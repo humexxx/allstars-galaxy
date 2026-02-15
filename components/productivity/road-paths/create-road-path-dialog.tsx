@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,11 +37,11 @@ type CreateRoadPathDialogProps = {
 export function CreateRoadPathDialog({ onSuccess, children }: CreateRoadPathDialogProps) {
   const [open, setOpen] = useState(false);
   const {
+    control,
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
     setValue,
-    watch,
     reset,
   } = useForm<CreateRoadPathInput>({
     resolver: zodResolver(createRoadPathSchema),
@@ -50,8 +50,8 @@ export function CreateRoadPathDialog({ onSuccess, children }: CreateRoadPathDial
     },
   });
 
-  const autoCreateTasks = watch("autoCreateTasks");
-  const taskFrequency = watch("taskFrequency");
+  const autoCreateTasks = useWatch({ control, name: "autoCreateTasks" });
+  const taskFrequency = useWatch({ control, name: "taskFrequency" });
 
   const onSubmit = async (data: CreateRoadPathInput) => {
     try {

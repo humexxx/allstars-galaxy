@@ -15,12 +15,12 @@ export function AppHeader({ user }: { user: User }) {
 
   return (
     <header className="sticky top-0 flex h-16 shrink-0 items-center border-b bg-background">
-      <div className="flex items-center justify-between w-full max-w-screen-2xl mx-auto px-8">
+      <div className="mx-auto flex w-full max-w-screen-2xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-4">
           <div className="-ml-2">
             <SidebarTrigger />
           </div>
-          <h1 className="text-xl font-bold">Capital Galaxy</h1>
+          <p className="text-xl font-bold">Capital Galaxy</p>
         </div>
         <div className="flex items-center gap-4">
           <ModeToggle />

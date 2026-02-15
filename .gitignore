@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local agent/skill folders
+/.agent/
+/.agents/
+/.claude/
+/skills/

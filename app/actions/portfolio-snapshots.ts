@@ -6,7 +6,6 @@ import { createManualSnapshot, deleteManualSnapshots } from "@/lib/services/snap
 import { applyMonthlyInterest } from "@/lib/services/interest-service";
 import { revalidatePath } from "next/cache";
 import { portfolios } from "@/db/schema";
-import { eq } from "drizzle-orm";
 import { manualSnapshotFormSchema, type ManualSnapshotFormData } from "@/schemas/snapshot";
 
 /**

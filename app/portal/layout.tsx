@@ -23,8 +23,8 @@ export default async function PortalLayout({
       <AppSidebar role={role} />
       <SidebarInset>
         <AppHeader user={user} />
-        <main className="flex-1">
-          <PortalPageContainer className="gap-6 py-6 px-8">
+        <main className="flex-1 min-w-0">
+          <PortalPageContainer>
             {children}
           </PortalPageContainer>
         </main>

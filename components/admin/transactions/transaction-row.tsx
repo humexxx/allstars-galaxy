@@ -30,7 +30,7 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
         try {
             await approveTransaction(transaction.id);
             toast.success("Transaction approved");
-        } catch (e) {
+        } catch {
             toast.error("Failed to approve");
         }
     };
@@ -39,7 +39,7 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
         try {
             await rejectTransaction(transaction.id);
             toast.success("Transaction rejected");
-        } catch (e) {
+        } catch {
             toast.error("Failed to reject");
         }
     };

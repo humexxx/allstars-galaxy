@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { AuthService } from "@/lib/services/auth-service"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 export function LoginForm({
   className,
@@ -66,26 +67,30 @@ export function LoginForm({
         </div>
         
         {error && (
-          <div className="text-destructive text-sm text-center p-2 bg-destructive/10 rounded">
+          <div
+            className="text-destructive text-sm text-center p-2 bg-destructive/10 rounded"
+            role="alert"
+            aria-live="polite"
+          >
             {error}
           </div>
         )}
 
         <Field>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" name="email" type="email" placeholder="m@example.com" required />
+          <Input id="email" name="email" type="email" placeholder="m@example.com" autoComplete="email" required />
         </Field>
         <Field>
           <div className="flex items-center">
             <FieldLabel htmlFor="password">Password</FieldLabel>
-            <a
+            <Link
               href="/forgot-password"
               className="ml-auto text-sm underline-offset-4 hover:underline"
             >
               Forgot your password?
-            </a>
+            </Link>
           </div>
-          <Input id="password" name="password" type="password" required />
+          <Input id="password" name="password" type="password" autoComplete="current-password" required />
         </Field>
         <Field>
           <Button type="submit" disabled={isLoading} className="w-full">
@@ -119,9 +124,9 @@ export function LoginForm({
 
         <div className="text-center text-sm">
           Don&apos;t have an account?{" "}
-          <a href="/signup" className="underline underline-offset-4">
+          <Link href="/signup" className="underline underline-offset-4">
             Sign up
-          </a>
+          </Link>
         </div>
       </FieldGroup>
     </form>

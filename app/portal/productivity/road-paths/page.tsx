@@ -8,12 +8,12 @@ export const metadata: Metadata = {
 
 export default function RoadPathsPage() {
   return (
-    <div className="flex w-full flex-1 flex-col gap-8 p-8 max-w-screen-2xl mx-auto">
-      <div>
+    <section className="space-y-6">
+      <header className="space-y-2">
         <h1 className="text-3xl font-bold">Road Paths</h1>
         <p className="text-muted-foreground">Track your long-term goals and progress</p>
-      </div>
+      </header>
       <RoadPathsView />
-    </div>
+    </section>
   );
 }

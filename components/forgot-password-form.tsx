@@ -10,6 +10,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { AuthService } from "@/lib/services/auth-service"
 import { useState } from "react"
+import Link from "next/link"
 
 export function ForgotPasswordForm({
   className,
@@ -53,20 +54,24 @@ export function ForgotPasswordForm({
         </div>
         
         {error && (
-          <div className="text-destructive text-sm text-center p-2 bg-destructive/10 rounded">
+          <div
+            className="text-destructive text-sm text-center p-2 bg-destructive/10 rounded"
+            role="alert"
+            aria-live="polite"
+          >
             {error}
           </div>
         )}
 
         {success && (
-          <div className="text-green-600 text-sm text-center p-2 bg-green-50 rounded border border-green-200">
+          <div className="text-green-600 text-sm text-center p-2 bg-green-50 rounded border border-green-200" aria-live="polite">
             Check your email for the password reset link.
           </div>
         )}
 
         <Field>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" name="email" type="email" placeholder="m@example.com" required />
+          <Input id="email" name="email" type="email" placeholder="m@example.com" autoComplete="email" required />
         </Field>
         
         <Field>
@@ -77,9 +82,9 @@ export function ForgotPasswordForm({
 
         <div className="text-center text-sm">
           Remember your password?{" "}
-          <a href="/login" className="underline underline-offset-4">
+          <Link href="/login" className="underline underline-offset-4">
             Login
-          </a>
+          </Link>
         </div>
       </FieldGroup>
     </form>

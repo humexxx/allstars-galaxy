@@ -49,16 +49,16 @@ export default async function AdminTransactionsPage({
     });
 
     return (
-        <>
-            <div className="space-y-2">
+        <section className="space-y-6">
+            <header className="space-y-2">
                 <h1 className="text-2xl font-bold">Transaction Management</h1>
                 <p className="text-muted-foreground">
                     Approve or reject transactions. Filter by user, status, or type.
                 </p>
-            </div>
+            </header>
 
             <TransactionFilters />
             <DataTable data={data} />
-        </>
+        </section>
     );
 }

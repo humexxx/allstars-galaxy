@@ -179,7 +179,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                   {data.chartData.length > 0 ? (
                     <PerformanceChart data={data.chartData} />
                   ) : (
-                    <Card className="h-100 flex items-center justify-center bg-card">
+                    <Card className="h-96 flex items-center justify-center bg-card">
                       <div className="text-center text-muted-foreground">
                         <p>Not enough data for chart</p>
                         <p className="text-sm">Approve transactions to see history</p>

@@ -36,19 +36,20 @@ export function TransactionFilters() {
     }, [userId, status, type, router]);
 
     return (
-        <div className="flex flex-col sm:flex-row gap-4 mb-6 items-end">
-            <div className="flex flex-col gap-2 w-full sm:w-75">
+        <div className={`flex flex-col sm:flex-row gap-4 mb-6 items-end ${isPending ? "opacity-90" : "opacity-100"}`}>
+            <div className="flex flex-col gap-2 w-full sm:w-[18rem]">
                 <span className="text-sm font-medium">User ID</span>
                 <Input
                     placeholder="Filter by User ID..."
                     value={userId}
                     onChange={(e) => setUserId(e.target.value)}
+                    disabled={isPending}
                 />
             </div>
 
-            <div className="flex flex-col gap-2 w-full sm:w-50">
+            <div className="flex flex-col gap-2 w-full sm:w-[12.5rem]">
                 <span className="text-sm font-medium">Status</span>
-                <Select value={status} onValueChange={setStatus}>
+                <Select value={status} onValueChange={setStatus} disabled={isPending}>
                     <SelectTrigger>
                         <SelectValue placeholder="All Statuses" />
                     </SelectTrigger>
@@ -61,9 +62,9 @@ export function TransactionFilters() {
                 </Select>
             </div>
 
-            <div className="flex flex-col gap-2 w-full sm:w-50">
+            <div className="flex flex-col gap-2 w-full sm:w-[12.5rem]">
                 <span className="text-sm font-medium">Type</span>
-                <Select value={type} onValueChange={setType}>
+                <Select value={type} onValueChange={setType} disabled={isPending}>
                     <SelectTrigger>
                         <SelectValue placeholder="All Types" />
                     </SelectTrigger>

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { EmptyPortfolio } from "@/components/portfolio/empty-portfolio";
 import { AddTransactionDialog } from "@/components/portfolio/add-transaction-dialog";
 import { TransactionsTable } from "@/components/portfolio/transactions-table";
-import { PerformanceChart } from "@/components/portfolio/performance-chart";
 import { PortfolioHeader } from "@/components/portfolio/portfolio-header";
 import { StatsCards } from "@/components/portfolio/stats-cards";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -69,6 +69,18 @@ type PortfolioData = {
   currentUserId: string;
 };
 
+const PerformanceChart = dynamic(
+  () => import("@/components/portfolio/performance-chart").then((mod) => mod.PerformanceChart),
+  {
+    ssr: false,
+    loading: () => (
+      <Card className="h-96 flex items-center justify-center bg-card">
+        <div className="text-sm text-muted-foreground">Loading chart...</div>
+      </Card>
+    ),
+  }
+);
+
 export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -105,7 +117,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           toast.success("Transaction added successfully");
         }
         
-        window.location.reload();
+        router.refresh();
       } else {
         const error = await response.json();
         toast.error(error.error || "Failed to create transaction");

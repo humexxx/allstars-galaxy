@@ -5,15 +5,18 @@ import { createApprovalSnapshot } from "@/lib/services/snapshot-service";
 
 export async function POST(request: Request) {
   try {
+    const bodyPromise = request.json();
     const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const role = await getUserRole(user.id);
+    const [role, body] = await Promise.all([
+      getUserRole(user.id),
+      bodyPromise,
+    ]);
     const isAdmin = role === "admin";
-    const body = await request.json();
     const { investmentMethodId, amount, date, notes, userId } = body;
 
     if (!investmentMethodId || !amount || !date) {

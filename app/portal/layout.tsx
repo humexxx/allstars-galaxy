@@ -2,7 +2,7 @@ import { AppHeader } from "@/components/app-header";
 import { redirect } from "next/navigation";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { getCurrentUser, getUserRole } from "@/lib/services/auth-server";
+import { getCurrentUserCached, getUserRoleCached } from "@/lib/services/auth-server";
 import { PortalPageContainer } from "@/components/portal/page-container";
 
 export default async function PortalLayout({
@@ -10,13 +10,13 @@ export default async function PortalLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserCached();
 
   if (!user) {
     redirect("/login");
   }
 
-  const role = await getUserRole(user.id) || "user";
+  const role = await getUserRoleCached(user.id) || "user";
 
   return (
     <SidebarProvider defaultOpen={false} className="[--sidebar-width-icon:3rem] transition-all duration-200">

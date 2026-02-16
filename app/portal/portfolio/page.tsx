@@ -12,7 +12,7 @@ import {
   getPortfolioTransactions,
 } from "@/lib/services/portfolio-service";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
-import { requireAuth, getUserRole } from "@/lib/services/auth-server";
+import { requireAuthCached, getUserRoleCached } from "@/lib/services/auth-server";
 import { getAllUsers } from "@/lib/services/user-service";
 import type { PortfolioTransaction } from "@/types/portfolio";
 import PortfolioClientPage from "@/components/portal/portfolio-client";
@@ -22,9 +22,11 @@ type PageProps = {
 };
 
 export default async function PortfolioPage({ searchParams }: PageProps) {
-  const params = await searchParams;
-  const currentUser = await requireAuth();
-  const role = await getUserRole(currentUser.id);
+  const [params, currentUser] = await Promise.all([
+    searchParams,
+    requireAuthCached(),
+  ]);
+  const role = await getUserRoleCached(currentUser.id);
   const isAdmin = role === "admin";
 
   // Determine which user's portfolio to show
@@ -32,20 +34,23 @@ export default async function PortfolioPage({ searchParams }: PageProps) {
   // Regular users always see their own
   const userId = isAdmin && params.userId ? params.userId : currentUser.id;
 
-  const portfolio = await getUserPortfolio(userId);
-  const methods = await db.select().from(investmentMethods);
-  const users = isAdmin ? await getAllUsers() : [];
+  const usersPromise = isAdmin ? getAllUsers() : Promise.resolve([]);
+  const [portfolio, methods, users] = await Promise.all([
+    getUserPortfolio(userId),
+    db.select().from(investmentMethods),
+    usersPromise,
+  ]);
 
   let stats = null;
   let transactions: PortfolioTransaction[] = [];
   let chartData: { date: string; value: number }[] = [];
 
   if (portfolio) {
-    stats = await getPortfolioStats(portfolio.id);
-    transactions = await getPortfolioTransactions(portfolio.id);
-
-    // Get real snapshot data for chart
-    chartData = await getPortfolioPerformanceData(portfolio.id, "All");
+    [stats, transactions, chartData] = await Promise.all([
+      getPortfolioStats(portfolio.id),
+      getPortfolioTransactions(portfolio.id),
+      getPortfolioPerformanceData(portfolio.id, "All"),
+    ]);
     
     // Fallback: Generate chart data from approved transactions if no snapshots exist
     if (chartData.length === 0) {

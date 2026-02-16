@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, RefreshCw } from "lucide-react";
 import { RoadPathCard } from "./road-path-card";
@@ -10,12 +10,17 @@ import { getUserRoadPathsAction } from "@/app/actions/road-path";
 import type { RoadPath } from "@/types";
 import { toast } from "sonner";
 
-export function RoadPathsView() {
-  const [roadPaths, setRoadPaths] = useState<RoadPath[]>([]);
+type RoadPathsViewProps = {
+  initialRoadPaths: RoadPath[];
+};
+
+export function RoadPathsView({ initialRoadPaths }: RoadPathsViewProps) {
+  const [roadPaths, setRoadPaths] = useState<RoadPath[]>(initialRoadPaths);
   const [selectedPath, setSelectedPath] = useState<RoadPath | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   const loadData = async () => {
+    setIsLoading(true);
     try {
       const result = await getUserRoadPathsAction();
       if (result.success) {
@@ -28,10 +33,6 @@ export function RoadPathsView() {
       setIsLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   if (isLoading) {
     return (

@@ -1,17 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { MilestoneList } from "./milestone-list";
 import { ProgressTracker } from "./progress-tracker";
-import {
-  getRoadPathMilestonesAction,
-  getRoadPathProgressAction,
-  calculateRoadPathStatsAction,
-} from "@/app/actions/road-path";
+import { getRoadPathDetailAction } from "@/app/actions/road-path";
 import type { RoadPath, RoadPathMilestone, RoadPathProgress, RoadPathStats } from "@/types";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -27,22 +23,14 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
   const [stats, setStats] = useState<RoadPathStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
     try {
-      const [milestonesResult, progressResult, statsResult] = await Promise.all([
-        getRoadPathMilestonesAction(roadPath.id),
-        getRoadPathProgressAction(roadPath.id),
-        calculateRoadPathStatsAction(roadPath.id),
-      ]);
-
-      if (milestonesResult.success) {
-        setMilestones(milestonesResult.data);
-      }
-      if (progressResult.success) {
-        setProgress(progressResult.data);
-      }
-      if (statsResult.success) {
-        setStats(statsResult.data);
+      const result = await getRoadPathDetailAction(roadPath.id);
+      if (result.success) {
+        setMilestones(result.data.milestones);
+        setProgress(result.data.progress);
+        setStats(result.data.stats);
       }
     } catch (error) {
       toast.error("Failed to load road path details");
@@ -50,12 +38,11 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [roadPath.id]);
 
   useEffect(() => {
     loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roadPath.id]);
+  }, [loadData]);
 
   if (isLoading) {
     return (

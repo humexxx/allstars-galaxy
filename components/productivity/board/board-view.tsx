@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -17,23 +17,22 @@ import { CreateColumnDialog } from "./create-column-dialog";
 import { CreateTaskDialog } from "./create-task-dialog";
 import { RefreshCw } from "lucide-react";
 import {
-  getUserBoardTasksAction,
+  getBoardDataAction,
   reorderBoardTaskAction,
-  initializeDefaultColumnsAction,
 } from "@/app/actions/board";
 import type { BoardColumn as BoardColumnType, BoardTask } from "@/types";
 import { toast } from "sonner";
 
 type BoardViewProps = {
   initialColumns: BoardColumnType[];
+  initialTasks: BoardTask[];
 };
 
-export function BoardView({ initialColumns }: BoardViewProps) {
+export function BoardView({ initialColumns, initialTasks }: BoardViewProps) {
   const [columns, setColumns] = useState<BoardColumnType[]>(initialColumns);
-  const [tasks, setTasks] = useState<BoardTask[]>([]);
+  const [tasks, setTasks] = useState<BoardTask[]>(initialTasks);
   const [activeTask, setActiveTask] = useState<BoardTask | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isInitializing, setIsInitializing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -44,45 +43,32 @@ export function BoardView({ initialColumns }: BoardViewProps) {
   );
 
   const loadData = async () => {
+    setIsLoading(true);
     try {
-      const tasksResult = await getUserBoardTasksAction();
+      const result = await getBoardDataAction();
 
-      if (tasksResult.success) {
-        setTasks(tasksResult.data);
+      if (result.success) {
+        setColumns(result.data.columns);
+        setTasks(result.data.tasks);
       }
     } catch (error) {
-      toast.error("Failed to load tasks");
+      toast.error("Failed to load board data");
       console.error(error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleInitializeColumns = async () => {
-    setIsInitializing(true);
-    try {
-      const result = await initializeDefaultColumnsAction();
-      if (result.success) {
-        setColumns(result.data);
-        toast.success("Default columns created");
+  const tasksByColumnId = useMemo(() => {
+    const grouped: Record<string, BoardTask[]> = {};
+    for (const task of tasks) {
+      if (!grouped[task.columnId]) {
+        grouped[task.columnId] = [];
       }
-    } catch (error) {
-      toast.error("Failed to initialize columns");
-      console.error(error);
-    } finally {
-      setIsInitializing(false);
+      grouped[task.columnId].push(task);
     }
-  };
-
-  useEffect(() => {
-    // Auto-initialize default columns if none exist
-    if (initialColumns.length === 0) {
-      handleInitializeColumns();
-    } else {
-      loadData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return grouped;
+  }, [tasks]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const task = tasks.find((t) => t.id === event.active.id);
@@ -104,8 +90,8 @@ export function BoardView({ initialColumns }: BoardViewProps) {
     const destinationColumnId = over.id as string;
     if (task.columnId === destinationColumnId) return;
 
-    // Optimistic update
-    const updatedTasks = tasks.map((t) =>
+    const previousTasks = tasks;
+    const updatedTasks = previousTasks.map((t) =>
       t.id === taskId ? { ...t, columnId: destinationColumnId } : t
     );
     setTasks(updatedTasks);
@@ -120,24 +106,16 @@ export function BoardView({ initialColumns }: BoardViewProps) {
       toast.success("Task moved");
     } catch (error) {
       // Revert on error
-      setTasks(tasks);
+      setTasks(previousTasks);
       toast.error("Failed to move task");
       console.error(error);
     }
   };
 
-  if (isInitializing) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   if (columns.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
-        <p className="text-muted-foreground">Setting up your board...</p>
+        <p className="text-muted-foreground">No columns yet. Create your first column.</p>
       </div>
     );
   }
@@ -148,6 +126,7 @@ export function BoardView({ initialColumns }: BoardViewProps) {
         <div className="flex gap-2">
           <CreateTaskDialog columns={columns} onSuccess={loadData} />
           <CreateColumnDialog onSuccess={loadData} />
+          {isLoading ? <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground mt-2" /> : null}
         </div>
       </div>
 
@@ -162,13 +141,13 @@ export function BoardView({ initialColumns }: BoardViewProps) {
             strategy={horizontalListSortingStrategy}
           >
             {columns.map((column) => (
-              <BoardColumn
-                key={column.id}
-                column={column}
-                tasks={tasks.filter((t) => t.columnId === column.id)}
-                onRefresh={loadData}
-                isLoadingTasks={isLoading}
-              />
+                <BoardColumn
+                  key={column.id}
+                  column={column}
+                  tasks={tasksByColumnId[column.id] ?? []}
+                  onRefresh={loadData}
+                  isLoadingTasks={isLoading}
+                />
             ))}
           </SortableContext>
         </div>

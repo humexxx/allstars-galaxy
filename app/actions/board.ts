@@ -103,6 +103,16 @@ export async function getUserBoardTasksAction() {
   return { success: true, data: tasks };
 }
 
+export async function getBoardDataAction() {
+  const user = await requireAuth();
+  const [columns, tasks] = await Promise.all([
+    getUserBoardColumns(user.id),
+    getUserBoardTasks(user.id),
+  ]);
+
+  return { success: true, data: { columns, tasks } };
+}
+
 export async function getBoardTaskAction(taskId: string) {
   const user = await requireAuth();
 

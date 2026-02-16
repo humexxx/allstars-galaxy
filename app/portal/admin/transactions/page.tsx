@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: "Approve or reject user transactions and manage investment requests",
 };
 import { TransactionFilters } from "@/components/admin/transactions/filters";
-import { requireAdmin } from "@/lib/services/auth-server";
+import { requireAdminCached } from "@/lib/services/auth-server";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic"; // Ensure fresh data
@@ -19,7 +19,7 @@ export default async function AdminTransactionsPage({
 }) {
     // Auth Check - will throw if not admin
     try {
-        await requireAdmin();
+        await requireAdminCached();
     } catch {
         redirect("/portal");
     }

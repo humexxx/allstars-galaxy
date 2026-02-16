@@ -164,6 +164,17 @@ export async function getRoadPathProgressAction(
   return { success: true, data: progress };
 }
 
+export async function getRoadPathDetailAction(roadPathId: string) {
+  const user = await requireAuth();
+  const [milestones, progress, stats] = await Promise.all([
+    getRoadPathMilestones(roadPathId, user.id),
+    getRoadPathProgress(roadPathId, user.id),
+    calculateRoadPathStats(roadPathId, user.id),
+  ]);
+
+  return { success: true, data: { milestones, progress, stats } };
+}
+
 export async function createRoadPathProgressAction(data: CreateRoadPathProgressInput) {
   const user = await requireAuth();
 

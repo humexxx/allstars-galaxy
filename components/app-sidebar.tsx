@@ -16,7 +16,6 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar"
 
@@ -57,10 +56,16 @@ export function AppSidebar({ role, ...props }: React.ComponentProps<typeof Sideb
     ]
 
     if (role === "admin") {
-      financeItems.push({
-        title: "Transactions",
-        url: "/portal/admin/transactions",
-      })
+      financeItems.push(
+        {
+          title: "Transactions",
+          url: "/portal/admin/transactions",
+        },
+        {
+          title: "Users",
+          url: "/portal/admin/users",
+        }
+      )
     }
 
     return [
@@ -180,7 +185,6 @@ export function AppSidebar({ role, ...props }: React.ComponentProps<typeof Sideb
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarRail />
     </Sidebar>
   )
 }

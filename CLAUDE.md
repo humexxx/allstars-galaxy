@@ -1,0 +1,116 @@
+# CLAUDE.md
+
+This file provides guidance for Claude Code when working on Capital Galaxy.
+
+## Project Overview
+
+Capital Galaxy is a personal finance and productivity web app built with Next.js 16 (App Router), React 19, Supabase (Auth + PostgreSQL), and Drizzle ORM.
+
+## Commands
+
+```bash
+npm run dev          # Start dev server (http://localhost:3000)
+npm run build        # Production build
+npm run lint         # ESLint
+npm run db:generate  # Generate migration from schema changes
+npm run db:migrate   # Apply pending migrations
+npm run db:studio    # Drizzle Studio (http://localhost:4983)
+npm run db:seed      # Seed database
+```
+
+## Architecture
+
+```
+app/actions/         Server actions (mutations, authenticated)
+app/api/             API routes + webhooks
+app/portal/          Authenticated pages
+components/ui/       shadcn/ui primitives
+components/          Feature components
+lib/services/        Business logic & data access
+types/               Shared TypeScript types
+schemas/             Zod validation schemas
+db/schema.ts         Drizzle schema (single source of truth)
+db/index.ts          Database client
+migrations/          Auto-generated SQL migrations
+```
+
+## Tech Stack
+
+- **Platform**: Windows / PowerShell
+- **Runtime**: Node 22+
+- **Framework**: Next.js 16 (App Router), React 19 (Server Components)
+- **Language**: TypeScript (strict mode)
+- **Styling**: Tailwind CSS v4
+- **UI**: shadcn/ui, Lucide React
+- **Auth/DB**: Supabase (Auth + PostgreSQL)
+- **ORM**: Drizzle ORM
+- **Validation**: Zod
+- **Forms**: React Hook Form + Zod
+
+## Code Conventions
+
+### Language
+All code, comments, and documentation in **English**.
+
+### Types
+- Shared types → `/types` (export from `/types/index.ts`)
+- Validation types → same file as Zod schema in `/schemas`
+- Database types: `typeof table.$inferSelect`
+- Validation types: `z.infer<typeof schema>`
+- Always explicit return types on functions
+
+### Schemas
+- Location: `/schemas` folder
+- Naming: `[name]Schema` + `[Name]Data`
+- Export both schema and inferred type
+
+### Database Changes
+1. Edit `db/schema.ts`
+2. `npm run db:generate`
+3. `npm run db:migrate`
+4. Commit schema + migrations together
+
+### Security
+- All server actions use `authenticatedAction` or `adminAction` from `@/lib/services/auth-server`
+- All service queries filter by `userId` for ownership
+- Always validate input with Zod
+- No secrets in client code
+
+### Patterns
+- Drizzle ORM for all DB operations
+- Transactions for multi-table changes
+- Foreign keys with cascade rules
+- Timestamps (createdAt, updatedAt) on all tables
+- Use shadcn/ui components from `/components/ui`
+- Avoid `any` — use `unknown` with type guards
+- Minimal comments (only complex logic)
+
+## Environment Variables
+
+Required in `.env`:
+```
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
+DATABASE_URL
+CRON_SECRET
+```
+
+## Common Workflows
+
+### New Feature
+1. Types in `/types/[feature].ts`
+2. Schema in `/schemas/[feature].ts`
+3. DB schema in `db/schema.ts` → generate → migrate
+4. Service in `/lib/services/[feature]-service.ts`
+5. Actions in `/app/actions/[feature].ts`
+6. UI in `/components/[feature]/`
+7. Page in `/app/portal/[feature]/page.tsx`
+
+### New Server Action
+- Import `authenticatedAction` from `@/lib/services/auth-server`
+- Define Zod schema, call service, revalidate paths
+
+### Adding UI Components
+```bash
+npx shadcn@latest add [component]
+```

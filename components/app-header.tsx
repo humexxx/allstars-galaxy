@@ -17,7 +17,7 @@ export function AppHeader({ user }: { user: User }) {
     <header className="sticky top-0 flex h-16 shrink-0 items-center border-b bg-background">
       <div className="mx-auto flex w-full max-w-screen-2xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-4">
-          <div className="-ml-2">
+          <div className="-ml-2 md:hidden">
             <SidebarTrigger />
           </div>
           <p className="text-xl font-bold">Capital Galaxy</p>

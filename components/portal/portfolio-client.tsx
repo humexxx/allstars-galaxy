@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { EmptyPortfolio } from "@/components/portfolio/empty-portfolio";
 import { AddTransactionDialog } from "@/components/portfolio/add-transaction-dialog";
 import { TransactionsTable } from "@/components/portfolio/transactions-table";
@@ -83,16 +83,9 @@ const PerformanceChart = dynamic(
 
 export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [showCharts, setShowCharts] = useState(true);
   const [hideValues, setHideValues] = useState(false);
-
-  const handleUserChange = (userId: string) => {
-    const params = new URLSearchParams(searchParams);
-    params.set("userId", userId);
-    router.push(`/portal/portfolio?${params.toString()}`);
-  };
 
   const handleAddTransaction = async (transactionData: {
     investmentMethodId: string;
@@ -156,9 +149,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           hideValues={hideValues}
           onToggleHideValues={() => setHideValues(!hideValues)}
           isAdmin={data.isAdmin}
-          users={data.users}
-          currentUserId={data.currentUserId}
-          onUserChange={handleUserChange}
         />
 
         {/* Tabs and Content */}

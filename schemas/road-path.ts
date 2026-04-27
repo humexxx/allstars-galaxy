@@ -59,7 +59,6 @@ export const updateRoadPathMilestoneSchema = z.object({
   description: z.string().max(2000, "Description too long").nullable().optional(),
   targetValue: z.number().positive().nullable().optional(),
   order: z.number().min(0).optional(),
-  completed: z.boolean().optional(),
   completedAt: z.union([z.string(), z.date()]).transform((val) => val instanceof Date ? val : new Date(val)).nullable().optional(),
 });
 

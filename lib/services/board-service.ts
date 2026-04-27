@@ -125,7 +125,7 @@ export async function getUserBoardTasks(userId: string): Promise<BoardTaskWithCo
 
 export async function createBoardTask(
   userId: string,
-  data: CreateBoardTaskData
+  data: CreateBoardTaskData & { order: number }
 ): Promise<BoardTask> {
   const [task] = await db
     .insert(boardTasks)

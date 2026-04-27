@@ -26,9 +26,8 @@ export function RoadPathsView({ initialRoadPaths }: RoadPathsViewProps) {
       if (result.success) {
         setRoadPaths(result.data);
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to load road paths");
-      console.error(error);
     } finally {
       setIsLoading(false);
     }

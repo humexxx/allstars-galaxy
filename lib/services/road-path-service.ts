@@ -88,19 +88,21 @@ export async function updateRoadPath(
   userId: string,
   data: Omit<UpdateRoadPathData, "id">
 ): Promise<RoadPath> {
-  const updateData: Record<string, unknown> = {
-    ...data,
+  const { targetValue, currentValue, autoCreateTasks, ...rest } = data;
+
+  const updateData: Partial<typeof roadPaths.$inferInsert> = {
+    ...rest,
     updatedAt: new Date(),
   };
 
-  if (data.targetValue !== undefined) {
-    updateData.targetValue = data.targetValue?.toString();
+  if (targetValue !== undefined) {
+    updateData.targetValue = targetValue?.toString() ?? null;
   }
-  if (data.currentValue !== undefined) {
-    updateData.currentValue = data.currentValue.toString();
+  if (currentValue !== undefined) {
+    updateData.currentValue = currentValue.toString();
   }
-  if (data.autoCreateTasks !== undefined) {
-    updateData.autoCreateTasks = data.autoCreateTasks ? 1 : 0;
+  if (autoCreateTasks !== undefined) {
+    updateData.autoCreateTasks = autoCreateTasks ? 1 : 0;
   }
 
   const [path] = await db
@@ -175,13 +177,15 @@ export async function updateRoadPathMilestone(
     throw new Error("Milestone not found");
   }
 
-  const updateData: Record<string, unknown> = {
-    ...data,
+  const { targetValue, ...rest } = data;
+
+  const updateData: Partial<typeof roadPathMilestones.$inferInsert> = {
+    ...rest,
     updatedAt: new Date(),
   };
 
-  if (data.targetValue !== undefined) {
-    updateData.targetValue = data.targetValue?.toString();
+  if (targetValue !== undefined) {
+    updateData.targetValue = targetValue?.toString() ?? null;
   }
 
   const [updatedMilestone] = await db
@@ -275,7 +279,7 @@ export async function createRoadPathProgress(
       roadPathId: data.roadPathId,
       value: data.value.toString(),
       notes: data.notes,
-      date: data.date,
+      date: data.date ?? new Date(),
     })
     .returning();
 

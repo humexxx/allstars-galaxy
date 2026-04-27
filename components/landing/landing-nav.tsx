@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { GalaxyLogo } from "./galaxy-logo";
 
 const NAV_LINKS = [
   { href: "#modules", label: "Modules" },
@@ -32,17 +33,7 @@ export function LandingNav(): React.ReactElement {
     >
       <nav className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-2 font-bold">
-          <span
-            className="grid size-8 place-items-center rounded-md bg-foreground text-background"
-            aria-hidden="true"
-          >
-            <svg viewBox="0 0 24 24" className="size-4" fill="currentColor">
-              <circle cx="12" cy="12" r="3" />
-              <ellipse cx="12" cy="12" rx="10" ry="3.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              <ellipse cx="12" cy="12" rx="10" ry="3.5" fill="none" stroke="currentColor" strokeWidth="1.5" transform="rotate(60 12 12)" />
-              <ellipse cx="12" cy="12" rx="10" ry="3.5" fill="none" stroke="currentColor" strokeWidth="1.5" transform="rotate(120 12 12)" />
-            </svg>
-          </span>
+          <GalaxyLogo />
           <span className="text-lg tracking-tight">Capital Galaxy</span>
         </Link>
 

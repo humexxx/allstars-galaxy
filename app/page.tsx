@@ -147,13 +147,8 @@ export default function LandingPage(): React.ReactElement {
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {MODULES.map((m) => {
-            const Card = m.status === "soon" ? "div" : Link;
-            return (
-              <Card
-                key={m.title}
-                {...(m.status === "soon" ? {} : { href: m.href })}
-                className="group relative flex flex-col overflow-hidden rounded-2xl border bg-card transition hover:-translate-y-1 hover:shadow-lg"
-              >
+            const inner = (
+              <>
                 <div className={`relative aspect-[6/5] w-full bg-gradient-to-br ${m.accent}`}>
                   <Image src={m.image} alt={`${m.title} illustration`} fill className="object-contain p-4" />
                   {m.status === "soon" && (
@@ -166,12 +161,18 @@ export default function LandingPage(): React.ReactElement {
                   <h3 className="text-xl font-semibold">{m.title}</h3>
                   <p className="mt-2 flex-1 text-sm text-muted-foreground">{m.description}</p>
                   {m.status !== "soon" && (
-                    <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary opacity-0 transition group-hover:opacity-100">
+                    <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary">
                       Open module <ArrowRight className="size-4" />
                     </span>
                   )}
                 </div>
-              </Card>
+              </>
+            );
+            const className = "relative flex flex-col overflow-hidden rounded-2xl border bg-card";
+            return m.status === "soon" ? (
+              <div key={m.title} className={className}>{inner}</div>
+            ) : (
+              <Link key={m.title} href={m.href} className={className}>{inner}</Link>
             );
           })}
         </div>
@@ -236,7 +237,7 @@ export default function LandingPage(): React.ReactElement {
         </div>
         <div className="grid gap-8 md:grid-cols-3">
           {STEPS.map((s) => (
-            <div key={s.n} className="relative rounded-2xl border bg-card p-8 transition hover:shadow-md">
+            <div key={s.n} className="relative rounded-2xl border bg-card p-8">
               <span className="text-sm font-mono font-semibold text-muted-foreground">{s.n}</span>
               <span className="mt-6 grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
                 <s.icon className="size-6" />

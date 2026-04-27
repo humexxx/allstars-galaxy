@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   description: "Manage your tasks with a visual board",
 };
 
-export default async function BoardPage() {
+export default async function BoardPage(): Promise<React.ReactElement> {
   const user = await requireAuthCached();
   const [existingColumns, tasks] = await Promise.all([
     getUserBoardColumns(user.id),
@@ -21,13 +21,5 @@ export default async function BoardPage() {
   const columns =
     existingColumns.length > 0 ? existingColumns : await initializeDefaultColumns(user.id);
 
-  return (
-    <section className="space-y-6">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-bold">Task Board</h1>
-        <p className="text-muted-foreground">Manage your tasks with a visual board</p>
-      </header>
-      <BoardView initialColumns={columns} initialTasks={tasks} />
-    </section>
-  );
+  return <BoardView initialColumns={columns} initialTasks={tasks} />;
 }

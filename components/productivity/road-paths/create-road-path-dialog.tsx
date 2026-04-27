@@ -60,9 +60,8 @@ export function CreateRoadPathDialog({ onSuccess, children }: CreateRoadPathDial
       setOpen(false);
       reset();
       onSuccess();
-    } catch (error) {
+    } catch {
       toast.error("Failed to create road path");
-      console.error(error);
     }
   };
 

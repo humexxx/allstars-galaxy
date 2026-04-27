@@ -115,8 +115,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
         const error = await response.json();
         toast.error(error.error || "Failed to create transaction");
       }
-    } catch (error) {
-      console.error("Failed to create transaction:", error);
+    } catch {
       toast.error("Failed to create transaction");
     }
   };

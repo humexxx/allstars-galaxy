@@ -179,10 +179,7 @@ export async function createRoadPathProgressAction(data: CreateRoadPathProgressI
   const user = await requireAuth();
 
   const validated = createRoadPathProgressSchema.parse(data);
-  const progress = await createRoadPathProgress(user.id, {
-    ...validated,
-    date: validated.date ?? new Date(),
-  });
+  const progress = await createRoadPathProgress(user.id, validated);
 
   revalidatePath("/portal/productivity");
 

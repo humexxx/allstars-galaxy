@@ -24,25 +24,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus } from "lucide-react";
-import { createBoardTaskAction } from "@/app/actions/board";
 import { createBoardTaskSchema, type CreateBoardTaskData } from "@/schemas/board";
 import { toast } from "sonner";
-import type { BoardColumn } from "@/types";
+import type { BoardColumn, TaskPriority } from "@/types";
 
 type CreateTaskDialogProps = {
   columns: BoardColumn[];
-  onSuccess: () => void;
+  onCreate: (data: CreateBoardTaskData) => Promise<void>;
   defaultColumnId?: string;
   children?: React.ReactNode;
 };
 
 export function CreateTaskDialog({
   columns,
-  onSuccess,
+  onCreate,
   defaultColumnId,
   children,
-}: CreateTaskDialogProps) {
-  const [open, setOpen] = useState(false);
+}: CreateTaskDialogProps): React.ReactElement {
+  const [open, setOpen] = useState<boolean>(false);
   const {
     register,
     handleSubmit,
@@ -56,16 +55,14 @@ export function CreateTaskDialog({
     },
   });
 
-  const onSubmit = async (data: CreateBoardTaskData) => {
+  const onSubmit = async (data: CreateBoardTaskData): Promise<void> => {
     try {
-      await createBoardTaskAction(data);
+      await onCreate(data);
       toast.success("Task created");
       setOpen(false);
       reset();
-      onSuccess();
-    } catch (error) {
-      toast.error("Failed to create task");
-      console.error(error);
+    } catch {
+      // parent already showed an error toast
     }
   };
 
@@ -87,14 +84,8 @@ export function CreateTaskDialog({
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="title">Title</Label>
-            <Input
-              id="title"
-              placeholder="Task title"
-              {...register("title")}
-            />
-            {errors.title && (
-              <p className="text-sm text-destructive">{errors.title.message}</p>
-            )}
+            <Input id="title" placeholder="Task title" {...register("title")} />
+            {errors.title && <p className="text-sm text-destructive">{errors.title.message}</p>}
           </div>
 
           <div className="space-y-2">
@@ -130,7 +121,7 @@ export function CreateTaskDialog({
 
           <div className="space-y-2">
             <Label htmlFor="priority">Priority</Label>
-            <Select onValueChange={(value) => setValue("priority", value)}>
+            <Select onValueChange={(value) => setValue("priority", value as TaskPriority)}>
               <SelectTrigger>
                 <SelectValue placeholder="Select priority (optional)" />
               </SelectTrigger>

@@ -18,6 +18,7 @@ import { deleteManualSnapshotsAction } from "@/app/actions/portfolio-snapshots";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { AdminOnly } from "@/components/admin-only";
+import { formatCurrency } from "@/lib/utils/format";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,14 +56,13 @@ export function PortfolioHeader({
   const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
 
-  const handleDeleteSnapshots = async () => {
+  const handleDeleteSnapshots = async (): Promise<void> => {
     try {
       setIsDeleting(true);
       await deleteManualSnapshotsAction();
       toast.success("Manual snapshots deleted successfully");
       router.refresh();
-    } catch (error) {
-      console.error("Error deleting snapshots:", error);
+    } catch {
       toast.error("Error deleting snapshots");
     } finally {
       setIsDeleting(false);
@@ -90,12 +90,7 @@ export function PortfolioHeader({
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <span className="text-4xl font-bold tracking-tight">
-                {hideValues
-                  ? "****"
-                  : `$${totalValue.toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}`}
+                {hideValues ? "****" : formatCurrency(totalValue)}
               </span>
               <button
                 onClick={onToggleHideValues}

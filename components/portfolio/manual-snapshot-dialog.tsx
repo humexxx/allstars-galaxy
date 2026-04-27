@@ -73,8 +73,7 @@ export function ManualSnapshotDialog({
 
       onOpenChange(false);
       router.refresh();
-    } catch (error) {
-      console.error("Error creating snapshot:", error);
+    } catch {
       toast.error("Error creating snapshot");
     } finally {
       setIsLoading(false);

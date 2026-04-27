@@ -32,9 +32,8 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
         setProgress(result.data.progress);
         setStats(result.data.stats);
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to load road path details");
-      console.error(error);
     } finally {
       setIsLoading(false);
     }
@@ -52,7 +51,8 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
     );
   }
 
-  const progressPercentage = stats?.progressPercentage || 0;
+  const progressPercentage = Math.round(stats?.totalProgress ?? 0);
+  const currentValue = roadPath.currentValue ? parseFloat(roadPath.currentValue) : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -79,7 +79,7 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
               <p className="text-2xl font-bold">{progressPercentage}%</p>
               {stats && roadPath.targetValue && (
                 <p className="text-sm text-muted-foreground">
-                  {stats.currentValue} / {roadPath.targetValue} {roadPath.unit}
+                  {currentValue} / {roadPath.targetValue} {roadPath.unit}
                 </p>
               )}
             </div>
@@ -93,7 +93,7 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
           <CardContent>
             <div className="space-y-1">
               <p className="text-2xl font-bold">
-                {stats?.milestonesCompleted || 0} / {stats?.totalMilestones || 0}
+                {stats?.completedMilestones ?? 0} / {stats?.totalMilestones ?? 0}
               </p>
               <p className="text-sm text-muted-foreground">completed</p>
             </div>

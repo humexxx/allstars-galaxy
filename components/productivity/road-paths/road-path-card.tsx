@@ -29,9 +29,8 @@ export function RoadPathCard({ roadPath, onClick, onRefresh }: RoadPathCardProps
       await deleteRoadPathAction(roadPath.id);
       toast.success("Road path deleted");
       onRefresh();
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete road path");
-      console.error(error);
     }
   };
 
@@ -84,9 +83,9 @@ export function RoadPathCard({ roadPath, onClick, onRefresh }: RoadPathCardProps
           </div>
         )}
 
-        {roadPath.frequency && (
+        {roadPath.taskFrequency && (
           <Badge variant="secondary">
-            {frequencyLabels[roadPath.frequency]}
+            {frequencyLabels[roadPath.taskFrequency]}
           </Badge>
         )}
       </CardContent>

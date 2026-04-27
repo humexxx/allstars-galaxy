@@ -7,6 +7,7 @@ export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "a
 export const transactionTypeEnum = pgEnum("transaction_type", ["buy", "withdrawal"]);
 export const snapshotSourceEnum = pgEnum("snapshot_source", ["system_cron", "admin_approval", "manual", "admin_enforce"]);
 export const roadPathFrequencyEnum = pgEnum("road_path_frequency", ["daily", "every_other_day", "weekly", "biweekly", "monthly"]);
+export const taskPriorityEnum = pgEnum("task_priority", ["low", "medium", "high"]);
 
 // Define auth schema to reference auth.users
 const authSchema = pgSchema("auth");
@@ -114,6 +115,7 @@ export const boardTasks = pgTable("board_tasks", {
   roadPathId: uuid("road_path_id").references(() => roadPaths.id, { onDelete: "set null" }),
   title: text("title").notNull(),
   description: text("description"),
+  priority: taskPriorityEnum("priority"),
   order: real("order").notNull(),
   dueDate: timestamp("due_date", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),

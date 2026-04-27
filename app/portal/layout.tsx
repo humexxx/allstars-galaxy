@@ -23,11 +23,11 @@ export default async function PortalLayout({
       <AppSidebar role={role} />
       <SidebarInset>
         <AppHeader user={user} />
-        <main className="flex-1 min-w-0">
+        <div className="flex min-h-0 flex-1 flex-col min-w-0">
           <PortalPageContainer>
             {children}
           </PortalPageContainer>
-        </main>
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );

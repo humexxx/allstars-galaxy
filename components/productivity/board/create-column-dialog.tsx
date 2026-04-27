@@ -16,16 +16,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus } from "lucide-react";
-import { createBoardColumnAction } from "@/app/actions/board";
 import { createBoardColumnSchema, type CreateBoardColumnData } from "@/schemas/board";
 import { toast } from "sonner";
 
 type CreateColumnDialogProps = {
-  onSuccess: () => void;
+  onCreate: (data: CreateBoardColumnData) => Promise<void>;
+  nextOrder: number;
 };
 
-export function CreateColumnDialog({ onSuccess }: CreateColumnDialogProps) {
-  const [open, setOpen] = useState(false);
+export function CreateColumnDialog({ onCreate, nextOrder }: CreateColumnDialogProps): React.ReactElement {
+  const [open, setOpen] = useState<boolean>(false);
   const {
     register,
     handleSubmit,
@@ -33,18 +33,17 @@ export function CreateColumnDialog({ onSuccess }: CreateColumnDialogProps) {
     reset,
   } = useForm<CreateBoardColumnData>({
     resolver: zodResolver(createBoardColumnSchema),
+    defaultValues: { order: nextOrder },
   });
 
-  const onSubmit = async (data: CreateBoardColumnData) => {
+  const onSubmit = async (data: CreateBoardColumnData): Promise<void> => {
     try {
-      await createBoardColumnAction(data);
+      await onCreate({ ...data, order: nextOrder });
       toast.success("Column created");
       setOpen(false);
-      reset();
-      onSuccess();
-    } catch (error) {
-      toast.error("Failed to create column");
-      console.error(error);
+      reset({ order: nextOrder + 1 });
+    } catch {
+      // parent already showed an error toast
     }
   };
 
@@ -64,14 +63,8 @@ export function CreateColumnDialog({ onSuccess }: CreateColumnDialogProps) {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Title</Label>
-            <Input
-              id="name"
-              placeholder="Column title"
-              {...register("name")}
-            />
-            {errors.name && (
-              <p className="text-sm text-destructive">{errors.name.message}</p>
-            )}
+            <Input id="name" placeholder="Column title" {...register("name")} />
+            {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
           </div>
 
           <DialogFooter>

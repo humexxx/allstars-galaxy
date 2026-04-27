@@ -43,13 +43,12 @@ export function ProgressTracker({ roadPathId, progress, unit, onRefresh }: Progr
       reset();
       setShowForm(false);
       onRefresh();
-    } catch (error) {
+    } catch {
       toast.error("Failed to record progress");
-      console.error(error);
     }
   };
 
-  const sortedProgress = [...progress].sort((a, b) => {
+  const sortedProgress = progress.toSorted((a, b) => {
     const dateA = a.date ? new Date(a.date).getTime() : 0;
     const dateB = b.date ? new Date(b.date).getTime() : 0;
     return dateB - dateA;

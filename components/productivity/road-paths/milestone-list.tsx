@@ -43,22 +43,20 @@ export function MilestoneList({ roadPathId, milestones, onRefresh }: MilestoneLi
       reset();
       setShowForm(false);
       onRefresh();
-    } catch (error) {
+    } catch {
       toast.error("Failed to create milestone");
-      console.error(error);
     }
   };
 
-  const handleToggle = async (milestone: RoadPathMilestone) => {
+  const handleToggle = async (milestone: RoadPathMilestone): Promise<void> => {
     try {
       await updateRoadPathMilestoneAction({
         id: milestone.id,
-        completed: !milestone.completed,
+        completedAt: milestone.completedAt ? null : new Date(),
       });
       onRefresh();
-    } catch (error) {
+    } catch {
       toast.error("Failed to update milestone");
-      console.error(error);
     }
   };
 
@@ -67,9 +65,8 @@ export function MilestoneList({ roadPathId, milestones, onRefresh }: MilestoneLi
       await deleteRoadPathMilestoneAction(id);
       toast.success("Milestone deleted");
       onRefresh();
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete milestone");
-      console.error(error);
     }
   };
 
@@ -79,10 +76,10 @@ export function MilestoneList({ roadPathId, milestones, onRefresh }: MilestoneLi
         {milestones.map((milestone) => (
           <div key={milestone.id} className="flex items-center gap-2 p-2 rounded-lg border">
             <Checkbox
-              checked={milestone.completed}
+              checked={milestone.completedAt !== null}
               onCheckedChange={() => handleToggle(milestone)}
             />
-            <span className={milestone.completed ? "line-through text-muted-foreground flex-1" : "flex-1"}>
+            <span className={milestone.completedAt !== null ? "line-through text-muted-foreground flex-1" : "flex-1"}>
               {milestone.title}
             </span>
             <Button

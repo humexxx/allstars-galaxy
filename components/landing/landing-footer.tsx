@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Github, Twitter, Linkedin } from "lucide-react";
+import { GalaxyLogo } from "./galaxy-logo";
 
 const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -47,12 +48,7 @@ export function LandingFooter(): React.ReactElement {
         <div className="grid gap-10 md:grid-cols-6">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2 font-bold">
-              <span className="grid size-8 place-items-center rounded-md bg-foreground text-background" aria-hidden="true">
-                <svg viewBox="0 0 24 24" className="size-4" fill="currentColor">
-                  <circle cx="12" cy="12" r="3" />
-                  <ellipse cx="12" cy="12" rx="10" ry="3.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                </svg>
-              </span>
+              <GalaxyLogo />
               <span className="text-lg tracking-tight">Capital Galaxy</span>
             </div>
             <p className="mt-4 max-w-sm text-sm text-muted-foreground">

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" fill="none" role="img" aria-label="Wellness illustration">
+  <defs>
+    <linearGradient id="wBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f3e6ff"/>
+      <stop offset="100%" stop-color="#dff5e3"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="200" rx="16" fill="url(#wBg)"/>
+  <!-- sun -->
+  <circle cx="180" cy="56" r="20" fill="#fbbf3a"/>
+  <g stroke="#fbbf3a" stroke-width="2" stroke-linecap="round">
+    <line x1="180" y1="22" x2="180" y2="32"/>
+    <line x1="208" y1="32" x2="202" y2="40"/>
+    <line x1="220" y1="56" x2="210" y2="56"/>
+    <line x1="156" y1="36" x2="160" y2="42"/>
+    <line x1="148" y1="60" x2="158" y2="58"/>
+  </g>
+  <!-- meditating figure -->
+  <g>
+    <!-- mat -->
+    <ellipse cx="120" cy="170" rx="78" ry="8" fill="#a78bfa" opacity="0.45"/>
+    <!-- legs -->
+    <path d="M 70 162 Q 90 130 120 130 Q 150 130 170 162 Z" fill="#7c3aed"/>
+    <!-- body -->
+    <rect x="100" y="98" width="40" height="44" rx="20" fill="#a78bfa"/>
+    <!-- arms -->
+    <path d="M 100 122 Q 80 130 78 144" stroke="#a78bfa" stroke-width="14" stroke-linecap="round" fill="none"/>
+    <path d="M 140 122 Q 160 130 162 144" stroke="#a78bfa" stroke-width="14" stroke-linecap="round" fill="none"/>
+    <!-- head -->
+    <circle cx="120" cy="84" r="18" fill="#fdd9b5"/>
+    <!-- closed eyes -->
+    <path d="M 112 82 q 3 3 6 0" stroke="#3a2418" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <path d="M 122 82 q 3 3 6 0" stroke="#3a2418" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <!-- smile -->
+    <path d="M 116 91 q 4 3 8 0" stroke="#3a2418" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  </g>
+  <!-- leaves -->
+  <g fill="#1f9d53">
+    <path d="M 36 130 q 12 -20 28 -8 q -12 18 -28 8 z"/>
+    <path d="M 200 138 q -10 -16 -24 -6 q 10 14 24 6 z"/>
+  </g>
+</svg>

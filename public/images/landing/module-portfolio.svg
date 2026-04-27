@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" fill="none" role="img" aria-label="Portfolio illustration">
+  <defs>
+    <linearGradient id="pBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e6f4f9"/>
+      <stop offset="100%" stop-color="#cfeaf2"/>
+    </linearGradient>
+    <linearGradient id="pLine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3a8fa4"/>
+      <stop offset="100%" stop-color="#5fd07a"/>
+    </linearGradient>
+    <linearGradient id="pFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3a8fa4" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#3a8fa4" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="200" rx="16" fill="url(#pBg)"/>
+  <!-- coin stack -->
+  <g>
+    <ellipse cx="48" cy="156" rx="22" ry="6" fill="#0c2733" opacity="0.08"/>
+    <circle cx="48" cy="148" r="20" fill="#fbbf3a" stroke="#d99412" stroke-width="2"/>
+    <text x="48" y="152" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="#7a5410">$</text>
+    <circle cx="48" cy="124" r="20" fill="#fbbf3a" stroke="#d99412" stroke-width="2"/>
+    <text x="48" y="128" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="#7a5410">$</text>
+    <circle cx="48" cy="100" r="20" fill="#fbbf3a" stroke="#d99412" stroke-width="2"/>
+    <text x="48" y="104" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="#7a5410">$</text>
+  </g>
+  <!-- chart card -->
+  <rect x="92" y="40" width="128" height="120" rx="10" fill="#ffffff" stroke="#cfeaf2"/>
+  <path d="M 102 138 L 122 122 L 138 130 L 156 100 L 178 90 L 200 70 L 212 60 L 212 150 L 102 150 Z" fill="url(#pFill)"/>
+  <path d="M 102 138 L 122 122 L 138 130 L 156 100 L 178 90 L 200 70 L 212 60" stroke="url(#pLine)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="212" cy="60" r="4" fill="#5fd07a" stroke="#ffffff" stroke-width="2"/>
+  <text x="102" y="60" font-family="Inter, sans-serif" font-size="9" font-weight="700" fill="#3a8fa4">+18.2%</text>
+</svg>

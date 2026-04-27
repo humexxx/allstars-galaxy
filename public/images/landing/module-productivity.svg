@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" fill="none" role="img" aria-label="Productivity board illustration">
+  <defs>
+    <linearGradient id="prBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e6f4f9"/>
+      <stop offset="100%" stop-color="#dff5e3"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="200" rx="16" fill="url(#prBg)"/>
+  <!-- columns -->
+  <g>
+    <rect x="20" y="36" width="62" height="148" rx="8" fill="#ffffff" stroke="#cfeaf2"/>
+    <text x="51" y="52" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="700" fill="#3a8fa4">TODO</text>
+    <rect x="28" y="60" width="46" height="22" rx="4" fill="#e6f4f9"/>
+    <rect x="28" y="86" width="46" height="22" rx="4" fill="#e6f4f9"/>
+    <rect x="28" y="112" width="46" height="22" rx="4" fill="#e6f4f9"/>
+
+    <rect x="89" y="36" width="62" height="148" rx="8" fill="#ffffff" stroke="#cfeaf2"/>
+    <text x="120" y="52" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="700" fill="#d99412">DOING</text>
+    <rect x="97" y="60" width="46" height="34" rx="4" fill="#fff3d6"/>
+    <circle cx="105" cy="68" r="2.5" fill="#d99412"/>
+    <rect x="111" y="65" width="26" height="3" rx="1.5" fill="#d99412" opacity="0.4"/>
+    <rect x="97" y="62" width="3" height="30" rx="1.5" fill="#fbbf3a"/>
+    <rect x="97" y="100" width="46" height="22" rx="4" fill="#fff3d6"/>
+
+    <rect x="158" y="36" width="62" height="148" rx="8" fill="#ffffff" stroke="#cfeaf2"/>
+    <text x="189" y="52" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="700" fill="#1f9d53">DONE</text>
+    <rect x="166" y="60" width="46" height="22" rx="4" fill="#dff5e3"/>
+    <path d="M 172 71 l 4 4 l 8 -8" stroke="#1f9d53" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="166" y="86" width="46" height="22" rx="4" fill="#dff5e3"/>
+    <path d="M 172 97 l 4 4 l 8 -8" stroke="#1f9d53" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="166" y="112" width="46" height="22" rx="4" fill="#dff5e3"/>
+    <path d="M 172 123 l 4 4 l 8 -8" stroke="#1f9d53" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="166" y="138" width="46" height="22" rx="4" fill="#dff5e3"/>
+    <path d="M 172 149 l 4 4 l 8 -8" stroke="#1f9d53" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

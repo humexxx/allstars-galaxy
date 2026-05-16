@@ -110,6 +110,97 @@ export const appState = pgTable("app_state", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+// Finance planning: each user can have multiple plans (scenarios) to model
+// future cash flow, debt amortization and net worth.
+
+export const financePlans = pgTable(
+  "finance_plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    // Anchor month for the projection (first day of the start month).
+    startMonth: timestamp("start_month", { withTimezone: true }).notNull(),
+    monthsAhead: real("months_ahead").notNull().default(24),
+    // Opening balance for the savings line at start_month.
+    initialSavings: numeric("initial_savings", { precision: 20, scale: 2 })
+      .notNull()
+      .default("0"),
+    // Monthly interest rate applied to savings (e.g. 0.007 for 0.70% per month).
+    monthlySavingsRate: numeric("monthly_savings_rate", { precision: 9, scale: 6 })
+      .notNull()
+      .default("0"),
+    // When true, the projection sums in the user's current portfolio value.
+    includePortfolio: boolean("include_portfolio").notNull().default(false),
+    // Color for chart visualisation (CSS color or theme token).
+    color: text("color").notNull().default("var(--chart-1)"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("finance_plans_user_id_idx").on(t.userId)]
+);
+
+export const financePlanIncomes = pgTable(
+  "finance_plan_incomes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => financePlans.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    monthlyAmount: numeric("monthly_amount", { precision: 20, scale: 2 })
+      .notNull()
+      .default("0"),
+    sortOrder: real("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("finance_plan_incomes_plan_id_idx").on(t.planId)]
+);
+
+export const financePlanExpenses = pgTable(
+  "finance_plan_expenses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => financePlans.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    monthlyAmount: numeric("monthly_amount", { precision: 20, scale: 2 })
+      .notNull()
+      .default("0"),
+    sortOrder: real("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("finance_plan_expenses_plan_id_idx").on(t.planId)]
+);
+
+export const financePlanDebts = pgTable(
+  "finance_plan_debts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => financePlans.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    initialBalance: numeric("initial_balance", { precision: 20, scale: 2 })
+      .notNull()
+      .default("0"),
+    // Monthly interest rate as a decimal (e.g. 0.02 for 2% per month).
+    monthlyInterestRate: numeric("monthly_interest_rate", { precision: 9, scale: 6 })
+      .notNull()
+      .default("0"),
+    monthlyPayment: numeric("monthly_payment", { precision: 20, scale: 2 })
+      .notNull()
+      .default("0"),
+    sortOrder: real("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("finance_plan_debts_plan_id_idx").on(t.planId)]
+);
+
 // Audit trail for mutations performed by an admin while impersonating another user.
 export const impersonationLogs = pgTable(
   "impersonation_logs",

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "node",
+      "args": ["--env-file=.env", "scripts/mcp-postgres.mjs"]
+    }
+  }
+}

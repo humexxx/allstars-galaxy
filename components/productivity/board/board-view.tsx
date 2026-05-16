@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSidebar } from "@/components/ui/sidebar";
 import {
   DndContext,
   DragEndEvent,
@@ -15,7 +16,9 @@ import { BoardColumn } from "./board-column";
 import { BoardTaskCard } from "./board-task-card";
 import { CreateColumnDialog } from "./create-column-dialog";
 import { CreateTaskDialog } from "./create-task-dialog";
-import { RefreshCw } from "lucide-react";
+import { Maximize2, Minimize2, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   createBoardColumnAction,
   createBoardTaskAction,
@@ -64,8 +67,24 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
   const [columns, setColumns] = useState<BoardColumnType[]>(initialColumns);
   const [tasks, setTasks] = useState<BoardTask[]>(initialTasks);
   const [activeTask, setActiveTask] = useState<BoardTask | null>(null);
-  const [pendingMutations, setPendingReorders] = useState<number>(0);
+  const [pendingMutations, setPendingMutations] = useState<number>(0);
   const isSyncing = pendingMutations > 0;
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const { setOpen: setSidebarOpen, open: isSidebarOpen } = useSidebar();
+  // Remember the sidebar state so we can restore it when the user collapses the board.
+  const sidebarStateBeforeExpand = useRef<boolean>(isSidebarOpen);
+
+  useEffect(() => {
+    if (isExpanded) {
+      sidebarStateBeforeExpand.current = isSidebarOpen;
+      setSidebarOpen(false);
+    } else {
+      setSidebarOpen(sidebarStateBeforeExpand.current);
+    }
+    // We intentionally only react to the expand toggle; sidebar state changes from
+    // elsewhere should not loop back through this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isExpanded]);
   // Serialize reorder mutations: rapid drags get queued and applied in order
   // so the server never sees them out of sequence.
   const reorderQueue = useRef<Promise<void>>(Promise.resolve());
@@ -115,7 +134,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
       prev.map((t) => (t.id === taskId ? { ...t, columnId: destinationColumnId } : t))
     );
 
-    setPendingReorders((n) => n + 1);
+    setPendingMutations((n) => n + 1);
     reorderQueue.current = reorderQueue.current
       .catch(() => undefined)
       .then(async () => {
@@ -130,7 +149,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
           setTasks(previousTasks);
           toast.error("Failed to move task");
         } finally {
-          setPendingReorders((n) => n - 1);
+          setPendingMutations((n) => n - 1);
         }
       });
   };
@@ -144,7 +163,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     setTasks((prev) => [...prev, optimistic]);
 
     try {
-      setPendingReorders((n) => n + 1);
+      setPendingMutations((n) => n + 1);
       const result = await createBoardTaskAction(data);
       if (result.success) {
         setTasks((prev) => prev.map((t) => (t.id === tempId ? result.data : t)));
@@ -154,7 +173,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
       toast.error("Failed to create task");
       throw error;
     } finally {
-      setPendingReorders((n) => n - 1);
+      setPendingMutations((n) => n - 1);
     }
   };
 
@@ -165,7 +184,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     setColumns((prev) => [...prev, optimistic]);
 
     try {
-      setPendingReorders((n) => n + 1);
+      setPendingMutations((n) => n + 1);
       const result = await createBoardColumnAction(data);
       if (result.success) {
         setColumns((prev) => prev.map((c) => (c.id === tempId ? result.data : c)));
@@ -175,7 +194,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
       toast.error("Failed to create column");
       throw error;
     } finally {
-      setPendingReorders((n) => n - 1);
+      setPendingMutations((n) => n - 1);
     }
   };
 
@@ -184,13 +203,13 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
 
     try {
-      setPendingReorders((n) => n + 1);
+      setPendingMutations((n) => n + 1);
       await deleteBoardTaskAction(taskId);
     } catch {
       setTasks(previous);
       toast.error("Failed to delete task");
     } finally {
-      setPendingReorders((n) => n - 1);
+      setPendingMutations((n) => n - 1);
     }
   };
 
@@ -199,13 +218,13 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     setColumns((prev) => prev.filter((c) => c.id !== columnId));
 
     try {
-      setPendingReorders((n) => n + 1);
+      setPendingMutations((n) => n + 1);
       await deleteBoardColumnAction(columnId);
     } catch {
       setColumns(previous);
       toast.error("Failed to delete column");
     } finally {
-      setPendingReorders((n) => n - 1);
+      setPendingMutations((n) => n - 1);
     }
   };
 
@@ -213,8 +232,21 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
   const isDraggingTask = activeTask !== null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
+    <div
+      // The viewport-escape trick: width:100vw + negative margin centers a wider
+      // element than its parent's max-width allows. Combined with closing the
+      // sidebar, the board really fills the screen.
+      className={cn(
+        "flex min-h-0 flex-1 flex-col gap-4",
+        isExpanded && "w-screen -ml-[calc(50vw-50%)]"
+      )}
+    >
+      <header
+        className={cn(
+          "flex flex-wrap items-start justify-between gap-3",
+          isExpanded && "px-4 sm:px-6 lg:px-8"
+        )}
+      >
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-bold tracking-tight">Task Board</h1>
@@ -228,6 +260,15 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
           <p className="text-sm text-muted-foreground">Manage your tasks with a visual board</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsExpanded((v) => !v)}
+            aria-label={isExpanded ? "Collapse board" : "Expand board"}
+            title={isExpanded ? "Collapse board" : "Expand board"}
+          >
+            {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </Button>
           {columns.length > 0 ? (
             <CreateTaskDialog columns={columns} onCreate={handleCreateTask} />
           ) : null}
@@ -241,7 +282,12 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
         </div>
       ) : (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="-mx-1 flex min-h-0 flex-1 gap-3 overflow-x-auto px-1 pb-2">
+          <div
+            className={cn(
+              "-mx-1 flex min-h-0 flex-1 gap-3 overflow-x-auto px-1 pb-2",
+              isExpanded && "px-4 sm:px-6 lg:px-8"
+            )}
+          >
             <SortableContext items={columns.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
               {columns.map((column) => (
                 <BoardColumn

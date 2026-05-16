@@ -60,6 +60,10 @@ export function AppSidebar({
         title: "Investment Methods",
         url: "/portal/investment-methods",
       },
+      {
+        title: "Plans",
+        url: "/portal/plans",
+      },
     ]
 
     const sections: NavSection[] = [

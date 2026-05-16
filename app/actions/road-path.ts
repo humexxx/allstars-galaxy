@@ -1,7 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAuth } from "@/lib/services/auth-server";
+import {
+  requireEffectiveContext,
+  logImpersonatedMutation,
+} from "@/lib/services/impersonation";
 import {
   getUserRoadPaths,
   getRoadPath,
@@ -32,124 +35,143 @@ import {
   type CreateRoadPathProgressInput,
 } from "@/schemas/road-path";
 
-export async function getUserRoadPathsAction() {
-  const user = await requireAuth();
+const PATH = "/portal/productivity";
 
-  const paths = await getUserRoadPaths(user.id);
+export async function getUserRoadPathsAction() {
+  const ctx = await requireEffectiveContext();
+  const paths = await getUserRoadPaths(ctx.effectiveUserId);
   return { success: true, data: paths };
 }
 
 export async function getRoadPathAction(roadPathId: string) {
-  const user = await requireAuth();
-
-  const path = await getRoadPath(roadPathId, user.id);
-  if (!path) {
-    throw new Error("Road path not found");
-  }
-
+  const ctx = await requireEffectiveContext();
+  const path = await getRoadPath(roadPathId, ctx.effectiveUserId);
+  if (!path) throw new Error("Road path not found");
   return { success: true, data: path };
 }
 
 export async function createRoadPathAction(data: CreateRoadPathInput) {
-  const user = await requireAuth();
-
+  const ctx = await requireEffectiveContext();
   const validated = createRoadPathSchema.parse(data);
   const { createFirstTask, ...roadPathData } = validated;
-  
-  const path = await createRoadPath(user.id, {
+
+  const path = await createRoadPath(ctx.effectiveUserId, {
     ...roadPathData,
     autoCreateTasks: validated.autoCreateTasks ?? false,
   });
 
-  // Create first task if requested and automation is enabled
   if (createFirstTask && path.autoCreateTasks && path.taskFrequency) {
     try {
-      await createAutomatedTasksForRoadPath(user.id, path.id);
+      await createAutomatedTasksForRoadPath(ctx.effectiveUserId, path.id);
     } catch (error) {
       console.error("Failed to create first task:", error);
-      // Don't fail the whole operation if task creation fails
     }
   }
 
-  revalidatePath("/portal/productivity");
-
+  await logImpersonatedMutation({
+    action: "roadPath.create",
+    entityTable: "road_paths",
+    entityId: path.id,
+  });
+  revalidatePath(PATH);
   return { success: true, data: path };
 }
 
 export async function updateRoadPathAction(data: UpdateRoadPathData) {
-  const user = await requireAuth();
-
+  const ctx = await requireEffectiveContext();
   const validated = updateRoadPathSchema.parse(data);
   const { id, ...updateData } = validated;
 
-  const path = await updateRoadPath(id, user.id, updateData);
-  if (!path) {
-    throw new Error("Road path not found");
-  }
+  const before = ctx.isImpersonating
+    ? await getRoadPath(id, ctx.effectiveUserId)
+    : undefined;
 
-  revalidatePath("/portal/productivity");
+  const path = await updateRoadPath(id, ctx.effectiveUserId, updateData);
+  if (!path) throw new Error("Road path not found");
 
+  await logImpersonatedMutation({
+    action: "roadPath.update",
+    entityTable: "road_paths",
+    entityId: path.id,
+    before,
+    after: path,
+  });
+  revalidatePath(PATH);
   return { success: true, data: path };
 }
 
 export async function deleteRoadPathAction(roadPathId: string) {
-  const user = await requireAuth();
+  const ctx = await requireEffectiveContext();
 
-  await deleteRoadPath(roadPathId, user.id);
+  const before = ctx.isImpersonating
+    ? await getRoadPath(roadPathId, ctx.effectiveUserId)
+    : undefined;
 
-  revalidatePath("/portal/productivity");
+  await deleteRoadPath(roadPathId, ctx.effectiveUserId);
 
+  await logImpersonatedMutation({
+    action: "roadPath.delete",
+    entityTable: "road_paths",
+    entityId: roadPathId,
+    before,
+  });
+  revalidatePath(PATH);
   return { success: true };
 }
 
 export async function getRoadPathMilestonesAction(roadPathId: string) {
-  const user = await requireAuth();
-
-  const milestones = await getRoadPathMilestones(roadPathId, user.id);
+  const ctx = await requireEffectiveContext();
+  const milestones = await getRoadPathMilestones(roadPathId, ctx.effectiveUserId);
   return { success: true, data: milestones };
 }
 
 export async function createRoadPathMilestoneAction(data: CreateRoadPathMilestoneData) {
-  const user = await requireAuth();
-
+  const ctx = await requireEffectiveContext();
   const validated = createRoadPathMilestoneSchema.parse(data);
-  const milestone = await createRoadPathMilestone(user.id, validated);
+  const milestone = await createRoadPathMilestone(ctx.effectiveUserId, validated);
 
-  revalidatePath("/portal/productivity");
-
+  await logImpersonatedMutation({
+    action: "roadPathMilestone.create",
+    entityTable: "road_path_milestones",
+    entityId: milestone.id,
+  });
+  revalidatePath(PATH);
   return { success: true, data: milestone };
 }
 
 export async function updateRoadPathMilestoneAction(data: UpdateRoadPathMilestoneData) {
-  const user = await requireAuth();
-
+  const ctx = await requireEffectiveContext();
   const validated = updateRoadPathMilestoneSchema.parse(data);
   const { id, ...updateData } = validated;
 
-  const milestone = await updateRoadPathMilestone(id, user.id, updateData);
-  if (!milestone) {
-    throw new Error("Milestone not found");
-  }
+  const milestone = await updateRoadPathMilestone(id, ctx.effectiveUserId, updateData);
+  if (!milestone) throw new Error("Milestone not found");
 
-  revalidatePath("/portal/productivity");
-
+  await logImpersonatedMutation({
+    action: "roadPathMilestone.update",
+    entityTable: "road_path_milestones",
+    entityId: milestone.id,
+  });
+  revalidatePath(PATH);
   return { success: true, data: milestone };
 }
 
 export async function deleteRoadPathMilestoneAction(milestoneId: string) {
-  const user = await requireAuth();
+  const ctx = await requireEffectiveContext();
+  await deleteRoadPathMilestone(milestoneId, ctx.effectiveUserId);
 
-  await deleteRoadPathMilestone(milestoneId, user.id);
-
-  revalidatePath("/portal/productivity");
-
+  await logImpersonatedMutation({
+    action: "roadPathMilestone.delete",
+    entityTable: "road_path_milestones",
+    entityId: milestoneId,
+  });
+  revalidatePath(PATH);
   return { success: true };
 }
 
 export async function getNextMilestoneOrderAction(roadPathId: string) {
-  const user = await requireAuth();
-
-  const order = await getNextMilestoneOrder(roadPathId, user.id);
+  const ctx = await requireEffectiveContext();
+  const order = await getNextMilestoneOrder(roadPathId, ctx.effectiveUserId);
   return { success: true, data: order };
 }
 
@@ -158,47 +180,56 @@ export async function getRoadPathProgressAction(
   startDate?: Date,
   endDate?: Date
 ) {
-  const user = await requireAuth();
-
-  const progress = await getRoadPathProgress(roadPathId, user.id, startDate, endDate);
+  const ctx = await requireEffectiveContext();
+  const progress = await getRoadPathProgress(
+    roadPathId,
+    ctx.effectiveUserId,
+    startDate,
+    endDate
+  );
   return { success: true, data: progress };
 }
 
 export async function getRoadPathDetailAction(roadPathId: string) {
-  const user = await requireAuth();
+  const ctx = await requireEffectiveContext();
   const [milestones, progress, stats] = await Promise.all([
-    getRoadPathMilestones(roadPathId, user.id),
-    getRoadPathProgress(roadPathId, user.id),
-    calculateRoadPathStats(roadPathId, user.id),
+    getRoadPathMilestones(roadPathId, ctx.effectiveUserId),
+    getRoadPathProgress(roadPathId, ctx.effectiveUserId),
+    calculateRoadPathStats(roadPathId, ctx.effectiveUserId),
   ]);
 
   return { success: true, data: { milestones, progress, stats } };
 }
 
 export async function createRoadPathProgressAction(data: CreateRoadPathProgressInput) {
-  const user = await requireAuth();
-
+  const ctx = await requireEffectiveContext();
   const validated = createRoadPathProgressSchema.parse(data);
-  const progress = await createRoadPathProgress(user.id, validated);
+  const progress = await createRoadPathProgress(ctx.effectiveUserId, validated);
 
-  revalidatePath("/portal/productivity");
-
+  await logImpersonatedMutation({
+    action: "roadPathProgress.create",
+    entityTable: "road_path_progress",
+    entityId: progress.id,
+  });
+  revalidatePath(PATH);
   return { success: true, data: progress };
 }
 
 export async function deleteRoadPathProgressAction(progressId: string) {
-  const user = await requireAuth();
+  const ctx = await requireEffectiveContext();
+  await deleteRoadPathProgress(progressId, ctx.effectiveUserId);
 
-  await deleteRoadPathProgress(progressId, user.id);
-
-  revalidatePath("/portal/productivity");
-
+  await logImpersonatedMutation({
+    action: "roadPathProgress.delete",
+    entityTable: "road_path_progress",
+    entityId: progressId,
+  });
+  revalidatePath(PATH);
   return { success: true };
 }
 
 export async function calculateRoadPathStatsAction(roadPathId: string) {
-  const user = await requireAuth();
-
-  const stats = await calculateRoadPathStats(roadPathId, user.id);
+  const ctx = await requireEffectiveContext();
+  const stats = await calculateRoadPathStats(roadPathId, ctx.effectiveUserId);
   return { success: true, data: stats };
 }

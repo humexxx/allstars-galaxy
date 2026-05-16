@@ -32,7 +32,14 @@ type NavSection = {
   disabled?: boolean
 }
 
-export function AppSidebar({ role, ...props }: React.ComponentProps<typeof Sidebar> & { role?: "admin" | "user" }) {
+export function AppSidebar({
+  role,
+  isImpersonating = false,
+  ...props
+}: React.ComponentProps<typeof Sidebar> & {
+  role?: "admin" | "user"
+  isImpersonating?: boolean
+}) {
   const pathname = usePathname()
   const { isMobile, setOpenMobile } = useSidebar()
 
@@ -55,20 +62,7 @@ export function AppSidebar({ role, ...props }: React.ComponentProps<typeof Sideb
       },
     ]
 
-    if (role === "admin") {
-      financeItems.push(
-        {
-          title: "Transactions",
-          url: "/portal/admin/transactions",
-        },
-        {
-          title: "Users",
-          url: "/portal/admin/users",
-        }
-      )
-    }
-
-    return [
+    const sections: NavSection[] = [
       {
         title: "Dashboard",
         url: "/portal",
@@ -98,11 +92,7 @@ export function AppSidebar({ role, ...props }: React.ComponentProps<typeof Sideb
         url: "#",
         disabled: true,
         items: [
-          {
-            title: "Coming soon",
-            url: "#",
-            disabled: true,
-          },
+          { title: "Coming soon", url: "#", disabled: true },
         ],
       },
       {
@@ -110,15 +100,33 @@ export function AppSidebar({ role, ...props }: React.ComponentProps<typeof Sideb
         url: "#",
         disabled: true,
         items: [
-          {
-            title: "Coming soon",
-            url: "#",
-            disabled: true,
-          },
+          { title: "Coming soon", url: "#", disabled: true },
         ],
       },
     ]
-  }, [role])
+
+    // Admin section is its own top-level group (impersonation affects all app
+    // modules, not just finance). Hidden while impersonating to avoid confusion —
+    // the active session is browsing as the impersonated (non-admin) user.
+    if (role === "admin" && !isImpersonating) {
+      sections.push({
+        title: "Admin",
+        url: "/portal/admin/users",
+        items: [
+          {
+            title: "Users",
+            url: "/portal/admin/users",
+          },
+          {
+            title: "Transactions",
+            url: "/portal/admin/transactions",
+          },
+        ],
+      })
+    }
+
+    return sections
+  }, [role, isImpersonating])
 
   const isActive = (href: string) => pathname === href
 

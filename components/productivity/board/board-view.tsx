@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -64,7 +64,11 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
   const [columns, setColumns] = useState<BoardColumnType[]>(initialColumns);
   const [tasks, setTasks] = useState<BoardTask[]>(initialTasks);
   const [activeTask, setActiveTask] = useState<BoardTask | null>(null);
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [pendingMutations, setPendingReorders] = useState<number>(0);
+  const isSyncing = pendingMutations > 0;
+  // Serialize reorder mutations: rapid drags get queued and applied in order
+  // so the server never sees them out of sequence.
+  const reorderQueue = useRef<Promise<void>>(Promise.resolve());
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -90,7 +94,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     if (task) setActiveTask(task);
   };
 
-  const handleDragEnd = async (event: DragEndEvent): Promise<void> => {
+  const handleDragEnd = (event: DragEndEvent): void => {
     setActiveTask(null);
 
     const { active, over } = event;
@@ -103,25 +107,32 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     const destinationColumnId = over.id as string;
     if (task.columnId === destinationColumnId) return;
 
+    const sourceColumnId = task.columnId;
     const previousTasks = tasks;
+
+    // Optimistic UI update — server call is enqueued below.
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, columnId: destinationColumnId } : t))
     );
 
-    try {
-      setIsSyncing(true);
-      await reorderBoardTaskAction({
-        taskId,
-        sourceColumnId: task.columnId,
-        destinationColumnId,
-        order: 0,
+    setPendingReorders((n) => n + 1);
+    reorderQueue.current = reorderQueue.current
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          await reorderBoardTaskAction({
+            taskId,
+            sourceColumnId,
+            destinationColumnId,
+            order: 0,
+          });
+        } catch {
+          setTasks(previousTasks);
+          toast.error("Failed to move task");
+        } finally {
+          setPendingReorders((n) => n - 1);
+        }
       });
-    } catch {
-      setTasks(previousTasks);
-      toast.error("Failed to move task");
-    } finally {
-      setIsSyncing(false);
-    }
   };
 
   const handleCreateTask = async (data: CreateBoardTaskData): Promise<void> => {
@@ -133,7 +144,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     setTasks((prev) => [...prev, optimistic]);
 
     try {
-      setIsSyncing(true);
+      setPendingReorders((n) => n + 1);
       const result = await createBoardTaskAction(data);
       if (result.success) {
         setTasks((prev) => prev.map((t) => (t.id === tempId ? result.data : t)));
@@ -143,7 +154,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
       toast.error("Failed to create task");
       throw error;
     } finally {
-      setIsSyncing(false);
+      setPendingReorders((n) => n - 1);
     }
   };
 
@@ -154,7 +165,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     setColumns((prev) => [...prev, optimistic]);
 
     try {
-      setIsSyncing(true);
+      setPendingReorders((n) => n + 1);
       const result = await createBoardColumnAction(data);
       if (result.success) {
         setColumns((prev) => prev.map((c) => (c.id === tempId ? result.data : c)));
@@ -164,7 +175,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
       toast.error("Failed to create column");
       throw error;
     } finally {
-      setIsSyncing(false);
+      setPendingReorders((n) => n - 1);
     }
   };
 
@@ -173,13 +184,13 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
 
     try {
-      setIsSyncing(true);
+      setPendingReorders((n) => n + 1);
       await deleteBoardTaskAction(taskId);
     } catch {
       setTasks(previous);
       toast.error("Failed to delete task");
     } finally {
-      setIsSyncing(false);
+      setPendingReorders((n) => n - 1);
     }
   };
 
@@ -188,13 +199,13 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     setColumns((prev) => prev.filter((c) => c.id !== columnId));
 
     try {
-      setIsSyncing(true);
+      setPendingReorders((n) => n + 1);
       await deleteBoardColumnAction(columnId);
     } catch {
       setColumns(previous);
       toast.error("Failed to delete column");
     } finally {
-      setIsSyncing(false);
+      setPendingReorders((n) => n - 1);
     }
   };
 

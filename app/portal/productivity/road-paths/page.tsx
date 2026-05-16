@@ -1,6 +1,6 @@
 import { RoadPathsView } from "@/components/productivity/road-paths/road-paths-view";
 import type { Metadata } from "next";
-import { requireAuthCached } from "@/lib/services/auth-server";
+import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { getUserRoadPaths } from "@/lib/services/road-path-service";
 import { PageHeader } from "@/components/portal/page-header";
 
@@ -10,8 +10,8 @@ export const metadata: Metadata = {
 };
 
 export default async function RoadPathsPage() {
-  const user = await requireAuthCached();
-  const roadPaths = await getUserRoadPaths(user.id);
+  const ctx = await requireEffectiveContext();
+  const roadPaths = await getUserRoadPaths(ctx.effectiveUserId);
 
   return (
     <section className="space-y-6">

@@ -1,6 +1,6 @@
 import { BoardView } from "@/components/productivity/board/board-view";
 import type { Metadata } from "next";
-import { requireAuthCached } from "@/lib/services/auth-server";
+import { requireEffectiveContext } from "@/lib/services/impersonation";
 import {
   getUserBoardColumns,
   getUserBoardTasks,
@@ -13,13 +13,15 @@ export const metadata: Metadata = {
 };
 
 export default async function BoardPage(): Promise<React.ReactElement> {
-  const user = await requireAuthCached();
+  const ctx = await requireEffectiveContext();
+  const userId = ctx.effectiveUserId;
+
   const [existingColumns, tasks] = await Promise.all([
-    getUserBoardColumns(user.id),
-    getUserBoardTasks(user.id),
+    getUserBoardColumns(userId),
+    getUserBoardTasks(userId),
   ]);
   const columns =
-    existingColumns.length > 0 ? existingColumns : await initializeDefaultColumns(user.id);
+    existingColumns.length > 0 ? existingColumns : await initializeDefaultColumns(userId);
 
   return <BoardView initialColumns={columns} initialTasks={tasks} />;
 }

@@ -1,11 +1,14 @@
 import { db } from "@/db";
-import { portfolioSnapshots, transactions } from "@/db/schema";
-import { eq, and, sql, lte, gt } from "drizzle-orm";
+import { portfolios, portfolioSnapshots, transactions } from "@/db/schema";
+import { eq, and, sql, lte, gt, desc } from "drizzle-orm";
 import type { SnapshotSource } from "@/schemas/snapshot";
 
 /**
- * Create daily snapshots for all portfolios with approved transactions
- * Sums currentValue of all active buy transactions per portfolio
+ * Create daily snapshots for all portfolios.
+ * Optimized as a batch: 3 queries total regardless of portfolio count.
+ *   1. SUM(currentValue) per portfolio for approved buy transactions.
+ *   2. Latest snapshot value per portfolio (to decide whether to write a zero row).
+ *   3. Single bulk INSERT for all eligible portfolios.
  */
 export async function createDailySnapshots(): Promise<{
   date: Date;
@@ -13,35 +16,71 @@ export async function createDailySnapshots(): Promise<{
   totalPortfolios: number;
   errors: string[];
 }> {
-  // Get all portfolios
-  const allPortfolios = await db.query.portfolios.findMany();
+  const today = new Date();
 
-  const snapshotsCreated: string[] = [];
-  const errors: string[] = [];
+  // 1. Aggregate balances per portfolio in a single query.
+  const balances = await db
+    .select({
+      portfolioId: transactions.portfolioId,
+      totalValue: sql<string>`COALESCE(SUM(${transactions.currentValue}), 0)`,
+      txCount: sql<number>`COUNT(*)::int`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.status, "approved"),
+        eq(transactions.type, "buy"),
+        lte(transactions.date, today)
+      )
+    )
+    .groupBy(transactions.portfolioId);
 
-  for (const portfolio of allPortfolios) {
-    try {
-      const result = await createSnapshotForPortfolio(
-        portfolio.id,
-        "system_cron"
-      );
-      if (result.created) {
-        snapshotsCreated.push(portfolio.id);
-      }
-    } catch (error) {
-      console.error(
-        `Error creating snapshot for portfolio ${portfolio.id}:`,
-        error
-      );
-      errors.push(`${portfolio.id}: ${error}`);
-    }
+  if (balances.length === 0) {
+    const totalPortfolios = await db.$count(portfolios);
+    return { date: today, snapshotsCreated: 0, totalPortfolios, errors: [] };
+  }
+
+  // 2. Latest snapshot per portfolio, for the zero-value branch logic.
+  const portfolioIds = balances.map((b) => b.portfolioId);
+  const latestSnapshots = await db
+    .selectDistinctOn([portfolioSnapshots.portfolioId], {
+      portfolioId: portfolioSnapshots.portfolioId,
+      totalValue: portfolioSnapshots.totalValue,
+    })
+    .from(portfolioSnapshots)
+    .where(sql`${portfolioSnapshots.portfolioId} = ANY(${portfolioIds})`)
+    .orderBy(portfolioSnapshots.portfolioId, desc(portfolioSnapshots.date));
+
+  const latestByPortfolio = new Map(
+    latestSnapshots.map((s) => [s.portfolioId, parseFloat(s.totalValue)])
+  );
+
+  // 3. Decide which rows to insert.
+  const rowsToInsert = balances
+    .filter((b) => {
+      const totalValue = parseFloat(b.totalValue);
+      if (totalValue > 0) return true;
+      // Only insert a zero-value snapshot if the previous one was non-zero
+      // (signals a real transition to empty).
+      const prev = latestByPortfolio.get(b.portfolioId);
+      return prev !== undefined && prev > 0;
+    })
+    .map((b) => ({
+      portfolioId: b.portfolioId,
+      date: today,
+      totalValue: parseFloat(b.totalValue).toFixed(2),
+      source: "system_cron" as SnapshotSource,
+    }));
+
+  if (rowsToInsert.length > 0) {
+    await db.insert(portfolioSnapshots).values(rowsToInsert);
   }
 
   return {
-    date: new Date(),
-    snapshotsCreated: snapshotsCreated.length,
-    totalPortfolios: allPortfolios.length,
-    errors,
+    date: today,
+    snapshotsCreated: rowsToInsert.length,
+    totalPortfolios: balances.length,
+    errors: [],
   };
 }
 

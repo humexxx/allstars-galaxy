@@ -99,6 +99,13 @@
       "when": 1778899919830,
       "tag": "0013_romantic_paladin",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1778901015288,
+      "tag": "0014_ambitious_white_queen",
+      "breakpoints": true
     }
   ]
 }

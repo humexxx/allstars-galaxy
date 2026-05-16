@@ -15,6 +15,8 @@ export type UserListItem = {
   id: string;
   email: string | null;
   fullName: string | null;
+  role: "admin" | "user" | null;
+  avatarUrl: string | null;
 };
 
 import { z } from "zod"

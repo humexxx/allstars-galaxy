@@ -104,6 +104,7 @@ export async function createAutomatedTasksForRoadPath(userId: string, roadPathId
 }
 
 export async function createAutomatedTasksForAllRoadPaths(userId: string): Promise<BoardTask[]> {
+  // 1. Fetch all candidate paths in one query.
   const activePaths = await db.query.roadPaths.findMany({
     where: and(
       eq(roadPaths.userId, userId),
@@ -112,14 +113,50 @@ export async function createAutomatedTasksForAllRoadPaths(userId: string): Promi
     ),
   });
 
-  const createdTasks = [];
+  // Pre-filter in memory — no extra queries needed for the schedule check.
+  const eligiblePaths = activePaths.filter(
+    (path) =>
+      !!path.taskFrequency &&
+      shouldCreateTask(
+        path.taskFrequency as RoadPathFrequency,
+        path.lastTaskCreatedAt,
+        path.startDate
+      )
+  );
 
-  for (const path of activePaths) {
+  if (eligiblePaths.length === 0) return [];
+
+  // 2. Fetch the Todo column ONCE for this user (was previously fetched per path).
+  const todoColumn = await db.query.boardColumns.findFirst({
+    where: and(eq(boardColumns.userId, userId), eq(boardColumns.name, "Todo")),
+  });
+
+  if (!todoColumn) {
+    throw new Error("Todo column not found. Please initialize board columns first.");
+  }
+
+  const createdTasks: BoardTask[] = [];
+
+  for (const path of eligiblePaths) {
     try {
-      const task = await createAutomatedTasksForRoadPath(userId, path.id);
-      if (task) {
-        createdTasks.push(task);
-      }
+      const order = await getNextTaskOrder(todoColumn.id, userId);
+      const taskTitle = getTaskTitle(path.title, path.taskFrequency as RoadPathFrequency);
+
+      const task = await createBoardTask(userId, {
+        columnId: todoColumn.id,
+        roadPathId: path.id,
+        title: taskTitle,
+        description: path.description,
+        order,
+        dueDate: new Date(),
+      });
+
+      await db
+        .update(roadPaths)
+        .set({ lastTaskCreatedAt: new Date(), updatedAt: new Date() })
+        .where(eq(roadPaths.id, path.id));
+
+      createdTasks.push(task);
     } catch (error) {
       console.error(`Failed to create task for road path ${path.id}:`, error);
     }

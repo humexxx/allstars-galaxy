@@ -67,8 +67,31 @@ All code, comments, and documentation in **English**.
 ### Database Changes
 1. Edit `db/schema.ts`
 2. `npm run db:generate`
-3. `npm run db:migrate`
+3. `npm run db:migrate` (see "Running migrations" below for caveats)
 4. Commit schema + migrations together
+
+### Running migrations
+`drizzle-kit` uses `DIRECT_URL` (session pooler, port 5432). The Next.js app at
+runtime uses `DATABASE_URL` (transaction pooler, port 6543). Both URLs differ
+**only in the port number**. See `.env.example`.
+
+**Before running migrations that change column types or add foreign keys, stop
+the dev server.** Active queries from `npm run dev` take `AccessShareLock` on
+tables and block `ALTER COLUMN SET DATA TYPE` (which needs `AccessExclusiveLock`).
+Symptom: `drizzle-kit migrate` appears to hang on a spinner — it is actually
+waiting on a lock with no timeout. Index-only migrations (`CREATE INDEX
+IF NOT EXISTS`) are safe to run with the dev server up.
+
+For DDL that rewrites tables, prefix the generated SQL with raised timeouts:
+```sql
+SET statement_timeout = 0;
+SET lock_timeout = '30s';
+```
+Supabase caps `statement_timeout` at ~8s by default on pooled connections, which
+will cancel a long-running `ALTER COLUMN ... USING (...)` mid-flight.
+
+The pre-flight check in `drizzle.config.ts` will refuse to run if `DIRECT_URL`
+is missing and `DATABASE_URL` points at the transaction pooler.
 
 ### Security
 - All server actions use `authenticatedAction` or `adminAction` from `@/lib/services/auth-server`
@@ -87,11 +110,12 @@ All code, comments, and documentation in **English**.
 
 ## Environment Variables
 
-Required in `.env`:
+Required in `.env` (see `.env.example` for full template):
 ```
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
-DATABASE_URL
+DATABASE_URL    # Supabase transaction pooler (:6543) — used by the app at runtime
+DIRECT_URL      # Supabase session pooler (:5432) — used by drizzle-kit only
 CRON_SECRET
 ```
 

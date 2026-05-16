@@ -1,18 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { requireAdminOrRedirect } from "@/lib/services/auth-server";
 import { getAllUsers } from "@/lib/services/user-service";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Eye } from "lucide-react";
 import { PageHeader } from "@/components/portal/page-header";
+import { UsersTable } from "@/components/admin/users/users-table";
 
 export const metadata: Metadata = {
   title: "Users | Capital Galaxy",
@@ -22,53 +12,16 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminUsersPage() {
-  await requireAdminOrRedirect();
-
+  const admin = await requireAdminOrRedirect();
   const users = await getAllUsers();
 
   return (
     <section className="space-y-6">
       <PageHeader
         title="Users"
-        description="View all users and access their portfolios."
+        description="Filter, promote, and impersonate users to provide support or verify behaviour."
       />
-
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead className="w-[100px] text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell className="font-medium">
-                  {user.fullName || "—"}
-                </TableCell>
-                <TableCell>{user.email || "—"}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href={`/portal/portfolio?userId=${user.id}`}>
-                      <Eye className="w-4 h-4 mr-1" />
-                      Portfolio
-                    </Link>
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-            {users.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
-                  No users found.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <UsersTable users={users} currentAdminId={admin.id} />
     </section>
   );
 }

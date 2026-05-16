@@ -110,6 +110,30 @@ export const appState = pgTable("app_state", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+// Audit trail for mutations performed by an admin while impersonating another user.
+export const impersonationLogs = pgTable(
+  "impersonation_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    adminId: uuid("admin_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    impersonatedUserId: uuid("impersonated_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    action: text("action").notNull(),
+    entityTable: text("entity_table"),
+    entityId: uuid("entity_id"),
+    metadata: text("metadata"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("impersonation_logs_admin_id_idx").on(t.adminId),
+    index("impersonation_logs_impersonated_user_id_idx").on(t.impersonatedUserId),
+    index("impersonation_logs_created_at_idx").on(t.createdAt),
+  ]
+);
+
 // Productivity Feature Tables
 export const boardColumns = pgTable(
   "board_columns",

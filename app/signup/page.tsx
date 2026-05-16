@@ -1,8 +1,14 @@
 import { GalleryVerticalEnd } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
+import type { Metadata } from "next"
 
 import { SignupForm } from "@/components/signup-form"
+
+export const metadata: Metadata = {
+  title: "Sign up | Capital Galaxy",
+  description: "Create your Capital Galaxy account.",
+}
 
 export default function SignupPage() {
   return (

@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { PageHeader } from "@/components/portal/page-header";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -29,11 +30,11 @@ export default async function InvestmentMethodsPage() {
 
   return (
     <section className="space-y-8">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-bold">Investment Methods</h1>
-        <p className="text-muted-foreground">Explore available investment strategies and their expected returns</p>
-      </header>
-      
+      <PageHeader
+        title="Investment Methods"
+        description="Explore available investment strategies and their expected returns."
+      />
+
       {methods.length === 0 ? (
         <p className="text-sm text-muted-foreground">No investment methods available yet.</p>
       ) : (

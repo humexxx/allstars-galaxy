@@ -1,8 +1,14 @@
 import { GalleryVerticalEnd } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
+import type { Metadata } from "next"
 
 import { ForgotPasswordForm } from "@/components/forgot-password-form"
+
+export const metadata: Metadata = {
+  title: "Reset password | Capital Galaxy",
+  description: "Request a password reset for your Capital Galaxy account.",
+}
 
 export default function ForgotPasswordPage() {
   return (

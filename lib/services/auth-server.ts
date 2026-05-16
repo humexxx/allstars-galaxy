@@ -4,6 +4,7 @@ import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import type { User } from "@supabase/supabase-js";
 import { cache } from "react";
+import { redirect } from "next/navigation";
 
 async function fetchCurrentUser(): Promise<User | null> {
   const supabase = await createClient();
@@ -68,4 +69,12 @@ export async function requireAdminCached(): Promise<User> {
   }
 
   return user;
+}
+
+export async function requireAdminOrRedirect(fallback = "/portal"): Promise<User> {
+  try {
+    return await requireAdminCached();
+  } catch {
+    redirect(fallback);
+  }
 }

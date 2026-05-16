@@ -2,67 +2,58 @@ import { NextResponse } from "next/server";
 import { createTransaction } from "@/lib/services/transaction-service";
 import { getCurrentUser, getUserRole } from "@/lib/services/auth-server";
 import { createApprovalSnapshot } from "@/lib/services/snapshot-service";
+import { createTransactionSchema } from "@/schemas/transaction";
 
 export async function POST(request: Request) {
   try {
-    const bodyPromise = request.json();
     const user = await getCurrentUser();
-
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [role, body] = await Promise.all([
-      getUserRole(user.id),
-      bodyPromise,
-    ]);
-    const isAdmin = role === "admin";
-    const { investmentMethodId, amount, date, notes, userId } = body;
-
-    if (!investmentMethodId || !amount || !date) {
+    const body = await request.json();
+    const parsed = createTransactionSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Invalid input", issues: parsed.error.flatten().fieldErrors },
         { status: 400 }
       );
     }
 
-    let targetUserId = user.id;
-    
-    if (userId) {
-      if (!isAdmin) {
-        return NextResponse.json(
-          { error: "Forbidden: Only admins can create transactions for other users" },
-          { status: 403 }
-        );
-      }
-      targetUserId = userId;
+    const { investmentMethodId, amount, date, notes, userId } = parsed.data;
+    const role = await getUserRole(user.id);
+    const isAdmin = role === "admin";
+
+    if (userId && userId !== user.id && !isAdmin) {
+      return NextResponse.json(
+        { error: "Forbidden: Only admins can create transactions for other users" },
+        { status: 403 }
+      );
     }
 
+    const targetUserId = userId ?? user.id;
+
+    // Non-admins can only post transactions dated within the last day.
     const transactionDate = new Date(date);
-    const now = new Date();
-    
     if (!isAdmin) {
-      const daysDifference = Math.abs(
-        (transactionDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      
-      if (daysDifference > 1) {
+      const dayInMs = 1000 * 60 * 60 * 24;
+      const driftDays = Math.abs(transactionDate.getTime() - Date.now()) / dayInMs;
+      if (driftDays > 1) {
         return NextResponse.json(
           { error: "Regular users can only create transactions with the current date" },
           { status: 400 }
         );
       }
-      
-      transactionDate.setTime(now.getTime());
+      transactionDate.setTime(Date.now());
     }
 
-    const { transaction, portfolio } = await createTransaction(targetUserId, {
+    const { transaction, portfolio } = await createTransaction(targetUserId, user.id, {
       investmentMethodId,
       type: "buy",
       amount,
       date: transactionDate,
-      notes,
-    }, isAdmin);
+      notes: notes ?? undefined,
+    });
 
     if (isAdmin && transaction.status === "approved") {
       await createApprovalSnapshot(portfolio.id, transactionDate);

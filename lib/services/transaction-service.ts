@@ -2,20 +2,26 @@ import { db } from "@/db";
 import { transactions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getUserPortfolio, createPortfolio } from "./portfolio-service";
+import { getUserRole } from "./auth-server";
 import type { Portfolio } from "@/types/portfolio";
 import type { Transaction } from "@/types";
-
-import { TransactionInput } from "@/types/transaction"
+import type { TransactionInput } from "@/types/transaction";
 
 export async function createTransaction(
-  userId: string,
-  data: TransactionInput,
-  isAdmin: boolean = false
+  targetUserId: string,
+  callerId: string,
+  data: TransactionInput
 ): Promise<{ transaction: Transaction; portfolio: Portfolio }> {
-  let portfolio = await getUserPortfolio(userId);
+  const callerRole = await getUserRole(callerId);
+  const isAdmin = callerRole === "admin";
 
+  if (targetUserId !== callerId && !isAdmin) {
+    throw new Error("Forbidden: only admins can create transactions for other users");
+  }
+
+  let portfolio = await getUserPortfolio(targetUserId);
   if (!portfolio) {
-    portfolio = await createPortfolio(userId);
+    portfolio = await createPortfolio(targetUserId);
   }
 
   const fee = "0";

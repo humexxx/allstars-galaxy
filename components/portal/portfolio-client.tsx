@@ -11,41 +11,12 @@ import { StatsCards } from "@/components/portfolio/stats-cards";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-
-type Portfolio = {
-  id: string;
-  name: string;
-};
-
-type InvestmentMethod = {
-  id: string;
-  name: string;
-  author: string;
-  riskLevel: string;
-  monthlyRoi: number;
-};
-
-type Transaction = {
-  id: string;
-  type: "buy" | "withdrawal";
-  amount: string;
-  fee: string;
-  total: string;
-  date: Date;
-  status: "pending" | "approved" | "rejected" | "closed";
-  notes?: string | null;
-  investmentMethod: InvestmentMethod;
-  asset_symbol?: string; // Assuming we might have this, or use name
-};
-
-type PortfolioStats = {
-  totalValue: number;
-  costBasis: number;
-  allTimeProfit: number;
-  allTimeProfitPercentage: number;
-  totalInvestmentMethods: number;
-  activeTransactions: number;
-};
+import type {
+  InvestmentMethod,
+  Portfolio,
+  PortfolioStats,
+  PortfolioTransaction,
+} from "@/types/portfolio";
 
 type ChartDataPoint = {
   date: string;
@@ -59,9 +30,9 @@ type User = {
 };
 
 type PortfolioData = {
-  portfolio: Portfolio | null;
+  portfolio: Pick<Portfolio, "id" | "name"> | null;
   stats: PortfolioStats | null;
-  transactions: Transaction[];
+  transactions: PortfolioTransaction[];
   chartData: ChartDataPoint[];
   methods: InvestmentMethod[];
   isAdmin: boolean;

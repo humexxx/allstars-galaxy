@@ -8,64 +8,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { formatCurrency, formatSignedPercent, parseDecimal } from "@/lib/utils/format";
-
-type InvestmentMethod = {
-  id: string;
-  name: string;
-  author: string;
-  riskLevel: string;
-  monthlyRoi: number;
-};
-
-type TransactionStatus = "pending" | "approved" | "rejected" | "closed";
-type TransactionType = "buy" | "withdrawal";
-
-type Transaction = {
-  id: string;
-  type: TransactionType;
-  amount: string;
-  fee: string;
-  total: string;
-  initialValue?: string | null;
-  currentValue?: string | null;
-  date: Date;
-  status: TransactionStatus;
-  notes?: string | null;
-  investmentMethod: InvestmentMethod;
-};
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge, TypeBadge } from "./transaction-badges";
+import type { PortfolioTransaction } from "@/types/portfolio";
 
 type TransactionsTableProps = {
-  transactions: Transaction[];
+  transactions: PortfolioTransaction[];
 };
 
-function StatusBadge({ status }: { status: TransactionStatus }): React.ReactElement {
-  switch (status) {
-    case "approved":
-      return <Badge variant="default" className="bg-green-500">Approved</Badge>;
-    case "pending":
-      return <Badge variant="outline" className="border-yellow-500 text-yellow-500 bg-yellow-500/10">Pending</Badge>;
-    case "rejected":
-      return <Badge variant="destructive">Rejected</Badge>;
-    default:
-      return <Badge variant="outline">{status}</Badge>;
-  }
-}
-
-function TypeBadge({ type }: { type: TransactionType }): React.ReactElement {
-  return type === "buy"
-    ? <Badge variant="secondary">Buy</Badge>
-    : <Badge variant="outline">Withdrawal</Badge>;
-}
-
-export function TransactionsTable({ transactions }: TransactionsTableProps): React.ReactElement {
+export function TransactionsTable({ transactions }: TransactionsTableProps) {
   if (transactions.length === 0) {
     return (
-      <div className="rounded-lg border p-8 text-center">
-        <p className="text-muted-foreground">No transactions yet. Add your first transaction to get started.</p>
-      </div>
+      <EmptyState
+        title="No transactions yet"
+        description="Add your first transaction to get started."
+      />
     );
   }
 

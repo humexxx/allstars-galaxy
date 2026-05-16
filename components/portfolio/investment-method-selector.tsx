@@ -11,14 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-
-type InvestmentMethod = {
-  id: string;
-  name: string;
-  author: string;
-  riskLevel: string;
-  monthlyRoi: number;
-};
+import type { InvestmentMethod } from "@/types/portfolio";
 
 type InvestmentMethodSelectorProps = {
   open: boolean;

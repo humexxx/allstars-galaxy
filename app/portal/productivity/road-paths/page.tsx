@@ -2,6 +2,7 @@ import { RoadPathsView } from "@/components/productivity/road-paths/road-paths-v
 import type { Metadata } from "next";
 import { requireAuthCached } from "@/lib/services/auth-server";
 import { getUserRoadPaths } from "@/lib/services/road-path-service";
+import { PageHeader } from "@/components/portal/page-header";
 
 export const metadata: Metadata = {
   title: "Road Paths | Capital Galaxy",
@@ -14,10 +15,10 @@ export default async function RoadPathsPage() {
 
   return (
     <section className="space-y-6">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-bold">Road Paths</h1>
-        <p className="text-muted-foreground">Track your long-term goals and progress</p>
-      </header>
+      <PageHeader
+        title="Road Paths"
+        description="Track your long-term goals and progress."
+      />
       <RoadPathsView initialRoadPaths={roadPaths} />
     </section>
   );

@@ -75,7 +75,7 @@ export async function createRoadPath(
       unit: data.unit,
       startDate: data.startDate,
       targetDate: data.targetDate,
-      autoCreateTasks: data.autoCreateTasks ? 1 : 0,
+      autoCreateTasks: data.autoCreateTasks ?? false,
       taskFrequency: data.taskFrequency,
     })
     .returning();
@@ -102,7 +102,7 @@ export async function updateRoadPath(
     updateData.currentValue = currentValue.toString();
   }
   if (autoCreateTasks !== undefined) {
-    updateData.autoCreateTasks = autoCreateTasks ? 1 : 0;
+    updateData.autoCreateTasks = autoCreateTasks;
   }
 
   const [path] = await db

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -21,31 +21,33 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
   const [milestones, setMilestones] = useState<RoadPathMilestone[]>([]);
   const [progress, setProgress] = useState<RoadPathProgress[]>([]);
   const [stats, setStats] = useState<RoadPathStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isPending, startTransition] = useTransition();
+  const [hasLoaded, setHasLoaded] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const result = await getRoadPathDetailAction(roadPath.id);
-      if (result.success) {
-        setMilestones(result.data.milestones);
-        setProgress(result.data.progress);
-        setStats(result.data.stats);
+  const loadData = useCallback(() => {
+    startTransition(async () => {
+      try {
+        const result = await getRoadPathDetailAction(roadPath.id);
+        if (result.success) {
+          setMilestones(result.data.milestones);
+          setProgress(result.data.progress);
+          setStats(result.data.stats);
+        }
+      } catch {
+        toast.error("Failed to load road path details");
+      } finally {
+        setHasLoaded(true);
       }
-    } catch {
-      toast.error("Failed to load road path details");
-    } finally {
-      setIsLoading(false);
-    }
+    });
   }, [roadPath.id]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  if (isLoading) {
+  if (!hasLoaded && isPending) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -68,7 +70,7 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">Progress</CardTitle>
@@ -117,7 +119,7 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Milestones</CardTitle>

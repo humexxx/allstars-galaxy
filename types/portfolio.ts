@@ -1,9 +1,11 @@
 import type { portfolios, investmentMethods } from "@/db/schema";
 
-// Infer from schema
 export type Portfolio = typeof portfolios.$inferSelect;
+export type InvestmentMethod = typeof investmentMethods.$inferSelect;
 
-// Custom calculated types that don't exist in schema
+export type TransactionStatus = "pending" | "approved" | "rejected" | "closed";
+export type TransactionType = "buy" | "withdrawal";
+
 export interface PortfolioStats {
   totalValue: number;
   costBasis: number;
@@ -13,24 +15,22 @@ export interface PortfolioStats {
   activeTransactions: number;
 }
 
-// Transaction with joined investment method
 export interface PortfolioTransaction {
   id: string;
-  type: "buy" | "withdrawal";
+  type: TransactionType;
   amount: string;
   fee: string;
   total: string;
   initialValue: string | null;
   currentValue: string | null;
   date: Date;
-  status: "pending" | "approved" | "rejected" | "closed";
+  status: TransactionStatus;
   notes: string | null;
-  investmentMethod: typeof investmentMethods.$inferSelect;
+  investmentMethod: InvestmentMethod;
 }
 
-// Custom aggregated asset type
 export interface PortfolioAsset {
-  investmentMethod: typeof investmentMethods.$inferSelect;
+  investmentMethod: InvestmentMethod;
   totalInvested: number;
   totalWithdrawn: number;
   holdingAmount: number;

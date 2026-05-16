@@ -1,9 +1,16 @@
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Sparkles, Wallet, Compass, Kanban, HeartPulse, ShieldCheck, BarChart3, Target } from "lucide-react";
+import type { Metadata } from "next";
 import { Button } from "@/components/ui/button";
 import { LandingNav } from "@/components/landing/landing-nav";
 import { LandingFooter } from "@/components/landing/landing-footer";
+
+export const metadata: Metadata = {
+  title: "Capital Galaxy — Personal capital, mapped like a galaxy",
+  description:
+    "The calm command center for your money, your projects and the decisions that connect them.",
+};
 
 const MODULES: {
   title: string;

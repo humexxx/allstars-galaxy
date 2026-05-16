@@ -1,8 +1,14 @@
 import { GalleryVerticalEnd } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
+import type { Metadata } from "next"
 
 import { LoginForm } from "@/components/login-form"
+
+export const metadata: Metadata = {
+  title: "Log in | Capital Galaxy",
+  description: "Sign in to your Capital Galaxy workspace.",
+}
 
 export default function LoginPage() {
   return (

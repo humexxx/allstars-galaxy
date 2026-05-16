@@ -93,8 +93,11 @@ export function PortfolioHeader({
                 {hideValues ? "****" : formatCurrency(totalValue)}
               </span>
               <button
+                type="button"
                 onClick={onToggleHideValues}
                 className="focus:outline-none"
+                aria-label={hideValues ? "Show portfolio balance" : "Hide portfolio balance"}
+                aria-pressed={hideValues}
               >
                 {hideValues ? (
                   <EyeOff className="w-5 h-5 text-muted-foreground cursor-pointer hover:text-foreground" />
@@ -124,7 +127,12 @@ export function PortfolioHeader({
               Export
             </Button>
 
-            <Button variant="outline" size="icon" className="bg-background">
+            <Button
+              variant="outline"
+              size="icon"
+              className="bg-background"
+              aria-label="More portfolio actions"
+            >
               <MoreHorizontal className="w-4 h-4" />
             </Button>
           </div>

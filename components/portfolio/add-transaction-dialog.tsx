@@ -9,14 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { InvestmentMethodSelector } from "./investment-method-selector";
 import { TransactionForm } from "./transaction-form";
-
-type InvestmentMethod = {
-  id: string;
-  name: string;
-  author: string;
-  riskLevel: string;
-  monthlyRoi: number;
-};
+import type { InvestmentMethod } from "@/types/portfolio";
 
 type User = {
   id: string;

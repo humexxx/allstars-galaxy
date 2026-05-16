@@ -20,7 +20,6 @@ export function AppHeader({ user }: { user: User }) {
           <div className="-ml-2 md:hidden">
             <SidebarTrigger />
           </div>
-          <p className="text-xl font-bold">Capital Galaxy</p>
         </div>
         <div className="flex items-center gap-4">
           <ModeToggle />

@@ -13,7 +13,7 @@ async function seed() {
       description: 'A low-risk method ideal for conservative investors.',
       author: 'Humexxx',
       riskLevel: 'Low',
-      monthlyRoi: 0.7
+      monthlyRoi: "0.7"
     }).onConflictDoNothing();
 
     console.log("  ✓ Investment Method created");

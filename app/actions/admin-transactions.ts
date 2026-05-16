@@ -103,12 +103,14 @@ export async function rejectTransaction(transactionId: string) {
 
   await db
     .update(transactions)
-    .set({ 
+    .set({
       status: "rejected",
       rejectedAt: new Date(),
       rejectedBy: admin.id,
+      updatedAt: new Date(),
     })
     .where(eq(transactions.id, transactionId));
 
   revalidatePath("/portal/admin/transactions");
+  revalidatePath("/portal/portfolio");
 }

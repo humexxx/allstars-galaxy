@@ -107,7 +107,7 @@ export async function createAutomatedTasksForAllRoadPaths(userId: string): Promi
   const activePaths = await db.query.roadPaths.findMany({
     where: and(
       eq(roadPaths.userId, userId),
-      eq(roadPaths.autoCreateTasks, 1),
+      eq(roadPaths.autoCreateTasks, true),
       isNull(roadPaths.completedAt)
     ),
   });

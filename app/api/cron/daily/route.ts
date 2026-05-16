@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { db } from "@/db";
 import { appState } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -7,6 +8,20 @@ import { createDailySnapshots } from "@/lib/services/snapshot-service";
 import { createAutomatedTasksForAllRoadPaths } from "@/lib/services/task-automation-service";
 
 const CRON_SECRET = process.env.CRON_SECRET;
+if (!CRON_SECRET) {
+  throw new Error("CRON_SECRET is not configured");
+}
+const EXPECTED_AUTH_HEADER = `Bearer ${CRON_SECRET}`;
+
+function isAuthorized(authHeader: string | null): boolean {
+  if (!authHeader || authHeader.length !== EXPECTED_AUTH_HEADER.length) {
+    return false;
+  }
+  return timingSafeEqual(
+    Buffer.from(authHeader),
+    Buffer.from(EXPECTED_AUTH_HEADER)
+  );
+}
 
 async function updateAppState(key: string, value: string, error: string | null = null) {
   const existingState = await db.query.appState.findFirst({
@@ -124,9 +139,7 @@ async function processAutomatedTasks(today: Date) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify cron secret
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${CRON_SECRET}`) {
+    if (!isAuthorized(request.headers.get("authorization"))) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }

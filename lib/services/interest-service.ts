@@ -39,7 +39,7 @@ export async function applyMonthlyInterest(beforeDate?: Date): Promise<{
   // Calculate new values and prepare updates
   const updates = activeTransactions.map((transaction) => {
     const currentValue = parseFloat(transaction.currentValue || "0");
-    const monthlyRoi = (transaction.investmentMethod?.monthlyRoi || 0) / 100; // Convert percentage to decimal
+    const monthlyRoi = parseFloat(transaction.investmentMethod?.monthlyRoi ?? "0") / 100; // Convert percentage to decimal
     const newValue = currentValue * (1 + monthlyRoi);
 
     return {

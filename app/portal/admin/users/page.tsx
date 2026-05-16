@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { requireAdminCached } from "@/lib/services/auth-server";
+import { requireAdminOrRedirect } from "@/lib/services/auth-server";
 import { getAllUsers } from "@/lib/services/user-service";
 import {
   Table,
@@ -13,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Eye } from "lucide-react";
+import { PageHeader } from "@/components/portal/page-header";
 
 export const metadata: Metadata = {
   title: "Users | Capital Galaxy",
@@ -22,22 +22,16 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminUsersPage() {
-  try {
-    await requireAdminCached();
-  } catch {
-    redirect("/portal");
-  }
+  await requireAdminOrRedirect();
 
   const users = await getAllUsers();
 
   return (
     <section className="space-y-6">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-bold">Users</h1>
-        <p className="text-muted-foreground">
-          View all users and access their portfolios.
-        </p>
-      </header>
+      <PageHeader
+        title="Users"
+        description="View all users and access their portfolios."
+      />
 
       <div className="rounded-md border">
         <Table>

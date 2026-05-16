@@ -18,14 +18,7 @@ import {
 } from "@/components/ui/field";
 import { UserSelector } from "@/components/user-selector";
 import { format } from "date-fns";
-
-type InvestmentMethod = {
-  id: string;
-  name: string;
-  author: string;
-  riskLevel: string;
-  monthlyRoi: number;
-};
+import type { InvestmentMethod } from "@/types/portfolio";
 
 type User = {
   id: string;

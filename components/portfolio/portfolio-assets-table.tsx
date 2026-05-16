@@ -12,37 +12,20 @@ import { Badge } from "@/components/ui/badge";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatSignedCurrency, formatSignedPercent } from "@/lib/utils/format";
-
-type InvestmentMethod = {
-  id: string;
-  name: string;
-  author: string;
-  riskLevel: string;
-  monthlyRoi: number;
-};
-
-type Asset = {
-  investmentMethod: InvestmentMethod;
-  totalInvested: number;
-  totalWithdrawn: number;
-  holdingAmount: number;
-  approvedAmount: number;
-  pendingAmount: number;
-  hasPendingTransactions: boolean;
-  profitLoss: number;
-  profitLossPercentage: number;
-};
+import { EmptyState } from "@/components/ui/empty-state";
+import type { PortfolioAsset } from "@/types/portfolio";
 
 type PortfolioAssetsTableProps = {
-  assets: Asset[];
+  assets: PortfolioAsset[];
 };
 
-export function PortfolioAssetsTable({ assets }: PortfolioAssetsTableProps): React.ReactElement {
+export function PortfolioAssetsTable({ assets }: PortfolioAssetsTableProps) {
   if (assets.length === 0) {
     return (
-      <div className="rounded-lg border p-8 text-center">
-        <p className="text-muted-foreground">No assets yet. Add your first transaction to get started.</p>
-      </div>
+      <EmptyState
+        title="No assets yet"
+        description="Add your first transaction to get started."
+      />
     );
   }
 
@@ -121,7 +104,11 @@ export function PortfolioAssetsTable({ assets }: PortfolioAssetsTableProps): Rea
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="ghost" size="icon">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Actions for ${asset.investmentMethod.name}`}
+                  >
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </TableCell>

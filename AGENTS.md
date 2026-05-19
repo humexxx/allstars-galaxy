@@ -73,7 +73,7 @@ capital-galaxy/
 
 ### Development
 ```bash
-npm run dev          # Start dev server (http://localhost:3000)
+npm run dev          # Start dev server (http://localhost:3010)
 npm run build        # Production build
 npm run start        # Start production server
 npm run lint         # Run ESLint
@@ -102,7 +102,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=your_supabase_anon_key
 DATABASE_URL=your_database_url
 
 # Base URL (required)
-NEXT_PUBLIC_BASE_URL=http://localhost:3000
+NEXT_PUBLIC_BASE_URL=http://localhost:3010
 
 # Cron Secret (required for scheduled jobs)
 CRON_SECRET=your_secure_random_string

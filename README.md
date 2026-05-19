@@ -60,7 +60,7 @@ npm install
 npm run dev
 ```
 
-Abrir [http://localhost:3000](http://localhost:3000) en tu navegador.
+Abrir [http://localhost:3010](http://localhost:3010) en tu navegador.
 
 ## 🛠️ Scripts Disponibles
 
@@ -85,7 +85,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=your_supabase_anon_key
 DATABASE_URL=your_database_url
 
 # Base URL
-NEXT_PUBLIC_BASE_URL=http://localhost:3000
+NEXT_PUBLIC_BASE_URL=http://localhost:3010
 
 # Cron Secret (generar una cadena aleatoria segura)
 CRON_SECRET=your_secure_random_string

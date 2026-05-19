@@ -2,13 +2,30 @@ import { cn } from "@/lib/utils";
 
 type GalaxyLogoProps = {
   className?: string;
+  /**
+   * `theme` follows the app theme (background/foreground tokens).
+   * `light` is white-bg friendly, `dark` is black-bg friendly. The landing uses the
+   * explicit variants so it stays consistent regardless of the user's theme.
+   */
+  variant?: "theme" | "light" | "dark";
 };
 
-export function GalaxyLogo({ className }: GalaxyLogoProps): React.ReactElement {
+export function GalaxyLogo({
+  className,
+  variant = "theme",
+}: GalaxyLogoProps): React.ReactElement {
+  const variantClass =
+    variant === "light"
+      ? "bg-neutral-900 text-white"
+      : variant === "dark"
+      ? "bg-white text-neutral-900"
+      : "bg-foreground text-background";
+
   return (
     <span
       className={cn(
-        "grid size-8 place-items-center rounded-md bg-foreground text-background",
+        "grid size-8 place-items-center rounded-md",
+        variantClass,
         className
       )}
       aria-hidden="true"

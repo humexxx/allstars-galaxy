@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Github, Twitter, Linkedin } from "lucide-react";
+
 import { GalaxyLogo } from "./galaxy-logo";
 
 const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
@@ -8,6 +8,7 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
     links: [
       { label: "Portfolio", href: "/portal/portfolio" },
       { label: "Investment Methods", href: "/portal/investment-methods" },
+      { label: "Plans", href: "/portal/plans" },
       { label: "Productivity Board", href: "/portal/productivity/board" },
       { label: "Road Paths", href: "/portal/productivity/road-paths" },
     ],
@@ -41,39 +42,33 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   },
 ];
 
-export function LandingFooter(): React.ReactElement {
+export function LandingFooter() {
   return (
-    <footer className="border-t bg-background">
-      <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="grid gap-10 md:grid-cols-6">
+    <footer className="border-t border-neutral-200 bg-white">
+      <div className="mx-auto w-full max-w-7xl px-5 py-16 sm:px-8">
+        <div className="grid gap-12 md:grid-cols-6">
           <div className="md:col-span-2">
-            <div className="flex items-center gap-2 font-bold">
-              <GalaxyLogo />
-              <span className="text-lg tracking-tight">Capital Galaxy</span>
-            </div>
-            <p className="mt-4 max-w-sm text-sm text-muted-foreground">
+            <Link href="/" className="inline-flex items-center gap-2.5 text-neutral-900">
+              <GalaxyLogo variant="light" />
+              <span className="text-base font-semibold tracking-tight">Capital Galaxy</span>
+            </Link>
+            <p className="mt-4 max-w-sm text-sm leading-relaxed text-neutral-600">
               One workspace for your money, your time, and the goals that connect them.
             </p>
-            <div className="mt-6 flex gap-2">
-              <Link href="#" aria-label="Twitter" className="grid size-9 place-items-center rounded-full border hover:bg-muted">
-                <Twitter className="size-4" />
-              </Link>
-              <Link href="#" aria-label="GitHub" className="grid size-9 place-items-center rounded-full border hover:bg-muted">
-                <Github className="size-4" />
-              </Link>
-              <Link href="#" aria-label="LinkedIn" className="grid size-9 place-items-center rounded-full border hover:bg-muted">
-                <Linkedin className="size-4" />
-              </Link>
-            </div>
           </div>
 
           {COLUMNS.map((col) => (
             <div key={col.title}>
-              <h4 className="mb-4 text-sm font-semibold">{col.title}</h4>
-              <ul className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-500">
+                {col.title}
+              </h4>
+              <ul className="mt-4 space-y-3">
                 {col.links.map((link) => (
                   <li key={link.label}>
-                    <Link href={link.href} className="text-sm text-muted-foreground transition hover:text-foreground">
+                    <Link
+                      href={link.href}
+                      className="text-sm text-neutral-700 transition hover:text-neutral-900"
+                    >
                       {link.label}
                     </Link>
                   </li>
@@ -83,11 +78,11 @@ export function LandingFooter(): React.ReactElement {
           ))}
         </div>
 
-        <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t pt-8 sm:flex-row sm:items-center">
-          <p className="text-xs text-muted-foreground">
+        <div className="mt-14 flex flex-col items-start justify-between gap-3 border-t border-neutral-200 pt-8 sm:flex-row sm:items-center">
+          <p className="text-xs text-neutral-500">
             © {new Date().getFullYear()} Capital Galaxy. All rights reserved.
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-neutral-500">
             Built for people who think in systems, not in spreadsheets.
           </p>
         </div>

@@ -9,7 +9,7 @@ Capital Galaxy is a personal finance and productivity web app built with Next.js
 ## Commands
 
 ```bash
-npm run dev          # Start dev server (http://localhost:3000)
+npm run dev          # Start dev server (http://localhost:3010)
 npm run build        # Production build
 npm run lint         # ESLint
 npm run db:generate  # Generate migration from schema changes

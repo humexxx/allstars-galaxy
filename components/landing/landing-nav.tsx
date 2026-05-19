@@ -1,40 +1,49 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Menu, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
+
 import { cn } from "@/lib/utils";
 import { GalaxyLogo } from "./galaxy-logo";
 
 const NAV_LINKS = [
   { href: "#modules", label: "Modules" },
   { href: "#how", label: "How it works" },
-  { href: "#galaxy", label: "Why Galaxy" },
+  { href: "#galaxy", label: "Manifesto" },
 ];
 
-export function LandingNav(): React.ReactElement {
-  const [scrolled, setScrolled] = useState<boolean>(false);
-  const [open, setOpen] = useState<boolean>(false);
+function subscribeScroll(onChange: () => void) {
+  window.addEventListener("scroll", onChange, { passive: true });
+  return () => window.removeEventListener("scroll", onChange);
+}
+function getScrollSnapshot() {
+  return window.scrollY > 8;
+}
+function getServerScrollSnapshot() {
+  return false;
+}
 
-  useEffect(() => {
-    const onScroll = (): void => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+export function LandingNav() {
+  const scrolled = useSyncExternalStore(
+    subscribeScroll,
+    getScrollSnapshot,
+    getServerScrollSnapshot
+  );
+  const [open, setOpen] = useState(false);
 
   return (
     <header
       className={cn(
-        "sticky top-0 z-50 w-full border-b border-transparent bg-background/0 transition-all",
-        scrolled && "border-border/60 bg-background/85 backdrop-blur"
+        "sticky top-0 z-50 w-full border-b border-transparent bg-white/0 transition-all",
+        scrolled && "border-neutral-200 bg-white/90 backdrop-blur"
       )}
     >
-      <nav className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2 font-bold">
-          <GalaxyLogo />
-          <span className="text-lg tracking-tight">Capital Galaxy</span>
+      <nav className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-5 sm:px-8">
+        <Link href="/" className="flex items-center gap-2.5 text-neutral-900">
+          <GalaxyLogo variant="light" />
+          <span className="text-base font-semibold tracking-tight">Capital Galaxy</span>
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">
@@ -42,27 +51,33 @@ export function LandingNav(): React.ReactElement {
             <Link
               key={link.href}
               href={link.href}
-              className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              className="rounded-full px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 hover:text-neutral-900"
             >
               {link.label}
             </Link>
           ))}
         </div>
 
-        <div className="hidden items-center gap-2 md:flex">
-          <Button asChild variant="ghost" className="rounded-full">
-            <Link href="/login">Log in</Link>
-          </Button>
-          <Button asChild className="rounded-full bg-foreground text-background hover:bg-foreground/90">
-            <Link href="/signup">Sign up</Link>
-          </Button>
+        <div className="hidden items-center gap-3 md:flex">
+          <Link
+            href="/login"
+            className="text-sm font-medium text-neutral-700 hover:text-neutral-900"
+          >
+            Log in
+          </Link>
+          <Link
+            href="/signup"
+            className="inline-flex h-10 items-center justify-center rounded-full bg-neutral-900 px-5 text-sm font-medium text-white transition hover:bg-neutral-800"
+          >
+            Get started
+          </Link>
         </div>
 
         <button
           type="button"
-          aria-label="Toggle menu"
+          aria-label={open ? "Close menu" : "Open menu"}
           aria-expanded={open}
-          className="grid size-10 place-items-center rounded-full hover:bg-muted md:hidden"
+          className="grid size-10 place-items-center rounded-full text-neutral-900 hover:bg-neutral-100 md:hidden"
           onClick={() => setOpen((v) => !v)}
         >
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
@@ -70,25 +85,31 @@ export function LandingNav(): React.ReactElement {
       </nav>
 
       {open && (
-        <div className="border-t bg-background md:hidden">
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-1 px-4 py-3 sm:px-6">
+        <div className="border-t border-neutral-200 bg-white md:hidden">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-1 px-5 py-3 sm:px-8">
             {NAV_LINKS.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
-                className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="rounded-md px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
               >
                 {link.label}
               </Link>
             ))}
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <Button asChild variant="outline" className="rounded-full">
-                <Link href="/login">Log in</Link>
-              </Button>
-              <Button asChild className="rounded-full bg-foreground text-background hover:bg-foreground/90">
-                <Link href="/signup">Sign up</Link>
-              </Button>
+            <div className="mt-2 flex gap-2">
+              <Link
+                href="/login"
+                className="flex-1 rounded-full border border-neutral-300 px-4 py-2 text-center text-sm font-medium text-neutral-900"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/signup"
+                className="flex-1 rounded-full bg-neutral-900 px-4 py-2 text-center text-sm font-medium text-white"
+              >
+                Get started
+              </Link>
             </div>
           </div>
         </div>

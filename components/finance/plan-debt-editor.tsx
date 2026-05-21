@@ -7,6 +7,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -16,13 +23,16 @@ import {
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
 
-import type { FinancePlanDebt } from "@/types/finance";
+import type { DebtPaymentType, FinancePlanDebt } from "@/types/finance";
 
 type DebtInput = {
   name: string;
   initialBalance: string;
   monthlyInterestRate: string;
   monthlyPayment: string;
+  paymentType: DebtPaymentType;
+  minPaymentPercent: string;
+  minPaymentFloor: string;
 };
 
 type PlanDebtEditorProps = {
@@ -32,18 +42,18 @@ type PlanDebtEditorProps = {
   onDelete: (id: string) => Promise<void>;
 };
 
-export function PlanDebtEditor({
-  debts,
-  onAdd,
-  onUpdate,
-  onDelete,
-}: PlanDebtEditorProps) {
-  const [draft, setDraft] = useState<DebtInput>({
-    name: "",
-    initialBalance: "",
-    monthlyInterestRate: "",
-    monthlyPayment: "",
-  });
+const EMPTY_DRAFT: DebtInput = {
+  name: "",
+  initialBalance: "",
+  monthlyInterestRate: "",
+  monthlyPayment: "",
+  paymentType: "fixed",
+  minPaymentPercent: "",
+  minPaymentFloor: "",
+};
+
+export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEditorProps) {
+  const [draft, setDraft] = useState<DebtInput>(EMPTY_DRAFT);
   const [isPending, startTransition] = useTransition();
 
   const handleAdd = () => {
@@ -55,25 +65,27 @@ export function PlanDebtEditor({
           initialBalance: draft.initialBalance || "0",
           monthlyInterestRate: draft.monthlyInterestRate || "0",
           monthlyPayment: draft.monthlyPayment || "0",
+          paymentType: draft.paymentType,
+          minPaymentPercent: draft.minPaymentPercent || "0",
+          minPaymentFloor: draft.minPaymentFloor || "0",
         });
-        setDraft({
-          name: "",
-          initialBalance: "",
-          monthlyInterestRate: "",
-          monthlyPayment: "",
-        });
+        setDraft(EMPTY_DRAFT);
       } catch {
         toast.error("Failed to add debt");
       }
     });
   };
 
+  const isPercent = draft.paymentType === "percent_of_balance";
+
   return (
     <div className="space-y-3">
       <div>
         <h3 className="text-base font-semibold">Debts</h3>
         <p className="text-xs text-muted-foreground">
-          Balance, monthly interest rate (decimal — 0.02 = 2%) and the payment you make each month.
+          Use <strong>Fixed</strong> for loans with a constant monthly payment, and{" "}
+          <strong>% of balance</strong> for credit cards (the minimum shrinks as the
+          balance drops, which produces a naturally curving payoff line).
         </p>
       </div>
 
@@ -85,60 +97,98 @@ export function PlanDebtEditor({
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead className="w-[160px]">Balance</TableHead>
-                <TableHead className="w-[140px]">Rate (mo.)</TableHead>
-                <TableHead className="w-[140px]">Payment</TableHead>
-                <TableHead className="w-[60px]" />
+                <TableHead className="w-[140px]">Balance</TableHead>
+                <TableHead className="w-[130px]">Rate (mo.)</TableHead>
+                <TableHead className="w-[150px]">Payment</TableHead>
+                <TableHead className="w-[200px]">Type</TableHead>
+                <TableHead className="w-[50px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {debts.map((debt) => (
-                <DebtRow
-                  key={debt.id}
-                  debt={debt}
-                  onUpdate={onUpdate}
-                  onDelete={onDelete}
-                />
+                <DebtRow key={debt.id} debt={debt} onUpdate={onUpdate} onDelete={onDelete} />
               ))}
             </TableBody>
           </Table>
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed p-3">
-        <Input
-          placeholder="Name (e.g. BAC card)"
-          value={draft.name}
-          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          className="max-w-xs"
-          aria-label="New debt name"
-        />
-        <Input
-          placeholder="Balance"
-          inputMode="decimal"
-          value={draft.initialBalance}
-          onChange={(e) => setDraft({ ...draft, initialBalance: e.target.value })}
-          className="max-w-[140px]"
-          aria-label="New debt balance"
-        />
-        <Input
-          placeholder="Rate (0.02)"
-          inputMode="decimal"
-          value={draft.monthlyInterestRate}
-          onChange={(e) =>
-            setDraft({ ...draft, monthlyInterestRate: e.target.value })
-          }
-          className="max-w-[140px]"
-          aria-label="New debt monthly rate"
-        />
-        <Input
-          placeholder="Payment"
-          inputMode="decimal"
-          value={draft.monthlyPayment}
-          onChange={(e) => setDraft({ ...draft, monthlyPayment: e.target.value })}
-          className="max-w-[140px]"
-          aria-label="New debt monthly payment"
-        />
+      <div className="space-y-3 rounded-md border border-dashed p-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <Input
+            placeholder="Name (e.g. BAC card)"
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            className="max-w-xs"
+            aria-label="New debt name"
+          />
+          <Input
+            placeholder="Balance"
+            inputMode="decimal"
+            value={draft.initialBalance}
+            onChange={(e) => setDraft({ ...draft, initialBalance: e.target.value })}
+            className="max-w-[140px]"
+            aria-label="New debt balance"
+          />
+          <Input
+            placeholder="Rate (0.02)"
+            inputMode="decimal"
+            value={draft.monthlyInterestRate}
+            onChange={(e) => setDraft({ ...draft, monthlyInterestRate: e.target.value })}
+            className="max-w-[130px]"
+            aria-label="New debt monthly rate"
+          />
+          <Select
+            value={draft.paymentType}
+            onValueChange={(v) =>
+              setDraft({ ...draft, paymentType: v as DebtPaymentType })
+            }
+          >
+            <SelectTrigger className="max-w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="fixed">Fixed payment</SelectItem>
+              <SelectItem value="percent_of_balance">% of balance (cards)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {isPercent ? (
+          <div className="flex flex-wrap items-end gap-2">
+            <Input
+              placeholder="% (0.02 = 2%)"
+              inputMode="decimal"
+              value={draft.minPaymentPercent}
+              onChange={(e) => setDraft({ ...draft, minPaymentPercent: e.target.value })}
+              className="max-w-[160px]"
+              aria-label="Minimum payment percent"
+            />
+            <Input
+              placeholder="Floor ($25)"
+              inputMode="decimal"
+              value={draft.minPaymentFloor}
+              onChange={(e) => setDraft({ ...draft, minPaymentFloor: e.target.value })}
+              className="max-w-[160px]"
+              aria-label="Minimum payment floor"
+            />
+            <span className="text-xs text-muted-foreground">
+              Each month: <strong>max(balance × %, floor)</strong>
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-end gap-2">
+            <Input
+              placeholder="Fixed monthly payment"
+              inputMode="decimal"
+              value={draft.monthlyPayment}
+              onChange={(e) => setDraft({ ...draft, monthlyPayment: e.target.value })}
+              className="max-w-[200px]"
+              aria-label="New debt monthly payment"
+            />
+          </div>
+        )}
+
         <Button
           onClick={handleAdd}
           disabled={isPending || draft.name.trim().length === 0}
@@ -165,33 +215,33 @@ function DebtRow({
   const [balance, setBalance] = useState(debt.initialBalance);
   const [rate, setRate] = useState(debt.monthlyInterestRate);
   const [payment, setPayment] = useState(debt.monthlyPayment);
+  const [paymentType, setPaymentType] = useState<DebtPaymentType>(
+    debt.paymentType as DebtPaymentType
+  );
+  const [minPercent, setMinPercent] = useState(debt.minPaymentPercent);
+  const [minFloor, setMinFloor] = useState(debt.minPaymentFloor);
   const [isPending, startTransition] = useTransition();
 
-  const commit = () => {
-    if (
-      name === debt.name &&
-      balance === debt.initialBalance &&
-      rate === debt.monthlyInterestRate &&
-      payment === debt.monthlyPayment
-    )
-      return;
+  const commit = (overrides: Partial<DebtInput> = {}) => {
+    const next: DebtInput = {
+      name: overrides.name ?? name.trim(),
+      initialBalance: overrides.initialBalance ?? (balance.trim() || "0"),
+      monthlyInterestRate: overrides.monthlyInterestRate ?? (rate.trim() || "0"),
+      monthlyPayment: overrides.monthlyPayment ?? (payment.trim() || "0"),
+      paymentType: overrides.paymentType ?? paymentType,
+      minPaymentPercent: overrides.minPaymentPercent ?? (minPercent.trim() || "0"),
+      minPaymentFloor: overrides.minPaymentFloor ?? (minFloor.trim() || "0"),
+    };
     startTransition(async () => {
       try {
-        await onUpdate(debt.id, {
-          name: name.trim(),
-          initialBalance: balance.trim() || "0",
-          monthlyInterestRate: rate.trim() || "0",
-          monthlyPayment: payment.trim() || "0",
-        });
+        await onUpdate(debt.id, next);
       } catch {
         toast.error("Failed to save");
-        setName(debt.name);
-        setBalance(debt.initialBalance);
-        setRate(debt.monthlyInterestRate);
-        setPayment(debt.monthlyPayment);
       }
     });
   };
+
+  const isPercent = paymentType === "percent_of_balance";
 
   return (
     <TableRow>
@@ -199,7 +249,7 @@ function DebtRow({
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onBlur={commit}
+          onBlur={() => commit()}
           disabled={isPending}
           className="h-8"
         />
@@ -208,7 +258,7 @@ function DebtRow({
         <Input
           value={balance}
           onChange={(e) => setBalance(e.target.value)}
-          onBlur={commit}
+          onBlur={() => commit()}
           inputMode="decimal"
           disabled={isPending}
           className="h-8"
@@ -218,21 +268,65 @@ function DebtRow({
         <Input
           value={rate}
           onChange={(e) => setRate(e.target.value)}
-          onBlur={commit}
+          onBlur={() => commit()}
           inputMode="decimal"
           disabled={isPending}
           className="h-8"
         />
       </TableCell>
       <TableCell>
-        <Input
-          value={payment}
-          onChange={(e) => setPayment(e.target.value)}
-          onBlur={commit}
-          inputMode="decimal"
+        {isPercent ? (
+          <div className="flex gap-1">
+            <Input
+              value={minPercent}
+              onChange={(e) => setMinPercent(e.target.value)}
+              onBlur={() => commit()}
+              inputMode="decimal"
+              disabled={isPending}
+              className="h-8"
+              placeholder="%"
+              title="Min % of balance"
+            />
+            <Input
+              value={minFloor}
+              onChange={(e) => setMinFloor(e.target.value)}
+              onBlur={() => commit()}
+              inputMode="decimal"
+              disabled={isPending}
+              className="h-8"
+              placeholder="floor"
+              title="Minimum dollar amount"
+            />
+          </div>
+        ) : (
+          <Input
+            value={payment}
+            onChange={(e) => setPayment(e.target.value)}
+            onBlur={() => commit()}
+            inputMode="decimal"
+            disabled={isPending}
+            className="h-8"
+          />
+        )}
+      </TableCell>
+      <TableCell>
+        <Select
+          value={paymentType}
+          onValueChange={(v) => {
+            const t = v as DebtPaymentType;
+            setPaymentType(t);
+            commit({ paymentType: t });
+          }}
           disabled={isPending}
-          className="h-8"
-        />
+        >
+          <SelectTrigger className="h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="fixed">Fixed</SelectItem>
+            <SelectItem value="percent_of_balance">% of balance</SelectItem>
+          </SelectContent>
+        </Select>
       </TableCell>
       <TableCell className="text-right">
         <Button

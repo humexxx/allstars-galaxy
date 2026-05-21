@@ -8,6 +8,7 @@ import {
 import { and, asc, eq } from "drizzle-orm";
 
 import type {
+  DebtStrategy,
   FinancePlan,
   FinancePlanDebt,
   FinancePlanExpense,
@@ -105,6 +106,12 @@ export async function createPlan(
       initialSavings: data.initialSavings,
       monthlySavingsRate: data.monthlySavingsRate,
       includePortfolio: data.includePortfolio,
+      surplusToDebtsPercent: data.surplusToDebtsPercent,
+      debtStrategy: data.debtStrategy,
+      autoInvestPercent: data.autoInvestPercent,
+      autoInvestMethodId: data.autoInvestMethodId ?? null,
+      initialInvestments: data.initialInvestments,
+      confirmationDayOfMonth: data.confirmationDayOfMonth,
       color: data.color,
     })
     .returning();
@@ -126,6 +133,12 @@ export async function updatePlan(
       initialSavings: data.initialSavings,
       monthlySavingsRate: data.monthlySavingsRate,
       includePortfolio: data.includePortfolio,
+      surplusToDebtsPercent: data.surplusToDebtsPercent,
+      debtStrategy: data.debtStrategy,
+      autoInvestPercent: data.autoInvestPercent,
+      autoInvestMethodId: data.autoInvestMethodId ?? null,
+      initialInvestments: data.initialInvestments,
+      confirmationDayOfMonth: data.confirmationDayOfMonth,
       color: data.color,
       updatedAt: new Date(),
     })
@@ -158,6 +171,11 @@ export async function clonePlan(
       initialSavings: source.initialSavings,
       monthlySavingsRate: source.monthlySavingsRate,
       includePortfolio: source.includePortfolio,
+      surplusToDebtsPercent: source.surplusToDebtsPercent,
+      debtStrategy: source.debtStrategy,
+      autoInvestPercent: source.autoInvestPercent,
+      autoInvestMethodId: source.autoInvestMethodId,
+      initialInvestments: source.initialInvestments,
       color: source.color,
     })
     .returning();
@@ -190,6 +208,9 @@ export async function clonePlan(
         initialBalance: d.initialBalance,
         monthlyInterestRate: d.monthlyInterestRate,
         monthlyPayment: d.monthlyPayment,
+        paymentType: d.paymentType,
+        minPaymentPercent: d.minPaymentPercent,
+        minPaymentFloor: d.minPaymentFloor,
         sortOrder: d.sortOrder,
       }))
     );
@@ -308,6 +329,9 @@ export async function addDebt(
       initialBalance: data.initialBalance,
       monthlyInterestRate: data.monthlyInterestRate,
       monthlyPayment: data.monthlyPayment,
+      paymentType: data.paymentType,
+      minPaymentPercent: data.minPaymentPercent,
+      minPaymentFloor: data.minPaymentFloor,
       sortOrder: data.sortOrder ?? 0,
     })
     .returning();
@@ -327,6 +351,9 @@ export async function updateDebt(
       initialBalance: data.initialBalance,
       monthlyInterestRate: data.monthlyInterestRate,
       monthlyPayment: data.monthlyPayment,
+      paymentType: data.paymentType,
+      minPaymentPercent: data.minPaymentPercent,
+      minPaymentFloor: data.minPaymentFloor,
       sortOrder: data.sortOrder,
     })
     .where(and(eq(financePlanDebts.id, data.id), eq(financePlanDebts.planId, planId)))
@@ -347,69 +374,196 @@ export async function deleteDebt(
 
 // ---------- projection algorithm ----------
 
+type DebtRuntimeState = {
+  id: string;
+  name: string;
+  balance: number;
+  rate: number;
+  // For 'fixed' debts this is the constant monthly payment. For 'percent_of_balance'
+  // debts it is recomputed each month as max(balance * pct, floor).
+  scheduledPaymentFixed: number;
+  paymentType: import("@/types/finance").DebtPaymentType;
+  minPercent: number;
+  minFloor: number;
+};
+
+function scheduledPaymentFor(d: DebtRuntimeState, balanceWithInterest: number): number {
+  if (d.paymentType === "percent_of_balance") {
+    const computed = balanceWithInterest * d.minPercent;
+    return Math.max(computed, d.minFloor);
+  }
+  return d.scheduledPaymentFixed;
+}
+
+// Single epsilon used everywhere — debts below this are considered paid off.
+// Same threshold as the active-filter so ordering and monthsToDebtFree agree.
+const DEBT_PAID_EPS = 0.01;
+
+function orderDebtsByStrategy(
+  debts: DebtRuntimeState[],
+  strategy: DebtStrategy
+): DebtRuntimeState[] {
+  const active = debts.filter((d) => d.balance > DEBT_PAID_EPS);
+  // Tertiary tie-break by stable `id` so multiple debts with identical rate &
+  // balance always order deterministically across runs.
+  if (strategy === "avalanche") {
+    return active.sort(
+      (a, b) => b.rate - a.rate || b.balance - a.balance || a.id.localeCompare(b.id)
+    );
+  }
+  if (strategy === "snowball") {
+    return active.sort(
+      (a, b) => a.balance - b.balance || b.rate - a.rate || a.id.localeCompare(b.id)
+    );
+  }
+  return active;
+}
+
+type ProjectOptions = {
+  portfolioValue?: number;
+  /** Monthly ROI (decimal) for the auto-invest account. Looked up from the plan's
+   *  autoInvestMethodId by the calling page. Ignored if plan.autoInvestPercent = 0. */
+  autoInvestRate?: number;
+};
+
 /**
  * Walks the plan month by month and returns a series with savings, debts,
- * cash flow and net worth at the end of each period.
+ * investments, cash flow and net worth at the end of each period.
  *
- * Conventions:
- *   - Income, expenses and debt payments apply at the START of the month.
- *   - Interest on remaining savings and on outstanding debts accrues over the month
- *     using the configured monthly rates.
- *   - Payment is capped at outstanding balance + accrued interest (no overpayment).
- *   - portfolioValue is added to net worth (but does not earn the savings rate).
+ * Each month, in order:
+ *   1. Interest accrues on each debt balance.
+ *   2. The scheduled payment for each debt is applied (capped at balance).
+ *      For 'percent_of_balance' debts (credit cards) the payment is recomputed
+ *      from the current balance, so it shrinks as the debt shrinks → curved line.
+ *   3. Cash flow = income − expenses − total scheduled payments.
+ *   4. If cash flow > 0 and surplusToDebtsPercent > 0, route a slice to EXTRA
+ *      debt principal using the chosen strategy.
+ *   5. From what's left, optionally route autoInvestPercent into the investments
+ *      bucket. The remainder goes to savings.
+ *   6. Savings + investments accrue their monthly compound interest.
+ *
+ * portfolioValue (the user's live portfolio) is added to net worth but does not
+ * earn the savings or investment rate (it grows independently in its own module).
  */
 export function projectPlan(
   plan: FinancePlan,
   incomes: FinancePlanIncome[],
   expenses: FinancePlanExpense[],
   debts: FinancePlanDebt[],
-  portfolioValue: number = 0
+  options: ProjectOptions = {}
 ): Projection {
-  const totalMonthlyIncome = incomes.reduce((s, i) => s + num(i.monthlyAmount), 0);
-  const totalMonthlyExpenses = expenses.reduce((s, e) => s + num(e.monthlyAmount), 0);
-  const savingsRate = num(plan.monthlySavingsRate);
+  const portfolioValue = Math.max(0, options.portfolioValue ?? 0);
+  // Guard against negative ROI configurations — investments never shrink.
+  const autoInvestRate = Math.max(0, options.autoInvestRate ?? 0);
+
+  const totalMonthlyIncome = Math.max(
+    0,
+    incomes.reduce((s, i) => s + num(i.monthlyAmount), 0)
+  );
+  const totalMonthlyExpenses = Math.max(
+    0,
+    expenses.reduce((s, e) => s + num(e.monthlyAmount), 0)
+  );
+  const savingsRate = Math.max(0, num(plan.monthlySavingsRate));
+  const surplusPercent = Math.max(0, Math.min(1, num(plan.surplusToDebtsPercent)));
+  const autoInvestPercent = Math.max(0, Math.min(1, num(plan.autoInvestPercent)));
+  // Validate the strategy enum so a stale value doesn't fall through to default.
+  const rawStrategy = plan.debtStrategy as string;
+  const strategy: DebtStrategy =
+    rawStrategy === "avalanche" || rawStrategy === "snowball" || rawStrategy === "none"
+      ? rawStrategy
+      : "avalanche";
 
   let savings = num(plan.initialSavings);
-  const debtStates = debts.map((d) => ({
+  let investments = num(plan.initialInvestments);
+  const debtStates: DebtRuntimeState[] = debts.map((d) => ({
     id: d.id,
     name: d.name,
     balance: num(d.initialBalance),
     rate: num(d.monthlyInterestRate),
-    scheduledPayment: num(d.monthlyPayment),
+    scheduledPaymentFixed: num(d.monthlyPayment),
+    paymentType: d.paymentType as import("@/types/finance").DebtPaymentType,
+    minPercent: num(d.minPaymentPercent),
+    minFloor: num(d.minPaymentFloor),
   }));
 
   const months: ProjectionMonth[] = [];
   let monthsToDebtFree: number | null = null;
+  let totalInterestPaidAcrossAllDebts = 0;
+  let totalInvestmentsInterestAcrossMonths = 0;
+
+  const monthly = new Map<string, { interest: number; scheduled: number; extra: number }>();
 
   for (let m = 0; m < plan.monthsAhead; m++) {
-    let actualDebtPayments = 0;
-    const debtSnapshot = debtStates.map((d) => {
+    monthly.clear();
+    for (const d of debtStates) monthly.set(d.id, { interest: 0, scheduled: 0, extra: 0 });
+
+    let scheduledTotal = 0;
+    let interestTotal = 0;
+
+    // Step 1 + 2: accrue interest and apply scheduled payments (variable for
+    // percent_of_balance debts, fixed otherwise).
+    for (const d of debtStates) {
+      if (d.balance <= 0) continue;
       const interest = d.balance * d.rate;
       const balanceWithInterest = d.balance + interest;
-      const payment = Math.min(d.scheduledPayment, balanceWithInterest);
-      const newBalance = balanceWithInterest - payment;
-      actualDebtPayments += payment;
-      // Persist for next month.
-      d.balance = newBalance;
-      return {
-        debtId: d.id,
-        name: d.name,
-        balance: newBalance,
-        appliedPayment: payment,
-        interestAccrued: interest,
-      };
-    });
+      const scheduled = scheduledPaymentFor(d, balanceWithInterest);
+      const payment = Math.min(scheduled, balanceWithInterest);
+      d.balance = balanceWithInterest - payment;
+      scheduledTotal += payment;
+      interestTotal += interest;
+      const entry = monthly.get(d.id)!;
+      entry.interest = interest;
+      entry.scheduled = payment;
+    }
 
-    const cashFlow = totalMonthlyIncome - totalMonthlyExpenses - actualDebtPayments;
-    // Savings interest is applied AFTER cash flow is added.
-    const balanceAfterFlow = savings + cashFlow;
-    const interestEarned = balanceAfterFlow > 0 ? balanceAfterFlow * savingsRate : 0;
-    savings = balanceAfterFlow + interestEarned;
+    const cashFlow = totalMonthlyIncome - totalMonthlyExpenses - scheduledTotal;
+
+    // Step 4: surplus → extra debt principal.
+    let extraTotal = 0;
+    if (cashFlow > 0 && surplusPercent > 0 && strategy !== "none") {
+      let extraBudget = cashFlow * surplusPercent;
+      for (const d of orderDebtsByStrategy(debtStates, strategy)) {
+        if (extraBudget <= 0) break;
+        if (d.balance <= 0) continue;
+        const extra = Math.min(extraBudget, d.balance);
+        d.balance -= extra;
+        extraBudget -= extra;
+        extraTotal += extra;
+        monthly.get(d.id)!.extra = extra;
+      }
+    }
+
+    totalInterestPaidAcrossAllDebts += interestTotal;
+    const totalDebtPayments = scheduledTotal + extraTotal;
+    const cashAfterDebts = cashFlow - extraTotal;
+
+    // Step 5: remainder splits between auto-invest and savings.
+    let investmentsContribution = 0;
+    let savingsContribution = cashAfterDebts;
+    if (cashAfterDebts > 0 && autoInvestPercent > 0) {
+      investmentsContribution = cashAfterDebts * autoInvestPercent;
+      savingsContribution = cashAfterDebts - investmentsContribution;
+    }
+
+    // Step 6: compound interest on both buckets. Cap savings at 0 — a negative
+    // balance would represent an overdraft, which we don't model and shouldn't
+    // earn interest. Net worth can still be negative via outstanding debt.
+    const savingsBeforeInterest = Math.max(0, savings + savingsContribution);
+    const savingsInterest = savingsBeforeInterest * savingsRate;
+    // Round to cents each month to avoid floating-point drift over 120 iterations.
+    savings = Math.round((savingsBeforeInterest + savingsInterest) * 100) / 100;
+
+    const investmentsBeforeInterest = Math.max(0, investments + investmentsContribution);
+    const investmentsInterest = investmentsBeforeInterest * autoInvestRate;
+    investments =
+      Math.round((investmentsBeforeInterest + investmentsInterest) * 100) / 100;
+    totalInvestmentsInterestAcrossMonths += investmentsInterest;
 
     const totalDebt = debtStates.reduce((s, d) => s + d.balance, 0);
-    const netWorth = savings + portfolioValue - totalDebt;
+    const netWorth = savings + investments + portfolioValue - totalDebt;
 
-    if (monthsToDebtFree === null && totalDebt <= 0.01 && debts.length > 0) {
+    if (monthsToDebtFree === null && totalDebt <= DEBT_PAID_EPS && debts.length > 0) {
       monthsToDebtFree = m + 1;
     }
 
@@ -418,25 +572,105 @@ export function projectPlan(
       date: addMonthsUtc(plan.startMonth, m),
       income: totalMonthlyIncome,
       expenses: totalMonthlyExpenses,
-      debtPayments: actualDebtPayments,
+      scheduledDebtPayments: scheduledTotal,
+      extraDebtPayments: extraTotal,
+      debtPayments: totalDebtPayments,
+      totalInterestAccrued: interestTotal,
       cashFlow,
       savings,
-      savingsInterest: interestEarned,
+      savingsInterest,
+      investments,
+      investmentsContribution,
+      investmentsInterest,
       totalDebt,
       portfolioValue,
       netWorth,
-      debts: debtSnapshot,
+      debts: debtStates.map((d) => {
+        const m = monthly.get(d.id)!;
+        return {
+          debtId: d.id,
+          name: d.name,
+          balance: d.balance,
+          scheduledPayment: m.scheduled,
+          extraPayment: m.extra,
+          interestAccrued: m.interest,
+        };
+      }),
     });
   }
 
+  const endingDebt = debtStates.reduce((s, d) => s + d.balance, 0);
   return {
     plan,
     months,
     endingSavings: savings,
-    endingDebt: debtStates.reduce((s, d) => s + d.balance, 0),
-    endingNetWorth:
-      savings + portfolioValue - debtStates.reduce((s, d) => s + d.balance, 0),
+    endingInvestments: investments,
+    endingDebt,
+    endingNetWorth: savings + investments + portfolioValue - endingDebt,
     monthsToDebtFree,
+    totalInterestPaid: totalInterestPaidAcrossAllDebts,
+    totalInvestmentsInterest: totalInvestmentsInterestAcrossMonths,
+  };
+}
+
+/**
+ * Runs the projection three times — once per strategy — to surface which one
+ * pays off debt faster and saves the most interest. surplusToDebtsPercent is
+ * forced to a usable value (the plan's, or 60% if the plan currently has 0)
+ * so the comparison is meaningful even when the user has not enabled it yet.
+ */
+export function compareDebtStrategies(
+  plan: FinancePlan,
+  incomes: FinancePlanIncome[],
+  expenses: FinancePlanExpense[],
+  debts: FinancePlanDebt[],
+  options: ProjectOptions = {}
+): import("@/types/finance").StrategyComparison {
+  const surplusForCompare =
+    num(plan.surplusToDebtsPercent) > 0 ? plan.surplusToDebtsPercent : "0.6";
+
+  const runWith = (strategy: DebtStrategy) =>
+    projectPlan(
+      { ...plan, debtStrategy: strategy, surplusToDebtsPercent: surplusForCompare },
+      incomes,
+      expenses,
+      debts,
+      options
+    );
+
+  const av = runWith("avalanche");
+  const sn = runWith("snowball");
+  const no = runWith("none");
+
+  const summarize = (p: Projection) => ({
+    totalInterestPaid: p.totalInterestPaid,
+    monthsToDebtFree: p.monthsToDebtFree,
+    endingNetWorth: p.endingNetWorth,
+  });
+
+  const a = summarize(av);
+  const s = summarize(sn);
+  const n = summarize(no);
+
+  // Recommended = lower total interest paid (math-optimal). Avalanche almost
+  // always wins; we still surface snowball numbers for the user to choose.
+  const recommended: DebtStrategy =
+    a.totalInterestPaid <= s.totalInterestPaid ? "avalanche" : "snowball";
+
+  const winner = recommended === "avalanche" ? a : s;
+  const worst = a.totalInterestPaid >= s.totalInterestPaid ? a : s;
+
+  return {
+    avalanche: a,
+    snowball: s,
+    none: n,
+    recommended,
+    interestSaved: Math.max(0, worst.totalInterestPaid - winner.totalInterestPaid),
+    monthsSaved: Math.max(
+      0,
+      (worst.monthsToDebtFree ?? plan.monthsAhead) -
+        (winner.monthsToDebtFree ?? plan.monthsAhead)
+    ),
   };
 }
 
@@ -447,12 +681,49 @@ export async function getPortfolioValueForUser(userId: string): Promise<number> 
   return stats.totalValue;
 }
 
+/**
+ * Resolves the monthly ROI (as a decimal) of the plan's auto-invest method, or
+ * 0 if none is linked. Used to compound the investments bucket during projection.
+ */
+export async function getAutoInvestRate(plan: FinancePlan): Promise<number> {
+  if (!plan.autoInvestMethodId) return 0;
+  const { investmentMethods } = await import("@/db/schema");
+  const [row] = await db
+    .select({ monthlyRoi: investmentMethods.monthlyRoi })
+    .from(investmentMethods)
+    .where(eq(investmentMethods.id, plan.autoInvestMethodId));
+  if (!row) return 0;
+  // monthly_roi is stored as a percentage (e.g. "0.7000" = 0.70%). Convert to a
+  // decimal multiplier the projection algorithm can apply directly.
+  return num(row.monthlyRoi) / 100;
+}
+
 export async function projectPlanWithPortfolio(
   plan: FinancePlanWithLines,
   userId: string
 ): Promise<Projection> {
-  const portfolioValue = plan.includePortfolio
-    ? await getPortfolioValueForUser(userId)
-    : 0;
-  return projectPlan(plan, plan.incomes, plan.expenses, plan.debts, portfolioValue);
+  const [portfolioValue, autoInvestRate] = await Promise.all([
+    plan.includePortfolio ? getPortfolioValueForUser(userId) : Promise.resolve(0),
+    getAutoInvestRate(plan),
+  ]);
+  return projectPlan(plan, plan.incomes, plan.expenses, plan.debts, {
+    portfolioValue,
+    autoInvestRate,
+  });
+}
+
+export async function listInvestmentMethods(
+  options: { includeDisabled?: boolean } = {}
+): Promise<Array<{ id: string; name: string; monthlyRoi: string; enabled: boolean }>> {
+  const { investmentMethods } = await import("@/db/schema");
+  const rows = await db
+    .select({
+      id: investmentMethods.id,
+      name: investmentMethods.name,
+      monthlyRoi: investmentMethods.monthlyRoi,
+      enabled: investmentMethods.enabled,
+    })
+    .from(investmentMethods)
+    .orderBy(asc(investmentMethods.name));
+  return options.includeDisabled ? rows : rows.filter((r) => r.enabled);
 }

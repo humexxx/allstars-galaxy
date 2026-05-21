@@ -9,13 +9,31 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 import { createPlanAction, updatePlanAction } from "@/app/actions/finance-plans";
-import type { FinancePlan } from "@/types/finance";
+import type { DebtStrategy, FinancePlan } from "@/types/finance";
+
+export type InvestmentMethodOption = {
+  id: string;
+  name: string;
+  monthlyRoi: string;
+  enabled: boolean;
+};
 
 type PlanFormProps = {
   plan?: FinancePlan;
+  investmentMethods: InvestmentMethodOption[];
 };
 
 function toMonthInputValue(date: Date): string {
@@ -35,7 +53,19 @@ const COLORS = [
   "var(--chart-5)",
 ];
 
-export function PlanForm({ plan }: PlanFormProps) {
+// 60% is the recommended starting point for new plans — aggressive enough to
+// meaningfully shorten the debt timeline without starving savings.
+const DEFAULT_NEW_SURPLUS = 60;
+
+function percentLabel(pct: number): string {
+  if (pct === 0) return "Off";
+  if (pct < 40) return "Conservative";
+  if (pct < 60) return "Balanced";
+  if (pct < 80) return "Aggressive";
+  return "Very aggressive";
+}
+
+export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState(plan?.name ?? "");
@@ -43,13 +73,50 @@ export function PlanForm({ plan }: PlanFormProps) {
   const [startMonth, setStartMonth] = useState(
     toMonthInputValue(plan?.startMonth ?? new Date())
   );
-  const [monthsAhead, setMonthsAhead] = useState(String(plan?.monthsAhead ?? 24));
+  // Default 120 (10 years) for new plans matches the schema default and lets the
+  // chart densifier kick in (first 12 months monthly, then year-ends after).
+  const [monthsAhead, setMonthsAhead] = useState(String(plan?.monthsAhead ?? 120));
   const [initialSavings, setInitialSavings] = useState(plan?.initialSavings ?? "0");
   const [monthlyRate, setMonthlyRate] = useState(plan?.monthlySavingsRate ?? "0");
   const [includePortfolio, setIncludePortfolio] = useState(
     plan?.includePortfolio ?? false
   );
   const [color, setColor] = useState(plan?.color ?? COLORS[0]);
+
+  // Surplus acceleration: stored as numeric string 0..1 in the DB. We convert to
+  // an integer 0..100 for the slider UX.
+  const initialSurplusPct = plan
+    ? Math.round(parseFloat(plan.surplusToDebtsPercent) * 100)
+    : DEFAULT_NEW_SURPLUS;
+  const [accelerate, setAccelerate] = useState<boolean>(initialSurplusPct > 0);
+  const [surplusPct, setSurplusPct] = useState<number>(
+    initialSurplusPct > 0 ? initialSurplusPct : DEFAULT_NEW_SURPLUS
+  );
+  const [strategy, setStrategy] = useState<DebtStrategy>(
+    (plan?.debtStrategy as DebtStrategy) ?? "avalanche"
+  );
+
+  // Auto-invest after the surplus → debts step. Same UX pattern as the
+  // acceleration switch: off snaps surplusPercent to 0 in the payload, on uses
+  // the slider value.
+  const initialInvestPct = plan
+    ? Math.round(parseFloat(plan.autoInvestPercent) * 100)
+    : 0;
+  const [autoInvest, setAutoInvest] = useState<boolean>(initialInvestPct > 0);
+  const [investPct, setInvestPct] = useState<number>(
+    initialInvestPct > 0 ? initialInvestPct : 50
+  );
+  const [investMethodId, setInvestMethodId] = useState<string>(
+    plan?.autoInvestMethodId ?? investmentMethods[0]?.id ?? ""
+  );
+  const [initialInvestments, setInitialInvestments] = useState(
+    plan?.initialInvestments ?? "0"
+  );
+
+  // Monthly confirmation prompt: 0 disables, 1..28 sets the trigger day.
+  const [confirmationDay, setConfirmationDay] = useState<string>(
+    String(plan?.confirmationDayOfMonth ?? 1)
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +126,8 @@ export function PlanForm({ plan }: PlanFormProps) {
     }
 
     startTransition(async () => {
+      const surplusValue = accelerate ? (surplusPct / 100).toFixed(4) : "0";
+      const investValue = autoInvest && investMethodId ? (investPct / 100).toFixed(4) : "0";
       const payload = {
         name: name.trim(),
         description: description.trim() || null,
@@ -67,6 +136,12 @@ export function PlanForm({ plan }: PlanFormProps) {
         initialSavings: initialSavings || "0",
         monthlySavingsRate: monthlyRate || "0",
         includePortfolio,
+        surplusToDebtsPercent: surplusValue,
+        debtStrategy: strategy,
+        autoInvestPercent: investValue,
+        autoInvestMethodId: autoInvest && investMethodId ? investMethodId : null,
+        initialInvestments: initialInvestments || "0",
+        confirmationDayOfMonth: Math.max(0, Math.min(28, Number(confirmationDay) || 0)),
         color,
       };
 
@@ -85,120 +160,330 @@ export function PlanForm({ plan }: PlanFormProps) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{plan ? "Plan settings" : "New plan"}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="plan-name">Name</Label>
-              <Input
-                id="plan-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Base scenario"
-                required
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="plan-description">Description</Label>
-              <Textarea
-                id="plan-description"
-                value={description ?? ""}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Notes about this scenario"
-                rows={2}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="plan-start">Start month</Label>
-              <Input
-                id="plan-start"
-                type="month"
-                value={startMonth}
-                onChange={(e) => setStartMonth(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="plan-months">Months ahead</Label>
-              <Input
-                id="plan-months"
-                type="number"
-                min={1}
-                max={120}
-                value={monthsAhead}
-                onChange={(e) => setMonthsAhead(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="plan-savings">Initial savings</Label>
-              <Input
-                id="plan-savings"
-                inputMode="decimal"
-                value={initialSavings}
-                onChange={(e) => setInitialSavings(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="plan-rate">Monthly savings rate</Label>
-              <Input
-                id="plan-rate"
-                inputMode="decimal"
-                value={monthlyRate}
-                onChange={(e) => setMonthlyRate(e.target.value)}
-                placeholder="0.007"
-              />
-              <p className="text-xs text-muted-foreground">
-                Decimal monthly rate. 0.007 ≈ 0.70% per month.
-              </p>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>Chart color</Label>
-              <div className="flex flex-wrap gap-2">
-                {COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    aria-label={`Use color ${c}`}
-                    onClick={() => setColor(c)}
-                    className={`h-7 w-7 rounded-full border-2 ${
-                      color === c ? "border-foreground" : "border-transparent"
-                    }`}
-                    style={{ backgroundColor: c }}
-                  />
-                ))}
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>{plan ? "Plan settings" : "New plan"}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} id="plan-form" className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="plan-name">Name</Label>
+                <Input
+                  id="plan-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Base scenario"
+                  required
+                />
               </div>
-            </div>
-            <div className="flex items-center justify-between rounded-md border p-3 sm:col-span-2">
-              <div>
-                <Label htmlFor="plan-include-portfolio" className="cursor-pointer">
-                  Include current portfolio in net worth
-                </Label>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="plan-description">Description</Label>
+                <Textarea
+                  id="plan-description"
+                  value={description ?? ""}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Notes about this scenario"
+                  rows={2}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-start">Start month</Label>
+                <Input
+                  id="plan-start"
+                  type="month"
+                  value={startMonth}
+                  onChange={(e) => setStartMonth(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-months">Months ahead</Label>
+                <Input
+                  id="plan-months"
+                  type="number"
+                  min={12}
+                  max={120}
+                  step={1}
+                  value={monthsAhead}
+                  onChange={(e) => setMonthsAhead(e.target.value)}
+                  required
+                />
                 <p className="text-xs text-muted-foreground">
-                  Adds your live portfolio value to the projection&apos;s net worth line.
+                  Minimum 12 months · default 120 (10 years).
                 </p>
               </div>
-              <Switch
-                id="plan-include-portfolio"
-                checked={includePortfolio}
-                onCheckedChange={setIncludePortfolio}
+              <div className="space-y-2">
+                <Label htmlFor="plan-savings">Initial savings</Label>
+                <Input
+                  id="plan-savings"
+                  inputMode="decimal"
+                  value={initialSavings}
+                  onChange={(e) => setInitialSavings(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-rate">Monthly savings rate</Label>
+                <Input
+                  id="plan-rate"
+                  inputMode="decimal"
+                  value={monthlyRate}
+                  onChange={(e) => setMonthlyRate(e.target.value)}
+                  placeholder="0.007"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Decimal monthly rate. 0.007 ≈ 0.70% per month.
+                </p>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Chart color</Label>
+                <div className="flex flex-wrap gap-2">
+                  {COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      aria-label={`Use color ${c}`}
+                      onClick={() => setColor(c)}
+                      className={`h-7 w-7 rounded-full border-2 ${
+                        color === c ? "border-foreground" : "border-transparent"
+                      }`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-3 sm:col-span-2">
+                <div>
+                  <Label htmlFor="plan-include-portfolio" className="cursor-pointer">
+                    Include current portfolio in net worth
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Adds your live portfolio value to the projection&apos;s net worth line.
+                  </p>
+                </div>
+                <Switch
+                  id="plan-include-portfolio"
+                  checked={includePortfolio}
+                  onCheckedChange={setIncludePortfolio}
+                />
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="plan-confirmation-day">Monthly confirmation day</Label>
+                <Input
+                  id="plan-confirmation-day"
+                  type="number"
+                  min={0}
+                  max={28}
+                  step={1}
+                  value={confirmationDay}
+                  onChange={(e) => setConfirmationDay(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Day of the month (1–28) when a dialog will ask you to confirm your
+                  real balances. Set to <strong>0</strong> to disable.
+                </p>
+              </div>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Debt acceleration</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            When your monthly cash flow is positive, route part of the surplus into
+            extra debt principal. Avalanche almost always pays less interest, but
+            snowball is easier to stick with.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div>
+              <Label htmlFor="plan-accelerate" className="cursor-pointer">
+                Apply surplus to debts
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Off → all surplus goes to savings. On → split surplus between extra debt
+                payments and savings using the slider below.
+              </p>
+            </div>
+            <Switch
+              id="plan-accelerate"
+              checked={accelerate}
+              onCheckedChange={setAccelerate}
+            />
+          </div>
+
+          <div className={accelerate ? "space-y-6" : "space-y-6 opacity-50 pointer-events-none"}>
+            <div className="space-y-3">
+              <div className="flex items-end justify-between">
+                <Label>Surplus aggressiveness</Label>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xl font-semibold tracking-tight">{surplusPct}%</span>
+                  <span className="text-xs text-muted-foreground">{percentLabel(surplusPct)}</span>
+                </div>
+              </div>
+              <Slider
+                value={[surplusPct]}
+                min={30}
+                max={100}
+                step={5}
+                onValueChange={(v) => setSurplusPct(v[0])}
+                aria-label="Surplus to debts percentage"
               />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>30% · keeps savings growing</span>
+                <span>100% · all-in on debt</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Recommended starting point: <strong>60%</strong>.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <Label>Payoff method</Label>
+              <RadioGroup
+                value={strategy}
+                onValueChange={(v) => setStrategy(v as DebtStrategy)}
+                className="grid gap-2"
+              >
+                <label
+                  htmlFor="strategy-avalanche"
+                  className="flex cursor-pointer items-start gap-3 rounded-md border p-3"
+                >
+                  <RadioGroupItem id="strategy-avalanche" value="avalanche" className="mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Avalanche · highest interest first</p>
+                    <p className="text-xs text-muted-foreground">
+                      Mathematically optimal — minimises total interest paid.
+                    </p>
+                  </div>
+                </label>
+                <label
+                  htmlFor="strategy-snowball"
+                  className="flex cursor-pointer items-start gap-3 rounded-md border p-3"
+                >
+                  <RadioGroupItem id="strategy-snowball" value="snowball" className="mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Snowball · smallest balance first</p>
+                    <p className="text-xs text-muted-foreground">
+                      Psychologically optimal — quick wins to build momentum.
+                    </p>
+                  </div>
+                </label>
+              </RadioGroup>
             </div>
           </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => router.back()}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Saving…" : plan ? "Save changes" : "Create plan"}
-            </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Auto-invest</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            After surplus → debts runs, route part of what&apos;s left into a compounding
+            investments bucket modelled against an investment method&apos;s monthly ROI.
+            The investments balance grows every month and counts toward your net worth.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div>
+              <Label htmlFor="plan-autoinvest" className="cursor-pointer">
+                Auto-invest the remainder
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Off → all the remainder stays as savings. On → split between
+                investments and savings using the slider.
+              </p>
+            </div>
+            <Switch
+              id="plan-autoinvest"
+              checked={autoInvest}
+              onCheckedChange={setAutoInvest}
+            />
           </div>
-        </form>
-      </CardContent>
-    </Card>
+
+          <div
+            className={
+              autoInvest
+                ? "space-y-6"
+                : "space-y-6 pointer-events-none opacity-50"
+            }
+          >
+            <div className="space-y-3">
+              <div className="flex items-end justify-between">
+                <Label>Share of remainder → investments</Label>
+                <span className="text-xl font-semibold tracking-tight">{investPct}%</span>
+              </div>
+              <Slider
+                value={[investPct]}
+                min={10}
+                max={100}
+                step={5}
+                onValueChange={(v) => setInvestPct(v[0])}
+                aria-label="Auto-invest percentage"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>10% · most stays as savings</span>
+                <span>100% · all remainder invested</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="plan-invest-method">Investment method</Label>
+              <Select value={investMethodId} onValueChange={setInvestMethodId}>
+                <SelectTrigger id="plan-invest-method">
+                  <SelectValue placeholder="Pick a method" />
+                </SelectTrigger>
+                <SelectContent>
+                  {investmentMethods.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      <span className="flex items-center gap-2">
+                        {m.name} · {m.monthlyRoi}%/mo
+                        {!m.enabled && (
+                          <Badge variant="outline" className="text-[10px]">
+                            Disabled in portfolio
+                          </Badge>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Disabled methods can be used here as hypothetical scenarios. They are
+                hidden from your real portfolio.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="plan-init-investments">Initial investments balance</Label>
+              <Input
+                id="plan-init-investments"
+                inputMode="decimal"
+                value={initialInvestments}
+                onChange={(e) => setInitialInvestments(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Opening balance for the investments bucket at the start month.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={() => router.back()}>
+          Cancel
+        </Button>
+        <Button type="submit" form="plan-form" disabled={isPending}>
+          {isPending ? "Saving…" : plan ? "Save changes" : "Create plan"}
+        </Button>
+      </div>
+    </div>
   );
 }

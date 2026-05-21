@@ -1,0 +1,2 @@
+ALTER TABLE "finance_plans" ADD COLUMN "surplus_to_debts_percent" numeric(5, 4) DEFAULT '0' NOT NULL;--> statement-breakpoint
+ALTER TABLE "finance_plans" ADD COLUMN "debt_strategy" text DEFAULT 'avalanche' NOT NULL;

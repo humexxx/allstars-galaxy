@@ -1,5 +1,5 @@
-import { pgTable, text, uuid, timestamp, pgSchema, real, pgEnum, numeric, index, boolean } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, uuid, timestamp, pgSchema, real, pgEnum, numeric, index, boolean, integer, date, check, uniqueIndex } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
 export const riskLevelEnum = pgEnum("risk_level", ["Low", "Medium", "High"]);
@@ -8,6 +8,9 @@ export const transactionTypeEnum = pgEnum("transaction_type", ["buy", "withdrawa
 export const snapshotSourceEnum = pgEnum("snapshot_source", ["system_cron", "admin_approval", "manual", "admin_enforce"]);
 export const roadPathFrequencyEnum = pgEnum("road_path_frequency", ["daily", "every_other_day", "weekly", "biweekly", "monthly"]);
 export const taskPriorityEnum = pgEnum("task_priority", ["low", "medium", "high"]);
+export const debtPaymentTypeEnum = pgEnum("debt_payment_type", ["fixed", "percent_of_balance"]);
+export const debtStrategyEnum = pgEnum("debt_strategy", ["avalanche", "snowball", "none"]);
+export const financeSnapshotSourceEnum = pgEnum("finance_snapshot_source", ["system_cron", "confirmation", "manual"]);
 
 // Define auth schema to reference auth.users
 const authSchema = pgSchema("auth");
@@ -34,6 +37,10 @@ export const investmentMethods = pgTable("investment_methods", {
   author: text("author").notNull(),
   riskLevel: riskLevelEnum("risk_level").notNull(),
   monthlyRoi: numeric("monthly_roi", { precision: 7, scale: 4 }).notNull(),
+  // Disabled methods are hidden from portfolio transaction selectors but still
+  // appear in finance plan auto-invest pickers (so they can be modelled as
+  // hypothetical scenarios without being actively used).
+  enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
@@ -124,7 +131,9 @@ export const financePlans = pgTable(
     description: text("description"),
     // Anchor month for the projection (first day of the start month).
     startMonth: timestamp("start_month", { withTimezone: true }).notNull(),
-    monthsAhead: real("months_ahead").notNull().default(24),
+    // Integer count of projected months. Minimum 12 (1 year), default 120 (10
+    // years). The UI shows the first 12 months monthly and yearly snapshots after.
+    monthsAhead: integer("months_ahead").notNull().default(120),
     // Opening balance for the savings line at start_month.
     initialSavings: numeric("initial_savings", { precision: 20, scale: 2 })
       .notNull()
@@ -135,12 +144,49 @@ export const financePlans = pgTable(
       .default("0"),
     // When true, the projection sums in the user's current portfolio value.
     includePortfolio: boolean("include_portfolio").notNull().default(false),
+    // Fraction of monthly cash-flow surplus (income - expenses - scheduled debt
+    // payments) redirected to extra debt principal each month. 0 = off (all
+    // surplus goes to savings), 1 = 100% to debts. Defaults to 0 on legacy rows.
+    surplusToDebtsPercent: numeric("surplus_to_debts_percent", { precision: 5, scale: 4 })
+      .notNull()
+      .default("0"),
+    // How the extra surplus payment is distributed across debts:
+    //   avalanche → highest interest rate first (math-optimal)
+    //   snowball  → lowest balance first (psych-optimal)
+    //   none      → no extra payment (off-switch when surplusToDebtsPercent > 0)
+    debtStrategy: debtStrategyEnum("debt_strategy").notNull().default("avalanche"),
+    // Day of the month (1..28) when the monthly confirmation prompt should appear
+    // in the dashboard. 0 means disabled. 28 is the safe upper bound (every month has it).
+    confirmationDayOfMonth: integer("confirmation_day_of_month").notNull().default(1),
+    // Auto-invest: after debt acceleration, optionally route a slice of what
+    // remains into a compounding investment account modelled against an
+    // investment method's monthly ROI. 0 = off (all remainder stays as savings).
+    autoInvestPercent: numeric("auto_invest_percent", { precision: 5, scale: 4 })
+      .notNull()
+      .default("0"),
+    autoInvestMethodId: uuid("auto_invest_method_id").references(
+      () => investmentMethods.id,
+      { onDelete: "set null" }
+    ),
+    initialInvestments: numeric("initial_investments", { precision: 20, scale: 2 })
+      .notNull()
+      .default("0"),
     // Color for chart visualisation (CSS color or theme token).
     color: text("color").notNull().default("var(--chart-1)"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("finance_plans_user_id_idx").on(t.userId)]
+  (t) => [
+    index("finance_plans_user_id_idx").on(t.userId),
+    index("finance_plans_auto_invest_method_id_idx").on(t.autoInvestMethodId),
+    check("finance_plans_months_ahead_chk", sql`${t.monthsAhead} >= 1 AND ${t.monthsAhead} <= 120`),
+    check("finance_plans_initial_savings_chk", sql`${t.initialSavings} >= 0`),
+    check("finance_plans_initial_investments_chk", sql`${t.initialInvestments} >= 0`),
+    check("finance_plans_savings_rate_chk", sql`${t.monthlySavingsRate} >= 0`),
+    check("finance_plans_surplus_chk", sql`${t.surplusToDebtsPercent} >= 0 AND ${t.surplusToDebtsPercent} <= 1`),
+    check("finance_plans_auto_invest_chk", sql`${t.autoInvestPercent} >= 0 AND ${t.autoInvestPercent} <= 1`),
+    check("finance_plans_confirmation_day_chk", sql`${t.confirmationDayOfMonth} >= 0 AND ${t.confirmationDayOfMonth} <= 28`),
+  ]
 );
 
 export const financePlanIncomes = pgTable(
@@ -177,6 +223,91 @@ export const financePlanExpenses = pgTable(
   (t) => [index("finance_plan_expenses_plan_id_idx").on(t.planId)]
 );
 
+/**
+ * Snapshot of a finance plan's projected position at a point in time. Mirrors
+ * the `portfolio_snapshots` shape (same column names, timestamp date, no UNIQUE
+ * constraint) so both subsystems share patterns and helpers can stay symmetric.
+ *
+ * Multiple rows per (plan_id, date) are allowed on purpose — a snapshot taken
+ * by the cron at 06:00 and another written when the user confirms balances at
+ * 14:00 both belong here. Queries that need "the latest" sort by date DESC.
+ */
+export const financePlanSnapshots = pgTable(
+  "finance_plan_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => financePlans.id, { onDelete: "cascade" }),
+    // Timestamp (with TZ) just like portfolio_snapshots.date — same column name
+    // and type so the two subsystems are interchangeable in tooling/queries.
+    date: timestamp("date", { withTimezone: true }).notNull(),
+    savings: numeric("savings", { precision: 20, scale: 2 }).notNull(),
+    investments: numeric("investments", { precision: 20, scale: 2 }).notNull(),
+    totalDebt: numeric("total_debt", { precision: 20, scale: 2 }).notNull(),
+    netWorth: numeric("net_worth", { precision: 20, scale: 2 }).notNull(),
+    source: financeSnapshotSourceEnum("source").notNull().default("system_cron"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("finance_plan_snapshots_plan_id_idx").on(t.planId),
+    index("finance_plan_snapshots_date_idx").on(t.date),
+  ]
+);
+
+/**
+ * User-confirmed actuals for a given month. The user is prompted on the
+ * configured `confirmationDayOfMonth` to confirm their real savings,
+ * investments and current debt balances. These numbers replace the
+ * computed projection as the new baseline going forward (recalibration).
+ */
+export const financePlanConfirmations = pgTable(
+  "finance_plan_confirmations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => financePlans.id, { onDelete: "cascade" }),
+    // Anchor to the FIRST day of the confirmed month (always UTC midnight).
+    confirmationMonth: date("confirmation_month").notNull(),
+    confirmedSavings: numeric("confirmed_savings", { precision: 20, scale: 2 }).notNull(),
+    confirmedInvestments: numeric("confirmed_investments", { precision: 20, scale: 2 })
+      .notNull()
+      .default("0"),
+    notes: text("notes"),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("finance_plan_confirmations_plan_month_uniq").on(t.planId, t.confirmationMonth),
+    index("finance_plan_confirmations_plan_id_idx").on(t.planId),
+    check("finance_plan_confirmations_savings_chk", sql`${t.confirmedSavings} >= 0`),
+    check("finance_plan_confirmations_investments_chk", sql`${t.confirmedInvestments} >= 0`),
+  ]
+);
+
+/**
+ * Per-debt confirmed balance at confirmation time. Lets the user say
+ * "BAC card showed $4,820 today" instead of just one bucket total.
+ */
+export const financePlanDebtConfirmations = pgTable(
+  "finance_plan_debt_confirmations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    confirmationId: uuid("confirmation_id")
+      .notNull()
+      .references(() => financePlanConfirmations.id, { onDelete: "cascade" }),
+    debtId: uuid("debt_id")
+      .notNull()
+      .references(() => financePlanDebts.id, { onDelete: "cascade" }),
+    confirmedBalance: numeric("confirmed_balance", { precision: 20, scale: 2 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("finance_plan_debt_confirmations_uniq").on(t.confirmationId, t.debtId),
+    index("finance_plan_debt_confirmations_debt_id_idx").on(t.debtId),
+    check("finance_plan_debt_confirmations_balance_chk", sql`${t.confirmedBalance} >= 0`),
+  ]
+);
+
 export const financePlanDebts = pgTable(
   "finance_plan_debts",
   {
@@ -192,7 +323,20 @@ export const financePlanDebts = pgTable(
     monthlyInterestRate: numeric("monthly_interest_rate", { precision: 9, scale: 6 })
       .notNull()
       .default("0"),
+    // For payment_type='fixed' this is the actual monthly payment.
+    // For payment_type='percent_of_balance' it is only used as a hint in the UI;
+    // the projection uses minPaymentPercent + minPaymentFloor instead.
     monthlyPayment: numeric("monthly_payment", { precision: 20, scale: 2 })
+      .notNull()
+      .default("0"),
+    // Credit-card-style debts have a monthly minimum proportional to balance
+    // (typically 2-5%, with a floor like $25). As balance drops the minimum
+    // drops too, which is what produces the natural curving payoff line.
+    paymentType: debtPaymentTypeEnum("payment_type").notNull().default("fixed"),
+    minPaymentPercent: numeric("min_payment_percent", { precision: 5, scale: 4 })
+      .notNull()
+      .default("0"),
+    minPaymentFloor: numeric("min_payment_floor", { precision: 20, scale: 2 })
       .notNull()
       .default("0"),
     sortOrder: real("sort_order").notNull().default(0),

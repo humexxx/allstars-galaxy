@@ -5,6 +5,7 @@ import { appState } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { applyMonthlyInterest } from "@/lib/services/interest-service";
 import { createDailySnapshots } from "@/lib/services/snapshot-service";
+import { createDailyFinanceSnapshots } from "@/lib/services/finance-snapshot-service";
 import { createAutomatedTasksForAllRoadPaths } from "@/lib/services/task-automation-service";
 
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -106,6 +107,19 @@ async function processDailySnapshots(today: Date) {
   }
 }
 
+async function processFinancePlanSnapshots(today: Date) {
+  try {
+    const result = await createDailyFinanceSnapshots(today);
+    await updateAppState("last_finance_snapshots_run", today.toISOString());
+    return result;
+  } catch (error) {
+    console.error("Failed to capture finance plan snapshots:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    await updateAppState("last_finance_snapshots_run", today.toISOString(), errorMessage);
+    throw error;
+  }
+}
+
 async function processAutomatedTasks(today: Date) {
   try {
     const allUsers = await db.query.users.findMany();
@@ -150,6 +164,7 @@ export async function GET(request: NextRequest) {
     const results: {
       interest?: { applied: boolean; result: unknown };
       snapshots?: unknown;
+      financeSnapshots?: { date: Date; totalPlans: number; snapshotsCreated: number; errors: string[] };
       tasks?: Array<{ userId: string; tasksCreated: number }>;
       errors: Array<{ operation: string; error: string }>;
     } = {
@@ -166,12 +181,22 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Process daily snapshots (independent operation)
+    // Process portfolio daily snapshots (independent operation)
     try {
       results.snapshots = await processDailySnapshots(today);
     } catch (error) {
       results.errors.push({
         operation: "daily_snapshots",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+
+    // Process finance plan daily snapshots (independent operation)
+    try {
+      results.financeSnapshots = await processFinancePlanSnapshots(today);
+    } catch (error) {
+      results.errors.push({
+        operation: "finance_plan_snapshots",
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
@@ -191,7 +216,14 @@ export async function GET(request: NextRequest) {
       date: today.toISOString(),
       interestApplied: results.interest?.applied ?? false,
       interestResult: results.interest?.result,
-      snapshotsCreated: (results.snapshots as { created?: number })?.created ?? 0,
+      snapshotsCreated: (results.snapshots as { snapshotsCreated?: number })?.snapshotsCreated ?? 0,
+      financePlanSnapshots: results.financeSnapshots
+        ? {
+            totalPlans: results.financeSnapshots.totalPlans,
+            snapshotsCreated: results.financeSnapshots.snapshotsCreated,
+            errors: results.financeSnapshots.errors,
+          }
+        : { totalPlans: 0, snapshotsCreated: 0, errors: [] },
       taskCreationResults: results.tasks ?? [],
       errors: results.errors,
     });

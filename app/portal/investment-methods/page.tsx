@@ -13,7 +13,13 @@ export const metadata: Metadata = {
 };
 
 async function getInvestmentMethods() {
-  const methods = await db.select().from(investmentMethods);
+  const { eq } = await import("drizzle-orm");
+  // Hide disabled methods from the catalogue — they are only visible inside
+  // finance plan auto-invest pickers.
+  const methods = await db
+    .select()
+    .from(investmentMethods)
+    .where(eq(investmentMethods.enabled, true));
   return methods;
 }
 

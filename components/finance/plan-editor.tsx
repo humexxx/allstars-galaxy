@@ -8,9 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { PlanLineEditor } from "./plan-line-editor";
 import { PlanDebtEditor } from "./plan-debt-editor";
-import { PlanForm } from "./plan-form";
-import { ProjectionChart } from "./projection-chart";
+import { PlanForm, type InvestmentMethodOption } from "./plan-form";
+import { ProjectionChart, type HistoricalSnapshot } from "./projection-chart";
 import { ProjectionTable } from "./projection-table";
+import { StrategyComparisonCard } from "./strategy-comparison";
+import { TrendingUp, TrendingDown } from "lucide-react";
 
 import {
   addPlanDebtAction,
@@ -24,14 +26,28 @@ import {
   updatePlanIncomeAction,
 } from "@/app/actions/finance-plans";
 import { formatCurrency } from "@/lib/utils/format";
-import type { FinancePlanWithLines, Projection } from "@/types/finance";
+import type {
+  DebtStrategy,
+  FinancePlanWithLines,
+  Projection,
+  StrategyComparison,
+} from "@/types/finance";
 
 type PlanEditorProps = {
   plan: FinancePlanWithLines;
   projection: Projection;
+  comparison: StrategyComparison | null;
+  investmentMethods: InvestmentMethodOption[];
+  historicalSnapshots: HistoricalSnapshot[];
 };
 
-export function PlanEditor({ plan, projection }: PlanEditorProps) {
+export function PlanEditor({
+  plan,
+  projection,
+  comparison,
+  investmentMethods,
+  historicalSnapshots,
+}: PlanEditorProps) {
   const [, startTransition] = useTransition();
 
   const wrap = <T,>(fn: () => Promise<{ success: boolean; error?: string } & T>) =>
@@ -75,14 +91,19 @@ export function PlanEditor({ plan, projection }: PlanEditorProps) {
           />
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Projection</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ProjectionChart projection={projection} />
-          </CardContent>
-        </Card>
+        {comparison && plan.debts.length > 0 && (
+          <StrategyComparisonCard
+            comparison={comparison}
+            currentStrategy={plan.debtStrategy as DebtStrategy}
+          />
+        )}
+
+        <ProjectionPanel
+          projection={projection}
+          historicalSnapshots={historicalSnapshots}
+        />
+
+
 
         <Card>
           <CardHeader>
@@ -150,9 +171,103 @@ export function PlanEditor({ plan, projection }: PlanEditorProps) {
       </TabsContent>
 
       <TabsContent value="settings">
-        <PlanForm plan={plan} />
+        <PlanForm plan={plan} investmentMethods={investmentMethods} />
       </TabsContent>
     </Tabs>
+  );
+}
+
+type ProjectionPanelProps = {
+  projection: Projection;
+  historicalSnapshots: HistoricalSnapshot[];
+};
+
+const FORMATTER = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" });
+
+/**
+ * Projection chart with a header strip that surfaces the headline number — how
+ * much the net worth is expected to grow over the next 12 months. The strip
+ * always reads "today → +12 months" regardless of the underlying horizon so the
+ * KPI is easy to compare across plans.
+ */
+function ProjectionPanel({ projection, historicalSnapshots }: ProjectionPanelProps) {
+  // Today's net worth is the first month of the projection (the calibrated state
+  // at startMonth). The "12 months out" point is index 11 — we guard for shorter
+  // horizons just in case.
+  const todayMonth = projection.months[0];
+  const futureMonth =
+    projection.months[Math.min(11, projection.months.length - 1)] ?? todayMonth;
+
+  const today = todayMonth?.netWorth ?? 0;
+  const future = futureMonth?.netWorth ?? today;
+  const delta = future - today;
+
+  // Compute % change against |today| so a negative starting net worth shows a
+  // sensible direction. Suppressed when today is ~0 to avoid divide-by-zero.
+  const pctChange =
+    Math.abs(today) > 0.01 ? (delta / Math.abs(today)) * 100 : null;
+
+  const isUp = delta >= 0;
+  const TrendIcon = isUp ? TrendingUp : TrendingDown;
+  const trendClass = isUp ? "text-green-600" : "text-red-600";
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <CardTitle>Projection</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Last 3 months · next 12 months
+            </p>
+          </div>
+          <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Today {todayMonth ? `(${FORMATTER.format(todayMonth.date)})` : ""}
+              </p>
+              <p
+                className={`text-lg font-semibold ${
+                  today >= 0 ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {formatCurrency(today)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                In 12 months {futureMonth ? `(${FORMATTER.format(futureMonth.date)})` : ""}
+              </p>
+              <p
+                className={`text-lg font-semibold ${
+                  future >= 0 ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {formatCurrency(future)}
+              </p>
+            </div>
+            <div className={`flex items-center gap-1 ${trendClass}`}>
+              <TrendIcon className="h-4 w-4" />
+              <div>
+                <p className="text-lg font-semibold">
+                  {isUp ? "+" : "−"}
+                  {formatCurrency(Math.abs(delta))}
+                </p>
+                {pctChange !== null && (
+                  <p className="text-xs">
+                    {isUp ? "+" : ""}
+                    {pctChange.toFixed(1)}%
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <ProjectionChart projection={projection} historicalSnapshots={historicalSnapshots} />
+      </CardContent>
+    </Card>
   );
 }
 

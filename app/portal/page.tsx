@@ -1,23 +1,30 @@
 import type { Metadata } from "next";
+
 import { PageHeader } from "@/components/portal/page-header";
+import { DashboardFinanceCard } from "@/components/finance/dashboard-finance-card";
+import { DashboardConfirmationHost } from "@/components/finance/dashboard-confirmation-host";
+import { requireEffectiveContext } from "@/lib/services/impersonation";
 
 export const metadata: Metadata = {
   title: "Dashboard | Capital Galaxy",
   description: "Your investment dashboard",
 };
 
-export default function PortalPage() {
+export const dynamic = "force-dynamic";
+
+export default async function PortalPage() {
+  const ctx = await requireEffectiveContext();
+
   return (
     <section className="space-y-6">
       <PageHeader
         title="Dashboard"
-        description="Overview of your workspace modules."
+        description="Snapshots from across your workspace."
       />
-      <div className="grid auto-rows-min gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-        {Array.from({ length: 20 }).map((_, i) => (
-          <div key={i} className="aspect-square rounded-xl bg-muted/50" aria-hidden="true" />
-        ))}
+      <div className="grid auto-rows-min gap-4 md:grid-cols-3">
+        <DashboardFinanceCard userId={ctx.effectiveUserId} />
       </div>
+      <DashboardConfirmationHost userId={ctx.effectiveUserId} />
     </section>
   );
 }

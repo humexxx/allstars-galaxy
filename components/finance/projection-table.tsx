@@ -21,6 +21,9 @@ const MONTH_FORMATTER = new Intl.DateTimeFormat("en-US", {
 
 type ProjectionTableProps = {
   projection: Projection;
+  /** Limits the table to the first N months of the projection. When omitted
+   *  the entire horizon is rendered. */
+  monthsToShow?: number;
 };
 
 /** Keep months 1-12 + year-end milestones, identical to the chart densifier. */
@@ -36,13 +39,18 @@ function densify(months: ProjectionMonth[]): ProjectionMonth[] {
   return kept;
 }
 
-export function ProjectionTable({ projection }: ProjectionTableProps) {
+export function ProjectionTable({ projection, monthsToShow }: ProjectionTableProps) {
   const [showAll, setShowAll] = useState(false);
-  const hasInvestments = projection.months.some((m) => m.investments > 0.01);
-  const isLongHorizon = projection.months.length > 24;
+  const visibleMonths = useMemo(() => {
+    if (typeof monthsToShow !== "number") return projection.months;
+    return projection.months.slice(0, Math.max(1, monthsToShow));
+  }, [projection.months, monthsToShow]);
+
+  const hasInvestments = visibleMonths.some((m) => m.investments > 0.01);
+  const isLongHorizon = visibleMonths.length > 24;
   const rows = useMemo(
-    () => (showAll ? projection.months : densify(projection.months)),
-    [projection.months, showAll]
+    () => (showAll || !isLongHorizon ? visibleMonths : densify(visibleMonths)),
+    [visibleMonths, showAll, isLongHorizon]
   );
 
   return (
@@ -51,8 +59,8 @@ export function ProjectionTable({ projection }: ProjectionTableProps) {
         <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           <span>
             {showAll
-              ? `Showing all ${projection.months.length} months`
-              : `Showing the first 12 months + each year-end (${rows.length} rows of ${projection.months.length})`}
+              ? `Showing all ${visibleMonths.length} months`
+              : `Showing the first 12 months + each year-end (${rows.length} of ${visibleMonths.length})`}
           </span>
           <Button
             type="button"
@@ -74,7 +82,9 @@ export function ProjectionTable({ projection }: ProjectionTableProps) {
                 <TableHead className="text-right">Expenses</TableHead>
                 <TableHead className="text-right">Debt pmt</TableHead>
                 <TableHead className="text-right">Extra pmt</TableHead>
-                <TableHead className="text-right">Interest</TableHead>
+                <TableHead className="text-right" title="Investment + savings interest earned minus debt interest accrued">
+                  Net interest
+                </TableHead>
                 <TableHead className="text-right">Savings</TableHead>
                 {hasInvestments && <TableHead className="text-right">Investments</TableHead>}
                 <TableHead className="text-right">Total debt</TableHead>
@@ -101,8 +111,27 @@ export function ProjectionTable({ projection }: ProjectionTableProps) {
                   >
                     {m.extraDebtPayments > 0 ? formatCurrency(m.extraDebtPayments) : "—"}
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground">
-                    {m.totalInterestAccrued > 0 ? formatCurrency(m.totalInterestAccrued) : "—"}
+                  <TableCell className="text-right">
+                    {(() => {
+                      // Net interest = what compounded into your favour minus what
+                      // accrued against you. Positive (green) once investments earn
+                      // more than debts cost; negative (red) when debts dominate.
+                      const net =
+                        m.investmentsInterest + m.savingsInterest - m.totalInterestAccrued;
+                      if (Math.abs(net) < 0.005) {
+                        return <span className="text-muted-foreground">—</span>;
+                      }
+                      const isPositive = net > 0;
+                      return (
+                        <span
+                          className={isPositive ? "text-green-600" : "text-red-600"}
+                          title={`Earned ${formatCurrency(m.investmentsInterest + m.savingsInterest)} · Paid ${formatCurrency(m.totalInterestAccrued)}`}
+                        >
+                          {isPositive ? "+" : "−"}
+                          {formatCurrency(Math.abs(net))}
+                        </span>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="text-right">{formatCurrency(m.savings)}</TableCell>
                   {hasInvestments && (

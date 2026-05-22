@@ -25,16 +25,20 @@ import {
 import {
   createFinancePlanSchema,
   planDebtSchema,
-  planLineSchema,
+  planExpenseSchema,
+  planIncomeSchema,
   updateFinancePlanSchema,
   updatePlanDebtSchema,
-  updatePlanLineSchema,
+  updatePlanExpenseSchema,
+  updatePlanIncomeSchema,
   type CreateFinancePlanInput,
   type PlanDebtInput,
-  type PlanLineInput,
+  type PlanExpenseInput,
+  type PlanIncomeInput,
   type UpdateFinancePlanInput,
   type UpdatePlanDebtInput,
-  type UpdatePlanLineInput,
+  type UpdatePlanExpenseInput,
+  type UpdatePlanIncomeInput,
 } from "@/schemas/finance";
 
 const PLAN_PATH = "/portal/plans";
@@ -137,11 +141,11 @@ export async function clonePlanAction(planId: string, newName: string) {
 
 // ---------- incomes ----------
 
-export async function addPlanIncomeAction(planId: string, input: PlanLineInput) {
+export async function addPlanIncomeAction(planId: string, input: PlanIncomeInput) {
   return safe(async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(planId);
-    const parsed = planLineSchema.safeParse(input);
+    const parsed = planIncomeSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
       return { success: false as const, error: "Invalid input" };
     }
@@ -156,11 +160,11 @@ export async function addPlanIncomeAction(planId: string, input: PlanLineInput) 
   });
 }
 
-export async function updatePlanIncomeAction(planId: string, input: UpdatePlanLineInput) {
+export async function updatePlanIncomeAction(planId: string, input: UpdatePlanIncomeInput) {
   return safe(async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(planId);
-    const parsed = updatePlanLineSchema.safeParse(input);
+    const parsed = updatePlanIncomeSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
       return { success: false as const, error: "Invalid input" };
     }
@@ -196,11 +200,11 @@ export async function deletePlanIncomeAction(planId: string, incomeId: string) {
 
 // ---------- expenses ----------
 
-export async function addPlanExpenseAction(planId: string, input: PlanLineInput) {
+export async function addPlanExpenseAction(planId: string, input: PlanExpenseInput) {
   return safe(async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(planId);
-    const parsed = planLineSchema.safeParse(input);
+    const parsed = planExpenseSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
       return { success: false as const, error: "Invalid input" };
     }
@@ -217,12 +221,12 @@ export async function addPlanExpenseAction(planId: string, input: PlanLineInput)
 
 export async function updatePlanExpenseAction(
   planId: string,
-  input: UpdatePlanLineInput
+  input: UpdatePlanExpenseInput
 ) {
   return safe(async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(planId);
-    const parsed = updatePlanLineSchema.safeParse(input);
+    const parsed = updatePlanExpenseSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
       return { success: false as const, error: "Invalid input" };
     }

@@ -20,10 +20,12 @@ import type {
 import type {
   CreateFinancePlanInput,
   PlanDebtInput,
-  PlanLineInput,
+  PlanExpenseInput,
+  PlanIncomeInput,
   UpdateFinancePlanInput,
   UpdatePlanDebtInput,
-  UpdatePlanLineInput,
+  UpdatePlanExpenseInput,
+  UpdatePlanIncomeInput,
 } from "@/schemas/finance";
 
 import { getUserPortfolio, getPortfolioStats } from "./portfolio-service";
@@ -38,6 +40,38 @@ function addMonthsUtc(date: Date, months: number): Date {
   const d = new Date(date);
   d.setUTCMonth(d.getUTCMonth() + months);
   return d;
+}
+
+// Year-month integer (e.g. 2026-03 → 24315). Lets us compare months without
+// dealing with timezones or day-of-month — purely a calendar bucket.
+function yearMonthKey(year: number, monthZeroIdx: number): number {
+  return year * 12 + monthZeroIdx;
+}
+
+function yearMonthKeyFromDate(date: Date): number {
+  return yearMonthKey(date.getUTCFullYear(), date.getUTCMonth());
+}
+
+// Parses "YYYY-MM-DD" into a year-month key at UTC. Returns null for nullish
+// inputs. We only care about year/month for the projection — the day is for
+// the calendar view only.
+function yearMonthKeyFromISO(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const [y, m] = value.split("-").map((s) => parseInt(s, 10));
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
+  return yearMonthKey(y, m - 1);
+}
+
+// True if a recurring income/expense is active during the month at `monthKey`.
+// `startMonthKey` null → no lower bound. `endMonthKey` null → no upper bound.
+function isActiveInMonth(
+  monthKey: number,
+  startMonthKey: number | null,
+  endMonthKey: number | null
+): boolean {
+  if (startMonthKey !== null && monthKey < startMonthKey) return false;
+  if (endMonthKey !== null && monthKey > endMonthKey) return false;
+  return true;
 }
 
 async function ensureOwnership(planId: string, userId: string): Promise<void> {
@@ -186,6 +220,11 @@ export async function clonePlan(
         planId: plan.id,
         name: i.name,
         monthlyAmount: i.monthlyAmount,
+        kind: i.kind,
+        dayOfMonth: i.dayOfMonth,
+        date: i.date,
+        startDate: i.startDate,
+        endDate: i.endDate,
         sortOrder: i.sortOrder,
       }))
     );
@@ -196,6 +235,9 @@ export async function clonePlan(
         planId: plan.id,
         name: e.name,
         monthlyAmount: e.monthlyAmount,
+        kind: e.kind,
+        dayOfMonth: e.dayOfMonth,
+        date: e.date,
         sortOrder: e.sortOrder,
       }))
     );
@@ -224,7 +266,7 @@ export async function clonePlan(
 export async function addIncome(
   userId: string,
   planId: string,
-  data: PlanLineInput
+  data: PlanIncomeInput
 ): Promise<FinancePlanIncome> {
   await ensureOwnership(planId, userId);
   const [row] = await db
@@ -233,6 +275,11 @@ export async function addIncome(
       planId,
       name: data.name,
       monthlyAmount: data.monthlyAmount,
+      kind: data.kind,
+      dayOfMonth: data.dayOfMonth ?? null,
+      date: data.kind === "one_time" ? data.date ?? null : null,
+      startDate: data.kind === "recurring" ? data.startDate ?? null : null,
+      endDate: data.kind === "recurring" ? data.endDate ?? null : null,
       sortOrder: data.sortOrder ?? 0,
     })
     .returning();
@@ -242,7 +289,7 @@ export async function addIncome(
 export async function updateIncome(
   userId: string,
   planId: string,
-  data: UpdatePlanLineInput
+  data: UpdatePlanIncomeInput
 ): Promise<FinancePlanIncome> {
   await ensureOwnership(planId, userId);
   const [row] = await db
@@ -250,6 +297,11 @@ export async function updateIncome(
     .set({
       name: data.name,
       monthlyAmount: data.monthlyAmount,
+      kind: data.kind,
+      dayOfMonth: data.dayOfMonth ?? null,
+      date: data.kind === "one_time" ? data.date ?? null : null,
+      startDate: data.kind === "recurring" ? data.startDate ?? null : null,
+      endDate: data.kind === "recurring" ? data.endDate ?? null : null,
       sortOrder: data.sortOrder,
     })
     .where(and(eq(financePlanIncomes.id, data.id), eq(financePlanIncomes.planId, planId)))
@@ -271,7 +323,7 @@ export async function deleteIncome(
 export async function addExpense(
   userId: string,
   planId: string,
-  data: PlanLineInput
+  data: PlanExpenseInput
 ): Promise<FinancePlanExpense> {
   await ensureOwnership(planId, userId);
   const [row] = await db
@@ -280,6 +332,9 @@ export async function addExpense(
       planId,
       name: data.name,
       monthlyAmount: data.monthlyAmount,
+      kind: data.kind,
+      dayOfMonth: data.dayOfMonth ?? null,
+      date: data.kind === "one_time" ? data.date ?? null : null,
       sortOrder: data.sortOrder ?? 0,
     })
     .returning();
@@ -289,7 +344,7 @@ export async function addExpense(
 export async function updateExpense(
   userId: string,
   planId: string,
-  data: UpdatePlanLineInput
+  data: UpdatePlanExpenseInput
 ): Promise<FinancePlanExpense> {
   await ensureOwnership(planId, userId);
   const [row] = await db
@@ -297,6 +352,9 @@ export async function updateExpense(
     .set({
       name: data.name,
       monthlyAmount: data.monthlyAmount,
+      kind: data.kind,
+      dayOfMonth: data.dayOfMonth ?? null,
+      date: data.kind === "one_time" ? data.date ?? null : null,
       sortOrder: data.sortOrder,
     })
     .where(and(eq(financePlanExpenses.id, data.id), eq(financePlanExpenses.planId, planId)))
@@ -456,14 +514,21 @@ export function projectPlan(
   // Guard against negative ROI configurations — investments never shrink.
   const autoInvestRate = Math.max(0, options.autoInvestRate ?? 0);
 
-  const totalMonthlyIncome = Math.max(
-    0,
-    incomes.reduce((s, i) => s + num(i.monthlyAmount), 0)
-  );
-  const totalMonthlyExpenses = Math.max(
-    0,
-    expenses.reduce((s, e) => s + num(e.monthlyAmount), 0)
-  );
+  // Pre-compute per-line month bounds and one-time hit-months so the inner
+  // loop is O(lines) per month with no string parsing or branching surprises.
+  const incomeRows = incomes.map((i) => ({
+    amount: Math.max(0, num(i.monthlyAmount)),
+    kind: i.kind,
+    startKey: yearMonthKeyFromISO(i.startDate),
+    endKey: yearMonthKeyFromISO(i.endDate),
+    oneTimeKey: i.kind === "one_time" ? yearMonthKeyFromISO(i.date) : null,
+  }));
+  const expenseRows = expenses.map((e) => ({
+    amount: Math.max(0, num(e.monthlyAmount)),
+    kind: e.kind,
+    oneTimeKey: e.kind === "one_time" ? yearMonthKeyFromISO(e.date) : null,
+  }));
+
   const savingsRate = Math.max(0, num(plan.monthlySavingsRate));
   const surplusPercent = Math.max(0, Math.min(1, num(plan.surplusToDebtsPercent)));
   const autoInvestPercent = Math.max(0, Math.min(1, num(plan.autoInvestPercent)));
@@ -501,6 +566,29 @@ export function projectPlan(
     let scheduledTotal = 0;
     let interestTotal = 0;
 
+    // Aggregate income/expenses for THIS month: recurring lines that fall
+    // within their date window contribute monthlyAmount; one-time lines
+    // contribute their amount only on the month that matches their `date`.
+    const monthDate = addMonthsUtc(plan.startMonth, m);
+    const monthKey = yearMonthKeyFromDate(monthDate);
+
+    let monthIncome = 0;
+    for (const row of incomeRows) {
+      if (row.kind === "one_time") {
+        if (row.oneTimeKey === monthKey) monthIncome += row.amount;
+      } else if (isActiveInMonth(monthKey, row.startKey, row.endKey)) {
+        monthIncome += row.amount;
+      }
+    }
+    let monthExpenses = 0;
+    for (const row of expenseRows) {
+      if (row.kind === "one_time") {
+        if (row.oneTimeKey === monthKey) monthExpenses += row.amount;
+      } else {
+        monthExpenses += row.amount;
+      }
+    }
+
     // Step 1 + 2: accrue interest and apply scheduled payments (variable for
     // percent_of_balance debts, fixed otherwise).
     for (const d of debtStates) {
@@ -517,7 +605,7 @@ export function projectPlan(
       entry.scheduled = payment;
     }
 
-    const cashFlow = totalMonthlyIncome - totalMonthlyExpenses - scheduledTotal;
+    const cashFlow = monthIncome - monthExpenses - scheduledTotal;
 
     // Step 4: surplus → extra debt principal.
     let extraTotal = 0;
@@ -569,9 +657,9 @@ export function projectPlan(
 
     months.push({
       monthOffset: m,
-      date: addMonthsUtc(plan.startMonth, m),
-      income: totalMonthlyIncome,
-      expenses: totalMonthlyExpenses,
+      date: monthDate,
+      income: monthIncome,
+      expenses: monthExpenses,
       scheduledDebtPayments: scheduledTotal,
       extraDebtPayments: extraTotal,
       debtPayments: totalDebtPayments,

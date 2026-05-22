@@ -11,6 +11,7 @@ export const taskPriorityEnum = pgEnum("task_priority", ["low", "medium", "high"
 export const debtPaymentTypeEnum = pgEnum("debt_payment_type", ["fixed", "percent_of_balance"]);
 export const debtStrategyEnum = pgEnum("debt_strategy", ["avalanche", "snowball", "none"]);
 export const financeSnapshotSourceEnum = pgEnum("finance_snapshot_source", ["system_cron", "confirmation", "manual"]);
+export const financePlanLineKindEnum = pgEnum("finance_plan_line_kind", ["recurring", "one_time"]);
 
 // Define auth schema to reference auth.users
 const authSchema = pgSchema("auth");
@@ -197,13 +198,32 @@ export const financePlanIncomes = pgTable(
       .notNull()
       .references(() => financePlans.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    // For kind='recurring' this is the monthly amount. For kind='one_time' this
+    // is the lump-sum amount paid on `date` (column name kept for compatibility).
     monthlyAmount: numeric("monthly_amount", { precision: 20, scale: 2 })
       .notNull()
       .default("0"),
+    kind: financePlanLineKindEnum("kind").notNull().default("recurring"),
+    // For 'recurring': which day of the month the income hits (1..31). Used by
+    // the calendar view only — the projection aggregates monthly regardless.
+    dayOfMonth: integer("day_of_month"),
+    // For 'one_time': the exact date the lump sum is received.
+    date: date("date"),
+    // For 'recurring': inclusive month range. null start = perpetual back to
+    // plan start; null end = perpetual forward. Day-precision but only the
+    // year/month is meaningful for the projection.
+    startDate: date("start_date"),
+    endDate: date("end_date"),
     sortOrder: real("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("finance_plan_incomes_plan_id_idx").on(t.planId)]
+  (t) => [
+    index("finance_plan_incomes_plan_id_idx").on(t.planId),
+    check(
+      "finance_plan_incomes_day_of_month_chk",
+      sql`${t.dayOfMonth} IS NULL OR (${t.dayOfMonth} >= 1 AND ${t.dayOfMonth} <= 31)`
+    ),
+  ]
 );
 
 export const financePlanExpenses = pgTable(
@@ -214,13 +234,26 @@ export const financePlanExpenses = pgTable(
       .notNull()
       .references(() => financePlans.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    // For kind='recurring' this is the monthly amount. For kind='one_time' this
+    // is the lump-sum amount paid on `date`.
     monthlyAmount: numeric("monthly_amount", { precision: 20, scale: 2 })
       .notNull()
       .default("0"),
+    kind: financePlanLineKindEnum("kind").notNull().default("recurring"),
+    // Day of the month for recurring expenses (1..31). Calendar-only metadata.
+    dayOfMonth: integer("day_of_month"),
+    // Specific date for one-time expenses.
+    date: date("date"),
     sortOrder: real("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("finance_plan_expenses_plan_id_idx").on(t.planId)]
+  (t) => [
+    index("finance_plan_expenses_plan_id_idx").on(t.planId),
+    check(
+      "finance_plan_expenses_day_of_month_chk",
+      sql`${t.dayOfMonth} IS NULL OR (${t.dayOfMonth} >= 1 AND ${t.dayOfMonth} <= 31)`
+    ),
+  ]
 );
 
 /**

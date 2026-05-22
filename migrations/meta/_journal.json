@@ -141,6 +141,13 @@
       "when": 1779250858920,
       "tag": "0019_align_finance_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779424199891,
+      "tag": "0020_early_thundra",
+      "breakpoints": true
     }
   ]
 }

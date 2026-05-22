@@ -12,6 +12,7 @@ import {
 import { Heading, Text } from "@/components/ui/typography";
 
 import { FinancialHealthGauge } from "./financial-health-gauge";
+import { PlanCalendar } from "./plan-calendar";
 import { PlanLineEditor } from "./plan-line-editor";
 import { PlanDebtEditor } from "./plan-debt-editor";
 import { PlanForm, type InvestmentMethodOption } from "./plan-form";
@@ -125,6 +126,7 @@ export function PlanEditor({
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="setup">Setup</TabsTrigger>
+            <TabsTrigger value="calendar">Calendar</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
         </div>
@@ -253,8 +255,9 @@ export function PlanEditor({
         <Card>
           <CardContent className="pt-6">
             <PlanLineEditor
+              variant="income"
               title="Income (Entradas)"
-              description="Monthly recurring income sources."
+              description="Recurring income or one-time receipts."
               emptyLabel="No income sources yet"
               lines={plan.incomes}
               addLabel="Add income"
@@ -272,8 +275,9 @@ export function PlanEditor({
         <Card>
           <CardContent className="pt-6">
             <PlanLineEditor
+              variant="expense"
               title="Expenses (Salidas)"
-              description="Monthly recurring expenses."
+              description="Recurring expenses or one-time payments."
               emptyLabel="No expense categories yet"
               lines={plan.expenses}
               addLabel="Add expense"
@@ -302,6 +306,18 @@ export function PlanEditor({
             />
           </CardContent>
         </Card>
+      </TabsContent>
+
+      <TabsContent value="calendar">
+        <PlanCalendar
+          plan={plan}
+          onAddIncome={(input) =>
+            wrap(() => addPlanIncomeAction(plan.id, input))
+          }
+          onAddExpense={(input) =>
+            wrap(() => addPlanExpenseAction(plan.id, input))
+          }
+        />
       </TabsContent>
 
       <TabsContent value="settings">

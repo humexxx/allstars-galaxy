@@ -327,6 +327,20 @@ When modifying `db/schema.ts`:
 - Style with Tailwind utilities and CSS variables
 - Support dark/light themes
 
+### Typography (mandatory reading)
+
+Before adding or modifying any text in the UI, read
+[`docs/TYPOGRAPHY.md`](./docs/TYPOGRAPHY.md). The app's type system is:
+
+- **Geist Sans** for all UI and body text (default `font-sans`)
+- **Geist Mono** for code, IDs, hashes, deployment URLs, and any numeric data
+  (`font-mono`, plus `tabular-nums` for columns of numbers)
+
+Use the primitives in [`@/components/ui/typography`](./components/ui/typography.tsx)
+(`Heading`, `Text`, `Eyebrow`, `Code`, `Mono`) rather than rebuilding the
+scale with raw Tailwind classes. The full scale, do's/don'ts, and common
+patterns are in [`docs/TYPOGRAPHY.md`](./docs/TYPOGRAPHY.md).
+
 ## Code Quality Standards
 
 - **Keep functions simple** - Extract complex logic
@@ -337,6 +351,7 @@ When modifying `db/schema.ts`:
 
 ## Related Documentation
 
+- [docs/TYPOGRAPHY.md](./docs/TYPOGRAPHY.md) - Typography system (fonts, scale, primitives) — required reading for UI work
 - [Agent Skills](./.github/skills/) - Specialized workflows (database migrations, service creation, server actions)
 - [.github/copilot-instructions.md](./.github/copilot-instructions.md) - Quick reference for inline code completion
 - [AI_CONTEXT.md](./AI_CONTEXT.md) - Project overview and technical stack

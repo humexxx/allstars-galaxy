@@ -49,6 +49,13 @@ migrations/          Auto-generated SQL migrations
 
 ## Code Conventions
 
+### Typography
+**Read [`docs/TYPOGRAPHY.md`](docs/TYPOGRAPHY.md) before writing or modifying
+any UI.** The app uses **Geist Sans** (UI/body) and **Geist Mono** (code,
+numerics, identifiers). Prefer the primitives in `@/components/ui/typography`
+(`Heading`, `Text`, `Eyebrow`, `Code`, `Mono`) over raw
+`text-* font-* tracking-*` chains. Never introduce another font family.
+
 ### Language
 All code, comments, and documentation in **English**.
 

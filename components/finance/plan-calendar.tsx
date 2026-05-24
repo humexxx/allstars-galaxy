@@ -104,16 +104,112 @@ function debtCalendarAmount(d: FinancePlanDebt): number {
   return payment > 0 ? payment : floor;
 }
 
+// Resolves the day-of-month an entry hits for a given (year, monthIdx). Returns
+// null when the entry skips that month (every_n_months between hits).
+type MonthHitResolver = (year: number, monthIdx: number) => number | null;
+
+type RecurrenceShape = {
+  recurrenceType: "monthly_day" | "monthly_weekday" | "every_n_months";
+  dayOfMonth: number | null;
+  weekOfMonth: number | null;
+  dayOfWeek: number | null;
+  intervalMonths: number | null;
+  recurrenceStart: string | null;
+};
+
+// Returns the Nth occurrence of dayOfWeek (0=Sun..6=Sat) inside (year, month).
+// Per the product call: when the Nth doesn't exist (e.g. 5th Tuesday in Feb),
+// fall back to the LAST occurrence in the month rather than skip.
+function nthWeekdayOfMonth(
+  year: number,
+  monthIdx: number,
+  weekOfMonth: number,
+  dayOfWeek: number
+): number {
+  const firstDow = new Date(year, monthIdx, 1).getDay();
+  // (target - first + 7) mod 7 gives the offset (0..6) from day 1 to the first
+  // occurrence of `dayOfWeek`. Day numbers start at 1.
+  const firstOccurrence = 1 + ((dayOfWeek - firstDow + 7) % 7);
+  let target = firstOccurrence + (weekOfMonth - 1) * 7;
+  const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+  if (target > lastDay) target -= 7;
+  return target;
+}
+
+function recurrenceAnchorKey(
+  shape: Pick<RecurrenceShape, "recurrenceType" | "recurrenceStart">,
+  planStartMonth: Date
+): number | null {
+  if (shape.recurrenceType !== "every_n_months") return null;
+  if (shape.recurrenceStart) {
+    const d = parseISODate(shape.recurrenceStart);
+    if (d) return d.getFullYear() * 12 + d.getMonth();
+  }
+  return planStartMonth.getFullYear() * 12 + planStartMonth.getMonth();
+}
+
+function buildHitResolver(
+  shape: RecurrenceShape,
+  planStartMonth: Date
+): MonthHitResolver {
+  if (
+    shape.recurrenceType === "monthly_weekday" &&
+    shape.weekOfMonth != null &&
+    shape.dayOfWeek != null
+  ) {
+    const w = shape.weekOfMonth;
+    const d = shape.dayOfWeek;
+    return (y, m) => nthWeekdayOfMonth(y, m, w, d);
+  }
+  if (shape.recurrenceType === "every_n_months" && shape.intervalMonths != null) {
+    const interval = shape.intervalMonths;
+    const anchor = recurrenceAnchorKey(shape, planStartMonth);
+    const dom = shape.dayOfMonth ?? 1;
+    return (y, m) => {
+      if (anchor === null) return null;
+      const mk = y * 12 + m;
+      if (mk < anchor) return null;
+      if ((mk - anchor) % interval !== 0) return null;
+      return clampDayInMonth(dom, y, m);
+    };
+  }
+  // monthly_day fallback (and any partially-configured row).
+  const dom = shape.dayOfMonth ?? 1;
+  return (y, m) => clampDayInMonth(dom, y, m);
+}
+
+// True if a recurring row contributes at all to (year, monthIdx) regardless of
+// which day inside. Used by the month-summary strip where day placement
+// doesn't matter.
+function recurringContributesToMonth(
+  shape: Pick<
+    RecurrenceShape,
+    "recurrenceType" | "intervalMonths" | "recurrenceStart"
+  >,
+  year: number,
+  monthIdx: number,
+  planStartMonth: Date
+): boolean {
+  if (shape.recurrenceType !== "every_n_months") return true;
+  if (!shape.intervalMonths || shape.intervalMonths < 1) return true;
+  const anchor = recurrenceAnchorKey(shape, planStartMonth);
+  if (anchor === null) return true;
+  const mk = year * 12 + monthIdx;
+  if (mk < anchor) return false;
+  return (mk - anchor) % shape.intervalMonths === 0;
+}
+
 // Sum of every entry hitting (year, monthIdx). Used by the calendar's monthly
 // summary strip. Recurring entries contribute their monthlyAmount once per
-// month inside their start/end window; one-time entries contribute only if
-// their date falls within the month.
+// month inside their start/end window AND on cycle months (for every_n_months).
+// One-time entries contribute only if their date falls within the month.
 function monthTotalsBySide(
   year: number,
   monthIdx: number,
   incomes: FinancePlanIncome[],
   expenses: FinancePlanExpense[],
-  debts: FinancePlanDebt[]
+  debts: FinancePlanDebt[],
+  planStartMonth: Date
 ): { income: number; expense: number; debt: number } {
   const monthKey = year * 12 + monthIdx;
   const isOneTimeHit = (iso: string | null): boolean => {
@@ -144,7 +240,10 @@ function monthTotalsBySide(
     const amount = Number(inc.monthlyAmount);
     if (inc.kind === "one_time") {
       if (isOneTimeHit(inc.date)) income += amount;
-    } else if (isInWindow(inc.startDate, inc.endDate)) {
+    } else if (
+      isInWindow(inc.startDate, inc.endDate) &&
+      recurringContributesToMonth(inc, year, monthIdx, planStartMonth)
+    ) {
       income += amount;
     }
   }
@@ -153,13 +252,15 @@ function monthTotalsBySide(
     const amount = Number(exp.monthlyAmount);
     if (exp.kind === "one_time") {
       if (isOneTimeHit(exp.date)) expense += amount;
-    } else {
+    } else if (recurringContributesToMonth(exp, year, monthIdx, planStartMonth)) {
       expense += amount;
     }
   }
 
   for (const d of debts) {
-    debt += debtCalendarAmount(d);
+    if (recurringContributesToMonth(d, year, monthIdx, planStartMonth)) {
+      debt += debtCalendarAmount(d);
+    }
   }
 
   return { income, expense, debt };
@@ -171,7 +272,8 @@ function buildDayMap(
   days: Date[],
   incomes: FinancePlanIncome[],
   expenses: FinancePlanExpense[],
-  debts: FinancePlanDebt[]
+  debts: FinancePlanDebt[],
+  planStartMonth: Date
 ): Map<string, DayEntry[]> {
   const map = new Map<string, DayEntry[]>();
   const push = (key: string, entry: DayEntry) => {
@@ -188,14 +290,19 @@ function buildDayMap(
     day: d.getDate(),
   }));
 
+  // Generic recurring placer. The resolver tells us which day-of-month (if
+  // any) the entry hits for a given (year, month) — works for monthly_day,
+  // monthly_weekday and every_n_months alike.
   const pushRecurring = (
     entry: DayEntry,
-    dayOfMonth: number,
+    resolver: MonthHitResolver,
     startKey: { y: number; m: number } | null,
     endKey: { y: number; m: number } | null
   ) => {
     for (const meta of dayMeta) {
-      if (meta.day !== clampDayInMonth(dayOfMonth, meta.year, meta.month)) continue;
+      const targetDay = resolver(meta.year, meta.month);
+      if (targetDay === null) continue;
+      if (meta.day !== targetDay) continue;
       const mk = meta.year * 12 + meta.month;
       if (startKey !== null && mk < startKey.y * 12 + startKey.m) continue;
       if (endKey !== null && mk > endKey.y * 12 + endKey.m) continue;
@@ -227,7 +334,6 @@ function buildDayMap(
         inc.date
       );
     } else {
-      const dom = inc.dayOfMonth ?? 1;
       const start = inc.startDate ? parseISODate(inc.startDate) : null;
       const end = inc.endDate ? parseISODate(inc.endDate) : null;
       pushRecurring(
@@ -239,7 +345,7 @@ function buildDayMap(
           kind: "recurring",
           source: inc,
         },
-        dom,
+        buildHitResolver(inc, planStartMonth),
         start ? { y: start.getFullYear(), m: start.getMonth() } : null,
         end ? { y: end.getFullYear(), m: end.getMonth() } : null
       );
@@ -262,7 +368,6 @@ function buildDayMap(
         exp.date
       );
     } else {
-      const dom = exp.dayOfMonth ?? 1;
       pushRecurring(
         {
           id: exp.id,
@@ -272,7 +377,7 @@ function buildDayMap(
           kind: "recurring",
           source: exp,
         },
-        dom,
+        buildHitResolver(exp, planStartMonth),
         null,
         null
       );
@@ -280,7 +385,6 @@ function buildDayMap(
   }
 
   for (const debt of debts) {
-    const dom = debt.dayOfMonth ?? 1;
     pushRecurring(
       {
         id: debt.id,
@@ -290,7 +394,7 @@ function buildDayMap(
         kind: "recurring",
         source: debt,
       },
-      dom,
+      buildHitResolver(debt, planStartMonth),
       null,
       null
     );
@@ -344,8 +448,15 @@ export function PlanCalendar({
   );
 
   const dayMap = useMemo(
-    () => buildDayMap(days, plan.incomes, plan.expenses, plan.debts),
-    [days, plan.incomes, plan.expenses, plan.debts]
+    () =>
+      buildDayMap(
+        days,
+        plan.incomes,
+        plan.expenses,
+        plan.debts,
+        plan.startMonth
+      ),
+    [days, plan.incomes, plan.expenses, plan.debts, plan.startMonth]
   );
 
   // Monthly summary for the navigated month + the month before, so we can show
@@ -356,7 +467,8 @@ export function PlanCalendar({
       cursor.getMonth(),
       plan.incomes,
       plan.expenses,
-      plan.debts
+      plan.debts,
+      plan.startMonth
     );
     const prevDate = subMonths(cursor, 1);
     const prev = monthTotalsBySide(
@@ -364,7 +476,8 @@ export function PlanCalendar({
       prevDate.getMonth(),
       plan.incomes,
       plan.expenses,
-      plan.debts
+      plan.debts,
+      plan.startMonth
     );
     return {
       curr,
@@ -372,7 +485,7 @@ export function PlanCalendar({
       currNet: curr.income - curr.expense - curr.debt,
       prevNet: prev.income - prev.expense - prev.debt,
     };
-  }, [cursor, plan.incomes, plan.expenses, plan.debts]);
+  }, [cursor, plan.incomes, plan.expenses, plan.debts, plan.startMonth]);
 
   const monthLabel = format(cursor, "MMMM yyyy");
 

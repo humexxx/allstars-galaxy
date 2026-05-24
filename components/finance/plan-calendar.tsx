@@ -1102,16 +1102,16 @@ export function PlanCalendar({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCursor(todayMonth)}
+              onClick={() => setCursor(planStartMonth)}
             >
-              Today
+              Plan start
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCursor(planStartMonth)}
+              onClick={() => setCursor(todayMonth)}
             >
-              Plan start
+              Today
             </Button>
           </div>
         </div>
@@ -1136,8 +1136,6 @@ export function PlanCalendar({
       </CardHeader>
 
       <CardContent className="space-y-3">
-        <MonthSummaryStrip summary={summary} />
-
         <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
             <div key={d} className="py-1">
@@ -1184,6 +1182,8 @@ export function PlanCalendar({
             );
           })}
         </div>
+
+        <MonthSummaryStrip summary={summary} />
       </CardContent>
 
       <LineFormDialog

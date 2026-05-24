@@ -769,7 +769,7 @@ function CalendarCell({
               </li>
             </TooltipTrigger>
             <TooltipContent side="top" sideOffset={10} className="max-w-xs">
-              <HiddenEntriesTooltipBody entries={entries.slice(3)} />
+              <HiddenEntriesTooltipBody allEntries={entries} />
             </TooltipContent>
           </Tooltip>
         )}
@@ -846,16 +846,21 @@ function chipPalette(side: EntrySide): string {
       : "bg-red-500/10 text-red-700 dark:text-red-300";
 }
 
-// Listing of entries hidden behind "+N more" — name + amount per line so the
-// user can scan what's underneath without having to expand the cell.
-function HiddenEntriesTooltipBody({ entries }: { entries: DayEntry[] }) {
+// Listing of entries hidden behind "+N more" plus a per-side / net total for
+// the whole day. Showing the day's net gives the user a one-glance answer to
+// "is this day positive or negative?" without expanding the cell.
+function HiddenEntriesTooltipBody({ allEntries }: { allEntries: DayEntry[] }) {
+  const hidden = allEntries.slice(3);
+  const totals = sumBySide(allEntries);
+  const net = totals.income - totals.expense - totals.debt;
+
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       <div className="text-[11px] opacity-80">
-        {entries.length} more {entries.length === 1 ? "entry" : "entries"} on this day
+        {hidden.length} more {hidden.length === 1 ? "entry" : "entries"} on this day
       </div>
       <ul className="space-y-0.5 text-[11px]">
-        {entries.map((e) => (
+        {hidden.map((e) => (
           <li
             key={`${e.side}-${e.id}`}
             className="flex items-center justify-between gap-3"
@@ -879,8 +884,73 @@ function HiddenEntriesTooltipBody({ entries }: { entries: DayEntry[] }) {
           </li>
         ))}
       </ul>
-      <div className="pt-0.5 text-[10px] italic opacity-60">Click to expand</div>
+
+      <div className="space-y-0.5 border-t border-background/20 pt-1.5 text-[11px]">
+        <div className="text-[10px] uppercase tracking-wide opacity-60">
+          Day total
+        </div>
+        {totals.income > 0 && (
+          <TotalRow label="Income" amount={totals.income} sign="+" color="text-green-400" />
+        )}
+        {totals.expense > 0 && (
+          <TotalRow label="Expense" amount={totals.expense} sign="−" color="text-amber-400" />
+        )}
+        {totals.debt > 0 && (
+          <TotalRow label="Debt" amount={totals.debt} sign="−" color="text-red-400" />
+        )}
+        <div className="flex items-baseline justify-between gap-3 border-t border-background/20 pt-1 font-semibold">
+          <span>Net</span>
+          <span
+            className={`font-mono tabular-nums ${
+              net >= 0 ? "text-green-400" : "text-red-400"
+            }`}
+          >
+            {net >= 0 ? "+" : "−"}
+            {formatCurrency(Math.abs(net))}
+          </span>
+        </div>
+      </div>
+
+      <div className="text-[10px] italic opacity-60">Click to expand</div>
     </div>
   );
+}
+
+function TotalRow({
+  label,
+  amount,
+  sign,
+  color,
+}: {
+  label: string;
+  amount: number;
+  sign: "+" | "−";
+  color: string;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="opacity-80">{label}</span>
+      <span className={`font-mono tabular-nums ${color}`}>
+        {sign}
+        {formatCurrency(amount)}
+      </span>
+    </div>
+  );
+}
+
+function sumBySide(entries: DayEntry[]): {
+  income: number;
+  expense: number;
+  debt: number;
+} {
+  let income = 0;
+  let expense = 0;
+  let debt = 0;
+  for (const e of entries) {
+    if (e.side === "income") income += e.amount;
+    else if (e.side === "expense") expense += e.amount;
+    else debt += e.amount;
+  }
+  return { income, expense, debt };
 }
 

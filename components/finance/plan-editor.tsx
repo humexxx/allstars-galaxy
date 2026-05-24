@@ -317,6 +317,15 @@ export function PlanEditor({
           onAddExpense={(input) =>
             wrap(() => addPlanExpenseAction(plan.id, input))
           }
+          onUpdateIncome={(id, input) =>
+            wrap(() => updatePlanIncomeAction(plan.id, { id, ...input }))
+          }
+          onUpdateExpense={(id, input) =>
+            wrap(() => updatePlanExpenseAction(plan.id, { id, ...input }))
+          }
+          onUpdateDebt={(id, input) =>
+            wrap(() => updatePlanDebtAction(plan.id, { id, ...input }))
+          }
         />
       </TabsContent>
 

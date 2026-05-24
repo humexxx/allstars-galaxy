@@ -1,13 +1,18 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Calendar as CalendarIcon, X } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronDown, X } from "lucide-react";
 import { format } from "date-fns";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Popover,
   PopoverContent,
@@ -189,24 +194,6 @@ function LineForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label>Type</Label>
-          <RadioGroup
-            value={kind}
-            onValueChange={(v) => setKind(v as LineKind)}
-            className="flex gap-4"
-          >
-            <label className="flex items-center gap-2 text-sm">
-              <RadioGroupItem value="recurring" />
-              Recurring
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <RadioGroupItem value="one_time" />
-              One-time
-            </label>
-          </RadioGroup>
-        </div>
-
-        <div className="space-y-1.5">
           <Label htmlFor={amountInputId}>
             {kind === "recurring" ? "Monthly amount" : "Amount"}
           </Label>
@@ -219,51 +206,21 @@ function LineForm({
           />
         </div>
 
-        {kind === "recurring" && (
-          <div className="space-y-1.5">
-            <Label htmlFor={domInputId}>Day of month</Label>
-            <Input
-              id={domInputId}
-              value={dayOfMonth}
-              onChange={(e) => setDayOfMonth(e.target.value)}
-              inputMode="numeric"
-              placeholder="1"
-            />
-            <p className="text-xs text-muted-foreground">
-              When in the month this {noun} usually hits (1–31).
-            </p>
-          </div>
-        )}
-
-        {kind === "one_time" && (
-          <div className="space-y-1.5">
-            <Label>Date</Label>
-            <DatePicker value={date} onChange={setDate} placeholder="Pick a date" />
-          </div>
-        )}
-
-        {variant === "income" && kind === "recurring" && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Start date</Label>
-              <DatePicker
-                value={startDate}
-                onChange={setStartDate}
-                placeholder="Plan start"
-                clearable
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>End date</Label>
-              <DatePicker
-                value={endDate}
-                onChange={setEndDate}
-                placeholder="No end"
-                clearable
-              />
-            </div>
-          </div>
-        )}
+        <ScheduleSection
+          kind={kind}
+          setKind={setKind}
+          dayOfMonth={dayOfMonth}
+          setDayOfMonth={setDayOfMonth}
+          date={date}
+          setDate={setDate}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+          domInputId={domInputId}
+          noun={noun}
+          showWindow={variant === "income"}
+        />
       </div>
 
       <DialogFooter>
@@ -275,6 +232,138 @@ function LineForm({
         </Button>
       </DialogFooter>
     </>
+  );
+}
+
+type ScheduleSectionProps = {
+  kind: LineKind;
+  setKind: (k: LineKind) => void;
+  dayOfMonth: string;
+  setDayOfMonth: (v: string) => void;
+  date: string | null;
+  setDate: (v: string | null) => void;
+  startDate: string | null;
+  setStartDate: (v: string | null) => void;
+  endDate: string | null;
+  setEndDate: (v: string | null) => void;
+  domInputId: string;
+  noun: string;
+  showWindow: boolean; // only incomes expose start/end window
+};
+
+// Groups every "when does this hit?" field into a single visual block so users
+// don't have to scan the dialog to figure out the schedule. Start/end window
+// lives behind an Advanced collapsible since most users won't touch it.
+function ScheduleSection({
+  kind,
+  setKind,
+  dayOfMonth,
+  setDayOfMonth,
+  date,
+  setDate,
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate,
+  domInputId,
+  noun,
+  showWindow,
+}: ScheduleSectionProps) {
+  const [advancedOpen, setAdvancedOpen] = useState(
+    // Auto-expand if there's already data in there so users see what they have.
+    Boolean(startDate || endDate)
+  );
+
+  return (
+    <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Schedule
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Type</Label>
+        <RadioGroup
+          value={kind}
+          onValueChange={(v) => setKind(v as LineKind)}
+          className="flex gap-4"
+        >
+          <label className="flex items-center gap-2 text-sm">
+            <RadioGroupItem value="recurring" />
+            Recurring
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <RadioGroupItem value="one_time" />
+            One-time
+          </label>
+        </RadioGroup>
+      </div>
+
+      {kind === "recurring" ? (
+        <div className="space-y-1.5">
+          <Label htmlFor={domInputId}>Day of month</Label>
+          <Input
+            id={domInputId}
+            value={dayOfMonth}
+            onChange={(e) => setDayOfMonth(e.target.value)}
+            inputMode="numeric"
+            placeholder="1"
+          />
+          <p className="text-xs text-muted-foreground">
+            When in the month this {noun} usually hits (1–31).
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <Label>Date</Label>
+          <DatePicker value={date} onChange={setDate} placeholder="Pick a date" />
+        </div>
+      )}
+
+      {showWindow && kind === "recurring" && (
+        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded px-1 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+              aria-label="Toggle advanced schedule options"
+            >
+              <span>Advanced</span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                  advancedOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Start date</Label>
+                <DatePicker
+                  value={startDate}
+                  onChange={setStartDate}
+                  placeholder="Plan start"
+                  clearable
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>End date</Label>
+                <DatePicker
+                  value={endDate}
+                  onChange={setEndDate}
+                  placeholder="No end"
+                  clearable
+                />
+              </div>
+            </div>
+            <p className="pt-1.5 text-xs text-muted-foreground">
+              Limit when this income is active. Leave both empty to run from
+              plan start to end.
+            </p>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+    </div>
   );
 }
 

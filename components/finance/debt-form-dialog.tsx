@@ -215,18 +215,23 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
           </div>
         )}
 
-        <div className="space-y-1.5">
-          <Label htmlFor={domInputId}>Day of month</Label>
-          <Input
-            id={domInputId}
-            value={dayOfMonth}
-            onChange={(e) => setDayOfMonth(e.target.value)}
-            inputMode="numeric"
-            placeholder="1"
-          />
-          <p className="text-xs text-muted-foreground">
-            When in the month the minimum payment is due (1–31).
-          </p>
+        <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Schedule
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={domInputId}>Day of month</Label>
+            <Input
+              id={domInputId}
+              value={dayOfMonth}
+              onChange={(e) => setDayOfMonth(e.target.value)}
+              inputMode="numeric"
+              placeholder="1"
+            />
+            <p className="text-xs text-muted-foreground">
+              When in the month the minimum payment is due (1–31).
+            </p>
+          </div>
         </div>
       </div>
 

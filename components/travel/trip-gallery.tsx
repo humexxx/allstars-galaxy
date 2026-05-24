@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { Trash2 } from "lucide-react";
@@ -74,15 +75,14 @@ export function TripGallery({ trip }: TripGalleryProps) {
             {trip.photos.map((photo) => (
               <div
                 key={photo.id}
-                className="group relative aspect-square overflow-hidden rounded-md border"
+                className="group relative aspect-square overflow-hidden rounded-md border bg-muted"
               >
-                <div
-                  className="absolute inset-0 bg-muted"
-                  style={{
-                    backgroundImage: `url(${photo.url})`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
-                  }}
+                <Image
+                  src={photo.url}
+                  alt={photo.caption ?? "Trip photo"}
+                  fill
+                  sizes="(max-width: 768px) 33vw, 200px"
+                  className="object-cover"
                 />
                 <Button
                   type="button"

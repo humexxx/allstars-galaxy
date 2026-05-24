@@ -1,6 +1,7 @@
 import "server-only";
 
 import { randomBytes } from "node:crypto";
+import { cache } from "react";
 
 import { and, asc, eq, isNull } from "drizzle-orm";
 
@@ -52,7 +53,12 @@ export async function listUserTrips(userId: string): Promise<Trip[]> {
     .orderBy(asc(trips.startDate));
 }
 
-export async function getTripWithRelations(
+/**
+ * Wrapped in React's `cache()` so calls from `generateMetadata` and the page
+ * body within the same request hit the DB once. Args are part of the cache
+ * key, so the per-user filter remains safe.
+ */
+export const getTripWithRelations = cache(async function getTripWithRelations(
   tripId: string,
   userId: string
 ): Promise<TripWithRelations | null> {
@@ -81,7 +87,7 @@ export async function getTripWithRelations(
   ]);
 
   return { ...trip, items, photos, shares };
-}
+});
 
 export async function createTrip(
   userId: string,

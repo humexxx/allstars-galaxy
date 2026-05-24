@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   addMonths,
@@ -159,17 +160,17 @@ function TripCard({ trip, dimmed = false }: { trip: Trip; dimmed?: boolean }) {
       >
         <div
           className="relative aspect-[16/9] w-full bg-muted"
-          style={
-            trip.coverPhotoUrl
-              ? {
-                  backgroundImage: `url(${trip.coverPhotoUrl})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                }
-              : { backgroundColor: trip.color }
-          }
+          style={trip.coverPhotoUrl ? undefined : { backgroundColor: trip.color }}
         >
-          {!trip.coverPhotoUrl && (
+          {trip.coverPhotoUrl ? (
+            <Image
+              src={trip.coverPhotoUrl}
+              alt={`${trip.title} cover photo`}
+              fill
+              sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              className="object-cover"
+            />
+          ) : (
             <div className="absolute inset-0 flex items-center justify-center text-white/70">
               <ImageIcon className="h-10 w-10" />
             </div>

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { format } from "date-fns";
 import {
   Bed,
@@ -79,16 +80,18 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
       <header className="overflow-hidden rounded-xl border">
         <div
           className="relative aspect-[21/9] w-full bg-muted"
-          style={
-            trip.coverPhotoUrl
-              ? {
-                  backgroundImage: `url(${trip.coverPhotoUrl})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                }
-              : { backgroundColor: trip.color }
-          }
+          style={trip.coverPhotoUrl ? undefined : { backgroundColor: trip.color }}
         >
+          {trip.coverPhotoUrl && (
+            <Image
+              src={trip.coverPhotoUrl}
+              alt={`${trip.title} cover photo`}
+              fill
+              priority
+              sizes="(max-width: 1024px) 100vw, 1024px"
+              className="object-cover"
+            />
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 p-6 text-white">
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{trip.title}</h1>
@@ -129,15 +132,16 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
           <h2 className="text-lg font-semibold tracking-tight">Photos</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {photos.map((photo) => (
-              <div key={photo.id} className="aspect-square overflow-hidden rounded-md border">
-                <div
-                  className="h-full w-full bg-muted"
-                  style={{
-                    backgroundImage: `url(${photo.url})`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
-                  }}
-                  aria-label={photo.caption ?? undefined}
+              <div
+                key={photo.id}
+                className="relative aspect-square overflow-hidden rounded-md border bg-muted"
+              >
+                <Image
+                  src={photo.url}
+                  alt={photo.caption ?? "Trip photo"}
+                  fill
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                  className="object-cover"
                 />
               </div>
             ))}

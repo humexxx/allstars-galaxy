@@ -83,7 +83,11 @@ async function computeStateAt(
     calibrated.incomes,
     calibrated.expenses,
     calibrated.debts,
-    { portfolioValue, autoInvestRate }
+    {
+      portfolioValue,
+      autoInvestRate,
+      overrides: calibrated.overrides,
+    }
   );
 
   if (projection.months.length === 0) {

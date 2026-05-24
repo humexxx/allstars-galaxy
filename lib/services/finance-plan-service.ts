@@ -16,6 +16,7 @@ import type {
   FinancePlanDebt,
   FinancePlanExpense,
   FinancePlanIncome,
+  FinancePlanLineOverride,
   FinancePlanWithLines,
   Projection,
   ProjectionMonth,
@@ -564,6 +565,10 @@ type ProjectOptions = {
   /** Monthly ROI (decimal) for the auto-invest account. Looked up from the plan's
    *  autoInvestMethodId by the calling page. Ignored if plan.autoInvestPercent = 0. */
   autoInvestRate?: number;
+  /** Per-month overrides for recurring entries. Optional so old callers that
+   *  don't have access to overrides still work (they project as if no
+   *  overrides were set, which is correct for those caller surfaces). */
+  overrides?: FinancePlanLineOverride[];
 };
 
 /**
@@ -596,6 +601,23 @@ export function projectPlan(
   // Guard against negative ROI configurations — investments never shrink.
   const autoInvestRate = Math.max(0, options.autoInvestRate ?? 0);
 
+  // Index overrides by side+parentId+monthKey so each iteration is O(1) lookup.
+  // Overrides are an opt-in arg so older callers that don't pass them still
+  // work (treated as no overrides → unchanged behaviour).
+  const overrides = options.overrides ?? [];
+  const overrideIndex = new Map<string, FinancePlanLineOverride>();
+  for (const o of overrides) {
+    const mKey = yearMonthKeyFromISO(o.monthYear);
+    if (mKey === null) continue;
+    overrideIndex.set(`${o.parentSide}:${o.parentId}:${mKey}`, o);
+  }
+  const lookupOverride = (
+    side: "income" | "expense" | "debt",
+    parentId: string,
+    monthKey: number
+  ): FinancePlanLineOverride | undefined =>
+    overrideIndex.get(`${side}:${parentId}:${monthKey}`);
+
   // Anchor used by every_n_months when an entry doesn't set its own
   // recurrenceStart — fall back to the plan's startMonth.
   const planStartKey = yearMonthKeyFromDate(plan.startMonth);
@@ -610,6 +632,7 @@ export function projectPlan(
   // Pre-compute per-line month bounds and one-time hit-months so the inner
   // loop is O(lines) per month with no string parsing or branching surprises.
   const incomeRows = incomes.map((i) => ({
+    id: i.id,
     amount: Math.max(0, num(i.monthlyAmount)),
     kind: i.kind,
     startKey: yearMonthKeyFromISO(i.startDate),
@@ -620,6 +643,7 @@ export function projectPlan(
     anchorKey: anchorFor(i.recurrenceType, i.recurrenceStart),
   }));
   const expenseRows = expenses.map((e) => ({
+    id: e.id,
     amount: Math.max(0, num(e.monthlyAmount)),
     kind: e.kind,
     oneTimeKey: e.kind === "one_time" ? yearMonthKeyFromISO(e.date) : null,
@@ -687,7 +711,16 @@ export function projectPlan(
           row.anchorKey
         )
       ) {
-        monthIncome += row.amount;
+        const ov = lookupOverride("income", row.id, monthKey);
+        // skip → suppress this month; amount → swap; reschedule → no-op for
+        // a monthly-aggregate projection (the day inside the month doesn't
+        // matter at this layer).
+        if (ov?.action === "skip") continue;
+        const amount =
+          ov?.action === "amount" && ov.monthlyAmount !== null
+            ? Math.max(0, num(ov.monthlyAmount))
+            : row.amount;
+        monthIncome += amount;
       }
     }
     let monthExpenses = 0;
@@ -702,7 +735,13 @@ export function projectPlan(
           row.anchorKey
         )
       ) {
-        monthExpenses += row.amount;
+        const ov = lookupOverride("expense", row.id, monthKey);
+        if (ov?.action === "skip") continue;
+        const amount =
+          ov?.action === "amount" && ov.monthlyAmount !== null
+            ? Math.max(0, num(ov.monthlyAmount))
+            : row.amount;
+        monthExpenses += amount;
       }
     }
 
@@ -723,12 +762,19 @@ export function projectPlan(
         d.intervalMonths,
         d.anchorKey
       );
-      if (!isHitMonth) {
+      const ov = lookupOverride("debt", d.id, monthKey);
+      // Per-month overrides take precedence over the regular cadence: skip
+      // suppresses the payment (interest still accrued above); amount swaps
+      // it for the override's value.
+      if (!isHitMonth || ov?.action === "skip") {
         d.balance = balanceWithInterest;
         entry.scheduled = 0;
         continue;
       }
-      const scheduled = scheduledPaymentFor(d, balanceWithInterest);
+      const scheduled =
+        ov?.action === "amount" && ov.monthlyAmount !== null
+          ? Math.max(0, num(ov.monthlyAmount))
+          : scheduledPaymentFor(d, balanceWithInterest);
       const payment = Math.min(scheduled, balanceWithInterest);
       d.balance = balanceWithInterest - payment;
       scheduledTotal += payment;
@@ -927,6 +973,7 @@ export async function projectPlanWithPortfolio(
   return projectPlan(plan, plan.incomes, plan.expenses, plan.debts, {
     portfolioValue,
     autoInvestRate,
+    overrides: plan.overrides,
   });
 }
 

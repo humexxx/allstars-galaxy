@@ -39,6 +39,7 @@ import type {
   FinancePlanDebt,
   FinancePlanExpense,
   FinancePlanIncome,
+  FinancePlanLineOverride,
   FinancePlanWithLines,
 } from "@/types/finance";
 
@@ -178,6 +179,21 @@ function buildHitResolver(
   return (y, m) => clampDayInMonth(dom, y, m);
 }
 
+// Index overrides by `${side}:${parentId}:${monthKey}` so the calendar's per-
+// day and per-month loops can look them up in O(1). monthKey = year*12 + month.
+function buildOverrideIndex(
+  overrides: FinancePlanLineOverride[]
+): Map<string, FinancePlanLineOverride> {
+  const map = new Map<string, FinancePlanLineOverride>();
+  for (const o of overrides) {
+    const d = parseISODate(o.monthYear);
+    if (!d) continue;
+    const mk = d.getFullYear() * 12 + d.getMonth();
+    map.set(`${o.parentSide}:${o.parentId}:${mk}`, o);
+  }
+  return map;
+}
+
 // True if a recurring row contributes at all to (year, monthIdx) regardless of
 // which day inside. Used by the month-summary strip where day placement
 // doesn't matter.
@@ -209,6 +225,7 @@ function monthTotalsBySide(
   incomes: FinancePlanIncome[],
   expenses: FinancePlanExpense[],
   debts: FinancePlanDebt[],
+  overrides: FinancePlanLineOverride[],
   planStartMonth: Date
 ): { income: number; expense: number; debt: number } {
   const monthKey = year * 12 + monthIdx;
@@ -232,34 +249,54 @@ function monthTotalsBySide(
     return true;
   };
 
+  const overrideIndex = buildOverrideIndex(overrides);
+  // Effective amount + skip flag for a recurring row + month, applying any
+  // override on top of the row's natural monthlyAmount.
+  const effective = (
+    side: "income" | "expense" | "debt",
+    parentId: string,
+    natural: number
+  ): { skip: boolean; amount: number } => {
+    const ov = overrideIndex.get(`${side}:${parentId}:${monthKey}`);
+    if (ov?.action === "skip") return { skip: true, amount: 0 };
+    if (ov?.action === "amount" && ov.monthlyAmount !== null) {
+      return { skip: false, amount: Number(ov.monthlyAmount) };
+    }
+    return { skip: false, amount: natural };
+  };
+
   let income = 0;
   let expense = 0;
   let debt = 0;
 
   for (const inc of incomes) {
-    const amount = Number(inc.monthlyAmount);
+    const natural = Number(inc.monthlyAmount);
     if (inc.kind === "one_time") {
-      if (isOneTimeHit(inc.date)) income += amount;
+      if (isOneTimeHit(inc.date)) income += natural;
     } else if (
       isInWindow(inc.startDate, inc.endDate) &&
       recurringContributesToMonth(inc, year, monthIdx, planStartMonth)
     ) {
-      income += amount;
+      const { skip, amount } = effective("income", inc.id, natural);
+      if (!skip) income += amount;
     }
   }
 
   for (const exp of expenses) {
-    const amount = Number(exp.monthlyAmount);
+    const natural = Number(exp.monthlyAmount);
     if (exp.kind === "one_time") {
-      if (isOneTimeHit(exp.date)) expense += amount;
+      if (isOneTimeHit(exp.date)) expense += natural;
     } else if (recurringContributesToMonth(exp, year, monthIdx, planStartMonth)) {
-      expense += amount;
+      const { skip, amount } = effective("expense", exp.id, natural);
+      if (!skip) expense += amount;
     }
   }
 
   for (const d of debts) {
     if (recurringContributesToMonth(d, year, monthIdx, planStartMonth)) {
-      debt += debtCalendarAmount(d);
+      const natural = debtCalendarAmount(d);
+      const { skip, amount } = effective("debt", d.id, natural);
+      if (!skip) debt += amount;
     }
   }
 
@@ -273,6 +310,7 @@ function buildDayMap(
   incomes: FinancePlanIncome[],
   expenses: FinancePlanExpense[],
   debts: FinancePlanDebt[],
+  overrides: FinancePlanLineOverride[],
   planStartMonth: Date
 ): Map<string, DayEntry[]> {
   const map = new Map<string, DayEntry[]>();
@@ -290,23 +328,53 @@ function buildDayMap(
     day: d.getDate(),
   }));
 
+  const overrideIndex = buildOverrideIndex(overrides);
+
   // Generic recurring placer. The resolver tells us which day-of-month (if
-  // any) the entry hits for a given (year, month) — works for monthly_day,
-  // monthly_weekday and every_n_months alike.
+  // any) the entry hits for a given (year, month). Then an override can:
+  // skip the month, reschedule to a different date inside it, or swap the
+  // amount.
   const pushRecurring = (
     entry: DayEntry,
+    side: "income" | "expense" | "debt",
+    parentId: string,
     resolver: MonthHitResolver,
     startKey: { y: number; m: number } | null,
     endKey: { y: number; m: number } | null
   ) => {
     for (const meta of dayMeta) {
-      const targetDay = resolver(meta.year, meta.month);
-      if (targetDay === null) continue;
-      if (meta.day !== targetDay) continue;
       const mk = meta.year * 12 + meta.month;
       if (startKey !== null && mk < startKey.y * 12 + startKey.m) continue;
       if (endKey !== null && mk > endKey.y * 12 + endKey.m) continue;
-      push(meta.key, entry);
+
+      const ov = overrideIndex.get(`${side}:${parentId}:${mk}`);
+      if (ov?.action === "skip") continue;
+
+      // Decide which day inside (year, month) the entry actually lands on.
+      let targetDay: number | null;
+      if (ov?.action === "reschedule" && ov.date) {
+        const od = parseISODate(ov.date);
+        targetDay =
+          od &&
+          od.getFullYear() === meta.year &&
+          od.getMonth() === meta.month
+            ? od.getDate()
+            : null;
+      } else {
+        targetDay = resolver(meta.year, meta.month);
+      }
+      if (targetDay === null) continue;
+      if (meta.day !== targetDay) continue;
+
+      // Swap the amount when the override is an amount override.
+      if (ov?.action === "amount" && ov.monthlyAmount !== null) {
+        push(meta.key, {
+          ...entry,
+          amount: Number(ov.monthlyAmount),
+        } as DayEntry);
+      } else {
+        push(meta.key, entry);
+      }
     }
   };
 
@@ -345,6 +413,8 @@ function buildDayMap(
           kind: "recurring",
           source: inc,
         },
+        "income",
+        inc.id,
         buildHitResolver(inc, planStartMonth),
         start ? { y: start.getFullYear(), m: start.getMonth() } : null,
         end ? { y: end.getFullYear(), m: end.getMonth() } : null
@@ -377,6 +447,8 @@ function buildDayMap(
           kind: "recurring",
           source: exp,
         },
+        "expense",
+        exp.id,
         buildHitResolver(exp, planStartMonth),
         null,
         null
@@ -394,6 +466,8 @@ function buildDayMap(
         kind: "recurring",
         source: debt,
       },
+      "debt",
+      debt.id,
       buildHitResolver(debt, planStartMonth),
       null,
       null
@@ -454,9 +528,17 @@ export function PlanCalendar({
         plan.incomes,
         plan.expenses,
         plan.debts,
+        plan.overrides,
         plan.startMonth
       ),
-    [days, plan.incomes, plan.expenses, plan.debts, plan.startMonth]
+    [
+      days,
+      plan.incomes,
+      plan.expenses,
+      plan.debts,
+      plan.overrides,
+      plan.startMonth,
+    ]
   );
 
   // Monthly summary for the navigated month + the month before, so we can show
@@ -468,6 +550,7 @@ export function PlanCalendar({
       plan.incomes,
       plan.expenses,
       plan.debts,
+      plan.overrides,
       plan.startMonth
     );
     const prevDate = subMonths(cursor, 1);
@@ -477,6 +560,7 @@ export function PlanCalendar({
       plan.incomes,
       plan.expenses,
       plan.debts,
+      plan.overrides,
       plan.startMonth
     );
     return {
@@ -485,7 +569,14 @@ export function PlanCalendar({
       currNet: curr.income - curr.expense - curr.debt,
       prevNet: prev.income - prev.expense - prev.debt,
     };
-  }, [cursor, plan.incomes, plan.expenses, plan.debts, plan.startMonth]);
+  }, [
+    cursor,
+    plan.incomes,
+    plan.expenses,
+    plan.debts,
+    plan.overrides,
+    plan.startMonth,
+  ]);
 
   const monthLabel = format(cursor, "MMMM yyyy");
 

@@ -61,6 +61,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   const projection = projectPlan(full, full.incomes, full.expenses, full.debts, {
     portfolioValue,
     autoInvestRate,
+    overrides: full.overrides,
   });
 
   // Keep the dashboard mini focused on the next 12 months so the line is readable.

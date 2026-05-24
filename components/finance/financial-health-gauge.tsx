@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { formatCurrency } from "@/lib/utils/format";
 import {
@@ -129,10 +129,26 @@ export function FinancialHealthGauge({
   const yellowEnd = ratioToAngle(YELLOW_THRESHOLD);
 
   const needleAngle = ratioToAngle(ratio);
-  // Keep the tip well clear of the (now thicker) coloured band.
-  const needleTip = polar(cx, cy, r - 10, needleAngle);
-  const baseLeft = polar(cx, cy, 7, needleAngle - 90);
-  const baseRight = polar(cx, cy, 7, needleAngle + 90);
+
+  // Sweep-in animation: render the needle once at the leftmost position
+  // (START_ANGLE — i.e. ratio 0, "healthy") and then transition it to the
+  // target angle on the next frame. The CSS transition on the <g> wrapper
+  // does the interpolation. Re-fires whenever the target angle changes.
+  const [animatedAngle, setAnimatedAngle] = useState(START_ANGLE);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setAnimatedAngle(needleAngle));
+    return () => cancelAnimationFrame(id);
+  }, [needleAngle]);
+
+  // Needle geometry is fixed: drawn pointing UP from the hub (math-angle 90°).
+  // We then rotate the <g> wrapper to put the tip on the live angle. Rotating
+  // a single element is what makes CSS-driven transitions possible — animating
+  // the polygon's `points` attribute is not transitionable.
+  const needleLength = r - 10;
+  const needleHalfWidth = 7;
+  // SVG rotate is clockwise; math-angle 90° = up = no rotation, so the offset
+  // to apply for any target math-angle θ is (90 − θ) degrees.
+  const needleRotation = 90 - animatedAngle;
 
   return (
     <Tooltip>
@@ -175,13 +191,25 @@ export function FinancialHealthGauge({
               strokeWidth={thickness}
               fill="none"
             />
-            {/* Needle — only when we have real data */}
+            {/* Needle — only when we have real data. The polygon is drawn
+                pointing up from the hub; the <g> wrapper handles the
+                rotation, and a CSS transition on `transform` produces the
+                sweep-in animation on mount and on data changes. */}
             {hasData && (
               <>
-                <polygon
-                  points={`${baseLeft.x},${baseLeft.y} ${baseRight.x},${baseRight.y} ${needleTip.x},${needleTip.y}`}
-                  className="fill-foreground"
-                />
+                <g
+                  style={{
+                    transform: `rotate(${needleRotation}deg)`,
+                    transformOrigin: `${cx}px ${cy}px`,
+                    transition:
+                      "transform 900ms cubic-bezier(0.16, 1, 0.3, 1)",
+                  }}
+                >
+                  <polygon
+                    points={`${cx - needleHalfWidth},${cy} ${cx + needleHalfWidth},${cy} ${cx},${cy - needleLength}`}
+                    className="fill-foreground"
+                  />
+                </g>
                 <circle cx={cx} cy={cy} r={8} className="fill-foreground" />
                 <circle cx={cx} cy={cy} r={3} className="fill-background" />
               </>

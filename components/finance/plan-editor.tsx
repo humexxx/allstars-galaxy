@@ -37,6 +37,7 @@ import {
   addPlanDebtAction,
   addPlanExpenseAction,
   addPlanIncomeAction,
+  deleteLineOverrideAction,
   deletePlanDebtAction,
   deletePlanExpenseAction,
   deletePlanIncomeAction,
@@ -336,6 +337,9 @@ export function PlanEditor({
           }
           onUpsertOverride={(input) =>
             wrap(() => upsertLineOverrideAction(plan.id, input))
+          }
+          onDeleteOverride={(input) =>
+            wrap(() => deleteLineOverrideAction(plan.id, input))
           }
         />
       </TabsContent>

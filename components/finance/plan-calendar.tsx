@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   GripVertical,
+  MoreHorizontal,
   Plus,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -33,6 +34,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
@@ -76,6 +84,11 @@ type PlanCalendarProps = {
     action: "skip" | "reschedule" | "amount";
     date?: string | null;
     monthlyAmount?: string | null;
+  }) => Promise<void>;
+  onDeleteOverride: (input: {
+    parentSide: "income" | "expense" | "debt";
+    parentId: string;
+    monthYear: string;
   }) => Promise<void>;
 };
 
@@ -522,6 +535,7 @@ export function PlanCalendar({
   onUpdateExpense,
   onUpdateDebt,
   onUpsertOverride,
+  onDeleteOverride,
 }: PlanCalendarProps) {
   const initialMonth = useMemo(() => {
     const d = new Date(plan.startMonth);
@@ -757,6 +771,54 @@ export function PlanCalendar({
     [plan.incomes, plan.expenses, plan.debts, onUpdateIncome, onUpdateExpense, onUpdateDebt]
   );
 
+  // Skip this month — writes a skip override for the chip's month. Used by
+  // the per-chip "⋯" menu so users can pause a recurring entry without
+  // touching the schedule.
+  const handleSkipMonth = useCallback(
+    async (
+      side: "income" | "expense" | "debt",
+      parentId: string,
+      dayKey: string
+    ) => {
+      const d = parseISODate(dayKey);
+      if (!d) return;
+      const monthYear = toISODate(new Date(d.getFullYear(), d.getMonth(), 1));
+      try {
+        await onUpsertOverride({
+          parentSide: side,
+          parentId,
+          monthYear,
+          action: "skip",
+        });
+        toast.success(`Skipped for ${format(d, "MMMM yyyy")}`);
+      } catch {
+        toast.error("Failed to skip");
+      }
+    },
+    [onUpsertOverride]
+  );
+
+  // Remove any per-month override for the chip's month — used to "undo" a
+  // skip / amount / reschedule and restore the natural cadence.
+  const handleResetMonth = useCallback(
+    async (
+      side: "income" | "expense" | "debt",
+      parentId: string,
+      dayKey: string
+    ) => {
+      const d = parseISODate(dayKey);
+      if (!d) return;
+      const monthYear = toISODate(new Date(d.getFullYear(), d.getMonth(), 1));
+      try {
+        await onDeleteOverride({ parentSide: side, parentId, monthYear });
+        toast.success(`Override cleared for ${format(d, "MMMM yyyy")}`);
+      } catch {
+        toast.error("Failed to clear override");
+      }
+    },
+    [onDeleteOverride]
+  );
+
   // "Just this month" path — writes a reschedule override pinned to the source
   // month so the parent's recurring cadence stays untouched. Restricted to
   // intra-month drops (the override stores monthYear of the source).
@@ -905,6 +967,12 @@ export function PlanCalendar({
                 }
                 onAdd={(side) => setDialog({ kind: "add", side, date: key })}
                 onEditEntry={openEditFor}
+                onSkipMonth={(entry) =>
+                  handleSkipMonth(entry.side, entry.id, key)
+                }
+                onResetMonth={(entry) =>
+                  handleResetMonth(entry.side, entry.id, key)
+                }
                 onDropEntry={(payload) => {
                   setDragOverDay(null);
                   void handleDrop(key, payload);
@@ -1206,6 +1274,8 @@ type CalendarCellProps = {
   onToggleExpand: () => void;
   onAdd: (side: "income" | "expense") => void;
   onEditEntry: (entry: DayEntry) => void;
+  onSkipMonth: (entry: DayEntry) => void;
+  onResetMonth: (entry: DayEntry) => void;
   onDropEntry: (payload: DragPayload) => void;
   onDragEnter: () => void;
   onDragLeaveCell: () => void;
@@ -1222,6 +1292,8 @@ function CalendarCell({
   onToggleExpand,
   onAdd,
   onEditEntry,
+  onSkipMonth,
+  onResetMonth,
   onDropEntry,
   onDragEnter,
   onDragLeaveCell,
@@ -1343,6 +1415,8 @@ function CalendarCell({
             entry={entry}
             dayKey={isoKey}
             onEdit={() => onEditEntry(entry)}
+            onSkipMonth={() => onSkipMonth(entry)}
+            onResetMonth={() => onResetMonth(entry)}
           />
         ))}
         {extra > 0 && (
@@ -1382,10 +1456,14 @@ function EntryChip({
   entry,
   dayKey,
   onEdit,
+  onSkipMonth,
+  onResetMonth,
 }: {
   entry: DayEntry;
   dayKey: string;
   onEdit: () => void;
+  onSkipMonth: () => void;
+  onResetMonth: () => void;
 }) {
   // Only the grip is draggable. The rest of the chip is the click target for
   // editing — that's the disambiguation: drag from the dots, click anywhere
@@ -1432,7 +1510,7 @@ function EntryChip({
       >
         <GripVertical className="h-3 w-3" />
       </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0 py-1 pr-1.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-0 py-1">
         <span className="truncate text-[11px] font-medium leading-tight">
           {entry.name}
         </span>
@@ -1440,6 +1518,56 @@ function EntryChip({
           {formatCurrency(entry.amount)}
         </span>
       </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            // Stop propagation so the chip's click → edit handler doesn't also
+            // fire when the user opens the menu.
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            aria-label={`More actions for ${entry.name}`}
+            className="flex shrink-0 cursor-pointer items-center pl-0.5 pr-1 opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 group-hover/entry:opacity-60"
+          >
+            <MoreHorizontal className="h-3 w-3" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          // Catch the menu-content click so it doesn't reach the chip or cell.
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              onEdit();
+            }}
+          >
+            Edit full entry
+          </DropdownMenuItem>
+          {entry.kind === "recurring" && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  onSkipMonth();
+                }}
+              >
+                Skip this month
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  onResetMonth();
+                }}
+              >
+                Clear this month&apos;s override
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </li>
   );
 }

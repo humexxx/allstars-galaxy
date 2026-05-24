@@ -1,10 +1,41 @@
 # CLAUDE.md
 
-This file provides guidance for Claude Code when working on Allstars Galaxy.
+This file provides guidance for Claude Code (and any other AI coding agent)
+when working on Allstars Galaxy.
+
+> **Heads-up for agents:** docs in this repo are **segmented**. Don't dump
+> module-specific knowledge here — put it in `docs/modules/<module>.md`. Don't
+> rewrite this file when fixing a typo in a route. The rules and the
+> change-to-doc map are in [`docs/AGENTS.md`](docs/AGENTS.md). Read it before
+> closing any task that touched code.
 
 ## Project Overview
 
-Allstars Galaxy is a personal finance and productivity web app built with Next.js 16 (App Router), React 19, Supabase (Auth + PostgreSQL), and Drizzle ORM.
+Allstars Galaxy is a personal finance and productivity web app built with
+Next.js 16 (App Router), React 19, Supabase (Auth + PostgreSQL), and Drizzle
+ORM. Six product modules — Finance, Portfolio, Productivity, Entertainment
+(Travel), Admin, Auth — share a single Supabase auth and the same patterns
+for actions / services / schemas / types.
+
+Per-module reference docs live in [`docs/modules/`](docs/modules/).
+
+## Documentation map
+
+| File | Owns |
+| --- | --- |
+| [`README.md`](README.md) | Public-facing overview, quick start, env, links out |
+| [`CLAUDE.md`](CLAUDE.md) *(this file)* | Architecture, conventions, env, workflows, release tooling |
+| [`docs/AGENTS.md`](docs/AGENTS.md) | **Rules for agents** on segmented doc updates — read every task |
+| [`docs/modules/<module>.md`](docs/modules/) | One file per product module: routes, actions, services, schemas, tables |
+| [`docs/TYPOGRAPHY.md`](docs/TYPOGRAPHY.md) | Font system + UI typography primitives (required for UI work) |
+| [`/app/actions/AGENTS.md`](app/actions/AGENTS.md) | Server-action patterns (the *how*) |
+| [`/lib/services/AGENTS.md`](lib/services/AGENTS.md) | Service-layer patterns (the *how*) |
+| [`.github/skills/`](.github/skills/) | Reusable playbooks: DB migration, service creation, server action creation |
+
+Each segment owns its scope. Linking between docs is preferred over
+duplicating content. When you make a change, edit **only** the segment that
+owns the thing you changed — see [`docs/AGENTS.md`](docs/AGENTS.md) for the
+exact change-to-doc map.
 
 ## Commands
 
@@ -36,7 +67,7 @@ migrations/          Auto-generated SQL migrations
 
 ## Tech Stack
 
-- **Platform**: Windows / PowerShell
+- **Platform**: cross-platform (developed on Windows / PowerShell + macOS); shell scripts in `.husky/` use POSIX `sh` and require Git Bash on Windows
 - **Runtime**: Node 22+
 - **Framework**: Next.js 16 (App Router), React 19 (Server Components)
 - **Language**: TypeScript (strict mode)
@@ -115,6 +146,38 @@ is missing and `DATABASE_URL` points at the transaction pooler.
 - Avoid `any` — use `unknown` with type guards
 - Minimal comments (only complex logic)
 
+### Commit messages & releases
+This repo uses **Conventional Commits** ([spec](https://www.conventionalcommits.org/)),
+enforced by `commitlint` via a `husky` `commit-msg` hook. Format:
+
+```
+<type>(<scope>): <subject>
+```
+
+- **type** (required): `feat`, `fix`, `perf`, `refactor`, `docs`, `style`,
+  `test`, `build`, `ci`, `chore`, `revert`
+- **scope** (optional, but constrained): `auth`, `db`, `finance`, `travel`,
+  `entertainment`, `landing`, `portal`, `ui`, `deps`, `release`, `ci`, `docs`,
+  `config`, `types`, `schemas` — extend the list in [`commitlint.config.mjs`](commitlint.config.mjs) if needed.
+- **subject**: imperative, lower-case start, no trailing period, ≤100 chars total header.
+- **Breaking change**: append `!` after type/scope (e.g. `feat(db)!: drop legacy column`)
+  or include a `BREAKING CHANGE:` footer.
+
+Examples:
+- `feat(finance): add monthly income forecast`
+- `fix(travel): correct timezone offset on trip dates`
+- `refactor(portal): extract plan editor into hook`
+- `feat(db)!: rename plans.user_id to plans.owner_id`
+
+**Versioning is automated.** `release-please` watches `develop` and opens a
+Release PR that bumps `package.json` + the manifest and updates `CHANGELOG.md`
+based on commits since the last tag. Merging that PR creates the GitHub
+release and the tag — see [.github/workflows/release-please.yml](.github/workflows/release-please.yml).
+
+The UI version label (sidebar) reads `NEXT_PUBLIC_APP_VERSION`, injected from
+`package.json` at build time via [next.config.ts](next.config.ts), so every
+release rebuild surfaces the new version automatically.
+
 ## Environment Variables
 
 Required in `.env` (see `.env.example` for full template):
@@ -128,7 +191,7 @@ CRON_SECRET
 
 ## Common Workflows
 
-### New Feature
+### New Feature (existing module)
 1. Types in `/types/[feature].ts`
 2. Schema in `/schemas/[feature].ts`
 3. DB schema in `db/schema.ts` → generate → migrate
@@ -136,12 +199,42 @@ CRON_SECRET
 5. Actions in `/app/actions/[feature].ts`
 6. UI in `/components/[feature]/`
 7. Page in `/app/portal/[feature]/page.tsx`
+8. **Update the module doc** — bump *Last reviewed*, add a bullet for the new
+   route / action / service / schema / type / table in
+   [`docs/modules/<module>.md`](docs/modules/).
+
+### New Module
+1. Steps 1–7 above, scoped to the new module.
+2. Copy [`docs/modules/_TEMPLATE.md`](docs/modules/_TEMPLATE.md) →
+   `docs/modules/<module>.md` and fill it.
+3. Register the module in [`docs/modules/README.md`](docs/modules/README.md)
+   and in the change-to-doc map inside [`docs/AGENTS.md`](docs/AGENTS.md).
+4. Add the module's scope (if new) to
+   [`commitlint.config.mjs`](commitlint.config.mjs) `scope-enum`.
 
 ### New Server Action
 - Import `authenticatedAction` from `@/lib/services/auth-server`
 - Define Zod schema, call service, revalidate paths
+- See [`/app/actions/AGENTS.md`](app/actions/AGENTS.md) for the canonical
+  pattern.
 
 ### Adding UI Components
 ```bash
 npx shadcn@latest add [component]
 ```
+
+### Closing any task (checklist)
+Before considering a code change complete:
+
+- [ ] Did I add / remove / rename a route, action, service, schema, type, or
+      DB table? → update the relevant
+      [`docs/modules/<module>.md`](docs/modules/) (bullet + *Last reviewed*).
+- [ ] Did I introduce a new Conventional Commits scope? → add it to
+      [`commitlint.config.mjs`](commitlint.config.mjs) **and** mention it in
+      the module doc's *Notes*.
+- [ ] Did I change env vars, scripts, or platform requirements? → update this
+      file and (if user-facing) [`README.md`](README.md).
+- [ ] Did I touch a public surface (landing, signup, public trip share)?
+      → update [`README.md`](README.md).
+
+Full rules: [`docs/AGENTS.md`](docs/AGENTS.md).

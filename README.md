@@ -1,143 +1,82 @@
 # Allstars Galaxy
 
-Aplicación empresarial construida con Next.js 16, React 19 y Tailwind CSS v4.
+Personal finance and productivity web app. Plan and confirm monthly cashflow,
+track a real investment portfolio, run a kanban board and long-term goals, and
+plan trips with shareable itineraries — all behind a single Supabase auth.
 
-## 🚀 Características
+Built with **Next.js 16 (App Router)**, **React 19** (Server Components),
+**Tailwind v4**, **shadcn/ui**, **Drizzle ORM**, **Supabase**, and **Zod**.
 
-- ✅ **Next.js 16** con App Router
-- ✅ **React 19** con Server Components
-- ✅ **Tailwind CSS v4** con tema personalizado
-- ✅ **TypeScript** para type safety
-- ✅ **shadcn/ui** componentes pre-configurados
-- ✅ **Tema claro/oscuro** con next-themes
-- ✅ **Sidebar responsivo** con navegación
-- ✅ **Validación de formularios** con react-hook-form + Zod
-- ✅ **Arquitectura escalable** con separación de concerns
+## Modules
 
-## 📁 Estructura del Proyecto
+| Module | What it does | Doc |
+| --- | --- | --- |
+| Finance | Plans (incomes / expenses / debts) with monthly confirmation & health scoring | [docs/modules/finance.md](docs/modules/finance.md) |
+| Portfolio | Real portfolio: transactions, snapshots, investment methods | [docs/modules/portfolio.md](docs/modules/portfolio.md) |
+| Productivity | Personal kanban board + long-term road paths with milestones | [docs/modules/productivity.md](docs/modules/productivity.md) |
+| Entertainment / Travel | Trip planner with public share links | [docs/modules/entertainment.md](docs/modules/entertainment.md) |
+| Admin | User management, transaction approvals, impersonation | [docs/modules/admin.md](docs/modules/admin.md) |
+| Auth | Supabase email auth + server action wrappers | [docs/modules/auth.md](docs/modules/auth.md) |
 
-```
-├── app/                    # App Router de Next.js
-│   ├── globals.css        # Estilos globales y variables de tema
-│   ├── layout.tsx         # Layout principal con ThemeProvider
-│   └── page.tsx           # Página de inicio
-├── components/            # Componentes React
-│   ├── ui/               # Componentes de shadcn/ui
-│   ├── app-sidebar.tsx   # Sidebar de navegación
-│   ├── sidebar-layout.tsx # Layout wrapper con sidebar
-│   ├── theme-provider.tsx # Provider de tema
-│   └── mode-toggle.tsx   # Toggle de tema claro/oscuro
-├── lib/                   # Utilidades y servicios
-│   ├── services/         # Servicios de API
-│   ├── utils.ts          # Funciones auxiliares (cn, etc.)
-│   └── env.ts            # Gestión de variables de entorno
-├── types/                 # Definiciones de TypeScript
-├── schemas/               # Esquemas Zod para validación
-├── hooks/                 # Custom React hooks
-├── db/                    # Base de datos (Drizzle ORM)
-├── docs/                  # Documentación del proyecto
-└── public/                # Archivos estáticos
-```
-
-## 🏃 Inicio Rápido
-
-### Prerequisitos
-
-- Node.js 22+
-- npm, pnpm o yarn
-
-### Instalación
+## Quick start
 
 ```bash
-# Clonar el repositorio
-git clone <repository-url>
+git clone https://github.com/humexxx/allstars-galaxy.git
 cd allstars-galaxy
-
-# Instalar dependencias
-npm install
-
-# Ejecutar en desarrollo
-npm run dev
+cp .env.example .env   # fill in Supabase URL, keys, and DATABASE_URL / DIRECT_URL
+npm install            # also wires the husky commit-msg hook
+npm run db:migrate     # apply migrations against your DB
+npm run dev            # http://localhost:3010
 ```
 
-Abrir [http://localhost:3010](http://localhost:3010) en tu navegador.
+Requires **Node 22+** and **npm 11+**.
 
-## 🛠️ Scripts Disponibles
+## Scripts
 
 ```bash
-npm run dev          # Servidor de desarrollo
-npm run build        # Build de producción
-npm run start        # Servidor de producción
-npm run lint         # Linter
-npm run db:generate  # Generar migraciones de base de datos
-npm run db:migrate   # Aplicar migraciones de base de datos
-npm run db:studio    # Abrir Drizzle Studio para ver la BD
+npm run dev          # dev server (http://localhost:3010)
+npm run build        # production build
+npm run start        # production server
+npm run lint         # ESLint
+npm run db:generate  # generate Drizzle migration from db/schema.ts
+npm run db:migrate   # apply pending migrations (stop dev server first for type changes)
+npm run db:studio    # Drizzle Studio (http://localhost:4983)
+npm run db:seed      # seed the database
 ```
 
-## ⚙️ Variables de Entorno
+## Environment
 
-Crea un archivo `.env` en la raíz del proyecto con las siguientes variables:
+See [`.env.example`](.env.example) for the full template. Minimum:
 
-```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=your_supabase_anon_key
-DATABASE_URL=your_database_url
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`
+- `DATABASE_URL` — Supabase transaction pooler (port `6543`), used by the app
+- `DIRECT_URL` — Supabase session pooler (port `5432`), used by `drizzle-kit`
+- `CRON_SECRET` — protects `/api/cron/daily`
 
-# Base URL
-NEXT_PUBLIC_BASE_URL=http://localhost:3010
+## Releases
 
-# Cron Secret (generar una cadena aleatoria segura)
-CRON_SECRET=your_secure_random_string
-```
+This repo uses **Conventional Commits** + **release-please**. Push to `develop`
+with messages like `feat(finance): …` or `fix(travel): …` and release-please
+opens a Release PR that bumps `package.json`, updates `CHANGELOG.md`, and tags
+the release. The version label in the sidebar reads `NEXT_PUBLIC_APP_VERSION`
+which is injected from `package.json` at build time — every release rebuild
+surfaces the new version automatically.
 
-### Configuración de Cron Secret
+Full format and scope rules: [CLAUDE.md → Commit messages & releases](CLAUDE.md#commit-messages--releases).
 
-El `CRON_SECRET` se usa para proteger el endpoint del cron job diario que:
-- Crea snapshots diarios del portfolio
-- Aplica intereses compuestos mensuales el primer día de cada mes
+## Documentation
 
-**En Vercel:**
-1. Ve a Project Settings → Environment Variables
-2. Agrega `CRON_SECRET` con un valor seguro aleatorio
-3. El cron job está configurado en `vercel.json` para ejecutarse diariamente a medianoche UTC
+- [CLAUDE.md](CLAUDE.md) — architecture, conventions, env, workflows (the source
+  of truth for contributors and agents).
+- [docs/modules/](docs/modules/) — one short doc per product module.
+- [docs/TYPOGRAPHY.md](docs/TYPOGRAPHY.md) — Geist + UI typography primitives
+  (required reading before touching UI).
+- [docs/AGENTS.md](docs/AGENTS.md) — **rules for agents** on how to keep this
+  documentation in sync as code changes (segmented updates, no rewrites).
+- [.github/skills/](.github/skills/) — reusable agent playbooks (DB migration,
+  service creation, server action creation).
 
-**Para generar un CRON_SECRET seguro:**
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
+## License
 
-## 🎨 Tema
-
-El proyecto incluye soporte completo para tema claro/oscuro:
-
-- Variables CSS personalizadas en `app/globals.css`
-- Toggle de tema en el sidebar
-- Soporte para preferencia del sistema
-- Transiciones suaves entre temas
-
-## 📚 Documentación
-
-Para más información sobre la configuración y mejores prácticas del proyecto, consulta:
-
-- [Guía de Configuración](./docs/setup-guide.md) - Guía completa de configuración
-- [Reglas del Proyecto](./docs/project-rules.md) - Arquitectura y estándares de código (Lectura obligatoria para Agentes)
-
-## 🏗️ Próximos Pasos
-
-- [ ] Configurar autenticación con Supabase
-- [ ] Configurar base de datos con Drizzle ORM
-- [ ] Implementar GitHub Actions para CI/CD
-- [ ] Agregar tests unitarios y de integración
-
-## 📖 Recursos
-
-- [Next.js Documentation](https://nextjs.org/docs)
-- [shadcn/ui](https://ui.shadcn.com)
-- [Tailwind CSS](https://tailwindcss.com/docs)
-- [React Hook Form](https://react-hook-form.com)
-- [Zod](https://zod.dev)
-
-## 📝 Licencia
-
-Este proyecto es privado y confidencial.
+Private and confidential.

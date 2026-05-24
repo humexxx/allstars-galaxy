@@ -746,7 +746,27 @@ function CalendarCell({
           />
         ))}
         {extra > 0 && (
-          <li className="text-[10px] text-muted-foreground">+{extra} more</li>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <li
+                role="button"
+                tabIndex={0}
+                onClick={onToggleExpand}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onToggleExpand();
+                  }
+                }}
+                className="cursor-pointer rounded px-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                +{extra} more
+              </li>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="max-w-xs">
+              <HiddenEntriesTooltipBody entries={entries.slice(3)} />
+            </TooltipContent>
+          </Tooltip>
         )}
       </ul>
     </div>
@@ -928,6 +948,44 @@ function DebtTooltipDetails({ debt }: { debt: FinancePlanDebt }) {
       <div>
         <span className="opacity-70">When: </span>day {debt.dayOfMonth ?? 1} of every month
       </div>
+    </div>
+  );
+}
+
+// Listing of entries hidden behind "+N more" — name + amount per line so the
+// user can scan what's underneath without having to expand the cell.
+function HiddenEntriesTooltipBody({ entries }: { entries: DayEntry[] }) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[11px] opacity-80">
+        {entries.length} more {entries.length === 1 ? "entry" : "entries"} on this day
+      </div>
+      <ul className="space-y-0.5 text-[11px]">
+        {entries.map((e) => (
+          <li
+            key={`${e.side}-${e.id}`}
+            className="flex items-center justify-between gap-3"
+          >
+            <span className="flex min-w-0 items-center gap-1">
+              <span
+                className={`inline-block size-1.5 shrink-0 rounded-full ${
+                  e.side === "income"
+                    ? "bg-green-500"
+                    : e.side === "expense"
+                      ? "bg-red-500"
+                      : "bg-amber-500"
+                }`}
+                aria-hidden
+              />
+              <span className="truncate">{e.name}</span>
+            </span>
+            <span className="font-mono tabular-nums opacity-90">
+              {formatCurrency(e.amount)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="pt-0.5 text-[10px] italic opacity-60">Click to expand</div>
     </div>
   );
 }

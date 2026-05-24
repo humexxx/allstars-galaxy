@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useOptimistic, useState, useTransition } from "react";
 import {
   addMonths,
   eachDayOfInterval,
@@ -527,6 +527,112 @@ type DialogState =
 const DND_MIME = "application/x-allstars-finance-entry";
 type DragPayload = { id: string; side: EntrySide; sourceDate: string };
 
+// useOptimistic updates — each kind describes a local mutation we apply to the
+// plan snapshot the second the user acts, before the server confirms. When
+// the wrapping transition resolves (success or failure), React swaps back to
+// the canonical `plan` prop, which either reflects the new data (success) or
+// the original (failure → toast surfaces the error).
+type OptimisticUpdate =
+  | {
+      kind: "income-move";
+      id: string;
+      dayOfMonth: number | null;
+      date: string | null;
+    }
+  | {
+      kind: "expense-move";
+      id: string;
+      dayOfMonth: number | null;
+      date: string | null;
+    }
+  | { kind: "debt-move"; id: string; dayOfMonth: number }
+  | {
+      kind: "upsert-override";
+      parentSide: EntrySide;
+      parentId: string;
+      monthYear: string;
+      action: "skip" | "reschedule" | "amount";
+      date?: string | null;
+      monthlyAmount?: string | null;
+    }
+  | {
+      kind: "delete-override";
+      parentSide: EntrySide;
+      parentId: string;
+      monthYear: string;
+    };
+
+function applyOptimistic(
+  plan: FinancePlanWithLines,
+  update: OptimisticUpdate
+): FinancePlanWithLines {
+  switch (update.kind) {
+    case "income-move":
+      return {
+        ...plan,
+        incomes: plan.incomes.map((i) =>
+          i.id === update.id
+            ? { ...i, dayOfMonth: update.dayOfMonth, date: update.date }
+            : i
+        ),
+      };
+    case "expense-move":
+      return {
+        ...plan,
+        expenses: plan.expenses.map((e) =>
+          e.id === update.id
+            ? { ...e, dayOfMonth: update.dayOfMonth, date: update.date }
+            : e
+        ),
+      };
+    case "debt-move":
+      return {
+        ...plan,
+        debts: plan.debts.map((d) =>
+          d.id === update.id ? { ...d, dayOfMonth: update.dayOfMonth } : d
+        ),
+      };
+    case "upsert-override": {
+      const matches = (o: FinancePlanLineOverride) =>
+        o.parentSide === update.parentSide &&
+        o.parentId === update.parentId &&
+        o.monthYear === update.monthYear;
+      const next: FinancePlanLineOverride = {
+        // The id will be replaced by the canonical row once the server
+        // responds; a sentinel is fine for the optimistic window.
+        id: `optimistic-${update.parentSide}-${update.parentId}-${update.monthYear}`,
+        planId: plan.id,
+        parentSide: update.parentSide,
+        parentId: update.parentId,
+        monthYear: update.monthYear,
+        action: update.action,
+        date: update.action === "reschedule" ? update.date ?? null : null,
+        monthlyAmount:
+          update.action === "amount" ? update.monthlyAmount ?? null : null,
+        createdAt: new Date(),
+      };
+      const existing = plan.overrides.findIndex(matches);
+      const overrides =
+        existing >= 0
+          ? plan.overrides.map((o, i) => (i === existing ? next : o))
+          : [...plan.overrides, next];
+      return { ...plan, overrides };
+    }
+    case "delete-override":
+      return {
+        ...plan,
+        overrides: plan.overrides.filter(
+          (o) =>
+            !(
+              o.parentSide === update.parentSide &&
+              o.parentId === update.parentId &&
+              o.monthYear === update.monthYear
+            )
+        ),
+      };
+  }
+}
+
 export function PlanCalendar({
   plan,
   onAddIncome,
@@ -553,6 +659,16 @@ export function PlanCalendar({
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
+
+  // Optimistic snapshot — every operation that touches the plan applies its
+  // change here first, so chips jump to the new position the moment the user
+  // confirms. The wrapping startTransition keeps this state alive until the
+  // server action resolves; on rejection it reverts automatically.
+  const [optimisticPlan, addOptimistic] = useOptimistic<
+    FinancePlanWithLines,
+    OptimisticUpdate
+  >(plan, applyOptimistic);
+  const [, startOptimisticTransition] = useTransition();
   // Stashed drag → AlertDialog → user picks "Move all" / "Just this month".
   const [pendingDrop, setPendingDrop] = useState<{
     payload: DragPayload;
@@ -568,23 +684,27 @@ export function PlanCalendar({
     [gridStart, gridEnd]
   );
 
+  // dayMap + summary read from the OPTIMISTIC snapshot so the calendar
+  // surface updates instantly on user actions, before the server roundtrip.
+  // Handler closures below still read `plan.*` (canonical) when looking up
+  // the parent record being acted on.
   const dayMap = useMemo(
     () =>
       buildDayMap(
         days,
-        plan.incomes,
-        plan.expenses,
-        plan.debts,
-        plan.overrides,
-        plan.startMonth
+        optimisticPlan.incomes,
+        optimisticPlan.expenses,
+        optimisticPlan.debts,
+        optimisticPlan.overrides,
+        optimisticPlan.startMonth
       ),
     [
       days,
-      plan.incomes,
-      plan.expenses,
-      plan.debts,
-      plan.overrides,
-      plan.startMonth,
+      optimisticPlan.incomes,
+      optimisticPlan.expenses,
+      optimisticPlan.debts,
+      optimisticPlan.overrides,
+      optimisticPlan.startMonth,
     ]
   );
 
@@ -594,21 +714,21 @@ export function PlanCalendar({
     const curr = monthTotalsBySide(
       cursor.getFullYear(),
       cursor.getMonth(),
-      plan.incomes,
-      plan.expenses,
-      plan.debts,
-      plan.overrides,
-      plan.startMonth
+      optimisticPlan.incomes,
+      optimisticPlan.expenses,
+      optimisticPlan.debts,
+      optimisticPlan.overrides,
+      optimisticPlan.startMonth
     );
     const prevDate = subMonths(cursor, 1);
     const prev = monthTotalsBySide(
       prevDate.getFullYear(),
       prevDate.getMonth(),
-      plan.incomes,
-      plan.expenses,
-      plan.debts,
-      plan.overrides,
-      plan.startMonth
+      optimisticPlan.incomes,
+      optimisticPlan.expenses,
+      optimisticPlan.debts,
+      optimisticPlan.overrides,
+      optimisticPlan.startMonth
     );
     return {
       curr,
@@ -618,11 +738,11 @@ export function PlanCalendar({
     };
   }, [
     cursor,
-    plan.incomes,
-    plan.expenses,
-    plan.debts,
-    plan.overrides,
-    plan.startMonth,
+    optimisticPlan.incomes,
+    optimisticPlan.expenses,
+    optimisticPlan.debts,
+    optimisticPlan.overrides,
+    optimisticPlan.startMonth,
   ]);
 
   const monthLabel = format(cursor, "MMMM yyyy");
@@ -682,7 +802,7 @@ export function PlanCalendar({
   // entries change `dayOfMonth` (or whatever else makes sense for the
   // recurrence type), which ripples to every month.
   const applyMoveAll = useCallback(
-    async (targetKey: string, payload: DragPayload) => {
+    (targetKey: string, payload: DragPayload) => {
       const target = parseISODate(targetKey);
       if (!target) return;
 
@@ -692,29 +812,37 @@ export function PlanCalendar({
         const isOneTime = income.kind === "one_time";
         if (isOneTime && income.date === targetKey) return;
         if (!isOneTime && (income.dayOfMonth ?? 1) === target.getDate()) return;
-        try {
-          await onUpdateIncome(income.id, {
-            name: income.name,
-            monthlyAmount: income.monthlyAmount,
-            kind: income.kind,
+        startOptimisticTransition(async () => {
+          addOptimistic({
+            kind: "income-move",
+            id: income.id,
             dayOfMonth: isOneTime ? null : target.getDate(),
             date: isOneTime ? targetKey : null,
-            startDate: income.startDate,
-            endDate: income.endDate,
-            recurrenceType: income.recurrenceType,
-            weekOfMonth: income.weekOfMonth,
-            dayOfWeek: income.dayOfWeek,
-            intervalMonths: income.intervalMonths,
-            recurrenceStart: income.recurrenceStart,
           });
-          toast.success(
-            isOneTime
-              ? `Income moved to ${format(target, "PPP")}`
-              : `Income now hits day ${target.getDate()} of every month`
-          );
-        } catch {
-          toast.error("Failed to move income");
-        }
+          try {
+            await onUpdateIncome(income.id, {
+              name: income.name,
+              monthlyAmount: income.monthlyAmount,
+              kind: income.kind,
+              dayOfMonth: isOneTime ? null : target.getDate(),
+              date: isOneTime ? targetKey : null,
+              startDate: income.startDate,
+              endDate: income.endDate,
+              recurrenceType: income.recurrenceType,
+              weekOfMonth: income.weekOfMonth,
+              dayOfWeek: income.dayOfWeek,
+              intervalMonths: income.intervalMonths,
+              recurrenceStart: income.recurrenceStart,
+            });
+            toast.success(
+              isOneTime
+                ? `Income moved to ${format(target, "PPP")}`
+                : `Income now hits day ${target.getDate()} of every month`
+            );
+          } catch {
+            toast.error("Failed to move income");
+          }
+        });
         return;
       }
 
@@ -724,27 +852,35 @@ export function PlanCalendar({
         const isOneTime = expense.kind === "one_time";
         if (isOneTime && expense.date === targetKey) return;
         if (!isOneTime && (expense.dayOfMonth ?? 1) === target.getDate()) return;
-        try {
-          await onUpdateExpense(expense.id, {
-            name: expense.name,
-            monthlyAmount: expense.monthlyAmount,
-            kind: expense.kind,
+        startOptimisticTransition(async () => {
+          addOptimistic({
+            kind: "expense-move",
+            id: expense.id,
             dayOfMonth: isOneTime ? null : target.getDate(),
             date: isOneTime ? targetKey : null,
-            recurrenceType: expense.recurrenceType,
-            weekOfMonth: expense.weekOfMonth,
-            dayOfWeek: expense.dayOfWeek,
-            intervalMonths: expense.intervalMonths,
-            recurrenceStart: expense.recurrenceStart,
           });
-          toast.success(
-            isOneTime
-              ? `Expense moved to ${format(target, "PPP")}`
-              : `Expense now hits day ${target.getDate()} of every month`
-          );
-        } catch {
-          toast.error("Failed to move expense");
-        }
+          try {
+            await onUpdateExpense(expense.id, {
+              name: expense.name,
+              monthlyAmount: expense.monthlyAmount,
+              kind: expense.kind,
+              dayOfMonth: isOneTime ? null : target.getDate(),
+              date: isOneTime ? targetKey : null,
+              recurrenceType: expense.recurrenceType,
+              weekOfMonth: expense.weekOfMonth,
+              dayOfWeek: expense.dayOfWeek,
+              intervalMonths: expense.intervalMonths,
+              recurrenceStart: expense.recurrenceStart,
+            });
+            toast.success(
+              isOneTime
+                ? `Expense moved to ${format(target, "PPP")}`
+                : `Expense now hits day ${target.getDate()} of every month`
+            );
+          } catch {
+            toast.error("Failed to move expense");
+          }
+        });
         return;
       }
 
@@ -752,37 +888,52 @@ export function PlanCalendar({
       const debt = plan.debts.find((d) => d.id === payload.id);
       if (!debt) return;
       if ((debt.dayOfMonth ?? 1) === target.getDate()) return;
-      try {
-        await onUpdateDebt(debt.id, {
-          name: debt.name,
-          initialBalance: debt.initialBalance,
-          monthlyInterestRate: debt.monthlyInterestRate,
-          monthlyPayment: debt.monthlyPayment,
-          paymentType: debt.paymentType as DebtPaymentType,
-          minPaymentPercent: debt.minPaymentPercent,
-          minPaymentFloor: debt.minPaymentFloor,
+      startOptimisticTransition(async () => {
+        addOptimistic({
+          kind: "debt-move",
+          id: debt.id,
           dayOfMonth: target.getDate(),
-          recurrenceType: debt.recurrenceType,
-          weekOfMonth: debt.weekOfMonth,
-          dayOfWeek: debt.dayOfWeek,
-          intervalMonths: debt.intervalMonths,
-          recurrenceStart: debt.recurrenceStart,
         });
-        toast.success(
-          `Debt payment now scheduled for day ${target.getDate()} of every month`
-        );
-      } catch {
-        toast.error("Failed to move debt");
-      }
+        try {
+          await onUpdateDebt(debt.id, {
+            name: debt.name,
+            initialBalance: debt.initialBalance,
+            monthlyInterestRate: debt.monthlyInterestRate,
+            monthlyPayment: debt.monthlyPayment,
+            paymentType: debt.paymentType as DebtPaymentType,
+            minPaymentPercent: debt.minPaymentPercent,
+            minPaymentFloor: debt.minPaymentFloor,
+            dayOfMonth: target.getDate(),
+            recurrenceType: debt.recurrenceType,
+            weekOfMonth: debt.weekOfMonth,
+            dayOfWeek: debt.dayOfWeek,
+            intervalMonths: debt.intervalMonths,
+            recurrenceStart: debt.recurrenceStart,
+          });
+          toast.success(
+            `Debt payment now scheduled for day ${target.getDate()} of every month`
+          );
+        } catch {
+          toast.error("Failed to move debt");
+        }
+      });
     },
-    [plan.incomes, plan.expenses, plan.debts, onUpdateIncome, onUpdateExpense, onUpdateDebt]
+    [
+      plan.incomes,
+      plan.expenses,
+      plan.debts,
+      addOptimistic,
+      onUpdateIncome,
+      onUpdateExpense,
+      onUpdateDebt,
+    ]
   );
 
   // Skip this month — writes a skip override for the chip's month. Used by
   // the per-chip "⋯" menu so users can pause a recurring entry without
   // touching the schedule.
   const handleSkipMonth = useCallback(
-    async (
+    (
       side: "income" | "expense" | "debt",
       parentId: string,
       dayKey: string
@@ -790,25 +941,37 @@ export function PlanCalendar({
       const d = parseISODate(dayKey);
       if (!d) return;
       const monthYear = toISODate(new Date(d.getFullYear(), d.getMonth(), 1));
-      try {
-        await onUpsertOverride({
+      // useOptimistic only persists the update while a transition is in
+      // flight, so we wrap the server call here. If the server rejects, the
+      // optimistic patch is dropped automatically and the toast surfaces.
+      startOptimisticTransition(async () => {
+        addOptimistic({
+          kind: "upsert-override",
           parentSide: side,
           parentId,
           monthYear,
           action: "skip",
         });
-        toast.success(`Skipped for ${format(d, "MMMM yyyy")}`);
-      } catch {
-        toast.error("Failed to skip");
-      }
+        try {
+          await onUpsertOverride({
+            parentSide: side,
+            parentId,
+            monthYear,
+            action: "skip",
+          });
+          toast.success(`Skipped for ${format(d, "MMMM yyyy")}`);
+        } catch {
+          toast.error("Failed to skip");
+        }
+      });
     },
-    [onUpsertOverride]
+    [addOptimistic, onUpsertOverride]
   );
 
   // Remove any per-month override for the chip's month — used to "undo" a
   // skip / amount / reschedule and restore the natural cadence.
   const handleResetMonth = useCallback(
-    async (
+    (
       side: "income" | "expense" | "debt",
       parentId: string,
       dayKey: string
@@ -816,26 +979,32 @@ export function PlanCalendar({
       const d = parseISODate(dayKey);
       if (!d) return;
       const monthYear = toISODate(new Date(d.getFullYear(), d.getMonth(), 1));
-      try {
-        await onDeleteOverride({ parentSide: side, parentId, monthYear });
-        toast.success(`Override cleared for ${format(d, "MMMM yyyy")}`);
-      } catch {
-        toast.error("Failed to clear override");
-      }
+      startOptimisticTransition(async () => {
+        addOptimistic({
+          kind: "delete-override",
+          parentSide: side,
+          parentId,
+          monthYear,
+        });
+        try {
+          await onDeleteOverride({ parentSide: side, parentId, monthYear });
+          toast.success(`Override cleared for ${format(d, "MMMM yyyy")}`);
+        } catch {
+          toast.error("Failed to clear override");
+        }
+      });
     },
-    [onDeleteOverride]
+    [addOptimistic, onDeleteOverride]
   );
 
   // "Just this month" path — writes a reschedule override pinned to the source
   // month so the parent's recurring cadence stays untouched. Restricted to
   // intra-month drops (the override stores monthYear of the source).
   const applyJustThisMonth = useCallback(
-    async (sourceKey: string, targetKey: string, payload: DragPayload) => {
+    (sourceKey: string, targetKey: string, payload: DragPayload) => {
       const source = parseISODate(sourceKey);
       const target = parseISODate(targetKey);
       if (!source || !target) return;
-      // The override is scoped to the source month — moving across months
-      // would silently disappear the chip from both, so we gate it here too.
       if (
         source.getFullYear() !== target.getFullYear() ||
         source.getMonth() !== target.getMonth()
@@ -846,22 +1015,32 @@ export function PlanCalendar({
       const monthYear = toISODate(
         new Date(source.getFullYear(), source.getMonth(), 1)
       );
-      try {
-        await onUpsertOverride({
+      startOptimisticTransition(async () => {
+        addOptimistic({
+          kind: "upsert-override",
           parentSide: payload.side,
           parentId: payload.id,
           monthYear,
           action: "reschedule",
           date: targetKey,
         });
-        toast.success(
-          `Moved to ${format(target, "PPP")} for ${format(source, "MMMM yyyy")} only`
-        );
-      } catch {
-        toast.error("Failed to write override");
-      }
+        try {
+          await onUpsertOverride({
+            parentSide: payload.side,
+            parentId: payload.id,
+            monthYear,
+            action: "reschedule",
+            date: targetKey,
+          });
+          toast.success(
+            `Moved to ${format(target, "PPP")} for ${format(source, "MMMM yyyy")} only`
+          );
+        } catch {
+          toast.error("Failed to write override");
+        }
+      });
     },
-    [onUpsertOverride]
+    [addOptimistic, onUpsertOverride]
   );
 
   // Drag-end dispatcher. one-time → just move (no prompt needed). recurring

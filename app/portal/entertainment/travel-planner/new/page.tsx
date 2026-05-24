@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/portal/page-header";
 import { TripForm } from "@/components/travel/trip-form";
+import { FormSkeleton } from "@/components/skeletons/form-skeleton";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 
 export const metadata: Metadata = {
@@ -25,7 +26,7 @@ export default async function NewTripPage() {
           <CardTitle>Trip basics</CardTitle>
         </CardHeader>
         <CardContent>
-          <Suspense>
+          <Suspense fallback={<FormSkeleton rows={4} />}>
             <TripForm />
           </Suspense>
         </CardContent>

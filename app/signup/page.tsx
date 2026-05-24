@@ -5,6 +5,7 @@ import type { Metadata } from "next"
 import { Suspense } from "react"
 
 import { SignupForm } from "@/components/signup-form"
+import { FormSkeleton } from "@/components/skeletons/form-skeleton"
 
 export const metadata: Metadata = {
   title: "Sign up | Allstars Galaxy",
@@ -25,7 +26,7 @@ export default function SignupPage() {
         </header>
         <div className="flex flex-1 items-center justify-center">
           <div className="w-full max-w-xs" aria-label="Signup form">
-            <Suspense>
+            <Suspense fallback={<FormSkeleton rows={3} />}>
               <SignupForm />
             </Suspense>
           </div>

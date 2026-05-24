@@ -11,6 +11,7 @@ import { StatsCards } from "@/components/portfolio/stats-cards";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
+import { createTransactionAction } from "@/app/actions/transactions";
 import type {
   InvestmentMethod,
   Portfolio,
@@ -65,30 +66,20 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
     notes?: string;
     userId?: string;
   }) => {
-    try {
-      const response = await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(transactionData),
-      });
-
-      if (response.ok) {
-        const transaction = await response.json();
-        
-        if (data.isAdmin && transaction.status === "approved") {
-          toast.success("Transaction added and approved successfully");
-        } else {
-          toast.success("Transaction added successfully");
-        }
-        
-        router.refresh();
-      } else {
-        const error = await response.json();
-        toast.error(error.error || "Failed to create transaction");
-      }
-    } catch {
-      toast.error("Failed to create transaction");
+    const result = await createTransactionAction(transactionData);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
     }
+    const transaction = result.data;
+    if (data.isAdmin && transaction?.status === "approved") {
+      toast.success("Transaction added and approved successfully");
+    } else {
+      toast.success("Transaction added successfully");
+    }
+    // revalidatePath already invalidated the RSC cache; router.refresh
+    // pulls the new data without remounting the dialog.
+    router.refresh();
   };
 
   if (!data.portfolio) {

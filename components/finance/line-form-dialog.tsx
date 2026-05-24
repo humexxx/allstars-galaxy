@@ -321,12 +321,16 @@ const WEEKDAYS: Array<{ value: number; label: string }> = [
   { value: 6, label: "Saturday" },
 ];
 
+// "Last" maps to DB value 5 — the projection / calendar logic treats 5 as
+// "Nth if it exists, otherwise the last occurrence", which is exactly what
+// "last Friday of the month" means. Labelled plainly here so users don't have
+// to puzzle out the "5th / last" alias.
 const WEEK_OF_MONTH: Array<{ value: number; label: string }> = [
   { value: 1, label: "1st" },
   { value: 2, label: "2nd" },
   { value: 3, label: "3rd" },
   { value: 4, label: "4th" },
-  { value: 5, label: "5th / last" },
+  { value: 5, label: "Last" },
 ];
 
 // Groups every "when does this hit?" field into a single visual block so users
@@ -534,15 +538,18 @@ export function RecurrenceFields({
       )}
 
       {recurrenceType === "monthly_weekday" && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label>Week of month</Label>
+        <div className="space-y-1.5">
+          <Label>Occurs on the</Label>
+          {/* Inline-sentence layout: "the [Last] [Friday] of every month" so
+              the relationship between the two selects is obvious without
+              separate labels. Wraps to two lines on narrow widths. */}
+          <div className="flex flex-wrap items-center gap-2 text-sm">
             <Select
               value={weekOfMonth != null ? String(weekOfMonth) : ""}
               onValueChange={(v) => setWeekOfMonth(parseInt(v, 10))}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Pick week" />
+              <SelectTrigger className="w-[110px]">
+                <SelectValue placeholder="Pick" />
               </SelectTrigger>
               <SelectContent>
                 {WEEK_OF_MONTH.map((w) => (
@@ -552,14 +559,11 @@ export function RecurrenceFields({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Day of week</Label>
             <Select
               value={dayOfWeek != null ? String(dayOfWeek) : ""}
               onValueChange={(v) => setDayOfWeek(parseInt(v, 10))}
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-[140px]">
                 <SelectValue placeholder="Pick day" />
               </SelectTrigger>
               <SelectContent>
@@ -570,19 +574,21 @@ export function RecurrenceFields({
                 ))}
               </SelectContent>
             </Select>
+            <span className="text-muted-foreground">of every month</span>
           </div>
-          <p className="col-span-2 text-xs text-muted-foreground">
-            E.g. &ldquo;2nd Tuesday of every month&rdquo;. Months without the
-            chosen occurrence (5th X) fall back to the last one.
+          <p className="text-xs text-muted-foreground">
+            Pick <strong>Last</strong> to always use the last occurrence of the
+            chosen weekday (handles months that have only four).
           </p>
         </div>
       )}
 
       {recurrenceType === "every_n_months" && (
         <div className="space-y-2.5">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Every</Label>
+          <div className="space-y-1.5">
+            <Label>Occurs</Label>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Every</span>
               <Input
                 value={intervalMonths != null ? String(intervalMonths) : ""}
                 onChange={(e) => {
@@ -593,29 +599,34 @@ export function RecurrenceFields({
                 }}
                 inputMode="numeric"
                 placeholder="3"
+                className="w-[64px] text-center"
+                aria-label="Interval in months"
               />
-              <p className="text-[10px] text-muted-foreground">months (1–12)</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={domInputId}>Day of month</Label>
+              <span className="text-muted-foreground">months on day</span>
               <Input
                 id={domInputId}
                 value={dayOfMonth}
                 onChange={(e) => setDayOfMonth(e.target.value)}
                 inputMode="numeric"
                 placeholder="1"
+                className="w-[64px] text-center"
+                aria-label="Day of month"
               />
             </div>
+            <p className="text-xs text-muted-foreground">
+              Interval is 1–12 months. Day clamps to the last day in shorter
+              months.
+            </p>
           </div>
           <div className="space-y-1.5">
-            <Label>Start month (anchor)</Label>
+            <Label>Anchor month</Label>
             <DatePicker
               value={recurrenceStart}
               onChange={setRecurrenceStart}
               placeholder="Plan start"
               clearable
             />
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               The cycle counts from this date. Leave empty to anchor to the
               plan&apos;s start month.
             </p>

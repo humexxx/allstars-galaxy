@@ -3,8 +3,9 @@
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Clock, TrendingDown, Zap } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -28,7 +29,6 @@ import { PlanLineEditor } from "./plan-line-editor";
 import { PlanDebtEditor } from "./plan-debt-editor";
 import { PlanForm, type InvestmentMethodOption } from "./plan-form";
 import { ProjectionTable } from "./projection-table";
-import { StrategyComparisonCard } from "./strategy-comparison";
 import { useState, useTransition } from "react";
 
 // Recharts is one of the heaviest deps in the app — lazy-load the chart so
@@ -50,6 +50,7 @@ import {
   deletePlanDebtAction,
   deletePlanExpenseAction,
   deletePlanIncomeAction,
+  updatePlanAction,
   updatePlanDebtAction,
   updatePlanExpenseAction,
   updatePlanIncomeAction,
@@ -293,14 +294,32 @@ export function PlanEditor({
           />
         </div>
 
-        {comparison && plan.debts.length > 0 && (
-          <StrategyComparisonCard
-            comparison={comparison}
-            currentStrategy={plan.debtStrategy as DebtStrategy}
-          />
-        )}
-
-        <ProjectionPanel projection={projection} />
+        <ProjectionPanel
+          projection={projection}
+          comparison={plan.debts.length > 0 ? comparison : null}
+          currentStrategy={plan.debtStrategy as DebtStrategy}
+          onChangeStrategy={(next) =>
+            wrap(() =>
+              updatePlanAction({
+                id: plan.id,
+                name: plan.name,
+                description: plan.description ?? null,
+                startMonth: plan.startMonth,
+                monthsAhead: plan.monthsAhead,
+                initialSavings: plan.initialSavings,
+                monthlySavingsRate: plan.monthlySavingsRate,
+                includePortfolio: plan.includePortfolio,
+                surplusToDebtsPercent: plan.surplusToDebtsPercent,
+                debtStrategy: next,
+                autoInvestPercent: plan.autoInvestPercent,
+                autoInvestMethodId: plan.autoInvestMethodId,
+                initialInvestments: plan.initialInvestments,
+                confirmationDayOfMonth: plan.confirmationDayOfMonth,
+                color: plan.color,
+              })
+            )
+          }
+        />
       </TabsContent>
 
       <TabsContent value="setup" className="space-y-6">
@@ -396,6 +415,17 @@ export function PlanEditor({
 
 type ProjectionPanelProps = {
   projection: Projection;
+  /** Pre-computed projections for the three debt strategies — null when the
+   *  plan has no debts (the comparison is meaningless). */
+  comparison: StrategyComparison | null;
+  currentStrategy: DebtStrategy;
+  onChangeStrategy: (next: DebtStrategy) => Promise<void>;
+};
+
+const STRATEGY_LABEL: Record<DebtStrategy, string> = {
+  avalanche: "Avalanche",
+  snowball: "Snowball",
+  none: "No acceleration",
 };
 
 const FORMATTER = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" });
@@ -425,12 +455,20 @@ function monthsLabel(n: number): string {
  * (12 mo / 2 yr / 5 yr / 10 yr) let the user switch horizons; the chart and KPIs
  * re-render against whatever is selected.
  */
-function ProjectionPanel({ projection }: ProjectionPanelProps) {
+function ProjectionPanel({
+  projection,
+  comparison,
+  currentStrategy,
+  onChangeStrategy,
+}: ProjectionPanelProps) {
   const maxAvailable = projection.months.length;
   // Default to 12 months when available, otherwise the plan's full horizon.
   const [monthsToShow, setMonthsToShow] = useState<number>(
     Math.min(12, maxAvailable)
   );
+  // Strategy picker — collapsed by default, surfacing just a compact badge in
+  // the header. Expands to show the three comparison cards inline.
+  const [strategyOpen, setStrategyOpen] = useState(false);
 
   // First month is the calibrated state at the plan's anchor. The "future"
   // anchor is the selected horizon, clamped to the projection length.
@@ -479,33 +517,52 @@ function ProjectionPanel({ projection }: ProjectionPanelProps) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Today {todayMonth ? `(${FORMATTER.format(todayMonth.date)})` : ""}
-            </p>
-            <p
-              className={`text-lg font-semibold ${
-                today >= 0 ? "text-green-600" : "text-red-600"
-              }`}
-            >
-              {formatCurrency(today)}
-            </p>
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Today {todayMonth ? `(${FORMATTER.format(todayMonth.date)})` : ""}
+              </p>
+              <p
+                className={`text-lg font-semibold ${
+                  today >= 0 ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {formatCurrency(today)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                In {monthsLabel(monthsToShow)}{" "}
+                {futureMonth ? `(${FORMATTER.format(futureMonth.date)})` : ""}
+              </p>
+              <p
+                className={`text-lg font-semibold ${
+                  future >= 0 ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {formatCurrency(future)}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              In {monthsLabel(monthsToShow)}{" "}
-              {futureMonth ? `(${FORMATTER.format(futureMonth.date)})` : ""}
-            </p>
-            <p
-              className={`text-lg font-semibold ${
-                future >= 0 ? "text-green-600" : "text-red-600"
-              }`}
-            >
-              {formatCurrency(future)}
-            </p>
-          </div>
+
+          {comparison && (
+            <StrategyBadge
+              comparison={comparison}
+              currentStrategy={currentStrategy}
+              open={strategyOpen}
+              onToggle={() => setStrategyOpen((v) => !v)}
+            />
+          )}
         </div>
+
+        {comparison && strategyOpen && (
+          <StrategyPicker
+            comparison={comparison}
+            currentStrategy={currentStrategy}
+            onChange={onChangeStrategy}
+          />
+        )}
       </CardHeader>
       <CardContent className="space-y-8">
         <ProjectionChart projection={projection} monthsToShow={monthsToShow} />
@@ -515,6 +572,140 @@ function ProjectionPanel({ projection }: ProjectionPanelProps) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// Compact badge in the projection header that shows the active strategy + how
+// much it saves vs. the worst option. Click to open the full picker below.
+function StrategyBadge({
+  comparison,
+  currentStrategy,
+  open,
+  onToggle,
+}: {
+  comparison: StrategyComparison;
+  currentStrategy: DebtStrategy;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const saves = comparison.interestSaved;
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="flex items-start gap-2 rounded-md border bg-muted/20 px-3 py-2 text-left transition hover:bg-muted/40"
+    >
+      <Zap className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+      <div className="space-y-0.5">
+        <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          Strategy
+        </div>
+        <div className="text-sm font-semibold">
+          {STRATEGY_LABEL[currentStrategy]}
+        </div>
+        {saves > 0 && (
+          <div className="flex items-center gap-1 text-[11px] text-green-700 dark:text-green-300">
+            <TrendingDown className="h-3 w-3" />
+            saves {formatCurrency(saves)} vs. worst
+          </div>
+        )}
+      </div>
+      <ChevronDown
+        className={`mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+          open ? "rotate-180" : ""
+        }`}
+      />
+    </button>
+  );
+}
+
+// Clickable 3-up grid. Selecting a non-active card persists the new strategy
+// via onChange; the chart re-renders once the server revalidates the page.
+function StrategyPicker({
+  comparison,
+  currentStrategy,
+  onChange,
+}: {
+  comparison: StrategyComparison;
+  currentStrategy: DebtStrategy;
+  onChange: (next: DebtStrategy) => Promise<void>;
+}) {
+  const rows: { key: DebtStrategy; data: StrategyComparison["avalanche"] }[] = [
+    { key: "avalanche", data: comparison.avalanche },
+    { key: "snowball", data: comparison.snowball },
+    { key: "none", data: comparison.none },
+  ];
+  const minInterest = Math.min(
+    comparison.avalanche.totalInterestPaid,
+    comparison.snowball.totalInterestPaid,
+    comparison.none.totalInterestPaid
+  );
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      {rows.map(({ key, data }) => {
+        const isCurrent = key === currentStrategy;
+        const isBest =
+          key !== "none" &&
+          Math.abs(data.totalInterestPaid - minInterest) < 0.5;
+        return (
+          <button
+            key={key}
+            type="button"
+            disabled={isCurrent}
+            onClick={() => void onChange(key)}
+            aria-pressed={isCurrent}
+            className={`relative rounded-md border p-4 text-left transition ${
+              isCurrent
+                ? "cursor-default border-foreground bg-muted/40"
+                : "hover:border-foreground/60 hover:bg-muted/30"
+            } ${isBest && !isCurrent ? "bg-green-500/5" : ""}`}
+          >
+            <div className="flex items-center justify-between">
+              <p className="font-semibold">{STRATEGY_LABEL[key]}</p>
+              {isCurrent && (
+                <Badge variant="secondary" className="text-xs">
+                  Active
+                </Badge>
+              )}
+            </div>
+            <dl className="mt-3 space-y-2 text-sm">
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Total interest paid
+                </dt>
+                <dd className="text-lg font-semibold">
+                  {formatCurrency(data.totalInterestPaid)}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between border-t pt-2">
+                <dt className="text-xs text-muted-foreground">
+                  <Clock className="mr-1 inline h-3 w-3" />
+                  Debt-free in
+                </dt>
+                <dd className="text-sm font-medium">
+                  {data.monthsToDebtFree !== null
+                    ? `${data.monthsToDebtFree} mo`
+                    : "—"}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-xs text-muted-foreground">Ending net worth</dt>
+                <dd className="text-sm font-medium">
+                  {formatCurrency(data.endingNetWorth)}
+                </dd>
+              </div>
+            </dl>
+            {!isCurrent && (
+              <p className="mt-3 text-[11px] italic text-muted-foreground">
+                Click to switch
+              </p>
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

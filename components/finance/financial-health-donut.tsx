@@ -89,10 +89,7 @@ export function FinancialHealthDonut({
   const dashOffset = circumference * (1 - filled);
 
   return (
-    <div className="flex min-w-[200px] flex-col items-center gap-1 rounded-lg border bg-card p-4">
-      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        Financial health
-      </div>
+    <div className="flex flex-col items-center gap-1">
       <div className="relative" style={{ width: size, height: size }}>
         <svg
           viewBox={`0 0 ${size} ${size}`}

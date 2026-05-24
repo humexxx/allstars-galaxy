@@ -30,6 +30,13 @@ import {
   RadioGroup,
   RadioGroupItem,
 } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export type LineKind = "recurring" | "one_time";
 export type LineVariant = "income" | "expense";
@@ -145,18 +152,22 @@ function LineForm({
   const [endDate, setEndDate] = useState<string | null>(
     initial?.endDate ?? null
   );
-  // B1/B2 fields — kept in state so edits round-trip, but the UI for choosing
-  // them ships with B5. Until then the form just passes them through verbatim,
-  // defaulting new entries to monthly_day.
-  const [recurrenceType] = useState<RecurrenceType>(
+  // B1/B2 recurrence fields — the UI for these is the ScheduleSection's
+  // Repeats selector. Default to monthly_day for new entries (identical to
+  // the prior behaviour).
+  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>(
     initial?.recurrenceType ?? "monthly_day"
   );
-  const [weekOfMonth] = useState<number | null>(initial?.weekOfMonth ?? null);
-  const [dayOfWeek] = useState<number | null>(initial?.dayOfWeek ?? null);
-  const [intervalMonths] = useState<number | null>(
+  const [weekOfMonth, setWeekOfMonth] = useState<number | null>(
+    initial?.weekOfMonth ?? null
+  );
+  const [dayOfWeek, setDayOfWeek] = useState<number | null>(
+    initial?.dayOfWeek ?? null
+  );
+  const [intervalMonths, setIntervalMonths] = useState<number | null>(
     initial?.intervalMonths ?? null
   );
-  const [recurrenceStart] = useState<string | null>(
+  const [recurrenceStart, setRecurrenceStart] = useState<string | null>(
     initial?.recurrenceStart ?? null
   );
   const [submitting, setSubmitting] = useState(false);
@@ -246,6 +257,16 @@ function LineForm({
           setStartDate={setStartDate}
           endDate={endDate}
           setEndDate={setEndDate}
+          recurrenceType={recurrenceType}
+          setRecurrenceType={setRecurrenceType}
+          weekOfMonth={weekOfMonth}
+          setWeekOfMonth={setWeekOfMonth}
+          dayOfWeek={dayOfWeek}
+          setDayOfWeek={setDayOfWeek}
+          intervalMonths={intervalMonths}
+          setIntervalMonths={setIntervalMonths}
+          recurrenceStart={recurrenceStart}
+          setRecurrenceStart={setRecurrenceStart}
           domInputId={domInputId}
           noun={noun}
           showWindow={variant === "income"}
@@ -275,10 +296,38 @@ type ScheduleSectionProps = {
   setStartDate: (v: string | null) => void;
   endDate: string | null;
   setEndDate: (v: string | null) => void;
+  recurrenceType: RecurrenceType;
+  setRecurrenceType: (v: RecurrenceType) => void;
+  weekOfMonth: number | null;
+  setWeekOfMonth: (v: number | null) => void;
+  dayOfWeek: number | null;
+  setDayOfWeek: (v: number | null) => void;
+  intervalMonths: number | null;
+  setIntervalMonths: (v: number | null) => void;
+  recurrenceStart: string | null;
+  setRecurrenceStart: (v: string | null) => void;
   domInputId: string;
   noun: string;
   showWindow: boolean; // only incomes expose start/end window
 };
+
+const WEEKDAYS: Array<{ value: number; label: string }> = [
+  { value: 0, label: "Sunday" },
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+];
+
+const WEEK_OF_MONTH: Array<{ value: number; label: string }> = [
+  { value: 1, label: "1st" },
+  { value: 2, label: "2nd" },
+  { value: 3, label: "3rd" },
+  { value: 4, label: "4th" },
+  { value: 5, label: "5th / last" },
+];
 
 // Groups every "when does this hit?" field into a single visual block so users
 // don't have to scan the dialog to figure out the schedule. Start/end window
@@ -294,6 +343,16 @@ function ScheduleSection({
   setStartDate,
   endDate,
   setEndDate,
+  recurrenceType,
+  setRecurrenceType,
+  weekOfMonth,
+  setWeekOfMonth,
+  dayOfWeek,
+  setDayOfWeek,
+  intervalMonths,
+  setIntervalMonths,
+  recurrenceStart,
+  setRecurrenceStart,
   domInputId,
   noun,
   showWindow,
@@ -328,19 +387,22 @@ function ScheduleSection({
       </div>
 
       {kind === "recurring" ? (
-        <div className="space-y-1.5">
-          <Label htmlFor={domInputId}>Day of month</Label>
-          <Input
-            id={domInputId}
-            value={dayOfMonth}
-            onChange={(e) => setDayOfMonth(e.target.value)}
-            inputMode="numeric"
-            placeholder="1"
-          />
-          <p className="text-xs text-muted-foreground">
-            When in the month this {noun} usually hits (1–31).
-          </p>
-        </div>
+        <RecurrenceFields
+          recurrenceType={recurrenceType}
+          setRecurrenceType={setRecurrenceType}
+          dayOfMonth={dayOfMonth}
+          setDayOfMonth={setDayOfMonth}
+          weekOfMonth={weekOfMonth}
+          setWeekOfMonth={setWeekOfMonth}
+          dayOfWeek={dayOfWeek}
+          setDayOfWeek={setDayOfWeek}
+          intervalMonths={intervalMonths}
+          setIntervalMonths={setIntervalMonths}
+          recurrenceStart={recurrenceStart}
+          setRecurrenceStart={setRecurrenceStart}
+          domInputId={domInputId}
+          noun={noun}
+        />
       ) : (
         <div className="space-y-1.5">
           <Label>Date</Label>
@@ -391,6 +453,174 @@ function ScheduleSection({
             </p>
           </CollapsibleContent>
         </Collapsible>
+      )}
+    </div>
+  );
+}
+
+type RecurrenceFieldsProps = {
+  recurrenceType: RecurrenceType;
+  setRecurrenceType: (v: RecurrenceType) => void;
+  dayOfMonth: string;
+  setDayOfMonth: (v: string) => void;
+  weekOfMonth: number | null;
+  setWeekOfMonth: (v: number | null) => void;
+  dayOfWeek: number | null;
+  setDayOfWeek: (v: number | null) => void;
+  intervalMonths: number | null;
+  setIntervalMonths: (v: number | null) => void;
+  recurrenceStart: string | null;
+  setRecurrenceStart: (v: string | null) => void;
+  domInputId: string;
+  /** Word used in helper copy — "income", "expense", or "debt payment". */
+  noun: string;
+};
+
+// Recurrence selector + the type-specific fields underneath. Exported because
+// the debt-form dialog uses the same set of fields (debts are always
+// recurring, so they skip the kind radio and embed this directly).
+export function RecurrenceFields({
+  recurrenceType,
+  setRecurrenceType,
+  dayOfMonth,
+  setDayOfMonth,
+  weekOfMonth,
+  setWeekOfMonth,
+  dayOfWeek,
+  setDayOfWeek,
+  intervalMonths,
+  setIntervalMonths,
+  recurrenceStart,
+  setRecurrenceStart,
+  domInputId,
+  noun,
+}: RecurrenceFieldsProps) {
+  return (
+    <div className="space-y-2.5">
+      <div className="space-y-1.5">
+        <Label>Repeats</Label>
+        <Select
+          value={recurrenceType}
+          onValueChange={(v) => setRecurrenceType(v as RecurrenceType)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="monthly_day">Every month on a day</SelectItem>
+            <SelectItem value="monthly_weekday">
+              Every month on the Nth weekday
+            </SelectItem>
+            <SelectItem value="every_n_months">Every N months</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {recurrenceType === "monthly_day" && (
+        <div className="space-y-1.5">
+          <Label htmlFor={domInputId}>Day of month</Label>
+          <Input
+            id={domInputId}
+            value={dayOfMonth}
+            onChange={(e) => setDayOfMonth(e.target.value)}
+            inputMode="numeric"
+            placeholder="1"
+          />
+          <p className="text-xs text-muted-foreground">
+            When in the month this {noun} hits (1–31). Day 31 clamps to the
+            last day of months that don&apos;t have it.
+          </p>
+        </div>
+      )}
+
+      {recurrenceType === "monthly_weekday" && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Week of month</Label>
+            <Select
+              value={weekOfMonth != null ? String(weekOfMonth) : ""}
+              onValueChange={(v) => setWeekOfMonth(parseInt(v, 10))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Pick week" />
+              </SelectTrigger>
+              <SelectContent>
+                {WEEK_OF_MONTH.map((w) => (
+                  <SelectItem key={w.value} value={String(w.value)}>
+                    {w.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Day of week</Label>
+            <Select
+              value={dayOfWeek != null ? String(dayOfWeek) : ""}
+              onValueChange={(v) => setDayOfWeek(parseInt(v, 10))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Pick day" />
+              </SelectTrigger>
+              <SelectContent>
+                {WEEKDAYS.map((d) => (
+                  <SelectItem key={d.value} value={String(d.value)}>
+                    {d.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="col-span-2 text-xs text-muted-foreground">
+            E.g. &ldquo;2nd Tuesday of every month&rdquo;. Months without the
+            chosen occurrence (5th X) fall back to the last one.
+          </p>
+        </div>
+      )}
+
+      {recurrenceType === "every_n_months" && (
+        <div className="space-y-2.5">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Every</Label>
+              <Input
+                value={intervalMonths != null ? String(intervalMonths) : ""}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setIntervalMonths(
+                    Number.isFinite(n) && n >= 1 && n <= 12 ? n : null
+                  );
+                }}
+                inputMode="numeric"
+                placeholder="3"
+              />
+              <p className="text-[10px] text-muted-foreground">months (1–12)</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={domInputId}>Day of month</Label>
+              <Input
+                id={domInputId}
+                value={dayOfMonth}
+                onChange={(e) => setDayOfMonth(e.target.value)}
+                inputMode="numeric"
+                placeholder="1"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Start month (anchor)</Label>
+            <DatePicker
+              value={recurrenceStart}
+              onChange={setRecurrenceStart}
+              placeholder="Plan start"
+              clearable
+            />
+            <p className="text-[10px] text-muted-foreground">
+              The cycle counts from this date. Leave empty to anchor to the
+              plan&apos;s start month.
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );

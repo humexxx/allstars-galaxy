@@ -20,6 +20,8 @@ import {
 
 import type { DebtPaymentType } from "@/types/finance";
 
+import { RecurrenceFields } from "./line-form-dialog";
+
 export type RecurrenceType =
   | "monthly_day"
   | "monthly_weekday"
@@ -98,16 +100,20 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
   const [dayOfMonth, setDayOfMonth] = useState<string>(
     initial?.dayOfMonth != null ? String(initial.dayOfMonth) : "1"
   );
-  // B1/B2 — UI lands in B5; pass through verbatim until then.
-  const [recurrenceType] = useState<RecurrenceType>(
+  // B1/B2 recurrence model — exposed via RecurrenceFields below.
+  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>(
     initial?.recurrenceType ?? "monthly_day"
   );
-  const [weekOfMonth] = useState<number | null>(initial?.weekOfMonth ?? null);
-  const [dayOfWeek] = useState<number | null>(initial?.dayOfWeek ?? null);
-  const [intervalMonths] = useState<number | null>(
+  const [weekOfMonth, setWeekOfMonth] = useState<number | null>(
+    initial?.weekOfMonth ?? null
+  );
+  const [dayOfWeek, setDayOfWeek] = useState<number | null>(
+    initial?.dayOfWeek ?? null
+  );
+  const [intervalMonths, setIntervalMonths] = useState<number | null>(
     initial?.intervalMonths ?? null
   );
-  const [recurrenceStart] = useState<string | null>(
+  const [recurrenceStart, setRecurrenceStart] = useState<string | null>(
     initial?.recurrenceStart ?? null
   );
   const [submitting, setSubmitting] = useState(false);
@@ -247,19 +253,22 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Schedule
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={domInputId}>Day of month</Label>
-            <Input
-              id={domInputId}
-              value={dayOfMonth}
-              onChange={(e) => setDayOfMonth(e.target.value)}
-              inputMode="numeric"
-              placeholder="1"
-            />
-            <p className="text-xs text-muted-foreground">
-              When in the month the minimum payment is due (1–31).
-            </p>
-          </div>
+          <RecurrenceFields
+            recurrenceType={recurrenceType}
+            setRecurrenceType={setRecurrenceType}
+            dayOfMonth={dayOfMonth}
+            setDayOfMonth={setDayOfMonth}
+            weekOfMonth={weekOfMonth}
+            setWeekOfMonth={setWeekOfMonth}
+            dayOfWeek={dayOfWeek}
+            setDayOfWeek={setDayOfWeek}
+            intervalMonths={intervalMonths}
+            setIntervalMonths={setIntervalMonths}
+            recurrenceStart={recurrenceStart}
+            setRecurrenceStart={setRecurrenceStart}
+            domInputId={domInputId}
+            noun="debt payment"
+          />
         </div>
       </div>
 

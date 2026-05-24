@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Allstars Galaxy favicon: a shooting star streaking across a rounded
+       badge. Auto-adapts to the OS color scheme — light OS gets a light
+       badge with a dark star, dark OS gets a dark badge with a light star.
+       Used by Next.js as /icon (App Router convention). -->
+  <style>
+    .bg { fill: #fafafa; }
+    .fg { fill: #0a0a0a; }
+    .fg-stroke { stroke: #0a0a0a; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0a0a0a; }
+      .fg { fill: #fafafa; }
+      .fg-stroke { stroke: #fafafa; }
+    }
+  </style>
+
+  <!-- Badge -->
+  <rect class="bg" width="32" height="32" rx="7" />
+
+  <!-- Trailing streak: three short bars tapering toward the star's tail.
+       Aligned along the diagonal from bottom-left to top-right. -->
+  <g class="fg-stroke" stroke-linecap="round" fill="none">
+    <line x1="6"  y1="26" x2="10" y2="22" stroke-width="1.4" opacity="0.35" />
+    <line x1="9"  y1="23" x2="14" y2="18" stroke-width="1.7" opacity="0.55" />
+    <line x1="13" y1="19" x2="18" y2="14" stroke-width="2"   opacity="0.85" />
+  </g>
+
+  <!-- Star head: 4-point star (north/south/east/west spikes) positioned at
+       the leading end of the streak (upper-right). -->
+  <path class="fg"
+        d="M22 5
+           L23.2 10
+           L28 11.2
+           L23.2 12.4
+           L22 17
+           L20.8 12.4
+           L16 11.2
+           L20.8 10 Z" />
+</svg>

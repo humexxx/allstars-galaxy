@@ -232,6 +232,11 @@ export async function clonePlan(
         date: i.date,
         startDate: i.startDate,
         endDate: i.endDate,
+        recurrenceType: i.recurrenceType,
+        weekOfMonth: i.weekOfMonth,
+        dayOfWeek: i.dayOfWeek,
+        intervalMonths: i.intervalMonths,
+        recurrenceStart: i.recurrenceStart,
         sortOrder: i.sortOrder,
       }))
     );
@@ -245,6 +250,11 @@ export async function clonePlan(
         kind: e.kind,
         dayOfMonth: e.dayOfMonth,
         date: e.date,
+        recurrenceType: e.recurrenceType,
+        weekOfMonth: e.weekOfMonth,
+        dayOfWeek: e.dayOfWeek,
+        intervalMonths: e.intervalMonths,
+        recurrenceStart: e.recurrenceStart,
         sortOrder: e.sortOrder,
       }))
     );
@@ -260,6 +270,12 @@ export async function clonePlan(
         paymentType: d.paymentType,
         minPaymentPercent: d.minPaymentPercent,
         minPaymentFloor: d.minPaymentFloor,
+        dayOfMonth: d.dayOfMonth,
+        recurrenceType: d.recurrenceType,
+        weekOfMonth: d.weekOfMonth,
+        dayOfWeek: d.dayOfWeek,
+        intervalMonths: d.intervalMonths,
+        recurrenceStart: d.recurrenceStart,
         sortOrder: d.sortOrder,
       }))
     );
@@ -287,6 +303,11 @@ export async function addIncome(
       date: data.kind === "one_time" ? data.date ?? null : null,
       startDate: data.kind === "recurring" ? data.startDate ?? null : null,
       endDate: data.kind === "recurring" ? data.endDate ?? null : null,
+      recurrenceType: data.recurrenceType,
+      weekOfMonth: data.weekOfMonth ?? null,
+      dayOfWeek: data.dayOfWeek ?? null,
+      intervalMonths: data.intervalMonths ?? null,
+      recurrenceStart: data.recurrenceStart ?? null,
       sortOrder: data.sortOrder ?? 0,
     })
     .returning();
@@ -309,6 +330,11 @@ export async function updateIncome(
       date: data.kind === "one_time" ? data.date ?? null : null,
       startDate: data.kind === "recurring" ? data.startDate ?? null : null,
       endDate: data.kind === "recurring" ? data.endDate ?? null : null,
+      recurrenceType: data.recurrenceType,
+      weekOfMonth: data.weekOfMonth ?? null,
+      dayOfWeek: data.dayOfWeek ?? null,
+      intervalMonths: data.intervalMonths ?? null,
+      recurrenceStart: data.recurrenceStart ?? null,
       sortOrder: data.sortOrder,
     })
     .where(and(eq(financePlanIncomes.id, data.id), eq(financePlanIncomes.planId, planId)))
@@ -342,6 +368,11 @@ export async function addExpense(
       kind: data.kind,
       dayOfMonth: data.dayOfMonth ?? null,
       date: data.kind === "one_time" ? data.date ?? null : null,
+      recurrenceType: data.recurrenceType,
+      weekOfMonth: data.weekOfMonth ?? null,
+      dayOfWeek: data.dayOfWeek ?? null,
+      intervalMonths: data.intervalMonths ?? null,
+      recurrenceStart: data.recurrenceStart ?? null,
       sortOrder: data.sortOrder ?? 0,
     })
     .returning();
@@ -362,6 +393,11 @@ export async function updateExpense(
       kind: data.kind,
       dayOfMonth: data.dayOfMonth ?? null,
       date: data.kind === "one_time" ? data.date ?? null : null,
+      recurrenceType: data.recurrenceType,
+      weekOfMonth: data.weekOfMonth ?? null,
+      dayOfWeek: data.dayOfWeek ?? null,
+      intervalMonths: data.intervalMonths ?? null,
+      recurrenceStart: data.recurrenceStart ?? null,
       sortOrder: data.sortOrder,
     })
     .where(and(eq(financePlanExpenses.id, data.id), eq(financePlanExpenses.planId, planId)))
@@ -398,6 +434,11 @@ export async function addDebt(
       minPaymentPercent: data.minPaymentPercent,
       minPaymentFloor: data.minPaymentFloor,
       dayOfMonth: data.dayOfMonth ?? null,
+      recurrenceType: data.recurrenceType,
+      weekOfMonth: data.weekOfMonth ?? null,
+      dayOfWeek: data.dayOfWeek ?? null,
+      intervalMonths: data.intervalMonths ?? null,
+      recurrenceStart: data.recurrenceStart ?? null,
       sortOrder: data.sortOrder ?? 0,
     })
     .returning();
@@ -421,6 +462,11 @@ export async function updateDebt(
       minPaymentPercent: data.minPaymentPercent,
       minPaymentFloor: data.minPaymentFloor,
       dayOfMonth: data.dayOfMonth ?? null,
+      recurrenceType: data.recurrenceType,
+      weekOfMonth: data.weekOfMonth ?? null,
+      dayOfWeek: data.dayOfWeek ?? null,
+      intervalMonths: data.intervalMonths ?? null,
+      recurrenceStart: data.recurrenceStart ?? null,
       sortOrder: data.sortOrder,
     })
     .where(and(eq(financePlanDebts.id, data.id), eq(financePlanDebts.planId, planId)))

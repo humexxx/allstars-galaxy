@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { db } from "@/db";
 import {
   financePlans,
@@ -94,7 +96,12 @@ export async function listUserPlans(userId: string): Promise<FinancePlan[]> {
     .orderBy(asc(financePlans.createdAt));
 }
 
-export async function getPlanWithLines(
+/**
+ * Wrapped in React's `cache()` so calls from `generateMetadata` and the page
+ * body within the same request hit the DB once. Args are part of the cache
+ * key, so the per-user filter remains safe.
+ */
+export const getPlanWithLines = cache(async function getPlanWithLines(
   planId: string,
   userId: string
 ): Promise<FinancePlanWithLines | null> {
@@ -123,7 +130,7 @@ export async function getPlanWithLines(
   ]);
 
   return { ...plan, incomes, expenses, debts };
-}
+});
 
 export async function createPlan(
   userId: string,

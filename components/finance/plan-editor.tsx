@@ -1,8 +1,10 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
@@ -16,10 +18,20 @@ import { PlanCalendar } from "./plan-calendar";
 import { PlanLineEditor } from "./plan-line-editor";
 import { PlanDebtEditor } from "./plan-debt-editor";
 import { PlanForm, type InvestmentMethodOption } from "./plan-form";
-import { ProjectionChart } from "./projection-chart";
 import { ProjectionTable } from "./projection-table";
 import { StrategyComparisonCard } from "./strategy-comparison";
 import { useState, useTransition } from "react";
+
+// Recharts is one of the heaviest deps in the app — lazy-load the chart so
+// the projection editor's initial bundle stays small. The chart lives below
+// the fold (table/form first), so the swap to a skeleton is unobtrusive.
+const ProjectionChart = dynamic(
+  () => import("./projection-chart").then((mod) => mod.ProjectionChart),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-80 w-full" />,
+  }
+);
 
 import {
   addPlanDebtAction,

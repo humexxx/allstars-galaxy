@@ -1,16 +1,26 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 
-import { ComparePlansChart } from "./projection-chart";
 import { formatCurrency } from "@/lib/utils/format";
 import type { Projection } from "@/types/finance";
+
+// Same rationale as plan-editor: defer recharts to a lazy chunk.
+const ComparePlansChart = dynamic(
+  () => import("./projection-chart").then((mod) => mod.ComparePlansChart),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-96 w-full" />,
+  }
+);
 
 type Metric = "netWorth" | "totalDebt" | "savings";
 

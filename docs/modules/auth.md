@@ -1,7 +1,7 @@
 # Auth
 
 > **Status:** Active
-> **Last reviewed:** 2026-05-23
+> **Last reviewed:** 2026-05-24
 
 ## Overview
 Supabase-backed authentication: email/password login, signup, password reset,
@@ -15,8 +15,7 @@ and SSR-friendly session management. Server-side action wrappers
 - `/auth/callback` — OAuth / email confirmation callback
 
 ## Server actions — `/app/actions/`
-None. Forms post directly via Supabase client; sessions are managed by
-middleware.
+- `auth.ts` — `signOutAction` (server-side sign-out + redirect to `/login`). Login / signup / password reset still use the Supabase client directly because they depend on `window.location.origin` for redirect URLs.
 
 ## Services — `/lib/services/`
 - `auth-service.ts` — Supabase client setup

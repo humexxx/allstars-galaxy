@@ -1,7 +1,7 @@
 # Finance
 
 > **Status:** Active
-> **Last reviewed:** 2026-05-23
+> **Last reviewed:** 2026-05-24
 
 ## Overview
 Personal financial planning: users build *plans* (scenarios) with incomes,
@@ -48,3 +48,7 @@ strategy comparisons, [`FinancialHealthGauge`](../../components/finance/financia
 ## Notes
 - Conventional Commits scope: `finance`
 - Cron job `/api/cron/daily` may write snapshots into this module — keep in sync with [Portfolio](./portfolio.md).
+- All actions wrap their handler in `safe()` from `@/lib/actions/safe` so service errors translate to `{ success: false, error: "Action failed" }` for the client.
+- `getPlanWithLines` is wrapped in `React.cache()` so `generateMetadata` and the page body share one DB hit per request.
+- `ProjectionChart` and `ComparePlansChart` are lazy-loaded via `next/dynamic({ ssr: false })` to keep recharts out of the initial bundle.
+- `app/portal/plans/loading.tsx` and `app/portal/plans/[id]/not-found.tsx` give the routes a proper skeleton / 404 experience.

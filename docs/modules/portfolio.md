@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active
-> **Last reviewed:** 2026-05-23
+> **Last reviewed:** 2026-05-24
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -13,6 +13,7 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `/portal/investment-methods` — investment method catalog
 
 ## Server actions — `/app/actions/`
+- `transactions.ts` — `createTransactionAction` (replaces the legacy `/api/transactions` route)
 - `portfolio-snapshots.ts` — create manual snapshots of portfolio value
 - `admin-transactions.ts` — admin-only approve/reject of transactions (see [Admin](./admin.md))
 
@@ -44,3 +45,6 @@ metadata. Interest math is shared with [Finance](./finance.md).
 ## Notes
 - Conventional Commits scope: `portfolio` *(not in commitlint allowlist — add it to [`commitlint.config.mjs`](../../commitlint.config.mjs) if you start committing here often, or use `finance` if the change is on shared math)*
 - Daily cron at `/api/cron/daily` writes snapshots and applies monthly compound interest on the 1st.
+- Transactions are created via `createTransactionAction` (server action). The previous `/api/transactions` route handler is gone; cron and webhook routes are the only remaining API routes.
+- `PerformanceChart` and the projection charts in [Finance](./finance.md) are lazy-loaded with `next/dynamic({ ssr: false })` to keep recharts out of the initial portal bundle.
+- `app/portal/portfolio/loading.tsx` and `app/portal/admin/loading.tsx` stream skeletons for the heavy data fetches.

@@ -1,7 +1,7 @@
 # Entertainment / Travel
 
 > **Status:** In progress (untracked files in repo as of 2026-05-23)
-> **Last reviewed:** 2026-05-23
+> **Last reviewed:** 2026-05-24
 
 ## Overview
 Trip planning: trips with items (activities, bookings, transport, food),
@@ -38,3 +38,6 @@ photos, expense aggregation, and public read-only sharing via tokens.
 - Conventional Commits scopes: `travel`, `entertainment`
 - `/app/trips/[token]` is **public** — verify no PII leaks through the shared route. The share token model in `trip_shares` is the only authz check.
 - A pre-existing TS error references `@/components/travel/trip-detail` (not yet created).
+- All trip cover photos and gallery thumbnails render through `next/image` (remote hosts whitelisted in [`next.config.ts`](../../next.config.ts)). The blob-URL preview inside `photo-picker.tsx` stays as a CSS background because the optimizer can't process blob URLs.
+- `getTripWithRelations` is wrapped in `React.cache()` so `generateMetadata` and the page body share one DB hit per request.
+- `app/portal/entertainment/loading.tsx` and `app/portal/entertainment/travel-planner/[id]/not-found.tsx` give the module its skeleton / 404 boundaries.

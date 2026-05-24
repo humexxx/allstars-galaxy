@@ -537,12 +537,19 @@ export function PlanCalendar({
   onUpsertOverride,
   onDeleteOverride,
 }: PlanCalendarProps) {
-  const initialMonth = useMemo(() => {
+  // Open on the current month — that's the most actionable view ("what's
+  // happening this month?"). The "Plan start" button still jumps back to the
+  // plan's beginning when the user needs the long view.
+  const todayMonth = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  }, []);
+  const planStartMonth = useMemo(() => {
     const d = new Date(plan.startMonth);
     return new Date(d.getFullYear(), d.getMonth(), 1);
   }, [plan.startMonth]);
 
-  const [cursor, setCursor] = useState<Date>(initialMonth);
+  const [cursor, setCursor] = useState<Date>(todayMonth);
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
@@ -908,13 +915,22 @@ export function PlanCalendar({
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCursor(initialMonth)}
-          >
-            Plan start
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCursor(todayMonth)}
+            >
+              Today
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCursor(planStartMonth)}
+            >
+              Plan start
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
@@ -1381,7 +1397,7 @@ function CalendarCell({
       }
       className={`group relative flex flex-col rounded-md border p-1.5 text-xs transition-[min-height,box-shadow,border-color,background-color] duration-200 ease-out ${
         muted ? "bg-muted/30 text-muted-foreground/60" : "bg-card"
-      } ${isCurrent ? "ring-1 ring-primary" : ""} ${
+      } ${
         isDragOver ? "border-primary/70 bg-primary/5 ring-1 ring-primary/50" : ""
       } ${isExpanded ? "min-h-[320px]" : "min-h-[140px]"} ${
         isExpanded || extra > 0
@@ -1391,10 +1407,15 @@ function CalendarCell({
       data-date={isoKey}
     >
       <div className="mb-1 flex items-center justify-between">
+        {/* Today's date number lives inside a filled pill (Google / Apple
+            calendar pattern) so it pops out from a quick scan. Other days
+            stay as flat numerals. */}
         <span
-          className={`px-1 py-0.5 font-mono text-[11px] ${
-            isCurrent ? "font-semibold text-primary" : ""
-          }`}
+          className={
+            isCurrent
+              ? "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 font-mono text-[11px] font-semibold text-primary-foreground"
+              : "px-1 py-0.5 font-mono text-[11px]"
+          }
         >
           {day.getDate()}
         </span>

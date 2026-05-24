@@ -19,6 +19,63 @@ const isoDate = z
 
 const lineKind = z.enum(["recurring", "one_time"]);
 
+// Recurrence model shared by income / expense / debt. monthly_day is the
+// historical behaviour (and the default) so existing rows keep working with no
+// migration of values — only the column type was added.
+const recurrenceType = z.enum([
+  "monthly_day",
+  "monthly_weekday",
+  "every_n_months",
+]);
+
+// Fields a recurring entry can carry depending on recurrenceType. All optional
+// at the validation surface; superRefine below enforces which ones are needed
+// per type so we keep clear error paths.
+const recurrenceFields = {
+  recurrenceType: recurrenceType.default("monthly_day"),
+  weekOfMonth: z.number().int().min(1).max(5).nullable().optional(),
+  dayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
+  intervalMonths: z.number().int().min(1).max(12).nullable().optional(),
+  recurrenceStart: isoDate.nullable().optional(),
+};
+
+type RecurrenceShape = {
+  recurrenceType?: z.infer<typeof recurrenceType>;
+  weekOfMonth?: number | null;
+  dayOfWeek?: number | null;
+  intervalMonths?: number | null;
+  recurrenceStart?: string | null;
+};
+
+// Validates that fields specific to a recurrenceType are present when chosen.
+// Pulled out so the same logic powers create + update for every line side.
+function refineRecurrence<T extends RecurrenceShape>(val: T, ctx: z.RefinementCtx) {
+  if (val.recurrenceType === "monthly_weekday") {
+    if (val.weekOfMonth == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["weekOfMonth"],
+        message: "Pick which week (1–5) for monthly-weekday recurrence",
+      });
+    }
+    if (val.dayOfWeek == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["dayOfWeek"],
+        message: "Pick which weekday for monthly-weekday recurrence",
+      });
+    }
+  } else if (val.recurrenceType === "every_n_months") {
+    if (val.intervalMonths == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["intervalMonths"],
+        message: "Set the month interval (1–12)",
+      });
+    }
+  }
+}
+
 export const createFinancePlanSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(1000).optional().nullable(),
@@ -41,113 +98,86 @@ export const updateFinancePlanSchema = createFinancePlanSchema.extend({
   id: z.string().uuid(),
 });
 
-// Shared rules:
-//   - recurring requires dayOfMonth (defaults to 1 if omitted at the action layer)
-//   - one_time requires a `date`
-//   - one_time must not have startDate/endDate (those are recurring-only concepts)
-// The rules are encoded as refinements so the action layer gets clear errors.
+// Income line shape + refinement. kind=one_time needs a date; kind=recurring
+// with monthly_weekday or every_n_months gates the per-type required fields.
+const incomeShape = {
+  name: z.string().min(1).max(120),
+  monthlyAmount: decimal.default("0"),
+  kind: lineKind.default("recurring"),
+  dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+  date: isoDate.nullable().optional(),
+  startDate: isoDate.nullable().optional(),
+  endDate: isoDate.nullable().optional(),
+  ...recurrenceFields,
+  sortOrder: z.number().optional(),
+};
 
-export const planIncomeSchema = z
-  .object({
-    name: z.string().min(1).max(120),
-    monthlyAmount: decimal.default("0"),
-    kind: lineKind.default("recurring"),
-    dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
-    date: isoDate.nullable().optional(),
-    startDate: isoDate.nullable().optional(),
-    endDate: isoDate.nullable().optional(),
-    sortOrder: z.number().optional(),
-  })
-  .superRefine((val, ctx) => {
-    if (val.kind === "one_time") {
-      if (!val.date) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["date"],
-          message: "One-time income requires a date",
-        });
-      }
-    }
-    if (val.kind === "recurring" && val.startDate && val.endDate) {
-      if (val.startDate > val.endDate) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["endDate"],
-          message: "End date must be on or after start date",
-        });
-      }
-    }
-  });
-
-export const updatePlanIncomeSchema = z
-  .object({
-    id: z.string().uuid(),
-    name: z.string().min(1).max(120),
-    monthlyAmount: decimal.default("0"),
-    kind: lineKind.default("recurring"),
-    dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
-    date: isoDate.nullable().optional(),
-    startDate: isoDate.nullable().optional(),
-    endDate: isoDate.nullable().optional(),
-    sortOrder: z.number().optional(),
-  })
-  .superRefine((val, ctx) => {
-    if (val.kind === "one_time" && !val.date) {
+function refineIncome(
+  val: z.infer<z.ZodObject<typeof incomeShape>>,
+  ctx: z.RefinementCtx
+) {
+  if (val.kind === "one_time") {
+    if (!val.date) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["date"],
         message: "One-time income requires a date",
       });
     }
-    if (val.kind === "recurring" && val.startDate && val.endDate && val.startDate > val.endDate) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["endDate"],
-        message: "End date must be on or after start date",
-      });
-    }
-  });
+    return;
+  }
+  // Recurring branch — start/end window + recurrence-specific fields.
+  if (val.startDate && val.endDate && val.startDate > val.endDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endDate"],
+      message: "End date must be on or after start date",
+    });
+  }
+  refineRecurrence(val, ctx);
+}
 
-export const planExpenseSchema = z
-  .object({
-    name: z.string().min(1).max(120),
-    monthlyAmount: decimal.default("0"),
-    kind: lineKind.default("recurring"),
-    dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
-    date: isoDate.nullable().optional(),
-    sortOrder: z.number().optional(),
-  })
-  .superRefine((val, ctx) => {
-    if (val.kind === "one_time" && !val.date) {
+export const planIncomeSchema = z.object(incomeShape).superRefine(refineIncome);
+export const updatePlanIncomeSchema = z
+  .object({ id: z.string().uuid(), ...incomeShape })
+  .superRefine(refineIncome);
+
+// Expense line shape + refinement. Same shape as income minus start/end window.
+const expenseShape = {
+  name: z.string().min(1).max(120),
+  monthlyAmount: decimal.default("0"),
+  kind: lineKind.default("recurring"),
+  dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+  date: isoDate.nullable().optional(),
+  ...recurrenceFields,
+  sortOrder: z.number().optional(),
+};
+
+function refineExpense(
+  val: z.infer<z.ZodObject<typeof expenseShape>>,
+  ctx: z.RefinementCtx
+) {
+  if (val.kind === "one_time") {
+    if (!val.date) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["date"],
         message: "One-time expense requires a date",
       });
     }
-  });
+    return;
+  }
+  refineRecurrence(val, ctx);
+}
 
+export const planExpenseSchema = z.object(expenseShape).superRefine(refineExpense);
 export const updatePlanExpenseSchema = z
-  .object({
-    id: z.string().uuid(),
-    name: z.string().min(1).max(120),
-    monthlyAmount: decimal.default("0"),
-    kind: lineKind.default("recurring"),
-    dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
-    date: isoDate.nullable().optional(),
-    sortOrder: z.number().optional(),
-  })
-  .superRefine((val, ctx) => {
-    if (val.kind === "one_time" && !val.date) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["date"],
-        message: "One-time expense requires a date",
-      });
-    }
-  });
+  .object({ id: z.string().uuid(), ...expenseShape })
+  .superRefine(refineExpense);
 
-export const planDebtSchema = z.object({
+// Debts are always recurring — the recurrence-type refinement runs
+// unconditionally.
+const debtShape = {
   name: z.string().min(1).max(120),
   initialBalance: decimal.default("0"),
   monthlyInterestRate: rate.default("0"),
@@ -158,12 +188,21 @@ export const planDebtSchema = z.object({
   // Day of the month the minimum payment is due. Null = treated as day 1 by
   // the calendar / projection — preserves behaviour for legacy debts.
   dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+  ...recurrenceFields,
   sortOrder: z.number().optional(),
-});
+};
 
-export const updatePlanDebtSchema = planDebtSchema.extend({
-  id: z.string().uuid(),
-});
+function refineDebt(
+  val: z.infer<z.ZodObject<typeof debtShape>>,
+  ctx: z.RefinementCtx
+) {
+  refineRecurrence(val, ctx);
+}
+
+export const planDebtSchema = z.object(debtShape).superRefine(refineDebt);
+export const updatePlanDebtSchema = z
+  .object({ id: z.string().uuid(), ...debtShape })
+  .superRefine(refineDebt);
 
 export type CreateFinancePlanInput = z.infer<typeof createFinancePlanSchema>;
 export type UpdateFinancePlanInput = z.infer<typeof updateFinancePlanSchema>;
@@ -173,3 +212,4 @@ export type PlanExpenseInput = z.infer<typeof planExpenseSchema>;
 export type UpdatePlanExpenseInput = z.infer<typeof updatePlanExpenseSchema>;
 export type PlanDebtInput = z.infer<typeof planDebtSchema>;
 export type UpdatePlanDebtInput = z.infer<typeof updatePlanDebtSchema>;
+export type RecurrenceType = z.infer<typeof recurrenceType>;

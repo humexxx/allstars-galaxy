@@ -25,6 +25,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 
 import type { DebtPaymentType, FinancePlanDebt } from "@/types/finance";
 
+type RecurrenceType =
+  | "monthly_day"
+  | "monthly_weekday"
+  | "every_n_months";
+
 type DebtInput = {
   name: string;
   initialBalance: string;
@@ -33,6 +38,13 @@ type DebtInput = {
   paymentType: DebtPaymentType;
   minPaymentPercent: string;
   minPaymentFloor: string;
+  // B1/B2 — pass through. The inline debt editor doesn't expose these yet;
+  // they survive round-trips via the parent that supplies them.
+  recurrenceType: RecurrenceType;
+  weekOfMonth: number | null;
+  dayOfWeek: number | null;
+  intervalMonths: number | null;
+  recurrenceStart: string | null;
 };
 
 type PlanDebtEditorProps = {
@@ -50,6 +62,11 @@ const EMPTY_DRAFT: DebtInput = {
   paymentType: "fixed",
   minPaymentPercent: "",
   minPaymentFloor: "",
+  recurrenceType: "monthly_day",
+  weekOfMonth: null,
+  dayOfWeek: null,
+  intervalMonths: null,
+  recurrenceStart: null,
 };
 
 export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEditorProps) {
@@ -68,6 +85,11 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
           paymentType: draft.paymentType,
           minPaymentPercent: draft.minPaymentPercent || "0",
           minPaymentFloor: draft.minPaymentFloor || "0",
+          recurrenceType: draft.recurrenceType,
+          weekOfMonth: draft.weekOfMonth,
+          dayOfWeek: draft.dayOfWeek,
+          intervalMonths: draft.intervalMonths,
+          recurrenceStart: draft.recurrenceStart,
         });
         setDraft(EMPTY_DRAFT);
       } catch {
@@ -231,6 +253,27 @@ function DebtRow({
       paymentType: overrides.paymentType ?? paymentType,
       minPaymentPercent: overrides.minPaymentPercent ?? (minPercent.trim() || "0"),
       minPaymentFloor: overrides.minPaymentFloor ?? (minFloor.trim() || "0"),
+      // Preserve the recurrence-model fields the row was loaded with — this
+      // editor doesn't surface them, but inline edits should not blow them
+      // away. dayOfMonth stays nullable for legacy rows.
+      recurrenceType:
+        overrides.recurrenceType ?? (debt.recurrenceType as RecurrenceType),
+      weekOfMonth:
+        overrides.weekOfMonth !== undefined
+          ? overrides.weekOfMonth
+          : debt.weekOfMonth,
+      dayOfWeek:
+        overrides.dayOfWeek !== undefined
+          ? overrides.dayOfWeek
+          : debt.dayOfWeek,
+      intervalMonths:
+        overrides.intervalMonths !== undefined
+          ? overrides.intervalMonths
+          : debt.intervalMonths,
+      recurrenceStart:
+        overrides.recurrenceStart !== undefined
+          ? overrides.recurrenceStart
+          : debt.recurrenceStart,
     };
     startTransition(async () => {
       try {

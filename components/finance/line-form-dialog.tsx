@@ -33,6 +33,10 @@ import {
 
 export type LineKind = "recurring" | "one_time";
 export type LineVariant = "income" | "expense";
+export type RecurrenceType =
+  | "monthly_day"
+  | "monthly_weekday"
+  | "every_n_months";
 
 export type LineFormValues = {
   name: string;
@@ -42,6 +46,13 @@ export type LineFormValues = {
   date: string | null;
   startDate?: string | null;
   endDate?: string | null;
+  // New recurrence model. Defaults to monthly_day so existing flows behave
+  // identically; the UI for choosing other types ships with B5.
+  recurrenceType: RecurrenceType;
+  weekOfMonth: number | null;
+  dayOfWeek: number | null;
+  intervalMonths: number | null;
+  recurrenceStart: string | null;
 };
 
 type LineFormDialogProps = {
@@ -134,6 +145,20 @@ function LineForm({
   const [endDate, setEndDate] = useState<string | null>(
     initial?.endDate ?? null
   );
+  // B1/B2 fields — kept in state so edits round-trip, but the UI for choosing
+  // them ships with B5. Until then the form just passes them through verbatim,
+  // defaulting new entries to monthly_day.
+  const [recurrenceType] = useState<RecurrenceType>(
+    initial?.recurrenceType ?? "monthly_day"
+  );
+  const [weekOfMonth] = useState<number | null>(initial?.weekOfMonth ?? null);
+  const [dayOfWeek] = useState<number | null>(initial?.dayOfWeek ?? null);
+  const [intervalMonths] = useState<number | null>(
+    initial?.intervalMonths ?? null
+  );
+  const [recurrenceStart] = useState<string | null>(
+    initial?.recurrenceStart ?? null
+  );
   const [submitting, setSubmitting] = useState(false);
 
   const canSubmit =
@@ -162,6 +187,12 @@ function LineForm({
               endDate: kind === "recurring" ? endDate : null,
             }
           : {}),
+        // Recurrence fields pass through untouched; defaults to monthly_day.
+        recurrenceType,
+        weekOfMonth,
+        dayOfWeek,
+        intervalMonths,
+        recurrenceStart,
       });
       onCancel();
     } finally {

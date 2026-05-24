@@ -20,6 +20,11 @@ import {
 
 import type { DebtPaymentType } from "@/types/finance";
 
+export type RecurrenceType =
+  | "monthly_day"
+  | "monthly_weekday"
+  | "every_n_months";
+
 export type DebtFormValues = {
   name: string;
   initialBalance: string;
@@ -29,6 +34,12 @@ export type DebtFormValues = {
   minPaymentPercent: string;
   minPaymentFloor: string;
   dayOfMonth: number | null;
+  // B1/B2 — UI lands with B5. Default monthly_day preserves prior behaviour.
+  recurrenceType: RecurrenceType;
+  weekOfMonth: number | null;
+  dayOfWeek: number | null;
+  intervalMonths: number | null;
+  recurrenceStart: string | null;
 };
 
 type DebtFormDialogProps = {
@@ -87,6 +98,18 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
   const [dayOfMonth, setDayOfMonth] = useState<string>(
     initial?.dayOfMonth != null ? String(initial.dayOfMonth) : "1"
   );
+  // B1/B2 — UI lands in B5; pass through verbatim until then.
+  const [recurrenceType] = useState<RecurrenceType>(
+    initial?.recurrenceType ?? "monthly_day"
+  );
+  const [weekOfMonth] = useState<number | null>(initial?.weekOfMonth ?? null);
+  const [dayOfWeek] = useState<number | null>(initial?.dayOfWeek ?? null);
+  const [intervalMonths] = useState<number | null>(
+    initial?.intervalMonths ?? null
+  );
+  const [recurrenceStart] = useState<string | null>(
+    initial?.recurrenceStart ?? null
+  );
   const [submitting, setSubmitting] = useState(false);
 
   const isPercent = paymentType === "percent_of_balance";
@@ -107,6 +130,11 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
         minPaymentFloor: minFloor.trim() || "0",
         dayOfMonth:
           Number.isFinite(dom) && dom >= 1 && dom <= 31 ? dom : null,
+        recurrenceType,
+        weekOfMonth,
+        dayOfWeek,
+        intervalMonths,
+        recurrenceStart,
       });
       onCancel();
     } finally {

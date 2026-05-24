@@ -449,6 +449,13 @@ export function PlanCalendar({
             date: isOneTime ? targetKey : null,
             startDate: income.startDate,
             endDate: income.endDate,
+            // Pass through recurrence model so the drag doesn't reset it. The
+            // drop semantics only intentionally change dayOfMonth / date.
+            recurrenceType: income.recurrenceType,
+            weekOfMonth: income.weekOfMonth,
+            dayOfWeek: income.dayOfWeek,
+            intervalMonths: income.intervalMonths,
+            recurrenceStart: income.recurrenceStart,
           });
           toast.success(
             isOneTime
@@ -474,6 +481,11 @@ export function PlanCalendar({
             kind: expense.kind,
             dayOfMonth: isOneTime ? null : target.getDate(),
             date: isOneTime ? targetKey : null,
+            recurrenceType: expense.recurrenceType,
+            weekOfMonth: expense.weekOfMonth,
+            dayOfWeek: expense.dayOfWeek,
+            intervalMonths: expense.intervalMonths,
+            recurrenceStart: expense.recurrenceStart,
           });
           toast.success(
             isOneTime
@@ -500,6 +512,11 @@ export function PlanCalendar({
           minPaymentPercent: debt.minPaymentPercent,
           minPaymentFloor: debt.minPaymentFloor,
           dayOfMonth: target.getDate(),
+          recurrenceType: debt.recurrenceType,
+          weekOfMonth: debt.weekOfMonth,
+          dayOfWeek: debt.dayOfWeek,
+          intervalMonths: debt.intervalMonths,
+          recurrenceStart: debt.recurrenceStart,
         });
         toast.success(
           `Debt payment now scheduled for day ${target.getDate()} of every month`
@@ -637,6 +654,11 @@ export function PlanCalendar({
                 date: dialog.income.date,
                 startDate: dialog.income.startDate,
                 endDate: dialog.income.endDate,
+                recurrenceType: dialog.income.recurrenceType,
+                weekOfMonth: dialog.income.weekOfMonth,
+                dayOfWeek: dialog.income.dayOfWeek,
+                intervalMonths: dialog.income.intervalMonths,
+                recurrenceStart: dialog.income.recurrenceStart,
               }
             : undefined
         }
@@ -656,6 +678,11 @@ export function PlanCalendar({
                 kind: dialog.expense.kind,
                 dayOfMonth: dialog.expense.dayOfMonth,
                 date: dialog.expense.date,
+                recurrenceType: dialog.expense.recurrenceType,
+                weekOfMonth: dialog.expense.weekOfMonth,
+                dayOfWeek: dialog.expense.dayOfWeek,
+                intervalMonths: dialog.expense.intervalMonths,
+                recurrenceStart: dialog.expense.recurrenceStart,
               }
             : undefined
         }
@@ -677,6 +704,11 @@ export function PlanCalendar({
                 minPaymentPercent: dialog.debt.minPaymentPercent,
                 minPaymentFloor: dialog.debt.minPaymentFloor,
                 dayOfMonth: dialog.debt.dayOfMonth,
+                recurrenceType: dialog.debt.recurrenceType,
+                weekOfMonth: dialog.debt.weekOfMonth,
+                dayOfWeek: dialog.debt.dayOfWeek,
+                intervalMonths: dialog.debt.intervalMonths,
+                recurrenceStart: dialog.debt.recurrenceStart,
               }
             : undefined
         }

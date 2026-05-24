@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { safe } from "@/lib/actions/safe";
 import {
   logImpersonatedMutation,
   requireEffectiveContext,
@@ -41,21 +42,10 @@ function pathForTrip(tripId: string): string {
   return `${TRIP_LIST_PATH}/${tripId}`;
 }
 
-async function safe<T>(
-  fn: () => Promise<{ success: true; data?: T } | { success: false; error: string }>
-): Promise<{ success: true; data?: T } | { success: false; error: string }> {
-  try {
-    return await fn();
-  } catch (err) {
-    console.error("[travel action] failed:", err);
-    return { success: false, error: "Action failed" };
-  }
-}
-
 // ---------- trips ----------
 
 export async function createTripAction(input: CreateTripInput) {
-  return safe(async () => {
+  return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = createTripSchema.safeParse(input);
     if (!parsed.success) {
@@ -74,7 +64,7 @@ export async function createTripAction(input: CreateTripInput) {
 }
 
 export async function updateTripAction(input: UpdateTripInput) {
-  return safe(async () => {
+  return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = updateTripSchema.safeParse(input);
     if (!parsed.success) {
@@ -94,7 +84,7 @@ export async function updateTripAction(input: UpdateTripInput) {
 }
 
 export async function deleteTripAction(tripId: string) {
-  return safe(async () => {
+  return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = z.string().uuid().safeParse(tripId);
     if (!parsed.success) return { success: false as const, error: "Invalid id" };
@@ -112,7 +102,7 @@ export async function deleteTripAction(tripId: string) {
 // ---------- items ----------
 
 export async function addTripItemAction(tripId: string, input: TripItemInput) {
-  return safe(async () => {
+  return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(tripId);
     const parsed = tripItemSchema.safeParse(input);
@@ -134,7 +124,7 @@ export async function updateTripItemAction(
   tripId: string,
   input: UpdateTripItemInput
 ) {
-  return safe(async () => {
+  return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(tripId);
     const parsed = updateTripItemSchema.safeParse(input);
@@ -153,7 +143,7 @@ export async function updateTripItemAction(
 }
 
 export async function deleteTripItemAction(tripId: string, itemId: string) {
-  return safe(async () => {
+  return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const tripIdParsed = z.string().uuid().safeParse(tripId);
     const itemIdParsed = z.string().uuid().safeParse(itemId);
@@ -174,7 +164,7 @@ export async function deleteTripItemAction(tripId: string, itemId: string) {
 // ---------- photos ----------
 
 export async function addTripPhotoAction(tripId: string, input: TripPhotoInput) {
-  return safe(async () => {
+  return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(tripId);
     const parsed = tripPhotoSchema.safeParse(input);
@@ -193,7 +183,7 @@ export async function addTripPhotoAction(tripId: string, input: TripPhotoInput) 
 }
 
 export async function deleteTripPhotoAction(tripId: string, photoId: string) {
-  return safe(async () => {
+  return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const tripIdParsed = z.string().uuid().safeParse(tripId);
     const photoIdParsed = z.string().uuid().safeParse(photoId);
@@ -235,7 +225,7 @@ export async function createTripShareAction(
   tripId: string,
   input: CreateTripShareInput
 ) {
-  return safe(async () => {
+  return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(tripId);
     const parsed = createTripShareSchema.safeParse(input);
@@ -255,7 +245,7 @@ export async function createTripShareAction(
 }
 
 export async function revokeTripShareAction(tripId: string, shareId: string) {
-  return safe(async () => {
+  return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const tripIdParsed = z.string().uuid().safeParse(tripId);
     const shareIdParsed = z.string().uuid().safeParse(shareId);
@@ -274,7 +264,7 @@ export async function revokeTripShareAction(tripId: string, shareId: string) {
 }
 
 export async function deleteTripShareAction(tripId: string, shareId: string) {
-  return safe(async () => {
+  return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const tripIdParsed = z.string().uuid().safeParse(tripId);
     const shareIdParsed = z.string().uuid().safeParse(shareId);

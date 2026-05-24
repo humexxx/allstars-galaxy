@@ -120,6 +120,52 @@ export async function deleteManualSnapshots(portfolioId: string): Promise<void> 
 }
 
 /**
+ * Admin-only: create a manual snapshot for EVERY portfolio in the system at
+ * the given date / source. Used by the admin "take a snapshot for everyone"
+ * tool when end-of-month interest is applied. Returns totals so the caller
+ * can confirm what happened.
+ */
+export async function createManualSnapshotsForAllPortfolios(
+  date: Date,
+  source: SnapshotSource = "manual"
+): Promise<{ snapshotsCreated: number; totalValue: number; portfoliosProcessed: number }> {
+  const allPortfolios = await db.select({ id: portfolios.id }).from(portfolios);
+  if (allPortfolios.length === 0) {
+    throw new Error("No portfolios found");
+  }
+
+  let totalValue = 0;
+  let snapshotsCreated = 0;
+  for (const portfolio of allPortfolios) {
+    const result = await createManualSnapshot(portfolio.id, date, source);
+    if (result.created) {
+      totalValue += result.totalValue;
+      snapshotsCreated++;
+    }
+  }
+
+  return {
+    snapshotsCreated,
+    totalValue,
+    portfoliosProcessed: allPortfolios.length,
+  };
+}
+
+/**
+ * Admin-only: delete every "manual" snapshot across all portfolios. Used by
+ * the admin reset-tool. Returns the count of portfolios processed.
+ */
+export async function deleteManualSnapshotsForAllPortfolios(): Promise<{
+  portfoliosProcessed: number;
+}> {
+  const allPortfolios = await db.select({ id: portfolios.id }).from(portfolios);
+  for (const portfolio of allPortfolios) {
+    await deleteManualSnapshots(portfolio.id);
+  }
+  return { portfoliosProcessed: allPortfolios.length };
+}
+
+/**
  * Internal function to create a snapshot for a portfolio
  */
 async function createSnapshotForPortfolio(

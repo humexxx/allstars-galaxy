@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { safe } from "@/lib/actions/safe";
 import {
   logImpersonatedMutation,
   requireEffectiveContext,
@@ -47,25 +48,10 @@ function pathForPlan(planId: string): string {
   return `${PLAN_PATH}/${planId}`;
 }
 
-/**
- * Wraps the action body so a thrown service error never surfaces a raw
- * stack/message to the client. Successful returns pass through.
- */
-async function safe<T>(
-  fn: () => Promise<{ success: true; data?: T } | { success: false; error: string }>
-): Promise<{ success: true; data?: T } | { success: false; error: string }> {
-  try {
-    return await fn();
-  } catch (err) {
-    console.error("[finance-plans action] failed:", err);
-    return { success: false, error: "Action failed" };
-  }
-}
-
 // ---------- plans ----------
 
 export async function createPlanAction(input: CreateFinancePlanInput) {
-  return safe(async () => {
+  return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = createFinancePlanSchema.safeParse(input);
     if (!parsed.success) {
@@ -84,7 +70,7 @@ export async function createPlanAction(input: CreateFinancePlanInput) {
 }
 
 export async function updatePlanAction(input: UpdateFinancePlanInput) {
-  return safe(async () => {
+  return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = updateFinancePlanSchema.safeParse(input);
     if (!parsed.success) {
@@ -104,7 +90,7 @@ export async function updatePlanAction(input: UpdateFinancePlanInput) {
 }
 
 export async function deletePlanAction(planId: string) {
-  return safe(async () => {
+  return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = z.string().uuid().safeParse(planId);
     if (!parsed.success) return { success: false as const, error: "Invalid id" };
@@ -120,7 +106,7 @@ export async function deletePlanAction(planId: string) {
 }
 
 export async function clonePlanAction(planId: string, newName: string) {
-  return safe(async () => {
+  return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(planId);
     const nameParsed = z.string().min(1).max(120).safeParse(newName);
@@ -142,7 +128,7 @@ export async function clonePlanAction(planId: string, newName: string) {
 // ---------- incomes ----------
 
 export async function addPlanIncomeAction(planId: string, input: PlanIncomeInput) {
-  return safe(async () => {
+  return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(planId);
     const parsed = planIncomeSchema.safeParse(input);
@@ -161,7 +147,7 @@ export async function addPlanIncomeAction(planId: string, input: PlanIncomeInput
 }
 
 export async function updatePlanIncomeAction(planId: string, input: UpdatePlanIncomeInput) {
-  return safe(async () => {
+  return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(planId);
     const parsed = updatePlanIncomeSchema.safeParse(input);
@@ -180,7 +166,7 @@ export async function updatePlanIncomeAction(planId: string, input: UpdatePlanIn
 }
 
 export async function deletePlanIncomeAction(planId: string, incomeId: string) {
-  return safe(async () => {
+  return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
     const planIdParsed = z.string().uuid().safeParse(planId);
     const incomeIdParsed = z.string().uuid().safeParse(incomeId);
@@ -201,7 +187,7 @@ export async function deletePlanIncomeAction(planId: string, incomeId: string) {
 // ---------- expenses ----------
 
 export async function addPlanExpenseAction(planId: string, input: PlanExpenseInput) {
-  return safe(async () => {
+  return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(planId);
     const parsed = planExpenseSchema.safeParse(input);
@@ -223,7 +209,7 @@ export async function updatePlanExpenseAction(
   planId: string,
   input: UpdatePlanExpenseInput
 ) {
-  return safe(async () => {
+  return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(planId);
     const parsed = updatePlanExpenseSchema.safeParse(input);
@@ -242,7 +228,7 @@ export async function updatePlanExpenseAction(
 }
 
 export async function deletePlanExpenseAction(planId: string, expenseId: string) {
-  return safe(async () => {
+  return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
     const planIdParsed = z.string().uuid().safeParse(planId);
     const expenseIdParsed = z.string().uuid().safeParse(expenseId);
@@ -263,7 +249,7 @@ export async function deletePlanExpenseAction(planId: string, expenseId: string)
 // ---------- debts ----------
 
 export async function addPlanDebtAction(planId: string, input: PlanDebtInput) {
-  return safe(async () => {
+  return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(planId);
     const parsed = planDebtSchema.safeParse(input);
@@ -294,7 +280,7 @@ export async function addPlanDebtAction(planId: string, input: PlanDebtInput) {
 }
 
 export async function updatePlanDebtAction(planId: string, input: UpdatePlanDebtInput) {
-  return safe(async () => {
+  return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(planId);
     const parsed = updatePlanDebtSchema.safeParse(input);
@@ -323,7 +309,7 @@ export async function updatePlanDebtAction(planId: string, input: UpdatePlanDebt
 }
 
 export async function deletePlanDebtAction(planId: string, debtId: string) {
-  return safe(async () => {
+  return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
     const planIdParsed = z.string().uuid().safeParse(planId);
     const debtIdParsed = z.string().uuid().safeParse(debtId);

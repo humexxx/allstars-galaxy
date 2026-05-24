@@ -12,17 +12,17 @@ const updateRoleSchema = z.object({
 });
 
 export async function updateUserRoleAction(
-  input: z.infer<typeof updateRoleSchema>
-): Promise<{ success: true } | { success: false; error: string }> {
+  input: z.infer<typeof updateRoleSchema>,
+): Promise<{ success: true }> {
   const admin = await requireAdmin();
 
   const parsed = updateRoleSchema.safeParse(input);
   if (!parsed.success) {
-    return { success: false, error: "Invalid input" };
+    throw new Error("Invalid input");
   }
 
   if (parsed.data.userId === admin.id && parsed.data.role === "user") {
-    return { success: false, error: "You cannot demote yourself" };
+    throw new Error("You cannot demote yourself");
   }
 
   await updateUserRole(parsed.data.userId, parsed.data.role);

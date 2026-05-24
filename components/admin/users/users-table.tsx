@@ -88,12 +88,12 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
     if (!pendingRoleChange) return;
     const { user, nextRole } = pendingRoleChange;
     startRoleTransition(async () => {
-      const result = await updateUserRoleAction({ userId: user.id, role: nextRole });
-      if (result.success) {
+      try {
+        await updateUserRoleAction({ userId: user.id, role: nextRole });
         toast.success(`${user.fullName ?? user.email ?? "User"} is now ${nextRole}`);
         setPendingRoleChange(null);
-      } else {
-        toast.error(result.error);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to update role");
       }
     });
   };

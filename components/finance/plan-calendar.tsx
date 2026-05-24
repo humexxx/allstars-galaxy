@@ -12,19 +12,14 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
-import { ChevronLeft, ChevronRight, ChevronUp, Plus } from "lucide-react";
-import { toast } from "sonner";
 import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  useDraggable,
-  useDroppable,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  GripVertical,
+  Plus,
+} from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -255,9 +250,9 @@ type DialogState =
   | { kind: "edit-expense"; expense: FinancePlanExpense }
   | { kind: "edit-debt"; debt: FinancePlanDebt };
 
-// Identity carried by dnd-kit's `data` channel on each draggable. The same
-// entry can appear on many days (recurring), so the draggable id alone is not
-// unique — we route the side+entry id through this payload instead.
+// Tiny payload we put on the native dataTransfer when dragging an entry's
+// grip handle. Lives here so we don't hand-parse JSON in three places.
+const DND_MIME = "application/x-allstars-finance-entry";
 type DragPayload = { id: string; side: EntrySide };
 
 export function PlanCalendar({
@@ -276,17 +271,7 @@ export function PlanCalendar({
   const [cursor, setCursor] = useState<Date>(initialMonth);
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
-  // Entry currently being dragged — drives the DragOverlay ghost.
-  const [activeEntry, setActiveEntry] = useState<DayEntry | null>(null);
-
-  // PointerSensor with delay constraint: a quick mousedown→up fires onClick
-  // (edit), but holding for 250 ms (without moving more than 5 px) activates
-  // drag-to-move. This is the click-vs-hold disambiguation the UX requires.
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { delay: 250, tolerance: 5 },
-    })
-  );
+  const [dragOverDay, setDragOverDay] = useState<string | null>(null);
 
   const monthStart = startOfMonth(cursor);
   const monthEnd = endOfMonth(cursor);
@@ -439,28 +424,7 @@ export function PlanCalendar({
     [plan.incomes, plan.expenses, plan.debts, onUpdateIncome, onUpdateExpense, onUpdateDebt]
   );
 
-  const handleDragStart = (event: DragStartEvent) => {
-    const entry = event.active.data.current?.entry as DayEntry | undefined;
-    if (entry) setActiveEntry(entry);
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    setActiveEntry(null);
-    const over = event.over;
-    if (!over) return;
-    const payload = event.active.data.current?.payload as DragPayload | undefined;
-    const targetKey = over.data.current?.dayKey as string | undefined;
-    if (!payload || !targetKey) return;
-    void handleDrop(targetKey, payload);
-  };
-
   return (
-    <DndContext
-      sensors={sensors}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      onDragCancel={() => setActiveEntry(null)}
-    >
     <Card>
       <CardHeader className="space-y-3 pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -508,7 +472,7 @@ export function PlanCalendar({
             Debt
           </span>
           <span className="ml-auto text-[10px] italic text-muted-foreground/70">
-            Click an entry to edit · hold to drag · click a day to expand
+            Click an entry to edit · drag the ⋮ handle to move · click a day to expand
           </span>
         </div>
       </CardHeader>
@@ -536,11 +500,20 @@ export function PlanCalendar({
                 muted={muted}
                 isCurrent={isToday(day)}
                 isExpanded={expandedDay === key}
+                isDragOver={dragOverDay === key}
                 onToggleExpand={() =>
                   setExpandedDay((prev) => (prev === key ? null : key))
                 }
                 onAdd={(side) => setDialog({ kind: "add", side, date: key })}
                 onEditEntry={openEditFor}
+                onDropEntry={(payload) => {
+                  setDragOverDay(null);
+                  void handleDrop(key, payload);
+                }}
+                onDragEnter={() => setDragOverDay(key)}
+                onDragLeaveCell={() =>
+                  setDragOverDay((prev) => (prev === key ? null : prev))
+                }
               />
             );
           })}
@@ -621,10 +594,6 @@ export function PlanCalendar({
         onSubmit={handleEditDebt}
       />
     </Card>
-    <DragOverlay dropAnimation={null}>
-      {activeEntry ? <ChipGhost entry={activeEntry} /> : null}
-    </DragOverlay>
-    </DndContext>
   );
 }
 
@@ -635,9 +604,13 @@ type CalendarCellProps = {
   muted: boolean;
   isCurrent: boolean;
   isExpanded: boolean;
+  isDragOver: boolean;
   onToggleExpand: () => void;
   onAdd: (side: "income" | "expense") => void;
   onEditEntry: (entry: DayEntry) => void;
+  onDropEntry: (payload: DragPayload) => void;
+  onDragEnter: () => void;
+  onDragLeaveCell: () => void;
 };
 
 function CalendarCell({
@@ -647,9 +620,13 @@ function CalendarCell({
   muted,
   isCurrent,
   isExpanded,
+  isDragOver,
   onToggleExpand,
   onAdd,
   onEditEntry,
+  onDropEntry,
+  onDragEnter,
+  onDragLeaveCell,
 }: CalendarCellProps) {
   // Collapsed view shows up to 3 entries + overflow indicator. Expanded view
   // shows every entry inside a scroll container.
@@ -657,21 +634,43 @@ function CalendarCell({
   const extra = isExpanded ? 0 : entries.length - visible.length;
   const hasEntries = entries.length > 0;
 
-  // Register the cell as a dnd-kit drop target. `isOver` flips while a drag
-  // hovers this cell, giving us the same visual feedback the old HTML5 path
-  // had via the dragOverDay state in the parent.
-  const { setNodeRef, isOver } = useDroppable({
-    id: `cell-${isoKey}`,
-    data: { dayKey: isoKey },
-  });
+  // Native HTML5 drop handlers — onDragOver must preventDefault to make the
+  // cell a valid drop target, otherwise onDrop never fires.
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.types.includes(DND_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    const raw = e.dataTransfer.getData(DND_MIME);
+    if (!raw) return;
+    e.preventDefault();
+    try {
+      const payload = JSON.parse(raw) as DragPayload;
+      onDropEntry(payload);
+    } catch {
+      // bad payload, ignore
+    }
+  };
 
   return (
     <div
-      ref={setNodeRef}
+      onDragOver={handleDragOver}
+      onDragEnter={onDragEnter}
+      onDragLeave={(e) => {
+        // Only fire leave when we actually leave the cell (not when crossing
+        // into a child element). currentTarget contains the cell; relatedTarget
+        // is where the cursor is going.
+        const next = e.relatedTarget as Node | null;
+        if (next && e.currentTarget.contains(next)) return;
+        onDragLeaveCell();
+      }}
+      onDrop={handleDrop}
       className={`group relative flex flex-col rounded-md border p-1.5 text-xs transition-[min-height,box-shadow,border-color] duration-200 ease-out ${
         muted ? "bg-muted/30 text-muted-foreground/60" : "bg-card"
       } ${isCurrent ? "ring-1 ring-primary" : ""} ${
-        isOver ? "border-primary/70 bg-primary/5 ring-1 ring-primary/50" : ""
+        isDragOver ? "border-primary/70 bg-primary/5 ring-1 ring-primary/50" : ""
       } ${isExpanded ? "min-h-[320px]" : "min-h-[140px]"}`}
       data-date={isoKey}
     >
@@ -738,7 +737,6 @@ function CalendarCell({
           <EntryChip
             key={`${entry.side}-${entry.id}`}
             entry={entry}
-            isoKey={isoKey}
             onEdit={() => onEditEntry(entry)}
           />
         ))}
@@ -772,76 +770,56 @@ function CalendarCell({
 
 function EntryChip({
   entry,
-  isoKey,
   onEdit,
 }: {
   entry: DayEntry;
-  isoKey: string;
   onEdit: () => void;
 }) {
-  // dnd-kit ids must be globally unique. The same recurring record renders on
-  // multiple days, so the id has to include the cell key.
-  const draggableId = `chip-${isoKey}-${entry.side}-${entry.id}`;
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: draggableId,
-    data: {
-      entry,
-      payload: { id: entry.id, side: entry.side } satisfies DragPayload,
-    },
-  });
-
-  // While this chip is the drag source, hide it from its own cell so the
-  // DragOverlay ghost is the only visual under the cursor. (Don't unmount —
-  // we still need the dnd-kit node alive for the active state.)
-  const dragHidden = isDragging
-    ? "pointer-events-none opacity-30"
-    : "";
+  // Only the grip is draggable. The rest of the chip is the click target for
+  // editing — that's the disambiguation: drag from the dots, click anywhere
+  // else to edit.
+  const handleDragStart = (e: React.DragEvent<HTMLSpanElement>) => {
+    const payload: DragPayload = { id: entry.id, side: entry.side };
+    e.dataTransfer.setData(DND_MIME, JSON.stringify(payload));
+    e.dataTransfer.effectAllowed = "move";
+    // Stop the click handler on the parent <li> from also firing.
+    e.stopPropagation();
+  };
 
   return (
     <li
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      // The PointerSensor's delay constraint guarantees that a quick click
-      // doesn't activate drag, so we can wire onClick to edit safely.
-      onClick={(e) => {
-        e.stopPropagation();
-        onEdit();
-      }}
+      role="button"
+      tabIndex={0}
+      onClick={onEdit}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           onEdit();
         }
       }}
-      role="button"
       aria-label={`Edit ${entry.name}`}
-      className={`flex cursor-pointer flex-col gap-0 rounded px-1.5 py-1 text-[10px] outline-none focus-visible:ring-2 focus-visible:ring-current ${chipPalette(entry.side)} ${dragHidden}`}
+      className={`group/entry flex cursor-pointer items-stretch gap-1 rounded text-[10px] outline-none focus-visible:ring-2 focus-visible:ring-current ${chipPalette(entry.side)}`}
     >
-      <span className="truncate text-[11px] font-medium leading-tight">
-        {entry.name}
+      <span
+        draggable
+        onDragStart={handleDragStart}
+        // Suppress the parent's click — without this, mousedown on the grip
+        // can bubble into the <li> onClick after dragend and re-trigger edit.
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Drag to move"
+        className="flex shrink-0 cursor-grab items-center pl-1 pr-0.5 opacity-50 transition-opacity hover:opacity-100 active:cursor-grabbing"
+      >
+        <GripVertical className="h-3 w-3" />
       </span>
-      <span className="font-mono text-[10px] tabular-nums leading-tight opacity-90">
-        {formatCurrency(entry.amount)}
-      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0 py-1 pr-1.5">
+        <span className="truncate text-[11px] font-medium leading-tight">
+          {entry.name}
+        </span>
+        <span className="font-mono text-[10px] tabular-nums leading-tight opacity-90">
+          {formatCurrency(entry.amount)}
+        </span>
+      </div>
     </li>
-  );
-}
-
-// The ghost rendered by DragOverlay — same look as the resting chip so the
-// transition feels seamless when the user picks one up.
-function ChipGhost({ entry }: { entry: DayEntry }) {
-  return (
-    <div
-      className={`pointer-events-none flex w-40 cursor-grabbing flex-col gap-0 rounded px-1.5 py-1 shadow-lg ring-1 ring-current/30 ${chipPalette(entry.side)}`}
-    >
-      <span className="truncate text-[11px] font-medium leading-tight">
-        {entry.name}
-      </span>
-      <span className="font-mono text-[10px] tabular-nums leading-tight opacity-90">
-        {formatCurrency(entry.amount)}
-      </span>
-    </div>
   );
 }
 

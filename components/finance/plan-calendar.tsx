@@ -464,11 +464,11 @@ export function PlanCalendar({
             Income
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block size-2 rounded-full bg-red-500" />
+            <span className="inline-block size-2 rounded-full bg-amber-500" />
             Expense
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block size-2 rounded-full bg-amber-500" />
+            <span className="inline-block size-2 rounded-full bg-red-500" />
             Debt
           </span>
           <span className="ml-auto text-[10px] italic text-muted-foreground/70">
@@ -721,7 +721,7 @@ function CalendarCell({
               onClick={() => onAdd("expense")}
               className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
             >
-              <span className="inline-block size-2 rounded-full bg-red-500" />
+              <span className="inline-block size-2 rounded-full bg-amber-500" />
               Add expense
             </button>
           </PopoverContent>
@@ -827,8 +827,8 @@ function chipPalette(side: EntrySide): string {
   return side === "income"
     ? "bg-green-500/10 text-green-700 dark:text-green-300"
     : side === "expense"
-      ? "bg-red-500/10 text-red-700 dark:text-red-300"
-      : "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+      ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+      : "bg-red-500/10 text-red-700 dark:text-red-300";
 }
 
 // Listing of entries hidden behind "+N more" — name + amount per line so the
@@ -851,8 +851,8 @@ function HiddenEntriesTooltipBody({ entries }: { entries: DayEntry[] }) {
                   e.side === "income"
                     ? "bg-green-500"
                     : e.side === "expense"
-                      ? "bg-red-500"
-                      : "bg-amber-500"
+                      ? "bg-amber-500"
+                      : "bg-red-500"
                 }`}
                 aria-hidden
               />

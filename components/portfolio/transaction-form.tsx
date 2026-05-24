@@ -90,7 +90,12 @@ export function TransactionForm({
         </Button>
       </div>
 
-      <div className="flex cursor-pointer items-center justify-between rounded-lg border p-4" onClick={onChangeMethod}>
+      <button
+        type="button"
+        onClick={onChangeMethod}
+        className="flex w-full cursor-pointer items-center justify-between rounded-lg border p-4 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={`Change investment method (current: ${selectedMethod.name})`}
+      >
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
             <span className="text-sm font-semibold text-primary">
@@ -107,6 +112,7 @@ export function TransactionForm({
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -115,7 +121,7 @@ export function TransactionForm({
             d="M19 9l-7 7-7-7"
           />
         </svg>
-      </div>
+      </button>
 
       <FieldGroup>
         {isAdmin && (

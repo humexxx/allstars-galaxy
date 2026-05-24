@@ -107,6 +107,10 @@ export function AppSidebar({
             title: "Travel Planner",
             url: "/portal/entertainment/travel-planner",
           },
+          {
+            title: "Sports",
+            url: "/portal/entertainment/sports",
+          },
         ],
       },
     ]

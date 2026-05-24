@@ -21,6 +21,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
@@ -59,6 +69,14 @@ type PlanCalendarProps = {
   onUpdateIncome: (id: string, input: LineFormValues) => Promise<void>;
   onUpdateExpense: (id: string, input: LineFormValues) => Promise<void>;
   onUpdateDebt: (id: string, input: DebtFormValues) => Promise<void>;
+  onUpsertOverride: (input: {
+    parentSide: "income" | "expense" | "debt";
+    parentId: string;
+    monthYear: string;
+    action: "skip" | "reschedule" | "amount";
+    date?: string | null;
+    monthlyAmount?: string | null;
+  }) => Promise<void>;
 };
 
 type DayEntry =
@@ -490,9 +508,11 @@ type DialogState =
   | { kind: "edit-debt"; debt: FinancePlanDebt };
 
 // Tiny payload we put on the native dataTransfer when dragging an entry's
-// grip handle. Lives here so we don't hand-parse JSON in three places.
+// grip handle. sourceDate is the ISO key of the cell the chip was dragged
+// FROM — needed to detect intra-month drops and to decide whether the
+// "Just this month" override option is available.
 const DND_MIME = "application/x-allstars-finance-entry";
-type DragPayload = { id: string; side: EntrySide };
+type DragPayload = { id: string; side: EntrySide; sourceDate: string };
 
 export function PlanCalendar({
   plan,
@@ -501,6 +521,7 @@ export function PlanCalendar({
   onUpdateIncome,
   onUpdateExpense,
   onUpdateDebt,
+  onUpsertOverride,
 }: PlanCalendarProps) {
   const initialMonth = useMemo(() => {
     const d = new Date(plan.startMonth);
@@ -511,6 +532,11 @@ export function PlanCalendar({
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
+  // Stashed drag → AlertDialog → user picks "Move all" / "Just this month".
+  const [pendingDrop, setPendingDrop] = useState<{
+    payload: DragPayload;
+    targetKey: string;
+  } | null>(null);
 
   const monthStart = startOfMonth(cursor);
   const monthEnd = endOfMonth(cursor);
@@ -630,10 +656,11 @@ export function PlanCalendar({
     }
   };
 
-  // Translate a drop on a target day into the right update call. one_time entries
-  // get their `date` rewritten; recurring entries change `dayOfMonth`, which
-  // ripples to every month (we toast to make that consequence visible).
-  const handleDrop = useCallback(
+  // "Move all" path — applies the existing global update to the parent record.
+  // Income/expense one-time entries get their `date` rewritten; recurring
+  // entries change `dayOfMonth` (or whatever else makes sense for the
+  // recurrence type), which ripples to every month.
+  const applyMoveAll = useCallback(
     async (targetKey: string, payload: DragPayload) => {
       const target = parseISODate(targetKey);
       if (!target) return;
@@ -653,8 +680,6 @@ export function PlanCalendar({
             date: isOneTime ? targetKey : null,
             startDate: income.startDate,
             endDate: income.endDate,
-            // Pass through recurrence model so the drag doesn't reset it. The
-            // drop semantics only intentionally change dayOfMonth / date.
             recurrenceType: income.recurrenceType,
             weekOfMonth: income.weekOfMonth,
             dayOfWeek: income.dayOfWeek,
@@ -730,6 +755,70 @@ export function PlanCalendar({
       }
     },
     [plan.incomes, plan.expenses, plan.debts, onUpdateIncome, onUpdateExpense, onUpdateDebt]
+  );
+
+  // "Just this month" path — writes a reschedule override pinned to the source
+  // month so the parent's recurring cadence stays untouched. Restricted to
+  // intra-month drops (the override stores monthYear of the source).
+  const applyJustThisMonth = useCallback(
+    async (sourceKey: string, targetKey: string, payload: DragPayload) => {
+      const source = parseISODate(sourceKey);
+      const target = parseISODate(targetKey);
+      if (!source || !target) return;
+      // The override is scoped to the source month — moving across months
+      // would silently disappear the chip from both, so we gate it here too.
+      if (
+        source.getFullYear() !== target.getFullYear() ||
+        source.getMonth() !== target.getMonth()
+      ) {
+        toast.error("Just-this-month moves must stay within the same month");
+        return;
+      }
+      const monthYear = toISODate(
+        new Date(source.getFullYear(), source.getMonth(), 1)
+      );
+      try {
+        await onUpsertOverride({
+          parentSide: payload.side,
+          parentId: payload.id,
+          monthYear,
+          action: "reschedule",
+          date: targetKey,
+        });
+        toast.success(
+          `Moved to ${format(target, "PPP")} for ${format(source, "MMMM yyyy")} only`
+        );
+      } catch {
+        toast.error("Failed to write override");
+      }
+    },
+    [onUpsertOverride]
+  );
+
+  // Drag-end dispatcher. one-time → just move (no prompt needed). recurring
+  // → stash the pending drop and let the AlertDialog ask the user whether to
+  // change the whole schedule or just this month.
+  const handleDrop = useCallback(
+    (targetKey: string, payload: DragPayload) => {
+      let isRecurring = false;
+      if (payload.side === "income") {
+        const inc = plan.incomes.find((i) => i.id === payload.id);
+        if (!inc) return;
+        isRecurring = inc.kind === "recurring";
+      } else if (payload.side === "expense") {
+        const exp = plan.expenses.find((e) => e.id === payload.id);
+        if (!exp) return;
+        isRecurring = exp.kind === "recurring";
+      } else {
+        isRecurring = true;
+      }
+      if (!isRecurring) {
+        void applyMoveAll(targetKey, payload);
+        return;
+      }
+      setPendingDrop({ payload, targetKey });
+    },
+    [plan.incomes, plan.expenses, applyMoveAll]
   );
 
   return (
@@ -918,7 +1007,88 @@ export function PlanCalendar({
         }
         onSubmit={handleEditDebt}
       />
+
+      <MoveRecurringPrompt
+        pending={pendingDrop}
+        onCancel={() => setPendingDrop(null)}
+        onMoveAll={() => {
+          if (!pendingDrop) return;
+          const drop = pendingDrop;
+          setPendingDrop(null);
+          void applyMoveAll(drop.targetKey, drop.payload);
+        }}
+        onJustThisMonth={() => {
+          if (!pendingDrop) return;
+          const drop = pendingDrop;
+          setPendingDrop(null);
+          void applyJustThisMonth(
+            drop.payload.sourceDate,
+            drop.targetKey,
+            drop.payload
+          );
+        }}
+      />
     </Card>
+  );
+}
+
+// Prompt the user when a recurring entry is dragged: change the schedule for
+// every month going forward, or just override this month? Cross-month drops
+// disable the "Just this month" option since overrides are scoped to the
+// source month.
+function MoveRecurringPrompt({
+  pending,
+  onCancel,
+  onMoveAll,
+  onJustThisMonth,
+}: {
+  pending: { payload: DragPayload; targetKey: string } | null;
+  onCancel: () => void;
+  onMoveAll: () => void;
+  onJustThisMonth: () => void;
+}) {
+  const sourceDate = pending ? parseISODate(pending.payload.sourceDate) : null;
+  const targetDate = pending ? parseISODate(pending.targetKey) : null;
+  const sameMonth =
+    !!sourceDate &&
+    !!targetDate &&
+    sourceDate.getFullYear() === targetDate.getFullYear() &&
+    sourceDate.getMonth() === targetDate.getMonth();
+
+  return (
+    <AlertDialog
+      open={pending !== null}
+      onOpenChange={(o) => (o ? null : onCancel())}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Move this entry</AlertDialogTitle>
+          <AlertDialogDescription>
+            {targetDate && sourceDate ? (
+              <>
+                From <strong>{format(sourceDate, "PPP")}</strong> to{" "}
+                <strong>{format(targetDate, "PPP")}</strong>. Apply the change
+                to the whole recurring schedule, or just this month?
+              </>
+            ) : (
+              "Apply the change to the whole recurring schedule, or just this month?"
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="gap-2 sm:gap-2">
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!sameMonth}
+            onClick={onJustThisMonth}
+            className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
+            title={sameMonth ? undefined : "Cross-month overrides aren't supported yet"}
+          >
+            Just this month
+          </AlertDialogAction>
+          <AlertDialogAction onClick={onMoveAll}>Move all</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -1171,6 +1341,7 @@ function CalendarCell({
           <EntryChip
             key={`${entry.side}-${entry.id}`}
             entry={entry}
+            dayKey={isoKey}
             onEdit={() => onEditEntry(entry)}
           />
         ))}
@@ -1209,16 +1380,22 @@ function CalendarCell({
 
 function EntryChip({
   entry,
+  dayKey,
   onEdit,
 }: {
   entry: DayEntry;
+  dayKey: string;
   onEdit: () => void;
 }) {
   // Only the grip is draggable. The rest of the chip is the click target for
   // editing — that's the disambiguation: drag from the dots, click anywhere
   // else to edit.
   const handleDragStart = (e: React.DragEvent<HTMLSpanElement>) => {
-    const payload: DragPayload = { id: entry.id, side: entry.side };
+    const payload: DragPayload = {
+      id: entry.id,
+      side: entry.side,
+      sourceDate: dayKey,
+    };
     e.dataTransfer.setData(DND_MIME, JSON.stringify(payload));
     e.dataTransfer.effectAllowed = "move";
     // Stop the click handler on the parent <li> from also firing.

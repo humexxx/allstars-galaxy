@@ -23,6 +23,8 @@ import type {
 } from "@/types/finance";
 import type {
   CreateFinancePlanInput,
+  DeleteLineOverrideInput,
+  LineOverrideInput,
   PlanDebtInput,
   PlanExpenseInput,
   PlanIncomeInput,
@@ -354,6 +356,17 @@ export async function deleteIncome(
   incomeId: string
 ): Promise<void> {
   await ensureOwnership(planId, userId);
+  // Cascade: kill any per-month overrides pointing at this income. The DB
+  // can't enforce it because parentId is a polymorphic FK.
+  await db
+    .delete(financePlanLineOverrides)
+    .where(
+      and(
+        eq(financePlanLineOverrides.planId, planId),
+        eq(financePlanLineOverrides.parentSide, "income"),
+        eq(financePlanLineOverrides.parentId, incomeId)
+      )
+    );
   await db
     .delete(financePlanIncomes)
     .where(and(eq(financePlanIncomes.id, incomeId), eq(financePlanIncomes.planId, planId)));
@@ -417,6 +430,15 @@ export async function deleteExpense(
   expenseId: string
 ): Promise<void> {
   await ensureOwnership(planId, userId);
+  await db
+    .delete(financePlanLineOverrides)
+    .where(
+      and(
+        eq(financePlanLineOverrides.planId, planId),
+        eq(financePlanLineOverrides.parentSide, "expense"),
+        eq(financePlanLineOverrides.parentId, expenseId)
+      )
+    );
   await db
     .delete(financePlanExpenses)
     .where(and(eq(financePlanExpenses.id, expenseId), eq(financePlanExpenses.planId, planId)));
@@ -487,8 +509,76 @@ export async function deleteDebt(
 ): Promise<void> {
   await ensureOwnership(planId, userId);
   await db
+    .delete(financePlanLineOverrides)
+    .where(
+      and(
+        eq(financePlanLineOverrides.planId, planId),
+        eq(financePlanLineOverrides.parentSide, "debt"),
+        eq(financePlanLineOverrides.parentId, debtId)
+      )
+    );
+  await db
     .delete(financePlanDebts)
     .where(and(eq(financePlanDebts.id, debtId), eq(financePlanDebts.planId, planId)));
+}
+
+// ---------- per-month line overrides ----------
+
+/**
+ * Upserts a single override for (parentSide, parentId, monthYear). The unique
+ * index on those three columns makes this an idempotent replace: writing a
+ * second override for the same recurring entry in the same month replaces
+ * whatever was there before.
+ */
+export async function upsertLineOverride(
+  userId: string,
+  planId: string,
+  data: LineOverrideInput
+): Promise<void> {
+  await ensureOwnership(planId, userId);
+  await db
+    .insert(financePlanLineOverrides)
+    .values({
+      planId,
+      parentSide: data.parentSide,
+      parentId: data.parentId,
+      monthYear: data.monthYear,
+      action: data.action,
+      date: data.action === "reschedule" ? data.date ?? null : null,
+      monthlyAmount:
+        data.action === "amount" ? data.monthlyAmount ?? null : null,
+    })
+    .onConflictDoUpdate({
+      target: [
+        financePlanLineOverrides.parentSide,
+        financePlanLineOverrides.parentId,
+        financePlanLineOverrides.monthYear,
+      ],
+      set: {
+        action: data.action,
+        date: data.action === "reschedule" ? data.date ?? null : null,
+        monthlyAmount:
+          data.action === "amount" ? data.monthlyAmount ?? null : null,
+      },
+    });
+}
+
+export async function deleteLineOverride(
+  userId: string,
+  planId: string,
+  data: DeleteLineOverrideInput
+): Promise<void> {
+  await ensureOwnership(planId, userId);
+  await db
+    .delete(financePlanLineOverrides)
+    .where(
+      and(
+        eq(financePlanLineOverrides.planId, planId),
+        eq(financePlanLineOverrides.parentSide, data.parentSide),
+        eq(financePlanLineOverrides.parentId, data.parentId),
+        eq(financePlanLineOverrides.monthYear, data.monthYear)
+      )
+    );
 }
 
 // ---------- projection algorithm ----------

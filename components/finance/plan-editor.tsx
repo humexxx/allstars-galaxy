@@ -43,6 +43,7 @@ import {
   updatePlanDebtAction,
   updatePlanExpenseAction,
   updatePlanIncomeAction,
+  upsertLineOverrideAction,
 } from "@/app/actions/finance-plans";
 import { formatCurrency } from "@/lib/utils/format";
 import type {
@@ -332,6 +333,9 @@ export function PlanEditor({
           }
           onUpdateDebt={(id, input) =>
             wrap(() => updatePlanDebtAction(plan.id, { id, ...input }))
+          }
+          onUpsertOverride={(input) =>
+            wrap(() => upsertLineOverrideAction(plan.id, input))
           }
         />
       </TabsContent>

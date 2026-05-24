@@ -204,6 +204,43 @@ export const updatePlanDebtSchema = z
   .object({ id: z.string().uuid(), ...debtShape })
   .superRefine(refineDebt);
 
+// Per-month override for a recurring line. monthYear should be the FIRST of the
+// targeted month ("2026-08-01") — the service normalises and persists it as is.
+export const lineOverrideSchema = z
+  .object({
+    parentSide: z.enum(["income", "expense", "debt"]),
+    parentId: z.string().uuid(),
+    monthYear: isoDate,
+    action: z.enum(["skip", "reschedule", "amount"]),
+    date: isoDate.nullable().optional(),
+    monthlyAmount: decimal.nullable().optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.action === "reschedule" && !val.date) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["date"],
+        message: "Reschedule overrides require a target date",
+      });
+    }
+    if (val.action === "amount" && (val.monthlyAmount == null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["monthlyAmount"],
+        message: "Amount overrides require an amount",
+      });
+    }
+  });
+
+export const deleteLineOverrideSchema = z.object({
+  parentSide: z.enum(["income", "expense", "debt"]),
+  parentId: z.string().uuid(),
+  monthYear: isoDate,
+});
+
+export type LineOverrideInput = z.infer<typeof lineOverrideSchema>;
+export type DeleteLineOverrideInput = z.infer<typeof deleteLineOverrideSchema>;
+
 export type CreateFinancePlanInput = z.infer<typeof createFinancePlanSchema>;
 export type UpdateFinancePlanInput = z.infer<typeof updateFinancePlanSchema>;
 export type PlanIncomeInput = z.infer<typeof planIncomeSchema>;

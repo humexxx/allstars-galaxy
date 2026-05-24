@@ -17,14 +17,18 @@ import {
   deleteDebt,
   deleteExpense,
   deleteIncome,
+  deleteLineOverride,
   deletePlan,
   updateDebt,
   updateExpense,
   updateIncome,
   updatePlan,
+  upsertLineOverride,
 } from "@/lib/services/finance-plan-service";
 import {
   createFinancePlanSchema,
+  deleteLineOverrideSchema,
+  lineOverrideSchema,
   planDebtSchema,
   planExpenseSchema,
   planIncomeSchema,
@@ -33,6 +37,8 @@ import {
   updatePlanExpenseSchema,
   updatePlanIncomeSchema,
   type CreateFinancePlanInput,
+  type DeleteLineOverrideInput,
+  type LineOverrideInput,
   type PlanDebtInput,
   type PlanExpenseInput,
   type PlanIncomeInput,
@@ -323,6 +329,52 @@ export async function deletePlanDebtAction(planId: string, debtId: string) {
       entityId: debtIdParsed.data,
     });
     revalidatePath(pathForPlan(planIdParsed.data));
+    return { success: true as const };
+  });
+}
+
+// ---------- per-month line overrides ----------
+
+export async function upsertLineOverrideAction(
+  planId: string,
+  input: LineOverrideInput
+) {
+  return safe("finance-plans", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = z.string().uuid().safeParse(planId);
+    const parsed = lineOverrideSchema.safeParse(input);
+    if (!idParsed.success || !parsed.success) {
+      return { success: false as const, error: "Invalid input" };
+    }
+    await upsertLineOverride(ctx.effectiveUserId, idParsed.data, parsed.data);
+    await logImpersonatedMutation({
+      action: "financePlanLineOverride.upsert",
+      entityTable: "finance_plan_line_overrides",
+      entityId: parsed.data.parentId,
+    });
+    revalidatePath(pathForPlan(idParsed.data));
+    return { success: true as const };
+  });
+}
+
+export async function deleteLineOverrideAction(
+  planId: string,
+  input: DeleteLineOverrideInput
+) {
+  return safe("finance-plans", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = z.string().uuid().safeParse(planId);
+    const parsed = deleteLineOverrideSchema.safeParse(input);
+    if (!idParsed.success || !parsed.success) {
+      return { success: false as const, error: "Invalid input" };
+    }
+    await deleteLineOverride(ctx.effectiveUserId, idParsed.data, parsed.data);
+    await logImpersonatedMutation({
+      action: "financePlanLineOverride.delete",
+      entityTable: "finance_plan_line_overrides",
+      entityId: parsed.data.parentId,
+    });
+    revalidatePath(pathForPlan(idParsed.data));
     return { success: true as const };
   });
 }

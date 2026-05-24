@@ -100,11 +100,13 @@ export function AppSidebar({
         ],
       },
       {
-        title: "Healthy Entertainment",
-        url: "#",
-        disabled: true,
+        title: "Entertainment",
+        url: "/portal/entertainment/travel-planner",
         items: [
-          { title: "Coming soon", url: "#", disabled: true },
+          {
+            title: "Travel Planner",
+            url: "/portal/entertainment/travel-planner",
+          },
         ],
       },
     ]

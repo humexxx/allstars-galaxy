@@ -2,42 +2,37 @@ import Link from "next/link";
 
 import { GalaxyLogo } from "./galaxy-logo";
 
+// Every link here either points at a real portal route or at an in-page
+// anchor of the landing. No placeholder pages (About, Blog, Help center,
+// etc.) — they would 404 today.
 const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
-    title: "Product",
+    title: "Finance",
     links: [
       { label: "Portfolio", href: "/portal/portfolio" },
       { label: "Investment Methods", href: "/portal/investment-methods" },
-      { label: "Plans", href: "/portal/plans" },
-      { label: "Productivity Board", href: "/portal/productivity/board" },
+      { label: "Finance Plans", href: "/portal/plans" },
+    ],
+  },
+  {
+    title: "Productivity",
+    links: [
+      { label: "Board", href: "/portal/productivity/board" },
       { label: "Road Paths", href: "/portal/productivity/road-paths" },
     ],
   },
   {
-    title: "Company",
+    title: "Entertainment",
     links: [
-      { label: "About", href: "#" },
-      { label: "Blog", href: "#" },
-      { label: "Roadmap", href: "#" },
-      { label: "Contact", href: "#" },
+      { label: "Travel Planner", href: "/portal/entertainment/travel-planner" },
     ],
   },
   {
-    title: "Resources",
+    title: "Account",
     links: [
-      { label: "Help center", href: "#" },
-      { label: "Guides", href: "#" },
-      { label: "Changelog", href: "#" },
-      { label: "Status", href: "#" },
-    ],
-  },
-  {
-    title: "Legal",
-    links: [
-      { label: "Privacy", href: "#" },
-      { label: "Terms", href: "#" },
-      { label: "Security", href: "#" },
-      { label: "Cookies", href: "#" },
+      { label: "Log in", href: "/login" },
+      { label: "Get started", href: "/signup" },
+      { label: "Forgot password", href: "/forgot-password" },
     ],
   },
 ];

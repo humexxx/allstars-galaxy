@@ -1,31 +1,44 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
+// Closing CTA — soft radial gradient anchored at the bottom, same shape as
+// trim-success's "Empieza a ver tu inventario claro" section.
 export function LandingCta() {
   return (
-    <section id="galaxy" className="bg-neutral-50">
-      <div className="mx-auto w-full max-w-5xl px-5 py-28 text-center sm:px-8 lg:py-36">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-neutral-500">
+    <section
+      id="galaxy"
+      className="relative overflow-hidden border-b border-neutral-200/80 bg-white"
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(50% 60% at 50% 100%, rgba(99,102,241,0.10) 0%, rgba(255,255,255,0) 70%)",
+        }}
+      />
+      <div className="relative mx-auto max-w-3xl px-6 py-28 text-center">
+        <span className="text-xs font-medium uppercase tracking-widest text-neutral-400">
           Manifesto
-        </p>
-        <h2 className="mt-3 text-5xl font-bold leading-[1.05] tracking-[-0.02em] text-neutral-900 text-balance sm:text-6xl lg:text-7xl">
+        </span>
+        <h2 className="mt-3 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
           Your finances orbit something bigger.
         </h2>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-neutral-600 text-balance">
-          Capital is the gravity. But your goals, your projects and your wellbeing are
-          the planets that actually make the picture worth looking at.
+        <p className="mt-4 text-neutral-500">
+          Capital is the gravity. But your goals, your projects and your
+          wellbeing are the planets that make the picture worth looking at.
         </p>
-        <div className="mt-12 flex flex-wrap items-center justify-center gap-3">
+        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
             href="/signup"
-            className="inline-flex h-12 items-center justify-center rounded-full bg-neutral-900 px-7 text-base font-medium text-white transition hover:bg-neutral-800"
+            className="inline-flex h-11 items-center justify-center rounded-full bg-neutral-900 px-6 text-[14px] font-medium text-white transition hover:bg-neutral-800"
           >
             Start free
-            <ArrowRight className="ml-1 size-4" />
+            <ArrowRight className="ml-1 h-4 w-4" />
           </Link>
           <Link
             href="/login"
-            className="inline-flex h-12 items-center justify-center rounded-full border border-neutral-300 px-7 text-base font-medium text-neutral-900 transition hover:bg-neutral-100"
+            className="inline-flex h-11 items-center justify-center rounded-full border border-neutral-200 bg-white px-6 text-[14px] font-medium text-neutral-900 transition hover:bg-neutral-50"
           >
             I already have an account
           </Link>

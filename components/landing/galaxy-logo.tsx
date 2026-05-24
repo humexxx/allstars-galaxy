@@ -10,6 +10,8 @@ type GalaxyLogoProps = {
   variant?: "theme" | "light" | "dark";
 };
 
+// Shooting-star mark. Mirrors the favicon at app/icon.svg so the brand reads
+// the same in the browser tab and inside the product.
 export function GalaxyLogo({
   className,
   variant = "theme",
@@ -30,11 +32,18 @@ export function GalaxyLogo({
       )}
       aria-hidden="true"
     >
-      <svg viewBox="0 0 24 24" className="size-4" fill="currentColor">
-        <circle cx="12" cy="12" r="3" />
-        <ellipse cx="12" cy="12" rx="10" ry="3.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        <ellipse cx="12" cy="12" rx="10" ry="3.5" fill="none" stroke="currentColor" strokeWidth="1.5" transform="rotate(60 12 12)" />
-        <ellipse cx="12" cy="12" rx="10" ry="3.5" fill="none" stroke="currentColor" strokeWidth="1.5" transform="rotate(120 12 12)" />
+      <svg viewBox="0 0 32 32" className="size-4" fill="none">
+        {/* Trailing streak */}
+        <g stroke="currentColor" strokeLinecap="round">
+          <line x1="6" y1="26" x2="10" y2="22" strokeWidth="1.6" opacity="0.35" />
+          <line x1="9" y1="23" x2="14" y2="18" strokeWidth="1.9" opacity="0.6" />
+          <line x1="13" y1="19" x2="18" y2="14" strokeWidth="2.2" opacity="0.9" />
+        </g>
+        {/* Star head */}
+        <path
+          fill="currentColor"
+          d="M22 5 L23.2 10 L28 11.2 L23.2 12.4 L22 17 L20.8 12.4 L16 11.2 L20.8 10 Z"
+        />
       </svg>
     </span>
   );

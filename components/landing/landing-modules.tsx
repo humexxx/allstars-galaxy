@@ -1,105 +1,156 @@
-import Image from "next/image";
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import {
+  ArrowUpRight,
+  Compass,
+  HeartPulse,
+  Kanban,
+  Plane,
+  Target,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
 
 type ModuleItem = {
+  icon: typeof Wallet;
   title: string;
   description: string;
-  href: string;
-  image: string;
+  href?: string;
   status?: "live" | "soon";
 };
 
+// MODULES — every live entry maps to a real page in app/portal/*. Copy lifted
+// from each page's PageHeader / metadata so the landing doesn't drift from
+// what the product actually does:
+//   Portfolio          → app/portal/portfolio/page.tsx
+//   Investment Methods → app/portal/investment-methods/page.tsx
+//   Finance Plans      → app/portal/plans/page.tsx
+//   Productivity Board → app/portal/productivity/board/page.tsx
+//   Road Paths         → app/portal/productivity/road-paths/page.tsx
+//   Travel Planner     → app/portal/entertainment/travel-planner/page.tsx
+// Wellness is "Coming soon" in the sidebar, kept as a soft placeholder here.
 const MODULES: ModuleItem[] = [
   {
+    icon: Wallet,
     title: "Portfolio",
     description:
-      "Track every account, asset and cash position in one consolidated view.",
+      "Total value, cost basis, all-time return and the full transactions log — one consolidated view of every account and asset.",
     href: "/portal/portfolio",
-    image: "/images/landing/module-portfolio.svg",
     status: "live",
   },
   {
+    icon: Compass,
     title: "Investment Methods",
     description:
-      "Define your strategy once. DCA, value, dividend, real estate — your playbook.",
+      "A catalogue of strategies grouped by author, each with its risk badge and expected returns. Reuse them inside your plans.",
     href: "/portal/investment-methods",
-    image: "/images/landing/module-methods.svg",
     status: "live",
   },
   {
-    title: "Productivity",
+    icon: TrendingUp,
+    title: "Finance Plans",
     description:
-      "A board for today, road paths for the year. Intentions turn into shipping.",
-    href: "/portal/productivity/board",
-    image: "/images/landing/module-productivity.svg",
+      "Build scenarios for your income, expenses, debts and projected net worth — then compare them side by side.",
+    href: "/portal/plans",
     status: "live",
   },
   {
+    icon: Kanban,
+    title: "Productivity Board",
+    description:
+      "Visual board for the week. Drag-and-drop columns and tasks; the layout you set is what loads next time.",
+    href: "/portal/productivity/board",
+    status: "live",
+  },
+  {
+    icon: Target,
+    title: "Road Paths",
+    description:
+      "Track long-term goals across quarters and years — milestones, progress and the slow compounding that gets you there.",
+    href: "/portal/productivity/road-paths",
+    status: "live",
+  },
+  {
+    icon: Plane,
+    title: "Travel Planner",
+    description:
+      "Plan upcoming trips, attach links and prices, share with a private link. Trips live in their own space, away from the numbers.",
+    href: "/portal/entertainment/travel-planner",
+    status: "live",
+  },
+  {
+    icon: HeartPulse,
     title: "Wellness",
     description:
-      "Sleep, energy, focus — the inputs behind every decision worth making.",
-    href: "#",
-    image: "/images/landing/module-wellness.svg",
+      "Sleep, energy and focus — the inputs behind every decision worth making. (Coming soon)",
     status: "soon",
   },
 ];
 
 export function LandingModules() {
   return (
-    <section id="modules" className="bg-white">
-      <div className="mx-auto w-full max-w-7xl px-5 py-24 sm:px-8 lg:py-32">
-        <div className="max-w-2xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-neutral-500">
-            Modules
-          </p>
-          <h2 className="mt-3 text-4xl font-bold tracking-tight text-neutral-900 text-balance sm:text-5xl">
+    <section
+      id="modules"
+      className="border-b border-neutral-200/80 bg-white py-24"
+    >
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <span className="text-xs font-medium uppercase tracking-widest text-neutral-400">
+            Product
+          </span>
+          <h2 className="mt-3 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
             One galaxy. Many orbits.
           </h2>
-          <p className="mt-4 text-lg text-neutral-600 text-balance">
-            Each module is useful on its own — and they really shine when they talk to
-            each other.
+          <p className="mt-4 text-neutral-500">
+            Six modules live today, one on the way. Each is useful on its own —
+            and they really shine when they talk to each other.
           </p>
         </div>
 
-        <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-200 sm:grid-cols-2">
-          {MODULES.map((m) => {
-            const Container = m.status === "soon" ? "div" : Link;
-            const containerProps =
-              m.status === "soon"
-                ? {}
-                : { href: m.href };
-
-            return (
-              <Container
-                key={m.title}
-                {...(containerProps as { href: string })}
-                className="group relative flex flex-col bg-white p-8 transition hover:bg-neutral-50"
+        <div className="mt-14 grid gap-px overflow-hidden rounded-xl border border-neutral-200 bg-neutral-200 sm:grid-cols-2 lg:grid-cols-3">
+          {MODULES.map(({ icon: Icon, title, description, href, status }) => {
+            const isSoon = status === "soon";
+            const body = (
+              <div
+                className={`group relative h-full bg-white p-6 transition-colors sm:p-8 ${
+                  isSoon ? "" : "hover:bg-neutral-50"
+                }`}
               >
-                <div className="relative aspect-[5/3] w-full overflow-hidden rounded-lg bg-neutral-100">
-                  <Image src={m.image} alt={`${m.title} illustration`} fill className="object-contain p-4" />
+                <div className="mb-5 inline-flex h-9 w-9 items-center justify-center rounded-md border border-neutral-200 bg-neutral-50 text-neutral-700 transition-colors group-hover:border-neutral-300 group-hover:text-neutral-900">
+                  <Icon className="h-4 w-4" />
                 </div>
-                <div className="mt-6 flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-2xl font-semibold tracking-tight text-neutral-900">
-                        {m.title}
-                      </h3>
-                      {m.status === "soon" && (
-                        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
-                          Soon
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-2 text-sm leading-relaxed text-neutral-600">
-                      {m.description}
-                    </p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-medium tracking-tight">
+                      {title}
+                    </h3>
+                    {isSoon && (
+                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                        Soon
+                      </span>
+                    )}
                   </div>
-                  {m.status !== "soon" && (
-                    <ArrowUpRight className="size-5 shrink-0 text-neutral-400 transition group-hover:text-neutral-900" />
+                  {!isSoon && (
+                    <ArrowUpRight className="size-4 shrink-0 text-neutral-300 transition group-hover:text-neutral-900" />
                   )}
                 </div>
-              </Container>
+                <p className="mt-2 text-sm leading-relaxed text-neutral-500">
+                  {description}
+                </p>
+              </div>
+            );
+
+            if (isSoon || !href) {
+              return (
+                <div key={title} className="bg-white">
+                  {body}
+                </div>
+              );
+            }
+
+            return (
+              <Link key={title} href={href} className="bg-white">
+                {body}
+              </Link>
             );
           })}
         </div>

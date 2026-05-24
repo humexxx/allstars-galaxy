@@ -1,75 +1,59 @@
 "use client";
 
 import Link from "next/link";
-import { useSyncExternalStore } from "react";
-import { Menu, X } from "lucide-react";
 import { useState } from "react";
+import { ArrowRight, Menu, X } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import { GalaxyLogo } from "./galaxy-logo";
 
 const NAV_LINKS = [
-  { href: "#modules", label: "Modules" },
+  { href: "#modules", label: "Product" },
   { href: "#how", label: "How it works" },
   { href: "#galaxy", label: "Manifesto" },
 ];
 
-function subscribeScroll(onChange: () => void) {
-  window.addEventListener("scroll", onChange, { passive: true });
-  return () => window.removeEventListener("scroll", onChange);
-}
-function getScrollSnapshot() {
-  return window.scrollY > 8;
-}
-function getServerScrollSnapshot() {
-  return false;
-}
-
+// Sticky translucent nav with backdrop blur — same treatment as trim-success
+// so the landing reads as part of the same product family.
 export function LandingNav() {
-  const scrolled = useSyncExternalStore(
-    subscribeScroll,
-    getScrollSnapshot,
-    getServerScrollSnapshot
-  );
   const [open, setOpen] = useState(false);
 
   return (
-    <header
-      className={cn(
-        "sticky top-0 z-50 w-full border-b border-transparent bg-white/0 transition-all",
-        scrolled && "border-neutral-200 bg-white/90 backdrop-blur"
-      )}
-    >
-      <nav className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-5 sm:px-8">
-        <Link href="/" className="flex items-center gap-2.5 text-neutral-900">
-          <GalaxyLogo variant="light" />
-          <span className="text-base font-semibold tracking-tight">Allstars Galaxy</span>
-        </Link>
-
-        <div className="hidden items-center gap-1 md:flex">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-full px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 hover:text-neutral-900"
-            >
-              {link.label}
-            </Link>
-          ))}
+    <header className="sticky top-0 z-50 border-b border-neutral-200/80 bg-white/70 backdrop-blur-xl">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+        <div className="flex items-center gap-8">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-[15px] font-semibold tracking-tight"
+          >
+            <GalaxyLogo variant="light" className="size-6" />
+            Allstars Galaxy
+          </Link>
+          <nav className="hidden items-center gap-6 md:flex">
+            {NAV_LINKS.map((link) => (
+              <a
+                key={link.label}
+                href={link.href}
+                className="text-sm text-neutral-500 transition-colors hover:text-neutral-900"
+              >
+                {link.label}
+              </a>
+            ))}
+          </nav>
         </div>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden items-center gap-2 md:flex">
           <Link
             href="/login"
-            className="text-sm font-medium text-neutral-700 hover:text-neutral-900"
+            className="rounded-full px-3 py-1.5 text-[13px] font-medium text-neutral-700 transition-colors hover:text-neutral-900"
           >
             Log in
           </Link>
           <Link
             href="/signup"
-            className="inline-flex h-10 items-center justify-center rounded-full bg-neutral-900 px-5 text-sm font-medium text-white transition hover:bg-neutral-800"
+            className="inline-flex h-8 items-center justify-center rounded-full bg-neutral-900 px-4 text-[13px] font-medium text-white transition hover:bg-neutral-800"
           >
             Get started
+            <ArrowRight className="ml-1 size-3" />
           </Link>
         </div>
 
@@ -77,25 +61,25 @@ export function LandingNav() {
           type="button"
           aria-label={open ? "Close menu" : "Open menu"}
           aria-expanded={open}
-          className="grid size-10 place-items-center rounded-full text-neutral-900 hover:bg-neutral-100 md:hidden"
+          className="grid size-9 place-items-center rounded-full text-neutral-900 hover:bg-neutral-100 md:hidden"
           onClick={() => setOpen((v) => !v)}
         >
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
         </button>
-      </nav>
+      </div>
 
       {open && (
         <div className="border-t border-neutral-200 bg-white md:hidden">
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-1 px-5 py-3 sm:px-8">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-1 px-6 py-3">
             {NAV_LINKS.map((link) => (
-              <Link
-                key={link.href}
+              <a
+                key={link.label}
                 href={link.href}
                 onClick={() => setOpen(false)}
                 className="rounded-md px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
               >
                 {link.label}
-              </Link>
+              </a>
             ))}
             <div className="mt-2 flex gap-2">
               <Link

@@ -1,62 +1,81 @@
-import Image from "next/image";
-import Link from "next/link";
-import { ArrowRight, Compass, HeartPulse, Kanban, Wallet } from "lucide-react";
+import { Lock, ShieldCheck, Zap } from "lucide-react";
 
-const POINTS = [
-  { icon: Wallet, title: "Net worth that adds up", desc: "Multi-currency, multi-account, no spreadsheets." },
-  { icon: Compass, title: "Strategy you can follow", desc: "Codify your investment methods and stick to them." },
-  { icon: Kanban, title: "Execution that ships", desc: "A board for the week, road paths for the year." },
-  { icon: HeartPulse, title: "Wellness in the loop", desc: "The inputs behind every great decision. (Soon)" },
-];
-
+// Feature bento — mirrors the "De Excel al cubo en 5 minutos" section in
+// trim-success: 2/3 + 1/3 split with a primary feature on the left and a
+// security pill on the right.
 export function LandingSplit() {
   return (
-    <section className="border-y border-neutral-200 bg-neutral-50">
-      <div className="mx-auto grid w-full max-w-7xl items-center gap-14 px-5 py-24 sm:px-8 lg:grid-cols-2 lg:py-32">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-neutral-500">
-            Built for owners
-          </p>
-          <h2 className="mt-3 text-4xl font-bold tracking-tight text-neutral-900 text-balance sm:text-5xl lg:text-6xl">
-            Money is just one variable in your life.
+    <section className="border-b border-neutral-200/80 bg-neutral-50 py-24">
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <span className="text-xs font-medium uppercase tracking-widest text-neutral-400">
+            Speed
+          </span>
+          <h2 className="mt-3 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
+            From scattered to systematic — in minutes.
           </h2>
-          <p className="mt-5 text-lg leading-relaxed text-neutral-600 text-balance">
-            Most apps treat your portfolio like an island. Allstars Galaxy treats it like
-            part of an ecosystem — your goals, your week, your energy, all in the same orbit.
+          <p className="mt-4 text-neutral-500">
+            Connect your accounts, drop your goals, watch the orbit form. No
+            setup ceremony, no consultants required.
           </p>
-          <ul className="mt-10 grid gap-6 sm:grid-cols-2">
-            {POINTS.map((p) => (
-              <li key={p.title} className="flex gap-3">
-                <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full border border-neutral-200 bg-white">
-                  <p.icon className="size-4 text-neutral-700" />
-                </span>
-                <div>
-                  <p className="font-semibold text-neutral-900">{p.title}</p>
-                  <p className="mt-0.5 text-sm text-neutral-600">{p.desc}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-10">
-            <Link
-              href="/signup"
-              className="inline-flex h-12 items-center justify-center rounded-full bg-neutral-900 px-6 text-base font-medium text-white transition hover:bg-neutral-800"
-            >
-              Open my workspace
-              <ArrowRight className="ml-1 size-4" />
-            </Link>
-          </div>
         </div>
 
-        <div className="relative">
-          <div className="relative overflow-hidden rounded-2xl border border-neutral-200 bg-white p-2">
-            <div className="relative aspect-[4/3] w-full">
-              <Image
-                src="/images/landing/hero-dashboard.svg"
-                alt="Workspace preview"
-                fill
-                className="object-contain"
-              />
+        <div className="mt-14 grid gap-4 lg:grid-cols-3">
+          <div className="rounded-xl border border-neutral-200 bg-white p-8 lg:col-span-2">
+            <div className="mb-4 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-neutral-500">
+              <Zap className="h-3 w-3 text-emerald-500" />
+              Compare
+            </div>
+            <h3 className="text-2xl font-semibold tracking-tight">
+              Build plans. Compare scenarios side by side.
+            </h3>
+            <p className="mt-3 max-w-lg text-sm text-neutral-500">
+              Stack income, expenses, debts and projected net worth into a
+              plan. Duplicate it, change one assumption, and open both at once
+              on <span className="font-mono text-neutral-700">/plans/compare</span>.
+            </p>
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <div className="text-[10px] font-medium uppercase tracking-widest text-neutral-400">
+                  Plan A
+                </div>
+                <div className="mt-1 font-mono text-sm text-neutral-700">
+                  Save 25% · 7% return
+                </div>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-neutral-200">
+                  <div className="h-full w-3/5 rounded-full bg-neutral-900" />
+                </div>
+              </div>
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <div className="text-[10px] font-medium uppercase tracking-widest text-neutral-400">
+                  Plan B
+                </div>
+                <div className="mt-1 font-mono text-sm text-neutral-700">
+                  Save 35% · 6% return
+                </div>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-neutral-200">
+                  <div className="h-full w-4/5 rounded-full bg-neutral-900" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-neutral-200 bg-white p-8">
+            <div className="mb-4 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-neutral-500">
+              <Lock className="h-3 w-3" />
+              Yours
+            </div>
+            <h3 className="text-2xl font-semibold tracking-tight">
+              Your data, your workspace.
+            </h3>
+            <p className="mt-3 text-sm text-neutral-500">
+              Built on Supabase Auth + PostgreSQL. Every row is scoped to your
+              user — services filter by ownership before they return a single
+              number.
+            </p>
+            <div className="mt-6 flex items-center gap-2 text-xs text-neutral-500">
+              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+              Row-level ownership, enforced server-side
             </div>
           </div>
         </div>

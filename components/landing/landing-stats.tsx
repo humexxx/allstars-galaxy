@@ -1,22 +1,26 @@
-const STATS = [
-  { kpi: "1", label: "Workspace for money + time" },
-  { kpi: "5", label: "Modules that talk to each other" },
-  { kpi: "0", label: "Ads, ever" },
-  { kpi: "100%", label: "You stay in control" },
-];
-
+// Proof strip — quiet sentence on the left, the actual module surface area
+// on the right. Labels match the live modules in app/portal/* so the strip
+// doubles as a one-line product map.
 export function LandingStats() {
   return (
-    <section className="border-y border-neutral-200 bg-neutral-50">
-      <div className="mx-auto grid w-full max-w-7xl grid-cols-2 gap-y-10 px-5 py-14 sm:grid-cols-4 sm:px-8">
-        {STATS.map((s) => (
-          <div key={s.label} className="text-center sm:text-left">
-            <p className="text-4xl font-bold tracking-tight text-neutral-900 sm:text-5xl">
-              {s.kpi}
-            </p>
-            <p className="mt-2 text-sm text-neutral-600">{s.label}</p>
-          </div>
-        ))}
+    <section className="border-b border-neutral-200/80 bg-white">
+      <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-6 py-12 sm:flex-row sm:justify-between">
+        <p className="text-sm text-neutral-500">
+          Built for people who think in systems, not in spreadsheets
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm font-medium text-neutral-400">
+          <span>Portfolio</span>
+          <span>·</span>
+          <span>Methods</span>
+          <span>·</span>
+          <span>Plans</span>
+          <span>·</span>
+          <span>Board</span>
+          <span>·</span>
+          <span>Road Paths</span>
+          <span>·</span>
+          <span>Travel</span>
+        </div>
       </div>
     </section>
   );

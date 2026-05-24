@@ -26,9 +26,10 @@ const GREEN_THRESHOLD = 0.36;
 const YELLOW_THRESHOLD = 0.5;
 
 // Semicircle anchors in math-angle convention (0° right, 90° up, 180° left).
-// We sweep from the left (low obligations = healthy) over the top to the right
-// (high obligations = stretched). Visually this is counter-clockwise in SVG
-// coordinates because the y-axis is flipped — see arcPath() for the sweep flag.
+// We sweep from the LEFT (high obligations = stretched/red) over the top to
+// the RIGHT (low obligations = healthy/green). The visual direction is
+// mirrored from the math-natural one — see ratioToAngle() below for how the
+// ratio maps onto the arc.
 const START_ANGLE = 180;
 const END_ANGLE = 0;
 const SWEEP = START_ANGLE - END_ANGLE; // 180°
@@ -56,7 +57,9 @@ function arcPath(
 
 function ratioToAngle(ratio: number): number {
   const clamped = Math.max(0, Math.min(1, ratio));
-  return START_ANGLE - clamped * SWEEP;
+  // ratio 0 (healthy) → END_ANGLE (right, green side).
+  // ratio 1 (stretched) → START_ANGLE (left, red side).
+  return END_ANGLE + clamped * SWEEP;
 }
 
 // One-line explanation of each status, surfaced in the gauge tooltip so users
@@ -130,11 +133,11 @@ export function FinancialHealthGauge({
 
   const needleAngle = ratioToAngle(ratio);
 
-  // Sweep-in animation: render the needle once at the leftmost position
-  // (START_ANGLE — i.e. ratio 0, "healthy") and then transition it to the
+  // Sweep-in animation: render the needle once at the rightmost position
+  // (END_ANGLE — i.e. ratio 0, "healthy") and then transition it to the
   // target angle on the next frame. The CSS transition on the <g> wrapper
   // does the interpolation. Re-fires whenever the target angle changes.
-  const [animatedAngle, setAnimatedAngle] = useState(START_ANGLE);
+  const [animatedAngle, setAnimatedAngle] = useState(END_ANGLE);
   useEffect(() => {
     const id = requestAnimationFrame(() => setAnimatedAngle(needleAngle));
     return () => cancelAnimationFrame(id);
@@ -170,24 +173,24 @@ export function FinancialHealthGauge({
               strokeWidth={thickness}
               fill="none"
             />
-            {/* Green zone */}
+            {/* Red zone — left side (high obligations) */}
             <path
-              d={arcPath(cx, cy, r, START_ANGLE, greenEnd)}
-              stroke="#16a34a"
+              d={arcPath(cx, cy, r, START_ANGLE, yellowEnd)}
+              stroke="#dc2626"
               strokeWidth={thickness}
               fill="none"
             />
-            {/* Yellow zone */}
+            {/* Yellow zone — middle */}
             <path
-              d={arcPath(cx, cy, r, greenEnd, yellowEnd)}
+              d={arcPath(cx, cy, r, yellowEnd, greenEnd)}
               stroke="#f59e0b"
               strokeWidth={thickness}
               fill="none"
             />
-            {/* Red zone */}
+            {/* Green zone — right side (low obligations) */}
             <path
-              d={arcPath(cx, cy, r, yellowEnd, END_ANGLE)}
-              stroke="#dc2626"
+              d={arcPath(cx, cy, r, greenEnd, END_ANGLE)}
+              stroke="#16a34a"
               strokeWidth={thickness}
               fill="none"
             />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   addMonths,
   eachDayOfInterval,
@@ -12,7 +12,14 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  GripVertical,
+  Pencil,
+  Plus,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -31,13 +38,14 @@ import type {
   FinancePlanWithLines,
 } from "@/types/finance";
 
-import { DayDetailDialog, type DayEntryRef } from "./day-detail-dialog";
 import { DebtFormDialog, type DebtFormValues } from "./debt-form-dialog";
 import {
   LineFormDialog,
   toISODate,
   type LineFormValues,
 } from "./line-form-dialog";
+
+type EntrySide = "income" | "expense" | "debt";
 
 type PlanCalendarProps = {
   plan: FinancePlanWithLines;
@@ -48,7 +56,13 @@ type PlanCalendarProps = {
   onUpdateDebt: (id: string, input: DebtFormValues) => Promise<void>;
 };
 
-type DayEntry = DayEntryRef;
+type DayEntry = {
+  id: string;
+  side: EntrySide;
+  name: string;
+  amount: number;
+  kind: "recurring" | "one_time";
+};
 
 function parseISODate(value: string | null | undefined): Date | null {
   if (!value) return null;
@@ -87,12 +101,12 @@ function buildDayMap(
     date: d,
     key: toISODate(d),
     year: d.getFullYear(),
-    month: d.getMonth(), // 0..11
+    month: d.getMonth(),
     day: d.getDate(),
   }));
 
   const handleRecurring = (
-    side: "income" | "expense" | "debt",
+    side: EntrySide,
     id: string,
     name: string,
     amount: number,
@@ -105,13 +119,7 @@ function buildDayMap(
       const mk = meta.year * 12 + meta.month;
       if (startKey !== null && mk < startKey.y * 12 + startKey.m) continue;
       if (endKey !== null && mk > endKey.y * 12 + endKey.m) continue;
-      push(meta.key, {
-        id,
-        side,
-        name,
-        amount,
-        kind: "recurring",
-      });
+      push(meta.key, { id, side, name, amount, kind: "recurring" });
     }
   };
 
@@ -175,8 +183,6 @@ function buildDayMap(
   return map;
 }
 
-// Some months don't have day 31 (or 30, or 29). Clamp the recurring day to the
-// last day of the target month so e.g. dayOfMonth=31 still pays in February.
 function clampDayInMonth(day: number, year: number, monthZeroIdx: number): number {
   const lastDay = new Date(year, monthZeroIdx + 1, 0).getDate();
   return Math.min(day, lastDay);
@@ -185,10 +191,14 @@ function clampDayInMonth(day: number, year: number, monthZeroIdx: number): numbe
 type DialogState =
   | { kind: "none" }
   | { kind: "add"; side: "income" | "expense"; date: string }
-  | { kind: "day-detail"; date: string }
   | { kind: "edit-income"; income: FinancePlanIncome }
   | { kind: "edit-expense"; expense: FinancePlanExpense }
   | { kind: "edit-debt"; debt: FinancePlanDebt };
+
+// Tiny payload we put on the native dataTransfer when dragging an entry. Lives
+// here so we don't accidentally hand parse JSON in three places.
+const DND_MIME = "application/x-allstars-finance-entry";
+type DragPayload = { id: string; side: EntrySide };
 
 export function PlanCalendar({
   plan,
@@ -198,8 +208,6 @@ export function PlanCalendar({
   onUpdateExpense,
   onUpdateDebt,
 }: PlanCalendarProps) {
-  // Anchor on the plan's startMonth so the first thing the user sees is the
-  // beginning of their projection horizon.
   const initialMonth = useMemo(() => {
     const d = new Date(plan.startMonth);
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -207,6 +215,8 @@ export function PlanCalendar({
 
   const [cursor, setCursor] = useState<Date>(initialMonth);
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
+  const [dragOverDay, setDragOverDay] = useState<string | null>(null);
 
   const monthStart = startOfMonth(cursor);
   const monthEnd = endOfMonth(cursor);
@@ -274,10 +284,90 @@ export function PlanCalendar({
     }
   };
 
-  const detailEntries =
-    dialog.kind === "day-detail" ? (dayMap.get(dialog.date) ?? []) : [];
-  const detailDate =
-    dialog.kind === "day-detail" ? parseISODate(dialog.date) : null;
+  // Translate a drop on a target day into the right update call. one_time entries
+  // get their `date` rewritten; recurring entries change `dayOfMonth`, which
+  // ripples to every month (we toast to make that consequence visible).
+  const handleDrop = useCallback(
+    async (targetKey: string, payload: DragPayload) => {
+      const target = parseISODate(targetKey);
+      if (!target) return;
+
+      if (payload.side === "income") {
+        const income = plan.incomes.find((i) => i.id === payload.id);
+        if (!income) return;
+        const isOneTime = income.kind === "one_time";
+        if (isOneTime && income.date === targetKey) return;
+        if (!isOneTime && (income.dayOfMonth ?? 1) === target.getDate()) return;
+        try {
+          await onUpdateIncome(income.id, {
+            name: income.name,
+            monthlyAmount: income.monthlyAmount,
+            kind: income.kind,
+            dayOfMonth: isOneTime ? null : target.getDate(),
+            date: isOneTime ? targetKey : null,
+            startDate: income.startDate,
+            endDate: income.endDate,
+          });
+          toast.success(
+            isOneTime
+              ? `Income moved to ${format(target, "PPP")}`
+              : `Income now hits day ${target.getDate()} of every month`
+          );
+        } catch {
+          toast.error("Failed to move income");
+        }
+        return;
+      }
+
+      if (payload.side === "expense") {
+        const expense = plan.expenses.find((e) => e.id === payload.id);
+        if (!expense) return;
+        const isOneTime = expense.kind === "one_time";
+        if (isOneTime && expense.date === targetKey) return;
+        if (!isOneTime && (expense.dayOfMonth ?? 1) === target.getDate()) return;
+        try {
+          await onUpdateExpense(expense.id, {
+            name: expense.name,
+            monthlyAmount: expense.monthlyAmount,
+            kind: expense.kind,
+            dayOfMonth: isOneTime ? null : target.getDate(),
+            date: isOneTime ? targetKey : null,
+          });
+          toast.success(
+            isOneTime
+              ? `Expense moved to ${format(target, "PPP")}`
+              : `Expense now hits day ${target.getDate()} of every month`
+          );
+        } catch {
+          toast.error("Failed to move expense");
+        }
+        return;
+      }
+
+      // debt — always recurring
+      const debt = plan.debts.find((d) => d.id === payload.id);
+      if (!debt) return;
+      if ((debt.dayOfMonth ?? 1) === target.getDate()) return;
+      try {
+        await onUpdateDebt(debt.id, {
+          name: debt.name,
+          initialBalance: debt.initialBalance,
+          monthlyInterestRate: debt.monthlyInterestRate,
+          monthlyPayment: debt.monthlyPayment,
+          paymentType: debt.paymentType as DebtPaymentType,
+          minPaymentPercent: debt.minPaymentPercent,
+          minPaymentFloor: debt.minPaymentFloor,
+          dayOfMonth: target.getDate(),
+        });
+        toast.success(
+          `Debt payment now scheduled for day ${target.getDate()} of every month`
+        );
+      } catch {
+        toast.error("Failed to move debt");
+      }
+    },
+    [plan.incomes, plan.expenses, plan.debts, onUpdateIncome, onUpdateExpense, onUpdateDebt]
+  );
 
   return (
     <Card>
@@ -326,6 +416,9 @@ export function PlanCalendar({
             <span className="inline-block size-2 rounded-full bg-amber-500" />
             Debt
           </span>
+          <span className="ml-auto text-[10px] italic text-muted-foreground/70">
+            Drag entries to move them. Click a day to expand.
+          </span>
         </div>
       </CardHeader>
 
@@ -351,8 +444,21 @@ export function PlanCalendar({
                 entries={entries}
                 muted={muted}
                 isCurrent={isToday(day)}
+                isExpanded={expandedDay === key}
+                isDragOver={dragOverDay === key}
+                onToggleExpand={() =>
+                  setExpandedDay((prev) => (prev === key ? null : key))
+                }
                 onAdd={(side) => setDialog({ kind: "add", side, date: key })}
-                onExpand={() => setDialog({ kind: "day-detail", date: key })}
+                onEditEntry={openEditFor}
+                onDropEntry={(payload) => {
+                  setDragOverDay(null);
+                  void handleDrop(key, payload);
+                }}
+                onDragEnter={() => setDragOverDay(key)}
+                onDragLeaveCell={() =>
+                  setDragOverDay((prev) => (prev === key ? null : prev))
+                }
               />
             );
           })}
@@ -364,8 +470,6 @@ export function PlanCalendar({
         onOpenChange={(o) => (o ? null : setDialog({ kind: "none" }))}
         variant={dialog.kind === "add" ? dialog.side : "income"}
         defaultDate={dialog.kind === "add" ? dialog.date : undefined}
-        // We pre-select one_time when opened from a calendar cell — the user
-        // clicked on a specific day, that's the natural intent.
         initial={
           dialog.kind === "add"
             ? { kind: "one_time", date: dialog.date }
@@ -434,17 +538,25 @@ export function PlanCalendar({
         }
         onSubmit={handleEditDebt}
       />
-
-      <DayDetailDialog
-        open={dialog.kind === "day-detail"}
-        onOpenChange={(o) => (o ? null : setDialog({ kind: "none" }))}
-        date={detailDate}
-        entries={detailEntries}
-        onEdit={openEditFor}
-      />
     </Card>
   );
 }
+
+type CalendarCellProps = {
+  day: Date;
+  isoKey: string;
+  entries: DayEntry[];
+  muted: boolean;
+  isCurrent: boolean;
+  isExpanded: boolean;
+  isDragOver: boolean;
+  onToggleExpand: () => void;
+  onAdd: (side: "income" | "expense") => void;
+  onEditEntry: (entry: DayEntry) => void;
+  onDropEntry: (payload: DragPayload) => void;
+  onDragEnter: () => void;
+  onDragLeaveCell: () => void;
+};
 
 function CalendarCell({
   day,
@@ -452,73 +564,95 @@ function CalendarCell({
   entries,
   muted,
   isCurrent,
+  isExpanded,
+  isDragOver,
+  onToggleExpand,
   onAdd,
-  onExpand,
-}: {
-  day: Date;
-  isoKey: string;
-  entries: DayEntry[];
-  muted: boolean;
-  isCurrent: boolean;
-  onAdd: (side: "income" | "expense") => void;
-  onExpand: () => void;
-}) {
-  const visible = entries.slice(0, 3);
-  const extra = entries.length - visible.length;
+  onEditEntry,
+  onDropEntry,
+  onDragEnter,
+  onDragLeaveCell,
+}: CalendarCellProps) {
+  // Collapsed view shows up to 3 entries + overflow indicator. Expanded view
+  // shows every entry inside a scroll container.
+  const visible = isExpanded ? entries : entries.slice(0, 3);
+  const extra = isExpanded ? 0 : entries.length - visible.length;
   const hasEntries = entries.length > 0;
+
+  // Native HTML5 drop handlers — onDragOver must preventDefault to make the
+  // cell a valid drop target, otherwise onDrop never fires.
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.types.includes(DND_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    const raw = e.dataTransfer.getData(DND_MIME);
+    if (!raw) return;
+    e.preventDefault();
+    try {
+      const payload = JSON.parse(raw) as DragPayload;
+      onDropEntry(payload);
+    } catch {
+      // bad payload, ignore
+    }
+  };
 
   return (
     <div
-      role={hasEntries ? "button" : undefined}
-      tabIndex={hasEntries ? 0 : -1}
-      onClick={hasEntries ? onExpand : undefined}
-      onKeyDown={
-        hasEntries
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onExpand();
-              }
-            }
-          : undefined
-      }
-      aria-label={
-        hasEntries ? `View ${entries.length} entries for ${format(day, "PPP")}` : undefined
-      }
-      className={`group relative flex min-h-[92px] flex-col rounded-md border p-1.5 text-xs ${
+      onDragOver={handleDragOver}
+      onDragEnter={onDragEnter}
+      onDragLeave={(e) => {
+        // Only fire leave when we actually leave the cell (not when crossing
+        // into a child element). currentTarget contains the cell; relatedTarget
+        // is where the cursor is going.
+        const next = e.relatedTarget as Node | null;
+        if (next && e.currentTarget.contains(next)) return;
+        onDragLeaveCell();
+      }}
+      onDrop={handleDrop}
+      className={`group relative flex flex-col rounded-md border p-1.5 text-xs transition-[min-height,box-shadow,border-color] duration-200 ease-out ${
         muted ? "bg-muted/30 text-muted-foreground/60" : "bg-card"
       } ${isCurrent ? "ring-1 ring-primary" : ""} ${
-        hasEntries
-          ? "cursor-pointer hover:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          : ""
-      }`}
+        isDragOver ? "border-primary/70 bg-primary/5 ring-1 ring-primary/50" : ""
+      } ${isExpanded ? "min-h-[320px]" : "min-h-[92px]"}`}
       data-date={isoKey}
     >
       <div className="mb-1 flex items-center justify-between">
-        <span
-          className={`font-mono text-[11px] ${
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          aria-expanded={isExpanded}
+          aria-label={
+            isExpanded
+              ? `Collapse ${format(day, "PPP")}`
+              : `Expand ${format(day, "PPP")}`
+          }
+          className={`flex items-center gap-1 rounded px-1 py-0.5 font-mono text-[11px] hover:bg-muted ${
             isCurrent ? "font-semibold text-primary" : ""
           }`}
         >
           {day.getDate()}
-        </span>
+          {hasEntries && (
+            <ChevronUp
+              className={`h-3 w-3 transition-transform duration-200 ${
+                isExpanded ? "" : "rotate-180"
+              }`}
+            />
+          )}
+        </button>
         <Popover>
           <PopoverTrigger asChild>
             <button
               type="button"
               aria-label={`Add entry on ${format(day, "PPP")}`}
-              // Stop the click from bubbling to the cell's expand handler.
-              onClick={(e) => e.stopPropagation()}
               className="rounded p-0.5 opacity-0 transition hover:bg-muted group-hover:opacity-100 focus-visible:opacity-100"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
           </PopoverTrigger>
-          <PopoverContent
-            align="end"
-            className="w-44 p-1"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <PopoverContent align="end" className="w-44 p-1">
             <button
               type="button"
               onClick={() => onAdd("income")}
@@ -539,29 +673,91 @@ function CalendarCell({
         </Popover>
       </div>
 
-      <ul className="space-y-0.5">
-        {visible.map((entry, i) => (
-          <li
-            key={`${entry.side}-${entry.id}-${i}`}
-            className={`truncate rounded px-1 py-0.5 text-[10px] ${
-              entry.side === "income"
-                ? "bg-green-500/10 text-green-700 dark:text-green-300"
-                : entry.side === "expense"
-                  ? "bg-red-500/10 text-red-700 dark:text-red-300"
-                  : "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-            }`}
-            title={`${entry.name} · ${formatCurrency(entry.amount)}`}
-          >
-            <span className="font-medium">{entry.name}</span>
-            <span className="ml-1 font-mono tabular-nums">
-              {formatCurrency(entry.amount)}
-            </span>
-          </li>
+      <ul
+        className={`space-y-0.5 ${
+          isExpanded ? "max-h-[260px] overflow-y-auto pr-0.5" : ""
+        }`}
+      >
+        {visible.map((entry) => (
+          <EntryChip
+            key={`${entry.side}-${entry.id}`}
+            entry={entry}
+            expanded={isExpanded}
+            onEdit={() => onEditEntry(entry)}
+          />
         ))}
         {extra > 0 && (
           <li className="text-[10px] text-muted-foreground">+{extra} more</li>
         )}
       </ul>
     </div>
+  );
+}
+
+function EntryChip({
+  entry,
+  expanded,
+  onEdit,
+}: {
+  entry: DayEntry;
+  expanded: boolean;
+  onEdit: () => void;
+}) {
+  const palette =
+    entry.side === "income"
+      ? "bg-green-500/10 text-green-700 dark:text-green-300"
+      : entry.side === "expense"
+        ? "bg-red-500/10 text-red-700 dark:text-red-300"
+        : "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+
+  const handleDragStart = (e: React.DragEvent<HTMLLIElement>) => {
+    const payload: DragPayload = { id: entry.id, side: entry.side };
+    e.dataTransfer.setData(DND_MIME, JSON.stringify(payload));
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  // Collapsed view: compact one-line chip, no edit/grip affordances.
+  if (!expanded) {
+    return (
+      <li
+        draggable
+        onDragStart={handleDragStart}
+        title={`${entry.name} · ${formatCurrency(entry.amount)} (drag to move)`}
+        className={`flex cursor-grab items-center justify-between gap-1 truncate rounded px-1 py-0.5 text-[10px] active:cursor-grabbing ${palette}`}
+      >
+        <span className="truncate font-medium">{entry.name}</span>
+        <span className="font-mono tabular-nums">
+          {formatCurrency(entry.amount)}
+        </span>
+      </li>
+    );
+  }
+
+  // Expanded view: grip handle + edit button on hover.
+  return (
+    <li
+      draggable
+      onDragStart={handleDragStart}
+      className={`group/entry flex items-center gap-1 rounded px-1 py-1 text-[11px] ${palette}`}
+    >
+      <GripVertical
+        className="h-3 w-3 shrink-0 cursor-grab opacity-50 active:cursor-grabbing"
+        aria-hidden
+      />
+      <div className="flex min-w-0 flex-1 items-center justify-between gap-1">
+        <span className="truncate font-medium">{entry.name}</span>
+        <span className="font-mono tabular-nums">
+          {formatCurrency(entry.amount)}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label={`Edit ${entry.name}`}
+        className="shrink-0 rounded p-0.5 opacity-0 transition hover:bg-background/60 group-hover/entry:opacity-100 focus-visible:opacity-100"
+      >
+        <Pencil className="h-3 w-3" />
+      </button>
+    </li>
   );
 }

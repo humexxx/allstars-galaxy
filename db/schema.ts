@@ -12,6 +12,15 @@ export const debtPaymentTypeEnum = pgEnum("debt_payment_type", ["fixed", "percen
 export const debtStrategyEnum = pgEnum("debt_strategy", ["avalanche", "snowball", "none"]);
 export const financeSnapshotSourceEnum = pgEnum("finance_snapshot_source", ["system_cron", "confirmation", "manual"]);
 export const financePlanLineKindEnum = pgEnum("finance_plan_line_kind", ["recurring", "one_time"]);
+// Shape of a recurring entry's cadence.
+//   monthly_day      — hits dayOfMonth every month (current default behaviour)
+//   monthly_weekday  — hits the Nth weekday of every month (e.g. 2nd Tuesday);
+//                       a 5th-weekday request falls back to the last occurrence
+//   every_n_months   — hits every intervalMonths starting from recurrenceStart
+export const financePlanRecurrenceTypeEnum = pgEnum(
+  "finance_plan_recurrence_type",
+  ["monthly_day", "monthly_weekday", "every_n_months"]
+);
 export const tripItemCategoryEnum = pgEnum("trip_item_category", [
   "lodging",
   "transport",
@@ -223,6 +232,17 @@ export const financePlanIncomes = pgTable(
     // year/month is meaningful for the projection.
     startDate: date("start_date"),
     endDate: date("end_date"),
+    // Recurrence shape — see financePlanRecurrenceTypeEnum. monthly_day uses
+    // dayOfMonth above; monthly_weekday uses weekOfMonth+dayOfWeek; and
+    // every_n_months uses intervalMonths anchored at recurrenceStart (falling
+    // back to the plan's startMonth when null).
+    recurrenceType: financePlanRecurrenceTypeEnum("recurrence_type")
+      .notNull()
+      .default("monthly_day"),
+    weekOfMonth: integer("week_of_month"),
+    dayOfWeek: integer("day_of_week"),
+    intervalMonths: integer("interval_months"),
+    recurrenceStart: date("recurrence_start"),
     sortOrder: real("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -231,6 +251,18 @@ export const financePlanIncomes = pgTable(
     check(
       "finance_plan_incomes_day_of_month_chk",
       sql`${t.dayOfMonth} IS NULL OR (${t.dayOfMonth} >= 1 AND ${t.dayOfMonth} <= 31)`
+    ),
+    check(
+      "finance_plan_incomes_week_of_month_chk",
+      sql`${t.weekOfMonth} IS NULL OR (${t.weekOfMonth} >= 1 AND ${t.weekOfMonth} <= 5)`
+    ),
+    check(
+      "finance_plan_incomes_day_of_week_chk",
+      sql`${t.dayOfWeek} IS NULL OR (${t.dayOfWeek} >= 0 AND ${t.dayOfWeek} <= 6)`
+    ),
+    check(
+      "finance_plan_incomes_interval_months_chk",
+      sql`${t.intervalMonths} IS NULL OR (${t.intervalMonths} >= 1 AND ${t.intervalMonths} <= 12)`
     ),
   ]
 );
@@ -253,6 +285,14 @@ export const financePlanExpenses = pgTable(
     dayOfMonth: integer("day_of_month"),
     // Specific date for one-time expenses.
     date: date("date"),
+    // Recurrence shape — see financePlanRecurrenceTypeEnum.
+    recurrenceType: financePlanRecurrenceTypeEnum("recurrence_type")
+      .notNull()
+      .default("monthly_day"),
+    weekOfMonth: integer("week_of_month"),
+    dayOfWeek: integer("day_of_week"),
+    intervalMonths: integer("interval_months"),
+    recurrenceStart: date("recurrence_start"),
     sortOrder: real("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -261,6 +301,18 @@ export const financePlanExpenses = pgTable(
     check(
       "finance_plan_expenses_day_of_month_chk",
       sql`${t.dayOfMonth} IS NULL OR (${t.dayOfMonth} >= 1 AND ${t.dayOfMonth} <= 31)`
+    ),
+    check(
+      "finance_plan_expenses_week_of_month_chk",
+      sql`${t.weekOfMonth} IS NULL OR (${t.weekOfMonth} >= 1 AND ${t.weekOfMonth} <= 5)`
+    ),
+    check(
+      "finance_plan_expenses_day_of_week_chk",
+      sql`${t.dayOfWeek} IS NULL OR (${t.dayOfWeek} >= 0 AND ${t.dayOfWeek} <= 6)`
+    ),
+    check(
+      "finance_plan_expenses_interval_months_chk",
+      sql`${t.intervalMonths} IS NULL OR (${t.intervalMonths} >= 1 AND ${t.intervalMonths} <= 12)`
     ),
   ]
 );
@@ -384,6 +436,14 @@ export const financePlanDebts = pgTable(
     // Calendar/projection use this to know WHEN in the month the minimum hits.
     // Nullable for legacy rows; treated as day 1 when unset.
     dayOfMonth: integer("day_of_month"),
+    // Recurrence shape — see financePlanRecurrenceTypeEnum.
+    recurrenceType: financePlanRecurrenceTypeEnum("recurrence_type")
+      .notNull()
+      .default("monthly_day"),
+    weekOfMonth: integer("week_of_month"),
+    dayOfWeek: integer("day_of_week"),
+    intervalMonths: integer("interval_months"),
+    recurrenceStart: date("recurrence_start"),
     sortOrder: real("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -392,6 +452,18 @@ export const financePlanDebts = pgTable(
     check(
       "finance_plan_debts_day_of_month_chk",
       sql`${t.dayOfMonth} IS NULL OR (${t.dayOfMonth} >= 1 AND ${t.dayOfMonth} <= 31)`
+    ),
+    check(
+      "finance_plan_debts_week_of_month_chk",
+      sql`${t.weekOfMonth} IS NULL OR (${t.weekOfMonth} >= 1 AND ${t.weekOfMonth} <= 5)`
+    ),
+    check(
+      "finance_plan_debts_day_of_week_chk",
+      sql`${t.dayOfWeek} IS NULL OR (${t.dayOfWeek} >= 0 AND ${t.dayOfWeek} <= 6)`
+    ),
+    check(
+      "finance_plan_debts_interval_months_chk",
+      sql`${t.intervalMonths} IS NULL OR (${t.intervalMonths} >= 1 AND ${t.intervalMonths} <= 12)`
     ),
   ]
 );
@@ -725,3 +797,26 @@ export const tripSharesRelations = relations(tripShares, ({ one }) => ({
     references: [trips.id],
   }),
 }));
+
+// Entertainment → Sports
+//
+// user_sports_preferences: which of the catalog sports the user has marked as
+// favourites. The sport identifier is a free-form text key (matches SportId in
+// /types/sports.ts) so adding/removing sports does not require an enum
+// migration. The UNIQUE (user_id, sport_id) constraint backs the toggle
+// semantics in the manage-favourites sheet.
+export const userSportsPreferences = pgTable(
+  "user_sports_preferences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sportId: text("sport_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("user_sports_preferences_user_sport_uniq").on(t.userId, t.sportId),
+    index("user_sports_preferences_user_id_idx").on(t.userId),
+  ]
+);

@@ -763,7 +763,7 @@ function CalendarCell({
                 +{extra} more
               </li>
             </TooltipTrigger>
-            <TooltipContent side="right" className="max-w-xs">
+            <TooltipContent side="top" sideOffset={4} className="max-w-xs">
               <HiddenEntriesTooltipBody entries={entries.slice(3)} />
             </TooltipContent>
           </Tooltip>
@@ -838,7 +838,7 @@ function EntryChip({
   return (
     <Tooltip>
       <TooltipTrigger asChild>{chip}</TooltipTrigger>
-      <TooltipContent side="right" className="max-w-xs">
+      <TooltipContent side="top" sideOffset={4} className="max-w-xs">
         <EntryTooltipBody entry={entry} />
       </TooltipContent>
     </Tooltip>

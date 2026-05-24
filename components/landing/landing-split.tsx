@@ -21,7 +21,7 @@ export function LandingSplit() {
             Money is just one variable in your life.
           </h2>
           <p className="mt-5 text-lg leading-relaxed text-neutral-600 text-balance">
-            Most apps treat your portfolio like an island. Capital Galaxy treats it like
+            Most apps treat your portfolio like an island. Allstars Galaxy treats it like
             part of an ecosystem — your goals, your week, your energy, all in the same orbit.
           </p>
           <ul className="mt-10 grid gap-6 sm:grid-cols-2">

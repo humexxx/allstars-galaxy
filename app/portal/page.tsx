@@ -6,7 +6,7 @@ import { DashboardConfirmationHost } from "@/components/finance/dashboard-confir
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 
 export const metadata: Metadata = {
-  title: "Dashboard | Capital Galaxy",
+  title: "Dashboard | Allstars Galaxy",
   description: "Your investment dashboard",
 };
 

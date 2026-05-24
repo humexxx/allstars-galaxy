@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/portal/page-header";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Investment Methods | Capital Galaxy",
+  title: "Investment Methods | Allstars Galaxy",
   description: "Explore available investment methods and strategies",
 };
 

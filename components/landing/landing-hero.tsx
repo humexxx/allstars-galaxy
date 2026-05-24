@@ -13,7 +13,7 @@ export function LandingHero() {
             in one orbit.
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-neutral-600 text-balance lg:text-xl">
-            Capital Galaxy is the calm command center for your finances, your week and the
+            Allstars Galaxy is the calm command center for your finances, your week and the
             goals that connect them — built for people who compound.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-3">
@@ -40,7 +40,7 @@ export function LandingHero() {
           <div className="relative mx-auto aspect-[4/3] w-full max-w-xl overflow-hidden rounded-2xl bg-neutral-100">
             <Image
               src="/images/landing/hero-dashboard.svg"
-              alt="Capital Galaxy dashboard preview"
+              alt="Allstars Galaxy dashboard preview"
               fill
               priority
               className="object-contain p-6"

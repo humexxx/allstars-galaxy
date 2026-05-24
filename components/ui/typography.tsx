@@ -1,5 +1,5 @@
 /**
- * Typography primitives for Capital Galaxy.
+ * Typography primitives for Allstars Galaxy.
  *
  * Source of truth for the type system: docs/TYPOGRAPHY.md
  * Keep variants here in sync with the scale documented there.

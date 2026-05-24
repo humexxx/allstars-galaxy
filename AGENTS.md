@@ -1,6 +1,6 @@
 # AI Agent Instructions
 
-This file contains comprehensive instructions for AI coding agents working on Capital Galaxy.
+This file contains comprehensive instructions for AI coding agents working on Allstars Galaxy.
 
 **File purpose**: Local map, navigation, and operational knowledge for this specific repository.
 
@@ -31,7 +31,7 @@ When using Agent Skills, substitute these placeholders with actual project value
 ## Project Structure
 
 ```
-capital-galaxy/
+allstars-galaxy/
 ├── app/                      # Next.js App Router
 │   ├── actions/             # Server actions (mutations)
 │   ├── api/                 # API routes

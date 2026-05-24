@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const ctx = await requireEffectiveContext();
   const plan = await getPlanWithLines(id, ctx.effectiveUserId);
   return {
-    title: plan ? `${plan.name} | Capital Galaxy` : "Plan | Capital Galaxy",
+    title: plan ? `${plan.name} | Allstars Galaxy` : "Plan | Allstars Galaxy",
   };
 }
 

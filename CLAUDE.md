@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance for Claude Code when working on Capital Galaxy.
+This file provides guidance for Claude Code when working on Allstars Galaxy.
 
 ## Project Overview
 
-Capital Galaxy is a personal finance and productivity web app built with Next.js 16 (App Router), React 19, Supabase (Auth + PostgreSQL), and Drizzle ORM.
+Allstars Galaxy is a personal finance and productivity web app built with Next.js 16 (App Router), React 19, Supabase (Auth + PostgreSQL), and Drizzle ORM.
 
 ## Commands
 

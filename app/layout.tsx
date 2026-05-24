@@ -7,8 +7,8 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 
 export const metadata: Metadata = {
-  title: "Capital Galaxy",
-  description: "Capital Galaxy Application",
+  title: "Allstars Galaxy",
+  description: "Allstars Galaxy Application",
 };
 
 export default function RootLayout({

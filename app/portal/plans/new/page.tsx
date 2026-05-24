@@ -6,7 +6,7 @@ import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { listInvestmentMethods } from "@/lib/services/finance-plan-service";
 
 export const metadata: Metadata = {
-  title: "New plan | Capital Galaxy",
+  title: "New plan | Allstars Galaxy",
 };
 
 export const dynamic = "force-dynamic";

@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/portal/page-header";
 import { UsersTable } from "@/components/admin/users/users-table";
 
 export const metadata: Metadata = {
-  title: "Users | Capital Galaxy",
+  title: "Users | Allstars Galaxy",
   description: "View and manage users",
 };
 

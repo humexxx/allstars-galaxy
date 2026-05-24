@@ -6,8 +6,8 @@ import type { Metadata } from "next"
 import { ForgotPasswordForm } from "@/components/forgot-password-form"
 
 export const metadata: Metadata = {
-  title: "Reset password | Capital Galaxy",
-  description: "Request a password reset for your Capital Galaxy account.",
+  title: "Reset password | Allstars Galaxy",
+  description: "Request a password reset for your Allstars Galaxy account.",
 }
 
 export default function ForgotPasswordPage() {
@@ -19,7 +19,7 @@ export default function ForgotPasswordPage() {
             <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
               <GalleryVerticalEnd className="size-4" />
             </div>
-            Capital Galaxy
+            Allstars Galaxy
           </Link>
         </header>
         <div className="flex flex-1 items-center justify-center">

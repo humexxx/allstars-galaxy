@@ -15,7 +15,7 @@ const STEPS = [
     n: "03",
     title: "Watch it compound",
     description:
-      "Capital Galaxy quietly tracks the orbit. You make decisions; it shows you whether they're working.",
+      "Allstars Galaxy quietly tracks the orbit. You make decisions; it shows you whether they're working.",
   },
 ];
 

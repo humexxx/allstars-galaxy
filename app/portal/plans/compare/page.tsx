@@ -15,7 +15,7 @@ import {
 } from "@/lib/services/finance-plan-service";
 
 export const metadata: Metadata = {
-  title: "Compare plans | Capital Galaxy",
+  title: "Compare plans | Allstars Galaxy",
 };
 
 export const dynamic = "force-dynamic";

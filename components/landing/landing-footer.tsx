@@ -50,7 +50,7 @@ export function LandingFooter() {
           <div className="md:col-span-2">
             <Link href="/" className="inline-flex items-center gap-2.5 text-neutral-900">
               <GalaxyLogo variant="light" />
-              <span className="text-base font-semibold tracking-tight">Capital Galaxy</span>
+              <span className="text-base font-semibold tracking-tight">Allstars Galaxy</span>
             </Link>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-neutral-600">
               One workspace for your money, your time, and the goals that connect them.
@@ -80,7 +80,7 @@ export function LandingFooter() {
 
         <div className="mt-14 flex flex-col items-start justify-between gap-3 border-t border-neutral-200 pt-8 sm:flex-row sm:items-center">
           <p className="text-xs text-neutral-500">
-            © {new Date().getFullYear()} Capital Galaxy. All rights reserved.
+            © {new Date().getFullYear()} Allstars Galaxy. All rights reserved.
           </p>
           <p className="text-xs text-neutral-500">
             Built for people who think in systems, not in spreadsheets.

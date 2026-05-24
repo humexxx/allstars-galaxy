@@ -145,7 +145,7 @@ export function AppSidebar({
                   <GalleryVerticalEnd className="size-4" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-medium">Capital Galaxy</span>
+                  <span className="font-medium">Allstars Galaxy</span>
                   <span className="text-xs text-sidebar-foreground/70">v0.1.0</span>
                 </div>
               </Link>

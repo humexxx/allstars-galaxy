@@ -1,7 +1,7 @@
 # AI Context & Project Guidelines
 
 ## Project Overview
-This project, **Capital Galaxy**, is a modern web application built with the Next.js framework.
+This project, **Allstars Galaxy**, is a modern web application built with the Next.js framework.
 It uses Supabase for backend services (Auth, Database) and Drizzle ORM for type-safe database interactions.
 
 ## Technology Stack

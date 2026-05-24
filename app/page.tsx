@@ -10,7 +10,7 @@ import { LandingCta } from "@/components/landing/landing-cta";
 import { LandingFooter } from "@/components/landing/landing-footer";
 
 export const metadata: Metadata = {
-  title: "Capital Galaxy — Money and time, in one orbit",
+  title: "Allstars Galaxy — Money and time, in one orbit",
   description:
     "The calm command center for your finances, your week and the goals that connect them.",
 };

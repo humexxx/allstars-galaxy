@@ -1,4 +1,4 @@
-# Capital Galaxy
+# Allstars Galaxy
 
 Aplicación empresarial construida con Next.js 16, React 19 y Tailwind CSS v4.
 
@@ -51,7 +51,7 @@ Aplicación empresarial construida con Next.js 16, React 19 y Tailwind CSS v4.
 ```bash
 # Clonar el repositorio
 git clone <repository-url>
-cd capital-galaxy
+cd allstars-galaxy
 
 # Instalar dependencias
 npm install

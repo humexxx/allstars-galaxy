@@ -8,7 +8,7 @@ import {
 } from "@/lib/services/board-service";
 
 export const metadata: Metadata = {
-  title: "Task Board | Capital Galaxy",
+  title: "Task Board | Allstars Galaxy",
   description: "Manage your tasks with a visual board",
 };
 

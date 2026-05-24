@@ -6,8 +6,8 @@ import type { Metadata } from "next"
 import { SignupForm } from "@/components/signup-form"
 
 export const metadata: Metadata = {
-  title: "Sign up | Capital Galaxy",
-  description: "Create your Capital Galaxy account.",
+  title: "Sign up | Allstars Galaxy",
+  description: "Create your Allstars Galaxy account.",
 }
 
 export default function SignupPage() {
@@ -19,7 +19,7 @@ export default function SignupPage() {
             <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
               <GalleryVerticalEnd className="size-4" />
             </div>
-            Capital Galaxy
+            Allstars Galaxy
           </Link>
         </header>
         <div className="flex flex-1 items-center justify-center">

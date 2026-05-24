@@ -6,8 +6,8 @@ import type { Metadata } from "next"
 import { LoginForm } from "@/components/login-form"
 
 export const metadata: Metadata = {
-  title: "Log in | Capital Galaxy",
-  description: "Sign in to your Capital Galaxy workspace.",
+  title: "Log in | Allstars Galaxy",
+  description: "Sign in to your Allstars Galaxy workspace.",
 }
 
 export default function LoginPage() {
@@ -19,7 +19,7 @@ export default function LoginPage() {
             <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
               <GalleryVerticalEnd className="size-4" />
             </div>
-            Capital Galaxy
+            Allstars Galaxy
           </Link>
         </header>
         <div className="flex flex-1 items-center justify-center">

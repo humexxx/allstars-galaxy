@@ -1,6 +1,6 @@
 # Typography
 
-> Single source of truth for typography in Capital Galaxy. If you change
+> Single source of truth for typography in Allstars Galaxy. If you change
 > anything about how text looks across the app, change it here and update the
 > primitives in [`components/ui/typography.tsx`](../components/ui/typography.tsx)
 > in the same commit.
@@ -71,7 +71,7 @@ OpenType features enabled globally on `<body>`:
 ```tsx
 import { Heading } from "@/components/ui/typography";
 
-<Heading level="display">Capital Galaxy</Heading>
+<Heading level="display">Allstars Galaxy</Heading>
 <Heading level="h1">Deployments</Heading>
 <Heading level="h2">Recent activity</Heading>
 <Heading level="h4" as="div">Card title</Heading>   // change the rendered tag

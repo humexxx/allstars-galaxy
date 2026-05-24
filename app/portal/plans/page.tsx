@@ -11,7 +11,7 @@ import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { listUserPlans } from "@/lib/services/finance-plan-service";
 
 export const metadata: Metadata = {
-  title: "Plans | Capital Galaxy",
+  title: "Plans | Allstars Galaxy",
   description: "Compare scenarios for your personal finances",
 };
 

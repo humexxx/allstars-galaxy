@@ -21,6 +21,21 @@ export const financePlanRecurrenceTypeEnum = pgEnum(
   "finance_plan_recurrence_type",
   ["monthly_day", "monthly_weekday", "every_n_months"]
 );
+// Which side a per-month override targets. Discriminator + parentId acts as a
+// "polymorphic FK" — we don't enforce the actual FK at the DB level because
+// the three line tables can't be referenced by a single column.
+export const financePlanOverrideSideEnum = pgEnum(
+  "finance_plan_override_side",
+  ["income", "expense", "debt"]
+);
+// What the override does for that one month:
+//   skip        — pretend the recurring entry doesn't hit this month
+//   reschedule  — move the occurrence to a different date (still that month)
+//   amount      — keep the date but use a different amount this month only
+export const financePlanOverrideActionEnum = pgEnum(
+  "finance_plan_override_action",
+  ["skip", "reschedule", "amount"]
+);
 export const tripItemCategoryEnum = pgEnum("trip_item_category", [
   "lodging",
   "transport",
@@ -464,6 +479,59 @@ export const financePlanDebts = pgTable(
     check(
       "finance_plan_debts_interval_months_chk",
       sql`${t.intervalMonths} IS NULL OR (${t.intervalMonths} >= 1 AND ${t.intervalMonths} <= 12)`
+    ),
+  ]
+);
+
+/**
+ * Per-occurrence overrides for recurring income / expense / debt entries.
+ *
+ * Lets the user say "move JUST this month's payment", "skip this month", or
+ * "use a different amount this month" without disturbing the parent's
+ * recurring schedule. Projection + calendar both consult this table per
+ * (parentSide, parentId, monthYear) before generating the regular contribution.
+ *
+ * monthYear stores the FIRST day of the targeted month (DATE 2026-08-01); the
+ * unique index on (parent_side, parent_id, month_year) enforces at most one
+ * override per recurring entry per month — a new override replaces the
+ * previous one.
+ */
+export const financePlanLineOverrides = pgTable(
+  "finance_plan_line_overrides",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => financePlans.id, { onDelete: "cascade" }),
+    parentSide: financePlanOverrideSideEnum("parent_side").notNull(),
+    // No DB-level FK — points to one of finance_plan_incomes / _expenses /
+    // _debts depending on parentSide. The service deletes matching overrides
+    // when its parent is deleted; the planId cascade catches whole-plan deletes.
+    parentId: uuid("parent_id").notNull(),
+    monthYear: date("month_year").notNull(),
+    action: financePlanOverrideActionEnum("action").notNull(),
+    // For action='reschedule': specific date this month maps to.
+    date: date("date"),
+    // For action='amount': the replacement amount for this month.
+    monthlyAmount: numeric("monthly_amount", { precision: 20, scale: 2 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("finance_plan_line_overrides_plan_id_idx").on(t.planId),
+    uniqueIndex("finance_plan_line_overrides_parent_month_uniq").on(
+      t.parentSide,
+      t.parentId,
+      t.monthYear
+    ),
+    check(
+      "finance_plan_line_overrides_reschedule_chk",
+      sql`(${t.action} <> 'reschedule') OR (${t.date} IS NOT NULL)`
+    ),
+    check(
+      "finance_plan_line_overrides_amount_chk",
+      sql`(${t.action} <> 'amount') OR (${t.monthlyAmount} IS NOT NULL)`
     ),
   ]
 );

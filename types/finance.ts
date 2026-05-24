@@ -3,6 +3,7 @@ import type {
   financePlanIncomes,
   financePlanExpenses,
   financePlanDebts,
+  financePlanLineOverrides,
   financePlanSnapshots,
   financePlanConfirmations,
   financePlanDebtConfirmations,
@@ -12,6 +13,10 @@ export type FinancePlan = typeof financePlans.$inferSelect;
 export type FinancePlanIncome = typeof financePlanIncomes.$inferSelect;
 export type FinancePlanExpense = typeof financePlanExpenses.$inferSelect;
 export type FinancePlanDebt = typeof financePlanDebts.$inferSelect;
+export type FinancePlanLineOverride =
+  typeof financePlanLineOverrides.$inferSelect;
+export type OverrideSide = "income" | "expense" | "debt";
+export type OverrideAction = "skip" | "reschedule" | "amount";
 export type FinancePlanSnapshot = typeof financePlanSnapshots.$inferSelect;
 export type FinancePlanConfirmation = typeof financePlanConfirmations.$inferSelect;
 export type FinancePlanDebtConfirmation = typeof financePlanDebtConfirmations.$inferSelect;
@@ -27,6 +32,7 @@ export type FinancePlanWithLines = FinancePlan & {
   incomes: FinancePlanIncome[];
   expenses: FinancePlanExpense[];
   debts: FinancePlanDebt[];
+  overrides: FinancePlanLineOverride[];
 };
 
 export type ProjectionDebtState = {

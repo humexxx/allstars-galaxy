@@ -6,6 +6,7 @@ import {
   financePlanIncomes,
   financePlanExpenses,
   financePlanDebts,
+  financePlanLineOverrides,
 } from "@/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 
@@ -111,7 +112,7 @@ export const getPlanWithLines = cache(async function getPlanWithLines(
     .where(and(eq(financePlans.id, planId), eq(financePlans.userId, userId)));
   if (!plan) return null;
 
-  const [incomes, expenses, debts] = await Promise.all([
+  const [incomes, expenses, debts, overrides] = await Promise.all([
     db
       .select()
       .from(financePlanIncomes)
@@ -127,9 +128,13 @@ export const getPlanWithLines = cache(async function getPlanWithLines(
       .from(financePlanDebts)
       .where(eq(financePlanDebts.planId, planId))
       .orderBy(asc(financePlanDebts.sortOrder), asc(financePlanDebts.createdAt)),
+    db
+      .select()
+      .from(financePlanLineOverrides)
+      .where(eq(financePlanLineOverrides.planId, planId)),
   ]);
 
-  return { ...plan, incomes, expenses, debts };
+  return { ...plan, incomes, expenses, debts, overrides };
 });
 
 export async function createPlan(

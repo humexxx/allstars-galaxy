@@ -1095,25 +1095,46 @@ export function PlanCalendar({
             drop.payload
           );
         }}
+        onEditDetails={() => {
+          // Drop the pending drag and route the user straight to the parent
+          // edit dialog so they can configure recurrence + amount in full
+          // instead of choosing one of the canned drop semantics.
+          if (!pendingDrop) return;
+          const { payload } = pendingDrop;
+          setPendingDrop(null);
+          if (payload.side === "income") {
+            const income = plan.incomes.find((i) => i.id === payload.id);
+            if (income) setDialog({ kind: "edit-income", income });
+          } else if (payload.side === "expense") {
+            const expense = plan.expenses.find((e) => e.id === payload.id);
+            if (expense) setDialog({ kind: "edit-expense", expense });
+          } else {
+            const debt = plan.debts.find((d) => d.id === payload.id);
+            if (debt) setDialog({ kind: "edit-debt", debt });
+          }
+        }}
       />
     </Card>
   );
 }
 
 // Prompt the user when a recurring entry is dragged: change the schedule for
-// every month going forward, or just override this month? Cross-month drops
-// disable the "Just this month" option since overrides are scoped to the
-// source month.
+// every month going forward, override just this month, or punt to the full
+// edit dialog for everything else (amount-only override, recurrence-model
+// changes, etc.). Cross-month drops disable the "Just this month" option
+// since overrides are scoped to the source month.
 function MoveRecurringPrompt({
   pending,
   onCancel,
   onMoveAll,
   onJustThisMonth,
+  onEditDetails,
 }: {
   pending: { payload: DragPayload; targetKey: string } | null;
   onCancel: () => void;
   onMoveAll: () => void;
   onJustThisMonth: () => void;
+  onEditDetails: () => void;
 }) {
   const sourceDate = pending ? parseISODate(pending.payload.sourceDate) : null;
   const targetDate = pending ? parseISODate(pending.targetKey) : null;
@@ -1135,16 +1156,23 @@ function MoveRecurringPrompt({
             {targetDate && sourceDate ? (
               <>
                 From <strong>{format(sourceDate, "PPP")}</strong> to{" "}
-                <strong>{format(targetDate, "PPP")}</strong>. Apply the change
-                to the whole recurring schedule, or just this month?
+                <strong>{format(targetDate, "PPP")}</strong>. Pick the simplest
+                action below, or open <em>Edit details</em> to tweak amount,
+                recurrence type and start/end window.
               </>
             ) : (
-              "Apply the change to the whole recurring schedule, or just this month?"
+              "Pick an action, or open Edit details for the full form."
             )}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter className="gap-2 sm:gap-2">
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+        <AlertDialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-2">
+          <AlertDialogCancel className="sm:mr-auto">Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={onEditDetails}
+            className="bg-background text-foreground ring-1 ring-border hover:bg-muted"
+          >
+            Edit details…
+          </AlertDialogAction>
           <AlertDialogAction
             disabled={!sameMonth}
             onClick={onJustThisMonth}

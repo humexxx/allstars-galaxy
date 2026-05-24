@@ -452,7 +452,29 @@ type DebtRuntimeState = {
   paymentType: import("@/types/finance").DebtPaymentType;
   minPercent: number;
   minFloor: number;
+  // Recurrence model — see RecurrenceType. monthly_day / monthly_weekday hit
+  // every month; every_n_months hits on the every-N cycle anchored at
+  // anchorKey (interest still accrues every month, payments don't).
+  recurrenceType: "monthly_day" | "monthly_weekday" | "every_n_months";
+  intervalMonths: number | null;
+  anchorKey: number | null;
 };
+
+// True if a recurring entry contributes to this month. monthly_day and
+// monthly_weekday differ only in WHICH day inside the month — both contribute
+// every month at the projection level. every_n_months contributes only on
+// hit months in the cycle anchored at anchorKey.
+function isRecurringHitMonth(
+  monthKey: number,
+  recurrenceType: "monthly_day" | "monthly_weekday" | "every_n_months",
+  intervalMonths: number | null,
+  anchorKey: number | null
+): boolean {
+  if (recurrenceType !== "every_n_months") return true;
+  if (!intervalMonths || intervalMonths < 1 || anchorKey === null) return true;
+  if (monthKey < anchorKey) return false;
+  return (monthKey - anchorKey) % intervalMonths === 0;
+}
 
 function scheduledPaymentFor(d: DebtRuntimeState, balanceWithInterest: number): number {
   if (d.paymentType === "percent_of_balance") {
@@ -523,6 +545,17 @@ export function projectPlan(
   // Guard against negative ROI configurations — investments never shrink.
   const autoInvestRate = Math.max(0, options.autoInvestRate ?? 0);
 
+  // Anchor used by every_n_months when an entry doesn't set its own
+  // recurrenceStart — fall back to the plan's startMonth.
+  const planStartKey = yearMonthKeyFromDate(plan.startMonth);
+  const anchorFor = (
+    type: "monthly_day" | "monthly_weekday" | "every_n_months",
+    recurrenceStart: string | null
+  ): number | null =>
+    type === "every_n_months"
+      ? yearMonthKeyFromISO(recurrenceStart) ?? planStartKey
+      : null;
+
   // Pre-compute per-line month bounds and one-time hit-months so the inner
   // loop is O(lines) per month with no string parsing or branching surprises.
   const incomeRows = incomes.map((i) => ({
@@ -531,11 +564,17 @@ export function projectPlan(
     startKey: yearMonthKeyFromISO(i.startDate),
     endKey: yearMonthKeyFromISO(i.endDate),
     oneTimeKey: i.kind === "one_time" ? yearMonthKeyFromISO(i.date) : null,
+    recurrenceType: i.recurrenceType,
+    intervalMonths: i.intervalMonths,
+    anchorKey: anchorFor(i.recurrenceType, i.recurrenceStart),
   }));
   const expenseRows = expenses.map((e) => ({
     amount: Math.max(0, num(e.monthlyAmount)),
     kind: e.kind,
     oneTimeKey: e.kind === "one_time" ? yearMonthKeyFromISO(e.date) : null,
+    recurrenceType: e.recurrenceType,
+    intervalMonths: e.intervalMonths,
+    anchorKey: anchorFor(e.recurrenceType, e.recurrenceStart),
   }));
 
   const savingsRate = Math.max(0, num(plan.monthlySavingsRate));
@@ -559,6 +598,9 @@ export function projectPlan(
     paymentType: d.paymentType as import("@/types/finance").DebtPaymentType,
     minPercent: num(d.minPaymentPercent),
     minFloor: num(d.minPaymentFloor),
+    recurrenceType: d.recurrenceType,
+    intervalMonths: d.intervalMonths,
+    anchorKey: anchorFor(d.recurrenceType, d.recurrenceStart),
   }));
 
   const months: ProjectionMonth[] = [];
@@ -585,7 +627,15 @@ export function projectPlan(
     for (const row of incomeRows) {
       if (row.kind === "one_time") {
         if (row.oneTimeKey === monthKey) monthIncome += row.amount;
-      } else if (isActiveInMonth(monthKey, row.startKey, row.endKey)) {
+      } else if (
+        isActiveInMonth(monthKey, row.startKey, row.endKey) &&
+        isRecurringHitMonth(
+          monthKey,
+          row.recurrenceType,
+          row.intervalMonths,
+          row.anchorKey
+        )
+      ) {
         monthIncome += row.amount;
       }
     }
@@ -593,24 +643,44 @@ export function projectPlan(
     for (const row of expenseRows) {
       if (row.kind === "one_time") {
         if (row.oneTimeKey === monthKey) monthExpenses += row.amount;
-      } else {
+      } else if (
+        isRecurringHitMonth(
+          monthKey,
+          row.recurrenceType,
+          row.intervalMonths,
+          row.anchorKey
+        )
+      ) {
         monthExpenses += row.amount;
       }
     }
 
-    // Step 1 + 2: accrue interest and apply scheduled payments (variable for
-    // percent_of_balance debts, fixed otherwise).
+    // Step 1 + 2: accrue interest every month; apply the scheduled payment
+    // only on hit months. For every_n_months debts, interest still piles up
+    // between payments — that's the realistic model for installment loans
+    // that bill quarterly etc.
     for (const d of debtStates) {
       if (d.balance <= 0) continue;
       const interest = d.balance * d.rate;
       const balanceWithInterest = d.balance + interest;
+      interestTotal += interest;
+      const entry = monthly.get(d.id)!;
+      entry.interest = interest;
+      const isHitMonth = isRecurringHitMonth(
+        monthKey,
+        d.recurrenceType,
+        d.intervalMonths,
+        d.anchorKey
+      );
+      if (!isHitMonth) {
+        d.balance = balanceWithInterest;
+        entry.scheduled = 0;
+        continue;
+      }
       const scheduled = scheduledPaymentFor(d, balanceWithInterest);
       const payment = Math.min(scheduled, balanceWithInterest);
       d.balance = balanceWithInterest - payment;
       scheduledTotal += payment;
-      interestTotal += interest;
-      const entry = monthly.get(d.id)!;
-      entry.interest = interest;
       entry.scheduled = payment;
     }
 

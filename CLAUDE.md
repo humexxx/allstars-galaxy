@@ -43,11 +43,32 @@ exact change-to-doc map.
 npm run dev          # Start dev server (http://localhost:3010)
 npm run build        # Production build
 npm run lint         # ESLint
+npm run test         # Vitest — unit + integration (mocked DB)
+npm run test:watch   # Vitest watch mode
+npm run test:e2e     # Playwright — needs .env.test + running dev server
+npm run test:e2e:ui  # Playwright UI mode
 npm run db:generate  # Generate migration from schema changes
 npm run db:migrate   # Apply pending migrations
 npm run db:studio    # Drizzle Studio (http://localhost:4983)
 npm run db:seed      # Seed database
 ```
+
+### Testing
+
+- **Vitest** (`*.test.ts(x)` co-located with source) runs in Node by default
+  and mocks `@/db` at the import boundary — no real Supabase needed. See
+  [`vitest.config.ts`](vitest.config.ts) and [`vitest.setup.ts`](vitest.setup.ts)
+  (the setup stubs the `server-only` marker so server modules can be imported
+  from the test runner).
+- **Playwright** (`e2e/*.spec.ts`) drives the real app at `http://localhost:3010`.
+  Requires a dedicated Supabase test user — copy [`.env.test.example`](.env.test.example)
+  to `.env.test` and fill `TEST_USER_EMAIL` / `TEST_USER_PASSWORD`. The auth
+  fixture logs in once and persists `storageState` to `playwright/.auth/user.json`
+  (gitignored). Per-test cleanup goes through `DATABASE_URL` from `.env` to
+  truncate `user_sports_preferences` for the test user — see
+  [`e2e/fixtures.ts`](e2e/fixtures.ts).
+- Specs run with `workers: 1` because they share one Supabase user; parallel
+  runs would race on the favourites table.
 
 ## Architecture
 

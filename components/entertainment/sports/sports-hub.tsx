@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Star } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { getFootballLeagues } from "@/lib/data/sports/football";
@@ -25,14 +26,37 @@ const FOOTBALL_LEAGUES = getFootballLeagues();
 
 type SportsHubProps = {
   defaultSport?: SportId;
+  /** Favourites surface as starred tabs and get pinned to the front of the strip. */
+  favoriteSportIds?: SportId[];
 };
 
-export function SportsHub({ defaultSport = "football" }: SportsHubProps) {
-  const [activeSport, setActiveSport] = useState<SportId>(defaultSport);
+export function SportsHub({
+  defaultSport,
+  favoriteSportIds = [],
+}: SportsHubProps) {
+  const favSet = useMemo(() => new Set(favoriteSportIds), [favoriteSportIds]);
+  const initial: SportId = defaultSport ?? favoriteSportIds[0] ?? "football";
+  const [activeSport, setActiveSport] = useState<SportId>(initial);
+
+  // Render favourites first so the user lands on their most-watched sports.
+  const orderedSports = useMemo(
+    () =>
+      [...SPORTS].sort((a, b) => {
+        const aFav = favSet.has(a.id) ? 0 : 1;
+        const bFav = favSet.has(b.id) ? 0 : 1;
+        return aFav - bFav;
+      }),
+    [favSet]
+  );
 
   return (
     <div className="space-y-6">
-      <SportSelector active={activeSport} onChange={setActiveSport} />
+      <SportSelector
+        active={activeSport}
+        onChange={setActiveSport}
+        favSet={favSet}
+        sports={orderedSports}
+      />
       <SportContent sport={activeSport} />
     </div>
   );
@@ -41,14 +65,19 @@ export function SportsHub({ defaultSport = "football" }: SportsHubProps) {
 function SportSelector({
   active,
   onChange,
+  favSet,
+  sports,
 }: {
   active: SportId;
   onChange: (sport: SportId) => void;
+  favSet: Set<SportId>;
+  sports: typeof SPORTS;
 }) {
   return (
     <div className="-mx-2 flex gap-2 overflow-x-auto px-2 pb-1">
-      {SPORTS.map((sport) => {
+      {sports.map((sport) => {
         const isActive = sport.id === active;
+        const isFav = favSet.has(sport.id);
         return (
           <button
             key={sport.id}
@@ -65,6 +94,13 @@ function SportSelector({
               {sport.emoji}
             </span>
             <span>{sport.shortLabel}</span>
+            {isFav && (
+              <Star
+                aria-hidden
+                className="h-3 w-3 fill-amber-400 text-amber-400"
+                strokeWidth={2}
+              />
+            )}
           </button>
         );
       })}

@@ -35,3 +35,18 @@ export type PublicTripView = {
   photos: TripPhoto[];
   share: TripShare;
 };
+
+export type DashboardTravelTripState = "in_progress" | "upcoming" | "past";
+
+export type DashboardTravelFeaturedTrip = Trip & {
+  state: DashboardTravelTripState;
+  itemCount: number;
+  totalEstimate: number;
+};
+
+export type DashboardTravelSummary = {
+  totalTrips: number;
+  upcomingCount: number;
+  inProgressCount: number;
+  featured: DashboardTravelFeaturedTrip | null;
+};

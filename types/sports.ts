@@ -2,6 +2,8 @@
 // designed to be filled by a real API later (e.g. football-data.org, ergast,
 // nba-api, etc.) without changing the UI layer.
 
+import type { userSportsPreferences } from "@/db/schema";
+
 export type SportId =
   | "football"
   | "padel"
@@ -10,6 +12,25 @@ export type SportId =
   | "tennis"
   | "nfl"
   | "lol";
+
+export type UserSportsPreference = typeof userSportsPreferences.$inferSelect;
+
+// One compact highlight rendered on the dashboard widget for a single
+// favourited sport. Each entry is a self-contained card the user can scan
+// without leaving the dashboard.
+export type DashboardSportHighlight = {
+  sportId: SportId;
+  emoji: string;
+  label: string;
+  /** Short headline, e.g. "Real Madrid 2 – 1 Arsenal · LIVE 67'". */
+  headline: string;
+  /** Secondary line: league/competition or timing context. */
+  context: string;
+  /** Optional tone for status pill: live games, upcoming, completed. */
+  tone?: "live" | "upcoming" | "result";
+  /** Optional secondary entry under the main headline (e.g. league leader). */
+  secondary?: { label: string; value: string };
+};
 
 export type SportMeta = {
   id: SportId;

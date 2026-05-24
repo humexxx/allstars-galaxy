@@ -8,6 +8,9 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { trips, tripItems, tripPhotos, tripShares } from "@/db/schema";
 import type {
+  DashboardTravelFeaturedTrip,
+  DashboardTravelSummary,
+  DashboardTravelTripState,
   PublicTripView,
   Trip,
   TripItem,
@@ -41,6 +44,21 @@ async function ensureTripOwnership(tripId: string, userId: string): Promise<void
 // limits — and we still index the column uniquely as a defense in depth.
 function generateShareToken(): string {
   return randomBytes(24).toString("base64url");
+}
+
+function todayIso(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function tripState(trip: Trip, today: string): DashboardTravelTripState {
+  const lastDay = trip.endDate ?? trip.startDate;
+  if (lastDay < today) return "past";
+  if (trip.startDate > today) return "upcoming";
+  return "in_progress";
 }
 
 // ---------- trip CRUD ----------
@@ -313,4 +331,62 @@ export async function getPublicTripByToken(
   ]);
 
   return { trip, items, photos, share };
+}
+
+// ---------- Dashboard summary ----------
+
+/**
+ * One-call summary for the /portal dashboard card. Picks a featured trip
+ * (in-progress wins, then the next upcoming, then the most recent past) and
+ * folds its items into a count + estimate so the card avoids a second query.
+ */
+export async function getDashboardTravelSummary(
+  userId: string
+): Promise<DashboardTravelSummary> {
+  const all = await db
+    .select()
+    .from(trips)
+    .where(eq(trips.userId, userId))
+    .orderBy(asc(trips.startDate));
+
+  if (all.length === 0) {
+    return { totalTrips: 0, upcomingCount: 0, inProgressCount: 0, featured: null };
+  }
+
+  const today = todayIso();
+  const inProgress = all.filter((t) => tripState(t, today) === "in_progress");
+  const upcoming = all.filter((t) => tripState(t, today) === "upcoming");
+  const past = all.filter((t) => tripState(t, today) === "past");
+
+  const pick =
+    inProgress[0] ??
+    upcoming[0] ??
+    past[past.length - 1] ??
+    null;
+
+  let featured: DashboardTravelFeaturedTrip | null = null;
+  if (pick) {
+    const items = await db
+      .select({ price: tripItems.price })
+      .from(tripItems)
+      .where(eq(tripItems.tripId, pick.id));
+    const totalEstimate = items.reduce((sum, row) => {
+      if (!row.price) return sum;
+      const n = parseFloat(row.price);
+      return Number.isFinite(n) ? sum + n : sum;
+    }, 0);
+    featured = {
+      ...pick,
+      state: tripState(pick, today),
+      itemCount: items.length,
+      totalEstimate,
+    };
+  }
+
+  return {
+    totalTrips: all.length,
+    upcomingCount: upcoming.length,
+    inProgressCount: inProgress.length,
+    featured,
+  };
 }

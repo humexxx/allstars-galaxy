@@ -15,7 +15,6 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   GripVertical,
   Plus,
 } from "lucide-react";
@@ -472,7 +471,7 @@ export function PlanCalendar({
             Debt
           </span>
           <span className="ml-auto text-[10px] italic text-muted-foreground/70">
-            Click an entry to edit · drag the ⋮ handle to move · click a day to expand
+            Click an entry to edit · drag the ⋮ handle to move · click a day cell to expand
           </span>
         </div>
       </CardHeader>
@@ -632,7 +631,6 @@ function CalendarCell({
   // shows every entry inside a scroll container.
   const visible = isExpanded ? entries : entries.slice(0, 3);
   const extra = isExpanded ? 0 : entries.length - visible.length;
-  const hasEntries = entries.length > 0;
 
   // Native HTML5 drop handlers — onDragOver must preventDefault to make the
   // cell a valid drop target, otherwise onDrop never fires.
@@ -667,41 +665,46 @@ function CalendarCell({
         onDragLeaveCell();
       }}
       onDrop={handleDrop}
+      // Toggle expand on background clicks when there's something to expand or
+      // collapse. Children (chip, "+", grip, popover) all stopPropagation so
+      // this only fires for actual cell-background clicks.
+      onClick={
+        isExpanded || extra > 0 ? onToggleExpand : undefined
+      }
+      role={isExpanded || extra > 0 ? "button" : undefined}
+      aria-expanded={isExpanded || extra > 0 ? isExpanded : undefined}
+      aria-label={
+        isExpanded
+          ? `Collapse ${format(day, "PPP")}`
+          : extra > 0
+            ? `Expand ${format(day, "PPP")} to see ${extra} more`
+            : undefined
+      }
       className={`group relative flex flex-col rounded-md border p-1.5 text-xs transition-[min-height,box-shadow,border-color] duration-200 ease-out ${
         muted ? "bg-muted/30 text-muted-foreground/60" : "bg-card"
       } ${isCurrent ? "ring-1 ring-primary" : ""} ${
         isDragOver ? "border-primary/70 bg-primary/5 ring-1 ring-primary/50" : ""
-      } ${isExpanded ? "min-h-[320px]" : "min-h-[140px]"}`}
+      } ${isExpanded ? "min-h-[320px]" : "min-h-[140px]"} ${
+        isExpanded || extra > 0 ? "cursor-pointer" : ""
+      }`}
       data-date={isoKey}
     >
       <div className="mb-1 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onToggleExpand}
-          aria-expanded={isExpanded}
-          aria-label={
-            isExpanded
-              ? `Collapse ${format(day, "PPP")}`
-              : `Expand ${format(day, "PPP")}`
-          }
-          className={`flex items-center gap-1 rounded px-1 py-0.5 font-mono text-[11px] hover:bg-muted ${
+        <span
+          className={`px-1 py-0.5 font-mono text-[11px] ${
             isCurrent ? "font-semibold text-primary" : ""
           }`}
         >
           {day.getDate()}
-          {hasEntries && (
-            <ChevronUp
-              className={`h-3 w-3 transition-transform duration-200 ${
-                isExpanded ? "" : "rotate-180"
-              }`}
-            />
-          )}
-        </button>
+        </span>
         <Popover>
           <PopoverTrigger asChild>
             <button
               type="button"
               aria-label={`Add entry on ${format(day, "PPP")}`}
+              // Don't bubble — the cell's onClick would otherwise toggle expand
+              // when the user just wants the Add popover.
+              onClick={(e) => e.stopPropagation()}
               className="rounded p-0.5 opacity-0 transition hover:bg-muted group-hover:opacity-100 focus-visible:opacity-100"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -746,7 +749,12 @@ function CalendarCell({
               <li
                 role="button"
                 tabIndex={0}
-                onClick={onToggleExpand}
+                // stopPropagation so the cell's own onClick doesn't also fire
+                // (would otherwise double-toggle and net to a no-op).
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleExpand();
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
@@ -790,7 +798,12 @@ function EntryChip({
     <li
       role="button"
       tabIndex={0}
-      onClick={onEdit}
+      // Don't bubble to the cell's expand handler; clicking a chip should only
+      // open its edit dialog.
+      onClick={(e) => {
+        e.stopPropagation();
+        onEdit();
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();

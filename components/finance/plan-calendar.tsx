@@ -12,15 +12,19 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
-import {
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-  GripVertical,
-  Pencil,
-  Plus,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronUp, Plus } from "lucide-react";
 import { toast } from "sonner";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -32,7 +36,6 @@ import {
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatCurrency } from "@/lib/utils/format";
@@ -252,9 +255,9 @@ type DialogState =
   | { kind: "edit-expense"; expense: FinancePlanExpense }
   | { kind: "edit-debt"; debt: FinancePlanDebt };
 
-// Tiny payload we put on the native dataTransfer when dragging an entry. Lives
-// here so we don't accidentally hand parse JSON in three places.
-const DND_MIME = "application/x-allstars-finance-entry";
+// Identity carried by dnd-kit's `data` channel on each draggable. The same
+// entry can appear on many days (recurring), so the draggable id alone is not
+// unique — we route the side+entry id through this payload instead.
 type DragPayload = { id: string; side: EntrySide };
 
 export function PlanCalendar({
@@ -273,7 +276,17 @@ export function PlanCalendar({
   const [cursor, setCursor] = useState<Date>(initialMonth);
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
-  const [dragOverDay, setDragOverDay] = useState<string | null>(null);
+  // Entry currently being dragged — drives the DragOverlay ghost.
+  const [activeEntry, setActiveEntry] = useState<DayEntry | null>(null);
+
+  // PointerSensor with delay constraint: a quick mousedown→up fires onClick
+  // (edit), but holding for 250 ms (without moving more than 5 px) activates
+  // drag-to-move. This is the click-vs-hold disambiguation the UX requires.
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: 250, tolerance: 5 },
+    })
+  );
 
   const monthStart = startOfMonth(cursor);
   const monthEnd = endOfMonth(cursor);
@@ -426,8 +439,28 @@ export function PlanCalendar({
     [plan.incomes, plan.expenses, plan.debts, onUpdateIncome, onUpdateExpense, onUpdateDebt]
   );
 
+  const handleDragStart = (event: DragStartEvent) => {
+    const entry = event.active.data.current?.entry as DayEntry | undefined;
+    if (entry) setActiveEntry(entry);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveEntry(null);
+    const over = event.over;
+    if (!over) return;
+    const payload = event.active.data.current?.payload as DragPayload | undefined;
+    const targetKey = over.data.current?.dayKey as string | undefined;
+    if (!payload || !targetKey) return;
+    void handleDrop(targetKey, payload);
+  };
+
   return (
-    <TooltipProvider delayDuration={300}>
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveEntry(null)}
+    >
     <Card>
       <CardHeader className="space-y-3 pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -475,7 +508,7 @@ export function PlanCalendar({
             Debt
           </span>
           <span className="ml-auto text-[10px] italic text-muted-foreground/70">
-            Drag entries to move them. Click a day to expand.
+            Click an entry to edit · hold to drag · click a day to expand
           </span>
         </div>
       </CardHeader>
@@ -503,20 +536,11 @@ export function PlanCalendar({
                 muted={muted}
                 isCurrent={isToday(day)}
                 isExpanded={expandedDay === key}
-                isDragOver={dragOverDay === key}
                 onToggleExpand={() =>
                   setExpandedDay((prev) => (prev === key ? null : key))
                 }
                 onAdd={(side) => setDialog({ kind: "add", side, date: key })}
                 onEditEntry={openEditFor}
-                onDropEntry={(payload) => {
-                  setDragOverDay(null);
-                  void handleDrop(key, payload);
-                }}
-                onDragEnter={() => setDragOverDay(key)}
-                onDragLeaveCell={() =>
-                  setDragOverDay((prev) => (prev === key ? null : prev))
-                }
               />
             );
           })}
@@ -597,7 +621,10 @@ export function PlanCalendar({
         onSubmit={handleEditDebt}
       />
     </Card>
-    </TooltipProvider>
+    <DragOverlay dropAnimation={null}>
+      {activeEntry ? <ChipGhost entry={activeEntry} /> : null}
+    </DragOverlay>
+    </DndContext>
   );
 }
 
@@ -608,13 +635,9 @@ type CalendarCellProps = {
   muted: boolean;
   isCurrent: boolean;
   isExpanded: boolean;
-  isDragOver: boolean;
   onToggleExpand: () => void;
   onAdd: (side: "income" | "expense") => void;
   onEditEntry: (entry: DayEntry) => void;
-  onDropEntry: (payload: DragPayload) => void;
-  onDragEnter: () => void;
-  onDragLeaveCell: () => void;
 };
 
 function CalendarCell({
@@ -624,13 +647,9 @@ function CalendarCell({
   muted,
   isCurrent,
   isExpanded,
-  isDragOver,
   onToggleExpand,
   onAdd,
   onEditEntry,
-  onDropEntry,
-  onDragEnter,
-  onDragLeaveCell,
 }: CalendarCellProps) {
   // Collapsed view shows up to 3 entries + overflow indicator. Expanded view
   // shows every entry inside a scroll container.
@@ -638,44 +657,22 @@ function CalendarCell({
   const extra = isExpanded ? 0 : entries.length - visible.length;
   const hasEntries = entries.length > 0;
 
-  // Native HTML5 drop handlers — onDragOver must preventDefault to make the
-  // cell a valid drop target, otherwise onDrop never fires.
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!e.dataTransfer.types.includes(DND_MIME)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    const raw = e.dataTransfer.getData(DND_MIME);
-    if (!raw) return;
-    e.preventDefault();
-    try {
-      const payload = JSON.parse(raw) as DragPayload;
-      onDropEntry(payload);
-    } catch {
-      // bad payload, ignore
-    }
-  };
+  // Register the cell as a dnd-kit drop target. `isOver` flips while a drag
+  // hovers this cell, giving us the same visual feedback the old HTML5 path
+  // had via the dragOverDay state in the parent.
+  const { setNodeRef, isOver } = useDroppable({
+    id: `cell-${isoKey}`,
+    data: { dayKey: isoKey },
+  });
 
   return (
     <div
-      onDragOver={handleDragOver}
-      onDragEnter={onDragEnter}
-      onDragLeave={(e) => {
-        // Only fire leave when we actually leave the cell (not when crossing
-        // into a child element). currentTarget contains the cell; relatedTarget
-        // is where the cursor is going.
-        const next = e.relatedTarget as Node | null;
-        if (next && e.currentTarget.contains(next)) return;
-        onDragLeaveCell();
-      }}
-      onDrop={handleDrop}
+      ref={setNodeRef}
       className={`group relative flex flex-col rounded-md border p-1.5 text-xs transition-[min-height,box-shadow,border-color] duration-200 ease-out ${
         muted ? "bg-muted/30 text-muted-foreground/60" : "bg-card"
       } ${isCurrent ? "ring-1 ring-primary" : ""} ${
-        isDragOver ? "border-primary/70 bg-primary/5 ring-1 ring-primary/50" : ""
-      } ${isExpanded ? "min-h-[320px]" : "min-h-[92px]"}`}
+        isOver ? "border-primary/70 bg-primary/5 ring-1 ring-primary/50" : ""
+      } ${isExpanded ? "min-h-[320px]" : "min-h-[140px]"}`}
       data-date={isoKey}
     >
       <div className="mb-1 flex items-center justify-between">
@@ -733,7 +730,7 @@ function CalendarCell({
       </div>
 
       <ul
-        className={`space-y-0.5 ${
+        className={`space-y-1 ${
           isExpanded ? "max-h-[260px] overflow-y-auto pr-0.5" : ""
         }`}
       >
@@ -741,7 +738,7 @@ function CalendarCell({
           <EntryChip
             key={`${entry.side}-${entry.id}`}
             entry={entry}
-            expanded={isExpanded}
+            isoKey={isoKey}
             onEdit={() => onEditEntry(entry)}
           />
         ))}
@@ -775,188 +772,85 @@ function CalendarCell({
 
 function EntryChip({
   entry,
-  expanded,
+  isoKey,
   onEdit,
 }: {
   entry: DayEntry;
-  expanded: boolean;
+  isoKey: string;
   onEdit: () => void;
 }) {
-  const palette =
-    entry.side === "income"
-      ? "bg-green-500/10 text-green-700 dark:text-green-300"
-      : entry.side === "expense"
-        ? "bg-red-500/10 text-red-700 dark:text-red-300"
-        : "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  // dnd-kit ids must be globally unique. The same recurring record renders on
+  // multiple days, so the id has to include the cell key.
+  const draggableId = `chip-${isoKey}-${entry.side}-${entry.id}`;
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: draggableId,
+    data: {
+      entry,
+      payload: { id: entry.id, side: entry.side } satisfies DragPayload,
+    },
+  });
 
-  const handleDragStart = (e: React.DragEvent<HTMLLIElement>) => {
-    const payload: DragPayload = { id: entry.id, side: entry.side };
-    e.dataTransfer.setData(DND_MIME, JSON.stringify(payload));
-    e.dataTransfer.effectAllowed = "move";
-  };
+  // While this chip is the drag source, hide it from its own cell so the
+  // DragOverlay ghost is the only visual under the cursor. (Don't unmount —
+  // we still need the dnd-kit node alive for the active state.)
+  const dragHidden = isDragging
+    ? "pointer-events-none opacity-30"
+    : "";
 
-  // When Radix opens this chip's tooltip, the Trigger receives
-  // data-state="delayed-open" (or "instant-open"). We use that to draw a ring
-  // around the active chip so it stays visually identifiable even when the
-  // tooltip panel covers it.
-  const activeRing =
-    "data-[state=delayed-open]:ring-2 data-[state=instant-open]:ring-2 data-[state=delayed-open]:ring-current data-[state=instant-open]:ring-current";
-
-  const chip = !expanded ? (
-    // Collapsed view: compact one-line chip.
+  return (
     <li
-      draggable
-      onDragStart={handleDragStart}
-      className={`flex cursor-grab items-center justify-between gap-1 truncate rounded px-1 py-0.5 text-[10px] active:cursor-grabbing ${palette} ${activeRing}`}
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      // The PointerSensor's delay constraint guarantees that a quick click
+      // doesn't activate drag, so we can wire onClick to edit safely.
+      onClick={(e) => {
+        e.stopPropagation();
+        onEdit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onEdit();
+        }
+      }}
+      role="button"
+      aria-label={`Edit ${entry.name}`}
+      className={`flex cursor-pointer flex-col gap-0 rounded px-1.5 py-1 text-[10px] outline-none focus-visible:ring-2 focus-visible:ring-current ${chipPalette(entry.side)} ${dragHidden}`}
     >
-      <span className="truncate font-medium">{entry.name}</span>
-      <span className="font-mono tabular-nums">
+      <span className="truncate text-[11px] font-medium leading-tight">
+        {entry.name}
+      </span>
+      <span className="font-mono text-[10px] tabular-nums leading-tight opacity-90">
         {formatCurrency(entry.amount)}
       </span>
     </li>
-  ) : (
-    // Expanded view: grip handle + edit button on hover.
-    <li
-      draggable
-      onDragStart={handleDragStart}
-      className={`group/entry flex items-center gap-1 rounded px-1 py-1 text-[11px] ${palette} ${activeRing}`}
+  );
+}
+
+// The ghost rendered by DragOverlay — same look as the resting chip so the
+// transition feels seamless when the user picks one up.
+function ChipGhost({ entry }: { entry: DayEntry }) {
+  return (
+    <div
+      className={`pointer-events-none flex w-40 cursor-grabbing flex-col gap-0 rounded px-1.5 py-1 shadow-lg ring-1 ring-current/30 ${chipPalette(entry.side)}`}
     >
-      <GripVertical
-        className="h-3 w-3 shrink-0 cursor-grab opacity-50 active:cursor-grabbing"
-        aria-hidden
-      />
-      <div className="flex min-w-0 flex-1 items-center justify-between gap-1">
-        <span className="truncate font-medium">{entry.name}</span>
-        <span className="font-mono tabular-nums">
-          {formatCurrency(entry.amount)}
-        </span>
-      </div>
-      <button
-        type="button"
-        onClick={onEdit}
-        aria-label={`Edit ${entry.name}`}
-        className="shrink-0 rounded p-0.5 opacity-0 transition hover:bg-background/60 group-hover/entry:opacity-100 focus-visible:opacity-100"
-      >
-        <Pencil className="h-3 w-3" />
-      </button>
-    </li>
-  );
-
-  return (
-    <Tooltip delayDuration={500}>
-      <TooltipTrigger asChild>{chip}</TooltipTrigger>
-      <TooltipContent side="top" sideOffset={10} className="max-w-xs">
-        <EntryTooltipBody entry={entry} />
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-// Rich tooltip body — kind/recurrence + amount + side-specific extras (start/end
-// window for incomes, balance/rate/payment-model for debts).
-function EntryTooltipBody({ entry }: { entry: DayEntry }) {
-  const sideLabel =
-    entry.side === "income" ? "Income" : entry.side === "expense" ? "Expense" : "Debt";
-  const kindLabel = entry.kind === "recurring" ? "Recurring" : "One-time";
-
-  return (
-    <div className="space-y-1">
-      <div className="font-semibold">{entry.name}</div>
-      <div className="text-[11px] opacity-80">
-        {sideLabel} · {kindLabel}
-      </div>
-
-      {entry.side === "income" || entry.side === "expense" ? (
-        <LineTooltipDetails entry={entry} />
-      ) : (
-        <DebtTooltipDetails debt={entry.source} />
-      )}
+      <span className="truncate text-[11px] font-medium leading-tight">
+        {entry.name}
+      </span>
+      <span className="font-mono text-[10px] tabular-nums leading-tight opacity-90">
+        {formatCurrency(entry.amount)}
+      </span>
     </div>
   );
 }
 
-function LineTooltipDetails({
-  entry,
-}: {
-  entry: Extract<DayEntry, { side: "income" | "expense" }>;
-}) {
-  return (
-    <div className="space-y-0.5 text-[11px]">
-      <div>
-        <span className="opacity-70">Amount: </span>
-        <span className="font-mono tabular-nums">
-          {formatCurrency(entry.amount)}
-        </span>
-        {entry.kind === "recurring" && (
-          <span className="opacity-70"> / month</span>
-        )}
-      </div>
-      {entry.kind === "recurring" ? (
-        <div>
-          <span className="opacity-70">When: </span>day{" "}
-          {entry.source.dayOfMonth ?? 1} of every month
-        </div>
-      ) : entry.source.date ? (
-        <div>
-          <span className="opacity-70">On: </span>
-          {format(parseISODate(entry.source.date) ?? new Date(), "PPP")}
-        </div>
-      ) : null}
-      {entry.side === "income" &&
-        (entry.source.startDate || entry.source.endDate) && (
-          <div>
-            <span className="opacity-70">Window: </span>
-            {formatWindow(entry.source.startDate, entry.source.endDate)}
-          </div>
-        )}
-    </div>
-  );
-}
-
-function DebtTooltipDetails({ debt }: { debt: FinancePlanDebt }) {
-  const isPercent = (debt.paymentType as DebtPaymentType) === "percent_of_balance";
-  const ratePct = (Number(debt.monthlyInterestRate) * 100).toFixed(2);
-  return (
-    <div className="space-y-0.5 text-[11px]">
-      <div>
-        <span className="opacity-70">Balance: </span>
-        <span className="font-mono tabular-nums">
-          {formatCurrency(Number(debt.initialBalance))}
-        </span>
-      </div>
-      <div>
-        <span className="opacity-70">Interest: </span>
-        <span className="font-mono tabular-nums">{ratePct}%</span>
-        <span className="opacity-70"> / month</span>
-      </div>
-      <div>
-        <span className="opacity-70">Payment: </span>
-        {isPercent ? (
-          <span>
-            min{" "}
-            <span className="font-mono tabular-nums">
-              {(Number(debt.minPaymentPercent) * 100).toFixed(2)}%
-            </span>{" "}
-            of balance, floor{" "}
-            <span className="font-mono tabular-nums">
-              {formatCurrency(Number(debt.minPaymentFloor))}
-            </span>
-          </span>
-        ) : (
-          <span>
-            fixed{" "}
-            <span className="font-mono tabular-nums">
-              {formatCurrency(Number(debt.monthlyPayment))}
-            </span>
-            <span className="opacity-70"> / month</span>
-          </span>
-        )}
-      </div>
-      <div>
-        <span className="opacity-70">When: </span>day {debt.dayOfMonth ?? 1} of every month
-      </div>
-    </div>
-  );
+function chipPalette(side: EntrySide): string {
+  return side === "income"
+    ? "bg-green-500/10 text-green-700 dark:text-green-300"
+    : side === "expense"
+      ? "bg-red-500/10 text-red-700 dark:text-red-300"
+      : "bg-amber-500/10 text-amber-700 dark:text-amber-300";
 }
 
 // Listing of entries hidden behind "+N more" — name + amount per line so the
@@ -997,11 +891,3 @@ function HiddenEntriesTooltipBody({ entries }: { entries: DayEntry[] }) {
   );
 }
 
-function formatWindow(start: string | null, end: string | null): string {
-  const s = start ? parseISODate(start) : null;
-  const e = end ? parseISODate(end) : null;
-  if (s && e) return `${format(s, "MMM yyyy")} – ${format(e, "MMM yyyy")}`;
-  if (s) return `from ${format(s, "MMM yyyy")}`;
-  if (e) return `until ${format(e, "MMM yyyy")}`;
-  return "";
-}

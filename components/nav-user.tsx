@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { signOut } from "@/lib/services/auth-service";
+import { signOutAction } from "@/app/actions/auth";
 
 type NavUserProps = {
   user: {
@@ -27,11 +27,6 @@ type NavUserProps = {
 };
 
 export function NavUser({ user }: NavUserProps) {
-  const handleSignOut = async () => {
-    await signOut();
-    window.location.href = "/login";
-  };
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -50,10 +45,17 @@ export function NavUser({ user }: NavUserProps) {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>My Account</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleSignOut}>
-          <LogOut className="mr-2 h-4 w-4" />
-          <span>Log out</span>
-        </DropdownMenuItem>
+        {/* Native <form action=...> integrates with React 19 form support so
+            the action runs server-side without a manual onClick + manual
+            redirect. */}
+        <form action={signOutAction}>
+          <DropdownMenuItem asChild>
+            <button type="submit" className="w-full">
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </button>
+          </DropdownMenuItem>
+        </form>
       </DropdownMenuContent>
     </DropdownMenu>
   );

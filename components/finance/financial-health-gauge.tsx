@@ -131,27 +131,52 @@ export function FinancialHealthGauge({
   const greenEnd = ratioToAngle(GREEN_THRESHOLD);
   const yellowEnd = ratioToAngle(YELLOW_THRESHOLD);
 
-  const needleAngle = ratioToAngle(ratio);
-
-  // Sweep-in animation: render the needle once at the rightmost position
-  // (END_ANGLE — i.e. ratio 0, "healthy") and then transition it to the
-  // target angle on the next frame. The CSS transition on the <g> wrapper
-  // does the interpolation. Re-fires whenever the target angle changes.
-  const [animatedAngle, setAnimatedAngle] = useState(END_ANGLE);
+  // JS-driven tween — drives both the needle rotation AND the percent label
+  // off the same `displayedRatio`, so the number visibly counts up while the
+  // needle sweeps. State updates every animation frame (~60 fps × 900 ms ≈ 54
+  // renders); plenty fast for a small SVG + label.
+  const [displayedRatio, setDisplayedRatio] = useState(0);
   useEffect(() => {
-    const id = requestAnimationFrame(() => setAnimatedAngle(needleAngle));
-    return () => cancelAnimationFrame(id);
-  }, [needleAngle]);
+    let cancelled = false;
+    // Capture the current rendered ratio as the animation's starting point so
+    // data changes glide from the old number, not snap back to zero. Read via
+    // a functional setter on the first tick to avoid stale-closure issues
+    // and keep the effect dep list clean.
+    let startRatio: number | null = null;
+    const startTime = performance.now();
+    const duration = 900;
+    // easeOutQuint — strong tail-off; visually close to the prior CSS
+    // cubic-bezier(0.16, 1, 0.3, 1).
+    const ease = (t: number) => 1 - Math.pow(1 - t, 5);
+
+    const tick = (now: number) => {
+      if (cancelled) return;
+      const t = Math.min(1, (now - startTime) / duration);
+      setDisplayedRatio((curr) => {
+        if (startRatio === null) startRatio = curr;
+        return startRatio + (ratio - startRatio) * ease(t);
+      });
+      if (t < 1) requestAnimationFrame(tick);
+    };
+    const raf = requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [ratio]);
+
+  const displayedAngle = ratioToAngle(displayedRatio);
+  const displayedPercent = hasData
+    ? `${Math.round(displayedRatio * 100)}%`
+    : "—";
 
   // Needle geometry is fixed: drawn pointing UP from the hub (math-angle 90°).
-  // We then rotate the <g> wrapper to put the tip on the live angle. Rotating
-  // a single element is what makes CSS-driven transitions possible — animating
-  // the polygon's `points` attribute is not transitionable.
+  // We then rotate the <g> wrapper to put the tip on the live angle.
   const needleLength = r - 10;
   const needleHalfWidth = 7;
   // SVG rotate is clockwise; math-angle 90° = up = no rotation, so the offset
   // to apply for any target math-angle θ is (90 − θ) degrees.
-  const needleRotation = 90 - animatedAngle;
+  const needleRotation = 90 - displayedAngle;
 
   return (
     <Tooltip>
@@ -196,16 +221,14 @@ export function FinancialHealthGauge({
             />
             {/* Needle — only when we have real data. The polygon is drawn
                 pointing up from the hub; the <g> wrapper handles the
-                rotation, and a CSS transition on `transform` produces the
-                sweep-in animation on mount and on data changes. */}
+                rotation, driven each frame by the displayedRatio tween so
+                the rotation and the percent label stay in sync. */}
             {hasData && (
               <>
                 <g
                   style={{
                     transform: `rotate(${needleRotation}deg)`,
                     transformOrigin: `${cx}px ${cy}px`,
-                    transition:
-                      "transform 900ms cubic-bezier(0.16, 1, 0.3, 1)",
                   }}
                 >
                   <polygon
@@ -221,7 +244,7 @@ export function FinancialHealthGauge({
           <div className="-mt-2 flex flex-col items-center text-center leading-tight">
             <span className={`text-sm font-semibold ${statusColor}`}>
               {status}
-              {hasData ? ` · ${percentLabel}` : ""}
+              {hasData ? ` · ${displayedPercent}` : ""}
             </span>
             <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
               Obligations to income

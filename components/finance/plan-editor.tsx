@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/tooltip";
 import { Heading, Text } from "@/components/ui/typography";
 
-import { FinancialHealthGauge } from "./financial-health-gauge";
+import { FinancialHealthCard } from "./financial-health-card";
+import { FinancialHealthDonut } from "./financial-health-donut";
 import { PlanCalendar } from "./plan-calendar";
 import { PlanLineEditor } from "./plan-line-editor";
 import { PlanDebtEditor } from "./plan-debt-editor";
@@ -142,12 +143,12 @@ export function PlanEditor({
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
         </div>
-        <FinancialHealthGauge
-          obligations={fixedOutflow}
-          income={income}
-          livingExpenses={livingExpenses}
-          minDebtPayments={minDebtPayments}
-        />
+        {/* A/B preview: showing the stat-card and donut variants side by side
+            until the user picks one. Both bind to the same data. */}
+        <div className="flex flex-wrap items-stretch gap-3">
+          <FinancialHealthCard obligations={fixedOutflow} income={income} />
+          <FinancialHealthDonut obligations={fixedOutflow} income={income} />
+        </div>
       </div>
 
       <TabsContent value="overview" className="space-y-6">

@@ -11,6 +11,7 @@ import {
   isToday,
   startOfMonth,
   startOfWeek,
+  subMonths,
 } from "date-fns";
 import {
   ChevronLeft,
@@ -101,6 +102,67 @@ function debtCalendarAmount(d: FinancePlanDebt): number {
   if ((d.paymentType as DebtPaymentType) === "fixed") return payment;
   const floor = Number(d.minPaymentFloor);
   return payment > 0 ? payment : floor;
+}
+
+// Sum of every entry hitting (year, monthIdx). Used by the calendar's monthly
+// summary strip. Recurring entries contribute their monthlyAmount once per
+// month inside their start/end window; one-time entries contribute only if
+// their date falls within the month.
+function monthTotalsBySide(
+  year: number,
+  monthIdx: number,
+  incomes: FinancePlanIncome[],
+  expenses: FinancePlanExpense[],
+  debts: FinancePlanDebt[]
+): { income: number; expense: number; debt: number } {
+  const monthKey = year * 12 + monthIdx;
+  const isOneTimeHit = (iso: string | null): boolean => {
+    if (!iso) return false;
+    const d = parseISODate(iso);
+    return !!d && d.getFullYear() === year && d.getMonth() === monthIdx;
+  };
+  const isInWindow = (
+    start: string | null,
+    end: string | null
+  ): boolean => {
+    if (start) {
+      const s = parseISODate(start);
+      if (!s || monthKey < s.getFullYear() * 12 + s.getMonth()) return false;
+    }
+    if (end) {
+      const e = parseISODate(end);
+      if (e && monthKey > e.getFullYear() * 12 + e.getMonth()) return false;
+    }
+    return true;
+  };
+
+  let income = 0;
+  let expense = 0;
+  let debt = 0;
+
+  for (const inc of incomes) {
+    const amount = Number(inc.monthlyAmount);
+    if (inc.kind === "one_time") {
+      if (isOneTimeHit(inc.date)) income += amount;
+    } else if (isInWindow(inc.startDate, inc.endDate)) {
+      income += amount;
+    }
+  }
+
+  for (const exp of expenses) {
+    const amount = Number(exp.monthlyAmount);
+    if (exp.kind === "one_time") {
+      if (isOneTimeHit(exp.date)) expense += amount;
+    } else {
+      expense += amount;
+    }
+  }
+
+  for (const d of debts) {
+    debt += debtCalendarAmount(d);
+  }
+
+  return { income, expense, debt };
 }
 
 // Build the list of income/expense/debt entries that hit each visible day. We
@@ -285,6 +347,32 @@ export function PlanCalendar({
     () => buildDayMap(days, plan.incomes, plan.expenses, plan.debts),
     [days, plan.incomes, plan.expenses, plan.debts]
   );
+
+  // Monthly summary for the navigated month + the month before, so we can show
+  // a current-vs-prev delta per metric. Memoised on cursor + plan lines.
+  const summary = useMemo(() => {
+    const curr = monthTotalsBySide(
+      cursor.getFullYear(),
+      cursor.getMonth(),
+      plan.incomes,
+      plan.expenses,
+      plan.debts
+    );
+    const prevDate = subMonths(cursor, 1);
+    const prev = monthTotalsBySide(
+      prevDate.getFullYear(),
+      prevDate.getMonth(),
+      plan.incomes,
+      plan.expenses,
+      plan.debts
+    );
+    return {
+      curr,
+      prev,
+      currNet: curr.income - curr.expense - curr.debt,
+      prevNet: prev.income - prev.expense - prev.debt,
+    };
+  }, [cursor, plan.incomes, plan.expenses, plan.debts]);
 
   const monthLabel = format(cursor, "MMMM yyyy");
 
@@ -476,7 +564,9 @@ export function PlanCalendar({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-3">
+        <MonthSummaryStrip summary={summary} />
+
         <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
             <div key={d} className="py-1">
@@ -593,6 +683,109 @@ export function PlanCalendar({
         onSubmit={handleEditDebt}
       />
     </Card>
+  );
+}
+
+type MonthSummaryData = {
+  curr: { income: number; expense: number; debt: number };
+  prev: { income: number; expense: number; debt: number };
+  currNet: number;
+  prevNet: number;
+};
+
+// Strip above the calendar grid: 4 cards (Income / Expense / Debt / Net) with
+// the current month's value and a delta vs the previous month. Delta colour is
+// semantic (more income = good, more expense/debt = bad).
+function MonthSummaryStrip({ summary }: { summary: MonthSummaryData }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <SummaryTile
+        label="Income"
+        value={summary.curr.income}
+        delta={summary.curr.income - summary.prev.income}
+        biggerIsBetter
+      />
+      <SummaryTile
+        label="Expense"
+        value={summary.curr.expense}
+        delta={summary.curr.expense - summary.prev.expense}
+        biggerIsBetter={false}
+      />
+      <SummaryTile
+        label="Debt"
+        value={summary.curr.debt}
+        delta={summary.curr.debt - summary.prev.debt}
+        biggerIsBetter={false}
+      />
+      <SummaryTile
+        label="Net"
+        value={summary.currNet}
+        delta={summary.currNet - summary.prevNet}
+        biggerIsBetter
+        signedValue
+      />
+    </div>
+  );
+}
+
+function SummaryTile({
+  label,
+  value,
+  delta,
+  biggerIsBetter,
+  signedValue = false,
+}: {
+  label: string;
+  value: number;
+  delta: number;
+  biggerIsBetter: boolean;
+  /** When true (Net only), display the value with an explicit +/− sign. */
+  signedValue?: boolean;
+}) {
+  const deltaRounded = Math.round(delta * 100) / 100;
+  const direction =
+    Math.abs(deltaRounded) < 0.005 ? "flat" : deltaRounded > 0 ? "up" : "down";
+  // good = up && biggerIsBetter, or down && !biggerIsBetter.
+  const good =
+    direction === "up"
+      ? biggerIsBetter
+      : direction === "down"
+        ? !biggerIsBetter
+        : null;
+  const deltaColor =
+    good === null
+      ? "text-muted-foreground"
+      : good
+        ? "text-green-600 dark:text-green-400"
+        : "text-red-600 dark:text-red-400";
+  const arrow = direction === "up" ? "▲" : direction === "down" ? "▼" : "·";
+
+  const displayValue = signedValue
+    ? `${value >= 0 ? "+" : "−"}${formatCurrency(Math.abs(value))}`
+    : formatCurrency(value);
+  const valueColor = signedValue
+    ? value >= 0
+      ? "text-green-700 dark:text-green-300"
+      : "text-red-700 dark:text-red-300"
+    : "";
+
+  return (
+    <div className="rounded-md border bg-card p-2.5">
+      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div
+        className={`mt-0.5 font-mono text-base font-semibold tabular-nums ${valueColor}`}
+      >
+        {displayValue}
+      </div>
+      <div className={`text-[10px] font-mono tabular-nums ${deltaColor}`}>
+        {arrow}{" "}
+        {direction === "flat"
+          ? "no change"
+          : `${formatCurrency(Math.abs(deltaRounded))} vs prev`}
+      </div>
+    </div>
   );
 }
 

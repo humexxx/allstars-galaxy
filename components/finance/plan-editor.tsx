@@ -3,7 +3,16 @@
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 
+import { ChevronDown } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -119,8 +128,19 @@ export function PlanEditor({
     balance: d.balance,
   }));
 
+  // Controlled tab value so the dropdown items (Setup / Settings) can drive
+  // the same surface as the visible TabsTriggers (Overview / Calendar).
+  const [tab, setTab] = useState<"overview" | "setup" | "calendar" | "settings">(
+    "overview"
+  );
+  // Label shown on the More dropdown — surfaces the current sub-section when
+  // one is active so users always see where they are.
+  const moreLabel =
+    tab === "setup" ? "Setup" : tab === "settings" ? "Settings" : "More";
+  const moreActive = tab === "setup" || tab === "settings";
+
   return (
-    <Tabs defaultValue="overview" className="space-y-6">
+    <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="space-y-6">
       {/* Header: title + subtitle + tabs share the left column; the gauge
           anchors the right column. `items-end` aligns the bottom of the
           gauge with the bottom of the TabsList so both sit on the same
@@ -137,12 +157,35 @@ export function PlanEditor({
             </Heading>
             <Text variant="muted">{description}</Text>
           </div>
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="setup">Setup</TabsTrigger>
-            <TabsTrigger value="calendar">Calendar</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
+          {/* Primary tabs (Overview / Calendar) sit in the TabsList; Setup
+              and Settings — used less often and more "admin"-flavoured —
+              live in the More dropdown next to it. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="calendar">Calendar</TabsTrigger>
+            </TabsList>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant={moreActive ? "default" : "outline"}
+                  size="sm"
+                  className="h-9"
+                >
+                  {moreLabel}
+                  <ChevronDown className="ml-1 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onSelect={() => setTab("setup")}>
+                  Setup
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setTab("settings")}>
+                  Settings
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
         <FinancialHealthDonut obligations={fixedOutflow} income={income} />
       </div>

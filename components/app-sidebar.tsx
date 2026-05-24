@@ -146,7 +146,7 @@ export function AppSidebar({
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-medium">Allstars Galaxy</span>
-                  <span className="text-xs text-sidebar-foreground/70">v0.1.0</span>
+                  <span className="text-xs text-sidebar-foreground/70">v{process.env.NEXT_PUBLIC_APP_VERSION}</span>
                 </div>
               </Link>
             </SidebarMenuButton>

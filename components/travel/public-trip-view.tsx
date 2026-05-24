@@ -90,6 +90,8 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
               priority
               sizes="(max-width: 1024px) 100vw, 1024px"
               className="object-cover"
+              // See trip-detail.tsx — covers may be external URLs.
+              unoptimized
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
@@ -142,6 +144,9 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                   fill
                   sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                   className="object-cover"
+                  // Gallery photos may be `source: "url"` (external) — same
+                  // rationale as trip covers.
+                  unoptimized
                 />
               </div>
             ))}

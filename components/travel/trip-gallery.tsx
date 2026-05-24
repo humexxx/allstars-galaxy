@@ -83,6 +83,10 @@ export function TripGallery({ trip }: TripGalleryProps) {
                   fill
                   sizes="(max-width: 768px) 33vw, 200px"
                   className="object-cover"
+                  // Gallery photos may be external URLs (see schema:
+                  // `tripPhotoSourceEnum`). `unoptimized` sidesteps
+                  // `images.remotePatterns` so legacy external URLs render.
+                  unoptimized
                 />
                 <Button
                   type="button"

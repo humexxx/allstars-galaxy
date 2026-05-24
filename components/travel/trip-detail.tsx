@@ -139,6 +139,12 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
               priority
               sizes="(max-width: 1024px) 100vw, 1024px"
               className="object-cover"
+              // Trip covers can be uploaded to Supabase Storage OR pasted as
+              // an external URL (see `tripPhotoSourceEnum`). `unoptimized`
+              // sidesteps `images.remotePatterns` so legacy external URLs
+              // still render — same forgiving behavior as the previous
+              // CSS-background implementation.
+              unoptimized
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />

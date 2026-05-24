@@ -1048,6 +1048,10 @@ export function PlanCalendar({
   // change the whole schedule or just this month.
   const handleDrop = useCallback(
     (targetKey: string, payload: DragPayload) => {
+      // No-op when the chip is dropped back on its own cell — nothing to ask
+      // about and nothing to save. Avoids the prompt flashing for accidental
+      // grip-drops that don't actually move the chip.
+      if (payload.sourceDate === targetKey) return;
       let isRecurring = false;
       if (payload.side === "income") {
         const inc = plan.incomes.find((i) => i.id === payload.id);

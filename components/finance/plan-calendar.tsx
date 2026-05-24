@@ -680,12 +680,14 @@ function CalendarCell({
             ? `Expand ${format(day, "PPP")} to see ${extra} more`
             : undefined
       }
-      className={`group relative flex flex-col rounded-md border p-1.5 text-xs transition-[min-height,box-shadow,border-color] duration-200 ease-out ${
+      className={`group relative flex flex-col rounded-md border p-1.5 text-xs transition-[min-height,box-shadow,border-color,background-color] duration-200 ease-out ${
         muted ? "bg-muted/30 text-muted-foreground/60" : "bg-card"
       } ${isCurrent ? "ring-1 ring-primary" : ""} ${
         isDragOver ? "border-primary/70 bg-primary/5 ring-1 ring-primary/50" : ""
       } ${isExpanded ? "min-h-[320px]" : "min-h-[140px]"} ${
-        isExpanded || extra > 0 ? "cursor-pointer" : ""
+        isExpanded || extra > 0
+          ? "cursor-pointer hover:bg-muted hover:text-foreground"
+          : ""
       }`}
       data-date={isoKey}
     >

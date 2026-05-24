@@ -59,17 +59,19 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   const [showCharts, setShowCharts] = useState(true);
   const [hideValues, setHideValues] = useState(false);
 
+  // Returns true on success so the dialog can stay open on failure (the
+  // user sees the toast against the still-mounted form and can retry).
   const handleAddTransaction = async (transactionData: {
     investmentMethodId: string;
     amount: string;
     date: Date;
     notes?: string;
     userId?: string;
-  }) => {
+  }): Promise<boolean> => {
     const result = await createTransactionAction(transactionData);
     if (!result.success) {
       toast.error(result.error);
-      return;
+      return false;
     }
     const transaction = result.data;
     if (data.isAdmin && transaction?.status === "approved") {
@@ -80,6 +82,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
     // revalidatePath already invalidated the RSC cache; router.refresh
     // pulls the new data without remounting the dialog.
     router.refresh();
+    return true;
   };
 
   if (!data.portfolio) {

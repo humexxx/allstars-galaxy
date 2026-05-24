@@ -39,6 +39,8 @@ type TransactionFormProps = {
   isAdmin: boolean;
   users?: User[];
   adminUserId?: string;
+  /** Disables the submit and cancel buttons while the parent action is pending. */
+  isSubmitting?: boolean;
 };
 
 export function TransactionForm({
@@ -49,6 +51,7 @@ export function TransactionForm({
   isAdmin,
   users = [],
   adminUserId,
+  isSubmitting = false,
 }: TransactionFormProps) {
   const [activeTab, setActiveTab] = useState<"buy" | "withdrawal">("buy");
   const [amount, setAmount] = useState("");
@@ -216,15 +219,20 @@ export function TransactionForm({
       </div>
 
       <div className="flex gap-2">
-        <Button onClick={onCancel} variant="outline" className="flex-1">
+        <Button onClick={onCancel} variant="outline" className="flex-1" disabled={isSubmitting}>
           Cancel
         </Button>
-        <Button 
-          onClick={handleSubmit} 
+        <Button
+          onClick={handleSubmit}
           className="flex-1"
-          disabled={!amount || parseFloat(amount) <= 0 || (isAdmin && !selectedUserId)}
+          disabled={
+            isSubmitting ||
+            !amount ||
+            parseFloat(amount) <= 0 ||
+            (isAdmin && !selectedUserId)
+          }
         >
-          Add Transaction
+          {isSubmitting ? "Adding…" : "Add Transaction"}
         </Button>
       </div>
     </div>

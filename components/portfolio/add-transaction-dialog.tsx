@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import {
   Dialog,
   DialogContent,
@@ -21,13 +21,18 @@ type AddTransactionDialogProps = {
   open: boolean;
   onClose: () => void;
   methods: InvestmentMethod[];
+  /**
+   * Submit handler. Must return `true` on success and `false` on failure so
+   * the dialog can stay open (with the form still mounted) when the server
+   * action fails — the parent is expected to surface the error via toast.
+   */
   onSubmit: (data: {
     investmentMethodId: string;
     amount: string;
     date: Date;
     notes?: string;
     userId?: string;
-  }) => void;
+  }) => Promise<boolean>;
   isAdmin: boolean;
   users?: User[];
   adminUserId?: string;
@@ -44,6 +49,7 @@ export function AddTransactionDialog({
 }: AddTransactionDialogProps) {
   const [selectedMethod, setSelectedMethod] = useState<InvestmentMethod | null>(null);
   const [showSelector, setShowSelector] = useState(true);
+  const [isPending, startTransition] = useTransition();
 
   const handleMethodSelect = (method: InvestmentMethod) => {
     setSelectedMethod(method);
@@ -56,18 +62,24 @@ export function AddTransactionDialog({
 
   const handleSubmit = (data: { amount: string; date: Date; notes?: string; userId?: string }) => {
     if (!selectedMethod) return;
-    
-    onSubmit({
-      investmentMethodId: selectedMethod.id,
-      ...data,
-    });
 
-    setSelectedMethod(null);
-    setShowSelector(true);
-    onClose();
+    // Wait for the action to complete before closing — otherwise the dialog
+    // dismisses before any error toast appears and the user has nothing to
+    // react to.
+    startTransition(async () => {
+      const succeeded = await onSubmit({
+        investmentMethodId: selectedMethod.id,
+        ...data,
+      });
+      if (!succeeded) return;
+      setSelectedMethod(null);
+      setShowSelector(true);
+      onClose();
+    });
   };
 
   const handleClose = () => {
+    if (isPending) return; // Don't let the user dismiss mid-submit.
     setSelectedMethod(null);
     setShowSelector(true);
     onClose();
@@ -96,6 +108,7 @@ export function AddTransactionDialog({
               isAdmin={isAdmin}
               users={users}
               adminUserId={adminUserId}
+              isSubmitting={isPending}
             />
           )}
         </DialogContent>

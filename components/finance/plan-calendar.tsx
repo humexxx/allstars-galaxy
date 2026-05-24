@@ -746,7 +746,7 @@ function CalendarCell({
           />
         ))}
         {extra > 0 && (
-          <Tooltip>
+          <Tooltip delayDuration={500}>
             <TooltipTrigger asChild>
               <li
                 role="button"
@@ -758,12 +758,12 @@ function CalendarCell({
                     onToggleExpand();
                   }
                 }}
-                className="cursor-pointer rounded px-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="cursor-pointer rounded px-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground data-[state=delayed-open]:bg-muted data-[state=instant-open]:bg-muted data-[state=delayed-open]:text-foreground data-[state=instant-open]:text-foreground"
               >
                 +{extra} more
               </li>
             </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={4} className="max-w-xs">
+            <TooltipContent side="top" sideOffset={10} className="max-w-xs">
               <HiddenEntriesTooltipBody entries={entries.slice(3)} />
             </TooltipContent>
           </Tooltip>
@@ -795,12 +795,19 @@ function EntryChip({
     e.dataTransfer.effectAllowed = "move";
   };
 
+  // When Radix opens this chip's tooltip, the Trigger receives
+  // data-state="delayed-open" (or "instant-open"). We use that to draw a ring
+  // around the active chip so it stays visually identifiable even when the
+  // tooltip panel covers it.
+  const activeRing =
+    "data-[state=delayed-open]:ring-2 data-[state=instant-open]:ring-2 data-[state=delayed-open]:ring-current data-[state=instant-open]:ring-current";
+
   const chip = !expanded ? (
     // Collapsed view: compact one-line chip.
     <li
       draggable
       onDragStart={handleDragStart}
-      className={`flex cursor-grab items-center justify-between gap-1 truncate rounded px-1 py-0.5 text-[10px] active:cursor-grabbing ${palette}`}
+      className={`flex cursor-grab items-center justify-between gap-1 truncate rounded px-1 py-0.5 text-[10px] active:cursor-grabbing ${palette} ${activeRing}`}
     >
       <span className="truncate font-medium">{entry.name}</span>
       <span className="font-mono tabular-nums">
@@ -812,7 +819,7 @@ function EntryChip({
     <li
       draggable
       onDragStart={handleDragStart}
-      className={`group/entry flex items-center gap-1 rounded px-1 py-1 text-[11px] ${palette}`}
+      className={`group/entry flex items-center gap-1 rounded px-1 py-1 text-[11px] ${palette} ${activeRing}`}
     >
       <GripVertical
         className="h-3 w-3 shrink-0 cursor-grab opacity-50 active:cursor-grabbing"
@@ -836,9 +843,9 @@ function EntryChip({
   );
 
   return (
-    <Tooltip>
+    <Tooltip delayDuration={500}>
       <TooltipTrigger asChild>{chip}</TooltipTrigger>
-      <TooltipContent side="top" sideOffset={4} className="max-w-xs">
+      <TooltipContent side="top" sideOffset={10} className="max-w-xs">
         <EntryTooltipBody entry={entry} />
       </TooltipContent>
     </Tooltip>

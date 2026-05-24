@@ -17,12 +17,15 @@ export class AuthService {
     }
   }
 
-  static async signInWithGoogle(): Promise<void> {
+  static async signInWithGoogle(next?: string | null): Promise<void> {
     const supabase = createClient()
+    const callback = `${location.origin}/auth/callback${
+      next ? `?next=${encodeURIComponent(next)}` : ""
+    }`
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${location.origin}/auth/callback`,
+        redirectTo: callback,
       },
     })
 
@@ -48,12 +51,21 @@ export class AuthService {
     return data
   }
 
-  static async signUpWithEmail(email: string, password: string, name: string): Promise<AuthResponse['data']> {
+  static async signUpWithEmail(
+    email: string,
+    password: string,
+    name: string,
+    next?: string | null
+  ): Promise<AuthResponse['data']> {
     const supabase = createClient()
+    const emailRedirectTo = `${location.origin}/auth/callback${
+      next ? `?next=${encodeURIComponent(next)}` : ""
+    }`
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo,
         data: {
           full_name: name,
         },
@@ -63,7 +75,7 @@ export class AuthService {
     if (error) {
       throw error
     }
-    
+
     return data
   }
   

@@ -24,6 +24,11 @@ export function SignupForm({
   const router = useRouter()
   const searchParams = useSearchParams()
   const prefillEmail = searchParams.get("email") ?? ""
+  // Same allow-list as the login form — only same-origin paths survive.
+  const nextRaw = searchParams.get("next")
+  const next =
+    nextRaw && nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : null
+  const loginHref = next ? `/login?next=${encodeURIComponent(next)}` : "/login"
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -43,10 +48,14 @@ export function SignupForm({
     }
 
     try {
-      await AuthService.signUpWithEmail(email, password, name)
+      await AuthService.signUpWithEmail(email, password, name, next)
       // Usually signup requires email confirmation, so we might want to show a message
       // But for now let's just push to home or show success
-      router.push("/login?message=Check your email for confirmation link")
+      const params = new URLSearchParams({
+        message: "Check your email for confirmation link",
+      })
+      if (next) params.set("next", next)
+      router.push(`/login?${params.toString()}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error initializing signup")
     } finally {
@@ -57,7 +66,7 @@ export function SignupForm({
   async function handleGoogleLogin() {
     setIsLoading(true)
     try {
-      await AuthService.signInWithGoogle()
+      await AuthService.signInWithGoogle(next)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error with Google login")
       setIsLoading(false)
@@ -140,7 +149,7 @@ export function SignupForm({
             Google
           </Button>
           <FieldDescription className="px-6 text-center">
-            Already have an account? <Link href="/login">Login</Link>
+            Already have an account? <Link href={loginHref}>Login</Link>
           </FieldDescription>
         </Field>
       </FieldGroup>

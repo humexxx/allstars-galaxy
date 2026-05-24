@@ -311,7 +311,7 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
               <div
                 key={key}
                 className={cn(
-                  "relative min-h-[88px] bg-background p-1.5",
+                  "group relative min-h-[88px] bg-background p-1.5",
                   !inMonth && "bg-muted/20 text-muted-foreground"
                 )}
               >
@@ -337,14 +337,14 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
 
                 <div className="mt-1 space-y-0.5">
                   {dayBars.slice(0, 3).map(({ trip }) => {
-                    const isStart = format(trip.startDate ? parseTripDate(trip.startDate) : day, "yyyy-MM-dd") === key;
+                    // Label only on the first day of each trip; subsequent days
+                    // get a thin marker bar so the cell stays uncluttered.
+                    const isStart = trip.startDate === key;
                     return (
                       <Link
                         key={trip.id}
                         href={tripPath(trip.id)}
-                        className={cn(
-                          "block truncate rounded px-1.5 py-0.5 text-[11px] font-medium text-white shadow-sm",
-                        )}
+                        className="block truncate rounded px-1.5 py-0.5 text-[11px] font-medium text-white shadow-sm"
                         style={{ backgroundColor: trip.color }}
                         title={`${trip.title} · ${formatDateRange(trip.startDate, trip.endDate)}`}
                       >

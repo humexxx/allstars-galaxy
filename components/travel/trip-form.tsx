@@ -31,7 +31,9 @@ export function TripForm({ trip }: { trip?: Trip }) {
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
-  const seedStartDate = searchParams.get("startDate") ?? trip?.startDate ?? todayIso();
+  // Only honour ?startDate= when creating — on edit the trip's own startDate is
+  // the source of truth and a stale URL param shouldn't overwrite it.
+  const seedStartDate = trip?.startDate ?? searchParams.get("startDate") ?? todayIso();
 
   const [title, setTitle] = useState(trip?.title ?? "");
   const [destination, setDestination] = useState(trip?.destination ?? "");

@@ -390,6 +390,7 @@ export async function addDebt(
       paymentType: data.paymentType,
       minPaymentPercent: data.minPaymentPercent,
       minPaymentFloor: data.minPaymentFloor,
+      dayOfMonth: data.dayOfMonth ?? null,
       sortOrder: data.sortOrder ?? 0,
     })
     .returning();
@@ -412,6 +413,7 @@ export async function updateDebt(
       paymentType: data.paymentType,
       minPaymentPercent: data.minPaymentPercent,
       minPaymentFloor: data.minPaymentFloor,
+      dayOfMonth: data.dayOfMonth ?? null,
       sortOrder: data.sortOrder,
     })
     .where(and(eq(financePlanDebts.id, data.id), eq(financePlanDebts.planId, planId)))

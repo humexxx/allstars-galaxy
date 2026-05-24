@@ -155,6 +155,9 @@ export const planDebtSchema = z.object({
   paymentType: z.enum(["fixed", "percent_of_balance"]).default("fixed"),
   minPaymentPercent: rate.default("0"),
   minPaymentFloor: decimal.default("0"),
+  // Day of the month the minimum payment is due. Null = treated as day 1 by
+  // the calendar / projection — preserves behaviour for legacy debts.
+  dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
   sortOrder: z.number().optional(),
 });
 

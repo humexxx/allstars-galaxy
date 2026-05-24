@@ -194,9 +194,7 @@ function LineForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor={amountInputId}>
-            {kind === "recurring" ? "Monthly amount" : "Amount"}
-          </Label>
+          <Label htmlFor={amountInputId}>Amount</Label>
           <Input
             id={amountInputId}
             value={amount}

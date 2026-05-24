@@ -12,7 +12,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { AuthService } from "@/lib/services/auth-service"
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 
 export function SignupForm({
@@ -22,6 +22,8 @@ export function SignupForm({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const prefillEmail = searchParams.get("email") ?? ""
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -92,7 +94,7 @@ export function SignupForm({
         </Field>
         <Field>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" name="email" type="email" placeholder="m@example.com" autoComplete="email" required />
+          <Input id="email" name="email" type="email" placeholder="m@example.com" autoComplete="email" defaultValue={prefillEmail} required />
           <FieldDescription>
             We&apos;ll use this to contact you. We won&apos;t share your email.
           </FieldDescription>

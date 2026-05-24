@@ -12,6 +12,15 @@ export const debtPaymentTypeEnum = pgEnum("debt_payment_type", ["fixed", "percen
 export const debtStrategyEnum = pgEnum("debt_strategy", ["avalanche", "snowball", "none"]);
 export const financeSnapshotSourceEnum = pgEnum("finance_snapshot_source", ["system_cron", "confirmation", "manual"]);
 export const financePlanLineKindEnum = pgEnum("finance_plan_line_kind", ["recurring", "one_time"]);
+export const tripItemCategoryEnum = pgEnum("trip_item_category", [
+  "lodging",
+  "transport",
+  "food",
+  "activity",
+  "shopping",
+  "other",
+]);
+export const tripPhotoSourceEnum = pgEnum("trip_photo_source", ["upload", "url"]);
 
 // Define auth schema to reference auth.users
 const authSchema = pgSchema("auth");
@@ -372,10 +381,19 @@ export const financePlanDebts = pgTable(
     minPaymentFloor: numeric("min_payment_floor", { precision: 20, scale: 2 })
       .notNull()
       .default("0"),
+    // Calendar/projection use this to know WHEN in the month the minimum hits.
+    // Nullable for legacy rows; treated as day 1 when unset.
+    dayOfMonth: integer("day_of_month"),
     sortOrder: real("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("finance_plan_debts_plan_id_idx").on(t.planId)]
+  (t) => [
+    index("finance_plan_debts_plan_id_idx").on(t.planId),
+    check(
+      "finance_plan_debts_day_of_month_chk",
+      sql`${t.dayOfMonth} IS NULL OR (${t.dayOfMonth} >= 1 AND ${t.dayOfMonth} <= 31)`
+    ),
+  ]
 );
 
 // Audit trail for mutations performed by an admin while impersonating another user.
@@ -561,5 +579,149 @@ export const roadPathProgressRelations = relations(roadPathProgress, ({ one }) =
   roadPath: one(roadPaths, {
     fields: [roadPathProgress.roadPathId],
     references: [roadPaths.id],
+  }),
+}));
+
+// Entertainment → Travel Planner
+//
+// trips: top-level user-owned record. Dates are date-only (calendar days, no TZ)
+// because a "trip" is a calendar concept — the user thinks "Aug 12 → Aug 20",
+// not "Aug 12 00:00:00 in some timezone".
+export const trips = pgTable(
+  "trips",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    destination: text("destination"),
+    description: text("description"),
+    startDate: date("start_date").notNull(),
+    // null end_date allows open-ended trips ("relocating", "sabbatical").
+    endDate: date("end_date"),
+    // Primary cover image. URL may point to Supabase Storage or any external URL.
+    coverPhotoUrl: text("cover_photo_url"),
+    // Currency code (ISO 4217) used to aggregate item prices into estimates.
+    currency: text("currency").notNull().default("USD"),
+    color: text("color").notNull().default("var(--chart-1)"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("trips_user_id_idx").on(t.userId),
+    index("trips_start_date_idx").on(t.startDate),
+    check("trips_date_range_chk", sql`${t.endDate} IS NULL OR ${t.endDate} >= ${t.startDate}`),
+  ]
+);
+
+// trip_items: planned activities, reservations, transport, food stops, etc.
+// Each item can carry a link (booking URL), a price, and an optional scheduled
+// datetime so the detail view can render a day-by-day itinerary.
+export const tripItems = pgTable(
+  "trip_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    category: tripItemCategoryEnum("category").notNull().default("activity"),
+    link: text("link"),
+    // Optional price. Null = "not estimated yet". Currency lives on the parent
+    // trip — multi-currency itineraries are out of scope for v1.
+    price: numeric("price", { precision: 20, scale: 2 }),
+    // Calendar day this item happens on (date-only, matches trips date columns).
+    // Allows grouping by day in the UI without timezone math.
+    scheduledOn: date("scheduled_on"),
+    notes: text("notes"),
+    sortOrder: real("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("trip_items_trip_id_idx").on(t.tripId),
+    index("trip_items_scheduled_on_idx").on(t.scheduledOn),
+    check("trip_items_price_chk", sql`${t.price} IS NULL OR ${t.price} >= 0`),
+  ]
+);
+
+// trip_photos: gallery shots. Both uploaded files (Supabase Storage public URLs)
+// and external URLs land here — the `source` enum just records provenance for
+// future cleanup (e.g. when a trip is deleted we may want to also delete the
+// storage objects, but only for `source = upload`).
+export const tripPhotos = pgTable(
+  "trip_photos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    // Storage object key for uploads (e.g. `user-id/trip-id/uuid.jpg`). Null for
+    // external URLs. Used at deletion time to remove the underlying file.
+    storagePath: text("storage_path"),
+    source: tripPhotoSourceEnum("source").notNull().default("url"),
+    caption: text("caption"),
+    sortOrder: real("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("trip_photos_trip_id_idx").on(t.tripId)]
+);
+
+// trip_shares: opaque tokens that grant read-only public access to a trip via
+// `/trips/{token}`. The invitee_email column is metadata only — we record who
+// the link was generated for; the link itself is the credential.
+export const tripShares = pgTable(
+  "trip_shares",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    // URL-safe random token. Unique across all trips so it can be the sole path
+    // segment in the public URL.
+    token: text("token").notNull(),
+    inviteeEmail: text("invitee_email"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    // Revoked shares stay around as audit history but stop resolving on the
+    // public page. Hard delete is also offered in the UI for cleanup.
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("trip_shares_token_uniq").on(t.token),
+    index("trip_shares_trip_id_idx").on(t.tripId),
+  ]
+);
+
+export const tripsRelations = relations(trips, ({ one, many }) => ({
+  user: one(users, {
+    fields: [trips.userId],
+    references: [users.id],
+  }),
+  items: many(tripItems),
+  photos: many(tripPhotos),
+  shares: many(tripShares),
+}));
+
+export const tripItemsRelations = relations(tripItems, ({ one }) => ({
+  trip: one(trips, {
+    fields: [tripItems.tripId],
+    references: [trips.id],
+  }),
+}));
+
+export const tripPhotosRelations = relations(tripPhotos, ({ one }) => ({
+  trip: one(trips, {
+    fields: [tripPhotos.tripId],
+    references: [trips.id],
+  }),
+}));
+
+export const tripSharesRelations = relations(tripShares, ({ one }) => ({
+  trip: one(trips, {
+    fields: [tripShares.tripId],
+    references: [trips.id],
   }),
 }));

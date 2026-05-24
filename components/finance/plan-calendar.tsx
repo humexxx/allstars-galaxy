@@ -29,6 +29,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatCurrency } from "@/lib/utils/format";
 import type {
   DebtPaymentType,
@@ -56,13 +62,31 @@ type PlanCalendarProps = {
   onUpdateDebt: (id: string, input: DebtFormValues) => Promise<void>;
 };
 
-type DayEntry = {
-  id: string;
-  side: EntrySide;
-  name: string;
-  amount: number;
-  kind: "recurring" | "one_time";
-};
+type DayEntry =
+  | {
+      id: string;
+      side: "income";
+      name: string;
+      amount: number;
+      kind: "recurring" | "one_time";
+      source: FinancePlanIncome;
+    }
+  | {
+      id: string;
+      side: "expense";
+      name: string;
+      amount: number;
+      kind: "recurring" | "one_time";
+      source: FinancePlanExpense;
+    }
+  | {
+      id: string;
+      side: "debt";
+      name: string;
+      amount: number;
+      kind: "recurring";
+      source: FinancePlanDebt;
+    };
 
 function parseISODate(value: string | null | undefined): Date | null {
   if (!value) return null;
@@ -105,11 +129,8 @@ function buildDayMap(
     day: d.getDate(),
   }));
 
-  const handleRecurring = (
-    side: EntrySide,
-    id: string,
-    name: string,
-    amount: number,
+  const pushRecurring = (
+    entry: DayEntry,
     dayOfMonth: number,
     startKey: { y: number; m: number } | null,
     endKey: { y: number; m: number } | null
@@ -119,37 +140,46 @@ function buildDayMap(
       const mk = meta.year * 12 + meta.month;
       if (startKey !== null && mk < startKey.y * 12 + startKey.m) continue;
       if (endKey !== null && mk > endKey.y * 12 + endKey.m) continue;
-      push(meta.key, { id, side, name, amount, kind: "recurring" });
+      push(meta.key, entry);
     }
   };
 
-  const handleOneTime = (
-    side: "income" | "expense",
-    id: string,
-    name: string,
-    amount: number,
-    isoDate: string
-  ) => {
+  const pushOneTime = (entry: DayEntry, isoDate: string) => {
     const parsed = parseISODate(isoDate);
     if (!parsed) return;
     const key = toISODate(parsed);
     if (!dayMeta.some((m) => m.key === key)) return;
-    push(key, { id, side, name, amount, kind: "one_time" });
+    push(key, entry);
   };
 
   for (const inc of incomes) {
     const amount = Number(inc.monthlyAmount);
     if (inc.kind === "one_time") {
-      if (inc.date) handleOneTime("income", inc.id, inc.name, amount, inc.date);
+      if (!inc.date) continue;
+      pushOneTime(
+        {
+          id: inc.id,
+          side: "income",
+          name: inc.name,
+          amount,
+          kind: "one_time",
+          source: inc,
+        },
+        inc.date
+      );
     } else {
       const dom = inc.dayOfMonth ?? 1;
       const start = inc.startDate ? parseISODate(inc.startDate) : null;
       const end = inc.endDate ? parseISODate(inc.endDate) : null;
-      handleRecurring(
-        "income",
-        inc.id,
-        inc.name,
-        amount,
+      pushRecurring(
+        {
+          id: inc.id,
+          side: "income",
+          name: inc.name,
+          amount,
+          kind: "recurring",
+          source: inc,
+        },
         dom,
         start ? { y: start.getFullYear(), m: start.getMonth() } : null,
         end ? { y: end.getFullYear(), m: end.getMonth() } : null
@@ -160,20 +190,47 @@ function buildDayMap(
   for (const exp of expenses) {
     const amount = Number(exp.monthlyAmount);
     if (exp.kind === "one_time") {
-      if (exp.date) handleOneTime("expense", exp.id, exp.name, amount, exp.date);
+      if (!exp.date) continue;
+      pushOneTime(
+        {
+          id: exp.id,
+          side: "expense",
+          name: exp.name,
+          amount,
+          kind: "one_time",
+          source: exp,
+        },
+        exp.date
+      );
     } else {
       const dom = exp.dayOfMonth ?? 1;
-      handleRecurring("expense", exp.id, exp.name, amount, dom, null, null);
+      pushRecurring(
+        {
+          id: exp.id,
+          side: "expense",
+          name: exp.name,
+          amount,
+          kind: "recurring",
+          source: exp,
+        },
+        dom,
+        null,
+        null
+      );
     }
   }
 
   for (const debt of debts) {
     const dom = debt.dayOfMonth ?? 1;
-    handleRecurring(
-      "debt",
-      debt.id,
-      debt.name,
-      debtCalendarAmount(debt),
+    pushRecurring(
+      {
+        id: debt.id,
+        side: "debt",
+        name: debt.name,
+        amount: debtCalendarAmount(debt),
+        kind: "recurring",
+        source: debt,
+      },
       dom,
       null,
       null
@@ -370,6 +427,7 @@ export function PlanCalendar({
   );
 
   return (
+    <TooltipProvider delayDuration={300}>
     <Card>
       <CardHeader className="space-y-3 pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -539,6 +597,7 @@ export function PlanCalendar({
         onSubmit={handleEditDebt}
       />
     </Card>
+    </TooltipProvider>
   );
 }
 
@@ -716,25 +775,20 @@ function EntryChip({
     e.dataTransfer.effectAllowed = "move";
   };
 
-  // Collapsed view: compact one-line chip, no edit/grip affordances.
-  if (!expanded) {
-    return (
-      <li
-        draggable
-        onDragStart={handleDragStart}
-        title={`${entry.name} · ${formatCurrency(entry.amount)} (drag to move)`}
-        className={`flex cursor-grab items-center justify-between gap-1 truncate rounded px-1 py-0.5 text-[10px] active:cursor-grabbing ${palette}`}
-      >
-        <span className="truncate font-medium">{entry.name}</span>
-        <span className="font-mono tabular-nums">
-          {formatCurrency(entry.amount)}
-        </span>
-      </li>
-    );
-  }
-
-  // Expanded view: grip handle + edit button on hover.
-  return (
+  const chip = !expanded ? (
+    // Collapsed view: compact one-line chip.
+    <li
+      draggable
+      onDragStart={handleDragStart}
+      className={`flex cursor-grab items-center justify-between gap-1 truncate rounded px-1 py-0.5 text-[10px] active:cursor-grabbing ${palette}`}
+    >
+      <span className="truncate font-medium">{entry.name}</span>
+      <span className="font-mono tabular-nums">
+        {formatCurrency(entry.amount)}
+      </span>
+    </li>
+  ) : (
+    // Expanded view: grip handle + edit button on hover.
     <li
       draggable
       onDragStart={handleDragStart}
@@ -760,4 +814,129 @@ function EntryChip({
       </button>
     </li>
   );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{chip}</TooltipTrigger>
+      <TooltipContent side="right" className="max-w-xs">
+        <EntryTooltipBody entry={entry} />
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// Rich tooltip body — kind/recurrence + amount + side-specific extras (start/end
+// window for incomes, balance/rate/payment-model for debts).
+function EntryTooltipBody({ entry }: { entry: DayEntry }) {
+  const sideLabel =
+    entry.side === "income" ? "Income" : entry.side === "expense" ? "Expense" : "Debt";
+  const kindLabel = entry.kind === "recurring" ? "Recurring" : "One-time";
+
+  return (
+    <div className="space-y-1">
+      <div className="font-semibold">{entry.name}</div>
+      <div className="text-[11px] opacity-80">
+        {sideLabel} · {kindLabel}
+      </div>
+
+      {entry.side === "income" || entry.side === "expense" ? (
+        <LineTooltipDetails entry={entry} />
+      ) : (
+        <DebtTooltipDetails debt={entry.source} />
+      )}
+    </div>
+  );
+}
+
+function LineTooltipDetails({
+  entry,
+}: {
+  entry: Extract<DayEntry, { side: "income" | "expense" }>;
+}) {
+  return (
+    <div className="space-y-0.5 text-[11px]">
+      <div>
+        <span className="opacity-70">Amount: </span>
+        <span className="font-mono tabular-nums">
+          {formatCurrency(entry.amount)}
+        </span>
+        {entry.kind === "recurring" && (
+          <span className="opacity-70"> / month</span>
+        )}
+      </div>
+      {entry.kind === "recurring" ? (
+        <div>
+          <span className="opacity-70">When: </span>day{" "}
+          {entry.source.dayOfMonth ?? 1} of every month
+        </div>
+      ) : entry.source.date ? (
+        <div>
+          <span className="opacity-70">On: </span>
+          {format(parseISODate(entry.source.date) ?? new Date(), "PPP")}
+        </div>
+      ) : null}
+      {entry.side === "income" &&
+        (entry.source.startDate || entry.source.endDate) && (
+          <div>
+            <span className="opacity-70">Window: </span>
+            {formatWindow(entry.source.startDate, entry.source.endDate)}
+          </div>
+        )}
+    </div>
+  );
+}
+
+function DebtTooltipDetails({ debt }: { debt: FinancePlanDebt }) {
+  const isPercent = (debt.paymentType as DebtPaymentType) === "percent_of_balance";
+  const ratePct = (Number(debt.monthlyInterestRate) * 100).toFixed(2);
+  return (
+    <div className="space-y-0.5 text-[11px]">
+      <div>
+        <span className="opacity-70">Balance: </span>
+        <span className="font-mono tabular-nums">
+          {formatCurrency(Number(debt.initialBalance))}
+        </span>
+      </div>
+      <div>
+        <span className="opacity-70">Interest: </span>
+        <span className="font-mono tabular-nums">{ratePct}%</span>
+        <span className="opacity-70"> / month</span>
+      </div>
+      <div>
+        <span className="opacity-70">Payment: </span>
+        {isPercent ? (
+          <span>
+            min{" "}
+            <span className="font-mono tabular-nums">
+              {(Number(debt.minPaymentPercent) * 100).toFixed(2)}%
+            </span>{" "}
+            of balance, floor{" "}
+            <span className="font-mono tabular-nums">
+              {formatCurrency(Number(debt.minPaymentFloor))}
+            </span>
+          </span>
+        ) : (
+          <span>
+            fixed{" "}
+            <span className="font-mono tabular-nums">
+              {formatCurrency(Number(debt.monthlyPayment))}
+            </span>
+            <span className="opacity-70"> / month</span>
+          </span>
+        )}
+      </div>
+      <div>
+        <span className="opacity-70">When: </span>day {debt.dayOfMonth ?? 1} of every month
+      </div>
+    </div>
+  );
+}
+
+function formatWindow(start: string | null, end: string | null): string {
+  const s = start ? parseISODate(start) : null;
+  const e = end ? parseISODate(end) : null;
+  if (s && e) return `${format(s, "MMM yyyy")} – ${format(e, "MMM yyyy")}`;
+  if (s) return `from ${format(s, "MMM yyyy")}`;
+  if (e) return `until ${format(e, "MMM yyyy")}`;
+  return "";
 }

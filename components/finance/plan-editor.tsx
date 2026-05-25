@@ -436,20 +436,28 @@ const FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-// The projection chart now shows a rolling 12-month window anchored at today:
-// up to 3 months back so the line has some context, then today and the next
-// few months forward. Early in a plan (today is month 0 or 1 of the
-// projection) we can't reach all 3 past, so we slide forward to keep the
-// total length at TARGET_RANGE.
-const TARGET_RANGE = 12;
-const TARGET_PAST = 3;
+// Projection horizon presets shown in the top-right of the panel. The window
+// always includes ~25% past + 75% future so "today" sits about a quarter of
+// the way from the left edge regardless of which horizon is active — that
+// keeps the early-history context visible without dominating the forecast.
+const HORIZON_PRESETS: ReadonlyArray<{ months: number; label: string }> = [
+  { months: 12, label: "12 mo" },
+  { months: 24, label: "2 yr" },
+  { months: 60, label: "5 yr" },
+  { months: 120, label: "10 yr" },
+];
 
-function computeProjectionWindow(projection: Projection): {
+function computeProjectionWindow(
+  projection: Projection,
+  totalMonths: number
+): {
   startIndex: number;
   count: number;
   pastCount: number;
   todayIndex: number; // index in the SLICED window
 } {
+  // ~25% of the window is past, the rest is future.
+  const targetPast = Math.max(1, Math.round(totalMonths * 0.25));
   // Projection dates are generated at UTC midnight. Comparing them against
   // the user's LOCAL year/month would shift a month in negative-offset
   // timezones (e.g. UTC-5 sees May 1 UTC as Apr 30 local) and the chart
@@ -461,9 +469,9 @@ function computeProjectionWindow(projection: Projection): {
     (m) => m.date.getUTCFullYear() * 12 + m.date.getUTCMonth() === todayKey
   );
   if (projIdx === -1) projIdx = 0;
-  const pastCount = Math.min(TARGET_PAST, projIdx);
+  const pastCount = Math.min(targetPast, projIdx);
   const startIndex = Math.max(0, projIdx - pastCount);
-  const count = Math.min(TARGET_RANGE, projection.months.length - startIndex);
+  const count = Math.min(totalMonths, projection.months.length - startIndex);
   return {
     startIndex,
     count,
@@ -488,9 +496,16 @@ function ProjectionPanel({
   // the header. Expands to show the three comparison cards inline.
   const [strategyOpen, setStrategyOpen] = useState(false);
 
-  // Window centred on today: ~3 past + 9 future (12 total). Edges shift when
+  // Horizon — 12 mo by default; bumps up to 2 / 5 / 10 yr when the user picks
+  // a preset above the chart.
+  const maxAvailable = projection.months.length;
+  const [horizonMonths, setHorizonMonths] = useState<number>(
+    Math.min(12, maxAvailable)
+  );
+
+  // Window with the active horizon: ~25% past + 75% future. Edges shift when
   // the plan started recently so we never look past data we don't have.
-  const window = computeProjectionWindow(projection);
+  const window = computeProjectionWindow(projection, horizonMonths);
   const todayMonth = projection.months[window.startIndex + window.pastCount];
   const futureMonth =
     projection.months[window.startIndex + window.count - 1] ?? todayMonth;
@@ -504,17 +519,45 @@ function ProjectionPanel({
           <div>
             <CardTitle>Projection</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              12-month window — solid line is past, dashed is forecast
+              Solid line is past, dashed is forecast
             </p>
           </div>
-          {comparison && (
-            <StrategyBadge
-              comparison={comparison}
-              currentStrategy={currentStrategy}
-              open={strategyOpen}
-              onToggle={() => setStrategyOpen((v) => !v)}
-            />
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              role="group"
+              aria-label="Projection horizon"
+              className="inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
+            >
+              {HORIZON_PRESETS.map((preset) => {
+                const disabled = preset.months > maxAvailable;
+                const active = horizonMonths === preset.months;
+                return (
+                  <button
+                    key={preset.months}
+                    type="button"
+                    onClick={() => setHorizonMonths(preset.months)}
+                    disabled={disabled}
+                    aria-pressed={active}
+                    className={`rounded px-3 py-1 text-xs font-medium transition ${
+                      active
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+            {comparison && (
+              <StrategyBadge
+                comparison={comparison}
+                currentStrategy={currentStrategy}
+                open={strategyOpen}
+                onToggle={() => setStrategyOpen((v) => !v)}
+              />
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-end gap-x-6 gap-y-2">

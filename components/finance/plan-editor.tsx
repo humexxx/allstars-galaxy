@@ -430,23 +430,37 @@ const STRATEGY_LABEL: Record<DebtStrategy, string> = {
 
 const FORMATTER = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" });
 
-// Preset horizons surfaced as a button group in the chart header. Listed in
-// ascending order; the first one ≤ the plan's monthsAhead is the initial value.
-const HORIZON_PRESETS: ReadonlyArray<{ months: number; label: string }> = [
-  { months: 12, label: "12 mo" },
-  { months: 24, label: "2 yr" },
-  { months: 60, label: "5 yr" },
-  { months: 120, label: "10 yr" },
-];
+// The projection chart now shows a rolling 12-month window anchored at today:
+// up to 3 months back so the line has some context, then today and the next
+// few months forward. Early in a plan (today is month 0 or 1 of the
+// projection) we can't reach all 3 past, so we slide forward to keep the
+// total length at TARGET_RANGE.
+const TARGET_RANGE = 12;
+const TARGET_PAST = 3;
 
-function monthsLabel(n: number): string {
-  if (n === 1) return "1 month";
-  if (n < 12) return `${n} months`;
-  if (n === 12) return "1 year";
-  if (n % 12 === 0) return `${n / 12} years`;
-  const years = Math.floor(n / 12);
-  const rem = n % 12;
-  return `${years}y ${rem}mo`;
+function computeProjectionWindow(projection: Projection): {
+  startIndex: number;
+  count: number;
+  pastCount: number;
+  todayIndex: number; // index in the SLICED window
+} {
+  const now = new Date();
+  const todayKey = now.getFullYear() * 12 + now.getMonth();
+  // Locate today inside the projection. -1 means today is outside the modelled
+  // range (plan starts in the future, or projection ended already).
+  let projIdx = projection.months.findIndex(
+    (m) => m.date.getFullYear() * 12 + m.date.getMonth() === todayKey
+  );
+  if (projIdx === -1) projIdx = 0;
+  const pastCount = Math.min(TARGET_PAST, projIdx);
+  const startIndex = Math.max(0, projIdx - pastCount);
+  const count = Math.min(TARGET_RANGE, projection.months.length - startIndex);
+  return {
+    startIndex,
+    count,
+    pastCount,
+    todayIndex: pastCount, // boundary point in the slice
+  };
 }
 
 /**
@@ -461,21 +475,16 @@ function ProjectionPanel({
   currentStrategy,
   onChangeStrategy,
 }: ProjectionPanelProps) {
-  const maxAvailable = projection.months.length;
-  // Default to 12 months when available, otherwise the plan's full horizon.
-  const [monthsToShow, setMonthsToShow] = useState<number>(
-    Math.min(12, maxAvailable)
-  );
   // Strategy picker — collapsed by default, surfacing just a compact badge in
   // the header. Expands to show the three comparison cards inline.
   const [strategyOpen, setStrategyOpen] = useState(false);
 
-  // First month is the calibrated state at the plan's anchor. The "future"
-  // anchor is the selected horizon, clamped to the projection length.
-  const todayMonth = projection.months[0];
-  const futureIndex = Math.max(0, Math.min(monthsToShow - 1, maxAvailable - 1));
-  const futureMonth = projection.months[futureIndex] ?? todayMonth;
-
+  // Window centred on today: ~3 past + 9 future (12 total). Edges shift when
+  // the plan started recently so we never look past data we don't have.
+  const window = computeProjectionWindow(projection);
+  const todayMonth = projection.months[window.startIndex + window.pastCount];
+  const futureMonth =
+    projection.months[window.startIndex + window.count - 1] ?? todayMonth;
   const today = todayMonth?.netWorth ?? 0;
   const future = futureMonth?.netWorth ?? today;
 
@@ -486,66 +495,9 @@ function ProjectionPanel({
           <div>
             <CardTitle>Projection</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              Next {monthsLabel(monthsToShow)}
+              12-month window — solid line is past, dashed is forecast
             </p>
           </div>
-          <div
-            role="group"
-            aria-label="Projection horizon"
-            className="inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
-          >
-            {HORIZON_PRESETS.map((preset) => {
-              const disabled = preset.months > maxAvailable;
-              const active = monthsToShow === preset.months;
-              return (
-                <button
-                  key={preset.months}
-                  type="button"
-                  onClick={() => setMonthsToShow(preset.months)}
-                  disabled={disabled}
-                  aria-pressed={active}
-                  className={`rounded px-3 py-1 text-xs font-medium transition ${
-                    active
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
-                >
-                  {preset.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-          <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                Today {todayMonth ? `(${FORMATTER.format(todayMonth.date)})` : ""}
-              </p>
-              <p
-                className={`text-lg font-semibold ${
-                  today >= 0 ? "text-green-600" : "text-red-600"
-                }`}
-              >
-                {formatCurrency(today)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                In {monthsLabel(monthsToShow)}{" "}
-                {futureMonth ? `(${FORMATTER.format(futureMonth.date)})` : ""}
-              </p>
-              <p
-                className={`text-lg font-semibold ${
-                  future >= 0 ? "text-green-600" : "text-red-600"
-                }`}
-              >
-                {formatCurrency(future)}
-              </p>
-            </div>
-          </div>
-
           {comparison && (
             <StrategyBadge
               comparison={comparison}
@@ -554,6 +506,34 @@ function ProjectionPanel({
               onToggle={() => setStrategyOpen((v) => !v)}
             />
           )}
+        </div>
+
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Today {todayMonth ? `(${FORMATTER.format(todayMonth.date)})` : ""}
+            </p>
+            <p
+              className={`text-lg font-semibold ${
+                today >= 0 ? "text-green-600" : "text-red-600"
+              }`}
+            >
+              {formatCurrency(today)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              End of window{" "}
+              {futureMonth ? `(${FORMATTER.format(futureMonth.date)})` : ""}
+            </p>
+            <p
+              className={`text-lg font-semibold ${
+                future >= 0 ? "text-green-600" : "text-red-600"
+              }`}
+            >
+              {formatCurrency(future)}
+            </p>
+          </div>
         </div>
 
         {comparison && strategyOpen && (
@@ -565,10 +545,15 @@ function ProjectionPanel({
         )}
       </CardHeader>
       <CardContent className="space-y-8">
-        <ProjectionChart projection={projection} monthsToShow={monthsToShow} />
+        <ProjectionChart
+          projection={projection}
+          monthsToShow={window.count}
+          startIndex={window.startIndex}
+          pastCount={window.pastCount}
+        />
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Monthly breakdown</h3>
-          <ProjectionTable projection={projection} monthsToShow={monthsToShow} />
+          <ProjectionTable projection={projection} monthsToShow={window.count} />
         </div>
       </CardContent>
     </Card>

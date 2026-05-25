@@ -32,7 +32,7 @@ const MONTH_FORMATTER = new Intl.DateTimeFormat("en-US", {
 // Net-worth milestones we annotate on the chart. Picked so they land on the
 // values users most often care about; intermediate ticks come from the y-axis.
 const MILESTONES = [
-  10_000, 20_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 2_000_000,
+  0, 10_000, 20_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 2_000_000,
   5_000_000, 10_000_000,
 ] as const;
 

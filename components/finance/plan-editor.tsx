@@ -428,7 +428,13 @@ const STRATEGY_LABEL: Record<DebtStrategy, string> = {
   none: "No acceleration",
 };
 
-const FORMATTER = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" });
+// Same UTC-anchored display formatter the chart uses — keeps the header KPIs
+// in sync with the chart's month labels even in negative-offset timezones.
+const FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
 // The projection chart now shows a rolling 12-month window anchored at today:
 // up to 3 months back so the line has some context, then today and the next
@@ -444,12 +450,15 @@ function computeProjectionWindow(projection: Projection): {
   pastCount: number;
   todayIndex: number; // index in the SLICED window
 } {
+  // Projection dates are generated at UTC midnight. Comparing them against
+  // the user's LOCAL year/month would shift a month in negative-offset
+  // timezones (e.g. UTC-5 sees May 1 UTC as Apr 30 local) and the chart
+  // would treat plan-start = May as if today were Apr. Use UTC on both sides
+  // so the bucket comparison is stable.
   const now = new Date();
-  const todayKey = now.getFullYear() * 12 + now.getMonth();
-  // Locate today inside the projection. -1 means today is outside the modelled
-  // range (plan starts in the future, or projection ended already).
+  const todayKey = now.getUTCFullYear() * 12 + now.getUTCMonth();
   let projIdx = projection.months.findIndex(
-    (m) => m.date.getFullYear() * 12 + m.date.getMonth() === todayKey
+    (m) => m.date.getUTCFullYear() * 12 + m.date.getUTCMonth() === todayKey
   );
   if (projIdx === -1) projIdx = 0;
   const pastCount = Math.min(TARGET_PAST, projIdx);

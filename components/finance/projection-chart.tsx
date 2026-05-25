@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import {
   CartesianGrid,
-  LabelList,
   Line,
   LineChart,
   ReferenceLine,
@@ -21,15 +20,26 @@ import {
 import type { ChartConfig } from "@/types/chart";
 import type { Projection } from "@/types/finance";
 
+// Format projection dates in UTC — the projection generates months at UTC
+// midnight, so any local timezone with a negative offset would shift the
+// formatted month back a day and show e.g. "Apr" for a "May 2026" bucket.
 const MONTH_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
   year: "2-digit",
+  timeZone: "UTC",
 });
 
-const NW_COLOR = "#16a34a"; // tailwind green-600
+// Net-worth milestones we annotate on the chart. Picked so they land on the
+// values users most often care about; intermediate ticks come from the y-axis.
+const MILESTONES = [
+  10_000, 20_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 2_500_000,
+  5_000_000, 10_000_000,
+] as const;
 
+// Stable chart config — the line stroke is overridden per-plan inside the
+// component so this only needs the label.
 const config = {
-  netWorth: { label: "Net worth", color: NW_COLOR },
+  netWorth: { label: "Net worth", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
 // Compact, human-readable money formatter for axis ticks AND on-point labels.
@@ -70,15 +80,21 @@ export function ProjectionChart({
   pastCount = 0,
   startIndex = 0,
 }: ProjectionChartProps) {
+  // Line color follows the plan's chosen colour token so users can tell their
+  // plans apart at a glance. Falls back to the chart-1 token when the plan
+  // doesn't have one set yet.
+  const lineColor = projection.plan.color || "var(--chart-1)";
+
   // Build the slice + per-point split between past (solid) and future (dashed).
   // The boundary point belongs to both series so the two Line components join
   // visually at the same y-value.
-  const data = useMemo(() => {
+  const { data, crossings } = useMemo(() => {
     const count = Math.max(
       1,
       Math.min(monthsToShow, projection.months.length - startIndex)
     );
-    return projection.months.slice(startIndex, startIndex + count).map((m, i) => {
+    const slice = projection.months.slice(startIndex, startIndex + count);
+    const rows = slice.map((m, i) => {
       const value = Number(m.netWorth.toFixed(2));
       const isPast = i < pastCount;
       const isFuture = i > pastCount;
@@ -90,21 +106,35 @@ export function ProjectionChart({
         // begins.
         pastValue: isPast || isBoundary ? value : null,
         futureValue: isFuture || isBoundary ? value : null,
+        rawValue: value,
       };
     });
+
+    // For each milestone, find the first month where the trajectory crosses it
+    // (either direction). We render a dashed vertical line + label at that
+    // point instead of labelling every data point.
+    const cross: { month: string; milestone: number }[] = [];
+    for (const m of MILESTONES) {
+      for (let i = 1; i < rows.length; i++) {
+        const prev = rows[i - 1].rawValue;
+        const curr = rows[i].rawValue;
+        if ((prev < m && curr >= m) || (prev > m && curr <= m)) {
+          cross.push({ month: rows[i].month, milestone: m });
+          break;
+        }
+      }
+    }
+
+    return { data: rows, crossings: cross };
   }, [projection.months, monthsToShow, startIndex, pastCount]);
 
   return (
     <ChartContainer config={config} className="h-80 w-full">
-      <LineChart data={data} margin={{ left: 10, right: 20, top: 30, bottom: 0 }}>
-        {/* Vertical guide lines only — the user explicitly asked for no
-            horizontal grid so the chart reads cleaner. */}
-        <CartesianGrid
-          horizontal={false}
-          vertical
-          strokeDasharray="3 3"
-          strokeOpacity={0.25}
-        />
+      <LineChart
+        data={data}
+        margin={{ left: 10, right: 20, top: 30, bottom: 0 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
         <XAxis
           dataKey="month"
           tickLine={false}
@@ -125,62 +155,53 @@ export function ProjectionChart({
           strokeOpacity={0.2}
           strokeDasharray="2 2"
         />
+        {/* Milestone crossings — full-height vertical line at the month the
+            net worth first crosses 10k / 100k / 1M etc., with a label on top. */}
+        {crossings.map((c) => (
+          <ReferenceLine
+            key={`${c.milestone}-${c.month}`}
+            x={c.month}
+            stroke="currentColor"
+            strokeOpacity={0.35}
+            strokeDasharray="4 4"
+            label={{
+              value: formatMoneyTick(c.milestone),
+              position: "top",
+              fill: "currentColor",
+              fontSize: 11,
+              fontWeight: 500,
+            }}
+          />
+        ))}
         <ChartTooltip content={<ChartTooltipContent />} />
 
-        {/* Past — solid line + filled dots + value labels above each point. */}
+        {/* Past — solid line + filled dots. Labels are reserved for milestone
+            crossings rendered above, so the dots stay clean. */}
         <Line
           dataKey="pastValue"
           name="Net worth"
           type="monotone"
-          stroke="var(--color-netWorth)"
+          stroke={lineColor}
           strokeWidth={2}
           isAnimationActive={false}
           connectNulls={false}
-          dot={{
-            r: 4,
-            fill: "var(--color-netWorth)",
-            strokeWidth: 0,
-          }}
+          dot={{ r: 4, fill: lineColor, strokeWidth: 0 }}
           activeDot={{ r: 6 }}
-        >
-          <LabelList
-            dataKey="pastValue"
-            position="top"
-            offset={10}
-            formatter={(v: unknown) =>
-              typeof v === "number" ? formatMoneyTick(v) : ""
-            }
-            className="fill-foreground text-[11px] font-medium"
-          />
-        </Line>
+        />
 
-        {/* Future — dashed, same color so the line still reads as one trend. */}
+        {/* Future — dashed, same colour so the line still reads as one trend. */}
         <Line
           dataKey="futureValue"
           name="Net worth"
           type="monotone"
-          stroke="var(--color-netWorth)"
+          stroke={lineColor}
           strokeWidth={2}
           strokeDasharray="6 4"
           isAnimationActive={false}
           connectNulls={false}
-          dot={{
-            r: 4,
-            fill: "var(--color-netWorth)",
-            strokeWidth: 0,
-          }}
+          dot={{ r: 4, fill: lineColor, strokeWidth: 0 }}
           activeDot={{ r: 6 }}
-        >
-          <LabelList
-            dataKey="futureValue"
-            position="top"
-            offset={10}
-            formatter={(v: unknown) =>
-              typeof v === "number" ? formatMoneyTick(v) : ""
-            }
-            className="fill-foreground text-[11px] font-medium"
-          />
-        </Line>
+        />
       </LineChart>
     </ChartContainer>
   );

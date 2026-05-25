@@ -34,9 +34,12 @@ import {
 import { clonePlanAction, deletePlanAction } from "@/app/actions/finance-plans";
 import type { FinancePlan } from "@/types/finance";
 
+// UTC-anchored — plan.startMonth is stored at UTC midnight; local formatting
+// would shift a month in negative-offset timezones.
 const MONTH_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
   year: "numeric",
+  timeZone: "UTC",
 });
 
 export function PlansList({ plans }: { plans: FinancePlan[] }) {

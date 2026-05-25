@@ -15,7 +15,12 @@ import {
   projectPlan,
 } from "@/lib/services/finance-plan-service";
 
-const MONTH_FMT = new Intl.DateTimeFormat("en-US", { month: "short" });
+// UTC-anchored — projection.months[i].date is generated at UTC midnight; local
+// formatting would shift a month for users in negative-offset timezones.
+const MONTH_FMT = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  timeZone: "UTC",
+});
 
 type DashboardFinanceCardProps = {
   userId: string;

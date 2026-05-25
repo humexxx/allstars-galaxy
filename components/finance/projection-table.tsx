@@ -14,9 +14,13 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils/format";
 import type { Projection, ProjectionMonth } from "@/types/finance";
 
+// Anchor formatting in UTC because the projection generates dates at UTC
+// midnight. Local-timezone formatting would shift a month for users in
+// negative offsets (e.g. May 1 UTC renders as "Apr 30" in UTC-5/6).
 const MONTH_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
   year: "2-digit",
+  timeZone: "UTC",
 });
 
 type ProjectionTableProps = {

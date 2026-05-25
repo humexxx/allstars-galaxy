@@ -3,7 +3,13 @@ import { getConfirmationStatus } from "@/lib/services/finance-confirmation-servi
 
 import { ConfirmationPrompt } from "./confirmation-prompt";
 
-const MONTH_LABEL = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" });
+// UTC-anchored — monthAnchor is generated at UTC midnight, so local formatting
+// would shift a month in negative-offset timezones.
+const MONTH_LABEL = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
 /**
  * Resolves on the server whether any of the user's plans is due for a monthly

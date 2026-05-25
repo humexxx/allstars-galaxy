@@ -5,7 +5,6 @@ import {
   CartesianGrid,
   Line,
   LineChart,
-  ReferenceDot,
   ReferenceLine,
   XAxis,
   YAxis,
@@ -58,6 +57,45 @@ function formatMoneyTick(v: number): string {
     return `${sign}${k % 1 < 0.05 ? Math.round(k) : k.toFixed(1)}k`;
   }
   return `${sign}${Math.round(abs)}`;
+}
+
+// Friendly distance-from-today string for milestone tooltips. Whole months
+// only — fractional months feel awkward in a casual hover tip.
+function formatTimeGap(monthsFromToday: number): string {
+  const rounded = Math.round(monthsFromToday);
+  if (rounded === 0) return "around today";
+  if (rounded > 0) {
+    return rounded === 1 ? "in about 1 month" : `in about ${rounded} months`;
+  }
+  const abs = Math.abs(rounded);
+  return abs === 1 ? "1 month ago" : `${abs} months ago`;
+}
+
+// Custom Recharts label for the milestone ReferenceLines. Renders the SVG
+// text + a native <title> child so hovering shows the "how far away" tip
+// without pulling in a full HTML tooltip portal.
+function MilestoneLabel(props: {
+  milestone: number;
+  tooltip: string;
+  viewBox?: { x?: number; y?: number };
+}) {
+  const x = props.viewBox?.x ?? 0;
+  const y = (props.viewBox?.y ?? 0) - 4;
+  return (
+    <g style={{ cursor: "help" }}>
+      <text
+        x={x}
+        y={y}
+        textAnchor="middle"
+        fill="currentColor"
+        fontSize={11}
+        fontWeight={500}
+      >
+        {formatMoneyTick(props.milestone)}
+        <title>{props.tooltip}</title>
+      </text>
+    </g>
+  );
 }
 
 type ProjectionChartProps = {
@@ -118,7 +156,9 @@ export function ProjectionChart({
     // Linear-interpolate the exact x where the trajectory hits each milestone.
     // Lets us place the marker between two months when the cross happens
     // mid-segment, so distinct milestones don't pile up on the same month.
-    const cross: { x: number; milestone: number }[] = [];
+    // The tooltip captures "how far from today" so users can read the
+    // distance to (or since) the milestone without doing the math.
+    const cross: { x: number; milestone: number; tooltip: string }[] = [];
     for (const m of MILESTONES) {
       for (let i = 1; i < rows.length; i++) {
         const prev = rows[i - 1].rawValue;
@@ -126,7 +166,13 @@ export function ProjectionChart({
         if ((prev < m && curr >= m) || (prev > m && curr <= m)) {
           const span = curr - prev;
           const t = span === 0 ? 0 : (m - prev) / span;
-          cross.push({ x: i - 1 + Math.max(0, Math.min(1, t)), milestone: m });
+          const x = i - 1 + Math.max(0, Math.min(1, t));
+          const monthsFromToday = x - pastCount;
+          cross.push({
+            x,
+            milestone: m,
+            tooltip: `${formatMoneyTick(m)} — ${formatTimeGap(monthsFromToday)}`,
+          });
           break;
         }
       }
@@ -174,45 +220,20 @@ export function ProjectionChart({
         {/* Milestone crossings — vertical dashed line at the EXACT fractional
             x where the trajectory hits the milestone. The numeric x-axis lets
             the line land between months so distinct milestones don't collide.
-            The zero crossing is special-cased: it'd duplicate the horizontal
-            y=0 baseline, so we drop a small dot at the cross-point instead
-            of running another full-height vertical. */}
-        {crossings.map((c) =>
-          c.milestone === 0 ? (
-            <ReferenceDot
-              key={c.milestone}
-              x={c.x}
-              y={0}
-              r={3}
-              fill="currentColor"
-              fillOpacity={0.55}
-              stroke="none"
-              label={{
-                value: "0",
-                position: "top",
-                offset: 8,
-                fill: "currentColor",
-                fontSize: 11,
-                fontWeight: 500,
-              }}
-            />
-          ) : (
-            <ReferenceLine
-              key={c.milestone}
-              x={c.x}
-              stroke="currentColor"
-              strokeOpacity={0.35}
-              strokeDasharray="4 4"
-              label={{
-                value: formatMoneyTick(c.milestone),
-                position: "top",
-                fill: "currentColor",
-                fontSize: 11,
-                fontWeight: 500,
-              }}
-            />
-          )
-        )}
+            Label is a custom component so hovering surfaces the time-gap
+            tooltip ("in about 5 months", "3 months ago"). */}
+        {crossings.map((c) => (
+          <ReferenceLine
+            key={c.milestone}
+            x={c.x}
+            stroke="currentColor"
+            strokeOpacity={0.35}
+            strokeDasharray="4 4"
+            label={
+              <MilestoneLabel milestone={c.milestone} tooltip={c.tooltip} />
+            }
+          />
+        ))}
         <ChartTooltip content={<ChartTooltipContent />} />
 
         {/* Past — solid line + filled dots. Labels are reserved for milestone

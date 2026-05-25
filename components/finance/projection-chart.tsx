@@ -143,7 +143,10 @@ export function ProjectionChart({
         data={data}
         margin={{ left: 10, right: 20, top: 30, bottom: 0 }}
       >
-        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+        {/* Horizontal-only grid (vertical={false}) matches the shadcn
+            Line-Label example — the vertical milestone markers below carry
+            the x-axis storytelling, so we don't double up. */}
+        <CartesianGrid vertical={false} strokeOpacity={0.25} />
         <XAxis
           dataKey="idx"
           type="number"

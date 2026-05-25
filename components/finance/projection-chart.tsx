@@ -17,6 +17,11 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { ChartConfig } from "@/types/chart";
 import type { Projection } from "@/types/finance";
 
@@ -71,9 +76,10 @@ function formatTimeGap(monthsFromToday: number): string {
   return abs === 1 ? "1 month ago" : `${abs} months ago`;
 }
 
-// Custom Recharts label for the milestone ReferenceLines. Renders the SVG
-// text + a native <title> child so hovering shows the "how far away" tip
-// without pulling in a full HTML tooltip portal.
+// Custom Recharts label for the milestone ReferenceLines. Wires the SVG
+// <text> through shadcn's Tooltip (Radix-based) so hovering shows the
+// "how far away" tip almost instantly — the native SVG <title> element
+// has a fixed browser delay (~500 ms+) that can't be tuned.
 function MilestoneLabel(props: {
   milestone: number;
   tooltip: string;
@@ -82,19 +88,24 @@ function MilestoneLabel(props: {
   const x = props.viewBox?.x ?? 0;
   const y = (props.viewBox?.y ?? 0) - 4;
   return (
-    <g style={{ cursor: "help" }}>
-      <text
-        x={x}
-        y={y}
-        textAnchor="middle"
-        fill="currentColor"
-        fontSize={11}
-        fontWeight={500}
-      >
-        {formatMoneyTick(props.milestone)}
-        <title>{props.tooltip}</title>
-      </text>
-    </g>
+    <Tooltip delayDuration={100}>
+      <TooltipTrigger asChild>
+        <text
+          x={x}
+          y={y}
+          textAnchor="middle"
+          fill="currentColor"
+          fontSize={11}
+          fontWeight={500}
+          style={{ cursor: "help" }}
+        >
+          {formatMoneyTick(props.milestone)}
+        </text>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6}>
+        {props.tooltip}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

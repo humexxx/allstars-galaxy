@@ -76,36 +76,43 @@ function formatTimeGap(monthsFromToday: number): string {
   return abs === 1 ? "1 month ago" : `${abs} months ago`;
 }
 
-// Custom Recharts label for the milestone ReferenceLines. Wires the SVG
-// <text> through shadcn's Tooltip (Radix-based) so hovering shows the
-// "how far away" tip almost instantly — the native SVG <title> element
-// has a fixed browser delay (~500 ms+) that can't be tuned.
+// Custom Recharts label for the milestone ReferenceLines. We render the label
+// inside a <foreignObject> so the trigger is an HTML <span>, not an SVG
+// <text> — Radix Tooltip's asChild via Slot doesn't reliably forward pointer
+// events onto SVG elements, so the hover never registered. With HTML inside
+// the foreignObject, the shadcn Tooltip works natively and appears with the
+// configured delayDuration (100 ms).
+const LABEL_WIDTH = 80;
+const LABEL_HEIGHT = 18;
+
 function MilestoneLabel(props: {
   milestone: number;
   tooltip: string;
   viewBox?: { x?: number; y?: number };
 }) {
-  const x = props.viewBox?.x ?? 0;
-  const y = (props.viewBox?.y ?? 0) - 4;
+  // (viewBox.x, viewBox.y) is the top of the vertical reference line. Centre
+  // the label horizontally on the line, then nudge it just above the top.
+  const cx = props.viewBox?.x ?? 0;
+  const top = (props.viewBox?.y ?? 0) - LABEL_HEIGHT - 2;
   return (
-    <Tooltip delayDuration={100}>
-      <TooltipTrigger asChild>
-        <text
-          x={x}
-          y={y}
-          textAnchor="middle"
-          fill="currentColor"
-          fontSize={11}
-          fontWeight={500}
-          style={{ cursor: "help" }}
-        >
-          {formatMoneyTick(props.milestone)}
-        </text>
-      </TooltipTrigger>
-      <TooltipContent side="top" sideOffset={6}>
-        {props.tooltip}
-      </TooltipContent>
-    </Tooltip>
+    <foreignObject
+      x={cx - LABEL_WIDTH / 2}
+      y={top}
+      width={LABEL_WIDTH}
+      height={LABEL_HEIGHT}
+      style={{ overflow: "visible" }}
+    >
+      <Tooltip delayDuration={100}>
+        <TooltipTrigger asChild>
+          <span className="block cursor-help text-center text-[11px] font-medium leading-none text-foreground">
+            {formatMoneyTick(props.milestone)}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" sideOffset={6}>
+          {props.tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </foreignObject>
   );
 }
 

@@ -118,7 +118,14 @@ export function AppSidebar({
     // Admin section is its own top-level group (impersonation affects all app
     // modules, not just finance). Hidden while impersonating to avoid confusion —
     // the active session is browsing as the impersonated (non-admin) user.
+    // "More apps" is an admin-only convenience for jumping to sibling projects,
+    // placed just before Admin so it stays grouped with admin-gated nav.
     if (role === "admin" && !isImpersonating) {
+      sections.push({
+        title: "More apps",
+        url: "/portal/more-apps",
+        items: [],
+      })
       sections.push({
         title: "Admin",
         url: "/portal/admin/users",

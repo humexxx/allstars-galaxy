@@ -17,6 +17,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: z.string().min(1),
   CRON_SECRET: z.string().min(16).optional(),
+  VERCEL_API_TOKEN: z.string().min(1).optional(),
 })
 
 function loadEnv(): Env {
@@ -28,6 +29,7 @@ function loadEnv(): Env {
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY:
         process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,
       CRON_SECRET: process.env.CRON_SECRET,
+      VERCEL_API_TOKEN: process.env.VERCEL_API_TOKEN,
     }
   }
 
@@ -38,6 +40,7 @@ function loadEnv(): Env {
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY:
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,
     CRON_SECRET: process.env.CRON_SECRET,
+    VERCEL_API_TOKEN: process.env.VERCEL_API_TOKEN,
   })
 
   if (!parsed.success) {

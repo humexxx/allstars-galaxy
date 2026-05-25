@@ -265,17 +265,27 @@ function monthTotalsBySide(
     const d = parseISODate(iso);
     return !!d && d.getFullYear() === year && d.getMonth() === monthIdx;
   };
-  const isInWindow = (
+  // Day-precise window check: the resolved hit-day in (year, monthIdx) must
+  // fall within [startDate, endDate]. Matches the projection's
+  // `dateWithinWindow` so chip placement, month summary and table totals all
+  // agree.
+  const hitDayWithinWindow = (
+    hitDay: number,
     start: string | null,
     end: string | null
   ): boolean => {
+    const hitMs = new Date(year, monthIdx, hitDay).getTime();
     if (start) {
       const s = parseISODate(start);
-      if (!s || monthKey < s.getFullYear() * 12 + s.getMonth()) return false;
+      if (s && new Date(s.getFullYear(), s.getMonth(), s.getDate()).getTime() > hitMs) {
+        return false;
+      }
     }
     if (end) {
       const e = parseISODate(end);
-      if (e && monthKey > e.getFullYear() * 12 + e.getMonth()) return false;
+      if (e && new Date(e.getFullYear(), e.getMonth(), e.getDate()).getTime() < hitMs) {
+        return false;
+      }
     }
     return true;
   };
@@ -304,10 +314,13 @@ function monthTotalsBySide(
     const natural = Number(inc.monthlyAmount);
     if (inc.kind === "one_time") {
       if (isOneTimeHit(inc.date)) income += natural;
-    } else if (
-      isInWindow(inc.startDate, inc.endDate) &&
-      recurringContributesToMonth(inc, year, monthIdx, planStartMonth)
-    ) {
+    } else if (recurringContributesToMonth(inc, year, monthIdx, planStartMonth)) {
+      // Resolve the in-month hit-day via the same calendar helpers, then
+      // require it to fall within the income's [startDate, endDate] window.
+      const resolver = buildHitResolver(inc, planStartMonth);
+      const hitDay = resolver(year, monthIdx);
+      if (hitDay === null) continue;
+      if (!hitDayWithinWindow(hitDay, inc.startDate, inc.endDate)) continue;
       const { skip, amount } = effective("income", inc.id, natural);
       if (!skip) income += amount;
     }
@@ -370,14 +383,29 @@ function buildDayMap(
     side: "income" | "expense" | "debt",
     parentId: string,
     resolver: MonthHitResolver,
-    startKey: { y: number; m: number } | null,
-    endKey: { y: number; m: number } | null
+    startDate: Date | null,
+    endDate: Date | null
   ) => {
+    // Compare hit-dates as midnight timestamps so the start/end window is
+    // enforced at day precision. This mirrors the projection's
+    // `dateWithinWindow` so the calendar chips match the table totals.
+    const startMs = startDate
+      ? new Date(
+          startDate.getFullYear(),
+          startDate.getMonth(),
+          startDate.getDate()
+        ).getTime()
+      : null;
+    const endMs = endDate
+      ? new Date(
+          endDate.getFullYear(),
+          endDate.getMonth(),
+          endDate.getDate()
+        ).getTime()
+      : null;
+
     for (const meta of dayMeta) {
       const mk = meta.year * 12 + meta.month;
-      if (startKey !== null && mk < startKey.y * 12 + startKey.m) continue;
-      if (endKey !== null && mk > endKey.y * 12 + endKey.m) continue;
-
       const ov = overrideIndex.get(`${side}:${parentId}:${mk}`);
       if (ov?.action === "skip") continue;
 
@@ -396,6 +424,14 @@ function buildDayMap(
       }
       if (targetDay === null) continue;
       if (meta.day !== targetDay) continue;
+
+      // Day-precise window: the resolved hit-date itself must fall within
+      // [startDate, endDate]. A mid-month start that lands AFTER the hit-day
+      // for that month skips the chip (e.g. dayOfMonth=1 + startDate=Jun 15
+      // → June is skipped, first chip lands on July 1).
+      const hitMs = new Date(meta.year, meta.month, targetDay).getTime();
+      if (startMs !== null && hitMs < startMs) continue;
+      if (endMs !== null && hitMs > endMs) continue;
 
       // Swap the amount when the override is an amount override.
       if (ov?.action === "amount" && ov.monthlyAmount !== null) {
@@ -447,8 +483,8 @@ function buildDayMap(
         "income",
         inc.id,
         buildHitResolver(inc, planStartMonth),
-        start ? { y: start.getFullYear(), m: start.getMonth() } : null,
-        end ? { y: end.getFullYear(), m: end.getMonth() } : null
+        start,
+        end
       );
     }
   }

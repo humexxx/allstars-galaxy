@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Plus } from "lucide-react";
 
 import {
   Table,
@@ -43,12 +44,43 @@ function densify(months: ProjectionMonth[]): ProjectionMonth[] {
   return kept;
 }
 
+// How many extra months a single "Load more" click reveals beyond the
+// initial window. Kept at a clean year so the table grows in human-sized
+// chunks rather than arbitrary numbers.
+const LOAD_MORE_STEP = 12;
+
 export function ProjectionTable({ projection, monthsToShow }: ProjectionTableProps) {
   const [showAll, setShowAll] = useState(false);
-  const visibleMonths = useMemo(() => {
-    if (typeof monthsToShow !== "number") return projection.months;
-    return projection.months.slice(0, Math.max(1, monthsToShow));
-  }, [projection.months, monthsToShow]);
+  // Extra months on top of the prop-supplied initial window. Reset whenever
+  // the parent changes the horizon (e.g. user picks a different preset on
+  // the projection card) so the extra doesn't carry over to a fresh range.
+  // Uses the "track-previous-prop in state" pattern recommended by React 19
+  // — see https://react.dev/learn/you-might-not-need-an-effect — instead of
+  // a useEffect, which would cascade a render.
+  const [extraMonths, setExtraMonths] = useState(0);
+  const [resetKey, setResetKey] = useState<{
+    monthsToShow?: number;
+    total: number;
+  }>({ monthsToShow, total: projection.months.length });
+  if (
+    resetKey.monthsToShow !== monthsToShow ||
+    resetKey.total !== projection.months.length
+  ) {
+    setResetKey({ monthsToShow, total: projection.months.length });
+    setExtraMonths(0);
+  }
+
+  const totalAvailable = projection.months.length;
+  const baseCount =
+    typeof monthsToShow === "number"
+      ? Math.max(1, Math.min(monthsToShow, totalAvailable))
+      : totalAvailable;
+  const effectiveCount = Math.min(baseCount + extraMonths, totalAvailable);
+
+  const visibleMonths = useMemo(
+    () => projection.months.slice(0, effectiveCount),
+    [projection.months, effectiveCount]
+  );
 
   const hasInvestments = visibleMonths.some((m) => m.investments > 0.01);
   const isLongHorizon = visibleMonths.length > 24;
@@ -56,6 +88,71 @@ export function ProjectionTable({ projection, monthsToShow }: ProjectionTablePro
     () => (showAll || !isLongHorizon ? visibleMonths : densify(visibleMonths)),
     [visibleMonths, showAll, isLongHorizon]
   );
+
+  // Show the "Load 12 more months" button as long as we haven't exhausted the
+  // projection's full horizon. The step is clamped against what's left so the
+  // last click can be shorter than 12 (e.g. 7 remaining → "Load 7 more").
+  const remaining = totalAvailable - effectiveCount;
+  const nextStep = Math.min(LOAD_MORE_STEP, remaining);
+
+  // Smooth-scroll to the first newly-revealed row after the user clicks
+  // "Load more". The ref captures the row offset BEFORE the state update;
+  // the layout effect runs after the new rows mount and animates the scroll
+  // container to the first row whose monthOffset is >= that snapshot.
+  // Falls back to the bottom of the container when no such row exists
+  // (densified mode: new content lives only at the tail as year-ends).
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const pendingScrollOffsetRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const targetOffset = pendingScrollOffsetRef.current;
+    if (targetOffset === null) return;
+    pendingScrollOffsetRef.current = null;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const tbody = container.querySelector("tbody");
+    if (!tbody) return;
+    // Find the first <tr> whose data-month-offset matches the first row that
+    // wasn't visible before the click.
+    let targetRow: HTMLElement | null = null;
+    for (const row of Array.from(tbody.children) as HTMLElement[]) {
+      const v = row.dataset.monthOffset;
+      if (v !== undefined && parseInt(v, 10) >= targetOffset) {
+        targetRow = row;
+        break;
+      }
+    }
+    if (targetRow) {
+      // Use getBoundingClientRect math so the calculation is independent of
+      // the offsetParent chain — `offsetTop` could be relative to the table
+      // or further up depending on intermediate positioning context.
+      const containerRect = container.getBoundingClientRect();
+      const rowRect = targetRow.getBoundingClientRect();
+      const theadHeight =
+        (container.querySelector("thead") as HTMLElement | null)?.offsetHeight ??
+        0;
+      const desired =
+        container.scrollTop + (rowRect.top - containerRect.top) - theadHeight;
+      container.scrollTo({
+        top: Math.max(0, desired),
+        behavior: "smooth",
+      });
+    } else {
+      // Densified case: no row with monthOffset ≥ snapshot exists in the
+      // visible array, so scroll to the bottom to reveal the new year-end
+      // markers that were appended.
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [rows]);
+
+  const handleLoadMore = () => {
+    // Snapshot the first-new-row offset BEFORE bumping state — after the
+    // re-render the layout effect uses this to decide where to scroll.
+    pendingScrollOffsetRef.current = effectiveCount;
+    setExtraMonths((v) => v + nextStep);
+  };
 
   return (
     <div className="space-y-2">
@@ -77,7 +174,10 @@ export function ProjectionTable({ projection, monthsToShow }: ProjectionTablePro
         </div>
       )}
       <div className="rounded-md border">
-        <div className="max-h-[480px] overflow-auto">
+        <div
+          ref={scrollContainerRef}
+          className="max-h-[480px] overflow-auto scroll-smooth"
+        >
           <Table>
             <TableHeader className="sticky top-0 bg-background">
               <TableRow>
@@ -85,11 +185,9 @@ export function ProjectionTable({ projection, monthsToShow }: ProjectionTablePro
                 <TableHead className="text-right">Income</TableHead>
                 <TableHead className="text-right">Expenses</TableHead>
                 <TableHead className="text-right">Debt pmt</TableHead>
-                <TableHead className="text-right">Extra pmt</TableHead>
                 <TableHead className="text-right" title="Investment + savings interest earned minus debt interest accrued">
                   Net interest
                 </TableHead>
-                <TableHead className="text-right">Savings</TableHead>
                 {hasInvestments && <TableHead className="text-right">Investments</TableHead>}
                 <TableHead className="text-right">Total debt</TableHead>
                 <TableHead className="text-right">Net worth</TableHead>
@@ -97,7 +195,7 @@ export function ProjectionTable({ projection, monthsToShow }: ProjectionTablePro
             </TableHeader>
             <TableBody>
               {rows.map((m) => (
-                <TableRow key={m.monthOffset}>
+                <TableRow key={m.monthOffset} data-month-offset={m.monthOffset}>
                   <TableCell className="font-medium">
                     {MONTH_FORMATTER.format(m.date)}
                   </TableCell>
@@ -107,13 +205,6 @@ export function ProjectionTable({ projection, monthsToShow }: ProjectionTablePro
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground">
                     {formatCurrency(m.scheduledDebtPayments)}
-                  </TableCell>
-                  <TableCell
-                    className={`text-right ${
-                      m.extraDebtPayments > 0 ? "text-amber-600" : "text-muted-foreground"
-                    }`}
-                  >
-                    {m.extraDebtPayments > 0 ? formatCurrency(m.extraDebtPayments) : "—"}
                   </TableCell>
                   <TableCell className="text-right">
                     {(() => {
@@ -137,7 +228,6 @@ export function ProjectionTable({ projection, monthsToShow }: ProjectionTablePro
                       );
                     })()}
                   </TableCell>
-                  <TableCell className="text-right">{formatCurrency(m.savings)}</TableCell>
                   {hasInvestments && (
                     <TableCell className="text-right text-blue-600">
                       {formatCurrency(m.investments)}
@@ -159,6 +249,25 @@ export function ProjectionTable({ projection, monthsToShow }: ProjectionTablePro
           </Table>
         </div>
       </div>
+      {remaining > 0 && (
+        // Footer button sits OUTSIDE the scroll container so it's always
+        // visible at the bottom of the table, regardless of how far the
+        // user has scrolled inside the table body.
+        <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <span>
+            Showing {effectiveCount} of {totalAvailable} months
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleLoadMore}
+          >
+            <Plus className="mr-1 h-3.5 w-3.5" />
+            Load {nextStep} more {nextStep === 1 ? "month" : "months"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -226,6 +226,82 @@ describe("projectPlan — savings and income", () => {
     expect(projection.months[3].income).toBe(0);
   });
 
+  it("skips a month when the recurring hit-day falls BEFORE startDate (same month)", () => {
+    // Income kicks in 2026-06-15 but lands on day-1 of the month. June's hit
+    // would be June 1 — already passed when the recurring becomes active, so
+    // the projection must skip June and first count it on July 1.
+    const plan = buildPlan({
+      startMonth: new Date(Date.UTC(2026, 5, 1)), // June 2026
+      monthsAhead: 3,
+    });
+    const income = buildIncome({
+      monthlyAmount: "1000",
+      dayOfMonth: 1,
+      startDate: "2026-06-15",
+    });
+
+    const projection = projectPlan(plan, [income], [], []);
+    expect(projection.months[0].income).toBe(0); // June — skipped
+    expect(projection.months[1].income).toBe(1000); // July 1 — first hit
+    expect(projection.months[2].income).toBe(1000); // August 1
+  });
+
+  it("skips a month when the recurring hit-day falls AFTER endDate (same month)", () => {
+    // Income paid on day-20 but the user marks it ended on June 15. June's
+    // hit (the 20th) is after the end, so June must be 0; May still counts.
+    const plan = buildPlan({
+      startMonth: new Date(Date.UTC(2026, 4, 1)), // May 2026
+      monthsAhead: 3,
+    });
+    const income = buildIncome({
+      monthlyAmount: "800",
+      dayOfMonth: 20,
+      endDate: "2026-06-15",
+    });
+
+    const projection = projectPlan(plan, [income], [], []);
+    expect(projection.months[0].income).toBe(800); // May 20 — within window
+    expect(projection.months[1].income).toBe(0); // June 20 — after end
+    expect(projection.months[2].income).toBe(0); // July — after end
+  });
+
+  it("counts the month when startDate equals the hit-day (boundary inclusive)", () => {
+    const plan = buildPlan({
+      startMonth: new Date(Date.UTC(2026, 5, 1)), // June 2026
+      monthsAhead: 2,
+    });
+    const income = buildIncome({
+      monthlyAmount: "1500",
+      dayOfMonth: 15,
+      startDate: "2026-06-15",
+    });
+
+    const projection = projectPlan(plan, [income], [], []);
+    expect(projection.months[0].income).toBe(1500); // June 15 == startDate
+    expect(projection.months[1].income).toBe(1500);
+  });
+
+  it("monthly_weekday respects day-precise startDate", () => {
+    // 1st Friday of the month — June 2026 is Fri 2026-06-05, July is 2026-07-03.
+    // startDate=2026-06-10 means June's 1st Friday already passed → skip June.
+    const plan = buildPlan({
+      startMonth: new Date(Date.UTC(2026, 5, 1)),
+      monthsAhead: 2,
+    });
+    const income = buildIncome({
+      monthlyAmount: "500",
+      recurrenceType: "monthly_weekday",
+      weekOfMonth: 1,
+      dayOfWeek: 5, // Friday
+      dayOfMonth: null,
+      startDate: "2026-06-10",
+    });
+
+    const projection = projectPlan(plan, [income], [], []);
+    expect(projection.months[0].income).toBe(0); // June — Fri 5 < Jun 10
+    expect(projection.months[1].income).toBe(500); // July — Fri 3 > Jun 10
+  });
+
   it("one_time income hits exactly its target month", () => {
     const plan = buildPlan({
       startMonth: new Date(Date.UTC(2026, 0, 1)),

@@ -84,18 +84,6 @@ function parseISODateLocal(
   return { year: y, month: m - 1, day: d };
 }
 
-// True if a recurring income/expense is active during the month at `monthKey`.
-// `startMonthKey` null → no lower bound. `endMonthKey` null → no upper bound.
-function isActiveInMonth(
-  monthKey: number,
-  startMonthKey: number | null,
-  endMonthKey: number | null
-): boolean {
-  if (startMonthKey !== null && monthKey < startMonthKey) return false;
-  if (endMonthKey !== null && monthKey > endMonthKey) return false;
-  return true;
-}
-
 async function ensureOwnership(planId: string, userId: string): Promise<void> {
   const [row] = await db
     .select({ userId: financePlans.userId })
@@ -657,6 +645,59 @@ function debtPaymentDayInMonth(
   return Math.min(d.dayOfMonth ?? 1, lastDay);
 }
 
+// Shape that any recurring row (income / expense / debt) exposes for day
+// resolution. Income/expense rows pass these from the DB columns; debts use
+// the dedicated `debtPaymentDayInMonth` because they're already a richer
+// runtime state.
+type RecurringDayShape = {
+  recurrenceType: "monthly_day" | "monthly_weekday" | "every_n_months";
+  dayOfMonth: number | null;
+  weekOfMonth: number | null;
+  dayOfWeek: number | null;
+};
+
+// Day-of-month (1..lastDay) the recurring entry hits in (year, monthIdx).
+// Same logic as the calendar's resolver so the projection / table / calendar
+// all agree on placement for the same row + month.
+function recurringHitDayInMonth(
+  shape: RecurringDayShape,
+  year: number,
+  monthIdx: number
+): number {
+  if (
+    shape.recurrenceType === "monthly_weekday" &&
+    shape.weekOfMonth != null &&
+    shape.dayOfWeek != null
+  ) {
+    return nthWeekdayOfMonth(year, monthIdx, shape.weekOfMonth, shape.dayOfWeek);
+  }
+  const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+  return Math.min(shape.dayOfMonth ?? 1, lastDay);
+}
+
+// True if the date (year, monthIdx, day) lands on/after startISO and on/before
+// endISO. Either bound can be null (unbounded). Compared in UTC because the
+// projection walks months in UTC. Replaces the old month-level active check so
+// an income starting 2026-06-15 with dayOfMonth=1 does NOT contribute to June.
+function dateWithinWindow(
+  year: number,
+  monthIdx: number,
+  day: number,
+  startISO: string | null,
+  endISO: string | null
+): boolean {
+  const hitMs = Date.UTC(year, monthIdx, day);
+  if (startISO) {
+    const s = parseISODateLocal(startISO);
+    if (s && Date.UTC(s.year, s.month, s.day) > hitMs) return false;
+  }
+  if (endISO) {
+    const e = parseISODateLocal(endISO);
+    if (e && Date.UTC(e.year, e.month, e.day) < hitMs) return false;
+  }
+  return true;
+}
+
 // True if a recurring entry contributes to this month. monthly_day and
 // monthly_weekday differ only in WHICH day inside the month — both contribute
 // every month at the projection level. every_n_months contributes only on
@@ -780,12 +821,20 @@ export function projectPlan(
     id: i.id,
     amount: Math.max(0, num(i.monthlyAmount)),
     kind: i.kind,
-    startKey: yearMonthKeyFromISO(i.startDate),
-    endKey: yearMonthKeyFromISO(i.endDate),
+    // Day-precise window — replaces the old month-level startKey/endKey so a
+    // mid-month start (or end) excludes the month when the actual hit day
+    // falls outside [startDate, endDate]. See `dateWithinWindow`.
+    startISO: i.startDate,
+    endISO: i.endDate,
     oneTimeKey: i.kind === "one_time" ? yearMonthKeyFromISO(i.date) : null,
     recurrenceType: i.recurrenceType,
     intervalMonths: i.intervalMonths,
     anchorKey: anchorFor(i.recurrenceType, i.recurrenceStart),
+    // Calendar fields needed by `recurringHitDayInMonth` to resolve the day
+    // the recurring entry lands on inside any given month.
+    dayOfMonth: i.dayOfMonth,
+    weekOfMonth: i.weekOfMonth,
+    dayOfWeek: i.dayOfWeek,
   }));
   const expenseRows = expenses.map((e) => ({
     id: e.id,
@@ -845,13 +894,17 @@ export function projectPlan(
     // contribute their amount only on the month that matches their `date`.
     const monthDate = addMonthsUtc(plan.startMonth, m);
     const monthKey = yearMonthKeyFromDate(monthDate);
+    // Hoisted out of the debt loop so the income window check can also use
+    // them. UTC parts because the projection walks months in UTC.
+    const year = monthDate.getUTCFullYear();
+    const month = monthDate.getUTCMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
 
     let monthIncome = 0;
     for (const row of incomeRows) {
       if (row.kind === "one_time") {
         if (row.oneTimeKey === monthKey) monthIncome += row.amount;
       } else if (
-        isActiveInMonth(monthKey, row.startKey, row.endKey) &&
         isRecurringHitMonth(
           monthKey,
           row.recurrenceType,
@@ -859,6 +912,15 @@ export function projectPlan(
           row.anchorKey
         )
       ) {
+        // Day-precise window: resolve the day this recurring lands on in
+        // (year, month), then require it to fall within [startDate, endDate].
+        // Catches mid-month starts (e.g. dayOfMonth=1 + startDate=2026-06-15
+        // → June is skipped, first hit is July 1) and mid-month ends.
+        const hitDay = recurringHitDayInMonth(row, year, month);
+        if (!dateWithinWindow(year, month, hitDay, row.startISO, row.endISO)) {
+          continue;
+        }
+
         const ov = lookupOverride("income", row.id, monthKey);
         // skip → suppress this month; amount → swap; reschedule → no-op for
         // a monthly-aggregate projection (the day inside the month doesn't
@@ -900,9 +962,8 @@ export function projectPlan(
     // accruing less interest, matching how real loans behave. For non-hit
     // months (every_n_months gaps, skip overrides) the full month's interest
     // accrues with no payment.
-    const year = monthDate.getUTCFullYear();
-    const month = monthDate.getUTCMonth();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    // `year`, `month`, `daysInMonth` already computed above for the income
+    // window check.
 
     for (const d of debtStates) {
       if (d.balance <= 0) continue;

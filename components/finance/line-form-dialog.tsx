@@ -1,7 +1,13 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Calendar as CalendarIcon, ChevronDown, X } from "lucide-react";
+import {
+  Calendar as CalendarIcon,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  X,
+} from "lucide-react";
 import { format } from "date-fns";
 
 import { Button } from "@/components/ui/button";
@@ -619,15 +625,15 @@ export function RecurrenceFields({
             </p>
           </div>
           <div className="space-y-1.5">
-            <Label>Anchor month</Label>
-            <DatePicker
+            <Label>First month</Label>
+            <MonthPicker
               value={recurrenceStart}
               onChange={setRecurrenceStart}
               placeholder="Plan start"
               clearable
             />
             <p className="text-xs text-muted-foreground">
-              The cycle counts from this date. Leave empty to anchor to the
+              The month the cycle first lands on. Leave empty to anchor to the
               plan&apos;s start month.
             </p>
           </div>
@@ -693,6 +699,147 @@ function DatePicker({
           className="absolute right-0 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
           onClick={(e) => {
             // Don't open the popover when the user only meant to clear.
+            e.stopPropagation();
+            onChange(null);
+          }}
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Lightweight month/year picker for fields where the day is meaningless (e.g.
+ * "First month" of a recurring cycle). Stores values as ISO "YYYY-MM-01" so it
+ * stays compatible with the existing date columns and string-parsing helpers,
+ * but UX-wise the user never sees or picks a day.
+ *
+ * UX: trigger renders "Month YYYY" (e.g. "January 2027"); popover has a year
+ * stepper (◄ 2027 ►) and a 4×3 grid of month buttons. Selected month is
+ * highlighted; the current real-world month is outlined for context.
+ */
+function MonthPicker({
+  value,
+  onChange,
+  placeholder,
+  clearable,
+}: {
+  value: string | null;
+  onChange: (value: string | null) => void;
+  placeholder: string;
+  clearable?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = fromISODate(value);
+  const today = new Date();
+  const todayYear = today.getFullYear();
+  const todayMonth = today.getMonth();
+
+  // The popover-visible year defaults to the selected value's year, falling
+  // back to today's year for new entries.
+  const [viewYear, setViewYear] = useState<number>(
+    selected ? selected.getFullYear() : todayYear
+  );
+
+  const monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+
+  const selectedYear = selected?.getFullYear();
+  const selectedMonth = selected?.getMonth();
+
+  return (
+    <div className="relative w-full">
+      <Popover
+        open={open}
+        onOpenChange={(o) => {
+          // Reset the year-stepper to follow the saved value each time the
+          // popover opens, so reopening doesn't strand the user on a year
+          // they navigated away from last time.
+          if (o) setViewYear(selected ? selected.getFullYear() : todayYear);
+          setOpen(o);
+        }}
+      >
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={`w-full justify-start font-normal ${
+              clearable && value ? "pr-9" : ""
+            }`}
+            type="button"
+          >
+            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+            <span className="truncate">
+              {selected ? format(selected, "MMMM yyyy") : placeholder}
+            </span>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[260px] p-3" align="start">
+          <div className="flex items-center justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setViewYear((y) => y - 1)}
+              aria-label="Previous year"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium">{viewYear}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setViewYear((y) => y + 1)}
+              aria-label="Next year"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-1">
+            {monthNames.map((name, idx) => {
+              const isSelected =
+                selectedYear === viewYear && selectedMonth === idx;
+              const isCurrent = viewYear === todayYear && idx === todayMonth;
+              return (
+                <Button
+                  key={name}
+                  type="button"
+                  size="sm"
+                  variant={isSelected ? "default" : "ghost"}
+                  className={`h-9 text-sm ${
+                    !isSelected && isCurrent
+                      ? "border border-border"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    // ISO "YYYY-MM-01" — day is meaningless for this control
+                    // but the DB column is a date, so we pin to day 1.
+                    const mm = String(idx + 1).padStart(2, "0");
+                    onChange(`${viewYear}-${mm}-01`);
+                    setOpen(false);
+                  }}
+                >
+                  {name}
+                </Button>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
+      {clearable && value && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Clear month"
+          className="absolute right-0 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          onClick={(e) => {
             e.stopPropagation();
             onChange(null);
           }}

@@ -1,3 +1,5 @@
+import "server-only";
+
 import { db } from "@/db";
 import { portfolios, transactions, investmentMethods } from "@/db/schema";
 import { eq, and } from "drizzle-orm";

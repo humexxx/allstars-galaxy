@@ -52,8 +52,12 @@ export async function getRoadPathAction(roadPathId: string) {
 
 export async function createRoadPathAction(data: CreateRoadPathInput) {
   const ctx = await requireEffectiveContext();
-  const validated = createRoadPathSchema.parse(data);
-  const { createFirstTask, ...roadPathData } = validated;
+  const parsed = createRoadPathSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false as const, error: "Invalid input" };
+  }
+  const { createFirstTask, ...roadPathData } = parsed.data;
+  const validated = parsed.data;
 
   const path = await createRoadPath(ctx.effectiveUserId, {
     ...roadPathData,
@@ -79,8 +83,11 @@ export async function createRoadPathAction(data: CreateRoadPathInput) {
 
 export async function updateRoadPathAction(data: UpdateRoadPathData) {
   const ctx = await requireEffectiveContext();
-  const validated = updateRoadPathSchema.parse(data);
-  const { id, ...updateData } = validated;
+  const parsed = updateRoadPathSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false as const, error: "Invalid input" };
+  }
+  const { id, ...updateData } = parsed.data;
 
   const before = ctx.isImpersonating
     ? await getRoadPath(id, ctx.effectiveUserId)
@@ -127,8 +134,11 @@ export async function getRoadPathMilestonesAction(roadPathId: string) {
 
 export async function createRoadPathMilestoneAction(data: CreateRoadPathMilestoneData) {
   const ctx = await requireEffectiveContext();
-  const validated = createRoadPathMilestoneSchema.parse(data);
-  const milestone = await createRoadPathMilestone(ctx.effectiveUserId, validated);
+  const parsed = createRoadPathMilestoneSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false as const, error: "Invalid input" };
+  }
+  const milestone = await createRoadPathMilestone(ctx.effectiveUserId, parsed.data);
 
   await logImpersonatedMutation({
     action: "roadPathMilestone.create",
@@ -141,8 +151,11 @@ export async function createRoadPathMilestoneAction(data: CreateRoadPathMileston
 
 export async function updateRoadPathMilestoneAction(data: UpdateRoadPathMilestoneData) {
   const ctx = await requireEffectiveContext();
-  const validated = updateRoadPathMilestoneSchema.parse(data);
-  const { id, ...updateData } = validated;
+  const parsed = updateRoadPathMilestoneSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false as const, error: "Invalid input" };
+  }
+  const { id, ...updateData } = parsed.data;
 
   const milestone = await updateRoadPathMilestone(id, ctx.effectiveUserId, updateData);
   if (!milestone) throw new Error("Milestone not found");
@@ -203,8 +216,11 @@ export async function getRoadPathDetailAction(roadPathId: string) {
 
 export async function createRoadPathProgressAction(data: CreateRoadPathProgressInput) {
   const ctx = await requireEffectiveContext();
-  const validated = createRoadPathProgressSchema.parse(data);
-  const progress = await createRoadPathProgress(ctx.effectiveUserId, validated);
+  const parsed = createRoadPathProgressSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false as const, error: "Invalid input" };
+  }
+  const progress = await createRoadPathProgress(ctx.effectiveUserId, parsed.data);
 
   await logImpersonatedMutation({
     action: "roadPathProgress.create",

@@ -1,3 +1,5 @@
+import "server-only";
+
 import { db } from "@/db";
 import { portfolioSnapshots } from "@/db/schema";
 import { eq, and, gte, asc } from "drizzle-orm";

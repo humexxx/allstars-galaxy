@@ -650,17 +650,26 @@ function DatePicker({
 }) {
   const [open, setOpen] = useState(false);
   const selected = fromISODate(value);
+  // The trigger is rendered inside a `relative` wrapper so the clear button
+  // can be absolutely positioned on top of the trigger's right edge — this
+  // keeps the whole control inside its column even when the parent is a
+  // 2-col grid (otherwise `w-full` on the trigger plus a sibling X icon
+  // overflows the column width).
   return (
-    <div className="flex items-center gap-1">
+    <div className="relative w-full">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
-            className="w-full justify-start font-normal"
+            className={`w-full justify-start font-normal ${
+              clearable && value ? "pr-9" : ""
+            }`}
             type="button"
           >
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            {selected ? format(selected, "PPP") : placeholder}
+            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+            <span className="truncate">
+              {selected ? format(selected, "PPP") : placeholder}
+            </span>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
@@ -681,9 +690,14 @@ function DatePicker({
           variant="ghost"
           size="icon"
           aria-label="Clear date"
-          onClick={() => onChange(null)}
+          className="absolute right-0 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          onClick={(e) => {
+            // Don't open the popover when the user only meant to clear.
+            e.stopPropagation();
+            onChange(null);
+          }}
         >
-          <X className="h-4 w-4" />
+          <X className="h-3.5 w-3.5" />
         </Button>
       )}
     </div>

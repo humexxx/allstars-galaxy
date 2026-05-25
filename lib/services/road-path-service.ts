@@ -1,3 +1,5 @@
+import "server-only";
+
 import { db } from "@/db";
 import { roadPaths, roadPathMilestones, roadPathProgress, boardTasks } from "@/db/schema";
 import { eq, and, asc, desc, gte, lte } from "drizzle-orm";

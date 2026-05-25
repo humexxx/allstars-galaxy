@@ -171,6 +171,7 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
               variant="secondary"
               className="bg-destructive/90 text-destructive-foreground hover:bg-destructive"
               onClick={() => setConfirmDelete(true)}
+              aria-label="Delete trip"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>

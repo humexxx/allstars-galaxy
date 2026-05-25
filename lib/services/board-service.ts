@@ -1,3 +1,5 @@
+import "server-only";
+
 import { db } from "@/db";
 import { boardColumns, boardTasks } from "@/db/schema";
 import { eq, and, asc, desc, gt, lt, sql } from "drizzle-orm";

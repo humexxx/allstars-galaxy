@@ -5,3 +5,6 @@ export * from "./transaction";
 export * from "./user";
 export * from "./finance";
 export * from "./finance-snapshot";
+export * from "./sports";
+export * from "./travel";
+export * from "./task-automation";

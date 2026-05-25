@@ -1,3 +1,5 @@
+import "server-only";
+
 import { db } from "@/db";
 import { roadPaths, boardColumns } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";

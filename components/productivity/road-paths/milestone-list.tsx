@@ -87,6 +87,7 @@ export function MilestoneList({ roadPathId, milestones, onRefresh }: MilestoneLi
               size="icon"
               className="h-8 w-8"
               onClick={() => handleDelete(milestone.id)}
+              aria-label={`Delete ${milestone.title}`}
             >
               <Trash2 className="h-4 w-4" />
             </Button>

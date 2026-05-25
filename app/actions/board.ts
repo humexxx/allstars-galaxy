@@ -51,8 +51,11 @@ export async function getBoardColumnAction(columnId: string) {
 
 export async function createBoardColumnAction(data: CreateBoardColumnData) {
   const ctx = await requireEffectiveContext();
-  const validated = createBoardColumnSchema.parse(data);
-  const column = await createBoardColumn(ctx.effectiveUserId, validated);
+  const parsed = createBoardColumnSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false as const, error: "Invalid input" };
+  }
+  const column = await createBoardColumn(ctx.effectiveUserId, parsed.data);
 
   await logImpersonatedMutation({
     action: "boardColumn.create",
@@ -65,8 +68,11 @@ export async function createBoardColumnAction(data: CreateBoardColumnData) {
 
 export async function updateBoardColumnAction(data: UpdateBoardColumnData) {
   const ctx = await requireEffectiveContext();
-  const validated = updateBoardColumnSchema.parse(data);
-  const { id, ...updateData } = validated;
+  const parsed = updateBoardColumnSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false as const, error: "Invalid input" };
+  }
+  const { id, ...updateData } = parsed.data;
 
   const before = ctx.isImpersonating
     ? await getBoardColumn(id, ctx.effectiveUserId)
@@ -137,7 +143,11 @@ export async function getBoardTaskAction(taskId: string) {
 
 export async function createBoardTaskAction(data: CreateBoardTaskData) {
   const ctx = await requireEffectiveContext();
-  const validated = createBoardTaskSchema.parse(data);
+  const parsed = createBoardTaskSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false as const, error: "Invalid input" };
+  }
+  const validated = parsed.data;
 
   const order =
     validated.order ?? (await getNextTaskOrder(validated.columnId, ctx.effectiveUserId));
@@ -155,8 +165,11 @@ export async function createBoardTaskAction(data: CreateBoardTaskData) {
 
 export async function updateBoardTaskAction(data: UpdateBoardTaskData) {
   const ctx = await requireEffectiveContext();
-  const validated = updateBoardTaskSchema.parse(data);
-  const { id, ...updateData } = validated;
+  const parsed = updateBoardTaskSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false as const, error: "Invalid input" };
+  }
+  const { id, ...updateData } = parsed.data;
 
   const before = ctx.isImpersonating
     ? await getBoardTask(id, ctx.effectiveUserId)
@@ -197,7 +210,11 @@ export async function deleteBoardTaskAction(taskId: string) {
 
 export async function reorderBoardTaskAction(data: ReorderTasksData) {
   const ctx = await requireEffectiveContext();
-  const validated = reorderTasksSchema.parse(data);
+  const parsed = reorderTasksSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false as const, error: "Invalid input" };
+  }
+  const validated = parsed.data;
   const task = await reorderTask(
     validated.taskId,
     ctx.effectiveUserId,

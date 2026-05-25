@@ -23,16 +23,55 @@ export async function myAction() {
 - If not, create one following the project conventions
 - Parse data before using it
 
-```typescript
-import { /* appropriate schema and type */ } from "@/schemas/my-schema";
+There are two acceptable shapes — pick based on who is calling the action:
 
-export async function createSomethingAction(data: /* SchemaData type */) {
-  const user = await /* auth utility */();
-  const validated = /* schema */.parse(data);
-  
-  // Use validated data...
+### User-facing actions (preferred)
+
+Use `.safeParse()` + the `safe()` wrapper from `@/lib/actions/safe`. Validation
+failures become `{ success: false, error: "Invalid input" }` so the UI's toast
+handler can surface them. Service errors are caught by `safe()` and become a
+generic `"Action failed"` — without leaking PG / Drizzle internals to the
+client.
+
+```typescript
+import { safe } from "@/lib/actions/safe";
+import { someSchema } from "@/schemas/my-schema";
+
+export async function createSomethingAction(data: SomeInput) {
+  return safe("my-feature", async () => {
+    const user = await requireAuth();
+    const parsed = someSchema.safeParse(data);
+    if (!parsed.success) {
+      return { success: false as const, error: "Invalid input" };
+    }
+    const result = await createSomething(user.id, parsed.data);
+    revalidatePath("/portal/my-feature");
+    return { success: true as const, data: result };
+  });
 }
 ```
+
+### Admin-only actions
+
+Admin actions that should bubble exceptions to the Next.js error boundary
+(e.g. cron / maintenance endpoints) may keep `.parse()` and let it throw —
+`safe()` is intentionally NOT used for these. The return type usually has no
+error envelope.
+
+```typescript
+export async function adminMaintenanceAction(
+  data: MaintenanceInput,
+): Promise<{ success: true; processed: number }> {
+  await requireAdmin();
+  const validated = maintenanceSchema.parse(data); // throws → error boundary
+  const { processed } = await runMaintenance(validated);
+  revalidatePath("/portal/admin");
+  return { success: true, processed };
+}
+```
+
+**Don't mix the two shapes inside a single file** — pick one per action based
+on the caller.
 
 ## Service Layer Pattern
 

@@ -1,7 +1,7 @@
 # Finance
 
 > **Status:** Active
-> **Last reviewed:** 2026-05-24
+> **Last reviewed:** 2026-05-25
 
 ## Overview
 Personal financial planning: users build *plans* (scenarios) with incomes,
@@ -51,4 +51,4 @@ strategy comparisons, [`FinancialHealthGauge`](../../components/finance/financia
 - All actions wrap their handler in `safe()` from `@/lib/actions/safe` so service errors translate to `{ success: false, error: "Action failed" }` for the client.
 - `getPlanWithLines` is wrapped in `React.cache()` so `generateMetadata` and the page body share one DB hit per request.
 - `ProjectionChart` and `ComparePlansChart` are lazy-loaded via `next/dynamic({ ssr: false })` to keep recharts out of the initial bundle.
-- `app/portal/plans/loading.tsx` and `app/portal/plans/[id]/not-found.tsx` give the routes a proper skeleton / 404 experience.
+- `app/portal/plans/loading.tsx`, `app/portal/plans/[id]/loading.tsx`, and `app/portal/plans/[id]/not-found.tsx` give the routes a proper skeleton / 404 experience. The `[id]/loading.tsx` mirrors the PlanEditor silhouette (back button + header with donut + 4 KPI cards + projection card) so the swap to the real editor feels like content filling in rather than a layout shift.

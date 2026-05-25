@@ -6,16 +6,21 @@ import {
   createAutomatedTasksForRoadPath,
   createAutomatedTasksForAllRoadPaths,
 } from "@/lib/services/task-automation-service";
+import { createAutomatedTaskSchema } from "@/schemas/task-automation";
 
 export async function createAutomatedTaskAction(roadPathId: string) {
   const user = await requireAuth();
+  const parsed = createAutomatedTaskSchema.safeParse({ roadPathId });
+  if (!parsed.success) {
+    return { success: false as const, error: "Invalid roadPathId" };
+  }
 
-  const task = await createAutomatedTasksForRoadPath(user.id, roadPathId);
+  const task = await createAutomatedTasksForRoadPath(user.id, parsed.data.roadPathId);
 
   revalidatePath("/portal/productivity");
 
   return {
-    success: true,
+    success: true as const,
     data: task,
     message: task ? "Task created successfully" : "No task needed at this time",
   };

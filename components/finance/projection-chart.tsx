@@ -86,8 +86,11 @@ export function ProjectionChart({
   const lineColor = projection.plan.color || "var(--chart-1)";
 
   // Build the slice + per-point split between past (solid) and future (dashed).
-  // The boundary point belongs to both series so the two Line components join
-  // visually at the same y-value.
+  // We use a numeric x-axis (each row's `idx` is its x coordinate) so milestone
+  // markers can land at the EXACT fractional crossing point between months
+  // instead of snapping to the nearest data point. That avoids two milestones
+  // collapsing onto the same month when both cross between the same pair of
+  // points.
   const { data, crossings } = useMemo(() => {
     const count = Math.max(
       1,
@@ -100,7 +103,8 @@ export function ProjectionChart({
       const isFuture = i > pastCount;
       const isBoundary = i === pastCount;
       return {
-        month: MONTH_FORMATTER.format(m.date),
+        idx: i,
+        monthLabel: MONTH_FORMATTER.format(m.date),
         // pastValue and futureValue overlap at the boundary to keep the line
         // visually continuous when one rendered series ends and the other
         // begins.
@@ -110,16 +114,18 @@ export function ProjectionChart({
       };
     });
 
-    // For each milestone, find the first month where the trajectory crosses it
-    // (either direction). We render a dashed vertical line + label at that
-    // point instead of labelling every data point.
-    const cross: { month: string; milestone: number }[] = [];
+    // Linear-interpolate the exact x where the trajectory hits each milestone.
+    // Lets us place the marker between two months when the cross happens
+    // mid-segment, so distinct milestones don't pile up on the same month.
+    const cross: { x: number; milestone: number }[] = [];
     for (const m of MILESTONES) {
       for (let i = 1; i < rows.length; i++) {
         const prev = rows[i - 1].rawValue;
         const curr = rows[i].rawValue;
         if ((prev < m && curr >= m) || (prev > m && curr <= m)) {
-          cross.push({ month: rows[i].month, milestone: m });
+          const span = curr - prev;
+          const t = span === 0 ? 0 : (m - prev) / span;
+          cross.push({ x: i - 1 + Math.max(0, Math.min(1, t)), milestone: m });
           break;
         }
       }
@@ -127,6 +133,8 @@ export function ProjectionChart({
 
     return { data: rows, crossings: cross };
   }, [projection.months, monthsToShow, startIndex, pastCount]);
+
+  const xMax = Math.max(0, data.length - 1);
 
   return (
     <ChartContainer config={config} className="h-80 w-full">
@@ -136,7 +144,11 @@ export function ProjectionChart({
       >
         <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
         <XAxis
-          dataKey="month"
+          dataKey="idx"
+          type="number"
+          domain={[0, xMax]}
+          ticks={data.map((_, i) => i)}
+          tickFormatter={(v: number) => data[Math.round(v)]?.monthLabel ?? ""}
           tickLine={false}
           axisLine={false}
           tickMargin={8}
@@ -155,12 +167,13 @@ export function ProjectionChart({
           strokeOpacity={0.2}
           strokeDasharray="2 2"
         />
-        {/* Milestone crossings — full-height vertical line at the month the
-            net worth first crosses 10k / 100k / 1M etc., with a label on top. */}
+        {/* Milestone crossings — vertical line at the EXACT fractional x where
+            the trajectory hits the milestone. The numeric x-axis lets the line
+            land between months so distinct milestones don't collide. */}
         {crossings.map((c) => (
           <ReferenceLine
-            key={`${c.milestone}-${c.month}`}
-            x={c.month}
+            key={c.milestone}
+            x={c.x}
             stroke="currentColor"
             strokeOpacity={0.35}
             strokeDasharray="4 4"

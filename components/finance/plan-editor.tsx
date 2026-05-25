@@ -296,6 +296,7 @@ export function PlanEditor({
 
         <ProjectionPanel
           projection={projection}
+          plan={plan}
           comparison={plan.debts.length > 0 ? comparison : null}
           currentStrategy={plan.debtStrategy as DebtStrategy}
           onChangeStrategy={(next) =>
@@ -415,6 +416,9 @@ export function PlanEditor({
 
 type ProjectionPanelProps = {
   projection: Projection;
+  /** Plan with lines, needed so the Today KPI can back out income / expense
+   *  that hasn't hit yet this month. */
+  plan: FinancePlanWithLines;
   /** Pre-computed projections for the three debt strategies — null when the
    *  plan has no debts (the comparison is meaningless). */
   comparison: StrategyComparison | null;
@@ -446,6 +450,146 @@ const HORIZON_PRESETS: ReadonlyArray<{ months: number; label: string }> = [
   { months: 60, label: "5 yr" },
   { months: 120, label: "10 yr" },
 ];
+
+// Day-of-month a recurring line lands on in (year, monthIdx). Mirrors the
+// calendar's resolver so the Today snapshot can ask "did this entry hit
+// already?" using the exact same dates the user sees on their calendar.
+function nthWeekdayOfMonth(
+  year: number,
+  monthIdx: number,
+  weekOfMonth: number,
+  dayOfWeek: number
+): number {
+  const firstDow = new Date(year, monthIdx, 1).getDay();
+  const firstOccurrence = 1 + ((dayOfWeek - firstDow + 7) % 7);
+  let target = firstOccurrence + (weekOfMonth - 1) * 7;
+  const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+  if (target > lastDay) target -= 7;
+  return target;
+}
+
+function recurringHitDayInMonth(
+  row: {
+    recurrenceType: "monthly_day" | "monthly_weekday" | "every_n_months";
+    dayOfMonth: number | null;
+    weekOfMonth: number | null;
+    dayOfWeek: number | null;
+    intervalMonths: number | null;
+    recurrenceStart: string | null;
+  },
+  year: number,
+  monthIdx: number,
+  planStartMonth: Date
+): number | null {
+  if (
+    row.recurrenceType === "monthly_weekday" &&
+    row.weekOfMonth != null &&
+    row.dayOfWeek != null
+  ) {
+    return nthWeekdayOfMonth(year, monthIdx, row.weekOfMonth, row.dayOfWeek);
+  }
+  if (row.recurrenceType === "every_n_months") {
+    if (!row.intervalMonths || row.intervalMonths < 1) return null;
+    const anchor = row.recurrenceStart
+      ? (() => {
+          const [y, m] = row.recurrenceStart!
+            .split("-")
+            .map((p) => parseInt(p, 10));
+          return Number.isFinite(y) && Number.isFinite(m) ? y * 12 + (m - 1) : null;
+        })()
+      : planStartMonth.getUTCFullYear() * 12 + planStartMonth.getUTCMonth();
+    if (anchor === null) return null;
+    const mk = year * 12 + monthIdx;
+    if (mk < anchor || (mk - anchor) % row.intervalMonths !== 0) return null;
+  }
+  const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+  return Math.min(row.dayOfMonth ?? 1, lastDay);
+}
+
+// Reads "YYYY-MM-DD" date strings (the form DB returns from `date` columns)
+// into a {y, m, d} triplet at UTC.
+function readDateParts(
+  iso: string | null
+): { year: number; month: number; day: number } | null {
+  if (!iso) return null;
+  const [y, m, d] = iso.split("-").map((p) => parseInt(p, 10));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+  return { year: y, month: m - 1, day: d };
+}
+
+type TodaySnapshot = {
+  netWorth: number;
+  monthDate: Date;
+};
+
+/**
+ * Approximates today's running net worth from the projection. The chart's
+ * monthly buckets sit at month-end, which over-counts income/expense that
+ * hasn't actually landed yet (e.g. paycheque on the 30th when today is the
+ * 25th). We back those out by walking each recurring/one-time line and
+ * subtracting (or restoring) the portion that hits AFTER today this month.
+ * Debt interest stays at the projection's month-end value — modelling it
+ * day-aware would need a richer return shape from projectPlan.
+ */
+function computeTodaySnapshot(
+  projection: Projection,
+  incomes: FinancePlanWithLines["incomes"],
+  expenses: FinancePlanWithLines["expenses"],
+  planStartMonth: Date
+): TodaySnapshot | null {
+  const now = new Date();
+  const todayKey = now.getUTCFullYear() * 12 + now.getUTCMonth();
+  const monthOffset =
+    todayKey - (planStartMonth.getUTCFullYear() * 12 + planStartMonth.getUTCMonth());
+
+  if (monthOffset < 0 || monthOffset >= projection.months.length) return null;
+
+  const month = projection.months[monthOffset];
+  const year = month.date.getUTCFullYear();
+  const monthIdx = month.date.getUTCMonth();
+  const todayDay = now.getUTCDate();
+
+  let netWorth = month.netWorth;
+
+  // Strip income that's still pending this month — it shows up in the
+  // month-end aggregate but the bank account doesn't have it yet.
+  for (const inc of incomes) {
+    if (inc.kind === "one_time") {
+      const d = readDateParts(inc.date);
+      if (d && d.year === year && d.month === monthIdx && d.day > todayDay) {
+        netWorth -= Number(inc.monthlyAmount);
+      }
+      continue;
+    }
+    // Recurring: window check first
+    const start = readDateParts(inc.startDate);
+    const end = readDateParts(inc.endDate);
+    const mk = year * 12 + monthIdx;
+    if (start && mk < start.year * 12 + start.month) continue;
+    if (end && mk > end.year * 12 + end.month) continue;
+    const hitDay = recurringHitDayInMonth(inc, year, monthIdx, planStartMonth);
+    if (hitDay !== null && hitDay > todayDay) {
+      netWorth -= Number(inc.monthlyAmount);
+    }
+  }
+
+  // Expenses pending today haven't drained the account yet — add them back.
+  for (const exp of expenses) {
+    if (exp.kind === "one_time") {
+      const d = readDateParts(exp.date);
+      if (d && d.year === year && d.month === monthIdx && d.day > todayDay) {
+        netWorth += Number(exp.monthlyAmount);
+      }
+      continue;
+    }
+    const hitDay = recurringHitDayInMonth(exp, year, monthIdx, planStartMonth);
+    if (hitDay !== null && hitDay > todayDay) {
+      netWorth += Number(exp.monthlyAmount);
+    }
+  }
+
+  return { netWorth, monthDate: month.date };
+}
 
 function computeProjectionWindow(
   projection: Projection,
@@ -488,6 +632,7 @@ function computeProjectionWindow(
  */
 function ProjectionPanel({
   projection,
+  plan,
   comparison,
   currentStrategy,
   onChangeStrategy,
@@ -509,7 +654,17 @@ function ProjectionPanel({
   const todayMonth = projection.months[window.startIndex + window.pastCount];
   const futureMonth =
     projection.months[window.startIndex + window.count - 1] ?? todayMonth;
-  const today = todayMonth?.netWorth ?? 0;
+  // Day-aware "today" net worth: strips income/expense from the month-end
+  // value when they haven't actually hit yet (e.g. paycheque on day 30 when
+  // today is day 25). Falls back to month-end when we're outside the
+  // projection range.
+  const todaySnapshot = computeTodaySnapshot(
+    projection,
+    plan.incomes,
+    plan.expenses,
+    new Date(plan.startMonth)
+  );
+  const today = todaySnapshot?.netWorth ?? todayMonth?.netWorth ?? 0;
   const future = futureMonth?.netWorth ?? today;
 
   return (
@@ -522,44 +677,20 @@ function ProjectionPanel({
               Solid line is past, dashed is forecast
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div
-              role="group"
-              aria-label="Projection horizon"
-              className="inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
-            >
-              {HORIZON_PRESETS.map((preset) => {
-                const disabled = preset.months > maxAvailable;
-                const active = horizonMonths === preset.months;
-                return (
-                  <button
-                    key={preset.months}
-                    type="button"
-                    onClick={() => setHorizonMonths(preset.months)}
-                    disabled={disabled}
-                    aria-pressed={active}
-                    className={`rounded px-3 py-1 text-xs font-medium transition ${
-                      active
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-            {comparison && (
-              <StrategyBadge
-                comparison={comparison}
-                currentStrategy={currentStrategy}
-                open={strategyOpen}
-                onToggle={() => setStrategyOpen((v) => !v)}
-              />
-            )}
-          </div>
+          {comparison && (
+            <StrategyBadge
+              comparison={comparison}
+              currentStrategy={currentStrategy}
+              open={strategyOpen}
+              onToggle={() => setStrategyOpen((v) => !v)}
+            />
+          )}
         </div>
 
+        {/* Today / End-of-window KPIs share a row with the horizon picker.
+            The KPIs cluster on the left; the picker sits on the right via
+            `ml-auto` so it lines up with the Strategy card above on wide
+            viewports and wraps neatly underneath on narrow ones. */}
         <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -585,6 +716,32 @@ function ProjectionPanel({
             >
               {formatCurrency(future)}
             </p>
+          </div>
+          <div
+            role="group"
+            aria-label="Projection horizon"
+            className="ml-auto inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
+          >
+            {HORIZON_PRESETS.map((preset) => {
+              const disabled = preset.months > maxAvailable;
+              const active = horizonMonths === preset.months;
+              return (
+                <button
+                  key={preset.months}
+                  type="button"
+                  onClick={() => setHorizonMonths(preset.months)}
+                  disabled={disabled}
+                  aria-pressed={active}
+                  className={`rounded px-3 py-1 text-xs font-medium transition ${
+                    active
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 

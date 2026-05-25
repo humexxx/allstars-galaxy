@@ -5,6 +5,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceDot,
   ReferenceLine,
   XAxis,
   YAxis,
@@ -167,25 +168,48 @@ export function ProjectionChart({
           strokeOpacity={0.2}
           strokeDasharray="2 2"
         />
-        {/* Milestone crossings — vertical line at the EXACT fractional x where
-            the trajectory hits the milestone. The numeric x-axis lets the line
-            land between months so distinct milestones don't collide. */}
-        {crossings.map((c) => (
-          <ReferenceLine
-            key={c.milestone}
-            x={c.x}
-            stroke="currentColor"
-            strokeOpacity={0.35}
-            strokeDasharray="4 4"
-            label={{
-              value: formatMoneyTick(c.milestone),
-              position: "top",
-              fill: "currentColor",
-              fontSize: 11,
-              fontWeight: 500,
-            }}
-          />
-        ))}
+        {/* Milestone crossings — vertical dashed line at the EXACT fractional
+            x where the trajectory hits the milestone. The numeric x-axis lets
+            the line land between months so distinct milestones don't collide.
+            The zero crossing is special-cased: it'd duplicate the horizontal
+            y=0 baseline, so we drop a small dot at the cross-point instead
+            of running another full-height vertical. */}
+        {crossings.map((c) =>
+          c.milestone === 0 ? (
+            <ReferenceDot
+              key={c.milestone}
+              x={c.x}
+              y={0}
+              r={3}
+              fill="currentColor"
+              fillOpacity={0.55}
+              stroke="none"
+              label={{
+                value: "0",
+                position: "top",
+                offset: 8,
+                fill: "currentColor",
+                fontSize: 11,
+                fontWeight: 500,
+              }}
+            />
+          ) : (
+            <ReferenceLine
+              key={c.milestone}
+              x={c.x}
+              stroke="currentColor"
+              strokeOpacity={0.35}
+              strokeDasharray="4 4"
+              label={{
+                value: formatMoneyTick(c.milestone),
+                position: "top",
+                fill: "currentColor",
+                fontSize: 11,
+                fontWeight: 500,
+              }}
+            />
+          )
+        )}
         <ChartTooltip content={<ChartTooltipContent />} />
 
         {/* Past — solid line + filled dots. Labels are reserved for milestone

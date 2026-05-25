@@ -1,3 +1,5 @@
+import "server-only";
+
 import { cache } from "react";
 
 import { db } from "@/db";
@@ -66,6 +68,20 @@ function yearMonthKeyFromISO(value: string | null | undefined): number | null {
   const [y, m] = value.split("-").map((s) => parseInt(s, 10));
   if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
   return yearMonthKey(y, m - 1);
+}
+
+// Splits "YYYY-MM-DD" into its calendar parts (month is 0-indexed for parity
+// with Date.prototype.getMonth). Used by the day-aware debt loop to decide
+// whether a reschedule override's date lands inside the current projection
+// month and on which day.
+function parseISODateLocal(
+  value: string
+): { year: number; month: number; day: number } | null {
+  const [y, m, d] = value.split("-").map((s) => parseInt(s, 10));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
+    return null;
+  }
+  return { year: y, month: m - 1, day: d };
 }
 
 // True if a recurring income/expense is active during the month at `monthKey`.
@@ -600,7 +616,46 @@ type DebtRuntimeState = {
   recurrenceType: "monthly_day" | "monthly_weekday" | "every_n_months";
   intervalMonths: number | null;
   anchorKey: number | null;
+  // Day-of-month fields drive WHEN inside a month the payment lands, which
+  // the day-aware interest split uses to charge less interest when the
+  // payment hits early.
+  dayOfMonth: number | null;
+  weekOfMonth: number | null;
+  dayOfWeek: number | null;
 };
+
+// Day-of-month (1..lastDay) the debt payment lands on in (year, monthIdx).
+// Mirrors the calendar's resolver so the projection charges interest against
+// the same date the user sees on their calendar.
+function nthWeekdayOfMonth(
+  year: number,
+  monthIdx: number,
+  weekOfMonth: number,
+  dayOfWeek: number
+): number {
+  const firstDow = new Date(year, monthIdx, 1).getDay();
+  const firstOccurrence = 1 + ((dayOfWeek - firstDow + 7) % 7);
+  let target = firstOccurrence + (weekOfMonth - 1) * 7;
+  const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+  if (target > lastDay) target -= 7;
+  return target;
+}
+
+function debtPaymentDayInMonth(
+  d: DebtRuntimeState,
+  year: number,
+  monthIdx: number
+): number {
+  if (
+    d.recurrenceType === "monthly_weekday" &&
+    d.weekOfMonth != null &&
+    d.dayOfWeek != null
+  ) {
+    return nthWeekdayOfMonth(year, monthIdx, d.weekOfMonth, d.dayOfWeek);
+  }
+  const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+  return Math.min(d.dayOfMonth ?? 1, lastDay);
+}
 
 // True if a recurring entry contributes to this month. monthly_day and
 // monthly_weekday differ only in WHICH day inside the month — both contribute
@@ -766,6 +821,9 @@ export function projectPlan(
     recurrenceType: d.recurrenceType,
     intervalMonths: d.intervalMonths,
     anchorKey: anchorFor(d.recurrenceType, d.recurrenceStart),
+    dayOfMonth: d.dayOfMonth,
+    weekOfMonth: d.weekOfMonth,
+    dayOfWeek: d.dayOfWeek,
   }));
 
   const months: ProjectionMonth[] = [];
@@ -835,17 +893,19 @@ export function projectPlan(
       }
     }
 
-    // Step 1 + 2: accrue interest every month; apply the scheduled payment
-    // only on hit months. For every_n_months debts, interest still piles up
-    // between payments — that's the realistic model for installment loans
-    // that bill quarterly etc.
+    // Step 1 + 2: day-aware interest + scheduled payment. The user's calendar
+    // tells us which day in the month the payment hits; we charge interest on
+    // the pre-payment balance for the days BEFORE the payment, then apply the
+    // payment, then charge interest for the days AFTER. Early payments end up
+    // accruing less interest, matching how real loans behave. For non-hit
+    // months (every_n_months gaps, skip overrides) the full month's interest
+    // accrues with no payment.
+    const year = monthDate.getUTCFullYear();
+    const month = monthDate.getUTCMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
     for (const d of debtStates) {
       if (d.balance <= 0) continue;
-      const interest = d.balance * d.rate;
-      const balanceWithInterest = d.balance + interest;
-      interestTotal += interest;
-      const entry = monthly.get(d.id)!;
-      entry.interest = interest;
       const isHitMonth = isRecurringHitMonth(
         monthKey,
         d.recurrenceType,
@@ -853,21 +913,53 @@ export function projectPlan(
         d.anchorKey
       );
       const ov = lookupOverride("debt", d.id, monthKey);
-      // Per-month overrides take precedence over the regular cadence: skip
-      // suppresses the payment (interest still accrued above); amount swaps
-      // it for the override's value.
+
+      // No payment this month → straight interest on the whole month, no
+      // scheduled outflow.
       if (!isHitMonth || ov?.action === "skip") {
-        d.balance = balanceWithInterest;
+        const interest = d.balance * d.rate;
+        d.balance += interest;
+        interestTotal += interest;
+        const entry = monthly.get(d.id)!;
+        entry.interest = interest;
         entry.scheduled = 0;
         continue;
       }
+
+      // Decide which day in this month the payment lands on. Reschedule
+      // overrides win when their date falls inside the same month.
+      let paymentDay = debtPaymentDayInMonth(d, year, month);
+      if (ov?.action === "reschedule" && ov.date) {
+        const od = parseISODateLocal(ov.date);
+        if (od && od.year === year && od.month === month) {
+          paymentDay = od.day;
+        }
+      }
+
+      // Two-halves interest: (paymentDay - 1) days at the pre-payment
+      // balance, then payment, then the remaining days at the post-payment
+      // balance. Reduces to "full month before payment" when paymentDay =
+      // daysInMonth, and "no pre-payment interest" when paymentDay = 1.
+      const daysBefore = Math.max(0, paymentDay - 1);
+      const interestBefore = d.balance * d.rate * (daysBefore / daysInMonth);
+      d.balance += interestBefore;
+
       const scheduled =
         ov?.action === "amount" && ov.monthlyAmount !== null
           ? Math.max(0, num(ov.monthlyAmount))
-          : scheduledPaymentFor(d, balanceWithInterest);
-      const payment = Math.min(scheduled, balanceWithInterest);
-      d.balance = balanceWithInterest - payment;
+          : scheduledPaymentFor(d, d.balance);
+      const payment = Math.min(scheduled, d.balance);
+      d.balance -= payment;
+
+      const daysAfter = daysInMonth - daysBefore;
+      const interestAfter = d.balance * d.rate * (daysAfter / daysInMonth);
+      d.balance += interestAfter;
+
+      const totalInterest = interestBefore + interestAfter;
+      interestTotal += totalInterest;
       scheduledTotal += payment;
+      const entry = monthly.get(d.id)!;
+      entry.interest = totalInterest;
       entry.scheduled = payment;
     }
 

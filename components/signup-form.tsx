@@ -10,6 +10,7 @@ import {
   FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Heading, Text } from "@/components/ui/typography"
 import { AuthService } from "@/lib/services/auth-service"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -81,10 +82,10 @@ export function SignupForm({
     >
       <FieldGroup>
         <div className="flex flex-col items-center gap-1 text-center">
-          <h1 className="text-2xl font-bold">Create an account</h1>
-          <p className="text-muted-foreground text-sm text-balance">
+          <Heading level="h3" as="h1">Create an account</Heading>
+          <Text variant="muted" className="text-balance">
             Enter your email below to create your account
-          </p>
+          </Text>
         </div>
 
         {error && (

@@ -3,6 +3,7 @@ import { Link2Off } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Heading, Text } from "@/components/ui/typography";
 
 export default function PublicTripNotFound() {
   return (
@@ -12,12 +13,12 @@ export default function PublicTripNotFound() {
           <Link2Off className="h-6 w-6" />
         </span>
         <div className="space-y-1">
-          <h1 className="text-xl font-semibold tracking-tight">
+          <Heading level="h4" as="h1">
             This share link is no longer available
-          </h1>
-          <p className="text-sm text-muted-foreground">
+          </Heading>
+          <Text variant="muted">
             The owner may have revoked it, or it has expired. Ask them for a fresh link.
-          </p>
+          </Text>
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline">

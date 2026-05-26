@@ -1,9 +1,30 @@
 "use client";
 
-import { Eye, EyeOff, ExternalLink } from "lucide-react";
+import {
+  ArrowRight,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  MoreHorizontal,
+} from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
-import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ProviderIcon } from "@/components/more-apps/provider-icon";
 import {
@@ -52,149 +73,147 @@ export function AppCard({
   onShow?: () => void;
 }) {
   const isLive = app.status === "live" && Boolean(app.url);
-  const gradient =
-    GRADIENT_BY_SLUG[app.slug] ?? "from-slate-500 to-slate-700";
+  const gradient = GRADIENT_BY_SLUG[app.slug] ?? "from-slate-500 to-slate-700";
   const domain = getHostname(app.url);
   const consoleUrl = deriveConsoleUrl(app);
 
-  // Screenshot + body + footer share the same "open the app" anchor.
-  // The provider header lives OUTSIDE that anchor so it can have its
-  // own link to the console (no nested anchors).
-  const mainContent = (
-    <>
-      {/* Screenshot */}
-      <div className="aspect-video w-full bg-muted relative">
-        {screenshotUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={screenshotUrl}
-            alt={`${app.name} preview`}
-            className="absolute inset-0 w-full h-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <div
-            className={cn(
-              "absolute inset-0 bg-gradient-to-br flex items-center justify-center text-6xl font-bold text-white/90 select-none",
-              gradient
-            )}
-            aria-hidden="true"
-          >
-            {app.name.charAt(0)}
-          </div>
-        )}
+  const description =
+    app.description || (isLive ? "No description" : "Not yet deployed");
 
-        {/* Hide/show overlay button. Inside the screenshot but outside
-            the anchor of the parent — we use preventDefault to be safe. */}
-        {(onHide || onShow) && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onHide?.();
-              onShow?.();
-            }}
-            className={cn(
-              "absolute top-2 right-2 inline-flex items-center justify-center size-7 rounded-md bg-background/80 text-foreground backdrop-blur-sm shadow-sm transition-opacity ring-1 ring-foreground/10 hover:bg-background",
-              onHide && "opacity-0 group-hover/card:opacity-100 focus:opacity-100"
-            )}
-            aria-label={onShow ? `Unhide ${app.name}` : `Hide ${app.name}`}
-            title={onShow ? "Unhide" : "Hide"}
-          >
-            {onShow ? (
-              <Eye className="size-3.5" />
-            ) : (
-              <EyeOff className="size-3.5" />
-            )}
-          </button>
-        )}
-      </div>
-
-      {/* Body */}
-      <div className="px-5 py-4 space-y-1">
-        <h3 className="font-medium text-base leading-tight truncate">
-          {app.name}
-        </h3>
-        <p className="text-xs text-muted-foreground truncate font-mono">
-          {domain || "Not deployed"}
-        </p>
-      </div>
-
-      {/* Footer: status + open icon */}
-      <div className="border-t px-5 py-2.5 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <span
-            className={cn(
-              "size-1.5 rounded-full",
-              isLive ? "bg-emerald-500" : "bg-muted-foreground/40"
-            )}
-            aria-hidden="true"
-          />
-          <span>{isLive ? "Live" : "Coming soon"}</span>
-          {app.updatedAt && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>
-                Updated{" "}
-                {formatDistanceToNow(new Date(app.updatedAt), {
-                  addSuffix: true,
-                })}
-              </span>
-            </>
-          )}
-        </div>
-        {isLive && (
-          <ExternalLink className="size-3 text-muted-foreground transition-colors group-hover/card:text-foreground" />
-        )}
-      </div>
-    </>
-  );
+  // Treat the dropdown as the single home for secondary actions. Console
+  // link, hide / unhide all live here — keeps the card header tidy and
+  // mirrors the plans-list pattern (3-dots in the corner).
+  const hasMenuItems = Boolean(consoleUrl) || Boolean(onHide) || Boolean(onShow);
 
   return (
     <Card
       className={cn(
-        "p-0 gap-0 overflow-hidden group/card transition-all relative",
+        "flex flex-col transition-shadow",
         isLive && "hover:ring-foreground/25 hover:shadow-md",
-        !isLive && "opacity-60",
-        onShow && "opacity-60"
+        (!isLive || onShow) && "opacity-60"
       )}
     >
-      {/* Provider header */}
-      <div className="px-4 py-2 flex items-center justify-between border-b text-xs">
-        <div className="flex items-center gap-1.5">
-          <ProviderIcon provider={app.provider} className="size-3 shrink-0" />
-          <span className="font-medium">{PROVIDER_LABEL[app.provider]}</span>
-        </div>
-        {consoleUrl && (
-          <a
-            href={consoleUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100 transition-opacity inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-            // Stop the click from bubbling so it doesn't also open the
-            // app's main URL when the header is layered above it.
-            onClick={(e) => e.stopPropagation()}
-          >
-            {PROVIDER_CONSOLE_LABEL[app.provider]}
-            <ExternalLink className="size-3" />
-          </a>
-        )}
-      </div>
-
-      {/* Main: clickable anchor opens the deployed app */}
-      {isLive ? (
-        <a
-          href={app.url!}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block"
-        >
-          {mainContent}
-        </a>
+      {/* Screenshot — kept as the visual hero so apps are recognisable at
+          a glance. The Card primitive auto-rounds img:first-child, so the
+          gradient placeholder mirrors that with rounded-t-xl manually. */}
+      {screenshotUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={screenshotUrl}
+          alt={`${app.name} preview`}
+          className="aspect-video w-full object-cover"
+          loading="lazy"
+        />
       ) : (
-        mainContent
+        <div
+          aria-hidden="true"
+          className={cn(
+            "flex aspect-video w-full items-center justify-center rounded-t-xl bg-gradient-to-br text-6xl font-bold text-white/90 select-none",
+            gradient
+          )}
+        >
+          {app.name.charAt(0)}
+        </div>
       )}
+
+      <CardHeader>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 space-y-1">
+            <CardTitle className="line-clamp-1">{app.name}</CardTitle>
+            <CardDescription className="line-clamp-2">
+              {description}
+            </CardDescription>
+          </div>
+          {hasMenuItems && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="-mr-2 h-8 w-8"
+                  aria-label={`Actions for ${app.name}`}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {consoleUrl && (
+                  <DropdownMenuItem asChild>
+                    <a
+                      href={consoleUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ProviderIcon
+                        provider={app.provider}
+                        className="mr-2 h-4 w-4"
+                      />
+                      {PROVIDER_CONSOLE_LABEL[app.provider]}
+                    </a>
+                  </DropdownMenuItem>
+                )}
+                {(consoleUrl && (onHide || onShow)) && <DropdownMenuSeparator />}
+                {onShow && (
+                  <DropdownMenuItem onSelect={onShow}>
+                    <Eye className="mr-2 h-4 w-4" /> Unhide
+                  </DropdownMenuItem>
+                )}
+                {onHide && (
+                  <DropdownMenuItem onSelect={onHide}>
+                    <EyeOff className="mr-2 h-4 w-4" /> Hide
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      </CardHeader>
+
+      <CardContent className="flex flex-1 flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <Badge variant="outline" className="gap-1">
+            <ProviderIcon provider={app.provider} className="size-3" />
+            {PROVIDER_LABEL[app.provider]}
+          </Badge>
+          <Badge variant={isLive ? "secondary" : "outline"} className="gap-1.5">
+            <span
+              aria-hidden="true"
+              className={cn(
+                "inline-block size-1.5 rounded-full",
+                isLive ? "bg-emerald-500" : "bg-muted-foreground/40"
+              )}
+            />
+            {isLive ? "Live" : "Coming soon"}
+          </Badge>
+          {app.updatedAt && (
+            <Badge variant="outline">
+              Updated{" "}
+              {formatDistanceToNow(new Date(app.updatedAt), { addSuffix: true })}
+            </Badge>
+          )}
+          {domain && (
+            <Badge variant="outline" className="font-mono">
+              {domain}
+            </Badge>
+          )}
+        </div>
+
+        <div className="mt-auto">
+          {isLive ? (
+            <Button variant="outline" className="w-full" asChild>
+              <a href={app.url!} target="_blank" rel="noopener noreferrer">
+                Open
+                <ExternalLink className="ml-1 h-4 w-4" />
+              </a>
+            </Button>
+          ) : (
+            <Button variant="outline" className="w-full" disabled>
+              Coming soon
+              <ArrowRight className="ml-1 h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </CardContent>
     </Card>
   );
 }

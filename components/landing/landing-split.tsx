@@ -1,5 +1,7 @@
 import { Lock, ShieldCheck, Zap } from "lucide-react";
 
+import { Heading } from "@/components/ui/typography";
+
 // Feature bento — mirrors the "De Excel al cubo en 5 minutos" section in
 // trim-success: 2/3 + 1/3 split with a primary feature on the left and a
 // security pill on the right.
@@ -11,9 +13,9 @@ export function LandingSplit() {
           <span className="text-xs font-medium uppercase tracking-widest text-neutral-400">
             Speed
           </span>
-          <h2 className="mt-3 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
+          <Heading level="h2" className="mt-3 text-neutral-900">
             From scattered to systematic — in minutes.
-          </h2>
+          </Heading>
           <p className="mt-4 text-neutral-500">
             Connect your accounts, drop your goals, watch the orbit form. No
             setup ceremony, no consultants required.
@@ -26,9 +28,9 @@ export function LandingSplit() {
               <Zap className="h-3 w-3 text-emerald-500" />
               Compare
             </div>
-            <h3 className="text-2xl font-semibold tracking-tight">
+            <Heading level="h3" className="text-neutral-900">
               Build plans. Compare scenarios side by side.
-            </h3>
+            </Heading>
             <p className="mt-3 max-w-lg text-sm text-neutral-500">
               Stack income, expenses, debts and projected net worth into a
               plan. Duplicate it, change one assumption, and open both at once
@@ -65,9 +67,9 @@ export function LandingSplit() {
               <Lock className="h-3 w-3" />
               Yours
             </div>
-            <h3 className="text-2xl font-semibold tracking-tight">
+            <Heading level="h3" className="text-neutral-900">
               Your data, your workspace.
-            </h3>
+            </Heading>
             <p className="mt-3 text-sm text-neutral-500">
               Built on Supabase Auth + PostgreSQL. Every row is scoped to your
               user — services filter by ownership before they return a single

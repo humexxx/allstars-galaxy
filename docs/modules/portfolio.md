@@ -1,7 +1,7 @@
 # Portfolio
 
-> **Status:** Active
-> **Last reviewed:** 2026-05-24
+> **Status:** Active (page redesigned to mirror plan-editor layout)
+> **Last reviewed:** 2026-05-25
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -33,7 +33,9 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `snapshot.ts`
 
 ## Components
-`components/portfolio/` — portfolio summaries, transaction tables, charts.
+- `components/portal/portfolio-client.tsx` — page shell: plan-style header (Heading h3 + muted Text), 4-card KPI grid (Total value with eye toggle, All-time profit, Cost basis, Active positions), Overview/Transactions tabs. Registers `Show charts`, `Hide values`, and admin `Manual snapshot` / `Clear manual snapshots` into the global dev drawer via `useRegisterDevTool` from `components/dev-tools/`.
+- `components/portfolio/investment-methods-view.tsx` — `/portal/investment-methods` view: plan-style header, 4-card KPI grid (Methods, Authors, Avg monthly ROI, Best monthly ROI), inline Risk-profile breakdown bar, grouped-by-author method cards with risk-tinted badges. Registers a `Show disabled methods` toggle in the dev drawer that hot-reveals methods normally filtered out.
+- `components/portfolio/` — supporting pieces: transactions table, performance chart (lazy-loaded), add-transaction dialog, manual-snapshot dialog, asset/allocation views. *Removed in the redesign:* `portfolio-header.tsx`, `stats-cards.tsx` (their concerns moved into `portfolio-client.tsx` and the dev drawer).
 
 ## DB tables — `db/schema.ts`
 - `portfolios` — user's portfolio account
@@ -48,3 +50,4 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - Transactions are created via `createTransactionAction` (server action). The previous `/api/transactions` route handler is gone; cron and webhook routes are the only remaining API routes.
 - `PerformanceChart` and the projection charts in [Finance](./finance.md) are lazy-loaded with `next/dynamic({ ssr: false })` to keep recharts out of the initial portal bundle.
 - `app/portal/portfolio/loading.tsx` and `app/portal/admin/loading.tsx` stream skeletons for the heavy data fetches.
+- The **Dev Tools drawer** (`components/dev-tools/`, mounted in `app/portal/layout.tsx`) is a portal-wide foundation: any page can call `useRegisterDevTool({ id, kind: "toggle" | "action" | "custom", ... })` and the helper shows up in the right-side `Sheet`. The floating wrench trigger only renders in `process.env.NODE_ENV === "development"` — registrations made by pages mounted in production are silently ignored. Context is split (`useDevToolsCommands` for stable register/unregister, `useDevToolsState` for the changing helpers/open) so consumer effects don't re-fire on every registration.

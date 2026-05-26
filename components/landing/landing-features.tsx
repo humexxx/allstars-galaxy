@@ -1,3 +1,5 @@
+import { Heading } from "@/components/ui/typography";
+
 // Three-step "How it works" — anchored in what the app actually does today.
 // Step 1 maps to /portal/portfolio (add accounts), step 2 maps to
 // /portal/investment-methods + /portal/plans (codify), step 3 maps to the
@@ -34,9 +36,9 @@ export function LandingFeatures() {
           <span className="text-xs font-medium uppercase tracking-widest text-neutral-400">
             How it works
           </span>
-          <h2 className="mt-3 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
+          <Heading level="h2" className="mt-3 text-neutral-900">
             Three moves. One orbit.
-          </h2>
+          </Heading>
           <p className="mt-4 text-neutral-500">
             No onboarding course, no twelve-step wizard. Add, codify, compound.
           </p>

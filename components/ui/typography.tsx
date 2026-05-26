@@ -13,14 +13,13 @@ import { cn } from "@/lib/utils";
 const headingVariants = cva("text-foreground text-balance", {
   variants: {
     level: {
-      display:
-        "text-5xl font-bold leading-[1.05] tracking-[-0.04em] sm:text-6xl lg:text-7xl",
-      h1: "text-4xl font-bold leading-[1.1] tracking-[-0.03em] sm:text-5xl",
-      h2: "text-3xl font-semibold leading-[1.15] tracking-[-0.025em] sm:text-4xl",
-      h3: "text-2xl font-semibold leading-[1.2] tracking-[-0.02em]",
-      h4: "text-xl font-semibold leading-[1.3] tracking-[-0.015em]",
-      h5: "text-lg font-semibold leading-[1.4] tracking-[-0.01em]",
-      h6: "text-base font-semibold leading-[1.5]",
+      display: "text-5xl font-extrabold tracking-tight lg:text-6xl",
+      h1: "text-4xl font-extrabold tracking-tight",
+      h2: "text-3xl font-semibold tracking-tight",
+      h3: "text-2xl font-semibold tracking-tight",
+      h4: "text-xl font-semibold tracking-tight",
+      h5: "text-lg font-semibold tracking-tight",
+      h6: "text-base font-semibold tracking-tight",
     },
   },
   defaultVariants: {
@@ -81,11 +80,12 @@ function defaultTagForLevel(level: HeadingProps["level"]): HeadingTag {
 const textVariants = cva("", {
   variants: {
     variant: {
-      lead: "text-lg leading-relaxed text-muted-foreground sm:text-xl",
-      body: "text-sm leading-6 text-foreground",
+      lead: "text-xl text-muted-foreground",
+      body: "text-base leading-7 text-foreground",
       "body-lg": "text-base leading-7 text-foreground",
-      muted: "text-sm leading-6 text-muted-foreground",
-      small: "text-xs leading-5 text-muted-foreground",
+      large: "text-lg font-semibold text-foreground",
+      muted: "text-sm text-muted-foreground",
+      small: "text-sm font-medium leading-none text-foreground",
     },
     weight: {
       normal: "font-normal",
@@ -159,7 +159,7 @@ function Code({ className, asChild = false, ...props }: CodeProps) {
     <Comp
       data-slot="code"
       className={cn(
-        "font-mono text-[0.9em] tabular-nums rounded-sm bg-muted px-1.5 py-0.5 text-foreground",
+        "relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold tabular-nums text-foreground",
         className,
       )}
       {...props}

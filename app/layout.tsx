@@ -2,6 +2,7 @@ import "./globals.css";
 
 import type { Metadata } from "next";
 import { ThemeProvider } from "@/components/theme-provider";
+import { DynamicFavicon } from "@/components/dynamic-favicon";
 import { Toaster } from "sonner";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
@@ -45,6 +46,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <DynamicFavicon />
           {children}
           <Toaster />
         </ThemeProvider>

@@ -10,6 +10,8 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { Heading } from "@/components/ui/typography";
+
 type ModuleItem = {
   icon: typeof Wallet;
   title: string;
@@ -97,9 +99,9 @@ export function LandingModules() {
           <span className="text-xs font-medium uppercase tracking-widest text-neutral-400">
             Product
           </span>
-          <h2 className="mt-3 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
+          <Heading level="h2" className="mt-3 text-neutral-900">
             One galaxy. Many orbits.
-          </h2>
+          </Heading>
           <p className="mt-4 text-neutral-500">
             Six modules live today, one on the way. Each is useful on its own —
             and they really shine when they talk to each other.

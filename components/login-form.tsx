@@ -9,6 +9,7 @@ import {
   FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Heading, Text } from "@/components/ui/typography"
 import { AuthService } from "@/lib/services/auth-service"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -73,10 +74,10 @@ export function LoginForm({
     >
       <FieldGroup>
         <div className="flex flex-col items-center gap-1 text-center">
-          <h1 className="text-2xl font-bold">Login to your account</h1>
-          <p className="text-muted-foreground text-sm text-balance">
+          <Heading level="h3" as="h1">Login to your account</Heading>
+          <Text variant="muted" className="text-balance">
             Enter your email below to login
-          </p>
+          </Text>
         </div>
         
         {error && (

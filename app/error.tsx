@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Heading, Text } from "@/components/ui/typography";
 
 export default function GlobalError({
   error,
@@ -18,12 +19,12 @@ export default function GlobalError({
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-6 p-6 text-center">
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold tracking-tight">Something went wrong</h1>
-        <p className="text-sm text-muted-foreground">
+        <Heading level="h3" as="h1">Something went wrong</Heading>
+        <Text variant="muted">
           An unexpected error happened. You can try again or go back to the home page.
-        </p>
+        </Text>
         {error.digest && (
-          <p className="text-xs text-muted-foreground">Reference: {error.digest}</p>
+          <Text variant="muted" className="text-xs">Reference: {error.digest}</Text>
         )}
       </div>
       <div className="flex flex-wrap items-center justify-center gap-3">

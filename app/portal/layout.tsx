@@ -1,28 +1,35 @@
-import { AppHeader } from "@/components/app-header";
 import { redirect } from "next/navigation";
+import { AppHeader } from "@/components/app-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { getCurrentUser, getUserRole } from "@/lib/services/auth-server";
+import { PortalPageContainer } from "@/components/portal/page-container";
+import { getEffectiveContext } from "@/lib/services/impersonation";
 
 export default async function PortalLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getCurrentUser();
+  const ctx = await getEffectiveContext();
 
-  if (!user) {
+  if (!ctx) {
     redirect("/login");
   }
 
-  const role = await getUserRole(user.id) || "user";
-
   return (
-    <SidebarProvider>
-      <AppSidebar role={role} />
+    <SidebarProvider defaultOpen={true}>
+      <AppSidebar
+        role={ctx.realRole ?? "user"}
+        isImpersonating={ctx.isImpersonating}
+      />
       <SidebarInset>
-        <AppHeader user={user} />
-        <main className="flex-1 p-6">{children}</main>
+        <AppHeader
+          realUser={ctx.realUser}
+          impersonatedUser={ctx.impersonatedUser}
+        />
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <PortalPageContainer>{children}</PortalPageContainer>
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );

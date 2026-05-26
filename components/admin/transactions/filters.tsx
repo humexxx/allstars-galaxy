@@ -1,79 +1,93 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTransition } from "react";
+
 import { Input } from "@/components/ui/input";
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
-import { useState, useEffect, useTransition } from "react";
+
+const BASE_PATH = "/portal/admin/transactions";
 
 export function TransactionFilters() {
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
 
-    const [userId, setUserId] = useState(searchParams.get("userId") || "");
-    const [status, setStatus] = useState(searchParams.get("status") || "pending");
-    const [type, setType] = useState(searchParams.get("type") || "all");
+  const userId = searchParams.get("userId") ?? "";
+  const status = searchParams.get("status") ?? "pending";
+  const type = searchParams.get("type") ?? "all";
 
-    useEffect(() => {
-        const params = new URLSearchParams();
+  const setParam = (key: "userId" | "status" | "type", value: string) => {
+    const next = new URLSearchParams(searchParams.toString());
+    if (!value || (key !== "status" && value === "all")) {
+      next.delete(key);
+    } else {
+      next.set(key, value);
+    }
+    const query = next.toString();
+    startTransition(() => {
+      router.replace(query ? `${BASE_PATH}?${query}` : BASE_PATH);
+    });
+  };
 
-        if (userId) params.set("userId", userId);
-        if (status && status !== "all") params.set("status", status);
-        else if (status === "all") params.set("status", "all");
-        if (type && type !== "all") params.set("type", type);
+  return (
+    <div
+      className={`mb-6 flex flex-col items-end gap-4 sm:flex-row ${
+        isPending ? "opacity-90" : "opacity-100"
+      }`}
+    >
+      <div className="flex w-full flex-col gap-2 sm:w-[18rem]">
+        <span className="text-sm font-medium">User ID</span>
+        <Input
+          placeholder="Filter by User ID..."
+          defaultValue={userId}
+          onChange={(e) => setParam("userId", e.target.value)}
+          disabled={isPending}
+        />
+      </div>
 
-        const newUrl = params.toString() ? `?${params.toString()}` : "/portal/admin/transactions";
-        
-        startTransition(() => {
-            router.replace(newUrl);
-        });
-    }, [userId, status, type, router]);
+      <div className="flex w-full flex-col gap-2 sm:w-[12.5rem]">
+        <span className="text-sm font-medium">Status</span>
+        <Select
+          value={status}
+          onValueChange={(value) => setParam("status", value)}
+          disabled={isPending}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="All Statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
-    return (
-        <div className="flex flex-col sm:flex-row gap-4 mb-6 items-end">
-            <div className="flex flex-col gap-2 w-full sm:w-75">
-                <span className="text-sm font-medium">User ID</span>
-                <Input
-                    placeholder="Filter by User ID..."
-                    value={userId}
-                    onChange={(e) => setUserId(e.target.value)}
-                />
-            </div>
-
-            <div className="flex flex-col gap-2 w-full sm:w-50">
-                <span className="text-sm font-medium">Status</span>
-                <Select value={status} onValueChange={setStatus}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="All Statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Statuses</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="approved">Approved</SelectItem>
-                        <SelectItem value="rejected">Rejected</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-
-            <div className="flex flex-col gap-2 w-full sm:w-50">
-                <span className="text-sm font-medium">Type</span>
-                <Select value={type} onValueChange={setType}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="All Types" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Types</SelectItem>
-                        <SelectItem value="buy">Buy</SelectItem>
-                        <SelectItem value="withdrawal">Withdrawal</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-        </div>
-    );
+      <div className="flex w-full flex-col gap-2 sm:w-[12.5rem]">
+        <span className="text-sm font-medium">Type</span>
+        <Select
+          value={type}
+          onValueChange={(value) => setParam("type", value)}
+          disabled={isPending}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="All Types" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="buy">Buy</SelectItem>
+            <SelectItem value="withdrawal">Withdrawal</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
 }

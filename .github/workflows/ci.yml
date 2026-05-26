@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: lint + types + tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # No standalone typecheck script — invoke tsc directly so a TS regression
+      # fails the job even if eslint and vitest happen to be green.
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Unit + integration tests
+        run: npm test
+
+      # E2E (Playwright) runs against a Supabase test user and a live Next.js
+      # dev server — out of scope for this CI job. Add a separate workflow with
+      # the appropriate env (TEST_USER_EMAIL/PASSWORD, DATABASE_URL) when ready.

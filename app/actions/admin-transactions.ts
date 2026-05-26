@@ -1,114 +1,53 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { db } from "@/db";
-import { transactions } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
+
 import { requireAdmin } from "@/lib/services/auth-server";
 import { createApprovalSnapshot } from "@/lib/services/snapshot-service";
+import {
+  approveTransactionById,
+  rejectTransactionById,
+} from "@/lib/services/transaction-service";
 
-const transactionActionSchema = z.object({
-  id: z.string().uuid(),
-});
+const transactionIdSchema = z.string().uuid();
 
-export async function approveTransaction(transactionId: string) {
+export async function approveTransaction(
+  transactionId: string,
+): Promise<{ success: true }> {
   const admin = await requireAdmin();
-  
-  const parsed = transactionActionSchema.safeParse({ id: transactionId });
+
+  const parsed = transactionIdSchema.safeParse(transactionId);
   if (!parsed.success) throw new Error("Invalid ID");
 
-  // Get the transaction details
-  const transaction = await db.query.transactions.findFirst({
-    where: eq(transactions.id, transactionId),
-  });
+  const { portfolioId, transactionDate } = await approveTransactionById(
+    admin.id,
+    parsed.data,
+  );
 
-  if (!transaction) throw new Error("Transaction not found");
-
-  await db.transaction(async (tx) => {
-    if (transaction.type === "buy") {
-      // For buy transactions, set initialValue and currentValue
-      await tx
-        .update(transactions)
-        .set({ 
-          status: "approved",
-          approvedAt: new Date(),
-          approvedBy: admin.id,
-          initialValue: transaction.total,
-          currentValue: transaction.total,
-          updatedAt: new Date(),
-        })
-        .where(eq(transactions.id, transactionId));
-    } else if (transaction.type === "withdrawal") {
-      // For withdrawals, validate and reduce currentValue of source transaction
-      const sourceTransactionId = transaction.sourceTransactionId;
-      
-      if (!sourceTransactionId) {
-        throw new Error("Withdrawal must have a source transaction");
-      }
-
-      const sourceTransaction = await tx.query.transactions.findFirst({
-        where: eq(transactions.id, sourceTransactionId),
-      });
-
-      if (!sourceTransaction) {
-        throw new Error("Source transaction not found");
-      }
-
-      const currentValue = parseFloat(sourceTransaction.currentValue || "0");
-      const withdrawalAmount = parseFloat(transaction.total);
-
-      if (currentValue < withdrawalAmount) {
-        throw new Error("Insufficient funds in source transaction");
-      }
-
-      const newValue = currentValue - withdrawalAmount;
-
-      // Update source transaction
-      await tx
-        .update(transactions)
-        .set({
-          currentValue: newValue.toFixed(2),
-          status: newValue <= 0 ? "closed" : "approved",
-          withdrawalTransactionIds: sql`array_append(COALESCE(${transactions.withdrawalTransactionIds}, ARRAY[]::text[]), ${transactionId})`,
-          updatedAt: new Date(),
-        })
-        .where(eq(transactions.id, sourceTransactionId));
-
-      // Approve withdrawal transaction
-      await tx
-        .update(transactions)
-        .set({
-          status: "approved",
-          approvedAt: new Date(),
-          approvedBy: admin.id,
-          updatedAt: new Date(),
-        })
-        .where(eq(transactions.id, transactionId));
-    }
-  });
-
-  // Create snapshot after transaction is committed, using the transaction date
-  await createApprovalSnapshot(transaction.portfolioId, transaction.date);
+  // Snapshot is intentionally created after the DB transaction commits so the
+  // sum sees the just-approved transaction.
+  await createApprovalSnapshot(portfolioId, transactionDate);
 
   revalidatePath("/portal/admin/transactions");
   revalidatePath("/portal/portfolio");
+
+  return { success: true };
 }
 
-export async function rejectTransaction(transactionId: string) {
+export async function rejectTransaction(
+  transactionId: string,
+): Promise<{ success: true }> {
   const admin = await requireAdmin();
 
-  const parsed = transactionActionSchema.safeParse({ id: transactionId });
+  const parsed = transactionIdSchema.safeParse(transactionId);
   if (!parsed.success) throw new Error("Invalid ID");
 
-  await db
-    .update(transactions)
-    .set({ 
-      status: "rejected",
-      rejectedAt: new Date(),
-      rejectedBy: admin.id,
-    })
-    .where(eq(transactions.id, transactionId));
+  await rejectTransactionById(admin.id, parsed.data);
 
+  // Rejection doesn't affect portfolio totals, so we only revalidate the
+  // admin queue page here.
   revalidatePath("/portal/admin/transactions");
+
+  return { success: true };
 }

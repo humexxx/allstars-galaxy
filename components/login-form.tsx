@@ -11,7 +11,17 @@ import {
 import { Input } from "@/components/ui/input"
 import { AuthService } from "@/lib/services/auth-service"
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
+import Link from "next/link"
+
+// Only honour same-origin paths so a crafted ?next=https://evil.example doesn't
+// turn the form into an open redirect. Anything that doesn't start with a
+// single "/" falls back to the default landing page.
+function safeNext(raw: string | null): string {
+  if (!raw) return "/portal"
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/portal"
+  return raw
+}
 
 export function LoginForm({
   className,
@@ -20,6 +30,10 @@ export function LoginForm({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const next = safeNext(searchParams.get("next"))
+  const signupHref =
+    next === "/portal" ? "/signup" : `/signup?next=${encodeURIComponent(next)}`
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -32,7 +46,7 @@ export function LoginForm({
 
     try {
       await AuthService.loginWithPassword(email, password)
-      router.push("/portal")
+      router.push(next)
       router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error initializing login")
@@ -44,7 +58,7 @@ export function LoginForm({
   async function handleGoogleLogin() {
     setIsLoading(true)
     try {
-      await AuthService.signInWithGoogle()
+      await AuthService.signInWithGoogle(next === "/portal" ? null : next)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error with Google login")
       setIsLoading(false)
@@ -66,26 +80,30 @@ export function LoginForm({
         </div>
         
         {error && (
-          <div className="text-destructive text-sm text-center p-2 bg-destructive/10 rounded">
+          <div
+            className="text-destructive text-sm text-center p-2 bg-destructive/10 rounded"
+            role="alert"
+            aria-live="polite"
+          >
             {error}
           </div>
         )}
 
         <Field>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" name="email" type="email" placeholder="m@example.com" required />
+          <Input id="email" name="email" type="email" placeholder="m@example.com" autoComplete="email" required />
         </Field>
         <Field>
           <div className="flex items-center">
             <FieldLabel htmlFor="password">Password</FieldLabel>
-            <a
+            <Link
               href="/forgot-password"
               className="ml-auto text-sm underline-offset-4 hover:underline"
             >
               Forgot your password?
-            </a>
+            </Link>
           </div>
-          <Input id="password" name="password" type="password" required />
+          <Input id="password" name="password" type="password" autoComplete="current-password" required />
         </Field>
         <Field>
           <Button type="submit" disabled={isLoading} className="w-full">
@@ -119,9 +137,9 @@ export function LoginForm({
 
         <div className="text-center text-sm">
           Don&apos;t have an account?{" "}
-          <a href="/signup" className="underline underline-offset-4">
+          <Link href={signupHref} className="underline underline-offset-4">
             Sign up
-          </a>
+          </Link>
         </div>
       </FieldGroup>
     </form>

@@ -1,10 +1,6 @@
-
 "use client";
 
-import {
-  ChevronsUpDown,
-  LogOut,
-} from "lucide-react";
+import { ChevronsUpDown, LogOut } from "lucide-react";
 
 import {
   Avatar,
@@ -20,22 +16,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { signOut } from "@/lib/services/auth-service";
+import { signOutAction } from "@/app/actions/auth";
 
-export function NavUser({
-  user,
-}: {
+type NavUserProps = {
   user: {
     name: string;
     email: string;
     avatar: string;
   };
-}) {
-  const handleSignOut = async () => {
-    await signOut();
-    window.location.href = "/login";
-  };
+};
 
+export function NavUser({ user }: NavUserProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -44,22 +35,28 @@ export function NavUser({
             <AvatarImage src={user.avatar} alt={user.name} />
             <AvatarFallback>{user.name.substring(0, 2).toUpperCase()}</AvatarFallback>
           </Avatar>
-          <div className="hidden md:grid flex-1 text-left text-sm leading-tight">
+          <div className="hidden flex-1 text-left text-sm leading-tight md:grid">
             <span className="truncate font-semibold">{user.name}</span>
             <span className="truncate text-xs text-muted-foreground">{user.email}</span>
           </div>
-          <ChevronsUpDown className="hidden md:block ml-auto h-4 w-4" />
+          <ChevronsUpDown className="ml-auto hidden h-4 w-4 md:block" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>My Account</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleSignOut}>
-          <LogOut className="mr-2 h-4 w-4" />
-          <span>Log out</span>
-        </DropdownMenuItem>
+        {/* Native <form action=...> integrates with React 19 form support so
+            the action runs server-side without a manual onClick + manual
+            redirect. */}
+        <form action={signOutAction}>
+          <DropdownMenuItem asChild>
+            <button type="submit" className="w-full">
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </button>
+          </DropdownMenuItem>
+        </form>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
-

@@ -1,42 +1,88 @@
+import "server-only";
+
 import { db } from "@/db";
-import { portfolioSnapshots, transactions } from "@/db/schema";
-import { eq, and, sql, lte, gt } from "drizzle-orm";
+import { portfolios, portfolioSnapshots, transactions } from "@/db/schema";
+import { eq, and, sql, lte, gt, desc } from "drizzle-orm";
 import type { SnapshotSource } from "@/schemas/snapshot";
 
 /**
- * Create daily snapshots for all portfolios with approved transactions
- * Sums currentValue of all active buy transactions per portfolio
+ * Create daily snapshots for all portfolios.
+ * Optimized as a batch: 3 queries total regardless of portfolio count.
+ *   1. SUM(currentValue) per portfolio for approved buy transactions.
+ *   2. Latest snapshot value per portfolio (to decide whether to write a zero row).
+ *   3. Single bulk INSERT for all eligible portfolios.
  */
-export async function createDailySnapshots() {
-  // Get all portfolios
-  const allPortfolios = await db.query.portfolios.findMany();
+export async function createDailySnapshots(): Promise<{
+  date: Date;
+  snapshotsCreated: number;
+  totalPortfolios: number;
+  errors: string[];
+}> {
+  const today = new Date();
 
-  const snapshotsCreated: string[] = [];
-  const errors: string[] = [];
+  // 1. Aggregate balances per portfolio in a single query.
+  const balances = await db
+    .select({
+      portfolioId: transactions.portfolioId,
+      totalValue: sql<string>`COALESCE(SUM(${transactions.currentValue}), 0)`,
+      txCount: sql<number>`COUNT(*)::int`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.status, "approved"),
+        eq(transactions.type, "buy"),
+        lte(transactions.date, today)
+      )
+    )
+    .groupBy(transactions.portfolioId);
 
-  for (const portfolio of allPortfolios) {
-    try {
-      const result = await createSnapshotForPortfolio(
-        portfolio.id,
-        "system_cron"
-      );
-      if (result.created) {
-        snapshotsCreated.push(portfolio.id);
-      }
-    } catch (error) {
-      console.error(
-        `Error creating snapshot for portfolio ${portfolio.id}:`,
-        error
-      );
-      errors.push(`${portfolio.id}: ${error}`);
-    }
+  if (balances.length === 0) {
+    const totalPortfolios = await db.$count(portfolios);
+    return { date: today, snapshotsCreated: 0, totalPortfolios, errors: [] };
+  }
+
+  // 2. Latest snapshot per portfolio, for the zero-value branch logic.
+  const portfolioIds = balances.map((b) => b.portfolioId);
+  const latestSnapshots = await db
+    .selectDistinctOn([portfolioSnapshots.portfolioId], {
+      portfolioId: portfolioSnapshots.portfolioId,
+      totalValue: portfolioSnapshots.totalValue,
+    })
+    .from(portfolioSnapshots)
+    .where(sql`${portfolioSnapshots.portfolioId} = ANY(${portfolioIds})`)
+    .orderBy(portfolioSnapshots.portfolioId, desc(portfolioSnapshots.date));
+
+  const latestByPortfolio = new Map(
+    latestSnapshots.map((s) => [s.portfolioId, parseFloat(s.totalValue)])
+  );
+
+  // 3. Decide which rows to insert.
+  const rowsToInsert = balances
+    .filter((b) => {
+      const totalValue = parseFloat(b.totalValue);
+      if (totalValue > 0) return true;
+      // Only insert a zero-value snapshot if the previous one was non-zero
+      // (signals a real transition to empty).
+      const prev = latestByPortfolio.get(b.portfolioId);
+      return prev !== undefined && prev > 0;
+    })
+    .map((b) => ({
+      portfolioId: b.portfolioId,
+      date: today,
+      totalValue: parseFloat(b.totalValue).toFixed(2),
+      source: "system_cron" as SnapshotSource,
+    }));
+
+  if (rowsToInsert.length > 0) {
+    await db.insert(portfolioSnapshots).values(rowsToInsert);
   }
 
   return {
-    date: new Date(),
-    snapshotsCreated: snapshotsCreated.length,
-    totalPortfolios: allPortfolios.length,
-    errors,
+    date: today,
+    snapshotsCreated: rowsToInsert.length,
+    totalPortfolios: balances.length,
+    errors: [],
   };
 }
 
@@ -45,7 +91,7 @@ export async function createDailySnapshots() {
  * Does NOT delete existing snapshots - allows multiple snapshots per day
  * Uses the transaction date for the snapshot
  */
-export async function createApprovalSnapshot(portfolioId: string, transactionDate: Date) {
+export async function createApprovalSnapshot(portfolioId: string, transactionDate: Date): Promise<void> {
   await createSnapshotForPortfolio(portfolioId, "admin_approval", transactionDate);
 }
 
@@ -57,15 +103,15 @@ export async function createManualSnapshot(
   portfolioId: string,
   date: Date = new Date(),
   source: SnapshotSource = "manual"
-) {
+): Promise<{ created: boolean; totalValue: number }> {
   return await createSnapshotForPortfolio(portfolioId, source, date);
 }
 
 /**
  * Delete all manual snapshots for a portfolio
  */
-export async function deleteManualSnapshots(portfolioId: string) {
-  const result = await db
+export async function deleteManualSnapshots(portfolioId: string): Promise<void> {
+  await db
     .delete(portfolioSnapshots)
     .where(
       and(
@@ -73,8 +119,52 @@ export async function deleteManualSnapshots(portfolioId: string) {
         eq(portfolioSnapshots.source, "manual")
       )
     );
+}
 
-  return result;
+/**
+ * Admin-only: create a manual snapshot for EVERY portfolio in the system at
+ * the given date / source. Used by the admin "take a snapshot for everyone"
+ * tool when end-of-month interest is applied. Returns totals so the caller
+ * can confirm what happened.
+ */
+export async function createManualSnapshotsForAllPortfolios(
+  date: Date,
+  source: SnapshotSource = "manual"
+): Promise<{ snapshotsCreated: number; totalValue: number; portfoliosProcessed: number }> {
+  const allPortfolios = await db.select({ id: portfolios.id }).from(portfolios);
+  if (allPortfolios.length === 0) {
+    throw new Error("No portfolios found");
+  }
+
+  let totalValue = 0;
+  let snapshotsCreated = 0;
+  for (const portfolio of allPortfolios) {
+    const result = await createManualSnapshot(portfolio.id, date, source);
+    if (result.created) {
+      totalValue += result.totalValue;
+      snapshotsCreated++;
+    }
+  }
+
+  return {
+    snapshotsCreated,
+    totalValue,
+    portfoliosProcessed: allPortfolios.length,
+  };
+}
+
+/**
+ * Admin-only: delete every "manual" snapshot across all portfolios. Used by
+ * the admin reset-tool. Returns the count of portfolios processed.
+ */
+export async function deleteManualSnapshotsForAllPortfolios(): Promise<{
+  portfoliosProcessed: number;
+}> {
+  const allPortfolios = await db.select({ id: portfolios.id }).from(portfolios);
+  for (const portfolio of allPortfolios) {
+    await deleteManualSnapshots(portfolio.id);
+  }
+  return { portfoliosProcessed: allPortfolios.length };
 }
 
 /**

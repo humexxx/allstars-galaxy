@@ -1,0 +1,532 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The service exercises three db shapes:
+//   - chainable selects: db.select().from().where()[.orderBy().limit()]
+//   - chainable insert (in saveConfirmation's tx) with onConflictDoUpdate +
+//     returning
+//   - db.transaction(cb) which is invoked with a `tx` that mirrors the same
+//     surface as `db` for insert / delete.
+// We expose mutable mocks per chain so individual tests can stub responses and
+// then assert on the call args.
+
+const selectImpl = vi.fn();
+const insertImpl = vi.fn();
+const deleteImpl = vi.fn();
+const txInsertImpl = vi.fn();
+const txDeleteImpl = vi.fn();
+
+vi.mock("@/db", () => ({
+  db: {
+    select: (...args: unknown[]) => selectImpl(...args),
+    insert: (...args: unknown[]) => insertImpl(...args),
+    delete: (...args: unknown[]) => deleteImpl(...args),
+    transaction: (cb: (tx: unknown) => Promise<unknown>) =>
+      cb({
+        insert: (...args: unknown[]) => txInsertImpl(...args),
+        delete: (...args: unknown[]) => txDeleteImpl(...args),
+      }),
+  },
+}));
+
+// Dependencies pulled in by the service. We stub them at the import boundary
+// so we never execute the real projection / snapshot machinery.
+const getPlanWithLinesMock = vi.fn();
+vi.mock("./finance-plan-service", () => ({
+  getPlanWithLines: (...args: unknown[]) => getPlanWithLinesMock(...args),
+}));
+
+const getProjectedStateForMonthMock = vi.fn();
+const createConfirmationSnapshotMock = vi.fn();
+vi.mock("./finance-snapshot-service", () => ({
+  getProjectedStateForMonth: (...args: unknown[]) =>
+    getProjectedStateForMonthMock(...args),
+  createConfirmationSnapshot: (...args: unknown[]) =>
+    createConfirmationSnapshotMock(...args),
+}));
+
+import {
+  getConfirmationStatus,
+  getLatestConfirmation,
+  getPlanForConfirmation,
+  saveConfirmation,
+} from "./finance-confirmation-service";
+import type {
+  FinancePlanConfirmation,
+  FinancePlanDebtConfirmation,
+  FinancePlanWithLines,
+  ProjectionMonth,
+} from "@/types/finance";
+
+const PLAN_ID = "11111111-1111-1111-1111-111111111111";
+const USER_ID = "22222222-2222-2222-2222-222222222222";
+
+// ---------- helpers ----------
+
+function buildPlan(
+  overrides: Partial<FinancePlanWithLines> = {}
+): FinancePlanWithLines {
+  const base = {
+    id: PLAN_ID,
+    userId: USER_ID,
+    name: "Test Plan",
+    description: null,
+    startMonth: new Date(Date.UTC(2026, 0, 1)),
+    monthsAhead: 12,
+    initialSavings: "0",
+    monthlySavingsRate: "0",
+    includePortfolio: false,
+    surplusToDebtsPercent: "0",
+    debtStrategy: "avalanche",
+    confirmationDayOfMonth: 1,
+    autoInvestPercent: "0",
+    autoInvestMethodId: null,
+    initialInvestments: "0",
+    color: "var(--chart-1)",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    incomes: [],
+    expenses: [],
+    debts: [],
+    overrides: [],
+    ...overrides,
+  };
+  return base as unknown as FinancePlanWithLines;
+}
+
+function buildProjectionMonth(): ProjectionMonth {
+  return {
+    monthOffset: 0,
+    date: new Date(Date.UTC(2026, 4, 1)),
+    income: 5000,
+    expenses: 2000,
+    scheduledDebtPayments: 0,
+    extraDebtPayments: 0,
+    debtPayments: 0,
+    totalInterestAccrued: 0,
+    cashFlow: 3000,
+    savings: 12000,
+    savingsInterest: 0,
+    investments: 5000,
+    investmentsContribution: 0,
+    investmentsInterest: 0,
+    totalDebt: 0,
+    portfolioValue: 0,
+    netWorth: 17000,
+    debts: [],
+  };
+}
+
+// Build a Drizzle-style select chain that is also a thenable. Every builder
+// method returns the same object; awaiting at ANY point resolves with `rows`.
+// This lets one helper cover both `.from().where()` and
+// `.from().where().orderBy().limit()` shapes.
+function makeSelectChain(rows: unknown[]) {
+  const chain = {
+    from: vi.fn(),
+    where: vi.fn(),
+    orderBy: vi.fn(),
+    limit: vi.fn(),
+    then: (
+      resolve: (v: unknown) => unknown,
+      reject?: (e: unknown) => unknown
+    ): Promise<unknown> => Promise.resolve(rows).then(resolve, reject),
+  };
+  chain.from.mockReturnValue(chain);
+  chain.where.mockReturnValue(chain);
+  chain.orderBy.mockReturnValue(chain);
+  chain.limit.mockReturnValue(chain);
+  return chain;
+}
+
+function buildConfirmation(
+  overrides: Partial<FinancePlanConfirmation> = {}
+): FinancePlanConfirmation {
+  const base = {
+    id: "conf-1",
+    planId: PLAN_ID,
+    confirmationMonth: "2026-05-01",
+    confirmedSavings: "12345.67",
+    confirmedInvestments: "9876.54",
+    notes: null,
+    confirmedAt: new Date(),
+    ...overrides,
+  };
+  return base as unknown as FinancePlanConfirmation;
+}
+
+function buildDebtConfirmation(
+  overrides: Partial<FinancePlanDebtConfirmation> = {}
+): FinancePlanDebtConfirmation {
+  const base = {
+    id: "debt-conf-1",
+    confirmationId: "conf-1",
+    debtId: "debt-1",
+    confirmedBalance: "1000.00",
+    createdAt: new Date(),
+    ...overrides,
+  };
+  return base as unknown as FinancePlanDebtConfirmation;
+}
+
+afterEach(() => {
+  // Reset both call history AND any queued mockReturnValueOnce / mockResolvedValueOnce
+  // values so leftover queue entries from one test don't bleed into the next.
+  selectImpl.mockReset();
+  insertImpl.mockReset();
+  deleteImpl.mockReset();
+  txInsertImpl.mockReset();
+  txDeleteImpl.mockReset();
+  getPlanWithLinesMock.mockReset();
+  getProjectedStateForMonthMock.mockReset();
+  createConfirmationSnapshotMock.mockReset();
+  vi.useRealTimers();
+});
+
+// ---------- getLatestConfirmation ----------
+
+describe("getLatestConfirmation", () => {
+  it("returns null when there is no prior confirmation", async () => {
+    // First select (latest confirmation): chain ends in .limit() → []
+    const first = makeSelectChain([]);
+    selectImpl.mockReturnValueOnce(first);
+
+    const result = await getLatestConfirmation(PLAN_ID);
+
+    expect(result).toBeNull();
+    expect(selectImpl).toHaveBeenCalledTimes(1);
+    expect(first.from).toHaveBeenCalledOnce();
+    expect(first.where).toHaveBeenCalledOnce();
+    expect(first.orderBy).toHaveBeenCalledOnce();
+    expect(first.limit).toHaveBeenCalledWith(1);
+  });
+
+  it("returns the latest row merged with its per-debt confirmations", async () => {
+    const latest = buildConfirmation();
+    const debtRows = [
+      buildDebtConfirmation({ debtId: "debt-A" }),
+      buildDebtConfirmation({ debtId: "debt-B", id: "debt-conf-2" }),
+    ];
+
+    // First call: ends on .limit() returning [latest].
+    const first = makeSelectChain([latest]);
+    // Second call: ends on .where() returning the debt rows.
+    const second = makeSelectChain(debtRows);
+
+    selectImpl.mockReturnValueOnce(first).mockReturnValueOnce(second);
+
+    const result = await getLatestConfirmation(PLAN_ID);
+
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe(latest.id);
+    expect(result?.debtConfirmations).toHaveLength(2);
+    expect(result?.debtConfirmations[0].debtId).toBe("debt-A");
+    expect(selectImpl).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ---------- getConfirmationStatus ----------
+
+describe("getConfirmationStatus", () => {
+  beforeEach(() => {
+    getProjectedStateForMonthMock.mockResolvedValue(buildProjectionMonth());
+  });
+
+  it("returns isDue=false immediately when confirmationDayOfMonth=0 (disabled)", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 15)));
+    const plan = buildPlan({ confirmationDayOfMonth: 0 });
+
+    const status = await getConfirmationStatus(plan, USER_ID);
+
+    expect(status.isDue).toBe(false);
+    expect(status.projectedState).toBeNull();
+    expect(status.existingConfirmation).toBeNull();
+    expect(status.monthAnchor).toBe("2026-05-01");
+    // No DB or projection call when the feature is off.
+    expect(selectImpl).not.toHaveBeenCalled();
+    expect(getProjectedStateForMonthMock).not.toHaveBeenCalled();
+  });
+
+  it("flags isDue=true when day-of-month is reached and no confirmation exists", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 5))); // May 5, day=5
+    const plan = buildPlan({ confirmationDayOfMonth: 1 });
+
+    // Existing confirmation lookup → empty array.
+    const chain = makeSelectChain([]);
+    selectImpl.mockReturnValueOnce(chain);
+
+    const status = await getConfirmationStatus(plan, USER_ID);
+
+    expect(status.isDue).toBe(true);
+    expect(status.existingConfirmation).toBeNull();
+    expect(status.monthAnchor).toBe("2026-05-01");
+    expect(status.projectedState).not.toBeNull();
+    expect(getProjectedStateForMonthMock).toHaveBeenCalledOnce();
+  });
+
+  it("returns isDue=false when the user already confirmed this month", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 20)));
+    const plan = buildPlan({ confirmationDayOfMonth: 1 });
+
+    const existing = buildConfirmation({ confirmationMonth: "2026-05-01" });
+    const chain = makeSelectChain([existing]);
+    selectImpl.mockReturnValueOnce(chain);
+
+    const status = await getConfirmationStatus(plan, USER_ID);
+
+    expect(status.isDue).toBe(false);
+    expect(status.existingConfirmation).not.toBeNull();
+    expect(status.existingConfirmation?.id).toBe(existing.id);
+    expect(status.monthAnchor).toBe("2026-05-01");
+  });
+
+  it("returns isDue=false before the configured day-of-month is reached", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 10))); // May 10
+    const plan = buildPlan({ confirmationDayOfMonth: 25 });
+
+    const chain = makeSelectChain([]);
+    selectImpl.mockReturnValueOnce(chain);
+
+    const status = await getConfirmationStatus(plan, USER_ID);
+
+    expect(status.isDue).toBe(false);
+    expect(status.existingConfirmation).toBeNull();
+  });
+
+  it("respects the explicit `today` parameter over the system clock", async () => {
+    // System clock is far in the future; the explicit `today` must win.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2099, 0, 1)));
+    const plan = buildPlan({ confirmationDayOfMonth: 1 });
+
+    const chain = makeSelectChain([]);
+    selectImpl.mockReturnValueOnce(chain);
+
+    const status = await getConfirmationStatus(
+      plan,
+      USER_ID,
+      new Date(Date.UTC(2026, 2, 15))
+    );
+
+    expect(status.monthAnchor).toBe("2026-03-01");
+    expect(status.isDue).toBe(true);
+  });
+});
+
+// ---------- saveConfirmation ----------
+
+describe("saveConfirmation", () => {
+  beforeEach(() => {
+    createConfirmationSnapshotMock.mockResolvedValue(undefined);
+  });
+
+  function mockOwnershipOk() {
+    // ensurePlanOwnership runs db.select().from().where() and expects the
+    // row's userId to match.
+    const ownership = makeSelectChain([{ userId: USER_ID }]);
+    selectImpl.mockReturnValueOnce(ownership);
+    return ownership;
+  }
+
+  function mockOwnershipMissing() {
+    const ownership = makeSelectChain([]);
+    selectImpl.mockReturnValueOnce(ownership);
+    return ownership;
+  }
+
+  function mockTxInsertConfirmation(row: FinancePlanConfirmation) {
+    // tx.insert(financePlanConfirmations).values(...).onConflictDoUpdate(...).returning()
+    const chain: Record<string, ReturnType<typeof vi.fn>> = {};
+    chain.values = vi.fn().mockReturnValue(chain);
+    chain.onConflictDoUpdate = vi.fn().mockReturnValue(chain);
+    chain.returning = vi.fn().mockResolvedValue([row]);
+    return chain;
+  }
+
+  function mockTxDelete() {
+    const chain: Record<string, ReturnType<typeof vi.fn>> = {};
+    chain.where = vi.fn().mockResolvedValue(undefined);
+    return chain;
+  }
+
+  function mockTxInsertDebts() {
+    const chain: Record<string, ReturnType<typeof vi.fn>> = {};
+    chain.values = vi.fn().mockResolvedValue(undefined);
+    return chain;
+  }
+
+  it("inserts a new confirmation and any per-debt rows inside the transaction", async () => {
+    mockOwnershipOk();
+    const row = buildConfirmation({ id: "new-conf" });
+
+    const insertConfChain = mockTxInsertConfirmation(row);
+    const deleteDebtsChain = mockTxDelete();
+    const insertDebtsChain = mockTxInsertDebts();
+
+    txInsertImpl
+      .mockReturnValueOnce(insertConfChain) // confirmations insert
+      .mockReturnValueOnce(insertDebtsChain); // debt confirmations insert
+    txDeleteImpl.mockReturnValueOnce(deleteDebtsChain);
+
+    const today = new Date(Date.UTC(2026, 4, 12));
+    const result = await saveConfirmation(
+      USER_ID,
+      {
+        planId: PLAN_ID,
+        confirmedSavings: "5000.00",
+        confirmedInvestments: "2500.00",
+        notes: "May check-in",
+        debtBalances: [
+          { debtId: "debt-A", confirmedBalance: "1234.56" },
+          { debtId: "debt-B", confirmedBalance: "0.00" },
+        ],
+      },
+      today
+    );
+
+    expect(result).toEqual(row);
+
+    // Confirmation upsert called with normalised payload + month anchor.
+    expect(txInsertImpl).toHaveBeenCalledTimes(2);
+    const valuesArg = insertConfChain.values.mock.calls[0][0];
+    expect(valuesArg).toMatchObject({
+      planId: PLAN_ID,
+      confirmationMonth: "2026-05-01",
+      confirmedSavings: "5000.00",
+      confirmedInvestments: "2500.00",
+      notes: "May check-in",
+    });
+    expect(insertConfChain.onConflictDoUpdate).toHaveBeenCalledOnce();
+    expect(insertConfChain.returning).toHaveBeenCalledOnce();
+
+    // Prior debt confirmations cleared for this confirmation.
+    expect(txDeleteImpl).toHaveBeenCalledTimes(1);
+    expect(deleteDebtsChain.where).toHaveBeenCalledOnce();
+
+    // Debt rows written with the parent confirmationId.
+    const debtPayload = insertDebtsChain.values.mock.calls[0][0];
+    expect(debtPayload).toHaveLength(2);
+    expect(debtPayload[0]).toMatchObject({
+      confirmationId: row.id,
+      debtId: "debt-A",
+      confirmedBalance: "1234.56",
+    });
+
+    // Snapshot side-effect ran after the txn (and didn't throw).
+    expect(createConfirmationSnapshotMock).toHaveBeenCalledWith(
+      PLAN_ID,
+      USER_ID,
+      today
+    );
+  });
+
+  it("updates the existing confirmation via onConflictDoUpdate", async () => {
+    mockOwnershipOk();
+    const row = buildConfirmation({ id: "existing-conf" });
+
+    const insertConfChain = mockTxInsertConfirmation(row);
+    const deleteDebtsChain = mockTxDelete();
+    txInsertImpl.mockReturnValueOnce(insertConfChain);
+    txDeleteImpl.mockReturnValueOnce(deleteDebtsChain);
+
+    await saveConfirmation(
+      USER_ID,
+      {
+        planId: PLAN_ID,
+        confirmedSavings: "9000.00",
+        confirmedInvestments: "100.00",
+        notes: null,
+        debtBalances: [], // No debts → no second insert call.
+      },
+      new Date(Date.UTC(2026, 4, 20))
+    );
+
+    // No debt-insert call because debtBalances was empty.
+    expect(txInsertImpl).toHaveBeenCalledTimes(1);
+
+    // The update branch is encoded in `onConflictDoUpdate`'s argument:
+    // .set should mirror the latest values + a fresh confirmedAt.
+    const conflictArg = insertConfChain.onConflictDoUpdate.mock.calls[0][0];
+    expect(conflictArg.set).toMatchObject({
+      confirmedSavings: "9000.00",
+      confirmedInvestments: "100.00",
+      notes: null,
+    });
+    expect(conflictArg.set.confirmedAt).toBeInstanceOf(Date);
+    expect(conflictArg.target).toBeTruthy();
+  });
+
+  it("throws when the plan is not owned by the user", async () => {
+    mockOwnershipMissing();
+
+    await expect(
+      saveConfirmation(
+        USER_ID,
+        {
+          planId: PLAN_ID,
+          confirmedSavings: "1",
+          confirmedInvestments: "1",
+          debtBalances: [],
+        },
+        new Date(Date.UTC(2026, 4, 1))
+      )
+    ).rejects.toThrow("Plan not found");
+
+    // Nothing past ownership should have run.
+    expect(txInsertImpl).not.toHaveBeenCalled();
+    expect(createConfirmationSnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it("still returns the confirmation even when the snapshot side-effect throws", async () => {
+    mockOwnershipOk();
+    const row = buildConfirmation({ id: "conf-snap-fail" });
+
+    const insertConfChain = mockTxInsertConfirmation(row);
+    const deleteDebtsChain = mockTxDelete();
+    txInsertImpl.mockReturnValueOnce(insertConfChain);
+    txDeleteImpl.mockReturnValueOnce(deleteDebtsChain);
+
+    createConfirmationSnapshotMock.mockRejectedValueOnce(new Error("boom"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await saveConfirmation(
+      USER_ID,
+      {
+        planId: PLAN_ID,
+        confirmedSavings: "1",
+        confirmedInvestments: "1",
+        debtBalances: [],
+      },
+      new Date(Date.UTC(2026, 4, 1))
+    );
+
+    expect(result).toEqual(row);
+    expect(errSpy).toHaveBeenCalledOnce();
+    errSpy.mockRestore();
+  });
+});
+
+// ---------- getPlanForConfirmation ----------
+
+describe("getPlanForConfirmation", () => {
+  it("delegates to getPlanWithLines with the same args", async () => {
+    const plan = buildPlan();
+    getPlanWithLinesMock.mockResolvedValueOnce(plan);
+
+    const result = await getPlanForConfirmation(PLAN_ID, USER_ID);
+
+    expect(result).toBe(plan);
+    expect(getPlanWithLinesMock).toHaveBeenCalledWith(PLAN_ID, USER_ID);
+  });
+
+  it("returns null when the underlying lookup misses", async () => {
+    getPlanWithLinesMock.mockResolvedValueOnce(null);
+
+    const result = await getPlanForConfirmation(PLAN_ID, USER_ID);
+
+    expect(result).toBeNull();
+  });
+});

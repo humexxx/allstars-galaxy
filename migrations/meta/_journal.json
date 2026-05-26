@@ -71,6 +71,111 @@
       "when": 1768951788223,
       "tag": "0009_giant_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1769213640379,
+      "tag": "0010_secret_logan",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1777266008681,
+      "tag": "0011_gray_lady_deathstrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1778899619172,
+      "tag": "0012_burly_titanium_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1778899919830,
+      "tag": "0013_romantic_paladin",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1778901015288,
+      "tag": "0014_ambitious_white_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1778905178320,
+      "tag": "0015_supreme_blink",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1779167021505,
+      "tag": "0016_silky_mordo",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1779168181631,
+      "tag": "0017_bumpy_chameleon",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1779250017925,
+      "tag": "0018_last_the_hood",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1779250858920,
+      "tag": "0019_align_finance_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779424199891,
+      "tag": "0020_early_thundra",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1779593733978,
+      "tag": "0021_jazzy_killer_shrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1779651153213,
+      "tag": "0022_quiet_medusa",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1779656333406,
+      "tag": "0023_wise_texas_twister",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1779657991439,
+      "tag": "0024_funny_grim_reaper",
+      "breakpoints": true
     }
   ]
 }

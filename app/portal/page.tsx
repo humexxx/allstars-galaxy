@@ -1,17 +1,34 @@
-export default async function PortalPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ month?: string; year?: string }>
-}) {
-  const { month, year } = await searchParams
+import type { Metadata } from "next";
+
+import { PageHeader } from "@/components/portal/page-header";
+import { DashboardFinanceCard } from "@/components/finance/dashboard-finance-card";
+import { DashboardConfirmationHost } from "@/components/finance/dashboard-confirmation-host";
+import { DashboardSportsCard } from "@/components/entertainment/sports/dashboard-sports-card";
+import { DashboardTravelCard } from "@/components/travel/dashboard-travel-card";
+import { requireEffectiveContext } from "@/lib/services/impersonation";
+
+export const metadata: Metadata = {
+  title: "Dashboard | Allstars Galaxy",
+  description: "Your investment dashboard",
+};
+
+export const dynamic = "force-dynamic";
+
+export default async function PortalPage() {
+  const ctx = await requireEffectiveContext();
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4">
-      <div className="grid auto-rows-min gap-4 md:grid-cols-5">
-        {Array.from({ length: 20 }).map((_, i) => (
-          <div key={i} className="aspect-square rounded-xl bg-muted/50" />
-        ))}
+    <section className="space-y-6">
+      <PageHeader
+        title="Dashboard"
+        description="Snapshots from across your workspace."
+      />
+      <div className="grid auto-rows-min gap-4 md:grid-cols-3">
+        <DashboardFinanceCard userId={ctx.effectiveUserId} />
+        <DashboardTravelCard userId={ctx.effectiveUserId} />
+        <DashboardSportsCard userId={ctx.effectiveUserId} />
       </div>
-    </div>
-  )
+      <DashboardConfirmationHost userId={ctx.effectiveUserId} />
+    </section>
+  );
 }

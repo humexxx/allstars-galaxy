@@ -18,6 +18,7 @@ interface DataTableProps {
 export function DataTable({ data }: DataTableProps) {
     return (
         <div className="rounded-md border">
+            <div className="w-full overflow-x-auto">
             <Table>
                 <TableHeader>
                     <TableRow>
@@ -37,13 +38,14 @@ export function DataTable({ data }: DataTableProps) {
                         ))
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center">
-                                No results.
+                            <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                No transactions match the current filters.
                             </TableCell>
                         </TableRow>
                     )}
                 </TableBody>
             </Table>
+            </div>
         </div>
     );
 }

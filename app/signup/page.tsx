@@ -1,32 +1,46 @@
 import { GalleryVerticalEnd } from "lucide-react"
+import Image from "next/image"
+import Link from "next/link"
+import type { Metadata } from "next"
+import { Suspense } from "react"
 
 import { SignupForm } from "@/components/signup-form"
+import { FormSkeleton } from "@/components/skeletons/form-skeleton"
+
+export const metadata: Metadata = {
+  title: "Sign up | Allstars Galaxy",
+  description: "Create your Allstars Galaxy account.",
+}
 
 export default function SignupPage() {
   return (
-    <div className="grid min-h-svh lg:grid-cols-2">
-      <div className="flex flex-col gap-4 p-6 md:p-10">
-        <div className="flex justify-center gap-2 md:justify-start">
-          <a href="#" className="flex items-center gap-2 font-medium">
+    <main className="grid min-h-svh lg:grid-cols-2">
+      <section className="flex flex-col gap-4 p-6 md:p-10">
+        <header className="flex justify-center gap-2 md:justify-start">
+          <Link href="/" className="flex items-center gap-2 font-medium">
             <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
               <GalleryVerticalEnd className="size-4" />
             </div>
-            Capital Galaxy
-          </a>
-        </div>
+            Allstars Galaxy
+          </Link>
+        </header>
         <div className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-xs">
-            <SignupForm />
+          <div className="w-full max-w-xs" aria-label="Signup form">
+            <Suspense fallback={<FormSkeleton rows={3} />}>
+              <SignupForm />
+            </Suspense>
           </div>
         </div>
-      </div>
-      <div className="bg-muted relative hidden lg:block">
-        <img
+      </section>
+      <aside className="bg-muted relative hidden lg:block" aria-hidden="true">
+        <Image
           src="/images/placeholder.svg"
-          alt="Image"
+          alt="Decorative background"
+          fill
           className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
+          sizes="50vw"
         />
-      </div>
-    </div>
+      </aside>
+    </main>
   )
 }

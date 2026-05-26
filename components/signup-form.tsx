@@ -12,7 +12,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { AuthService } from "@/lib/services/auth-service"
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
+import Link from "next/link"
 
 export function SignupForm({
   className,
@@ -21,6 +22,13 @@ export function SignupForm({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const prefillEmail = searchParams.get("email") ?? ""
+  // Same allow-list as the login form — only same-origin paths survive.
+  const nextRaw = searchParams.get("next")
+  const next =
+    nextRaw && nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : null
+  const loginHref = next ? `/login?next=${encodeURIComponent(next)}` : "/login"
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -40,10 +48,14 @@ export function SignupForm({
     }
 
     try {
-      await AuthService.signUpWithEmail(email, password, name)
+      await AuthService.signUpWithEmail(email, password, name, next)
       // Usually signup requires email confirmation, so we might want to show a message
       // But for now let's just push to home or show success
-      router.push("/login?message=Check your email for confirmation link")
+      const params = new URLSearchParams({
+        message: "Check your email for confirmation link",
+      })
+      if (next) params.set("next", next)
+      router.push(`/login?${params.toString()}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error initializing signup")
     } finally {
@@ -54,7 +66,7 @@ export function SignupForm({
   async function handleGoogleLogin() {
     setIsLoading(true)
     try {
-      await AuthService.signInWithGoogle()
+      await AuthService.signInWithGoogle(next)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error with Google login")
       setIsLoading(false)
@@ -76,32 +88,36 @@ export function SignupForm({
         </div>
 
         {error && (
-          <div className="text-destructive text-sm text-center p-2 bg-destructive/10 rounded">
+          <div
+            className="text-destructive text-sm text-center p-2 bg-destructive/10 rounded"
+            role="alert"
+            aria-live="polite"
+          >
             {error}
           </div>
         )}
 
         <Field>
           <FieldLabel htmlFor="name">Full Name</FieldLabel>
-          <Input id="name" name="name" type="text" placeholder="John Doe" required />
+          <Input id="name" name="name" type="text" placeholder="John Doe" autoComplete="name" required />
         </Field>
         <Field>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" name="email" type="email" placeholder="m@example.com" required />
+          <Input id="email" name="email" type="email" placeholder="m@example.com" autoComplete="email" defaultValue={prefillEmail} required />
           <FieldDescription>
             We&apos;ll use this to contact you. We won&apos;t share your email.
           </FieldDescription>
         </Field>
         <Field>
           <FieldLabel htmlFor="password">Password</FieldLabel>
-          <Input id="password" name="password" type="password" required />
+          <Input id="password" name="password" type="password" autoComplete="new-password" required />
           <FieldDescription>
             Must be at least 8 characters.
           </FieldDescription>
         </Field>
         <Field>
           <FieldLabel htmlFor="confirm-password">Confirm Password</FieldLabel>
-          <Input id="confirm-password" name="confirm-password" type="password" required />
+          <Input id="confirm-password" name="confirm-password" type="password" autoComplete="new-password" required />
           <FieldDescription>Please confirm your password.</FieldDescription>
         </Field>
         <Field>
@@ -133,7 +149,7 @@ export function SignupForm({
             Google
           </Button>
           <FieldDescription className="px-6 text-center">
-            Already have an account? <a href="/login">Login</a>
+            Already have an account? <Link href={loginHref}>Login</Link>
           </FieldDescription>
         </Field>
       </FieldGroup>

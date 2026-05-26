@@ -18,14 +18,7 @@ import {
 } from "@/components/ui/field";
 import { UserSelector } from "@/components/user-selector";
 import { format } from "date-fns";
-
-type InvestmentMethod = {
-  id: string;
-  name: string;
-  author: string;
-  riskLevel: string;
-  monthlyRoi: number;
-};
+import type { InvestmentMethod } from "@/types/portfolio";
 
 type User = {
   id: string;
@@ -46,6 +39,8 @@ type TransactionFormProps = {
   isAdmin: boolean;
   users?: User[];
   adminUserId?: string;
+  /** Disables the submit and cancel buttons while the parent action is pending. */
+  isSubmitting?: boolean;
 };
 
 export function TransactionForm({
@@ -56,6 +51,7 @@ export function TransactionForm({
   isAdmin,
   users = [],
   adminUserId,
+  isSubmitting = false,
 }: TransactionFormProps) {
   const [activeTab, setActiveTab] = useState<"buy" | "withdrawal">("buy");
   const [amount, setAmount] = useState("");
@@ -97,7 +93,12 @@ export function TransactionForm({
         </Button>
       </div>
 
-      <div className="flex cursor-pointer items-center justify-between rounded-lg border p-4" onClick={onChangeMethod}>
+      <button
+        type="button"
+        onClick={onChangeMethod}
+        className="flex w-full cursor-pointer items-center justify-between rounded-lg border p-4 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={`Change investment method (current: ${selectedMethod.name})`}
+      >
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
             <span className="text-sm font-semibold text-primary">
@@ -114,6 +115,7 @@ export function TransactionForm({
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -122,7 +124,7 @@ export function TransactionForm({
             d="M19 9l-7 7-7-7"
           />
         </svg>
-      </div>
+      </button>
 
       <FieldGroup>
         {isAdmin && (
@@ -217,15 +219,20 @@ export function TransactionForm({
       </div>
 
       <div className="flex gap-2">
-        <Button onClick={onCancel} variant="outline" className="flex-1">
+        <Button onClick={onCancel} variant="outline" className="flex-1" disabled={isSubmitting}>
           Cancel
         </Button>
-        <Button 
-          onClick={handleSubmit} 
+        <Button
+          onClick={handleSubmit}
           className="flex-1"
-          disabled={!amount || parseFloat(amount) <= 0 || (isAdmin && !selectedUserId)}
+          disabled={
+            isSubmitting ||
+            !amount ||
+            parseFloat(amount) <= 0 ||
+            (isAdmin && !selectedUserId)
+          }
         >
-          Add Transaction
+          {isSubmitting ? "Adding…" : "Add Transaction"}
         </Button>
       </div>
     </div>

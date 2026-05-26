@@ -11,6 +11,14 @@ export interface AuthUser {
   name: string
 }
 
+export type UserListItem = {
+  id: string;
+  email: string | null;
+  fullName: string | null;
+  role: "admin" | "user" | null;
+  avatarUrl: string | null;
+};
+
 import { z } from "zod"
 import { userFormSchema } from "@/schemas/user"
 

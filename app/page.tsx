@@ -1,20 +1,36 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
+import type { Metadata } from "next";
 
+import { LandingNav } from "@/components/landing/landing-nav";
+import { LandingHero } from "@/components/landing/landing-hero";
+import { LandingStats } from "@/components/landing/landing-stats";
+import { LandingModules } from "@/components/landing/landing-modules";
+import { LandingSplit } from "@/components/landing/landing-split";
+import { LandingFeatures } from "@/components/landing/landing-features";
+import { LandingCta } from "@/components/landing/landing-cta";
+import { LandingFooter } from "@/components/landing/landing-footer";
+
+export const metadata: Metadata = {
+  title: "Allstars Galaxy — Money and time, in one orbit",
+  description:
+    "The calm command center for your finances, your week and the goals that connect them.",
+};
+
+// Landing intentionally locks its palette to neutral whites/blacks regardless of
+// the user's theme — we use Tailwind neutral-* tokens directly instead of the
+// theme-aware bg-background / text-foreground variables.
 export default function LandingPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background p-4 text-center">
-      <h1 className="text-4xl font-bold tracking-tight lg:text-5xl">
-        Capital Galaxy
-      </h1>
-      <p className="text-xl text-muted-foreground">
-        Welcome to your capital management platform.
-      </p>
-      <div className="flex gap-4">
-        <Button asChild size="lg">
-          <Link href="/portal">Go to Portal</Link>
-        </Button>
-      </div>
+    <div className="min-h-screen bg-white text-neutral-900 antialiased">
+      <LandingNav />
+      <main>
+        <LandingHero />
+        <LandingStats />
+        <LandingModules />
+        <LandingSplit />
+        <LandingFeatures />
+        <LandingCta />
+      </main>
+      <LandingFooter />
     </div>
-  )
+  );
 }

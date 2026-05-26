@@ -11,37 +11,21 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-type InvestmentMethod = {
-  id: string;
-  name: string;
-  author: string;
-  riskLevel: string;
-  monthlyRoi: number;
-};
-
-type Asset = {
-  investmentMethod: InvestmentMethod;
-  totalInvested: number;
-  totalWithdrawn: number;
-  holdingAmount: number;
-  approvedAmount: number;
-  pendingAmount: number;
-  hasPendingTransactions: boolean;
-  profitLoss: number;
-  profitLossPercentage: number;
-};
+import { formatCurrency, formatSignedCurrency, formatSignedPercent } from "@/lib/utils/format";
+import { EmptyState } from "@/components/ui/empty-state";
+import type { PortfolioAsset } from "@/types/portfolio";
 
 type PortfolioAssetsTableProps = {
-  assets: Asset[];
+  assets: PortfolioAsset[];
 };
 
 export function PortfolioAssetsTable({ assets }: PortfolioAssetsTableProps) {
   if (assets.length === 0) {
     return (
-      <div className="rounded-lg border p-8 text-center">
-        <p className="text-muted-foreground">No assets yet. Add your first transaction to get started.</p>
-      </div>
+      <EmptyState
+        title="No assets yet"
+        description="Add your first transaction to get started."
+      />
     );
   }
 
@@ -59,9 +43,7 @@ export function PortfolioAssetsTable({ assets }: PortfolioAssetsTableProps) {
         </TableHeader>
         <TableBody>
           {assets.map((asset) => {
-            const avgBuyPrice = asset.totalInvested;
-            const profitLoss = asset.profitLoss;
-            const profitLossPercentage = asset.profitLossPercentage;
+            const profitTone = asset.profitLoss >= 0 ? "text-green-500" : "text-red-500";
 
             return (
               <TableRow key={asset.investmentMethod.id}>
@@ -91,46 +73,42 @@ export function PortfolioAssetsTable({ assets }: PortfolioAssetsTableProps) {
                   <div className="flex flex-col">
                     {asset.holdingAmount > 0 && (
                       <>
-                        <span className="font-medium">
-                          ${asset.holdingAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
+                        <span className="font-medium">{formatCurrency(asset.holdingAmount)}</span>
                         <span className="text-xs text-muted-foreground">
                           {asset.investmentMethod.monthlyRoi}% Monthly ROI
                         </span>
                       </>
                     )}
-                    {asset.pendingAmount > 0 && (
+                    {asset.pendingAmount > 0 && asset.holdingAmount > 0 && (
                       <span className="text-xs text-muted-foreground">
-                        +${asset.pendingAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} pending
+                        +{formatCurrency(asset.pendingAmount)} pending
                       </span>
                     )}
                     {asset.holdingAmount === 0 && asset.pendingAmount > 0 && (
                       <>
                         <span className="font-medium text-muted-foreground">
-                          ${asset.pendingAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {formatCurrency(asset.pendingAmount)}
                         </span>
-                        <span className="text-xs text-muted-foreground">
-                          Awaiting approval
-                        </span>
+                        <span className="text-xs text-muted-foreground">Awaiting approval</span>
                       </>
                     )}
                   </div>
                 </TableCell>
-                <TableCell>
-                  ${avgBuyPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </TableCell>
+                <TableCell>{formatCurrency(asset.totalInvested)}</TableCell>
                 <TableCell>
                   <div className="flex flex-col">
-                    <span className={profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}>
-                      {profitLoss >= 0 ? '+' : '-'}${Math.abs(profitLoss).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                    <span className={`text-xs ${profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                      {profitLoss >= 0 ? '+' : ''}{profitLossPercentage.toFixed(2)}%
+                    <span className={profitTone}>{formatSignedCurrency(asset.profitLoss)}</span>
+                    <span className={`text-xs ${profitTone}`}>
+                      {formatSignedPercent(asset.profitLossPercentage)}
                     </span>
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="ghost" size="icon">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Actions for ${asset.investmentMethod.name}`}
+                  >
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </TableCell>
@@ -142,4 +120,3 @@ export function PortfolioAssetsTable({ assets }: PortfolioAssetsTableProps) {
     </div>
   );
 }
-

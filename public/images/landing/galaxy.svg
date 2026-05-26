@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" fill="none" role="img" aria-label="Galaxy illustration">
+  <defs>
+    <radialGradient id="gCore" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="30%" stop-color="#aae0ee" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#3a8fa4" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="gArm" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#a78bfa" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#a78bfa" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gOrbit" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#aae0ee" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#aae0ee" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#aae0ee" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- stars background -->
+  <g fill="#ffffff">
+    <circle cx="40" cy="30" r="1"/>
+    <circle cx="120" cy="80" r="1.4" opacity="0.8"/>
+    <circle cx="80" cy="200" r="1"/>
+    <circle cx="50" cy="320" r="1.2"/>
+    <circle cx="180" cy="350" r="1"/>
+    <circle cx="540" cy="40" r="1.4"/>
+    <circle cx="560" cy="160" r="1"/>
+    <circle cx="500" cy="320" r="1.2" opacity="0.8"/>
+    <circle cx="430" cy="370" r="1"/>
+    <circle cx="20" cy="120" r="0.8"/>
+    <circle cx="580" cy="240" r="0.8"/>
+    <circle cx="340" cy="20" r="1"/>
+    <circle cx="260" cy="380" r="1"/>
+  </g>
+  <!-- shooting star -->
+  <g stroke="#ffffff" stroke-linecap="round" opacity="0.9">
+    <line x1="30" y1="60" x2="80" y2="40" stroke-width="1.5"/>
+    <circle cx="80" cy="40" r="2" fill="#ffffff"/>
+  </g>
+
+  <!-- galaxy arms -->
+  <g transform="translate(300 200) rotate(-20)">
+    <ellipse cx="0" cy="0" rx="240" ry="60" fill="url(#gArm)"/>
+    <ellipse cx="0" cy="0" rx="180" ry="40" fill="url(#gArm)" opacity="0.7"/>
+  </g>
+
+  <!-- orbits -->
+  <g transform="translate(300 200)">
+    <ellipse cx="0" cy="0" rx="200" ry="64" stroke="url(#gOrbit)" stroke-width="1" fill="none"/>
+    <ellipse cx="0" cy="0" rx="140" ry="44" stroke="url(#gOrbit)" stroke-width="1" fill="none" transform="rotate(15)"/>
+    <ellipse cx="0" cy="0" rx="100" ry="30" stroke="url(#gOrbit)" stroke-width="1" fill="none" transform="rotate(-12)"/>
+  </g>
+
+  <!-- core -->
+  <circle cx="300" cy="200" r="80" fill="url(#gCore)"/>
+  <circle cx="300" cy="200" r="14" fill="#ffffff"/>
+
+  <!-- planets -->
+  <circle cx="492" cy="184" r="6" fill="#fbbf3a"/>
+  <circle cx="492" cy="184" r="14" fill="none" stroke="#fbbf3a" stroke-opacity="0.3" stroke-width="1"/>
+  <circle cx="118" cy="218" r="4" fill="#5fd07a"/>
+  <circle cx="420" cy="260" r="3" fill="#a78bfa"/>
+</svg>

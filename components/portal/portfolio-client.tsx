@@ -1,0 +1,189 @@
+"use client";
+
+import { useState } from "react";
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { EmptyPortfolio } from "@/components/portfolio/empty-portfolio";
+import { AddTransactionDialog } from "@/components/portfolio/add-transaction-dialog";
+import { TransactionsTable } from "@/components/portfolio/transactions-table";
+import { PortfolioHeader } from "@/components/portfolio/portfolio-header";
+import { StatsCards } from "@/components/portfolio/stats-cards";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
+import { toast } from "sonner";
+import { createTransactionAction } from "@/app/actions/transactions";
+import type {
+  InvestmentMethod,
+  Portfolio,
+  PortfolioStats,
+  PortfolioTransaction,
+} from "@/types/portfolio";
+
+type ChartDataPoint = {
+  date: string;
+  value: number;
+};
+
+type User = {
+  id: string;
+  fullName: string | null;
+  email: string | null;
+};
+
+type PortfolioData = {
+  portfolio: Pick<Portfolio, "id" | "name"> | null;
+  stats: PortfolioStats | null;
+  transactions: PortfolioTransaction[];
+  chartData: ChartDataPoint[];
+  methods: InvestmentMethod[];
+  isAdmin: boolean;
+  users?: User[];
+  currentUserId: string;
+};
+
+const PerformanceChart = dynamic(
+  () => import("@/components/portfolio/performance-chart").then((mod) => mod.PerformanceChart),
+  {
+    ssr: false,
+    loading: () => (
+      <Card className="h-96 flex items-center justify-center bg-card">
+        <div className="text-sm text-muted-foreground">Loading chart...</div>
+      </Card>
+    ),
+  }
+);
+
+export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
+  const router = useRouter();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [showCharts, setShowCharts] = useState(true);
+  const [hideValues, setHideValues] = useState(false);
+
+  // Returns true on success so the dialog can stay open on failure (the
+  // user sees the toast against the still-mounted form and can retry).
+  const handleAddTransaction = async (transactionData: {
+    investmentMethodId: string;
+    amount: string;
+    date: Date;
+    notes?: string;
+    userId?: string;
+  }): Promise<boolean> => {
+    const result = await createTransactionAction(transactionData);
+    if (!result.success) {
+      toast.error(result.error);
+      return false;
+    }
+    const transaction = result.data;
+    if (data.isAdmin && transaction?.status === "approved") {
+      toast.success("Transaction added and approved successfully");
+    } else {
+      toast.success("Transaction added successfully");
+    }
+    // revalidatePath already invalidated the RSC cache; router.refresh
+    // pulls the new data without remounting the dialog.
+    router.refresh();
+    return true;
+  };
+
+  if (!data.portfolio) {
+    return (
+      <>
+        <EmptyPortfolio onAddTransaction={() => setIsDialogOpen(true)} />
+        <AddTransactionDialog
+          open={isDialogOpen}
+          onClose={() => setIsDialogOpen(false)}
+          methods={data.methods}
+          onSubmit={handleAddTransaction}
+          isAdmin={data.isAdmin}
+          users={data.users}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {/* Top Header Section */}
+      <PortfolioHeader
+          portfolioName={data.portfolio.name}
+          totalValue={data.stats?.totalValue || 0}
+          onAddTransaction={() => setIsDialogOpen(true)}
+          showCharts={showCharts}
+          onToggleCharts={() => setShowCharts(!showCharts)}
+          hideValues={hideValues}
+          onToggleHideValues={() => setHideValues(!hideValues)}
+          isAdmin={data.isAdmin}
+        />
+
+        {/* Tabs and Content */}
+        <Tabs defaultValue="overview" className="w-full">
+          <div>
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="transactions">Transactions</TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent value="overview" className="space-y-6 mt-6">
+            {/* KPI Cards */}
+            {data.stats && (
+              <StatsCards
+                allTimeProfit={data.stats.allTimeProfit}
+                allTimeProfitPercentage={data.stats.allTimeProfitPercentage}
+                costBasis={data.stats.costBasis}
+                totalInvestmentMethods={data.stats.totalInvestmentMethods}
+                activeTransactions={data.stats.activeTransactions}
+                hideValues={hideValues}
+              />
+            )}
+
+            {/* Charts Grid */}
+            {showCharts && (
+              <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-3">
+                {/* History Chart - Takes up 2 columns */}
+                <div className="lg:col-span-2">
+                  {data.chartData.length > 0 ? (
+                    <PerformanceChart data={data.chartData} />
+                  ) : (
+                    <Card className="h-96 flex items-center justify-center bg-card">
+                      <div className="text-center text-muted-foreground">
+                        <p>Not enough data for chart</p>
+                        <p className="text-sm">Approve transactions to see history</p>
+                      </div>
+                    </Card>
+                  )}
+                </div>
+
+                {/* Allocation Chart - Takes up 1 column */}
+                {/* <div className="lg:col-span-1">
+                  <AllocationChart data={allocationData} />
+                </div> */}
+              </div>
+            )}
+
+            {/* Future: Performance (Cumulative) Chart could go here or in the grid above */}
+
+          </TabsContent>
+
+          <TabsContent value="transactions" className="mt-6">
+            <Card className="bg-card">
+              <CardContent>
+                <TransactionsTable transactions={data.transactions} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+      <AddTransactionDialog
+        open={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
+        methods={data.methods}
+        onSubmit={handleAddTransaction}
+        isAdmin={data.isAdmin}
+        users={data.users}
+        adminUserId={data.currentUserId}
+      />
+    </>
+  );
+}
+

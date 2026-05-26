@@ -117,6 +117,41 @@ export function PlanEditor({
 
   const totalDebt = today?.totalDebt ?? 0;
 
+  // Filter income / expense lines to ONLY those that contribute to the
+  // current projection month, so the breakdown tooltips don't show one-time
+  // entries from other months or recurring entries outside their active
+  // window. Mirrors what `projectPlan` itself counts toward `today.income`
+  // / `today.expenses`, so the tooltip total matches the card value.
+  const currentMonthDate = today?.date ?? new Date(plan.startMonth);
+  const currentYear = currentMonthDate.getUTCFullYear();
+  const currentMonthIdx = currentMonthDate.getUTCMonth();
+  const planStartMonthDate = new Date(plan.startMonth);
+  const isLineInCurrentMonth = (
+    line:
+      | FinancePlanWithLines["incomes"][number]
+      | FinancePlanWithLines["expenses"][number]
+  ): boolean => {
+    if (line.kind === "one_time") {
+      const d = readDateParts(line.date);
+      return !!d && d.year === currentYear && d.month === currentMonthIdx;
+    }
+    // Recurring: hit-day must exist (catches off-cycle every_n_months) AND
+    // fall inside [startDate, endDate] at day precision. Incomes carry the
+    // window; expenses don't, so we read defensively from the line type.
+    const hitDay = recurringHitDayInMonth(
+      line,
+      currentYear,
+      currentMonthIdx,
+      planStartMonthDate
+    );
+    if (hitDay === null) return false;
+    const startISO = "startDate" in line ? line.startDate : null;
+    const endISO = "endDate" in line ? line.endDate : null;
+    return hitDayWithinWindow(currentYear, currentMonthIdx, hitDay, startISO, endISO);
+  };
+  const activeIncomes = plan.incomes.filter(isLineInCurrentMonth);
+  const activeExpenses = plan.expenses.filter(isLineInCurrentMonth);
+
   // Debt-line lookups: payment-this-month for the Living-expenses tooltip,
   // current balance for the Total-debt tooltip.
   const debtPaymentLines = (today?.debts ?? []).map((d) => ({
@@ -200,7 +235,7 @@ export function PlanEditor({
             sublabel="From all active sources"
             breakdown={
               <BreakdownList
-                items={plan.incomes.map((i) => ({
+                items={activeIncomes.map((i) => ({
                   name: i.name,
                   amount: Number(i.monthlyAmount),
                 }))}
@@ -218,7 +253,7 @@ export function PlanEditor({
                 groups={[
                   {
                     heading: "Expenses",
-                    items: plan.expenses.map((e) => ({
+                    items: activeExpenses.map((e) => ({
                       name: e.name,
                       amount: Number(e.monthlyAmount),
                     })),
@@ -522,73 +557,140 @@ type TodaySnapshot = {
   monthDate: Date;
 };
 
+// Day-precise window check: is the hit date (year, monthIdx, day) on/after
+// startISO and on/before endISO? Either bound is optional. Lives at module
+// level so the breakdown filter and the partial-month walker share semantics
+// with the server-side projection's `dateWithinWindow`.
+function hitDayWithinWindow(
+  year: number,
+  monthIdx: number,
+  hitDay: number,
+  startISO: string | null,
+  endISO: string | null
+): boolean {
+  const hitMs = Date.UTC(year, monthIdx, hitDay);
+  const s = readDateParts(startISO);
+  if (s && Date.UTC(s.year, s.month, s.day) > hitMs) return false;
+  const e = readDateParts(endISO);
+  if (e && Date.UTC(e.year, e.month, e.day) < hitMs) return false;
+  return true;
+}
+
 /**
- * Approximates today's running net worth from the projection. The chart's
- * monthly buckets sit at month-end, which over-counts income/expense that
- * hasn't actually landed yet (e.g. paycheque on the 30th when today is the
- * 25th). We back those out by walking each recurring/one-time line and
- * subtracting (or restoring) the portion that hits AFTER today this month.
- * Debt interest stays at the projection's month-end value — modelling it
- * day-aware would need a richer return shape from projectPlan.
+ * Computes today's net worth as a *partial-month* snapshot built from
+ * scratch — NOT from the projection's end-of-month aggregate. This matches
+ * the user's mental model: "what does my bank/debt look like right now,
+ * given what has actually hit so far this month?".
+ *
+ * Algorithm:
+ *   1. Seed savings/investments/per-debt balances from end-of-previous-month
+ *      (= start of current month). For month 0, use the plan's initial state.
+ *   2. Walk every income/expense line; if its hit-day this month is ≤ today,
+ *      apply it as cash in/out of savings.
+ *   3. For each debt, if the scheduled payment day this month is ≤ today,
+ *      subtract the scheduled payment from savings and swap the debt balance
+ *      for the projection's end-of-month value (captures interest + extra).
+ *      Payments after today leave the balance at start-of-month.
+ *   4. Net worth = savings + investments + portfolio − total debt.
+ *
+ * Trade-offs: extra payments only happen at month-end (after surplus routing)
+ * so subtracting them from savings mid-month would be wrong; instead they
+ * stay in the debt balance via the EoM swap. Mid-month interest accrual is
+ * approximated by trusting the projection's EoM balance once today >= payment
+ * day; before payment day, the start-of-month balance carries no interest at
+ * all (mild under-statement for high-rate debts in the first ~half of a
+ * month, accepted to keep the snapshot O(lines) instead of a full re-walk).
  */
 function computeTodaySnapshot(
-  projection: Projection,
-  incomes: FinancePlanWithLines["incomes"],
-  expenses: FinancePlanWithLines["expenses"],
-  planStartMonth: Date
+  plan: FinancePlanWithLines,
+  projection: Projection
 ): TodaySnapshot | null {
   const now = new Date();
+  const planStart = new Date(plan.startMonth);
+  const planStartKey =
+    planStart.getUTCFullYear() * 12 + planStart.getUTCMonth();
   const todayKey = now.getUTCFullYear() * 12 + now.getUTCMonth();
-  const monthOffset =
-    todayKey - (planStartMonth.getUTCFullYear() * 12 + planStartMonth.getUTCMonth());
+  const monthOffset = todayKey - planStartKey;
 
   if (monthOffset < 0 || monthOffset >= projection.months.length) return null;
 
-  const month = projection.months[monthOffset];
-  const year = month.date.getUTCFullYear();
-  const monthIdx = month.date.getUTCMonth();
+  const currentMonth = projection.months[monthOffset];
+  const year = now.getUTCFullYear();
+  const monthIdx = now.getUTCMonth();
   const todayDay = now.getUTCDate();
 
-  let netWorth = month.netWorth;
+  // Seed from end-of-previous-month — that's exactly the state at start of
+  // the current month, including any surplus routed to savings in prior
+  // months. For month 0, fall back to the plan's initial figures.
+  const prevMonth = monthOffset > 0 ? projection.months[monthOffset - 1] : null;
+  let savings = prevMonth ? prevMonth.savings : parseFloat(plan.initialSavings);
+  const investments = prevMonth
+    ? prevMonth.investments
+    : parseFloat(plan.initialInvestments);
+  const debtBalances = new Map<string, number>();
+  if (prevMonth) {
+    for (const d of prevMonth.debts) debtBalances.set(d.debtId, d.balance);
+  } else {
+    for (const d of plan.debts) {
+      debtBalances.set(d.id, parseFloat(d.initialBalance));
+    }
+  }
 
-  // Strip income that's still pending this month — it shows up in the
-  // month-end aggregate but the bank account doesn't have it yet.
-  for (const inc of incomes) {
+  // ---- Income / expense cashflow ------------------------------------------
+  for (const inc of plan.incomes) {
     if (inc.kind === "one_time") {
       const d = readDateParts(inc.date);
-      if (d && d.year === year && d.month === monthIdx && d.day > todayDay) {
-        netWorth -= Number(inc.monthlyAmount);
+      if (d && d.year === year && d.month === monthIdx && d.day <= todayDay) {
+        savings += Number(inc.monthlyAmount);
       }
       continue;
     }
-    // Recurring: window check first
-    const start = readDateParts(inc.startDate);
-    const end = readDateParts(inc.endDate);
-    const mk = year * 12 + monthIdx;
-    if (start && mk < start.year * 12 + start.month) continue;
-    if (end && mk > end.year * 12 + end.month) continue;
-    const hitDay = recurringHitDayInMonth(inc, year, monthIdx, planStartMonth);
-    if (hitDay !== null && hitDay > todayDay) {
-      netWorth -= Number(inc.monthlyAmount);
+    const hitDay = recurringHitDayInMonth(inc, year, monthIdx, planStart);
+    if (hitDay === null || hitDay > todayDay) continue;
+    if (!hitDayWithinWindow(year, monthIdx, hitDay, inc.startDate, inc.endDate)) {
+      continue;
     }
+    savings += Number(inc.monthlyAmount);
   }
-
-  // Expenses pending today haven't drained the account yet — add them back.
-  for (const exp of expenses) {
+  for (const exp of plan.expenses) {
     if (exp.kind === "one_time") {
       const d = readDateParts(exp.date);
-      if (d && d.year === year && d.month === monthIdx && d.day > todayDay) {
-        netWorth += Number(exp.monthlyAmount);
+      if (d && d.year === year && d.month === monthIdx && d.day <= todayDay) {
+        savings -= Number(exp.monthlyAmount);
       }
       continue;
     }
-    const hitDay = recurringHitDayInMonth(exp, year, monthIdx, planStartMonth);
-    if (hitDay !== null && hitDay > todayDay) {
-      netWorth += Number(exp.monthlyAmount);
-    }
+    // Expenses don't carry a start/end window in the schema; the hit-day
+    // check is sufficient.
+    const hitDay = recurringHitDayInMonth(exp, year, monthIdx, planStart);
+    if (hitDay === null || hitDay > todayDay) continue;
+    savings -= Number(exp.monthlyAmount);
   }
 
-  return { netWorth, monthDate: month.date };
+  // ---- Debt payments hit this month ---------------------------------------
+  for (const debt of plan.debts) {
+    const eomDebt = currentMonth.debts.find((d) => d.debtId === debt.id);
+    if (!eomDebt) continue;
+    const hitDay = recurringHitDayInMonth(debt, year, monthIdx, planStart);
+    if (hitDay === null || hitDay > todayDay) continue;
+    // Scheduled payment already left the bank by today. Extra payments
+    // happen at month-end (after surplus routing) so we don't deduct them
+    // from savings here — but we do trust the projection's end-of-month
+    // balance for accuracy (captures interest + extra).
+    savings -= eomDebt.scheduledPayment;
+    debtBalances.set(debt.id, eomDebt.balance);
+  }
+
+  const totalDebt = Array.from(debtBalances.values()).reduce(
+    (sum, b) => sum + Math.max(0, b),
+    0
+  );
+  const portfolioValue = currentMonth.portfolioValue ?? 0;
+
+  return {
+    netWorth: savings + investments + portfolioValue - totalDebt,
+    monthDate: currentMonth.date,
+  };
 }
 
 function computeProjectionWindow(
@@ -651,20 +753,21 @@ function ProjectionPanel({
   // Window with the active horizon: ~25% past + 75% future. Edges shift when
   // the plan started recently so we never look past data we don't have.
   const window = computeProjectionWindow(projection, horizonMonths);
-  const todayMonth = projection.months[window.startIndex + window.pastCount];
+  const todayMonthIdx = window.startIndex + window.pastCount;
+  const todayMonth = projection.months[todayMonthIdx];
+  // "Next month" forecast — the month-end projection for the month right after
+  // today. Falls back to undefined when we're already at the last month of
+  // the plan (the KPI is hidden in that case).
+  const nextMonth = projection.months[todayMonthIdx + 1];
   const futureMonth =
     projection.months[window.startIndex + window.count - 1] ?? todayMonth;
   // Day-aware "today" net worth: strips income/expense from the month-end
   // value when they haven't actually hit yet (e.g. paycheque on day 30 when
   // today is day 25). Falls back to month-end when we're outside the
   // projection range.
-  const todaySnapshot = computeTodaySnapshot(
-    projection,
-    plan.incomes,
-    plan.expenses,
-    new Date(plan.startMonth)
-  );
+  const todaySnapshot = computeTodaySnapshot(plan, projection);
   const today = todaySnapshot?.netWorth ?? todayMonth?.netWorth ?? 0;
+  const next = nextMonth?.netWorth;
   const future = futureMonth?.netWorth ?? today;
 
   return (
@@ -704,6 +807,20 @@ function ProjectionPanel({
               {formatCurrency(today)}
             </p>
           </div>
+          {nextMonth && next !== undefined && (
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Next month ({FORMATTER.format(nextMonth.date)})
+              </p>
+              <p
+                className={`text-lg font-semibold ${
+                  next >= 0 ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {formatCurrency(next)}
+              </p>
+            </div>
+          )}
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
               End of window{" "}

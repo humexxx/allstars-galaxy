@@ -8,6 +8,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Heading, Text } from "@/components/ui/typography"
 import { AuthService } from "@/lib/services/auth-service"
 import { useState } from "react"
 import Link from "next/link"
@@ -47,10 +48,10 @@ export function ForgotPasswordForm({
     >
       <FieldGroup>
         <div className="flex flex-col items-center gap-1 text-center">
-          <h1 className="text-2xl font-bold">Reset Password</h1>
-          <p className="text-muted-foreground text-sm text-balance">
+          <Heading level="h3" as="h1">Reset Password</Heading>
+          <Text variant="muted" className="text-balance">
             Enter your email to receive a password reset link
-          </p>
+          </Text>
         </div>
         
         {error && (

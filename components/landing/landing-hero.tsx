@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
+import { Heading } from "@/components/ui/typography";
+
 // Hero — radial spotlight + grid background + faux product card under the
 // copy. Same visual structure as trim-success, adapted to Allstars Galaxy
 // copy and KPIs.
@@ -39,11 +41,11 @@ export function LandingHero() {
           <ArrowRight className="h-3 w-3" />
         </Link>
 
-        <h1 className="mx-auto max-w-4xl text-balance text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl md:text-7xl">
+        <Heading level="display" className="mx-auto max-w-4xl">
           Money and time,
           <br />
           in one orbit.
-        </h1>
+        </Heading>
 
         <p className="mx-auto mt-6 max-w-2xl text-balance text-base text-neutral-500 sm:text-lg">
           Allstars Galaxy is the calm command center for your portfolio, your

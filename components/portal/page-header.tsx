@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { Heading, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 type PageHeaderProps = {
@@ -23,10 +24,8 @@ export function PageHeader({
       )}
     >
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-        {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        )}
+        <Heading level="h1">{title}</Heading>
+        {description && <Text variant="muted">{description}</Text>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </header>

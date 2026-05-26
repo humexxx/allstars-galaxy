@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
+import { Heading } from "@/components/ui/typography";
+
 // Closing CTA — soft radial gradient anchored at the bottom, same shape as
 // trim-success's "Empieza a ver tu inventario claro" section.
 export function LandingCta() {
@@ -21,9 +23,9 @@ export function LandingCta() {
         <span className="text-xs font-medium uppercase tracking-widest text-neutral-400">
           Manifesto
         </span>
-        <h2 className="mt-3 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
+        <Heading level="h2" className="mt-3 text-neutral-900">
           Your finances orbit something bigger.
-        </h2>
+        </Heading>
         <p className="mt-4 text-neutral-500">
           Capital is the gravity. But your goals, your projects and your
           wellbeing are the planets that make the picture worth looking at.

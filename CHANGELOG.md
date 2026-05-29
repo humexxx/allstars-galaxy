@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0](https://github.com/humexxx/allstars-galaxy/compare/v0.2.0...v0.3.0) (2026-05-29)
+
+
+### Features
+
+* **finance:** main plan concept + strict confirmation-day check ([004df7e](https://github.com/humexxx/allstars-galaxy/commit/004df7e212268505afbab7ad3e5e523f40a53a07))
+* **ui:** landing + auth + portfolio refresh, dev-tools drawer, app-shell polish ([61ac06c](https://github.com/humexxx/allstars-galaxy/commit/61ac06c7aeafc86b79f7697a1556dfb7aea9f58a))
+* **ui:** landing + auth + portfolio refresh, dev-tools drawer, app-shell polish ([13d3778](https://github.com/humexxx/allstars-galaxy/commit/13d37786158bf6ac8a971c054d38f2fb3c3c9534))
+
 ## [0.2.0](https://github.com/humexxx/allstars-galaxy/compare/v0.1.0...v0.2.0) (2026-05-26)
 
 

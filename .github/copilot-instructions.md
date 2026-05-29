@@ -36,8 +36,8 @@ Always explicit for functions:
 
 ### Schema Changes
 1. Modify `db/schema.ts`
-2. Run `npm run db:generate`
-3. Run `npm run db:migrate`
+2. Run `pnpm db:generate`
+3. Run `pnpm db:migrate`
 4. Commit schema + migrations together
 
 ### Patterns

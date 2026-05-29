@@ -91,7 +91,18 @@ export async function getConfirmationStatus(
   }
 
   const monthAnchor = startOfMonthUtc(today);
-  const dayReached = today.getUTCDate() >= plan.confirmationDayOfMonth;
+  // Strict "the day described by the plan" check — was `>=` which meant the
+  // prompt fired any day from confirmationDayOfMonth to month-end. Now we
+  // only fire on the exact day, with a clamp to the last day of the month
+  // when the configured day is past month-end (e.g. day 31 in February).
+  const todayDay = today.getUTCDate();
+  const lastDayOfMonth = new Date(
+    today.getUTCFullYear(),
+    today.getUTCMonth() + 1,
+    0
+  ).getUTCDate();
+  const targetDay = Math.min(plan.confirmationDayOfMonth, lastDayOfMonth);
+  const dayReached = todayDay === targetDay;
 
   const [existing] = await db
     .select()

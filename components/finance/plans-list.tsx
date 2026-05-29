@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ArrowRight, Copy, MoreHorizontal, Trash2 } from "lucide-react";
+import {
+  ArrowRight,
+  Copy,
+  MoreHorizontal,
+  Star,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -31,7 +37,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { clonePlanAction, deletePlanAction } from "@/app/actions/finance-plans";
+import {
+  clonePlanAction,
+  deletePlanAction,
+  setMainPlanAction,
+} from "@/app/actions/finance-plans";
 import type { FinancePlan } from "@/types/finance";
 
 // UTC-anchored — plan.startMonth is stored at UTC midnight; local formatting
@@ -52,6 +62,19 @@ export function PlansList({ plans }: { plans: FinancePlan[] }) {
       const result = await clonePlanAction(plan.id, `${plan.name} (copy)`);
       if (result.success) {
         toast.success("Plan cloned");
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    });
+  };
+
+  const handleSetMain = (plan: FinancePlan) => {
+    if (plan.isMain) return;
+    startTransition(async () => {
+      const result = await setMainPlanAction(plan.id);
+      if (result.success) {
+        toast.success(`${plan.name} is now your main plan`);
         router.refresh();
       } else {
         toast.error(result.error);
@@ -81,7 +104,22 @@ export function PlansList({ plans }: { plans: FinancePlan[] }) {
             <CardHeader>
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 space-y-1">
-                  <CardTitle className="line-clamp-1">{plan.name}</CardTitle>
+                  <CardTitle className="line-clamp-1 flex items-center gap-1.5">
+                    {plan.name}
+                    {plan.isMain && (
+                      // Star icon marks the main plan inline with the title.
+                      // Browser tooltip on hover via `title` attr; the span
+                      // wrapper exists so the title applies to a real DOM
+                      // element rather than the Lucide SVG.
+                      <span
+                        title="Main plan"
+                        className="inline-flex"
+                        aria-label="Main plan"
+                      >
+                        <Star className="h-4 w-4 shrink-0 fill-yellow-400 text-yellow-500" />
+                      </span>
+                    )}
+                  </CardTitle>
                   <CardDescription className="line-clamp-2">
                     {plan.description || "No description"}
                   </CardDescription>
@@ -98,6 +136,13 @@ export function PlansList({ plans }: { plans: FinancePlan[] }) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onSelect={() => handleSetMain(plan)}
+                      disabled={plan.isMain}
+                    >
+                      <Star className="mr-2 h-4 w-4" />
+                      {plan.isMain ? "Main plan" : "Set as main"}
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => handleClone(plan)}>
                       <Copy className="mr-2 h-4 w-4" /> Clone
                     </DropdownMenuItem>

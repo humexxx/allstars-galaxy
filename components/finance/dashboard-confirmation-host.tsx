@@ -1,4 +1,7 @@
-import { getPlanWithLines, listUserPlans } from "@/lib/services/finance-plan-service";
+import {
+  getMainPlan,
+  getPlanWithLines,
+} from "@/lib/services/finance-plan-service";
 import { getConfirmationStatus } from "@/lib/services/finance-confirmation-service";
 
 import { ConfirmationPrompt } from "./confirmation-prompt";
@@ -12,41 +15,38 @@ const MONTH_LABEL = new Intl.DateTimeFormat("en-US", {
 });
 
 /**
- * Resolves on the server whether any of the user's plans is due for a monthly
- * confirmation today. Renders the auto-opening ConfirmationPrompt for the first
- * plan that's due. Only one popup at a time to avoid stacking dialogs.
+ * Resolves on the server whether the user's MAIN plan is due for monthly
+ * confirmation today, and renders the auto-opening prompt if so. Only the
+ * main plan can trigger this popup — secondary plans never auto-prompt,
+ * which avoids stacking dialogs and keeps the dashboard focused.
  */
 export async function DashboardConfirmationHost({ userId }: { userId: string }) {
-  const plans = await listUserPlans(userId);
-  if (plans.length === 0) return null;
+  const main = await getMainPlan(userId);
+  if (!main || main.confirmationDayOfMonth === 0) return null;
 
-  for (const plan of plans) {
-    if (plan.confirmationDayOfMonth === 0) continue;
-    const full = await getPlanWithLines(plan.id, userId);
-    if (!full) continue;
-    const status = await getConfirmationStatus(full, userId);
-    if (!status.isDue || !status.projectedState) continue;
+  const full = await getPlanWithLines(main.id, userId);
+  if (!full) return null;
 
-    const projectedDebts = status.projectedState.debts.map((d) => ({
-      debtId: d.debtId,
-      name: d.name,
-      balance: d.balance,
-    }));
+  const status = await getConfirmationStatus(full, userId);
+  if (!status.isDue || !status.projectedState) return null;
 
-    return (
-      <ConfirmationPrompt
-        planId={plan.id}
-        planName={plan.name}
-        monthLabel={MONTH_LABEL.format(new Date(status.monthAnchor))}
-        projected={{
-          savings: status.projectedState.savings,
-          investments: status.projectedState.investments,
-          debts: projectedDebts,
-        }}
-        debts={full.debts}
-      />
-    );
-  }
+  const projectedDebts = status.projectedState.debts.map((d) => ({
+    debtId: d.debtId,
+    name: d.name,
+    balance: d.balance,
+  }));
 
-  return null;
+  return (
+    <ConfirmationPrompt
+      planId={main.id}
+      planName={main.name}
+      monthLabel={MONTH_LABEL.format(new Date(status.monthAnchor))}
+      projected={{
+        savings: status.projectedState.savings,
+        investments: status.projectedState.investments,
+        debts: projectedDebts,
+      }}
+      debts={full.debts}
+    />
+  );
 }

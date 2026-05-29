@@ -176,6 +176,13 @@
       "when": 1779657991439,
       "tag": "0024_funny_grim_reaper",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1780074043724,
+      "tag": "0025_dazzling_puppet_master",
+      "breakpoints": true
     }
   ]
 }

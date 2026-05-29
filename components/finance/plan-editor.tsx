@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 
-import { ChevronDown, Clock, TrendingDown, Zap } from "lucide-react";
+import { ChevronDown, Clock, Star, TrendingDown, Zap } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,7 @@ import {
   deletePlanDebtAction,
   deletePlanExpenseAction,
   deletePlanIncomeAction,
+  setMainPlanAction,
   updatePlanAction,
   updatePlanDebtAction,
   updatePlanExpenseAction,
@@ -442,10 +443,69 @@ export function PlanEditor({
         />
       </TabsContent>
 
-      <TabsContent value="settings">
+      <TabsContent value="settings" className="space-y-4">
+        <MainPlanToggle plan={plan} wrap={wrap} />
         <PlanForm plan={plan} investmentMethods={investmentMethods} />
       </TabsContent>
     </Tabs>
+  );
+}
+
+/**
+ * Banner card in the Settings tab that surfaces whether THIS plan is the
+ * user's main plan, and offers a one-click promotion when it isn't. The
+ * `wrap` helper threads through PlanEditor's startTransition so the toast +
+ * router.refresh stays consistent with every other server-action button.
+ */
+function MainPlanToggle({
+  plan,
+  wrap,
+}: {
+  plan: FinancePlanWithLines;
+  wrap: <T,>(
+    fn: () => Promise<{ success: boolean; error?: string } & T>
+  ) => Promise<void>;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+        <div className="flex items-center gap-3">
+          <Star
+            className={`h-5 w-5 shrink-0 ${
+              plan.isMain
+                ? "fill-yellow-400 text-yellow-500"
+                : "text-muted-foreground"
+            }`}
+          />
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">
+              {plan.isMain ? "Main plan" : "Set as main plan"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {plan.isMain
+                ? "This is the plan the dashboard follows and the only one that fires the monthly confirmation prompt."
+                : "Make this the plan the dashboard follows. The current main plan will lose the flag."}
+            </p>
+          </div>
+        </div>
+        {!plan.isMain && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              wrap(async () => {
+                const result = await setMainPlanAction(plan.id);
+                if (result.success) toast.success(`${plan.name} is now your main plan`);
+                return result;
+              })
+            }
+          >
+            Make main
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -247,12 +247,13 @@ describe("getConfirmationStatus", () => {
     expect(getProjectedStateForMonthMock).not.toHaveBeenCalled();
   });
 
-  it("flags isDue=true when day-of-month is reached and no confirmation exists", async () => {
+  it("flags isDue=true ONLY on the exact day-of-month (strict equality)", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date(Date.UTC(2026, 4, 5))); // May 5, day=5
+    // Today IS May 1 — exactly the configured day. Strict-equality check
+    // means this is the only day the prompt fires.
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 1)));
     const plan = buildPlan({ confirmationDayOfMonth: 1 });
 
-    // Existing confirmation lookup → empty array.
     const chain = makeSelectChain([]);
     selectImpl.mockReturnValueOnce(chain);
 
@@ -263,6 +264,38 @@ describe("getConfirmationStatus", () => {
     expect(status.monthAnchor).toBe("2026-05-01");
     expect(status.projectedState).not.toBeNull();
     expect(getProjectedStateForMonthMock).toHaveBeenCalledOnce();
+  });
+
+  it("does NOT fire on days AFTER the configured day-of-month", async () => {
+    // Regression: the old `>=` check fired the prompt every day from the
+    // configured day to month-end. The strict `===` check guarantees it
+    // fires only on that exact day.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 5))); // May 5
+    const plan = buildPlan({ confirmationDayOfMonth: 1 });
+
+    const chain = makeSelectChain([]);
+    selectImpl.mockReturnValueOnce(chain);
+
+    const status = await getConfirmationStatus(plan, USER_ID);
+
+    expect(status.isDue).toBe(false);
+  });
+
+  it("clamps to the last day of the month when the configured day exceeds it", async () => {
+    // confirmationDayOfMonth=31, February only has 28/29 days. The strict
+    // check would never fire — but the clamp treats day-of-month >
+    // lastDayOfMonth as "the last day".
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 1, 28))); // Feb 28 2026 (last day, non-leap)
+    const plan = buildPlan({ confirmationDayOfMonth: 31 });
+
+    const chain = makeSelectChain([]);
+    selectImpl.mockReturnValueOnce(chain);
+
+    const status = await getConfirmationStatus(plan, USER_ID);
+
+    expect(status.isDue).toBe(true);
   });
 
   it("returns isDue=false when the user already confirmed this month", async () => {
@@ -298,9 +331,10 @@ describe("getConfirmationStatus", () => {
 
   it("respects the explicit `today` parameter over the system clock", async () => {
     // System clock is far in the future; the explicit `today` must win.
+    // confirmationDayOfMonth=15 to match the strict-equality day in `today`.
     vi.useFakeTimers();
     vi.setSystemTime(new Date(Date.UTC(2099, 0, 1)));
-    const plan = buildPlan({ confirmationDayOfMonth: 1 });
+    const plan = buildPlan({ confirmationDayOfMonth: 15 });
 
     const chain = makeSelectChain([]);
     selectImpl.mockReturnValueOnce(chain);

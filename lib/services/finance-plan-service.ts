@@ -148,27 +148,40 @@ export async function createPlan(
   userId: string,
   data: CreateFinancePlanInput
 ): Promise<FinancePlan> {
-  const [plan] = await db
-    .insert(financePlans)
-    .values({
-      userId,
-      name: data.name,
-      description: data.description ?? null,
-      startMonth: data.startMonth,
-      monthsAhead: data.monthsAhead,
-      initialSavings: data.initialSavings,
-      monthlySavingsRate: data.monthlySavingsRate,
-      includePortfolio: data.includePortfolio,
-      surplusToDebtsPercent: data.surplusToDebtsPercent,
-      debtStrategy: data.debtStrategy,
-      autoInvestPercent: data.autoInvestPercent,
-      autoInvestMethodId: data.autoInvestMethodId ?? null,
-      initialInvestments: data.initialInvestments,
-      confirmationDayOfMonth: data.confirmationDayOfMonth,
-      color: data.color,
-    })
-    .returning();
-  return plan;
+  return db.transaction(async (tx) => {
+    // Auto-set as main when the user has no plans yet. Keeps the
+    // confirmation host / dashboard finance card pointed at something
+    // useful from the very first plan onwards.
+    const [existing] = await tx
+      .select({ id: financePlans.id })
+      .from(financePlans)
+      .where(eq(financePlans.userId, userId))
+      .limit(1);
+    const shouldBeMain = !existing;
+
+    const [plan] = await tx
+      .insert(financePlans)
+      .values({
+        userId,
+        name: data.name,
+        description: data.description ?? null,
+        startMonth: data.startMonth,
+        monthsAhead: data.monthsAhead,
+        initialSavings: data.initialSavings,
+        monthlySavingsRate: data.monthlySavingsRate,
+        includePortfolio: data.includePortfolio,
+        surplusToDebtsPercent: data.surplusToDebtsPercent,
+        debtStrategy: data.debtStrategy,
+        autoInvestPercent: data.autoInvestPercent,
+        autoInvestMethodId: data.autoInvestMethodId ?? null,
+        initialInvestments: data.initialInvestments,
+        confirmationDayOfMonth: data.confirmationDayOfMonth,
+        color: data.color,
+        isMain: shouldBeMain,
+      })
+      .returning();
+    return plan;
+  });
 }
 
 export async function updatePlan(
@@ -202,7 +215,68 @@ export async function updatePlan(
 
 export async function deletePlan(userId: string, planId: string): Promise<void> {
   await ensureOwnership(planId, userId);
-  await db.delete(financePlans).where(eq(financePlans.id, planId));
+  await db.transaction(async (tx) => {
+    // Was this the main plan? If so, after deletion we need to promote
+    // another plan to keep the user with a main (so the confirmation host
+    // and dashboard finance card still have a target).
+    const [target] = await tx
+      .select({ isMain: financePlans.isMain })
+      .from(financePlans)
+      .where(eq(financePlans.id, planId));
+
+    await tx.delete(financePlans).where(eq(financePlans.id, planId));
+
+    if (target?.isMain) {
+      const [nextOldest] = await tx
+        .select({ id: financePlans.id })
+        .from(financePlans)
+        .where(eq(financePlans.userId, userId))
+        .orderBy(asc(financePlans.createdAt))
+        .limit(1);
+      if (nextOldest) {
+        await tx
+          .update(financePlans)
+          .set({ isMain: true })
+          .where(eq(financePlans.id, nextOldest.id));
+      }
+    }
+  });
+}
+
+/**
+ * Atomically marks `planId` as the user's main plan and clears the flag on
+ * every other plan they own. Enforced at the DB level by the partial unique
+ * index, but the transaction makes the swap race-free.
+ */
+export async function setMainPlan(
+  userId: string,
+  planId: string
+): Promise<void> {
+  await ensureOwnership(planId, userId);
+  await db.transaction(async (tx) => {
+    // Clear the flag on every other plan first so the partial unique index
+    // doesn't fire when we try to set the new one.
+    await tx
+      .update(financePlans)
+      .set({ isMain: false })
+      .where(
+        and(eq(financePlans.userId, userId), eq(financePlans.isMain, true))
+      );
+    await tx
+      .update(financePlans)
+      .set({ isMain: true })
+      .where(eq(financePlans.id, planId));
+  });
+}
+
+/** Returns the user's main plan, or null if none has been marked. */
+export async function getMainPlan(userId: string): Promise<FinancePlan | null> {
+  const [plan] = await db
+    .select()
+    .from(financePlans)
+    .where(and(eq(financePlans.userId, userId), eq(financePlans.isMain, true)))
+    .limit(1);
+  return plan ?? null;
 }
 
 export async function clonePlan(

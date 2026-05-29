@@ -207,12 +207,23 @@ export const financePlans = pgTable(
       .default("0"),
     // Color for chart visualisation (CSS color or theme token).
     color: text("color").notNull().default("var(--chart-1)"),
+    // Marks the user's primary plan. Only ONE plan per user can have this
+    // true (enforced by the partial unique index below). The Dashboard
+    // confirmation host and the dashboard Finance card both follow the
+    // main plan; non-main plans never auto-prompt for monthly confirmation.
+    isMain: boolean("is_main").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("finance_plans_user_id_idx").on(t.userId),
     index("finance_plans_auto_invest_method_id_idx").on(t.autoInvestMethodId),
+    // Partial unique index: enforce at most one main plan per user. Postgres
+    // partial indexes don't count rows where `is_main = false`, so the
+    // constraint kicks in only on the rows we care about.
+    uniqueIndex("finance_plans_user_main_uniq")
+      .on(t.userId)
+      .where(sql`${t.isMain} = TRUE`),
     check("finance_plans_months_ahead_chk", sql`${t.monthsAhead} >= 1 AND ${t.monthsAhead} <= 120`),
     check("finance_plans_initial_savings_chk", sql`${t.initialSavings} >= 0`),
     check("finance_plans_initial_investments_chk", sql`${t.initialInvestments} >= 0`),

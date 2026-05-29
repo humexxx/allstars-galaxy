@@ -9,6 +9,7 @@ import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
 import { formatCurrency } from "@/lib/utils/format";
 import {
   getAutoInvestRate,
+  getMainPlan,
   getPlanWithLines,
   getPortfolioValueForUser,
   listUserPlans,
@@ -52,10 +53,15 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     );
   }
 
-  // Show the most recently updated plan as the dashboard signal.
-  const featured = plans.slice().sort(
-    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
-  )[0];
+  // Follow the user's main plan. Fallback to the most recently updated when
+  // none is marked main (shouldn't happen after the data migration, but
+  // protects new users between the create-first-plan moment and the auto
+  // is_main flip if anything got out of sync).
+  const featured =
+    (await getMainPlan(userId)) ??
+    plans.slice().sort(
+      (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
+    )[0];
   const full = await getPlanWithLines(featured.id, userId);
   if (!full) return null;
 

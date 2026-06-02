@@ -93,11 +93,6 @@
       "brace-expansion": "^1.1.13",
       "@esbuild-kit/esm-loader": "npm:tsx@^4.22.0",
       "@esbuild-kit/core-utils": "npm:tsx@^4.22.0"
-    },
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "sharp",
-      "unrs-resolver"
-    ]
+    }
   }
 }

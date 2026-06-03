@@ -91,10 +91,10 @@ export async function getConfirmationStatus(
   }
 
   const monthAnchor = startOfMonthUtc(today);
-  // Strict "the day described by the plan" check — was `>=` which meant the
-  // prompt fired any day from confirmationDayOfMonth to month-end. Now we
-  // only fire on the exact day, with a clamp to the last day of the month
-  // when the configured day is past month-end (e.g. day 31 in February).
+  // Fire from the configured day through month-end. The dialog should keep
+  // prompting every day until the user fills it in; once a confirmation row
+  // exists for the month it stops (see `isDue` below). Day 31 in a short
+  // month clamps to the last day so February still works.
   const todayDay = today.getUTCDate();
   const lastDayOfMonth = new Date(
     today.getUTCFullYear(),
@@ -102,7 +102,7 @@ export async function getConfirmationStatus(
     0
   ).getUTCDate();
   const targetDay = Math.min(plan.confirmationDayOfMonth, lastDayOfMonth);
-  const dayReached = todayDay === targetDay;
+  const dayReached = todayDay >= targetDay;
 
   const [existing] = await db
     .select()

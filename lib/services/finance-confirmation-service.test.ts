@@ -247,10 +247,8 @@ describe("getConfirmationStatus", () => {
     expect(getProjectedStateForMonthMock).not.toHaveBeenCalled();
   });
 
-  it("flags isDue=true ONLY on the exact day-of-month (strict equality)", async () => {
+  it("flags isDue=true on the configured day when no confirmation exists yet", async () => {
     vi.useFakeTimers();
-    // Today IS May 1 — exactly the configured day. Strict-equality check
-    // means this is the only day the prompt fires.
     vi.setSystemTime(new Date(Date.UTC(2026, 4, 1)));
     const plan = buildPlan({ confirmationDayOfMonth: 1 });
 
@@ -266,12 +264,13 @@ describe("getConfirmationStatus", () => {
     expect(getProjectedStateForMonthMock).toHaveBeenCalledOnce();
   });
 
-  it("does NOT fire on days AFTER the configured day-of-month", async () => {
-    // Regression: the old `>=` check fired the prompt every day from the
-    // configured day to month-end. The strict `===` check guarantees it
-    // fires only on that exact day.
+  it("keeps firing on days AFTER the configured day until a confirmation exists", async () => {
+    // The `>=` semantics: from the configured day through month-end, the
+    // prompt keeps asking until the user actually fills it in. The per-day
+    // localStorage dismiss key in confirmation-prompt.tsx is what suppresses
+    // re-shows within a single calendar day.
     vi.useFakeTimers();
-    vi.setSystemTime(new Date(Date.UTC(2026, 4, 5))); // May 5
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 5))); // May 5, day 4 past anchor
     const plan = buildPlan({ confirmationDayOfMonth: 1 });
 
     const chain = makeSelectChain([]);
@@ -279,7 +278,7 @@ describe("getConfirmationStatus", () => {
 
     const status = await getConfirmationStatus(plan, USER_ID);
 
-    expect(status.isDue).toBe(false);
+    expect(status.isDue).toBe(true);
   });
 
   it("clamps to the last day of the month when the configured day exceeds it", async () => {

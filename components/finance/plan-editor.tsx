@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { toast } from "sonner";
 
 import {
+  Camera,
   ChevronDown,
   ClipboardCheck,
   Clock,
@@ -33,6 +34,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Heading, Text } from "@/components/ui/typography";
 
 import { useRegisterDevTool } from "@/components/dev-tools/dev-tools-context";
+import { runDailySnapshotsAction } from "@/app/actions/dev-tools";
 
 import { ConfirmationDialog } from "./confirmation-dialog";
 import { FinancialHealthDonut } from "./financial-health-donut";
@@ -233,6 +235,28 @@ export function PlanEditor({
     onRun: () => setDevConfirmOpen(true),
   }));
   useRegisterDevTool(forceConfirmationTool);
+
+  // Dev-tools: run the daily snapshot job (finance + portfolio) on demand so
+  // snapshot creation can be verified without waiting for the midnight cron.
+  // Admin-gated server-side. Built once for a stable identity.
+  const [runSnapshotsTool] = useState(() => ({
+    id: "finance:run-daily-snapshots",
+    kind: "action" as const,
+    label: "Run daily snapshot now",
+    description:
+      "Trigger the daily finance + portfolio snapshot job (the midnight cron) on demand. Admin only.",
+    section: "Finance",
+    icon: Camera,
+    onRun: async () => {
+      const res = await runDailySnapshotsAction();
+      if (res.success) {
+        toast.success(`Snapshots run — ${res.message ?? "done"}`);
+      } else {
+        toast.error(res.error);
+      }
+    },
+  }));
+  useRegisterDevTool(runSnapshotsTool);
   // Label shown on the More dropdown — surfaces the current sub-section when
   // one is active so users always see where they are.
   const moreLabel =

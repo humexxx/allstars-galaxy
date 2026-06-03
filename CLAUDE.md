@@ -30,7 +30,7 @@ Per-module reference docs live in [`docs/modules/`](docs/modules/).
 | [`docs/TYPOGRAPHY.md`](docs/TYPOGRAPHY.md) | Font system + UI typography primitives (required for UI work) |
 | [`/app/actions/AGENTS.md`](app/actions/AGENTS.md) | Server-action patterns (the *how*) |
 | [`/lib/services/AGENTS.md`](lib/services/AGENTS.md) | Service-layer patterns (the *how*) |
-| [`.github/skills/`](.github/skills/) | Reusable playbooks: DB migration, service creation, server action creation |
+| [`.github/skills/`](.github/skills/) | Reusable playbooks: DB migration, service creation, server action creation, responsive UI |
 
 Each segment owns its scope. Linking between docs is preferred over
 duplicating content. When you make a change, edit **only** the segment that

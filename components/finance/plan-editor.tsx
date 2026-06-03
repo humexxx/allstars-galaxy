@@ -1012,7 +1012,7 @@ function ProjectionPanel({
               Today {todayMonth ? `(${FORMATTER.format(todayMonth.date)})` : ""}
             </p>
             <p
-              className={`text-lg font-semibold ${
+              className={`text-base font-semibold sm:text-lg ${
                 today >= 0 ? "text-green-600" : "text-red-600"
               }`}
             >
@@ -1025,7 +1025,7 @@ function ProjectionPanel({
                 Next month ({FORMATTER.format(nextMonth.date)})
               </p>
               <p
-                className={`text-lg font-semibold ${
+                className={`text-base font-semibold sm:text-lg ${
                   next >= 0 ? "text-green-600" : "text-red-600"
                 }`}
               >
@@ -1039,7 +1039,7 @@ function ProjectionPanel({
               {futureMonth ? `(${FORMATTER.format(futureMonth.date)})` : ""}
             </p>
             <p
-              className={`text-lg font-semibold ${
+              className={`text-base font-semibold sm:text-lg ${
                 future >= 0 ? "text-green-600" : "text-red-600"
               }`}
             >
@@ -1276,7 +1276,7 @@ function SummaryCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-0.5">
-        <p className={`text-xl font-semibold lg:text-2xl ${colorClass}`}>
+        <p className={`text-lg font-semibold sm:text-xl lg:text-2xl ${colorClass}`}>
           {display}
         </p>
         {sublabel && (

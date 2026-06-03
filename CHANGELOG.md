@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.3.0](https://github.com/humexxx/allstars-galaxy/compare/v0.2.0...v0.3.0) (2026-06-03)
+
+
+### Features
+
+* **finance:** add confirmation-day-anchored period helpers ([b375695](https://github.com/humexxx/allstars-galaxy/commit/b375695b9143aeb6450acea5476817889f940ee7))
+* **finance:** Anchored / Month toggle in the Calendar tab ([db6d43f](https://github.com/humexxx/allstars-galaxy/commit/db6d43f95dd99f4d1accb415aa53e990f34a5379))
+* **finance:** bucket confirmations by period anchor ([9c4de91](https://github.com/humexxx/allstars-galaxy/commit/9c4de91f0a9f375d6de0633ae4e34e7ec5700aa3))
+* **finance:** compact 2x2 KPI layout for plan Overview on mobile ([bc81f52](https://github.com/humexxx/allstars-galaxy/commit/bc81f522d4a5bfb778151ddab332edd8f488bf33))
+* **finance:** dev-tools action to force the confirmation dialog ([7e11653](https://github.com/humexxx/allstars-galaxy/commit/7e116534ffff216695b7b5d74998c96cbfe858e9))
+* **finance:** dev-tools action to run the daily snapshot job on demand ([a5090ae](https://github.com/humexxx/allstars-galaxy/commit/a5090aecc5eb84cbe89651aa174d536c13b43cdf))
+* **finance:** horizontal KPI rail + period-aware wording on Overview ([86e2855](https://github.com/humexxx/allstars-galaxy/commit/86e2855ed1147c323d0811630c64b69f2b314399))
+* **finance:** main plan concept + strict confirmation-day check ([004df7e](https://github.com/humexxx/allstars-galaxy/commit/004df7e212268505afbab7ad3e5e523f40a53a07))
+* **finance:** pin compact health gauge to the title's top-right on mobile ([0717e48](https://github.com/humexxx/allstars-galaxy/commit/0717e48047c1cb3419a88b277cd5da45aec262f8))
+* **finance:** pin the strategy picker to the projection card's top-right on mobile ([ae69c0c](https://github.com/humexxx/allstars-galaxy/commit/ae69c0c6bec56ea4a9a16a2dca0317f5e06d921b))
+* **finance:** project plan by confirmation-day anchored periods ([1e62da5](https://github.com/humexxx/allstars-galaxy/commit/1e62da53bd47f5ffbcfb68708458806254a0886a))
+* **ui:** disable document overscroll bounce on the app shell ([670de86](https://github.com/humexxx/allstars-galaxy/commit/670de867eb490828c10c3ccc0c4833a191bf7dac))
+* **ui:** landing + auth + portfolio refresh, dev-tools drawer, app-shell polish ([61ac06c](https://github.com/humexxx/allstars-galaxy/commit/61ac06c7aeafc86b79f7697a1556dfb7aea9f58a))
+* **ui:** landing + auth + portfolio refresh, dev-tools drawer, app-shell polish ([13d3778](https://github.com/humexxx/allstars-galaxy/commit/13d37786158bf6ac8a971c054d38f2fb3c3c9534))
+* **ui:** scale typography down on mobile (responsive heading scale) ([c05947f](https://github.com/humexxx/allstars-galaxy/commit/c05947f1217be2c68ab6cb5dd825cb356ff4fee9))
+
+
+### Bug Fixes
+
+* **config:** move pnpm build allowlist to pnpm-workspace.yaml ([ab8eb03](https://github.com/humexxx/allstars-galaxy/commit/ab8eb03c2bbd5b373a1a353a09b92e47df423bf9))
+* **db:** repair daily portfolio snapshots broken by ANY(tuple) query ([f07998f](https://github.com/humexxx/allstars-galaxy/commit/f07998f9aea3f1d4e2248beb8f9cbf8abbae16cb))
+* **finance:** align KPI rail with the page + bump mobile gauge to 96px ([36c4f9f](https://github.com/humexxx/allstars-galaxy/commit/36c4f9f585a212d35ae70ed4f7c74e140c9085ec))
+* **finance:** align plan-detail skeleton with the new header + KPI rail ([fbf92c3](https://github.com/humexxx/allstars-galaxy/commit/fbf92c32c0a00e8b1391889590abd28c64decab9))
+* **finance:** re-show confirmation dialog daily until filled ([e8707c5](https://github.com/humexxx/allstars-galaxy/commit/e8707c5ef05b676aac730c7a8b2b45a73015c881))
+* **finance:** restore KPI rail's bottom gap to the projection panel ([8cff052](https://github.com/humexxx/allstars-galaxy/commit/8cff0520209b38545a5cd4a4fc2ee47c5198b2ca))
+* **finance:** stop the KPI rail clipping each card's top border ([d30ceee](https://github.com/humexxx/allstars-galaxy/commit/d30ceeef6fa9fb354b9c52872e0704aef3012ef3))
+
 ## [0.2.0](https://github.com/humexxx/allstars-galaxy/compare/v0.1.0...v0.2.0) (2026-05-26)
 
 

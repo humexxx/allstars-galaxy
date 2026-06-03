@@ -47,7 +47,7 @@ export default function PlanDetailLoading() {
         {/* 4 KPI cards: a horizontal-scroll rail on mobile (each ~44% wide so
             the third peeks in), a 2- then 4-column grid from `sm` up. Matches
             the real Overview rail so the swap doesn't shift. */}
-        <div className="-m-1 flex gap-3 overflow-x-auto p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:m-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:p-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
+        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:py-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
           {Array.from({ length: 4 }).map((_, i) => (
             <SummaryCardSkeleton key={i} />
           ))}

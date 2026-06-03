@@ -345,11 +345,13 @@ export function PlanEditor({
             so a quarter of the third card peeks in to signal there's more to
             scroll. The scrollbar is hidden and scroll snaps card-to-card. From
             `sm` up it falls back to the regular 2- then 4-column grid.
-            `-m-1 p-1` gives the cards' ring + shadow room on every side — an
-            `overflow-x-auto` container also clips the cross axis, so without
-            the padding the top border of each card gets shaved off. The
-            negative margin cancels the padding so nothing shifts. */}
-        <div className="-m-1 flex snap-x snap-mandatory gap-3 overflow-x-auto p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:m-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:p-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
+            `overflow-x-auto` also clips the cross axis, so `py-1` keeps the
+            cards' ring + shadow from being shaved top/bottom. Horizontal room
+            uses `-mx-1 px-1` (cancels out, so no shift). We deliberately avoid
+            a negative *vertical* margin here — it would eat into the
+            `space-y-6` gap to the projection panel below and read tighter than
+            the desktop grid. */}
+        <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:py-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
           <SummaryCard
             className="w-[44%] shrink-0 snap-start sm:w-auto"
             label={incomeLabel}

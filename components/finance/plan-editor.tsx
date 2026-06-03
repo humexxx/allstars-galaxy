@@ -981,8 +981,12 @@ function ProjectionPanel({
   return (
     <Card>
       <CardHeader className="space-y-4 pb-2">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+        {/* Title left, strategy picker pinned top-right. `items-start` +
+            no-wrap keeps the badge in the corner on mobile (the title block
+            shrinks via `min-w-0` and its description wraps) instead of the
+            badge dropping to its own full-width row below. */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
             <CardTitle>Projection</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
               Solid line is past, dashed is forecast
@@ -1113,7 +1117,7 @@ function StrategyBadge({
       type="button"
       onClick={onToggle}
       aria-expanded={open}
-      className="flex items-start gap-2 rounded-md border bg-muted/20 px-3 py-2 text-left transition hover:bg-muted/40"
+      className="flex shrink-0 items-start gap-2 rounded-md border bg-muted/20 px-3 py-2 text-left transition hover:bg-muted/40"
     >
       <Zap className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
       <div className="space-y-0.5">
@@ -1124,7 +1128,10 @@ function StrategyBadge({
           {STRATEGY_LABEL[currentStrategy]}
         </div>
         {saves > 0 && (
-          <div className="flex items-center gap-1 text-[11px] text-green-700 dark:text-green-300">
+          // Hidden on mobile so the badge stays narrow enough to pin top-right
+          // next to the title without crushing the description. The savings
+          // figure still shows on desktop and inside the expanded picker.
+          <div className="hidden items-center gap-1 text-[11px] text-green-700 sm:flex dark:text-green-300">
             <TrendingDown className="h-3 w-3" />
             saves {formatCurrency(saves)} vs. worst
           </div>

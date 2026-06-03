@@ -2,7 +2,7 @@ import "server-only";
 
 import { db } from "@/db";
 import { portfolios, portfolioSnapshots, transactions } from "@/db/schema";
-import { eq, and, sql, lte, gt, desc } from "drizzle-orm";
+import { eq, and, sql, lte, gt, desc, inArray } from "drizzle-orm";
 import type { SnapshotSource } from "@/schemas/snapshot";
 
 /**
@@ -50,7 +50,12 @@ export async function createDailySnapshots(): Promise<{
       totalValue: portfolioSnapshots.totalValue,
     })
     .from(portfolioSnapshots)
-    .where(sql`${portfolioSnapshots.portfolioId} = ANY(${portfolioIds})`)
+    // `inArray` emits `IN ($1, $2, …)`. The previous raw
+    // `= ANY(${portfolioIds})` made Drizzle serialise the array as a row
+    // tuple — `ANY(($1, $2))` — which Postgres rejects (`ANY` needs an
+    // array, not a record). It only worked while there was a single
+    // portfolio; a second one broke every daily run.
+    .where(inArray(portfolioSnapshots.portfolioId, portfolioIds))
     .orderBy(portfolioSnapshots.portfolioId, desc(portfolioSnapshots.date));
 
   const latestByPortfolio = new Map(

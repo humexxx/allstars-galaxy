@@ -209,20 +209,36 @@ export function PlanEditor({
           baseline, regardless of the gauge's larger height. */}
       <div className="flex flex-wrap items-end justify-between gap-6">
         {/* space-y-7 between the title block and the tabs gives the tabs
-            visual room to breathe and matches the original PageHeader gap. */}
-        <div className="space-y-7">
-          <div className="space-y-1">
-            {/* Match the original PageHeader's title size: text-2xl + bold.
-                Heading "h3" is the closest variant; override semibold→bold. */}
-            <Heading level="h3" className="font-bold">
-              {title}
-            </Heading>
-            <Text variant="muted">{description}</Text>
-            {periodLabel && (
-              <Text variant="muted" className="font-mono text-xs">
-                Current period · {periodLabel}
-              </Text>
-            )}
+            visual room to breathe and matches the original PageHeader gap. On
+            mobile this column fills the row so the compact gauge can pin to the
+            title's top-right; on desktop it shrinks back and the full gauge
+            anchors the far-right column (below). */}
+        <div className="min-w-0 flex-1 space-y-7 sm:flex-none">
+          {/* Title row: text on the left; on mobile the compact gauge sits in
+              the top-right corner to reclaim the vertical space its own row
+              used to eat. Hidden from `sm` up, where the full gauge takes over. */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              {/* Match the original PageHeader's title size: text-2xl + bold.
+                  Heading "h3" is the closest variant; override semibold→bold. */}
+              <Heading level="h3" className="font-bold">
+                {title}
+              </Heading>
+              <Text variant="muted">{description}</Text>
+              {periodLabel && (
+                <Text variant="muted" className="font-mono text-xs">
+                  Current period · {periodLabel}
+                </Text>
+              )}
+            </div>
+            <div className="shrink-0 sm:hidden">
+              <FinancialHealthDonut
+                obligations={fixedOutflow}
+                income={income}
+                size={88}
+                showFooter={false}
+              />
+            </div>
           </div>
           {/* Primary tabs (Overview / Calendar) sit in the TabsList; Setup
               and Settings — used less often and more "admin"-flavoured —
@@ -254,7 +270,12 @@ export function PlanEditor({
             </DropdownMenu>
           </div>
         </div>
-        <FinancialHealthDonut obligations={fixedOutflow} income={income} />
+        {/* Desktop gauge: keeps the original right-column position, bottom-
+            aligned with the tabs. Hidden on mobile, where the compact gauge
+            above takes its place. */}
+        <div className="hidden sm:block">
+          <FinancialHealthDonut obligations={fixedOutflow} income={income} />
+        </div>
       </div>
 
       <TabsContent value="overview" className="space-y-6">

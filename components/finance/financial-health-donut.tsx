@@ -9,6 +9,12 @@ type FinancialHealthDonutProps = {
   obligations: number;
   /** Gross monthly income. */
   income: number;
+  /** Outer ring diameter in px. Defaults to 110 (the desktop gauge). Pass a
+   *  smaller value for the compact mobile badge. */
+  size?: number;
+  /** When false, hide the "$X of $Y" caption — used in the compact variant
+   *  where the same figures already live in the KPI cards. */
+  showFooter?: boolean;
 };
 
 const GREEN_THRESHOLD = 0.36;
@@ -40,6 +46,8 @@ const TONE_TEXT: Record<Status["tone"], string> = {
 export function FinancialHealthDonut({
   obligations,
   income,
+  size = 110,
+  showFooter = true,
 }: FinancialHealthDonutProps) {
   const hasIncome = Number.isFinite(income) && income > 0;
   const targetRatio = hasIncome ? Math.max(0, obligations) / income : 0;
@@ -76,13 +84,14 @@ export function FinancialHealthDonut({
     : "—";
 
   // Geometry: a full circle. We use SVG stroke-dasharray to fill the ring
-  // proportionally to the displayed ratio.
-  const size = 110;
+  // proportionally to the displayed ratio. r and stroke scale off `size` so
+  // the compact badge keeps the same proportions as the full gauge.
   const cx = size / 2;
   const cy = size / 2;
-  const r = 44;
-  const stroke = 12;
+  const stroke = Math.max(6, Math.round(size * 0.109));
+  const r = size * 0.4;
   const circumference = 2 * Math.PI * r;
+  const percentClass = size >= 100 ? "text-2xl" : "text-lg";
   // Clamp the displayed fill so the ring never overflows past full when the
   // ratio exceeds 1 (e.g. someone owes more than they earn).
   const filled = Math.min(1, Math.max(0, displayedRatio));
@@ -125,7 +134,7 @@ export function FinancialHealthDonut({
         </svg>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <span
-            className={`font-mono text-2xl font-bold leading-none tabular-nums ${TONE_TEXT[status.tone]}`}
+            className={`font-mono ${percentClass} font-bold leading-none tabular-nums ${TONE_TEXT[status.tone]}`}
           >
             {displayedPercent}
           </span>
@@ -134,7 +143,7 @@ export function FinancialHealthDonut({
           </span>
         </div>
       </div>
-      {hasIncome && (
+      {showFooter && hasIncome && (
         <div className="text-[11px] text-muted-foreground">
           {formatCurrency(obligations)} of {formatCurrency(income)}
         </div>

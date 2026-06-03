@@ -52,6 +52,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatCurrency } from "@/lib/utils/format";
+import {
+  periodRangeFor,
+  type Period,
+} from "@/lib/finance/period";
 import type {
   DebtPaymentType,
   FinancePlanDebt,
@@ -692,9 +696,43 @@ export function PlanCalendar({
   }, [plan.startMonth]);
 
   const [cursor, setCursor] = useState<Date>(todayMonth);
+  const [viewMode, setViewMode] = useState<"anchored" | "month">("anchored");
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
+
+  // Period anchor day. 0 (feature disabled) collapses to day=1 — equivalent
+  // to calendar months, which is the "Month" view anyway.
+  const anchorDay =
+    plan.confirmationDayOfMonth > 0 ? plan.confirmationDayOfMonth : 1;
+
+  // Resolved "what to display": either a confirmation-day-anchored period
+  // (day N → day N-1 of next month) or the cursor's calendar month.
+  const currentRange = useMemo<Period>(() => {
+    if (viewMode === "anchored") {
+      return periodRangeFor(
+        new Date(
+          Date.UTC(cursor.getFullYear(), cursor.getMonth(), cursor.getDate())
+        ),
+        anchorDay
+      );
+    }
+    return { start: startOfMonth(cursor), end: endOfMonth(cursor) };
+  }, [viewMode, cursor, anchorDay]);
+
+  const previousRange = useMemo<Period>(() => {
+    if (viewMode === "anchored") {
+      // One day before the period start lies in the previous period.
+      const prevDate = new Date(currentRange.start);
+      prevDate.setUTCDate(prevDate.getUTCDate() - 1);
+      return periodRangeFor(prevDate, anchorDay);
+    }
+    const prevCursor = subMonths(cursor, 1);
+    return {
+      start: startOfMonth(prevCursor),
+      end: endOfMonth(prevCursor),
+    };
+  }, [viewMode, cursor, anchorDay, currentRange.start]);
 
   // Optimistic snapshot — every operation that touches the plan applies its
   // change here first, so chips jump to the new position the moment the user
@@ -711,10 +749,8 @@ export function PlanCalendar({
     targetKey: string;
   } | null>(null);
 
-  const monthStart = startOfMonth(cursor);
-  const monthEnd = endOfMonth(cursor);
-  const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
-  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+  const gridStart = startOfWeek(currentRange.start, { weekStartsOn: 0 });
+  const gridEnd = endOfWeek(currentRange.end, { weekStartsOn: 0 });
   const days = useMemo(
     () => eachDayOfInterval({ start: gridStart, end: gridEnd }),
     [gridStart, gridEnd]
@@ -744,28 +780,52 @@ export function PlanCalendar({
     ]
   );
 
-  // Monthly summary for the navigated month + the month before, so we can show
-  // a current-vs-prev delta per metric. Memoised on cursor + plan lines.
+  // Summary for the displayed range and the one before it (month → month or
+  // period → period), so we can show a current-vs-prev delta per metric.
+  // Calendar-month view delegates to the existing month aggregator; the
+  // anchored view sums per-day entries computed by `buildDayMap` over the
+  // period range, so the same entry contributes only to the period it
+  // actually hits in.
   const summary = useMemo(() => {
-    const curr = monthTotalsBySide(
-      cursor.getFullYear(),
-      cursor.getMonth(),
-      optimisticPlan.incomes,
-      optimisticPlan.expenses,
-      optimisticPlan.debts,
-      optimisticPlan.overrides,
-      optimisticPlan.startMonth
-    );
-    const prevDate = subMonths(cursor, 1);
-    const prev = monthTotalsBySide(
-      prevDate.getFullYear(),
-      prevDate.getMonth(),
-      optimisticPlan.incomes,
-      optimisticPlan.expenses,
-      optimisticPlan.debts,
-      optimisticPlan.overrides,
-      optimisticPlan.startMonth
-    );
+    const summarize = (range: Period) => {
+      if (viewMode === "month") {
+        return monthTotalsBySide(
+          range.start.getFullYear(),
+          range.start.getMonth(),
+          optimisticPlan.incomes,
+          optimisticPlan.expenses,
+          optimisticPlan.debts,
+          optimisticPlan.overrides,
+          optimisticPlan.startMonth
+        );
+      }
+      const rangeDays = eachDayOfInterval({
+        start: range.start,
+        end: range.end,
+      });
+      const rangeMap = buildDayMap(
+        rangeDays,
+        optimisticPlan.incomes,
+        optimisticPlan.expenses,
+        optimisticPlan.debts,
+        optimisticPlan.overrides,
+        optimisticPlan.startMonth
+      );
+      let income = 0;
+      let expense = 0;
+      let debt = 0;
+      for (const entries of rangeMap.values()) {
+        for (const e of entries) {
+          if (e.side === "income") income += e.amount;
+          else if (e.side === "expense") expense += e.amount;
+          else debt += e.amount;
+        }
+      }
+      return { income, expense, debt };
+    };
+
+    const curr = summarize(currentRange);
+    const prev = summarize(previousRange);
     return {
       curr,
       prev,
@@ -773,7 +833,9 @@ export function PlanCalendar({
       prevNet: prev.income - prev.expense - prev.debt,
     };
   }, [
-    cursor,
+    viewMode,
+    currentRange,
+    previousRange,
     optimisticPlan.incomes,
     optimisticPlan.expenses,
     optimisticPlan.debts,
@@ -781,7 +843,10 @@ export function PlanCalendar({
     optimisticPlan.startMonth,
   ]);
 
-  const monthLabel = format(cursor, "MMMM yyyy");
+  const monthLabel =
+    viewMode === "anchored"
+      ? `${format(currentRange.start, "MMM d")} – ${format(currentRange.end, "MMM d, yyyy")}`
+      : format(cursor, "MMMM yyyy");
 
   const handleAdd = async (values: LineFormValues) => {
     if (dialog.kind !== "add") return;
@@ -1117,8 +1182,18 @@ export function PlanCalendar({
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Previous month"
-              onClick={() => setCursor((c) => addMonths(c, -1))}
+              aria-label={
+                viewMode === "anchored" ? "Previous period" : "Previous month"
+              }
+              onClick={() => {
+                if (viewMode === "anchored") {
+                  const prevDay = new Date(currentRange.start);
+                  prevDay.setUTCDate(prevDay.getUTCDate() - 1);
+                  setCursor(prevDay);
+                } else {
+                  setCursor((c) => addMonths(c, -1));
+                }
+              }}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -1128,13 +1203,55 @@ export function PlanCalendar({
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Next month"
-              onClick={() => setCursor((c) => addMonths(c, 1))}
+              aria-label={
+                viewMode === "anchored" ? "Next period" : "Next month"
+              }
+              onClick={() => {
+                if (viewMode === "anchored") {
+                  const nextDay = new Date(currentRange.end);
+                  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+                  setCursor(nextDay);
+                } else {
+                  setCursor((c) => addMonths(c, 1));
+                }
+              }}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              role="radiogroup"
+              aria-label="Calendar view mode"
+              className="inline-flex rounded-md border bg-card p-0.5"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={viewMode === "anchored"}
+                onClick={() => setViewMode("anchored")}
+                className={`rounded px-2.5 py-1 text-xs font-medium transition ${
+                  viewMode === "anchored"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Anchored
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={viewMode === "month"}
+                onClick={() => setViewMode("month")}
+                className={`rounded px-2.5 py-1 text-xs font-medium transition ${
+                  viewMode === "month"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Month
+              </button>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -1184,7 +1301,24 @@ export function PlanCalendar({
           {days.map((day) => {
             const key = toISODate(day);
             const entries = dayMap.get(key) ?? [];
-            const muted = !isSameMonth(day, cursor);
+            // In anchored mode, "muted" means outside the current period.
+            // In month mode it falls back to outside the cursor's month.
+            const muted =
+              viewMode === "anchored"
+                ? day < currentRange.start || day > currentRange.end
+                : !isSameMonth(day, cursor);
+            // Highlight the configured confirmation day in each rendered
+            // calendar month — clamped to month-end so day-31 in February
+            // shows on Feb 28/29.
+            const lastDayOfMonth = new Date(
+              day.getFullYear(),
+              day.getMonth() + 1,
+              0
+            ).getDate();
+            const clampedAnchor = Math.min(anchorDay, lastDayOfMonth);
+            const isAnchor =
+              plan.confirmationDayOfMonth > 0 &&
+              day.getDate() === clampedAnchor;
             return (
               <CalendarCell
                 key={key}
@@ -1193,6 +1327,7 @@ export function PlanCalendar({
                 entries={entries}
                 muted={muted}
                 isCurrent={isToday(day)}
+                isAnchor={isAnchor}
                 isExpanded={expandedDay === key}
                 isDragOver={dragOverDay === key}
                 onToggleExpand={() =>
@@ -1532,6 +1667,8 @@ type CalendarCellProps = {
   entries: DayEntry[];
   muted: boolean;
   isCurrent: boolean;
+  /** True on the confirmation-day anchor (clamped to month-end). */
+  isAnchor: boolean;
   isExpanded: boolean;
   isDragOver: boolean;
   onToggleExpand: () => void;
@@ -1550,6 +1687,7 @@ function CalendarCell({
   entries,
   muted,
   isCurrent,
+  isAnchor,
   isExpanded,
   isDragOver,
   onToggleExpand,
@@ -1616,6 +1754,10 @@ function CalendarCell({
       }
       className={`group relative flex flex-col rounded-md border p-1.5 text-xs transition-[min-height,box-shadow,border-color,background-color] duration-200 ease-out ${
         muted ? "bg-muted/30 text-muted-foreground/60" : "bg-card"
+      } ${
+        isAnchor && !muted
+          ? "border-amber-400/60 bg-amber-50 dark:bg-amber-950/30"
+          : ""
       } ${
         isDragOver ? "border-primary/70 bg-primary/5 ring-1 ring-primary/50" : ""
       } ${isExpanded ? "min-h-[320px]" : "min-h-[140px]"} ${

@@ -9,6 +9,8 @@ import {
   financePlans,
 } from "@/db/schema";
 
+import { periodAnchorIso, periodStartFor } from "@/lib/finance/period";
+
 import { getPlanWithLines } from "./finance-plan-service";
 import {
   createConfirmationSnapshot,
@@ -23,22 +25,35 @@ import type {
 
 // ---------- helpers ----------
 
-function startOfMonthUtc(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-}
-
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-async function ensurePlanOwnership(planId: string, userId: string): Promise<void> {
+/**
+ * Resolves the bucket the confirmation belongs to. With the period-anchored
+ * model, the bucket key is the start date of the period containing `today`.
+ * confirmationDayOfMonth=0 (feature disabled) falls back to day=1, which is
+ * equivalent to bucketing by calendar month — what the engine did before.
+ */
+function periodAnchorFor(today: Date, day: number): Date {
+  return periodStartFor(today, day > 0 ? day : 1);
+}
+
+async function ensurePlanOwnership(
+  planId: string,
+  userId: string
+): Promise<{ confirmationDayOfMonth: number }> {
   const [row] = await db
-    .select({ userId: financePlans.userId })
+    .select({
+      userId: financePlans.userId,
+      confirmationDayOfMonth: financePlans.confirmationDayOfMonth,
+    })
     .from(financePlans)
     .where(eq(financePlans.id, planId));
   if (!row || row.userId !== userId) {
     throw new Error("Plan not found");
   }
+  return { confirmationDayOfMonth: row.confirmationDayOfMonth };
 }
 
 // ---------- public API ----------
@@ -84,25 +99,20 @@ export async function getConfirmationStatus(
   if (plan.confirmationDayOfMonth === 0) {
     return {
       isDue: false,
-      monthAnchor: isoDate(startOfMonthUtc(today)),
+      monthAnchor: periodAnchorIso(today, 1),
       projectedState: null,
       existingConfirmation: null,
     };
   }
 
-  const monthAnchor = startOfMonthUtc(today);
-  // Fire from the configured day through month-end. The dialog should keep
-  // prompting every day until the user fills it in; once a confirmation row
-  // exists for the month it stops (see `isDue` below). Day 31 in a short
-  // month clamps to the last day so February still works.
-  const todayDay = today.getUTCDate();
-  const lastDayOfMonth = new Date(
-    today.getUTCFullYear(),
-    today.getUTCMonth() + 1,
-    0
-  ).getUTCDate();
-  const targetDay = Math.min(plan.confirmationDayOfMonth, lastDayOfMonth);
-  const dayReached = todayDay >= targetDay;
+  // The bucket key is the start of the period containing today, anchored on
+  // the plan's confirmation day. By construction, every day in a period
+  // satisfies "today >= anchor", so the only practical guard is whether a
+  // confirmation row already exists for this period — once it does, the
+  // dialog stops; otherwise it keeps prompting every day. The per-day
+  // localStorage dismiss in confirmation-prompt.tsx handles within-day
+  // re-shows.
+  const monthAnchor = periodAnchorFor(today, plan.confirmationDayOfMonth);
 
   const [existing] = await db
     .select()
@@ -117,7 +127,7 @@ export async function getConfirmationStatus(
   const projectedState = await getProjectedStateForMonth(plan, userId, monthAnchor);
 
   return {
-    isDue: dayReached && !existing,
+    isDue: !existing,
     monthAnchor: isoDate(monthAnchor),
     projectedState,
     existingConfirmation: existing ?? null,
@@ -141,9 +151,12 @@ export async function saveConfirmation(
   input: ConfirmActualsInput,
   today: Date = new Date()
 ): Promise<FinancePlanConfirmation> {
-  await ensurePlanOwnership(input.planId, userId);
+  const { confirmationDayOfMonth } = await ensurePlanOwnership(
+    input.planId,
+    userId
+  );
 
-  const monthAnchor = isoDate(startOfMonthUtc(today));
+  const monthAnchor = isoDate(periodAnchorFor(today, confirmationDayOfMonth));
 
   const conf = await db.transaction(async (tx) => {
     const [row] = await tx

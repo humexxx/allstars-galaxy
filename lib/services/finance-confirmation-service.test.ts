@@ -314,7 +314,10 @@ describe("getConfirmationStatus", () => {
     expect(status.monthAnchor).toBe("2026-05-01");
   });
 
-  it("returns isDue=false before the configured day-of-month is reached", async () => {
+  it("buckets May 10 (day=25 anchor) into the PREVIOUS period anchor", async () => {
+    // Period semantics: with anchor day 25, May 10 belongs to the period
+    // Apr 25 → May 24. The dialog should still prompt (period reached),
+    // and the bucket key is the period's anchor (Apr 25).
     vi.useFakeTimers();
     vi.setSystemTime(new Date(Date.UTC(2026, 4, 10))); // May 10
     const plan = buildPlan({ confirmationDayOfMonth: 25 });
@@ -324,13 +327,14 @@ describe("getConfirmationStatus", () => {
 
     const status = await getConfirmationStatus(plan, USER_ID);
 
-    expect(status.isDue).toBe(false);
-    expect(status.existingConfirmation).toBeNull();
+    expect(status.monthAnchor).toBe("2026-04-25");
+    expect(status.isDue).toBe(true);
   });
 
   it("respects the explicit `today` parameter over the system clock", async () => {
     // System clock is far in the future; the explicit `today` must win.
-    // confirmationDayOfMonth=15 to match the strict-equality day in `today`.
+    // With anchor day 15 and today=Mar 15 2026, the period anchor is Mar 15
+    // (today is exactly on the anchor — current period starts today).
     vi.useFakeTimers();
     vi.setSystemTime(new Date(Date.UTC(2099, 0, 1)));
     const plan = buildPlan({ confirmationDayOfMonth: 15 });
@@ -344,7 +348,7 @@ describe("getConfirmationStatus", () => {
       new Date(Date.UTC(2026, 2, 15))
     );
 
-    expect(status.monthAnchor).toBe("2026-03-01");
+    expect(status.monthAnchor).toBe("2026-03-15");
     expect(status.isDue).toBe(true);
   });
 });

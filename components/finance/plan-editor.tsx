@@ -59,7 +59,9 @@ import {
   updatePlanIncomeAction,
   upsertLineOverrideAction,
 } from "@/app/actions/finance-plans";
+import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
+import { periodRangeFor } from "@/lib/finance/period";
 import type {
   DebtStrategy,
   FinancePlanWithLines,
@@ -167,6 +169,27 @@ export function PlanEditor({
     balance: d.balance,
   }));
 
+  // Period anchoring: when the plan confirms on a day other than the 1st (or
+  // the disabled sentinel 0), the projection rows are custom accounting
+  // periods, not calendar months. Reflect that in the card wording and show
+  // the exact date window so the numbers aren't misread as a calendar month.
+  const anchorDay = plan.confirmationDayOfMonth;
+  const isPeriodMode = anchorDay > 1;
+  const periodRange = isPeriodMode
+    ? periodRangeFor(currentMonthDate, anchorDay)
+    : null;
+  const fmtPeriodDay = (d: Date): string =>
+    new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    }).format(d);
+  const periodLabel = periodRange
+    ? `${fmtPeriodDay(periodRange.start)} – ${fmtPeriodDay(periodRange.end)}`
+    : null;
+  const incomeLabel = isPeriodMode ? "Period income" : "Monthly income";
+  const expensesLabel = isPeriodMode ? "Period expenses" : "Living expenses";
+
   // Controlled tab value so the dropdown items (Setup / Settings) can drive
   // the same surface as the visible TabsTriggers (Overview / Calendar).
   const [tab, setTab] = useState<"overview" | "setup" | "calendar" | "settings">(
@@ -195,6 +218,11 @@ export function PlanEditor({
               {title}
             </Heading>
             <Text variant="muted">{description}</Text>
+            {periodLabel && (
+              <Text variant="muted" className="font-mono text-xs">
+                Current period · {periodLabel}
+              </Text>
+            )}
           </div>
           {/* Primary tabs (Overview / Calendar) sit in the TabsList; Setup
               and Settings — used less often and more "admin"-flavoured —
@@ -230,9 +258,14 @@ export function PlanEditor({
       </div>
 
       <TabsContent value="overview" className="space-y-6">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+        {/* Mobile: a single horizontal-scroll rail where each card is ~44% wide
+            so a quarter of the third card peeks in to signal there's more to
+            scroll. The scrollbar is hidden and scroll snaps card-to-card. From
+            `sm` up it falls back to the regular 2- then 4-column grid. */}
+        <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
           <SummaryCard
-            label="Monthly income"
+            className="w-[44%] shrink-0 snap-start sm:w-auto"
+            label={incomeLabel}
             value={income}
             tone="positive"
             sublabel="From all active sources"
@@ -248,7 +281,8 @@ export function PlanEditor({
             }
           />
           <SummaryCard
-            label="Living expenses"
+            className="w-[44%] shrink-0 snap-start sm:w-auto"
+            label={expensesLabel}
             value={fixedOutflow}
             sublabel="Includes debt minimums"
             breakdown={
@@ -275,6 +309,7 @@ export function PlanEditor({
             }
           />
           <SummaryCard
+            className="w-[44%] shrink-0 snap-start sm:w-auto"
             label="Total debt"
             value={totalDebt}
             tone={totalDebt > 0 ? "negative" : undefined}
@@ -297,6 +332,7 @@ export function PlanEditor({
             }
           />
           <SummaryCard
+            className="w-[44%] shrink-0 snap-start sm:w-auto"
             label="Surplus"
             value={surplus}
             tone={surplus >= 0 ? "positive" : "negative"}
@@ -1088,12 +1124,16 @@ function SummaryCard({
   tone,
   sublabel,
   breakdown,
+  className,
 }: {
   label: string;
   value: number | string;
   tone?: "positive" | "negative";
   sublabel?: React.ReactNode;
   breakdown?: React.ReactNode;
+  /** Extra classes for the card root — used to size cards inside the mobile
+   *  horizontal-scroll rail (peek of the next card) vs the desktop grid. */
+  className?: string;
 }) {
   const display =
     typeof value === "number" ? formatCurrency(value) : value;
@@ -1107,11 +1147,11 @@ function SummaryCard({
   const card = (
     <Card
       size="sm"
-      className={
-        breakdown
-          ? "cursor-pointer text-left transition hover:border-foreground/30 focus-visible:border-foreground/40 focus-visible:outline-none"
-          : undefined
-      }
+      className={cn(
+        breakdown &&
+          "cursor-pointer text-left transition hover:border-foreground/30 focus-visible:border-foreground/40 focus-visible:outline-none",
+        className
+      )}
     >
       <CardHeader className="pb-1">
         <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground lg:text-xs">

@@ -14,12 +14,20 @@ export default function PlanDetailLoading() {
       <Skeleton className="h-8 w-32 -ml-2" />
 
       <div className="space-y-6">
-        {/* Header row: title block + tabs on the left, donut on the right */}
+        {/* Header row mirrors PlanEditor: on mobile the compact 88px gauge
+            pins to the title's top-right; from `sm` up the left column shrinks
+            and the full 110px gauge anchors the far-right column. */}
         <div className="flex flex-wrap items-end justify-between gap-6">
-          <div className="space-y-7">
-            <div className="space-y-2">
-              <Skeleton className="h-7 w-64" />
-              <Skeleton className="h-4 w-96 max-w-full" />
+          <div className="min-w-0 flex-1 space-y-7 sm:flex-none">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 space-y-1">
+                <Skeleton className="h-7 w-48" />
+                <Skeleton className="h-4 w-96 max-w-full" />
+                {/* "Current period · …" line (period-mode plans) */}
+                <Skeleton className="h-3 w-40" />
+              </div>
+              {/* Compact mobile gauge (88×88), hidden from `sm` up. */}
+              <Skeleton className="h-[88px] w-[88px] shrink-0 rounded-full sm:hidden" />
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {/* TabsList: two visible triggers */}
@@ -31,13 +39,15 @@ export default function PlanDetailLoading() {
               <Skeleton className="h-9 w-20" />
             </div>
           </div>
-          {/* Financial-health donut (110×110) — render as a perfect circle so
-              the loading shape matches the rendered gauge exactly. */}
-          <Skeleton className="h-[110px] w-[110px] rounded-full" />
+          {/* Desktop gauge (110×110), hidden on mobile where the compact one
+              above takes its place. */}
+          <Skeleton className="hidden h-[110px] w-[110px] rounded-full sm:block" />
         </div>
 
-        {/* 4 KPI summary cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* 4 KPI cards: a horizontal-scroll rail on mobile (each ~44% wide so
+            the third peeks in), a 2- then 4-column grid from `sm` up. Matches
+            the real Overview rail so the swap doesn't shift. */}
+        <div className="-m-1 flex gap-3 overflow-x-auto p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:m-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:p-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
           {Array.from({ length: 4 }).map((_, i) => (
             <SummaryCardSkeleton key={i} />
           ))}
@@ -87,21 +97,23 @@ export default function PlanDetailLoading() {
 }
 
 /**
- * Mirrors the `SummaryCard` used in the Overview tab: a chevron-bearing
- * header, a hero number, and a sublabel. The values themselves are
- * intentionally short blocks so the skeleton reads as "card content
- * loading" rather than "page chrome loading".
+ * Mirrors the compact `SummaryCard` (size="sm") used in the Overview rail: an
+ * uppercase label, a hero number, and a sublabel — no chevron (the breakdown
+ * now opens in a sheet). On mobile the wrapper is ~44% wide and non-shrinking
+ * so the cards line up with the real horizontal rail; from `sm` up it fills
+ * its grid cell.
  */
 function SummaryCardSkeleton() {
   return (
-    <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
-      <div className="flex items-center justify-between p-6 pb-2">
-        <Skeleton className="h-4 w-28" />
-        <Skeleton className="h-4 w-4 rounded-sm" />
-      </div>
-      <div className="space-y-2 px-6 pb-6">
-        <Skeleton className="h-8 w-32" />
-        <Skeleton className="h-3 w-40 max-w-full" />
+    <div className="w-[44%] shrink-0 sm:w-auto">
+      <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+        <div className="px-4 pt-4 pb-1">
+          <Skeleton className="h-3 w-24" />
+        </div>
+        <div className="space-y-1 px-4 pb-4">
+          <Skeleton className="h-6 w-28" />
+          <Skeleton className="h-3 w-32 max-w-full" />
+        </div>
       </div>
     </div>
   );

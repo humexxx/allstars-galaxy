@@ -26,8 +26,8 @@ export default function PlanDetailLoading() {
                 {/* "Current period · …" line (period-mode plans) */}
                 <Skeleton className="h-3 w-40" />
               </div>
-              {/* Compact mobile gauge (88×88), hidden from `sm` up. */}
-              <Skeleton className="h-[88px] w-[88px] shrink-0 rounded-full sm:hidden" />
+              {/* Compact mobile gauge (96×96), hidden from `sm` up. */}
+              <Skeleton className="h-[96px] w-[96px] shrink-0 rounded-full sm:hidden" />
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {/* TabsList: two visible triggers */}
@@ -47,7 +47,7 @@ export default function PlanDetailLoading() {
         {/* 4 KPI cards: a horizontal-scroll rail on mobile (each ~44% wide so
             the third peeks in), a 2- then 4-column grid from `sm` up. Matches
             the real Overview rail so the swap doesn't shift. */}
-        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:py-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
+        <div className="flex gap-3 overflow-x-auto py-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:py-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
           {Array.from({ length: 4 }).map((_, i) => (
             <SummaryCardSkeleton key={i} />
           ))}

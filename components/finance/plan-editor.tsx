@@ -297,7 +297,7 @@ export function PlanEditor({
               <FinancialHealthDonut
                 obligations={fixedOutflow}
                 income={income}
-                size={88}
+                size={96}
                 showFooter={false}
               />
             </div>
@@ -346,12 +346,11 @@ export function PlanEditor({
             scroll. The scrollbar is hidden and scroll snaps card-to-card. From
             `sm` up it falls back to the regular 2- then 4-column grid.
             `overflow-x-auto` also clips the cross axis, so `py-1` keeps the
-            cards' ring + shadow from being shaved top/bottom. Horizontal room
-            uses `-mx-1 px-1` (cancels out, so no shift). We deliberately avoid
-            a negative *vertical* margin here — it would eat into the
-            `space-y-6` gap to the projection panel below and read tighter than
-            the desktop grid. */}
-        <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:py-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
+            cards' ring + shadow from being shaved top/bottom. NO horizontal
+            margin/padding: a negative `-mx-1` shifted the first card 4px left
+            of the title and the projection card below it; the 1px faint ring
+            on the scroll edges is not worth the misalignment. */}
+        <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto py-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:py-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
           <SummaryCard
             className="w-[44%] shrink-0 snap-start sm:w-auto"
             label={incomeLabel}

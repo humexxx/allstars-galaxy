@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active (page redesigned to mirror plan-editor layout)
-> **Last reviewed:** 2026-05-25
+> **Last reviewed:** 2026-06-03
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -47,6 +47,7 @@ metadata. Interest math is shared with [Finance](./finance.md).
 ## Notes
 - Conventional Commits scope: `portfolio` *(not in commitlint allowlist — add it to [`commitlint.config.mjs`](../../commitlint.config.mjs) if you start committing here often, or use `finance` if the change is on shared math)*
 - Daily cron at `/api/cron/daily` writes snapshots and applies monthly compound interest on the 1st.
+- `createDailySnapshots` must use `inArray(...)` for the "latest snapshot per portfolio" lookup — a raw ``sql`... = ANY(${ids})` `` makes Drizzle emit `ANY(($1, $2))` (a row tuple), which Postgres rejects once there's more than one portfolio. That bug silently broke every daily portfolio snapshot from 2026-05-26 until the `inArray` fix.
 - Transactions are created via `createTransactionAction` (server action). The previous `/api/transactions` route handler is gone; cron and webhook routes are the only remaining API routes.
 - `PerformanceChart` and the projection charts in [Finance](./finance.md) are lazy-loaded with `next/dynamic({ ssr: false })` to keep recharts out of the initial portal bundle.
 - `app/portal/portfolio/loading.tsx` and `app/portal/admin/loading.tsx` stream skeletons for the heavy data fetches.

@@ -14,13 +14,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Heading, Text } from "@/components/ui/typography";
 
 import { FinancialHealthDonut } from "./financial-health-donut";
@@ -228,7 +230,7 @@ export function PlanEditor({
       </div>
 
       <TabsContent value="overview" className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
           <SummaryCard
             label="Monthly income"
             value={income}
@@ -1104,17 +1106,26 @@ function SummaryCard({
 
   const card = (
     <Card
-      className={breakdown ? "cursor-help transition hover:border-foreground/30" : undefined}
+      size="sm"
+      className={
+        breakdown
+          ? "cursor-pointer text-left transition hover:border-foreground/30 focus-visible:border-foreground/40 focus-visible:outline-none"
+          : undefined
+      }
     >
-      <CardHeader className="pb-2">
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <CardHeader className="pb-1">
+        <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground lg:text-xs">
           {label}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-1">
-        <p className={`text-2xl font-semibold ${colorClass}`}>{display}</p>
+      <CardContent className="space-y-0.5">
+        <p className={`text-xl font-semibold lg:text-2xl ${colorClass}`}>
+          {display}
+        </p>
         {sublabel && (
-          <div className="text-xs text-muted-foreground">{sublabel}</div>
+          <div className="line-clamp-2 text-[11px] text-muted-foreground lg:line-clamp-none lg:text-xs">
+            {sublabel}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -1123,16 +1134,17 @@ function SummaryCard({
   if (!breakdown) return card;
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{card}</TooltipTrigger>
-      {/* Use shadcn's default TooltipContent styling (inverted bg-foreground /
-          text-background "chip"). We only widen it and bump padding — colors
-          stay native so this reads as the same primitive used everywhere
-          else in the app. */}
-      <TooltipContent side="bottom" align="start" className="max-w-sm p-3">
-        {breakdown}
-      </TooltipContent>
-    </Tooltip>
+    <Sheet>
+      <SheetTrigger asChild aria-label={`Show ${label} breakdown`}>
+        {card}
+      </SheetTrigger>
+      <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>{label}</SheetTitle>
+        </SheetHeader>
+        <div className="px-4 pb-6">{breakdown}</div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -1155,22 +1167,19 @@ function BreakdownList({
   const sections: BreakdownGroup[] = groups ?? [{ items: items ?? [] }];
   const hasAny = sections.some((g) => g.items.length > 0);
   if (!hasAny) {
-    // Inside the shadcn tooltip we're on bg-foreground / text-background, so
-    // standard muted-foreground would be near-invisible. text-background/70
-    // gives the same "muted" feel against either light or dark tooltip bg.
-    return <p className="text-xs text-background/70">{emptyLabel}</p>;
+    return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
   }
   return (
-    <div className="space-y-2 text-xs">
+    <div className="space-y-3 text-sm">
       {sections.map((section, gi) =>
         section.items.length === 0 ? null : (
-          <div key={gi} className="space-y-1">
+          <div key={gi} className="space-y-1.5">
             {section.heading && (
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-background/60">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {section.heading}
               </div>
             )}
-            <ul className="space-y-1">
+            <ul className="space-y-1.5">
               {section.items.map((item, idx) => (
                 <li
                   key={`${item.name}-${idx}`}
@@ -1179,7 +1188,7 @@ function BreakdownList({
                   <span className="truncate">
                     {item.name}
                     {item.hint && (
-                      <span className="ml-1 text-background/70">· {item.hint}</span>
+                      <span className="ml-1 text-muted-foreground">· {item.hint}</span>
                     )}
                   </span>
                   <span className="font-mono tabular-nums">
@@ -1191,7 +1200,7 @@ function BreakdownList({
           </div>
         )
       )}
-      <div className="flex items-baseline justify-between gap-4 border-t border-background/20 pt-1.5 font-semibold">
+      <div className="flex items-baseline justify-between gap-4 border-t pt-2 font-semibold">
         <span>Total</span>
         <span className="font-mono tabular-nums">{formatCurrency(total)}</span>
       </div>
@@ -1231,19 +1240,19 @@ function SurplusBreakdown({
     { label: "Debt minimums", value: formatCurrency(minDebtPayments), op: "−" },
   ];
   return (
-    <div className="space-y-2 text-xs">
-      <ul className="space-y-1">
+    <div className="space-y-3 text-sm">
+      <ul className="space-y-1.5">
         {rows.map((r) => (
           <li key={r.label} className="flex items-baseline justify-between gap-4">
             <span>
-              {r.op && <span className="mr-1 text-background/70">{r.op}</span>}
+              {r.op && <span className="mr-1 text-muted-foreground">{r.op}</span>}
               {r.label}
             </span>
             <span className="font-mono tabular-nums">{r.value}</span>
           </li>
         ))}
       </ul>
-      <div className="flex items-baseline justify-between gap-4 border-t border-background/20 pt-1.5 font-semibold">
+      <div className="flex items-baseline justify-between gap-4 border-t pt-2 font-semibold">
         <span>= Surplus</span>
         <span
           className={`font-mono tabular-nums ${
@@ -1254,7 +1263,7 @@ function SurplusBreakdown({
         </span>
       </div>
       {surplus > 0 && (
-        <ul className="space-y-1 border-t border-background/20 pt-2 text-background/70">
+        <ul className="space-y-1.5 border-t pt-2 text-muted-foreground">
           <li className="flex items-baseline justify-between gap-4">
             <span>→ Extra debt</span>
             <span className="font-mono tabular-nums">{formatCurrency(toExtraDebt)}</span>

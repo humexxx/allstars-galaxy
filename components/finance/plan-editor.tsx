@@ -3,7 +3,14 @@
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 
-import { ChevronDown, Clock, Star, TrendingDown, Zap } from "lucide-react";
+import {
+  ChevronDown,
+  ClipboardCheck,
+  Clock,
+  Star,
+  TrendingDown,
+  Zap,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +32,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Heading, Text } from "@/components/ui/typography";
 
+import { useRegisterDevTool } from "@/components/dev-tools/dev-tools-context";
+
+import { ConfirmationDialog } from "./confirmation-dialog";
 import { FinancialHealthDonut } from "./financial-health-donut";
 import { PlanCalendar } from "./plan-calendar";
 import { PlanLineEditor } from "./plan-line-editor";
@@ -190,11 +200,39 @@ export function PlanEditor({
   const incomeLabel = isPeriodMode ? "Period income" : "Monthly income";
   const expensesLabel = isPeriodMode ? "Period expenses" : "Living expenses";
 
+  // Label for the confirmation dialog header. Period mode shows the window
+  // (e.g. "Apr 5 – May 4"); calendar mode shows month + year.
+  const confirmDialogLabel =
+    periodLabel ??
+    new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(currentMonthDate);
+
   // Controlled tab value so the dropdown items (Setup / Settings) can drive
   // the same surface as the visible TabsTriggers (Overview / Calendar).
   const [tab, setTab] = useState<"overview" | "setup" | "calendar" | "settings">(
     "overview"
   );
+
+  // Dev-tools: force-open the monthly confirmation dialog from this plan,
+  // bypassing the date + dismiss gates so the whole confirm-and-update flow
+  // can be exercised on demand. The helper is built once via useState so it
+  // keeps a stable identity (useRegisterDevTool re-registers on identity
+  // change, which would loop with an inline object).
+  const [devConfirmOpen, setDevConfirmOpen] = useState(false);
+  const [forceConfirmationTool] = useState(() => ({
+    id: "finance:force-confirmation",
+    kind: "action" as const,
+    label: "Force confirmation dialog",
+    description:
+      "Open the monthly confirmation + balance-update dialog now, ignoring the confirmation day and the per-day dismiss.",
+    section: "Finance",
+    icon: ClipboardCheck,
+    onRun: () => setDevConfirmOpen(true),
+  }));
+  useRegisterDevTool(forceConfirmationTool);
   // Label shown on the More dropdown — surfaces the current sub-section when
   // one is active so users always see where they are.
   const moreLabel =
@@ -510,6 +548,27 @@ export function PlanEditor({
         <MainPlanToggle plan={plan} wrap={wrap} />
         <PlanForm plan={plan} investmentMethods={investmentMethods} />
       </TabsContent>
+
+      {/* Dev-only: force-openable confirmation dialog (see the dev drawer's
+          Finance section). Saving it writes a real confirmation and
+          recalibrates the projection, exactly like the dashboard prompt. */}
+      <ConfirmationDialog
+        open={devConfirmOpen}
+        onOpenChange={setDevConfirmOpen}
+        planId={plan.id}
+        planName={plan.name}
+        monthLabel={confirmDialogLabel}
+        projected={{
+          savings: today?.savings ?? 0,
+          investments: today?.investments ?? 0,
+          debts: (today?.debts ?? []).map((d) => ({
+            debtId: d.debtId,
+            name: d.name,
+            balance: d.balance,
+          })),
+        }}
+        debts={plan.debts}
+      />
     </Tabs>
   );
 }

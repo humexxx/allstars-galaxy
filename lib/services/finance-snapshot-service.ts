@@ -36,7 +36,7 @@ function monthsBetween(start: Date, target: Date): number {
  * recalibrate from the user's most recent real-world numbers instead of
  * always extrapolating from the original startMonth.
  */
-async function buildCalibratedPlan(
+export async function buildCalibratedPlan(
   plan: FinancePlanWithLines
 ): Promise<FinancePlanWithLines> {
   const latest = await getLatestConfirmation(plan.id);

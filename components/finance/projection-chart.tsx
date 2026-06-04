@@ -116,52 +116,44 @@ function MilestoneLabel(props: {
   );
 }
 
+type ChartPoint = { date: Date; netWorth: number };
+
 type ProjectionChartProps = {
-  projection: Projection;
-  /** How many months of the projection to plot (controlled by the slider above). */
-  monthsToShow?: number;
-  /** Index inside the rendered slice marking the past/future split. Indexes
-   *  before this go solid; this index and after go dashed. */
+  /** Net-worth points to plot, left→right. The caller merges real snapshots
+   *  (past) with the projection (future); this component just renders them. */
+  points: ChartPoint[];
+  /** Index marking the past/future split. Indexes before this go solid (real
+   *  / historical), this index and after go dashed (forecast). */
   pastCount?: number;
-  /** Where in the projection to start the slice. Lets the caller surface a
-   *  windowed view (e.g. 3 past + 9 future) instead of always projection[0..N]. */
-  startIndex?: number;
+  /** Plan colour token for the line; falls back to chart-1. */
+  color?: string;
 };
 
-// Sensible default when the caller doesn't pass a value.
-const DEFAULT_MONTHS_TO_SHOW = 12;
-
 export function ProjectionChart({
-  projection,
-  monthsToShow = DEFAULT_MONTHS_TO_SHOW,
+  points,
   pastCount = 0,
-  startIndex = 0,
+  color,
 }: ProjectionChartProps) {
   // Line color follows the plan's chosen colour token so users can tell their
   // plans apart at a glance. Falls back to the chart-1 token when the plan
   // doesn't have one set yet.
-  const lineColor = projection.plan.color || "var(--chart-1)";
+  const lineColor = color || "var(--chart-1)";
 
-  // Build the slice + per-point split between past (solid) and future (dashed).
-  // We use a numeric x-axis (each row's `idx` is its x coordinate) so milestone
+  // Build the per-point split between past (solid) and future (dashed). We use
+  // a numeric x-axis (each row's `idx` is its x coordinate) so milestone
   // markers can land at the EXACT fractional crossing point between months
   // instead of snapping to the nearest data point. That avoids two milestones
   // collapsing onto the same month when both cross between the same pair of
   // points.
   const { data, crossings } = useMemo(() => {
-    const count = Math.max(
-      1,
-      Math.min(monthsToShow, projection.months.length - startIndex)
-    );
-    const slice = projection.months.slice(startIndex, startIndex + count);
-    const rows = slice.map((m, i) => {
-      const value = Number(m.netWorth.toFixed(2));
+    const rows = points.map((p, i) => {
+      const value = Number(p.netWorth.toFixed(2));
       const isPast = i < pastCount;
       const isFuture = i > pastCount;
       const isBoundary = i === pastCount;
       return {
         idx: i,
-        monthLabel: MONTH_FORMATTER.format(m.date),
+        monthLabel: MONTH_FORMATTER.format(p.date),
         // pastValue and futureValue overlap at the boundary to keep the line
         // visually continuous when one rendered series ends and the other
         // begins.
@@ -197,7 +189,7 @@ export function ProjectionChart({
     }
 
     return { data: rows, crossings: cross };
-  }, [projection.months, monthsToShow, startIndex, pastCount]);
+  }, [points, pastCount]);
 
   const xMax = Math.max(0, data.length - 1);
 

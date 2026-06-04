@@ -74,6 +74,11 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
 import { periodRangeFor } from "@/lib/finance/period";
+import {
+  buildChartSeries,
+  computeProjectionWindow,
+  type PlanHistoryPoint,
+} from "@/lib/finance/chart-series";
 import type {
   DebtStrategy,
   FinancePlanWithLines,
@@ -83,7 +88,13 @@ import type {
 
 type PlanEditorProps = {
   plan: FinancePlanWithLines;
+  /** Plan calibrated from the latest confirmation — drives the projection and
+   *  the "today" seed. Equals `plan` when there are no confirmations. The raw
+   *  `plan` is what the line/debt editors mutate. */
+  baseline: FinancePlanWithLines;
   projection: Projection;
+  /** Real monthly snapshots for the chart's past (newest-last). */
+  history: PlanHistoryPoint[];
   comparison: StrategyComparison | null;
   investmentMethods: InvestmentMethodOption[];
   title: string;
@@ -92,7 +103,9 @@ type PlanEditorProps = {
 
 export function PlanEditor({
   plan,
+  baseline,
   projection,
+  history,
   comparison,
   investmentMethods,
   title,
@@ -112,8 +125,9 @@ export function PlanEditor({
       });
     });
 
-  // "Today" snapshot — the projection's first row is the calibrated starting
-  // state, which is the most actionable reference for the cards and gauge.
+  // "Today" snapshot — the projection's first row is the current-period state
+  // of the (confirmation-calibrated) baseline, the most actionable reference
+  // for the cards and gauge.
   const today = projection.months[0];
   const income = today?.income ?? 0;
   const livingExpenses = today?.expenses ?? 0;
@@ -458,7 +472,8 @@ export function PlanEditor({
 
         <ProjectionPanel
           projection={projection}
-          plan={plan}
+          baseline={baseline}
+          history={history}
           comparison={plan.debts.length > 0 ? comparison : null}
           currentStrategy={plan.debtStrategy as DebtStrategy}
           onChangeStrategy={(next) =>
@@ -658,9 +673,12 @@ function MainPlanToggle({
 
 type ProjectionPanelProps = {
   projection: Projection;
-  /** Plan with lines, needed so the Today KPI can back out income / expense
-   *  that hasn't hit yet this month. */
-  plan: FinancePlanWithLines;
+  /** Confirmation-calibrated plan — drives the projection and the "today"
+   *  partial-month seed (its startMonth/initials match `projection`). The Today
+   *  KPI uses it to back out income / expense that hasn't hit yet this month. */
+  baseline: FinancePlanWithLines;
+  /** Real monthly snapshots for the chart's past (newest-last). */
+  history: PlanHistoryPoint[];
   /** Pre-computed projections for the three debt strategies — null when the
    *  plan has no debts (the comparison is meaningless). */
   comparison: StrategyComparison | null;
@@ -900,39 +918,6 @@ function computeTodaySnapshot(
   };
 }
 
-function computeProjectionWindow(
-  projection: Projection,
-  totalMonths: number
-): {
-  startIndex: number;
-  count: number;
-  pastCount: number;
-  todayIndex: number; // index in the SLICED window
-} {
-  // ~25% of the window is past, the rest is future.
-  const targetPast = Math.max(1, Math.round(totalMonths * 0.25));
-  // Projection dates are generated at UTC midnight. Comparing them against
-  // the user's LOCAL year/month would shift a month in negative-offset
-  // timezones (e.g. UTC-5 sees May 1 UTC as Apr 30 local) and the chart
-  // would treat plan-start = May as if today were Apr. Use UTC on both sides
-  // so the bucket comparison is stable.
-  const now = new Date();
-  const todayKey = now.getUTCFullYear() * 12 + now.getUTCMonth();
-  let projIdx = projection.months.findIndex(
-    (m) => m.date.getUTCFullYear() * 12 + m.date.getUTCMonth() === todayKey
-  );
-  if (projIdx === -1) projIdx = 0;
-  const pastCount = Math.min(targetPast, projIdx);
-  const startIndex = Math.max(0, projIdx - pastCount);
-  const count = Math.min(totalMonths, projection.months.length - startIndex);
-  return {
-    startIndex,
-    count,
-    pastCount,
-    todayIndex: pastCount, // boundary point in the slice
-  };
-}
-
 /**
  * Projection chart with a header that surfaces the headline number — how much
  * the net worth is expected to grow over the chosen horizon. Preset buttons
@@ -941,7 +926,8 @@ function computeProjectionWindow(
  */
 function ProjectionPanel({
   projection,
-  plan,
+  baseline,
+  history,
   comparison,
   currentStrategy,
   onChangeStrategy,
@@ -958,8 +944,13 @@ function ProjectionPanel({
   );
 
   // Window with the active horizon: ~25% past + 75% future. Edges shift when
-  // the plan started recently so we never look past data we don't have.
+  // the plan started recently so we never look past data we don't have. Used
+  // for the KPIs + the monthly-breakdown table (both are forecast views).
   const window = computeProjectionWindow(projection, horizonMonths);
+
+  // Chart series: real snapshots for the past, calibrated projection for the
+  // future. Falls back to the projection-only window when there's no history.
+  const chartSeries = buildChartSeries(history, projection, horizonMonths);
   const todayMonthIdx = window.startIndex + window.pastCount;
   const todayMonth = projection.months[todayMonthIdx];
   // "Next month" forecast — the month-end projection for the month right after
@@ -972,7 +963,10 @@ function ProjectionPanel({
   // value when they haven't actually hit yet (e.g. paycheque on day 30 when
   // today is day 25). Falls back to month-end when we're outside the
   // projection range.
-  const todaySnapshot = computeTodaySnapshot(plan, projection);
+  // Refine against the CALIBRATED baseline — its startMonth + initials match
+  // the projection we're refining, so month indexing and the month-0 seed line
+  // up with confirmed reality.
+  const todaySnapshot = computeTodaySnapshot(baseline, projection);
   const today = todaySnapshot?.netWorth ?? todayMonth?.netWorth ?? 0;
   const next = nextMonth?.netWorth;
   const future = futureMonth?.netWorth ?? today;
@@ -1083,10 +1077,9 @@ function ProjectionPanel({
       </CardHeader>
       <CardContent className="space-y-8">
         <ProjectionChart
-          projection={projection}
-          monthsToShow={window.count}
-          startIndex={window.startIndex}
-          pastCount={window.pastCount}
+          points={chartSeries.points}
+          pastCount={chartSeries.pastCount}
+          color={projection.plan.color}
         />
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Monthly breakdown</h3>

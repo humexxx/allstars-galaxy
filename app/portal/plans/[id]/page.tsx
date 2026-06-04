@@ -14,6 +14,10 @@ import {
   listInvestmentMethods,
   projectPlanWithPortfolio,
 } from "@/lib/services/finance-plan-service";
+import {
+  buildCalibratedPlan,
+  getRecentMonthlySnapshots,
+} from "@/lib/services/finance-snapshot-service";
 
 export const dynamic = "force-dynamic";
 
@@ -36,22 +40,36 @@ export default async function PlanDetailPage({ params }: PageProps) {
   const plan = await getPlanWithLines(id, ctx.effectiveUserId);
   if (!plan) notFound();
 
-  const [portfolioValue, autoInvestRate, investmentMethods] = await Promise.all([
-    plan.includePortfolio
-      ? getPortfolioValueForUser(ctx.effectiveUserId)
-      : Promise.resolve(0),
-    getAutoInvestRate(plan),
-    listInvestmentMethods({ includeDisabled: true }),
-  ]);
+  // Calibrate from the latest confirmation so the projection (and the chart's
+  // forward line) starts from the user's most recent real numbers instead of
+  // the original plan baseline. Returns the plan unchanged when there are no
+  // confirmations. The raw `plan` is still what the editor mutates.
+  const baseline = await buildCalibratedPlan(plan);
 
-  const projection = await projectPlanWithPortfolio(plan, ctx.effectiveUserId);
+  const [portfolioValue, autoInvestRate, investmentMethods, history] =
+    await Promise.all([
+      baseline.includePortfolio
+        ? getPortfolioValueForUser(ctx.effectiveUserId)
+        : Promise.resolve(0),
+      getAutoInvestRate(baseline),
+      listInvestmentMethods({ includeDisabled: true }),
+      // Real recorded history for the chart's past (today → backwards). 36
+      // months covers the largest horizon's ~25% past budget; empty for fresh
+      // plans, which fall back to the projected past.
+      getRecentMonthlySnapshots(plan.id, ctx.effectiveUserId, 36),
+    ]);
+
+  const projection = await projectPlanWithPortfolio(baseline, ctx.effectiveUserId);
   // Strategy comparison only meaningful when there's something to compare.
   const comparison =
-    plan.debts.length > 0
-      ? compareDebtStrategies(plan, plan.incomes, plan.expenses, plan.debts, {
-          portfolioValue,
-          autoInvestRate,
-        })
+    baseline.debts.length > 0
+      ? compareDebtStrategies(
+          baseline,
+          baseline.incomes,
+          baseline.expenses,
+          baseline.debts,
+          { portfolioValue, autoInvestRate }
+        )
       : null;
 
   return (
@@ -65,7 +83,9 @@ export default async function PlanDetailPage({ params }: PageProps) {
       </div>
       <PlanEditor
         plan={plan}
+        baseline={baseline}
         projection={projection}
+        history={history}
         comparison={comparison}
         investmentMethods={investmentMethods}
         title={plan.name}

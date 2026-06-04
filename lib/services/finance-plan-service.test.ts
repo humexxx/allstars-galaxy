@@ -607,6 +607,83 @@ describe("compareDebtStrategies", () => {
   });
 });
 
+describe("projectPlan — confirmation-day anchored periods", () => {
+  it("emits period start dates that match the confirmation-day anchor", () => {
+    // confirmationDayOfMonth=15 + startMonth=Jan 1 2026 means period 0
+    // contains Jan 1, which lives in the Dec 15 2025 → Jan 14 2026 period.
+    const plan = buildPlan({
+      startMonth: new Date(Date.UTC(2026, 0, 1)),
+      monthsAhead: 3,
+      confirmationDayOfMonth: 15,
+    });
+    const projection = projectPlan(plan, [], [], []);
+
+    expect(projection.months[0].date).toEqual(new Date(Date.UTC(2025, 11, 15)));
+    expect(projection.months[1].date).toEqual(new Date(Date.UTC(2026, 0, 15)));
+    expect(projection.months[2].date).toEqual(new Date(Date.UTC(2026, 1, 15)));
+  });
+
+  it("attributes a recurring income to the period that contains its hit date", () => {
+    // Anchor day 15 → periods run day-15 to day-14. Income hits day-1 of each
+    // calendar month, so each hit (Jan 1, Feb 1, Mar 1, ...) lands in the
+    // PREVIOUS period (Dec 15 → Jan 14, Jan 15 → Feb 14, Feb 15 → Mar 14).
+    const plan = buildPlan({
+      startMonth: new Date(Date.UTC(2026, 0, 1)),
+      monthsAhead: 4,
+      confirmationDayOfMonth: 15,
+    });
+    const income = buildIncome({
+      monthlyAmount: "1000",
+      dayOfMonth: 1,
+    });
+
+    const projection = projectPlan(plan, [income], [], []);
+
+    // Period 0 = Dec 15 2025 → Jan 14 2026 contains Jan 1's hit.
+    expect(projection.months[0].income).toBe(1000);
+    expect(projection.months[1].income).toBe(1000); // Feb 1
+    expect(projection.months[2].income).toBe(1000); // Mar 1
+    expect(projection.months[3].income).toBe(1000); // Apr 1
+  });
+
+  it("places a one-time income in the period that contains its date", () => {
+    // confirmationDayOfMonth=15 → period 1 = Feb 15 → Mar 14.
+    // A one-time income on Feb 20 must land in period 1, not period 0.
+    const plan = buildPlan({
+      startMonth: new Date(Date.UTC(2026, 1, 1)),
+      monthsAhead: 3,
+      confirmationDayOfMonth: 15,
+    });
+    const income = buildIncome({
+      monthlyAmount: "500",
+      kind: "one_time",
+      date: "2026-02-20",
+    });
+
+    const projection = projectPlan(plan, [income], [], []);
+
+    // Period 0 = Jan 15 → Feb 14 (no hit), Period 1 = Feb 15 → Mar 14 (hit).
+    expect(projection.months[0].income).toBe(0);
+    expect(projection.months[1].income).toBe(500);
+    expect(projection.months[2].income).toBe(0);
+  });
+
+  it("falls back to calendar months when confirmationDayOfMonth is 0", () => {
+    // Disabled (0) collapses to anchor-day=1 internally, which is identical
+    // to the calendar-month behaviour the engine had before periods.
+    const plan = buildPlan({
+      startMonth: new Date(Date.UTC(2026, 0, 1)),
+      monthsAhead: 3,
+      confirmationDayOfMonth: 0,
+    });
+    const projection = projectPlan(plan, [], [], []);
+
+    expect(projection.months[0].date).toEqual(new Date(Date.UTC(2026, 0, 1)));
+    expect(projection.months[1].date).toEqual(new Date(Date.UTC(2026, 1, 1)));
+    expect(projection.months[2].date).toEqual(new Date(Date.UTC(2026, 2, 1)));
+  });
+});
+
 // Sanity check that closeTo helper compiles when used.
 describe("internal helper", () => {
   it("compiles closeTo without runtime use", () => {

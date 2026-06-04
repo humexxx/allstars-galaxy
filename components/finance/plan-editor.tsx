@@ -3,7 +3,15 @@
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 
-import { ChevronDown, Clock, TrendingDown, Zap } from "lucide-react";
+import {
+  Camera,
+  ChevronDown,
+  ClipboardCheck,
+  Clock,
+  Star,
+  TrendingDown,
+  Zap,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,15 +22,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Heading, Text } from "@/components/ui/typography";
 
+import { useRegisterDevTool } from "@/components/dev-tools/dev-tools-context";
+import { runDailySnapshotsAction } from "@/app/actions/dev-tools";
+
+import { ConfirmationDialog } from "./confirmation-dialog";
 import { FinancialHealthDonut } from "./financial-health-donut";
 import { PlanCalendar } from "./plan-calendar";
 import { PlanLineEditor } from "./plan-line-editor";
@@ -50,13 +64,16 @@ import {
   deletePlanDebtAction,
   deletePlanExpenseAction,
   deletePlanIncomeAction,
+  setMainPlanAction,
   updatePlanAction,
   updatePlanDebtAction,
   updatePlanExpenseAction,
   updatePlanIncomeAction,
   upsertLineOverrideAction,
 } from "@/app/actions/finance-plans";
+import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
+import { periodRangeFor } from "@/lib/finance/period";
 import type {
   DebtStrategy,
   FinancePlanWithLines,
@@ -164,11 +181,82 @@ export function PlanEditor({
     balance: d.balance,
   }));
 
+  // Period anchoring: when the plan confirms on a day other than the 1st (or
+  // the disabled sentinel 0), the projection rows are custom accounting
+  // periods, not calendar months. Reflect that in the card wording and show
+  // the exact date window so the numbers aren't misread as a calendar month.
+  const anchorDay = plan.confirmationDayOfMonth;
+  const isPeriodMode = anchorDay > 1;
+  const periodRange = isPeriodMode
+    ? periodRangeFor(currentMonthDate, anchorDay)
+    : null;
+  const fmtPeriodDay = (d: Date): string =>
+    new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    }).format(d);
+  const periodLabel = periodRange
+    ? `${fmtPeriodDay(periodRange.start)} – ${fmtPeriodDay(periodRange.end)}`
+    : null;
+  const incomeLabel = isPeriodMode ? "Period income" : "Monthly income";
+  const expensesLabel = isPeriodMode ? "Period expenses" : "Living expenses";
+
+  // Label for the confirmation dialog header. Period mode shows the window
+  // (e.g. "Apr 5 – May 4"); calendar mode shows month + year.
+  const confirmDialogLabel =
+    periodLabel ??
+    new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(currentMonthDate);
+
   // Controlled tab value so the dropdown items (Setup / Settings) can drive
   // the same surface as the visible TabsTriggers (Overview / Calendar).
   const [tab, setTab] = useState<"overview" | "setup" | "calendar" | "settings">(
     "overview"
   );
+
+  // Dev-tools: force-open the monthly confirmation dialog from this plan,
+  // bypassing the date + dismiss gates so the whole confirm-and-update flow
+  // can be exercised on demand. The helper is built once via useState so it
+  // keeps a stable identity (useRegisterDevTool re-registers on identity
+  // change, which would loop with an inline object).
+  const [devConfirmOpen, setDevConfirmOpen] = useState(false);
+  const [forceConfirmationTool] = useState(() => ({
+    id: "finance:force-confirmation",
+    kind: "action" as const,
+    label: "Force confirmation dialog",
+    description:
+      "Open the monthly confirmation + balance-update dialog now, ignoring the confirmation day and the per-day dismiss.",
+    section: "Finance",
+    icon: ClipboardCheck,
+    onRun: () => setDevConfirmOpen(true),
+  }));
+  useRegisterDevTool(forceConfirmationTool);
+
+  // Dev-tools: run the daily snapshot job (finance + portfolio) on demand so
+  // snapshot creation can be verified without waiting for the midnight cron.
+  // Admin-gated server-side. Built once for a stable identity.
+  const [runSnapshotsTool] = useState(() => ({
+    id: "finance:run-daily-snapshots",
+    kind: "action" as const,
+    label: "Run daily snapshot now",
+    description:
+      "Trigger the daily finance + portfolio snapshot job (the midnight cron) on demand. Admin only.",
+    section: "Finance",
+    icon: Camera,
+    onRun: async () => {
+      const res = await runDailySnapshotsAction();
+      if (res.success) {
+        toast.success(`Snapshots run — ${res.message ?? "done"}`);
+      } else {
+        toast.error(res.error);
+      }
+    },
+  }));
+  useRegisterDevTool(runSnapshotsTool);
   // Label shown on the More dropdown — surfaces the current sub-section when
   // one is active so users always see where they are.
   const moreLabel =
@@ -183,15 +271,36 @@ export function PlanEditor({
           baseline, regardless of the gauge's larger height. */}
       <div className="flex flex-wrap items-end justify-between gap-6">
         {/* space-y-7 between the title block and the tabs gives the tabs
-            visual room to breathe and matches the original PageHeader gap. */}
-        <div className="space-y-7">
-          <div className="space-y-1">
-            {/* Match the original PageHeader's title size: text-2xl + bold.
-                Heading "h3" is the closest variant; override semibold→bold. */}
-            <Heading level="h3" className="font-bold">
-              {title}
-            </Heading>
-            <Text variant="muted">{description}</Text>
+            visual room to breathe and matches the original PageHeader gap. On
+            mobile this column fills the row so the compact gauge can pin to the
+            title's top-right; on desktop it shrinks back and the full gauge
+            anchors the far-right column (below). */}
+        <div className="min-w-0 flex-1 space-y-7 sm:flex-none">
+          {/* Title row: text on the left; on mobile the compact gauge sits in
+              the top-right corner to reclaim the vertical space its own row
+              used to eat. Hidden from `sm` up, where the full gauge takes over. */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              {/* Match the original PageHeader's title size: text-2xl + bold.
+                  Heading "h3" is the closest variant; override semibold→bold. */}
+              <Heading level="h3" className="font-bold">
+                {title}
+              </Heading>
+              <Text variant="muted">{description}</Text>
+              {periodLabel && (
+                <Text variant="muted" className="font-mono text-xs">
+                  Current period · {periodLabel}
+                </Text>
+              )}
+            </div>
+            <div className="shrink-0 sm:hidden">
+              <FinancialHealthDonut
+                obligations={fixedOutflow}
+                income={income}
+                size={96}
+                showFooter={false}
+              />
+            </div>
           </div>
           {/* Primary tabs (Overview / Calendar) sit in the TabsList; Setup
               and Settings — used less often and more "admin"-flavoured —
@@ -223,13 +332,28 @@ export function PlanEditor({
             </DropdownMenu>
           </div>
         </div>
-        <FinancialHealthDonut obligations={fixedOutflow} income={income} />
+        {/* Desktop gauge: keeps the original right-column position, bottom-
+            aligned with the tabs. Hidden on mobile, where the compact gauge
+            above takes its place. */}
+        <div className="hidden sm:block">
+          <FinancialHealthDonut obligations={fixedOutflow} income={income} />
+        </div>
       </div>
 
       <TabsContent value="overview" className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Mobile: a single horizontal-scroll rail where each card is ~44% wide
+            so a quarter of the third card peeks in to signal there's more to
+            scroll. The scrollbar is hidden and scroll snaps card-to-card. From
+            `sm` up it falls back to the regular 2- then 4-column grid.
+            `overflow-x-auto` also clips the cross axis, so `py-1` keeps the
+            cards' ring + shadow from being shaved top/bottom. NO horizontal
+            margin/padding: a negative `-mx-1` shifted the first card 4px left
+            of the title and the projection card below it; the 1px faint ring
+            on the scroll edges is not worth the misalignment. */}
+        <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto py-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:py-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
           <SummaryCard
-            label="Monthly income"
+            className="w-[44%] shrink-0 snap-start sm:w-auto"
+            label={incomeLabel}
             value={income}
             tone="positive"
             sublabel="From all active sources"
@@ -245,7 +369,8 @@ export function PlanEditor({
             }
           />
           <SummaryCard
-            label="Living expenses"
+            className="w-[44%] shrink-0 snap-start sm:w-auto"
+            label={expensesLabel}
             value={fixedOutflow}
             sublabel="Includes debt minimums"
             breakdown={
@@ -272,6 +397,7 @@ export function PlanEditor({
             }
           />
           <SummaryCard
+            className="w-[44%] shrink-0 snap-start sm:w-auto"
             label="Total debt"
             value={totalDebt}
             tone={totalDebt > 0 ? "negative" : undefined}
@@ -294,6 +420,7 @@ export function PlanEditor({
             }
           />
           <SummaryCard
+            className="w-[44%] shrink-0 snap-start sm:w-auto"
             label="Surplus"
             value={surplus}
             tone={surplus >= 0 ? "positive" : "negative"}
@@ -442,10 +569,90 @@ export function PlanEditor({
         />
       </TabsContent>
 
-      <TabsContent value="settings">
+      <TabsContent value="settings" className="space-y-4">
+        <MainPlanToggle plan={plan} wrap={wrap} />
         <PlanForm plan={plan} investmentMethods={investmentMethods} />
       </TabsContent>
+
+      {/* Dev-only: force-openable confirmation dialog (see the dev drawer's
+          Finance section). Saving it writes a real confirmation and
+          recalibrates the projection, exactly like the dashboard prompt. */}
+      <ConfirmationDialog
+        open={devConfirmOpen}
+        onOpenChange={setDevConfirmOpen}
+        planId={plan.id}
+        planName={plan.name}
+        monthLabel={confirmDialogLabel}
+        projected={{
+          savings: today?.savings ?? 0,
+          investments: today?.investments ?? 0,
+          debts: (today?.debts ?? []).map((d) => ({
+            debtId: d.debtId,
+            name: d.name,
+            balance: d.balance,
+          })),
+        }}
+        debts={plan.debts}
+      />
     </Tabs>
+  );
+}
+
+/**
+ * Banner card in the Settings tab that surfaces whether THIS plan is the
+ * user's main plan, and offers a one-click promotion when it isn't. The
+ * `wrap` helper threads through PlanEditor's startTransition so the toast +
+ * router.refresh stays consistent with every other server-action button.
+ */
+function MainPlanToggle({
+  plan,
+  wrap,
+}: {
+  plan: FinancePlanWithLines;
+  wrap: <T,>(
+    fn: () => Promise<{ success: boolean; error?: string } & T>
+  ) => Promise<void>;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+        <div className="flex items-center gap-3">
+          <Star
+            className={`h-5 w-5 shrink-0 ${
+              plan.isMain
+                ? "fill-yellow-400 text-yellow-500"
+                : "text-muted-foreground"
+            }`}
+          />
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">
+              {plan.isMain ? "Main plan" : "Set as main plan"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {plan.isMain
+                ? "This is the plan the dashboard follows and the only one that fires the monthly confirmation prompt."
+                : "Make this the plan the dashboard follows. The current main plan will lose the flag."}
+            </p>
+          </div>
+        </div>
+        {!plan.isMain && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              wrap(async () => {
+                const result = await setMainPlanAction(plan.id);
+                if (result.success) toast.success(`${plan.name} is now your main plan`);
+                return result;
+              })
+            }
+          >
+            Make main
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -773,8 +980,12 @@ function ProjectionPanel({
   return (
     <Card>
       <CardHeader className="space-y-4 pb-2">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+        {/* Title left, strategy picker pinned top-right. `items-start` +
+            no-wrap keeps the badge in the corner on mobile (the title block
+            shrinks via `min-w-0` and its description wraps) instead of the
+            badge dropping to its own full-width row below. */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
             <CardTitle>Projection</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
               Solid line is past, dashed is forecast
@@ -800,7 +1011,7 @@ function ProjectionPanel({
               Today {todayMonth ? `(${FORMATTER.format(todayMonth.date)})` : ""}
             </p>
             <p
-              className={`text-lg font-semibold ${
+              className={`text-base font-semibold sm:text-lg ${
                 today >= 0 ? "text-green-600" : "text-red-600"
               }`}
             >
@@ -813,7 +1024,7 @@ function ProjectionPanel({
                 Next month ({FORMATTER.format(nextMonth.date)})
               </p>
               <p
-                className={`text-lg font-semibold ${
+                className={`text-base font-semibold sm:text-lg ${
                   next >= 0 ? "text-green-600" : "text-red-600"
                 }`}
               >
@@ -827,7 +1038,7 @@ function ProjectionPanel({
               {futureMonth ? `(${FORMATTER.format(futureMonth.date)})` : ""}
             </p>
             <p
-              className={`text-lg font-semibold ${
+              className={`text-base font-semibold sm:text-lg ${
                 future >= 0 ? "text-green-600" : "text-red-600"
               }`}
             >
@@ -905,7 +1116,7 @@ function StrategyBadge({
       type="button"
       onClick={onToggle}
       aria-expanded={open}
-      className="flex items-start gap-2 rounded-md border bg-muted/20 px-3 py-2 text-left transition hover:bg-muted/40"
+      className="flex shrink-0 items-start gap-2 rounded-md border bg-muted/20 px-3 py-2 text-left transition hover:bg-muted/40"
     >
       <Zap className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
       <div className="space-y-0.5">
@@ -916,7 +1127,10 @@ function StrategyBadge({
           {STRATEGY_LABEL[currentStrategy]}
         </div>
         {saves > 0 && (
-          <div className="flex items-center gap-1 text-[11px] text-green-700 dark:text-green-300">
+          // Hidden on mobile so the badge stays narrow enough to pin top-right
+          // next to the title without crushing the description. The savings
+          // figure still shows on desktop and inside the expanded picker.
+          <div className="hidden items-center gap-1 text-[11px] text-green-700 sm:flex dark:text-green-300">
             <TrendingDown className="h-3 w-3" />
             saves {formatCurrency(saves)} vs. worst
           </div>
@@ -1026,12 +1240,16 @@ function SummaryCard({
   tone,
   sublabel,
   breakdown,
+  className,
 }: {
   label: string;
   value: number | string;
   tone?: "positive" | "negative";
   sublabel?: React.ReactNode;
   breakdown?: React.ReactNode;
+  /** Extra classes for the card root — used to size cards inside the mobile
+   *  horizontal-scroll rail (peek of the next card) vs the desktop grid. */
+  className?: string;
 }) {
   const display =
     typeof value === "number" ? formatCurrency(value) : value;
@@ -1044,17 +1262,26 @@ function SummaryCard({
 
   const card = (
     <Card
-      className={breakdown ? "cursor-help transition hover:border-foreground/30" : undefined}
+      size="sm"
+      className={cn(
+        breakdown &&
+          "cursor-pointer text-left transition hover:border-foreground/30 focus-visible:border-foreground/40 focus-visible:outline-none",
+        className
+      )}
     >
-      <CardHeader className="pb-2">
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <CardHeader className="pb-1">
+        <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground lg:text-xs">
           {label}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-1">
-        <p className={`text-2xl font-semibold ${colorClass}`}>{display}</p>
+      <CardContent className="space-y-0.5">
+        <p className={`text-lg font-semibold sm:text-xl lg:text-2xl ${colorClass}`}>
+          {display}
+        </p>
         {sublabel && (
-          <div className="text-xs text-muted-foreground">{sublabel}</div>
+          <div className="line-clamp-2 text-[11px] text-muted-foreground lg:line-clamp-none lg:text-xs">
+            {sublabel}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -1063,16 +1290,17 @@ function SummaryCard({
   if (!breakdown) return card;
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{card}</TooltipTrigger>
-      {/* Use shadcn's default TooltipContent styling (inverted bg-foreground /
-          text-background "chip"). We only widen it and bump padding — colors
-          stay native so this reads as the same primitive used everywhere
-          else in the app. */}
-      <TooltipContent side="bottom" align="start" className="max-w-sm p-3">
-        {breakdown}
-      </TooltipContent>
-    </Tooltip>
+    <Sheet>
+      <SheetTrigger asChild aria-label={`Show ${label} breakdown`}>
+        {card}
+      </SheetTrigger>
+      <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>{label}</SheetTitle>
+        </SheetHeader>
+        <div className="px-4 pb-6">{breakdown}</div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -1095,22 +1323,19 @@ function BreakdownList({
   const sections: BreakdownGroup[] = groups ?? [{ items: items ?? [] }];
   const hasAny = sections.some((g) => g.items.length > 0);
   if (!hasAny) {
-    // Inside the shadcn tooltip we're on bg-foreground / text-background, so
-    // standard muted-foreground would be near-invisible. text-background/70
-    // gives the same "muted" feel against either light or dark tooltip bg.
-    return <p className="text-xs text-background/70">{emptyLabel}</p>;
+    return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
   }
   return (
-    <div className="space-y-2 text-xs">
+    <div className="space-y-3 text-sm">
       {sections.map((section, gi) =>
         section.items.length === 0 ? null : (
-          <div key={gi} className="space-y-1">
+          <div key={gi} className="space-y-1.5">
             {section.heading && (
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-background/60">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {section.heading}
               </div>
             )}
-            <ul className="space-y-1">
+            <ul className="space-y-1.5">
               {section.items.map((item, idx) => (
                 <li
                   key={`${item.name}-${idx}`}
@@ -1119,7 +1344,7 @@ function BreakdownList({
                   <span className="truncate">
                     {item.name}
                     {item.hint && (
-                      <span className="ml-1 text-background/70">· {item.hint}</span>
+                      <span className="ml-1 text-muted-foreground">· {item.hint}</span>
                     )}
                   </span>
                   <span className="font-mono tabular-nums">
@@ -1131,7 +1356,7 @@ function BreakdownList({
           </div>
         )
       )}
-      <div className="flex items-baseline justify-between gap-4 border-t border-background/20 pt-1.5 font-semibold">
+      <div className="flex items-baseline justify-between gap-4 border-t pt-2 font-semibold">
         <span>Total</span>
         <span className="font-mono tabular-nums">{formatCurrency(total)}</span>
       </div>
@@ -1171,19 +1396,19 @@ function SurplusBreakdown({
     { label: "Debt minimums", value: formatCurrency(minDebtPayments), op: "−" },
   ];
   return (
-    <div className="space-y-2 text-xs">
-      <ul className="space-y-1">
+    <div className="space-y-3 text-sm">
+      <ul className="space-y-1.5">
         {rows.map((r) => (
           <li key={r.label} className="flex items-baseline justify-between gap-4">
             <span>
-              {r.op && <span className="mr-1 text-background/70">{r.op}</span>}
+              {r.op && <span className="mr-1 text-muted-foreground">{r.op}</span>}
               {r.label}
             </span>
             <span className="font-mono tabular-nums">{r.value}</span>
           </li>
         ))}
       </ul>
-      <div className="flex items-baseline justify-between gap-4 border-t border-background/20 pt-1.5 font-semibold">
+      <div className="flex items-baseline justify-between gap-4 border-t pt-2 font-semibold">
         <span>= Surplus</span>
         <span
           className={`font-mono tabular-nums ${
@@ -1194,7 +1419,7 @@ function SurplusBreakdown({
         </span>
       </div>
       {surplus > 0 && (
-        <ul className="space-y-1 border-t border-background/20 pt-2 text-background/70">
+        <ul className="space-y-1.5 border-t pt-2 text-muted-foreground">
           <li className="flex items-baseline justify-between gap-4">
             <span>→ Extra debt</span>
             <span className="font-mono tabular-nums">{formatCurrency(toExtraDebt)}</span>

@@ -215,7 +215,7 @@ ALTER TABLE "users" ADD COLUMN "new_field" text;
 Run the migration to update your database:
 
 ```bash
-npm run db:migrate
+pnpm db:migrate
 ```
 
 This applies all pending migrations to your database.
@@ -225,7 +225,7 @@ This applies all pending migrations to your database.
 Open Drizzle Studio to verify:
 
 ```bash
-npm run db:studio
+pnpm db:studio
 ```
 
 Navigate to `http://localhost:4983` and check:
@@ -292,7 +292,7 @@ If you get a drift warning:
 
 ```bash
 # Reset and regenerate (DEVELOPMENT ONLY)
-npm run db:generate
+pnpm db:generate
 ```
 
 ### Migration Fails

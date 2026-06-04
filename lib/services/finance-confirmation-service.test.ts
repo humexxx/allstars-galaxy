@@ -247,12 +247,11 @@ describe("getConfirmationStatus", () => {
     expect(getProjectedStateForMonthMock).not.toHaveBeenCalled();
   });
 
-  it("flags isDue=true when day-of-month is reached and no confirmation exists", async () => {
+  it("flags isDue=true on the configured day when no confirmation exists yet", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date(Date.UTC(2026, 4, 5))); // May 5, day=5
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 1)));
     const plan = buildPlan({ confirmationDayOfMonth: 1 });
 
-    // Existing confirmation lookup → empty array.
     const chain = makeSelectChain([]);
     selectImpl.mockReturnValueOnce(chain);
 
@@ -263,6 +262,39 @@ describe("getConfirmationStatus", () => {
     expect(status.monthAnchor).toBe("2026-05-01");
     expect(status.projectedState).not.toBeNull();
     expect(getProjectedStateForMonthMock).toHaveBeenCalledOnce();
+  });
+
+  it("keeps firing on days AFTER the configured day until a confirmation exists", async () => {
+    // The `>=` semantics: from the configured day through month-end, the
+    // prompt keeps asking until the user actually fills it in. The per-day
+    // localStorage dismiss key in confirmation-prompt.tsx is what suppresses
+    // re-shows within a single calendar day.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 5))); // May 5, day 4 past anchor
+    const plan = buildPlan({ confirmationDayOfMonth: 1 });
+
+    const chain = makeSelectChain([]);
+    selectImpl.mockReturnValueOnce(chain);
+
+    const status = await getConfirmationStatus(plan, USER_ID);
+
+    expect(status.isDue).toBe(true);
+  });
+
+  it("clamps to the last day of the month when the configured day exceeds it", async () => {
+    // confirmationDayOfMonth=31, February only has 28/29 days. The strict
+    // check would never fire — but the clamp treats day-of-month >
+    // lastDayOfMonth as "the last day".
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 1, 28))); // Feb 28 2026 (last day, non-leap)
+    const plan = buildPlan({ confirmationDayOfMonth: 31 });
+
+    const chain = makeSelectChain([]);
+    selectImpl.mockReturnValueOnce(chain);
+
+    const status = await getConfirmationStatus(plan, USER_ID);
+
+    expect(status.isDue).toBe(true);
   });
 
   it("returns isDue=false when the user already confirmed this month", async () => {
@@ -282,7 +314,10 @@ describe("getConfirmationStatus", () => {
     expect(status.monthAnchor).toBe("2026-05-01");
   });
 
-  it("returns isDue=false before the configured day-of-month is reached", async () => {
+  it("buckets May 10 (day=25 anchor) into the PREVIOUS period anchor", async () => {
+    // Period semantics: with anchor day 25, May 10 belongs to the period
+    // Apr 25 → May 24. The dialog should still prompt (period reached),
+    // and the bucket key is the period's anchor (Apr 25).
     vi.useFakeTimers();
     vi.setSystemTime(new Date(Date.UTC(2026, 4, 10))); // May 10
     const plan = buildPlan({ confirmationDayOfMonth: 25 });
@@ -292,15 +327,17 @@ describe("getConfirmationStatus", () => {
 
     const status = await getConfirmationStatus(plan, USER_ID);
 
-    expect(status.isDue).toBe(false);
-    expect(status.existingConfirmation).toBeNull();
+    expect(status.monthAnchor).toBe("2026-04-25");
+    expect(status.isDue).toBe(true);
   });
 
   it("respects the explicit `today` parameter over the system clock", async () => {
     // System clock is far in the future; the explicit `today` must win.
+    // With anchor day 15 and today=Mar 15 2026, the period anchor is Mar 15
+    // (today is exactly on the anchor — current period starts today).
     vi.useFakeTimers();
     vi.setSystemTime(new Date(Date.UTC(2099, 0, 1)));
-    const plan = buildPlan({ confirmationDayOfMonth: 1 });
+    const plan = buildPlan({ confirmationDayOfMonth: 15 });
 
     const chain = makeSelectChain([]);
     selectImpl.mockReturnValueOnce(chain);
@@ -311,7 +348,7 @@ describe("getConfirmationStatus", () => {
       new Date(Date.UTC(2026, 2, 15))
     );
 
-    expect(status.monthAnchor).toBe("2026-03-01");
+    expect(status.monthAnchor).toBe("2026-03-15");
     expect(status.isDue).toBe(true);
   });
 });

@@ -1,11 +1,11 @@
 {
   "name": "allstars-galaxy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "npm@11.12.1",
+  "packageManager": "pnpm@11.0.4",
   "scripts": {
     "dev": "next dev --port 3010",
     "build": "next build",
@@ -86,5 +86,13 @@
     "brace-expansion": "^1.1.13",
     "@esbuild-kit/esm-loader": "npm:tsx@^4.22.0",
     "@esbuild-kit/core-utils": "npm:tsx@^4.22.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "^8.5.10",
+      "brace-expansion": "^1.1.13",
+      "@esbuild-kit/esm-loader": "npm:tsx@^4.22.0",
+      "@esbuild-kit/core-utils": "npm:tsx@^4.22.0"
+    }
   }
 }

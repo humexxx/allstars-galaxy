@@ -30,7 +30,7 @@ Per-module reference docs live in [`docs/modules/`](docs/modules/).
 | [`docs/TYPOGRAPHY.md`](docs/TYPOGRAPHY.md) | Font system + UI typography primitives (required for UI work) |
 | [`/app/actions/AGENTS.md`](app/actions/AGENTS.md) | Server-action patterns (the *how*) |
 | [`/lib/services/AGENTS.md`](lib/services/AGENTS.md) | Service-layer patterns (the *how*) |
-| [`.github/skills/`](.github/skills/) | Reusable playbooks: DB migration, service creation, server action creation |
+| [`.github/skills/`](.github/skills/) | Reusable playbooks: DB migration, service creation, server action creation, responsive UI |
 
 Each segment owns its scope. Linking between docs is preferred over
 duplicating content. When you make a change, edit **only** the segment that
@@ -40,18 +40,18 @@ exact change-to-doc map.
 ## Commands
 
 ```bash
-npm run dev            # Start dev server (http://localhost:3010)
-npm run build          # Production build
-npm run lint           # ESLint
-npm run test           # Vitest — unit + integration (mocked DB)
-npm run test:watch     # Vitest watch mode
-npm run test:coverage  # Vitest with v8 coverage report
-npm run test:e2e       # Playwright — needs .env.test + running dev server
-npm run test:e2e:ui    # Playwright UI mode
-npm run db:generate    # Generate migration from schema changes
-npm run db:migrate     # Apply pending migrations
-npm run db:studio      # Drizzle Studio (http://localhost:4983)
-npm run db:seed        # Seed database
+pnpm dev            # Start dev server (http://localhost:3010)
+pnpm build          # Production build
+pnpm lint           # ESLint
+pnpm test           # Vitest — unit + integration (mocked DB)
+pnpm test:watch     # Vitest watch mode
+pnpm test:coverage  # Vitest with v8 coverage report
+pnpm test:e2e       # Playwright — needs .env.test + running dev server
+pnpm test:e2e:ui    # Playwright UI mode
+pnpm db:generate    # Generate migration from schema changes
+pnpm db:migrate     # Apply pending migrations
+pnpm db:studio      # Drizzle Studio (http://localhost:4983)
+pnpm db:seed        # Seed database
 ```
 
 ### Testing
@@ -72,7 +72,7 @@ npm run db:seed        # Seed database
   your spec needs in `test.beforeEach`/`afterAll`.
 - Specs run with `workers: 1` because they share one Supabase user; parallel
   runs would race on shared tables.
-- Coverage: `npm run test:coverage` (powered by `@vitest/coverage-v8`). The
+- Coverage: `pnpm test:coverage` (powered by `@vitest/coverage-v8`). The
   service + action layers sit above 80% statements / 85% lines as of the last
   audit.
 
@@ -131,8 +131,8 @@ All code, comments, and documentation in **English**.
 
 ### Database Changes
 1. Edit `db/schema.ts`
-2. `npm run db:generate`
-3. `npm run db:migrate` (see "Running migrations" below for caveats)
+2. `pnpm db:generate`
+3. `pnpm db:migrate` (see "Running migrations" below for caveats)
 4. Commit schema + migrations together
 
 ### Running migrations
@@ -141,7 +141,7 @@ runtime uses `DATABASE_URL` (transaction pooler, port 6543). Both URLs differ
 **only in the port number**. See `.env.example`.
 
 **Before running migrations that change column types or add foreign keys, stop
-the dev server.** Active queries from `npm run dev` take `AccessShareLock` on
+the dev server.** Active queries from `pnpm dev` take `AccessShareLock` on
 tables and block `ALTER COLUMN SET DATA TYPE` (which needs `AccessExclusiveLock`).
 Symptom: `drizzle-kit migrate` appears to hang on a spinner — it is actually
 waiting on a lock with no timeout. Index-only migrations (`CREATE INDEX
@@ -247,7 +247,7 @@ CRON_SECRET
 
 ### Adding UI Components
 ```bash
-npx shadcn@latest add [component]
+pnpm dlx shadcn@latest add [component]
 ```
 
 ### Closing any task (checklist)

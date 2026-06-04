@@ -10,16 +10,22 @@ import { Slot } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
+// Responsive, mobile-first scale: the base class is the MOBILE size, `sm:`
+// (≥640px, where the portal switches to its multi-column layouts) restores the
+// desktop size. Each level drops exactly one step on mobile so dense phone
+// screens don't feel oversized. Desktop sizes are unchanged from before. Keep
+// the docs/TYPOGRAPHY.md scale table in sync with these classes.
 const headingVariants = cva("text-foreground text-balance", {
   variants: {
     level: {
-      display: "text-5xl font-extrabold tracking-tight lg:text-6xl",
-      h1: "text-4xl font-extrabold tracking-tight",
-      h2: "text-3xl font-semibold tracking-tight",
-      h3: "text-2xl font-semibold tracking-tight",
-      h4: "text-xl font-semibold tracking-tight",
-      h5: "text-lg font-semibold tracking-tight",
-      h6: "text-base font-semibold tracking-tight",
+      display:
+        "text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl",
+      h1: "text-3xl font-extrabold tracking-tight sm:text-4xl",
+      h2: "text-2xl font-semibold tracking-tight sm:text-3xl",
+      h3: "text-xl font-semibold tracking-tight sm:text-2xl",
+      h4: "text-lg font-semibold tracking-tight sm:text-xl",
+      h5: "text-base font-semibold tracking-tight sm:text-lg",
+      h6: "text-sm font-semibold tracking-tight sm:text-base",
     },
   },
   defaultVariants: {

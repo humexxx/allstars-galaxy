@@ -161,6 +161,14 @@ body {
     text-rendering: optimizeLegibility;
   }
 
+  /* Kill the document-level overscroll bounce / rubber-band (and pull-to-
+     refresh / scroll-chaining) on the app shell. Inner scroll containers keep
+     their own behaviour — e.g. the combobox uses `overscroll-contain`. */
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+
   /* Tabular numerals for numeric/data-heavy surfaces. Opt-in via the
      `.tabular-nums` class or the `font-mono` utility. */
   .tabular-nums,

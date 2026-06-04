@@ -24,24 +24,24 @@ Built with **Next.js 16 (App Router)**, **React 19** (Server Components),
 git clone https://github.com/humexxx/allstars-galaxy.git
 cd allstars-galaxy
 cp .env.example .env   # fill in Supabase URL, keys, and DATABASE_URL / DIRECT_URL
-npm install            # also wires the husky commit-msg hook
-npm run db:migrate     # apply migrations against your DB
-npm run dev            # http://localhost:3010
+pnpm install           # also wires the husky commit-msg hook
+pnpm db:migrate        # apply migrations against your DB
+pnpm dev               # http://localhost:3010
 ```
 
-Requires **Node 22+** and **npm 11+**.
+Requires **Node 22+** and **pnpm 11+**.
 
 ## Scripts
 
 ```bash
-npm run dev          # dev server (http://localhost:3010)
-npm run build        # production build
-npm run start        # production server
-npm run lint         # ESLint
-npm run db:generate  # generate Drizzle migration from db/schema.ts
-npm run db:migrate   # apply pending migrations (stop dev server first for type changes)
-npm run db:studio    # Drizzle Studio (http://localhost:4983)
-npm run db:seed      # seed the database
+pnpm dev          # dev server (http://localhost:3010)
+pnpm build        # production build
+pnpm start        # production server
+pnpm lint         # ESLint
+pnpm db:generate  # generate Drizzle migration from db/schema.ts
+pnpm db:migrate   # apply pending migrations (stop dev server first for type changes)
+pnpm db:studio    # Drizzle Studio (http://localhost:4983)
+pnpm db:seed      # seed the database
 ```
 
 ## Environment

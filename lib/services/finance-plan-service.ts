@@ -36,18 +36,21 @@ import type {
   UpdatePlanIncomeInput,
 } from "@/schemas/finance";
 
+import {
+  type Period,
+  isDateInPeriod,
+  iteratePeriods,
+  periodLengthDays,
+} from "@/lib/finance/period";
+
 import { getUserPortfolio, getPortfolioStats } from "./portfolio-service";
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 // ---------- helpers ----------
 
 function num(value: string | number): number {
   return typeof value === "number" ? value : parseFloat(value || "0");
-}
-
-function addMonthsUtc(date: Date, months: number): Date {
-  const d = new Date(date);
-  d.setUTCMonth(d.getUTCMonth() + months);
-  return d;
 }
 
 // Year-month integer (e.g. 2026-03 → 24315). Lets us compare months without
@@ -148,27 +151,40 @@ export async function createPlan(
   userId: string,
   data: CreateFinancePlanInput
 ): Promise<FinancePlan> {
-  const [plan] = await db
-    .insert(financePlans)
-    .values({
-      userId,
-      name: data.name,
-      description: data.description ?? null,
-      startMonth: data.startMonth,
-      monthsAhead: data.monthsAhead,
-      initialSavings: data.initialSavings,
-      monthlySavingsRate: data.monthlySavingsRate,
-      includePortfolio: data.includePortfolio,
-      surplusToDebtsPercent: data.surplusToDebtsPercent,
-      debtStrategy: data.debtStrategy,
-      autoInvestPercent: data.autoInvestPercent,
-      autoInvestMethodId: data.autoInvestMethodId ?? null,
-      initialInvestments: data.initialInvestments,
-      confirmationDayOfMonth: data.confirmationDayOfMonth,
-      color: data.color,
-    })
-    .returning();
-  return plan;
+  return db.transaction(async (tx) => {
+    // Auto-set as main when the user has no plans yet. Keeps the
+    // confirmation host / dashboard finance card pointed at something
+    // useful from the very first plan onwards.
+    const [existing] = await tx
+      .select({ id: financePlans.id })
+      .from(financePlans)
+      .where(eq(financePlans.userId, userId))
+      .limit(1);
+    const shouldBeMain = !existing;
+
+    const [plan] = await tx
+      .insert(financePlans)
+      .values({
+        userId,
+        name: data.name,
+        description: data.description ?? null,
+        startMonth: data.startMonth,
+        monthsAhead: data.monthsAhead,
+        initialSavings: data.initialSavings,
+        monthlySavingsRate: data.monthlySavingsRate,
+        includePortfolio: data.includePortfolio,
+        surplusToDebtsPercent: data.surplusToDebtsPercent,
+        debtStrategy: data.debtStrategy,
+        autoInvestPercent: data.autoInvestPercent,
+        autoInvestMethodId: data.autoInvestMethodId ?? null,
+        initialInvestments: data.initialInvestments,
+        confirmationDayOfMonth: data.confirmationDayOfMonth,
+        color: data.color,
+        isMain: shouldBeMain,
+      })
+      .returning();
+    return plan;
+  });
 }
 
 export async function updatePlan(
@@ -202,7 +218,68 @@ export async function updatePlan(
 
 export async function deletePlan(userId: string, planId: string): Promise<void> {
   await ensureOwnership(planId, userId);
-  await db.delete(financePlans).where(eq(financePlans.id, planId));
+  await db.transaction(async (tx) => {
+    // Was this the main plan? If so, after deletion we need to promote
+    // another plan to keep the user with a main (so the confirmation host
+    // and dashboard finance card still have a target).
+    const [target] = await tx
+      .select({ isMain: financePlans.isMain })
+      .from(financePlans)
+      .where(eq(financePlans.id, planId));
+
+    await tx.delete(financePlans).where(eq(financePlans.id, planId));
+
+    if (target?.isMain) {
+      const [nextOldest] = await tx
+        .select({ id: financePlans.id })
+        .from(financePlans)
+        .where(eq(financePlans.userId, userId))
+        .orderBy(asc(financePlans.createdAt))
+        .limit(1);
+      if (nextOldest) {
+        await tx
+          .update(financePlans)
+          .set({ isMain: true })
+          .where(eq(financePlans.id, nextOldest.id));
+      }
+    }
+  });
+}
+
+/**
+ * Atomically marks `planId` as the user's main plan and clears the flag on
+ * every other plan they own. Enforced at the DB level by the partial unique
+ * index, but the transaction makes the swap race-free.
+ */
+export async function setMainPlan(
+  userId: string,
+  planId: string
+): Promise<void> {
+  await ensureOwnership(planId, userId);
+  await db.transaction(async (tx) => {
+    // Clear the flag on every other plan first so the partial unique index
+    // doesn't fire when we try to set the new one.
+    await tx
+      .update(financePlans)
+      .set({ isMain: false })
+      .where(
+        and(eq(financePlans.userId, userId), eq(financePlans.isMain, true))
+      );
+    await tx
+      .update(financePlans)
+      .set({ isMain: true })
+      .where(eq(financePlans.id, planId));
+  });
+}
+
+/** Returns the user's main plan, or null if none has been marked. */
+export async function getMainPlan(userId: string): Promise<FinancePlan | null> {
+  const [plan] = await db
+    .select()
+    .from(financePlans)
+    .where(and(eq(financePlans.userId, userId), eq(financePlans.isMain, true)))
+    .limit(1);
+  return plan ?? null;
 }
 
 export async function clonePlan(
@@ -698,6 +775,40 @@ function dateWithinWindow(
   return true;
 }
 
+// Calendar months that overlap the given period (1 or 2 entries: a period
+// either lives entirely in one month or straddles a single month boundary).
+function monthsTouchedByPeriod(
+  period: Period
+): { year: number; monthIdx: number; monthKey: number }[] {
+  const startY = period.start.getUTCFullYear();
+  const startM = period.start.getUTCMonth();
+  const endY = period.end.getUTCFullYear();
+  const endM = period.end.getUTCMonth();
+  const first = {
+    year: startY,
+    monthIdx: startM,
+    monthKey: yearMonthKey(startY, startM),
+  };
+  if (startY === endY && startM === endM) {
+    return [first];
+  }
+  return [
+    first,
+    {
+      year: endY,
+      monthIdx: endM,
+      monthKey: yearMonthKey(endY, endM),
+    },
+  ];
+}
+
+// 1-indexed day within the period (1 = period.start, daysInPeriod = period.end).
+function dayInPeriodFor(date: Date, period: Period): number {
+  return (
+    Math.round((date.getTime() - period.start.getTime()) / MS_PER_DAY) + 1
+  );
+}
+
 // True if a recurring entry contributes to this month. monthly_day and
 // monthly_weekday differ only in WHICH day inside the month — both contribute
 // every month at the projection level. every_n_months contributes only on
@@ -815,8 +926,18 @@ export function projectPlan(
       ? yearMonthKeyFromISO(recurrenceStart) ?? planStartKey
       : null;
 
-  // Pre-compute per-line month bounds and one-time hit-months so the inner
-  // loop is O(lines) per month with no string parsing or branching surprises.
+  // Convert "YYYY-MM-DD" to a UTC Date so one-time entries can be checked for
+  // period inclusion directly (no calendar-month bucketing).
+  const isoToUtcDate = (iso: string | null | undefined): Date | null => {
+    if (!iso) return null;
+    const parts = parseISODateLocal(iso);
+    return parts
+      ? new Date(Date.UTC(parts.year, parts.month, parts.day))
+      : null;
+  };
+
+  // Pre-compute per-line metadata so the inner loop is O(lines) per period
+  // with no string parsing or branching surprises.
   const incomeRows = incomes.map((i) => ({
     id: i.id,
     amount: Math.max(0, num(i.monthlyAmount)),
@@ -826,7 +947,7 @@ export function projectPlan(
     // falls outside [startDate, endDate]. See `dateWithinWindow`.
     startISO: i.startDate,
     endISO: i.endDate,
-    oneTimeKey: i.kind === "one_time" ? yearMonthKeyFromISO(i.date) : null,
+    oneTimeDate: i.kind === "one_time" ? isoToUtcDate(i.date) : null,
     recurrenceType: i.recurrenceType,
     intervalMonths: i.intervalMonths,
     anchorKey: anchorFor(i.recurrenceType, i.recurrenceStart),
@@ -840,10 +961,15 @@ export function projectPlan(
     id: e.id,
     amount: Math.max(0, num(e.monthlyAmount)),
     kind: e.kind,
-    oneTimeKey: e.kind === "one_time" ? yearMonthKeyFromISO(e.date) : null,
+    oneTimeDate: e.kind === "one_time" ? isoToUtcDate(e.date) : null,
     recurrenceType: e.recurrenceType,
     intervalMonths: e.intervalMonths,
     anchorKey: anchorFor(e.recurrenceType, e.recurrenceStart),
+    // Calendar fields needed by `recurringHitDayInMonth` for both recurring
+    // and override-via-reschedule paths.
+    dayOfMonth: e.dayOfMonth,
+    weekOfMonth: e.weekOfMonth,
+    dayOfWeek: e.dayOfWeek,
   }));
 
   const savingsRate = Math.max(0, num(plan.monthlySavingsRate));
@@ -882,49 +1008,65 @@ export function projectPlan(
 
   const monthly = new Map<string, { interest: number; scheduled: number; extra: number }>();
 
-  for (let m = 0; m < plan.monthsAhead; m++) {
+  // Period iteration: each entry in `months` represents one accounting period
+  // anchored at `plan.confirmationDayOfMonth`. A period runs from day N of
+  // month X (clamped to month-end) through the day before the next anchor.
+  // confirmationDayOfMonth=0 (feature disabled) collapses to day=1, which is
+  // identical to calendar-month behaviour (start of month → end of month).
+  const anchorDay =
+    plan.confirmationDayOfMonth > 0 ? plan.confirmationDayOfMonth : 1;
+  const periods = iteratePeriods(plan.startMonth, anchorDay, plan.monthsAhead);
+
+  for (let m = 0; m < periods.length; m++) {
     monthly.clear();
     for (const d of debtStates) monthly.set(d.id, { interest: 0, scheduled: 0, extra: 0 });
 
     let scheduledTotal = 0;
     let interestTotal = 0;
 
-    // Aggregate income/expenses for THIS month: recurring lines that fall
-    // within their date window contribute monthlyAmount; one-time lines
-    // contribute their amount only on the month that matches their `date`.
-    const monthDate = addMonthsUtc(plan.startMonth, m);
-    const monthKey = yearMonthKeyFromDate(monthDate);
-    // Hoisted out of the debt loop so the income window check can also use
-    // them. UTC parts because the projection walks months in UTC.
-    const year = monthDate.getUTCFullYear();
-    const month = monthDate.getUTCMonth();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const period = periods[m];
+    const daysInPeriod = periodLengthDays(period);
+    // A period overlaps at most two calendar months. Recurrence and override
+    // lookups still key off the calendar month the hit-date falls in, so a
+    // monthly entry contributes once per period even when the period straddles
+    // a month boundary.
+    const candidateMonths = monthsTouchedByPeriod(period);
 
     let monthIncome = 0;
     for (const row of incomeRows) {
       if (row.kind === "one_time") {
-        if (row.oneTimeKey === monthKey) monthIncome += row.amount;
-      } else if (
-        isRecurringHitMonth(
-          monthKey,
-          row.recurrenceType,
-          row.intervalMonths,
-          row.anchorKey
-        )
-      ) {
-        // Day-precise window: resolve the day this recurring lands on in
-        // (year, month), then require it to fall within [startDate, endDate].
-        // Catches mid-month starts (e.g. dayOfMonth=1 + startDate=2026-06-15
-        // → June is skipped, first hit is July 1) and mid-month ends.
-        const hitDay = recurringHitDayInMonth(row, year, month);
-        if (!dateWithinWindow(year, month, hitDay, row.startISO, row.endISO)) {
+        if (row.oneTimeDate && isDateInPeriod(row.oneTimeDate, period)) {
+          monthIncome += row.amount;
+        }
+        continue;
+      }
+      for (const cm of candidateMonths) {
+        if (
+          !isRecurringHitMonth(
+            cm.monthKey,
+            row.recurrenceType,
+            row.intervalMonths,
+            row.anchorKey
+          )
+        ) {
           continue;
         }
-
-        const ov = lookupOverride("income", row.id, monthKey);
-        // skip → suppress this month; amount → swap; reschedule → no-op for
-        // a monthly-aggregate projection (the day inside the month doesn't
-        // matter at this layer).
+        const hitDay = recurringHitDayInMonth(row, cm.year, cm.monthIdx);
+        const hitDate = new Date(Date.UTC(cm.year, cm.monthIdx, hitDay));
+        if (!isDateInPeriod(hitDate, period)) continue;
+        // Day-precise window — see `dateWithinWindow` for the rationale.
+        if (
+          !dateWithinWindow(
+            cm.year,
+            cm.monthIdx,
+            hitDay,
+            row.startISO,
+            row.endISO
+          )
+        ) {
+          continue;
+        }
+        const ov = lookupOverride("income", row.id, cm.monthKey);
         if (ov?.action === "skip") continue;
         const amount =
           ov?.action === "amount" && ov.monthlyAmount !== null
@@ -933,19 +1075,30 @@ export function projectPlan(
         monthIncome += amount;
       }
     }
+
     let monthExpenses = 0;
     for (const row of expenseRows) {
       if (row.kind === "one_time") {
-        if (row.oneTimeKey === monthKey) monthExpenses += row.amount;
-      } else if (
-        isRecurringHitMonth(
-          monthKey,
-          row.recurrenceType,
-          row.intervalMonths,
-          row.anchorKey
-        )
-      ) {
-        const ov = lookupOverride("expense", row.id, monthKey);
+        if (row.oneTimeDate && isDateInPeriod(row.oneTimeDate, period)) {
+          monthExpenses += row.amount;
+        }
+        continue;
+      }
+      for (const cm of candidateMonths) {
+        if (
+          !isRecurringHitMonth(
+            cm.monthKey,
+            row.recurrenceType,
+            row.intervalMonths,
+            row.anchorKey
+          )
+        ) {
+          continue;
+        }
+        const hitDay = recurringHitDayInMonth(row, cm.year, cm.monthIdx);
+        const hitDate = new Date(Date.UTC(cm.year, cm.monthIdx, hitDay));
+        if (!isDateInPeriod(hitDate, period)) continue;
+        const ov = lookupOverride("expense", row.id, cm.monthKey);
         if (ov?.action === "skip") continue;
         const amount =
           ov?.action === "amount" && ov.monthlyAmount !== null
@@ -955,29 +1108,46 @@ export function projectPlan(
       }
     }
 
-    // Step 1 + 2: day-aware interest + scheduled payment. The user's calendar
-    // tells us which day in the month the payment hits; we charge interest on
-    // the pre-payment balance for the days BEFORE the payment, then apply the
-    // payment, then charge interest for the days AFTER. Early payments end up
-    // accruing less interest, matching how real loans behave. For non-hit
-    // months (every_n_months gaps, skip overrides) the full month's interest
-    // accrues with no payment.
-    // `year`, `month`, `daysInMonth` already computed above for the income
-    // window check.
-
+    // Step 1 + 2: day-aware interest + scheduled payment. We charge interest
+    // on the pre-payment balance for the days from period start up to (but
+    // not including) the payment, apply the payment, then charge interest on
+    // the post-payment balance for the remaining days. When no payment falls
+    // inside the period (every_n_months gaps, skip overrides), the whole
+    // period accrues interest with no scheduled outflow.
     for (const d of debtStates) {
       if (d.balance <= 0) continue;
-      const isHitMonth = isRecurringHitMonth(
-        monthKey,
-        d.recurrenceType,
-        d.intervalMonths,
-        d.anchorKey
-      );
-      const ov = lookupOverride("debt", d.id, monthKey);
 
-      // No payment this month → straight interest on the whole month, no
+      // Find the calendar month inside the period whose anchor hits this
+      // debt's recurrence — and whose payment-date falls inside the period.
+      let paymentDate: Date | null = null;
+      let paymentMonthKey: number | null = null;
+      for (const cm of candidateMonths) {
+        if (
+          !isRecurringHitMonth(
+            cm.monthKey,
+            d.recurrenceType,
+            d.intervalMonths,
+            d.anchorKey
+          )
+        ) {
+          continue;
+        }
+        const day = debtPaymentDayInMonth(d, cm.year, cm.monthIdx);
+        const date = new Date(Date.UTC(cm.year, cm.monthIdx, day));
+        if (!isDateInPeriod(date, period)) continue;
+        paymentDate = date;
+        paymentMonthKey = cm.monthKey;
+        break;
+      }
+
+      const ov =
+        paymentMonthKey !== null
+          ? lookupOverride("debt", d.id, paymentMonthKey)
+          : undefined;
+
+      // No payment this period → straight interest on the whole period, no
       // scheduled outflow.
-      if (!isHitMonth || ov?.action === "skip") {
+      if (!paymentDate || ov?.action === "skip") {
         const interest = d.balance * d.rate;
         d.balance += interest;
         interestTotal += interest;
@@ -987,22 +1157,27 @@ export function projectPlan(
         continue;
       }
 
-      // Decide which day in this month the payment lands on. Reschedule
-      // overrides win when their date falls inside the same month.
-      let paymentDay = debtPaymentDayInMonth(d, year, month);
+      // Reschedule overrides win when their explicit date falls inside the
+      // same period.
       if (ov?.action === "reschedule" && ov.date) {
         const od = parseISODateLocal(ov.date);
-        if (od && od.year === year && od.month === month) {
-          paymentDay = od.day;
+        if (od) {
+          const reschedDate = new Date(Date.UTC(od.year, od.month, od.day));
+          if (isDateInPeriod(reschedDate, period)) {
+            paymentDate = reschedDate;
+          }
         }
       }
 
-      // Two-halves interest: (paymentDay - 1) days at the pre-payment
-      // balance, then payment, then the remaining days at the post-payment
-      // balance. Reduces to "full month before payment" when paymentDay =
-      // daysInMonth, and "no pre-payment interest" when paymentDay = 1.
-      const daysBefore = Math.max(0, paymentDay - 1);
-      const interestBefore = d.balance * d.rate * (daysBefore / daysInMonth);
+      // Two-halves interest: (dayInPeriod - 1) days at the pre-payment
+      // balance, then payment, then the remaining (daysInPeriod - daysBefore)
+      // days at the post-payment balance. Reduces to "full period before
+      // payment" when payment lands on the last day, and "no pre-payment
+      // interest" when payment lands on the first day.
+      const dayInPeriod = dayInPeriodFor(paymentDate, period);
+      const daysBefore = Math.max(0, dayInPeriod - 1);
+      const interestBefore =
+        d.balance * d.rate * (daysBefore / daysInPeriod);
       d.balance += interestBefore;
 
       const scheduled =
@@ -1012,8 +1187,9 @@ export function projectPlan(
       const payment = Math.min(scheduled, d.balance);
       d.balance -= payment;
 
-      const daysAfter = daysInMonth - daysBefore;
-      const interestAfter = d.balance * d.rate * (daysAfter / daysInMonth);
+      const daysAfter = daysInPeriod - daysBefore;
+      const interestAfter =
+        d.balance * d.rate * (daysAfter / daysInPeriod);
       d.balance += interestAfter;
 
       const totalInterest = interestBefore + interestAfter;
@@ -1076,7 +1252,7 @@ export function projectPlan(
 
     months.push({
       monthOffset: m,
-      date: monthDate,
+      date: period.start,
       income: monthIncome,
       expenses: monthExpenses,
       scheduledDebtPayments: scheduledTotal,

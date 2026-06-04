@@ -58,15 +58,28 @@ OpenType features enabled globally on `<body>`:
 
 ### Headings — use `<Heading level="…">`
 
-| Level     | Size (mobile → desktop) | Weight | Tracking  | Leading | Default tag | Use it for                          |
-| --------- | ----------------------- | ------ | --------- | ------- | ----------- | ----------------------------------- |
-| `display` | 48 → 60 → 72 px         | 700    | -0.04em   | 1.05    | `h1`        | Landing hero only                   |
-| `h1`      | 36 → 48 px              | 700    | -0.03em   | 1.10    | `h1`        | Page titles                         |
-| `h2`      | 30 → 36 px              | 600    | -0.025em  | 1.15    | `h2`        | Major section headings              |
-| `h3`      | 24 px                   | 600    | -0.02em   | 1.20    | `h3`        | Subsection headings                 |
-| `h4`      | 20 px                   | 600    | -0.015em  | 1.30    | `h4`        | Card titles                         |
-| `h5`      | 18 px                   | 600    | -0.01em   | 1.40    | `h5`        | Small card titles, dialog titles    |
-| `h6`      | 16 px                   | 600    | normal    | 1.50    | `h6`        | List-item headings, table captions  |
+Sizes are **responsive (mobile → desktop)**. The base Tailwind class is the
+mobile size; `sm:` (≥640px — the same breakpoint where the portal switches to
+its multi-column layouts) restores the desktop size; `display` adds an extra
+`lg:` step. Each level drops exactly one step on phones so dense screens don't
+feel oversized. **Tailwind class** is the exact string in `headingVariants`.
+
+| Level     | Size (mobile → desktop) | Tailwind class                                  | Weight | Default tag | Use it for                          |
+| --------- | ----------------------- | ----------------------------------------------- | ------ | ----------- | ----------------------------------- |
+| `display` | 36 → 48 → 60 px         | `text-4xl sm:text-5xl lg:text-6xl`              | 800    | `h1`        | Landing hero only                   |
+| `h1`      | 30 → 36 px              | `text-3xl sm:text-4xl`                          | 800    | `h1`        | Page titles                         |
+| `h2`      | 24 → 30 px              | `text-2xl sm:text-3xl`                          | 600    | `h2`        | Major section headings              |
+| `h3`      | 20 → 24 px              | `text-xl sm:text-2xl`                           | 600    | `h3`        | Subsection headings, plan titles    |
+| `h4`      | 18 → 20 px              | `text-lg sm:text-xl`                            | 600    | `h4`        | Card titles                         |
+| `h5`      | 16 → 18 px              | `text-base sm:text-lg`                          | 600    | `h5`        | Small card titles, dialog titles    |
+| `h6`      | 14 → 16 px              | `text-sm sm:text-base`                          | 600    | `h6`        | List-item headings, table captions  |
+
+All levels carry `tracking-tight`. When you need a number/stat to read like a
+heading (KPI hero values), don't use `<Heading>` — apply the same mobile-first
+pattern to a `<p>`/`<Mono>`: e.g. `text-lg sm:text-xl lg:text-2xl` for a card's
+hero figure, `text-base sm:text-lg` for a secondary stat. Always pin the
+**desktop** size to the value you actually want at ≥640px and step the base
+(mobile) class down from there.
 
 ```tsx
 import { Heading } from "@/components/ui/typography";

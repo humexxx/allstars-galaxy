@@ -19,6 +19,7 @@ import {
   deleteIncome,
   deleteLineOverride,
   deletePlan,
+  setMainPlan,
   updateDebt,
   updateExpense,
   updateIncome,
@@ -107,6 +108,24 @@ export async function deletePlanAction(planId: string) {
       entityId: parsed.data,
     });
     revalidatePath(PLAN_PATH);
+    return { success: true as const };
+  });
+}
+
+export async function setMainPlanAction(planId: string) {
+  return safe("finance-plans", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = z.string().uuid().safeParse(planId);
+    if (!parsed.success) return { success: false as const, error: "Invalid id" };
+    await setMainPlan(ctx.effectiveUserId, parsed.data);
+    await logImpersonatedMutation({
+      action: "financePlan.setMain",
+      entityTable: "finance_plans",
+      entityId: parsed.data,
+    });
+    // Revalidate dashboard + plans list — both surfaces follow the main flag.
+    revalidatePath(PLAN_PATH);
+    revalidatePath("/portal");
     return { success: true as const };
   });
 }

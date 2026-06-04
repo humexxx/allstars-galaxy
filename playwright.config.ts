@@ -40,12 +40,12 @@ export default defineConfig({
       dependencies: ["setup"],
     },
   ],
-  // Reuse the developer's running `npm run dev` on :3010. Next 16 refuses to
+  // Reuse the developer's running `pnpm dev` on :3010. Next 16 refuses to
   // start a second dev server in the same project directory, so spinning one
   // up here would fight that lock.
   webServer: process.env.CI
     ? {
-        command: "npm run dev",
+        command: "pnpm dev",
         url: BASE_URL,
         timeout: 120_000,
         reuseExistingServer: false,

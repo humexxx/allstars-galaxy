@@ -13,6 +13,7 @@ import {
   projectPlan,
 } from "./finance-plan-service";
 import { getLatestConfirmation } from "./finance-confirmation-service";
+import { periodStartFor } from "@/lib/finance/period";
 import type {
   FinancePlanWithLines,
   ProjectionMonth,
@@ -20,12 +21,9 @@ import type {
 
 // ---------- helpers ----------
 
-/** Midnight UTC of the first day of the date's month. */
-function startOfMonthUtc(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-}
-
-/** Whole months between `start` and `target`, signed. */
+/** Whole months between `start` and `target`, signed. Both inputs are
+ *  expected to be period-anchor dates (same day-of-month, possibly clamped),
+ *  so the calendar-month diff equals the period offset. */
 function monthsBetween(start: Date, target: Date): number {
   return (
     (target.getUTCFullYear() - start.getUTCFullYear()) * 12 +
@@ -94,7 +92,16 @@ async function computeStateAt(
     return { state: null, calibrated };
   }
 
-  const offset = monthsBetween(calibrated.startMonth, targetDate);
+  // Both ends normalised to their period anchors so the month diff is the
+  // period diff. Day-1 anchors collapse to first-of-month, which is the
+  // historical (calendar-month) behaviour.
+  const anchorDay =
+    calibrated.confirmationDayOfMonth > 0
+      ? calibrated.confirmationDayOfMonth
+      : 1;
+  const startAnchor = periodStartFor(calibrated.startMonth, anchorDay);
+  const targetAnchor = periodStartFor(targetDate, anchorDay);
+  const offset = monthsBetween(startAnchor, targetAnchor);
   if (offset < 0) {
     const totalDebt = calibrated.debts.reduce(
       (s, d) => s + parseFloat(d.initialBalance),
@@ -393,14 +400,16 @@ export async function getRecentMonthlySnapshots(
 // ---------- exposed for confirmation flow ----------
 
 /**
- * Public view of the calibrated "current month" projection state for a plan,
- * used by the confirmation dialog to pre-fill the form.
+ * Public view of the calibrated "current period" projection state for a
+ * plan, used by the confirmation dialog to pre-fill the form. `targetDate`
+ * is expected to be the period anchor — typically passed straight through
+ * from `periodStartFor(today, confirmationDayOfMonth)`.
  */
 export async function getProjectedStateForMonth(
   plan: FinancePlanWithLines,
   userId: string,
   targetDate: Date
 ): Promise<ProjectionMonth | null> {
-  const { state } = await computeStateAt(plan, userId, startOfMonthUtc(targetDate));
+  const { state } = await computeStateAt(plan, userId, targetDate);
   return state;
 }

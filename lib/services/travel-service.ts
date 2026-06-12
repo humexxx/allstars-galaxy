@@ -303,8 +303,11 @@ export async function deleteTripShare(
  * No auth required — the token IS the credential. Callers should never expose
  * trip ownership data (userId) or other shares of the same trip back to the
  * public renderer.
+ *
+ * `React.cache()` so `generateMetadata` and the page body share one DB hit per
+ * request — same reason `getTripWithRelations` is wrapped.
  */
-export async function getPublicTripByToken(
+export const getPublicTripByToken = cache(async function getPublicTripByToken(
   token: string
 ): Promise<PublicTripView | null> {
   const [share] = await db
@@ -331,7 +334,7 @@ export async function getPublicTripByToken(
   ]);
 
   return { trip, items, photos, share };
-}
+});
 
 // ---------- Dashboard summary ----------
 

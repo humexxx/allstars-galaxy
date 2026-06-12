@@ -8,8 +8,8 @@ type TeamBadgeProps = {
 };
 
 const sizeMap = {
-  sm: "h-5 w-5 text-[9px]",
-  md: "h-6 w-6 text-[10px]",
+  sm: "h-5 w-5 text-2xs",
+  md: "h-6 w-6 text-2xs",
   lg: "h-8 w-8 text-xs",
 };
 

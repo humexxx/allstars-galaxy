@@ -3,6 +3,7 @@ import { ArrowRight, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Text } from "@/components/ui/typography";
 
 type ShareCtaProps = {
   /** Email recorded with the share link (used to prefill signup). */
@@ -21,10 +22,11 @@ export function ShareCta({ inviteeEmail, currentUserEmail, shareToken }: ShareCt
     return (
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="flex flex-col items-start justify-between gap-3 p-4 sm:flex-row sm:items-center">
-          <p className="text-sm">
-            You&apos;re signed in as <span className="font-medium">{currentUserEmail}</span>. Plan
-            your own trip in the portal.
-          </p>
+          <Text variant="body">
+            You&apos;re signed in as{" "}
+            <Text as="span" weight="medium">{currentUserEmail}</Text>. Plan your own trip in the
+            portal.
+          </Text>
           <Button asChild size="sm" variant="outline">
             <Link href="/portal/entertainment/travel-planner">
               Open my trips <ArrowRight className="ml-1 h-3.5 w-3.5" />
@@ -42,24 +44,26 @@ export function ShareCta({ inviteeEmail, currentUserEmail, shareToken }: ShareCt
 
   return (
     <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-      <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <span className="rounded-md bg-primary/10 p-2 text-primary">
             <Sparkles className="h-4 w-4" />
           </span>
           <div>
-            <p className="text-sm font-semibold">Plan your own trip with Allstars Galaxy</p>
-            <p className="text-xs text-muted-foreground">
+            <Text variant="body" weight="semibold">Plan your own trip with Allstars Galaxy</Text>
+            <Text variant="small">
               {inviteeEmail ? (
                 <>
                   Create an account as{" "}
-                  <span className="font-medium text-foreground">{inviteeEmail}</span> or continue
-                  with a social provider.
+                  <Text as="span" weight="medium" className="text-foreground">
+                    {inviteeEmail}
+                  </Text>{" "}
+                  or continue with a social provider.
                 </>
               ) : (
                 <>Create an account in seconds — free for personal use.</>
               )}
-            </p>
+            </Text>
           </div>
         </div>
         <div className="flex gap-2">

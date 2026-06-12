@@ -35,7 +35,7 @@ export function SportShell({
   className,
 }: SportShellProps) {
   return (
-    <div className={cn("space-y-5", className)}>
+    <div className={cn("space-y-6", className)}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex items-center gap-3">
           {emoji && (

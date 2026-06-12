@@ -12,7 +12,14 @@ import { NFL_DATA } from "@/lib/data/sports/nfl";
 import { PADEL_DATA } from "@/lib/data/sports/padel";
 import { SPORTS } from "@/lib/data/sports/registry";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
-import type { SportId } from "@/types/sports";
+import type {
+  F1Data,
+  FootballLeagueData,
+  LolData,
+  PadelData,
+  SportId,
+  TennisData,
+} from "@/types/sports";
 
 import { F1View } from "./sports/f1-view";
 import { FootballView } from "./sports/football-view";
@@ -28,11 +35,26 @@ type SportsHubProps = {
   defaultSport?: SportId;
   /** Favourites surface as starred tabs and get pinned to the front of the strip. */
   favoriteSportIds?: SportId[];
+  /** Live LoL data from Lolesports; falls back to mock when omitted. */
+  lolData?: LolData;
+  /** Live F1 data from Jolpica; falls back to mock when omitted. */
+  f1Data?: F1Data;
+  /** Live football leagues from football-data.org; falls back to mocks when omitted. */
+  footballLeagues?: FootballLeagueData[];
+  /** Live padel data from Padel API; falls back to mock when omitted. */
+  padelData?: PadelData;
+  /** Live tennis data from TheSportsDB; falls back to mock when omitted. */
+  tennisData?: TennisData;
 };
 
 export function SportsHub({
   defaultSport,
   favoriteSportIds = [],
+  lolData,
+  f1Data,
+  footballLeagues,
+  padelData,
+  tennisData,
 }: SportsHubProps) {
   const favSet = useMemo(() => new Set(favoriteSportIds), [favoriteSportIds]);
   const initial: SportId = defaultSport ?? favoriteSportIds[0] ?? "football";
@@ -57,7 +79,14 @@ export function SportsHub({
         favSet={favSet}
         sports={orderedSports}
       />
-      <SportContent sport={activeSport} />
+      <SportContent
+        sport={activeSport}
+        lolData={lolData}
+        f1Data={f1Data}
+        footballLeagues={footballLeagues}
+        padelData={padelData}
+        tennisData={tennisData}
+      />
     </div>
   );
 }
@@ -108,21 +137,35 @@ function SportSelector({
   );
 }
 
-function SportContent({ sport }: { sport: SportId }) {
+function SportContent({
+  sport,
+  lolData,
+  f1Data,
+  footballLeagues,
+  padelData,
+  tennisData,
+}: {
+  sport: SportId;
+  lolData?: LolData;
+  f1Data?: F1Data;
+  footballLeagues?: FootballLeagueData[];
+  padelData?: PadelData;
+  tennisData?: TennisData;
+}) {
   switch (sport) {
     case "football":
-      return <FootballView leagues={FOOTBALL_LEAGUES} />;
+      return <FootballView leagues={footballLeagues ?? FOOTBALL_LEAGUES} />;
     case "f1":
-      return <F1View data={F1_DATA} />;
+      return <F1View data={f1Data ?? F1_DATA} />;
     case "nba":
       return <NbaView data={NBA_DATA} />;
     case "tennis":
-      return <TennisView data={TENNIS_DATA} />;
+      return <TennisView data={tennisData ?? TENNIS_DATA} />;
     case "padel":
-      return <PadelView data={PADEL_DATA} />;
+      return <PadelView data={padelData ?? PADEL_DATA} />;
     case "nfl":
       return <NflView data={NFL_DATA} />;
     case "lol":
-      return <LolView data={LOL_DATA} />;
+      return <LolView data={lolData ?? LOL_DATA} />;
   }
 }

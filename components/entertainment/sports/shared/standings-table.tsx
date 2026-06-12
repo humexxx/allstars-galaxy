@@ -2,7 +2,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
@@ -11,6 +10,7 @@ import { cn } from "@/lib/utils";
 import type { Standing, Team } from "@/types/sports";
 
 import { Last5Form } from "./last-5-form";
+import { SportsTh, TableCellNum } from "./table-primitives";
 import { TeamBadge } from "./team-badge";
 
 type StandingsTableProps = {
@@ -42,40 +42,40 @@ export function StandingsTable({
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
-            <TableHead className="w-8 text-xs uppercase tracking-wide text-muted-foreground">
+            <SportsTh className="w-8">
               #
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+            </SportsTh>
+            <SportsTh>
               Club
-            </TableHead>
-            <TableHead className="w-12 text-center text-xs uppercase tracking-wide text-muted-foreground">
+            </SportsTh>
+            <SportsTh className="w-12 text-center">
               MP
-            </TableHead>
-            <TableHead className="w-12 text-center text-xs uppercase tracking-wide text-muted-foreground">
+            </SportsTh>
+            <SportsTh className="w-12 text-center">
               W
-            </TableHead>
-            <TableHead className="w-12 text-center text-xs uppercase tracking-wide text-muted-foreground">
+            </SportsTh>
+            <SportsTh className="w-12 text-center">
               D
-            </TableHead>
-            <TableHead className="w-12 text-center text-xs uppercase tracking-wide text-muted-foreground">
+            </SportsTh>
+            <SportsTh className="w-12 text-center">
               L
-            </TableHead>
-            <TableHead className="w-12 text-center text-xs uppercase tracking-wide text-muted-foreground">
+            </SportsTh>
+            <SportsTh className="w-12 text-center">
               GF
-            </TableHead>
-            <TableHead className="w-12 text-center text-xs uppercase tracking-wide text-muted-foreground">
+            </SportsTh>
+            <SportsTh className="w-12 text-center">
               GA
-            </TableHead>
-            <TableHead className="w-12 text-center text-xs uppercase tracking-wide text-muted-foreground">
+            </SportsTh>
+            <SportsTh className="w-12 text-center">
               GD
-            </TableHead>
-            <TableHead className="w-14 text-center text-xs uppercase tracking-wide text-foreground">
+            </SportsTh>
+            <SportsTh className="w-14 text-center text-foreground">
               Pts
-            </TableHead>
+            </SportsTh>
             {hasForm && (
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              <SportsTh className="text-center">
                 Last 5
-              </TableHead>
+              </SportsTh>
             )}
           </TableRow>
         </TableHeader>
@@ -132,19 +132,5 @@ export function StandingsTable({
         </TableBody>
       </Table>
     </div>
-  );
-}
-
-function TableCellNum({
-  value,
-  className,
-}: {
-  value: number | string;
-  className?: string;
-}) {
-  return (
-    <TableCell className={cn("text-center", className)}>
-      <Mono className="text-sm tabular-nums">{value}</Mono>
-    </TableCell>
   );
 }

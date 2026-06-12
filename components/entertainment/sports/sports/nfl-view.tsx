@@ -7,18 +7,17 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { NflConference, NflData, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { ScoreCard } from "../shared/score-card";
 import { SportShell } from "../shared/sport-shell";
+import { SportsTh, TableCellNum } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
 
 type NflViewProps = {
@@ -31,19 +30,22 @@ export function NflView({ data }: NflViewProps) {
     [data.teams],
   );
 
-  return (
-    <SportShell
-      emoji="🏈"
-      title="American Football · NFL"
-      subtitle={`Season ${data.season}`}
-    >
-      <Tabs defaultValue="games" className="space-y-5">
-        <TabsList>
-          <TabsTrigger value="games">Games</TabsTrigger>
-          <TabsTrigger value="standings">Standings</TabsTrigger>
-          <TabsTrigger value="playoffs">Playoffs</TabsTrigger>
-        </TabsList>
+  const hasPlayoffs = data.playoffs.length > 0;
 
+  return (
+    <Tabs defaultValue={hasPlayoffs ? "playoffs" : "games"} className="space-y-6">
+      <SportShell
+        emoji="🏈"
+        title="American Football · NFL"
+        subtitle={`Season ${data.season}`}
+        tabs={
+          <TabsList>
+            <TabsTrigger value="games">Games</TabsTrigger>
+            <TabsTrigger value="standings">Standings</TabsTrigger>
+            {hasPlayoffs && <TabsTrigger value="playoffs">Playoffs</TabsTrigger>}
+          </TabsList>
+        }
+      >
         <TabsContent value="games">
           <div className="grid gap-2 sm:grid-cols-2">
             {data.games.map((g) => (
@@ -56,15 +58,17 @@ export function NflView({ data }: NflViewProps) {
           <NflStandings data={data} teamsMap={teamsMap} />
         </TabsContent>
 
-        <TabsContent value="playoffs">
-          <Card>
-            <CardContent className="p-4">
-              <KnockoutBracket rounds={data.playoffs} teams={teamsMap} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </SportShell>
+        {hasPlayoffs && (
+          <TabsContent value="playoffs">
+            <Card>
+              <CardContent className="p-4">
+                <KnockoutBracket rounds={data.playoffs} teams={teamsMap} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+      </SportShell>
+    </Tabs>
   );
 }
 
@@ -92,33 +96,33 @@ function NflStandings({
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead className="w-8 text-xs uppercase tracking-wide text-muted-foreground">
+              <SportsTh className="w-8">
                 #
-              </TableHead>
-              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh>
                 Team
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 W
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 L
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 T
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 PCT
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 PF
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 PA
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 STRK
-              </TableHead>
+              </SportsTh>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -152,13 +156,5 @@ function NflStandings({
         </Table>
       </CardContent>
     </Card>
-  );
-}
-
-function TableCellNum({ value }: { value: number | string }) {
-  return (
-    <TableCell className="text-center">
-      <Mono className="text-sm tabular-nums">{value}</Mono>
-    </TableCell>
   );
 }

@@ -34,7 +34,7 @@ export function Last5Form({ results, className }: Last5FormProps) {
             key={index}
             aria-label={resultLabel(result)}
             className={cn(
-              "grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold ring-1 ring-foreground/5",
+              "grid h-5 w-5 place-items-center rounded-full text-2xs font-bold ring-1 ring-foreground/5",
               COLOR_MAP[result],
               isLast && "ring-2 ring-foreground/20",
             )}

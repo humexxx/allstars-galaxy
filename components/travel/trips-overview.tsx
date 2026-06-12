@@ -27,7 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eyebrow, Mono, Text } from "@/components/ui/typography";
+import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { Trip } from "@/types/travel";
 
@@ -184,9 +184,9 @@ function TripCard({ trip, dimmed = false }: { trip: Trip; dimmed?: boolean }) {
         </div>
         <CardContent className="space-y-2 p-4">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="line-clamp-1 text-base font-semibold tracking-tight">
+            <Heading level="h6" as="h3" className="line-clamp-1">
               {trip.title}
-            </h3>
+            </Heading>
             <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </div>
           {trip.destination && (
@@ -266,9 +266,9 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
     <Card>
       <CardContent className="p-3 sm:p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-base font-semibold tracking-tight">
+          <Heading level="h5" as="h3">
             {format(cursor, "MMMM yyyy")}
-          </h3>
+          </Heading>
           <div className="flex items-center gap-1">
             <Button
               size="sm"
@@ -300,7 +300,7 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
             <div
               key={d}
-              className="bg-muted/40 px-2 py-1.5 text-center text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+              className="bg-muted/40 px-2 py-1.5 text-center text-2xs font-medium uppercase tracking-wider text-muted-foreground"
             >
               {d}
             </div>
@@ -321,7 +321,7 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
                 <div className="flex items-center justify-between">
                   <span
                     className={cn(
-                      "inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px]",
+                      "inline-flex h-5 w-5 items-center justify-center rounded-full text-2xs",
                       isToday(day) && "bg-primary text-primary-foreground font-semibold"
                     )}
                   >
@@ -330,7 +330,7 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
                   {inMonth && (
                     <Link
                       href={primary ? tripPath(primary.id) : newTripWithDate(key)}
-                      className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                      className="rounded p-0.5 text-muted-foreground transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                       aria-label={primary ? `Open ${primary.title}` : `New trip on ${key}`}
                     >
                       <Plus className="h-3 w-3" />
@@ -347,7 +347,7 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
                       <Link
                         key={trip.id}
                         href={tripPath(trip.id)}
-                        className="block truncate rounded px-1.5 py-0.5 text-[11px] font-medium text-white shadow-sm"
+                        className="block truncate rounded px-1.5 py-0.5 text-2xs font-medium text-white shadow-sm"
                         style={{ backgroundColor: trip.color }}
                         title={`${trip.title} · ${formatDateRange(trip.startDate, trip.endDate)}`}
                       >
@@ -356,7 +356,7 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
                     );
                   })}
                   {dayBars.length > 3 && (
-                    <span className="block px-1.5 text-[10px] text-muted-foreground">
+                    <span className="block px-1.5 text-2xs text-muted-foreground">
                       +{dayBars.length - 3} more
                     </span>
                   )}

@@ -2,8 +2,8 @@ import Link from "next/link";
 import { ArrowRight, Circle, Star, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Text } from "@/components/ui/typography";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Heading, Text } from "@/components/ui/typography";
 import { getDashboardSportsSummary } from "@/lib/services/sports-service";
 import { cn } from "@/lib/utils";
 import type { DashboardSportHighlight } from "@/types/sports";
@@ -21,13 +21,13 @@ export async function DashboardSportsCard({ userId }: DashboardSportsCardProps) 
     return (
       <Card className="col-span-full">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <Heading level="h5" as="h2" className="flex items-center gap-2">
             <Trophy className="h-5 w-5" />
             Sports
-          </CardTitle>
+          </Heading>
         </CardHeader>
         <CardContent className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Text variant="muted" className="text-sm">
+          <Text variant="muted">
             Pick a few favorite sports to see live results, standings and the
             next big match right here on your dashboard.
           </Text>
@@ -46,11 +46,11 @@ export async function DashboardSportsCard({ userId }: DashboardSportsCardProps) 
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="flex items-center gap-2">
+            <Heading level="h5" as="h2" className="flex items-center gap-2">
               <Trophy className="h-5 w-5" />
               Sports
-            </CardTitle>
-            <Text variant="muted" className="mt-1 text-sm">
+            </Heading>
+            <Text variant="muted" className="mt-1">
               Following {highlights.length}{" "}
               {highlights.length === 1 ? "sport" : "sports"} · live highlights
               and table leaders
@@ -98,14 +98,16 @@ function HighlightCard({ highlight }: { highlight: DashboardSportHighlight }) {
         </div>
         <ToneBadge tone={highlight.tone} />
       </div>
-      <div className="min-h-[2.5rem]">
+      <div className="min-h-10">
         <div className="text-sm font-semibold leading-snug">{highlight.headline}</div>
-        <div className="mt-0.5 text-xs text-muted-foreground">{highlight.context}</div>
+        <Text variant="small" as="div" className="mt-0.5">
+          {highlight.context}
+        </Text>
       </div>
       {highlight.secondary && (
         <div className="mt-auto flex items-center justify-between gap-2 border-t pt-2 text-xs">
           <span className="text-muted-foreground">{highlight.secondary.label}</span>
-          <span className="font-medium">{highlight.secondary.value}</span>
+          <span className="font-mono font-medium tabular-nums">{highlight.secondary.value}</span>
         </div>
       )}
     </div>
@@ -116,20 +118,20 @@ function ToneBadge({ tone }: { tone?: DashboardSportHighlight["tone"] }) {
   if (!tone) return null;
   if (tone === "live") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-2xs font-medium text-emerald-600 dark:text-emerald-400">
         <Circle className="h-2 w-2 animate-pulse fill-current" /> Live
       </span>
     );
   }
   if (tone === "upcoming") {
     return (
-      <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-medium text-sky-600 dark:text-sky-400">
+      <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-2xs font-medium text-sky-600 dark:text-sky-400">
         Upcoming
       </span>
     );
   }
   return (
-    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+    <span className="rounded-full bg-muted px-2 py-0.5 text-2xs font-medium text-muted-foreground">
       Result
     </span>
   );

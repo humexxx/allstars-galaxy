@@ -12,11 +12,21 @@ import { NFL_DATA } from "@/lib/data/sports/nfl";
 import { PADEL_DATA } from "@/lib/data/sports/padel";
 import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
+import { getFootballData } from "@/lib/services/football-data-service";
+import { getF1Data } from "@/lib/services/jolpica-f1-service";
+import { getLolData } from "@/lib/services/lolesports-service";
+import { getPadelData } from "@/lib/services/padel-api-service";
+import { getTennisData } from "@/lib/services/thesportsdb-tennis-service";
 import type {
   DashboardSportHighlight,
+  F1Data,
+  FootballLeagueData,
+  LolData,
   Match,
+  PadelData,
   SportId,
   Team,
+  TennisData,
   UserSportsPreference,
 } from "@/types/sports";
 
@@ -64,47 +74,79 @@ export async function setSportFavorite(
 // ---------- Dashboard summary ----------
 
 /**
- * Build a compact dashboard highlight for each favourite sport. Mock-data only:
- * the strategy per sport is "show the most relevant in-progress / upcoming
- * thing, plus one leaderboard fact". When real APIs are wired in later, this
- * function is the single place to swap implementations.
+ * Build a compact dashboard highlight for each favourite sport. LoL pulls from
+ * Lolesports, F1 from Jolpica (both cached); the rest are mock fixtures. When
+ * more APIs are wired in, this function stays the single place to swap
+ * implementations.
  */
 export async function getDashboardSportsSummary(
   userId: string
 ): Promise<DashboardSportHighlight[]> {
   const favIds = await listUserFavoriteSportIds(userId);
+  const [lolData, f1Data, footballLeagues, padelData, tennisData] =
+    await Promise.all([
+      favIds.includes("lol") ? getLolData() : Promise.resolve(null),
+      favIds.includes("f1") ? getF1Data() : Promise.resolve(null),
+      favIds.includes("football")
+        ? getFootballData()
+        : Promise.resolve(null),
+      favIds.includes("padel") ? getPadelData() : Promise.resolve(null),
+      favIds.includes("tennis") ? getTennisData() : Promise.resolve(null),
+    ]);
   return favIds
-    .map((id) => buildHighlight(id))
+    .map((id) =>
+      buildHighlight(id, {
+        lolData,
+        f1Data,
+        footballLeagues,
+        padelData,
+        tennisData,
+      }),
+    )
     .filter((h): h is DashboardSportHighlight => h !== null);
 }
 
-function buildHighlight(sportId: SportId): DashboardSportHighlight | null {
+type HighlightContext = {
+  lolData: LolData | null;
+  f1Data: F1Data | null;
+  footballLeagues: FootballLeagueData[] | null;
+  padelData: PadelData | null;
+  tennisData: TennisData | null;
+};
+
+function buildHighlight(
+  sportId: SportId,
+  ctx: HighlightContext,
+): DashboardSportHighlight | null {
   const meta = SPORTS_BY_ID.get(sportId);
   if (!meta) return null;
   const base = { sportId, emoji: meta.emoji, label: meta.label };
 
   switch (sportId) {
     case "football":
-      return footballHighlight(base);
+      return footballHighlight(base, ctx.footballLeagues);
     case "nba":
       return nbaHighlight(base);
     case "f1":
-      return f1Highlight(base);
+      return f1Highlight(base, ctx.f1Data ?? F1_DATA);
     case "nfl":
       return nflHighlight(base);
     case "tennis":
-      return tennisHighlight(base);
+      return tennisHighlight(base, ctx.tennisData ?? TENNIS_DATA);
     case "padel":
-      return padelHighlight(base);
+      return padelHighlight(base, ctx.padelData ?? PADEL_DATA);
     case "lol":
-      return lolHighlight(base);
+      return lolHighlight(base, ctx.lolData ?? LOL_DATA);
   }
 }
 
 type HighlightBase = Pick<DashboardSportHighlight, "sportId" | "emoji" | "label">;
 
-function footballHighlight(base: HighlightBase): DashboardSportHighlight {
-  const leagues = getFootballLeagues();
+function footballHighlight(
+  base: HighlightBase,
+  liveLeagues: FootballLeagueData[] | null,
+): DashboardSportHighlight {
+  const leagues = liveLeagues ?? getFootballLeagues();
   const ucl = leagues.find((l) => l.league.id === "uefa-champions-league") ?? leagues[0];
   const teamsMap = new Map<string, Team>(ucl.teams.map((t) => [t.id, t]));
   const featured = pickFeaturedMatch(ucl.matches);
@@ -150,20 +192,20 @@ function nbaHighlight(base: HighlightBase): DashboardSportHighlight {
   };
 }
 
-function f1Highlight(base: HighlightBase): DashboardSportHighlight {
-  const upcoming = F1_DATA.races.find((r) => r.status === "upcoming") ?? F1_DATA.races.find((r) => r.status === "live");
-  const last = [...F1_DATA.races].reverse().find((r) => r.status === "completed");
-  const leader = F1_DATA.drivers[0];
+function f1Highlight(base: HighlightBase, data: F1Data): DashboardSportHighlight {
+  const upcoming = data.races.find((r) => r.status === "upcoming") ?? data.races.find((r) => r.status === "live");
+  const last = [...data.races].reverse().find((r) => r.status === "completed");
+  const leader = data.drivers[0];
 
   const next = upcoming ?? last;
   return {
     ...base,
     headline: next
       ? `${next.flagEmoji} Round ${next.round} · ${next.name}`
-      : `F1 ${F1_DATA.season}`,
+      : `F1 ${data.season}`,
     context: next
       ? `${next.circuit} · ${formatShortDate(next.date)}`
-      : `Season ${F1_DATA.season}`,
+      : `Season ${data.season}`,
     tone: upcoming ? "upcoming" : "result",
     secondary: leader
       ? { label: "Drivers' leader", value: `${leader.shortName} · ${leader.points} pts` }
@@ -197,23 +239,23 @@ function nflHighlight(base: HighlightBase): DashboardSportHighlight {
   };
 }
 
-function tennisHighlight(base: HighlightBase): DashboardSportHighlight {
+function tennisHighlight(base: HighlightBase, data: TennisData): DashboardSportHighlight {
   const liveTournament =
-    TENNIS_DATA.atp.tournaments.find((t) => t.status === "live") ??
-    TENNIS_DATA.atp.tournaments.find((t) => t.status === "upcoming");
-  const atpLeader = TENNIS_DATA.atp.rankings[0];
+    data.atp.tournaments.find((t) => t.status === "live") ??
+    data.atp.tournaments.find((t) => t.status === "upcoming");
+  const atpLeader = data.atp.rankings[0];
 
   return {
     ...base,
     headline: liveTournament
       ? `${liveTournament.name} · ${liveTournament.location}`
-      : `ATP / WTA · Season ${TENNIS_DATA.atp.season}`,
+      : `ATP / WTA · Season ${data.atp.season}`,
     context: liveTournament
       ? `${liveTournament.surface ?? "Tour"} · ${formatRange(
           liveTournament.startDate,
           liveTournament.endDate
         )}`
-      : `Season ${TENNIS_DATA.atp.season}`,
+      : `Season ${data.atp.season}`,
     tone: liveTournament?.status === "live" ? "live" : "upcoming",
     secondary: atpLeader
       ? { label: "ATP #1", value: `${atpLeader.shortName} · ${atpLeader.points.toLocaleString()} pts` }
@@ -221,27 +263,27 @@ function tennisHighlight(base: HighlightBase): DashboardSportHighlight {
   };
 }
 
-function padelHighlight(base: HighlightBase): DashboardSportHighlight {
+function padelHighlight(base: HighlightBase, data: PadelData): DashboardSportHighlight {
   const live =
-    PADEL_DATA.men.tournaments.find((t) => t.status === "live") ??
-    PADEL_DATA.men.tournaments.find((t) => t.status === "upcoming");
-  const leader = PADEL_DATA.men.rankings[0];
+    data.men.tournaments.find((t) => t.status === "live") ??
+    data.men.tournaments.find((t) => t.status === "upcoming");
+  const leader = data.men.rankings[0];
 
   return {
     ...base,
     headline: live ? `${live.name} · ${live.location}` : "Padel · WPT",
     context: live
       ? formatRange(live.startDate, live.endDate)
-      : `Season ${PADEL_DATA.men.season}`,
+      : `Season ${data.men.season}`,
     tone: live?.status === "live" ? "live" : "upcoming",
     secondary: leader
-      ? { label: "WPT Men #1", value: `${leader.shortName} · ${leader.points.toLocaleString()} pts` }
+      ? { label: "Padel Men #1", value: `${leader.shortName} · ${leader.points.toLocaleString()} pts` }
       : undefined,
   };
 }
 
-function lolHighlight(base: HighlightBase): DashboardSportHighlight {
-  const split = LOL_DATA.splits[0];
+function lolHighlight(base: HighlightBase, data: LolData): DashboardSportHighlight {
+  const split = data.splits[0];
   if (!split) {
     return {
       ...base,

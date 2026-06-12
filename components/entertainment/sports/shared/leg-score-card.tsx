@@ -18,21 +18,36 @@ export function LegScoreCard({ match, teams, className }: LegScoreCardProps) {
   const home = match.homeTeamId ? teams.get(match.homeTeamId) ?? null : null;
   const away = match.awayTeamId ? teams.get(match.awayTeamId) ?? null : null;
   const legs = match.legs ?? [];
+  const hasLegs = legs.length > 0;
   const hasAggregate =
     match.aggregateHome !== undefined &&
     match.aggregateAway !== undefined &&
     match.aggregateHome !== null &&
     match.aggregateAway !== null;
 
+  // Two-legged ties (UCL knockout) carry per-leg scores; single best-of series
+  // (LoL playoffs, NFL playoffs) carry homeScore/awayScore directly. Fall back
+  // to a single score column for the latter so the card never hides the result.
+  const homeScores = hasLegs
+    ? legs.map((l) => l.homeScore)
+    : match.homeScore !== undefined && match.homeScore !== null
+      ? [match.homeScore]
+      : [];
+  const awayScores = hasLegs
+    ? legs.map((l) => l.awayScore)
+    : match.awayScore !== undefined && match.awayScore !== null
+      ? [match.awayScore]
+      : [];
+
   return (
     <div className={cn("rounded-lg border bg-card p-3 text-sm", className)}>
-      {legs.length > 0 && (
+      {hasLegs && (
         <div className="mb-2 grid grid-cols-[1fr_auto_auto] gap-x-3">
           <span />
           {legs.map((_, idx) => (
             <span
               key={idx}
-              className="inline-flex h-5 w-7 items-center justify-center rounded-full bg-muted text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+              className="inline-flex h-5 w-6 items-center justify-center rounded-full bg-muted text-2xs font-semibold uppercase tracking-wide text-muted-foreground"
             >
               L{idx + 1}
             </span>
@@ -42,22 +57,22 @@ export function LegScoreCard({ match, teams, className }: LegScoreCardProps) {
       <div className="space-y-1.5">
         <LegRow
           team={home}
-          scores={legs.map((l) => l.homeScore)}
+          scores={homeScores}
           isWinner={match.winnerTeamId === match.homeTeamId}
         />
         <LegRow
           team={away}
-          scores={legs.map((l) => l.awayScore)}
+          scores={awayScores}
           isWinner={match.winnerTeamId === match.awayTeamId}
         />
       </div>
       {hasAggregate && (
-        <div className="mt-2 border-t pt-1.5 text-[11px] text-muted-foreground">
+        <div className="mt-2 border-t pt-1.5 text-2xs text-muted-foreground">
           Aggregate: {match.aggregateHome} - {match.aggregateAway}
         </div>
       )}
       {!hasAggregate && match.date && (
-        <div className="mt-2 border-t pt-1.5 text-[11px] text-muted-foreground">
+        <div className="mt-2 border-t pt-1.5 text-2xs text-muted-foreground">
           {new Date(match.date).toLocaleDateString(undefined, {
             weekday: "short",
             month: "short",

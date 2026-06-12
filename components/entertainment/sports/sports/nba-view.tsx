@@ -7,17 +7,16 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { NbaConference, NbaData, Team } from "@/types/sports";
 
 import { ScoreCard } from "../shared/score-card";
 import { SportShell } from "../shared/sport-shell";
+import { SportsTh, TableCellNum } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
 
 type NbaViewProps = {
@@ -31,13 +30,18 @@ export function NbaView({ data }: NbaViewProps) {
   );
 
   return (
-    <SportShell emoji="🏀" title="NBA" subtitle={`Season ${data.season}`}>
-      <Tabs defaultValue="games" className="space-y-5">
-        <TabsList>
-          <TabsTrigger value="games">Games</TabsTrigger>
-          <TabsTrigger value="standings">Standings</TabsTrigger>
-        </TabsList>
-
+    <Tabs defaultValue="games" className="space-y-6">
+      <SportShell
+        emoji="🏀"
+        title="NBA"
+        subtitle={`Season ${data.season}`}
+        tabs={
+          <TabsList>
+            <TabsTrigger value="games">Games</TabsTrigger>
+            <TabsTrigger value="standings">Standings</TabsTrigger>
+          </TabsList>
+        }
+      >
         <TabsContent value="games">
           <div className="grid gap-2 sm:grid-cols-2">
             {data.games.map((g) => (
@@ -49,8 +53,8 @@ export function NbaView({ data }: NbaViewProps) {
         <TabsContent value="standings">
           <NbaStandings data={data} teamsMap={teamsMap} />
         </TabsContent>
-      </Tabs>
-    </SportShell>
+      </SportShell>
+    </Tabs>
   );
 }
 
@@ -78,30 +82,30 @@ function NbaStandings({
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead className="w-8 text-xs uppercase tracking-wide text-muted-foreground">
+              <SportsTh className="w-8">
                 #
-              </TableHead>
-              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh>
                 Team
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 W
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 L
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 PCT
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 GB
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 STRK
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 Last 10
-              </TableHead>
+              </SportsTh>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -132,16 +136,7 @@ function NbaStandings({
             })}
           </TableBody>
         </Table>
-        <Eyebrow className="block text-[10px]">Blue = playoff seed · Bottom rows enter play-in</Eyebrow>
       </CardContent>
     </Card>
-  );
-}
-
-function TableCellNum({ value }: { value: number | string }) {
-  return (
-    <TableCell className="text-center">
-      <Mono className="text-sm tabular-nums">{value}</Mono>
-    </TableCell>
   );
 }

@@ -3,8 +3,8 @@ import Link from "next/link";
 import { ArrowRight, CalendarDays, ListChecks, MapPin, Plane, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Eyebrow, Mono, Text } from "@/components/ui/typography";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { getDashboardTravelSummary } from "@/lib/services/travel-service";
 import { cn } from "@/lib/utils";
 import type { DashboardTravelFeaturedTrip, DashboardTravelTripState } from "@/types/travel";
@@ -23,10 +23,10 @@ export async function DashboardTravelCard({ userId }: DashboardTravelCardProps) 
     return (
       <Card className="col-span-full">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <Heading level="h5" as="h2" className="flex items-center gap-2">
             <Plane className="h-5 w-5" />
             Travel Planner
-          </CardTitle>
+          </Heading>
         </CardHeader>
         <CardContent className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Text variant="muted" className="text-sm">
@@ -51,10 +51,10 @@ export async function DashboardTravelCard({ userId }: DashboardTravelCardProps) 
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="flex items-center gap-2">
+            <Heading level="h5" as="h2" className="flex items-center gap-2">
               <Plane className="h-5 w-5" />
               Travel Planner
-            </CardTitle>
+            </Heading>
             <Text variant="muted" className="mt-1 text-sm">
               {subtitle}
             </Text>
@@ -105,9 +105,9 @@ function FeaturedTripCard({ trip }: { trip: DashboardTravelFeaturedTrip }) {
             <Eyebrow>{relativeLabel(trip)}</Eyebrow>
           </div>
           <div className="flex items-start justify-between gap-2">
-            <h3 className="line-clamp-1 text-base font-semibold tracking-tight">
+            <Heading level="h6" as="h3" className="line-clamp-1">
               {trip.title}
-            </h3>
+            </Heading>
             <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -141,20 +141,20 @@ function FeaturedTripCard({ trip }: { trip: DashboardTravelFeaturedTrip }) {
 function StateBadge({ state }: { state: DashboardTravelTripState }) {
   if (state === "in_progress") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-2xs font-medium text-emerald-600 dark:text-emerald-400">
         In progress
       </span>
     );
   }
   if (state === "upcoming") {
     return (
-      <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-medium text-sky-600 dark:text-sky-400">
+      <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-2xs font-medium text-sky-600 dark:text-sky-400">
         Upcoming
       </span>
     );
   }
   return (
-    <span className={cn("rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground")}>
+    <span className={cn("rounded-full bg-muted px-2 py-0.5 text-2xs font-medium text-muted-foreground")}>
       Past
     </span>
   );

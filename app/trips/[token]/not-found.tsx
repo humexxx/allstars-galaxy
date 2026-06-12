@@ -8,7 +8,7 @@ import { Heading, Text } from "@/components/ui/typography";
 export default function PublicTripNotFound() {
   return (
     <Card className="border-dashed">
-      <CardContent className="flex flex-col items-center gap-4 p-10 text-center">
+      <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
         <span className="rounded-full bg-muted p-3 text-muted-foreground">
           <Link2Off className="h-6 w-6" />
         </span>

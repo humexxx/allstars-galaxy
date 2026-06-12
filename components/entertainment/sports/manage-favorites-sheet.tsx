@@ -33,7 +33,10 @@ export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetP
   const [selected, setSelected] = useState<Set<SportId>>(
     () => new Set(favoriteSportIds)
   );
-  const [pending, setPending] = useState<SportId | null>(null);
+  // One in-flight flag PER sport — a single slot meant toggling A then B
+  // quickly let A's completion clear B's spinner (and re-enable B's switch)
+  // while B's action was still running.
+  const [pending, setPending] = useState<Set<SportId>>(() => new Set());
   const [, startTransition] = useTransition();
 
   const count = selected.size;
@@ -46,9 +49,13 @@ export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetP
       else copy.delete(sportId);
       return copy;
     });
-    setPending(sportId);
+    setPending((prev) => new Set(prev).add(sportId));
     const result = await setSportFavoriteAction({ sportId, isFavorite: next });
-    setPending(null);
+    setPending((prev) => {
+      const copy = new Set(prev);
+      copy.delete(sportId);
+      return copy;
+    });
     if (!result.success) {
       setSelected((prev) => {
         const copy = new Set(prev);
@@ -69,7 +76,7 @@ export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetP
           <Star className="mr-1.5 h-4 w-4" />
           Manage favorites
           {count > 0 && (
-            <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+            <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary">
               {count}
             </span>
           )}
@@ -88,7 +95,7 @@ export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetP
           <ul className="divide-y divide-border rounded-lg border">
             {SPORTS.map((sport) => {
               const isOn = selected.has(sport.id);
-              const isPending = pending === sport.id;
+              const isPending = pending.has(sport.id);
               return (
                 <li
                   key={sport.id}
@@ -105,9 +112,9 @@ export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetP
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium">{sport.label}</div>
-                    <div className="text-xs text-muted-foreground">
+                    <Text variant="small" as="div">
                       {sport.shortLabel}
-                    </div>
+                    </Text>
                   </div>
                   <div className="flex items-center gap-2">
                     {isPending && (

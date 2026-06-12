@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mono } from "@/components/ui/typography";
+import { Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 import {
@@ -72,8 +72,15 @@ export function TripSharePanel({ trip, baseUrl }: TripSharePanelProps) {
     }
   };
 
-  const active = trip.shares.filter((s) => s.revokedAt === null);
-  const revoked = trip.shares.filter((s) => s.revokedAt !== null);
+  // Expired links are rejected by the public resolver exactly like revoked
+  // ones — listing them as "Active" hands the owner a copyable dead link.
+  // Snapshot "now" once per mount: render-pure, and expiry granularity is
+  // days, so a stale-by-minutes comparison is irrelevant.
+  const [now] = useState(() => Date.now());
+  const isExpired = (s: TripShare): boolean =>
+    s.expiresAt !== null && new Date(s.expiresAt).getTime() < now;
+  const active = trip.shares.filter((s) => s.revokedAt === null && !isExpired(s));
+  const revoked = trip.shares.filter((s) => s.revokedAt !== null || isExpired(s));
 
   return (
     <Card>
@@ -103,15 +110,15 @@ export function TripSharePanel({ trip, baseUrl }: TripSharePanelProps) {
               Create link
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <Text variant="small">
             The email is just a label — we don&apos;t send a message. Copy the link and share it
             on WhatsApp, X, Slack or Instagram and the preview card will appear automatically.
-          </p>
+          </Text>
         </form>
 
         {active.length > 0 && (
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Active links</p>
+            <Text variant="small" weight="medium">Active links</Text>
             <ul className="space-y-2">
               {active.map((share) => (
                 <ShareRow
@@ -129,14 +136,22 @@ export function TripSharePanel({ trip, baseUrl }: TripSharePanelProps) {
 
         {revoked.length > 0 && (
           <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer">Revoked ({revoked.length})</summary>
+            <summary className="cursor-pointer">
+              Revoked or expired ({revoked.length})
+            </summary>
             <ul className="mt-2 space-y-1">
               {revoked.map((share) => (
                 <li key={share.id} className="flex items-center justify-between rounded border bg-muted/30 px-2 py-1">
-                  <span>
+                  <Text as="span" variant="small">
                     {share.inviteeEmail ?? "Anonymous"} ·{" "}
-                    {share.revokedAt ? format(new Date(share.revokedAt), "MMM d") : ""}
-                  </span>
+                    {share.revokedAt ? (
+                      <Mono>{format(new Date(share.revokedAt), "MMM d")}</Mono>
+                    ) : share.expiresAt ? (
+                      <Mono>expired {format(new Date(share.expiresAt), "MMM d")}</Mono>
+                    ) : (
+                      ""
+                    )}
+                  </Text>
                   <DeleteRevokedButton tripId={trip.id} shareId={share.id} />
                 </li>
               ))}
@@ -196,7 +211,7 @@ function ShareRow({
         </Button>
       </div>
       <div className="flex items-center gap-1">
-        <Mono className="flex-1 truncate rounded border bg-background px-2 py-1 text-[11px]">
+        <Mono className="flex-1 truncate rounded border bg-background px-2 py-1 text-2xs">
           {url}
         </Mono>
         <Button

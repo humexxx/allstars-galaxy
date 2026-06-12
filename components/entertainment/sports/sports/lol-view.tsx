@@ -14,7 +14,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
@@ -32,6 +31,7 @@ import type {
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { Last5Form } from "../shared/last-5-form";
 import { SportShell } from "../shared/sport-shell";
+import { SportsTh } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
 
 type LolViewProps = {
@@ -49,38 +49,43 @@ export function LolView({ data }: LolViewProps) {
     [split],
   );
 
-  return (
-    <SportShell
-      emoji="🎮"
-      title="League of Legends"
-      subtitle={`${split.name} · ${split.season}`}
-      controls={
-        <Select value={region} onValueChange={(v) => setRegion(v as LolRegion)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Region" />
-          </SelectTrigger>
-          <SelectContent>
-            {data.splits.map((s) => (
-              <SelectItem key={s.region} value={s.region}>
-                {s.region.toUpperCase()} — {s.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      }
-    >
-      <Tabs
-        defaultValue={split.playoffs && split.playoffs.length > 0 ? "playoffs" : "matches"}
-        className="space-y-5"
-      >
-        <TabsList>
-          <TabsTrigger value="matches">Matches</TabsTrigger>
-          <TabsTrigger value="standings">Standings</TabsTrigger>
-          {split.playoffs && split.playoffs.length > 0 && (
-            <TabsTrigger value="playoffs">Playoffs</TabsTrigger>
-          )}
-        </TabsList>
+  const hasPlayoffs = !!split.playoffs && split.playoffs.length > 0;
 
+  return (
+    // Keyed by region: switching to a region without playoffs while on the
+    // "playoffs" tab would otherwise strand the uncontrolled Tabs on a value
+    // whose trigger/content no longer exist (blank body).
+    <Tabs
+      key={region}
+      defaultValue={hasPlayoffs ? "playoffs" : "matches"}
+      className="space-y-6"
+    >
+      <SportShell
+        emoji="🎮"
+        title="League of Legends"
+        subtitle={`${split.name} · ${split.season}`}
+        controls={
+          <Select value={region} onValueChange={(v) => setRegion(v as LolRegion)}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Region" />
+            </SelectTrigger>
+            <SelectContent>
+              {data.splits.map((s) => (
+                <SelectItem key={s.region} value={s.region}>
+                  {s.region.toUpperCase()} — {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+        tabs={
+          <TabsList>
+            <TabsTrigger value="matches">Matches</TabsTrigger>
+            <TabsTrigger value="standings">Standings</TabsTrigger>
+            {hasPlayoffs && <TabsTrigger value="playoffs">Playoffs</TabsTrigger>}
+          </TabsList>
+        }
+      >
         <TabsContent value="matches">
           <div className="grid gap-2 sm:grid-cols-2">
             {split.matches.map((m) => (
@@ -93,17 +98,17 @@ export function LolView({ data }: LolViewProps) {
           <LolStandings split={split} teamsMap={teamsMap} />
         </TabsContent>
 
-        {split.playoffs && split.playoffs.length > 0 && (
+        {hasPlayoffs && (
           <TabsContent value="playoffs">
             <Card>
               <CardContent className="p-4">
-                <KnockoutBracket rounds={split.playoffs} teams={teamsMap} />
+                <KnockoutBracket rounds={split.playoffs!} teams={teamsMap} />
               </CardContent>
             </Card>
           </TabsContent>
         )}
-      </Tabs>
-    </SportShell>
+      </SportShell>
+    </Tabs>
   );
 }
 
@@ -131,7 +136,7 @@ function LolMatchCard({
     <div className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
       <div className="min-w-0 space-y-1.5">
         {match.stageLabel && (
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <div className="text-2xs uppercase tracking-wide text-muted-foreground">
             {match.stageLabel} · BO{match.bestOf}
           </div>
         )}
@@ -139,7 +144,7 @@ function LolMatchCard({
         <LolTeamRow team={away} score={match.awayScore} winner={awayWon} scheduled={isScheduled} />
       </div>
       <div className="border-l pl-3 text-right">
-        <Mono className="text-[11px] uppercase tracking-wide text-muted-foreground">
+        <Mono className="text-2xs uppercase tracking-wide text-muted-foreground">
           {isScheduled
             ? new Date(match.date).toLocaleDateString(undefined, {
                 month: "short",
@@ -196,21 +201,21 @@ function LolStandings({
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead className="w-8 text-xs uppercase tracking-wide text-muted-foreground">
+              <SportsTh className="w-8">
                 #
-              </TableHead>
-              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh>
                 Team
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 W
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 L
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 Last 5
-              </TableHead>
+              </SportsTh>
             </TableRow>
           </TableHeader>
           <TableBody>

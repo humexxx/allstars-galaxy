@@ -15,11 +15,35 @@ type KnockoutBracketProps = {
   className?: string;
 };
 
+const VISIBLE_COUNT = 3;
+
+/** Window start that puts the CURRENT round (first with an undecided tie) in
+ *  view; a fully decided bracket lands on the final columns instead of opening
+ *  on the oldest rounds and hiding the most interesting one. */
+function initialWindowStart(rounds: BracketRound[]): number {
+  const maxStart = Math.max(0, rounds.length - VISIBLE_COUNT);
+  const currentIdx = rounds.findIndex((r) =>
+    r.matches.some((m) => !m.winnerTeamId)
+  );
+  if (currentIdx === -1) return maxStart;
+  return Math.min(currentIdx, maxStart);
+}
+
 export function KnockoutBracket({ rounds, teams, className }: KnockoutBracketProps) {
-  const [windowStart, setWindowStart] = useState(0);
-  const visibleCount = 3;
-  const maxStart = Math.max(0, rounds.length - visibleCount);
-  const visibleRounds = rounds.slice(windowStart, windowStart + visibleCount);
+  const [windowStart, setWindowStart] = useState(() => initialWindowStart(rounds));
+  const maxStart = Math.max(0, rounds.length - VISIBLE_COUNT);
+
+  // Re-focus when the rounds themselves change (league switch, revalidation) —
+  // a stale windowStart could point past the new bracket's last round. This is
+  // React's render-time derived-state reset pattern (not an effect).
+  const [prevRounds, setPrevRounds] = useState(rounds);
+  if (prevRounds !== rounds) {
+    setPrevRounds(rounds);
+    setWindowStart(initialWindowStart(rounds));
+  }
+
+  const start = Math.min(windowStart, maxStart);
+  const visibleRounds = rounds.slice(start, start + VISIBLE_COUNT);
 
   return (
     <div className={cn("space-y-3", className)}>
@@ -27,7 +51,7 @@ export function KnockoutBracket({ rounds, teams, className }: KnockoutBracketPro
         <Button
           size="icon"
           variant="ghost"
-          disabled={windowStart === 0}
+          disabled={start === 0}
           onClick={() => setWindowStart((s) => Math.max(0, s - 1))}
           aria-label="Previous round"
         >
@@ -50,7 +74,7 @@ export function KnockoutBracket({ rounds, teams, className }: KnockoutBracketPro
         <Button
           size="icon"
           variant="ghost"
-          disabled={windowStart >= maxStart}
+          disabled={start >= maxStart}
           onClick={() => setWindowStart((s) => Math.min(maxStart, s + 1))}
           aria-label="Next round"
         >

@@ -15,10 +15,15 @@ import {
 } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { Eyebrow, Mono } from "@/components/ui/typography";
+import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import type { PublicTripView } from "@/types/travel";
 
-import { formatTripMoney } from "./trip-detail";
+import {
+  formatDateRange,
+  formatTripMoney,
+  parseTripDate,
+  tripDurationLabel,
+} from "@/lib/travel/format";
 
 const CATEGORY_META: Record<
   string,
@@ -31,28 +36,6 @@ const CATEGORY_META: Record<
   shopping: { label: "Shopping", Icon: ShoppingBag },
   other: { label: "Other", Icon: Tag },
 };
-
-function parseTripDate(value: string): Date {
-  const [y, m, d] = value.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function formatDateRange(start: string, end: string | null): string {
-  const s = parseTripDate(start);
-  if (!end || start === end) return format(s, "EEE, MMM d, yyyy");
-  const e = parseTripDate(end);
-  const sameYear = s.getFullYear() === e.getFullYear();
-  if (sameYear) {
-    return `${format(s, "EEE, MMM d")} – ${format(e, "EEE, MMM d, yyyy")}`;
-  }
-  return `${format(s, "MMM d, yyyy")} – ${format(e, "MMM d, yyyy")}`;
-}
-
-function tripDays(start: string, end: string | null): number {
-  const s = parseTripDate(start);
-  const e = end ? parseTripDate(end) : s;
-  return Math.round((e.getTime() - s.getTime()) / 86_400_000) + 1;
-}
 
 const NO_DATE_KEY = "__no_date__";
 
@@ -96,7 +79,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 p-6 text-white">
-            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{trip.title}</h1>
+            <Heading level="h1" className="text-white">{trip.title}</Heading>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
               {trip.destination && (
                 <span className="inline-flex items-center gap-1.5">
@@ -113,25 +96,29 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
       </header>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Stat icon={CalendarDays} label="Duration" value={`${tripDays(trip.startDate, trip.endDate)} days`} />
+        <Stat
+          icon={CalendarDays}
+          label="Duration"
+          value={tripDurationLabel(trip.startDate, trip.endDate)}
+        />
         <Stat icon={ListChecks} label="Items" value={String(items.length)} />
         <Stat icon={DollarSign} label="Est. total" value={formatTripMoney(totalEstimate, trip.currency)} />
       </div>
 
       {trip.description && (
         <Card>
-          <CardContent className="p-5">
+          <CardContent className="p-6">
             <Eyebrow className="mb-2 block">About</Eyebrow>
-            <p className="whitespace-pre-wrap text-sm leading-6 text-foreground/90">
+            <Text className="whitespace-pre-wrap text-foreground/90">
               {trip.description}
-            </p>
+            </Text>
           </CardContent>
         </Card>
       )}
 
       {photos.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold tracking-tight">Photos</h2>
+          <Heading level="h4" as="h2">Photos</Heading>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {photos.map((photo) => (
               <div
@@ -156,7 +143,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
 
       {groupKeys.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold tracking-tight">Itinerary</h2>
+          <Heading level="h4" as="h2">Itinerary</Heading>
           <div className="space-y-6">
             {groupKeys.map((key) => {
               const groupItems = groups.get(key)!;
@@ -171,7 +158,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                 <Card key={key}>
                   <CardContent className="p-4">
                     <div className="mb-2 flex items-end justify-between border-b pb-1">
-                      <h3 className="text-sm font-semibold tracking-tight">{label}</h3>
+                      <Heading level="h6" as="h3">{label}</Heading>
                       {groupTotal > 0 && (
                         <Mono className="text-xs text-muted-foreground">
                           {formatTripMoney(groupTotal, trip.currency)}
@@ -189,7 +176,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                             </div>
                             <div className="min-w-0 flex-1 space-y-0.5">
                               <div className="flex items-baseline justify-between gap-2">
-                                <p className="truncate text-sm font-medium">{item.title}</p>
+                                <Text weight="medium" className="truncate">{item.title}</Text>
                                 {item.price && (
                                   <Mono className="text-xs font-medium">
                                     {formatTripMoney(parseFloat(item.price), trip.currency)}
@@ -210,7 +197,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                                 )}
                               </div>
                               {item.notes && (
-                                <p className="text-xs text-muted-foreground">{item.notes}</p>
+                                <Text variant="small">{item.notes}</Text>
                               )}
                             </div>
                           </li>
@@ -244,8 +231,8 @@ function Stat({
           <Icon className="h-4 w-4" />
         </div>
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-          <p className="truncate text-sm font-semibold">{value}</p>
+          <Text variant="small" className="uppercase tracking-wider">{label}</Text>
+          <Text weight="semibold" className="truncate tabular-nums">{value}</Text>
         </div>
       </CardContent>
     </Card>

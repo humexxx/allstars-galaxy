@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mono } from "@/components/ui/typography";
+import { Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 import {
@@ -40,7 +40,7 @@ import {
 } from "@/app/actions/travel";
 import type { TripItem, TripItemCategory, TripWithRelations } from "@/types/travel";
 
-import { formatTripMoney } from "./trip-detail";
+import { formatTripMoney } from "@/lib/travel/format";
 
 const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "lodging", label: "Lodging", Icon: Bed },
@@ -115,15 +115,18 @@ export function TripItinerary({ trip }: TripItineraryProps) {
         )}
 
         {groups.length === 0 && !adding && (
-          <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+          <Text
+            variant="muted"
+            className="rounded-md border border-dashed p-6 text-center"
+          >
             No items yet. Add lodging, transport, activities or anything with a link or price.
-          </p>
+          </Text>
         )}
 
         {groups.map((group) => (
           <section key={group.key} className="space-y-2">
             <div className="flex items-end justify-between border-b pb-1">
-              <h3 className="text-sm font-semibold tracking-tight">{group.label}</h3>
+              <Heading level="h6" as="h3">{group.label}</Heading>
               {group.total > 0 && (
                 <Mono className="text-xs text-muted-foreground">
                   {formatTripMoney(group.total, trip.currency)}
@@ -189,7 +192,7 @@ function ItemRow({
       </div>
       <div className="min-w-0 flex-1 space-y-0.5">
         <div className="flex items-baseline justify-between gap-2">
-          <p className="truncate text-sm font-medium">{item.title}</p>
+          <Text weight="medium" className="truncate">{item.title}</Text>
           {item.price && (
             <Mono className="text-xs font-medium">
               {formatTripMoney(parseFloat(item.price), currency)}
@@ -210,10 +213,11 @@ function ItemRow({
           )}
         </div>
         {item.notes && (
-          <p className="line-clamp-2 text-xs text-muted-foreground">{item.notes}</p>
+          <Text variant="small" className="line-clamp-2">{item.notes}</Text>
         )}
       </div>
-      <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      {/* Always visible on touch (no hover); hover/focus-revealed on desktop. */}
+      <div className="flex shrink-0 gap-0.5 transition-opacity sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover:opacity-100">
         <Button
           size="icon"
           variant="ghost"

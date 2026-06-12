@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Text } from "@/components/ui/typography";
 
 import {
   addTripPhotoAction,
@@ -67,9 +68,12 @@ export function TripGallery({ trip }: TripGalleryProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         {trip.photos.length === 0 ? (
-          <p className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+          <Text
+            variant="small"
+            className="rounded-md border border-dashed p-4 text-center"
+          >
             No photos yet — pick a few to show in the shared view.
-          </p>
+          </Text>
         ) : (
           <div className="grid grid-cols-3 gap-2">
             {trip.photos.map((photo) => (
@@ -92,7 +96,7 @@ export function TripGallery({ trip }: TripGalleryProps) {
                   type="button"
                   size="icon"
                   variant="secondary"
-                  className="absolute right-1 top-1 h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
+                  className="absolute right-1 top-1 h-6 w-6 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                   onClick={() => handleDelete(photo.id)}
                   disabled={isPending}
                   aria-label="Delete photo"

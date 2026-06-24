@@ -13,6 +13,8 @@ changed — don't rewrite anything else.
 | Public-facing project info (what it is, how to run it, links) | [`/README.md`](../README.md) |
 | Anything inside a feature module (routes, actions, services, schemas, tables) | [`docs/modules/<module>.md`](./modules/) |
 | Typography / font / type system | [`docs/TYPOGRAPHY.md`](./TYPOGRAPHY.md) |
+| Spacing / padding / margin scale, app-shell offsets | [`docs/SPACING.md`](./SPACING.md) |
+| Composition patterns for data-dense UIs (cards, KPI rails, outcome selectors, sticky rails) | [`.github/skills/data-density-ui/SKILL.md`](../.github/skills/data-density-ui/SKILL.md) |
 | Server-action patterns (the *how*, not a specific action) | [`/app/actions/AGENTS.md`](../app/actions/AGENTS.md) |
 | Service-layer patterns (the *how*, not a specific service) | [`/lib/services/AGENTS.md`](../lib/services/AGENTS.md) |
 | Agent skills / reusable playbooks | [`/.github/skills/`](../.github/skills/) |

@@ -28,9 +28,10 @@ Per-module reference docs live in [`docs/modules/`](docs/modules/).
 | [`docs/AGENTS.md`](docs/AGENTS.md) | **Rules for agents** on segmented doc updates — read every task |
 | [`docs/modules/<module>.md`](docs/modules/) | One file per product module: routes, actions, services, schemas, tables |
 | [`docs/TYPOGRAPHY.md`](docs/TYPOGRAPHY.md) | Font system + UI typography primitives (required for UI work) |
+| [`docs/SPACING.md`](docs/SPACING.md) | Spacing/padding/margin scale + app-shell offsets (required for UI work) |
 | [`/app/actions/AGENTS.md`](app/actions/AGENTS.md) | Server-action patterns (the *how*) |
 | [`/lib/services/AGENTS.md`](lib/services/AGENTS.md) | Service-layer patterns (the *how*) |
-| [`.github/skills/`](.github/skills/) | Reusable playbooks: DB migration, service creation, server action creation, responsive UI |
+| [`.github/skills/`](.github/skills/) | Reusable playbooks: DB migration, service creation, server action creation, responsive UI, data-density UI patterns |
 
 Each segment owns its scope. Linking between docs is preferred over
 duplicating content. When you make a change, edit **only** the segment that
@@ -108,11 +109,14 @@ migrations/          Auto-generated SQL migrations
 ## Code Conventions
 
 ### Typography
-**Read [`docs/TYPOGRAPHY.md`](docs/TYPOGRAPHY.md) before writing or modifying
-any UI.** The app uses **Geist Sans** (UI/body) and **Geist Mono** (code,
-numerics, identifiers). Prefer the primitives in `@/components/ui/typography`
-(`Heading`, `Text`, `Eyebrow`, `Code`, `Mono`) over raw
-`text-* font-* tracking-*` chains. Never introduce another font family.
+**Read [`docs/TYPOGRAPHY.md`](docs/TYPOGRAPHY.md) and
+[`docs/SPACING.md`](docs/SPACING.md) before writing or modifying any UI.** The
+app uses **Geist Sans** (UI/body) and **Geist Mono** (code, numerics,
+identifiers). Prefer the primitives in `@/components/ui/typography` (`Heading`,
+`Text`, `Eyebrow`, `Code`, `Mono`) over raw `text-* font-* tracking-*` chains.
+Never introduce another font family. The smallest sanctioned size is `text-2xs`
+(10px); never use arbitrary `text-[Npx]`. For spacing, reuse the Tailwind scale —
+never arbitrary `[...]` padding/margin/gap (see SPACING.md).
 
 ### Language
 All code, comments, and documentation in **English**.
@@ -215,6 +219,31 @@ DATABASE_URL    # Supabase transaction pooler (:6543) — used by the app at run
 DIRECT_URL      # Supabase session pooler (:5432) — used by drizzle-kit only
 CRON_SECRET
 ```
+
+Optional (feature-gated, each sport falls back to mock when unset):
+```
+# football / soccer
+FOOTBALL_DATA_API_KEY   # EPL, La Liga, Bundesliga, Serie A, Ligue 1, UCL,
+                        # World Cup, Euro. Free: 10 req/min, X-Auth-Token header.
+                        # https://www.football-data.org/client/register
+
+# NBA
+BALLDONTLIE_API_KEY     # NBA only (free tier = single sport). 5 req/min.
+                        # https://app.balldontlie.io
+
+# padel
+PADEL_API_KEY           # Premier Padel + FIP tournaments, last 6 months of
+                        # matches free. 50K req/mo. https://padelapi.org
+
+# DORMANT — kept for reference, not used by any service today:
+API_SPORTS_KEY          # Free tier hard-locked to seasons 2022-2024, unusable
+                        # for current data. ~$100/mo for the All Sports paid
+                        # plan if we ever upgrade. https://dashboard.api-sports.io
+```
+
+F1 (Jolpica), LoL (Lolesports) and TheSportsDB are key-less — nothing to
+configure in `.env`. NFL and tennis stay on mock fixtures (no decent free
+provider with current data).
 
 ## Common Workflows
 

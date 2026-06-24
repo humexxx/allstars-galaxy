@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0](https://github.com/humexxx/allstars-galaxy/compare/v0.3.0...v0.4.0) (2026-06-24)
+
+
+### Features
+
+* **finance:** chart past from real snapshots + calibrated forecast future ([9dd3dd6](https://github.com/humexxx/allstars-galaxy/commit/9dd3dd6a2b492936d814dbcce4ce30b953e4d7cf))
+* **finance:** real snapshots, auto-confirm, chart hover preview + plan UI refresh ([8c3c8b7](https://github.com/humexxx/allstars-galaxy/commit/8c3c8b710a3c85fb54881d21e8a300eeb8d116da))
+* **portal:** shared nav config powering sidebar, header and command menu ([fcc55bd](https://github.com/humexxx/allstars-galaxy/commit/fcc55bde0454b7a26f08437d66a956e8d10239a6))
+
+
+### Bug Fixes
+
+* **db:** recycle pooled connections to avoid statement-timeout hangs ([708b8be](https://github.com/humexxx/allstars-galaxy/commit/708b8be90710d2da93d7367fa44af47fcbb22147))
+* **entertainment:** repair public trip shares and knockout brackets, standardize sports styles ([44c84b1](https://github.com/humexxx/allstars-galaxy/commit/44c84b1752a58b59ed41a31f53bf6be97e954e20))
+
+
+### Refactor
+
+* **ui:** standardize typography and spacing across landing, portal and modules ([b823a79](https://github.com/humexxx/allstars-galaxy/commit/b823a79a1f5999373595bed65870bb1f67899984))
+
 ## [0.3.0](https://github.com/humexxx/allstars-galaxy/compare/v0.2.0...v0.3.0) (2026-06-03)
 
 

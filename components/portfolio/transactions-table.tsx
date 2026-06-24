@@ -11,6 +11,7 @@ import {
 import { format } from "date-fns";
 import { formatCurrency, formatSignedPercent, parseDecimal } from "@/lib/utils/format";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Mono, Text } from "@/components/ui/typography";
 import { StatusBadge, TypeBadge } from "./transaction-badges";
 import type { PortfolioTransaction } from "@/types/portfolio";
 
@@ -55,10 +56,10 @@ export function TransactionsTable({ transactions }: TransactionsTableProps) {
             return (
               <TableRow key={transaction.id}>
                 <TableCell className="font-medium">
-                  {format(new Date(transaction.date), "MMM d, yyyy")}
-                  <div className="text-xs text-muted-foreground">
+                  <Mono>{format(new Date(transaction.date), "MMM d, yyyy")}</Mono>
+                  <Mono as="div" className="text-xs text-muted-foreground">
                     {format(new Date(transaction.date), "h:mm a")}
-                  </div>
+                  </Mono>
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
@@ -68,44 +69,44 @@ export function TransactionsTable({ transactions }: TransactionsTableProps) {
                       </span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="font-medium">{transaction.investmentMethod.name}</span>
-                      <span className="text-xs text-muted-foreground">
+                      <Text as="span" className="font-medium">{transaction.investmentMethod.name}</Text>
+                      <Text variant="small" as="span">
                         {transaction.investmentMethod.author}
-                      </span>
+                      </Text>
                     </div>
                   </div>
                 </TableCell>
                 <TableCell><TypeBadge type={transaction.type} /></TableCell>
-                <TableCell>{formatCurrency(transaction.amount)}</TableCell>
-                <TableCell>{formatCurrency(transaction.fee)}</TableCell>
-                <TableCell className="font-semibold">{formatCurrency(transaction.total)}</TableCell>
+                <TableCell><Mono>{formatCurrency(transaction.amount)}</Mono></TableCell>
+                <TableCell><Mono>{formatCurrency(transaction.fee)}</Mono></TableCell>
+                <TableCell className="font-semibold"><Mono>{formatCurrency(transaction.total)}</Mono></TableCell>
                 <TableCell>
                   {isBuy && transaction.initialValue ? (
-                    <span>{formatCurrency(transaction.initialValue)}</span>
+                    <Mono>{formatCurrency(transaction.initialValue)}</Mono>
                   ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
+                    <Text variant="small" as="span">—</Text>
                   )}
                 </TableCell>
                 <TableCell>
                   {isBuy && transaction.currentValue && transaction.initialValue ? (
                     <div className="flex flex-col">
-                      <span className="font-medium">{formatCurrency(transaction.currentValue)}</span>
+                      <Mono className="font-medium">{formatCurrency(transaction.currentValue)}</Mono>
                       {growth !== null && (
-                        <span className={`text-xs ${growth >= 0 ? "text-green-500" : "text-red-500"}`}>
+                        <Mono className={`text-xs ${growth >= 0 ? "text-green-500" : "text-red-500"}`}>
                           {formatSignedPercent(growth)}
-                        </span>
+                        </Mono>
                       )}
                     </div>
                   ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
+                    <Text variant="small" as="span">—</Text>
                   )}
                 </TableCell>
                 <TableCell><StatusBadge status={transaction.status} /></TableCell>
                 <TableCell>
                   {transaction.notes ? (
-                    <span className="text-sm text-muted-foreground">{transaction.notes}</span>
+                    <Text variant="muted" as="span">{transaction.notes}</Text>
                   ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
+                    <Text variant="small" as="span">—</Text>
                   )}
                 </TableCell>
               </TableRow>

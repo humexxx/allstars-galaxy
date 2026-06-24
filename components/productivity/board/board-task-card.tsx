@@ -3,6 +3,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
+import { Heading, Mono, Text } from "@/components/ui/typography";
 import { GripVertical, MoreHorizontal, Calendar } from "lucide-react";
 import {
   DropdownMenu,
@@ -74,7 +75,7 @@ export function BoardTaskCard({ task, isOverlay, onDelete }: BoardTaskCardProps)
             className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/40 opacity-0 transition group-hover:opacity-100"
             aria-hidden="true"
           />
-          <h4 className="text-sm font-medium leading-snug">{task.title}</h4>
+          <Heading level="h6" as="h4">{task.title}</Heading>
         </div>
         {onDelete ? (
           <DropdownMenu>
@@ -101,11 +102,11 @@ export function BoardTaskCard({ task, isOverlay, onDelete }: BoardTaskCardProps)
       </div>
 
       {task.description ? (
-        <p className="line-clamp-2 text-xs text-muted-foreground">{task.description}</p>
+        <Text variant="small" className="line-clamp-2">{task.description}</Text>
       ) : null}
 
       {priorityStyle || task.dueDate ? (
-        <div className="mt-1 flex items-center gap-3 text-[11px]">
+        <div className="mt-1 flex items-center gap-3 text-2xs">
           {priorityStyle ? (
             <span className={cn("inline-flex items-center gap-1 font-medium", priorityStyle.tone)}>
               <span className={cn("size-1.5 rounded-full", priorityStyle.bar)} />
@@ -113,10 +114,10 @@ export function BoardTaskCard({ task, isOverlay, onDelete }: BoardTaskCardProps)
             </span>
           ) : null}
           {task.dueDate ? (
-            <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <Mono className="inline-flex items-center gap-1 text-muted-foreground">
               <Calendar className="size-3" />
               {format(new Date(task.dueDate), "MMM d")}
-            </span>
+            </Mono>
           ) : null}
         </div>
       ) : null}

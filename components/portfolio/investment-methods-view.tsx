@@ -116,7 +116,7 @@ export function InvestmentMethodsView({ methods }: InvestmentMethodsViewProps) {
   return (
     <section className="space-y-6">
       <div className="space-y-1">
-        <Heading level="h3" className="font-bold">
+        <Heading level="h3" className="font-semibold">
           Investment Methods
         </Heading>
         <Text variant="muted">
@@ -169,7 +169,7 @@ export function InvestmentMethodsView({ methods }: InvestmentMethodsViewProps) {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center justify-between gap-3 text-base font-semibold">
+              <CardTitle className="flex items-center justify-between gap-3">
                 <span>Risk profile</span>
                 <span className="text-xs font-normal text-muted-foreground">
                   {totals.total} enabled
@@ -200,9 +200,7 @@ export function InvestmentMethodsView({ methods }: InvestmentMethodsViewProps) {
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <h2 className="text-sm font-semibold tracking-tight">
-                        {author}
-                      </h2>
+                      <Heading level="h6" as="h2">{author}</Heading>
                       <Text variant="small">
                         {items.length}{" "}
                         {items.length === 1 ? "method" : "methods"}
@@ -252,7 +250,7 @@ function KpiCard({
           {value}
         </Mono>
         {sublabel && (
-          <div className="text-xs text-muted-foreground">{sublabel}</div>
+          <Text variant="small" as="div">{sublabel}</Text>
         )}
       </CardContent>
     </Card>
@@ -273,7 +271,7 @@ function MethodCard({ method }: { method: InvestmentMethod }) {
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="space-y-1">
-            <CardTitle className="text-base">{method.name}</CardTitle>
+            <CardTitle>{method.name}</CardTitle>
             {method.description && (
               <Text variant="small" className="line-clamp-2">
                 {method.description}
@@ -292,7 +290,7 @@ function MethodCard({ method }: { method: InvestmentMethod }) {
             <Mono
               className={cn(
                 "block text-2xl font-semibold",
-                roi >= 0 ? "text-green-600" : "text-red-600"
+                roi >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
               )}
             >
               {Number.isFinite(roi) ? `${roi.toFixed(2)}%` : "—"}
@@ -347,9 +345,9 @@ function RiskBar({
               aria-hidden
               className={cn("h-2 w-2 rounded-full", segmentColor(seg.tone))}
             />
-            <span className="text-muted-foreground">
+            <Text variant="small" as="span">
               {RISK_BADGE[seg.tone].label}
-            </span>
+            </Text>
             <Mono className="font-medium text-foreground">
               {seg.count}
             </Mono>
@@ -367,7 +365,7 @@ function segmentColor(tone: RiskTone): string {
 }
 
 function toneClass(tone?: "positive" | "negative"): string {
-  if (tone === "positive") return "text-green-600";
-  if (tone === "negative") return "text-red-600";
+  if (tone === "positive") return "text-emerald-600 dark:text-emerald-400";
+  if (tone === "negative") return "text-rose-600 dark:text-rose-400";
   return "";
 }

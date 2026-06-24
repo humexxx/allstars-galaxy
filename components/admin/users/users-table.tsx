@@ -41,6 +41,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Mono, Text } from "@/components/ui/typography";
 
 import { startImpersonationAction } from "@/app/actions/impersonation";
 import { updateUserRoleAction } from "@/app/actions/admin-users";
@@ -145,7 +146,7 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
                         </Avatar>
                         <div className="flex flex-col">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium">{displayName}</span>
+                            <Text as="span" variant="body" weight="medium">{displayName}</Text>
                             {isSelf && (
                               <Badge variant="outline" className="text-xs">
                                 You
@@ -153,7 +154,7 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
                             )}
                           </div>
                           {user.email && (
-                            <span className="text-xs text-muted-foreground">{user.email}</span>
+                            <Mono className="text-xs text-muted-foreground">{user.email}</Mono>
                           )}
                         </div>
                       </div>
@@ -172,9 +173,9 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
                       {isSelf ? (
                         // No actions on yourself: keeps the UI honest and avoids a
                         // dropdown with everything greyed out.
-                        <span className="text-xs text-muted-foreground" aria-label="No actions available">
+                        <Text as="span" variant="small" aria-label="No actions available">
                           —
-                        </span>
+                        </Text>
                       ) : (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

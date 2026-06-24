@@ -17,6 +17,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { UserSelector } from "@/components/user-selector";
+import { Mono, Text } from "@/components/ui/typography";
 import { format } from "date-fns";
 import type { InvestmentMethod } from "@/types/portfolio";
 
@@ -214,8 +215,8 @@ export function TransactionForm({
       </FieldGroup>
 
       <div className="rounded-lg bg-muted p-4">
-        <div className="text-sm text-muted-foreground">Total Spent</div>
-        <div className="text-3xl font-bold">$ {total}</div>
+        <Text variant="muted">Total Spent</Text>
+        <div className="text-3xl font-bold">$ <Mono>{total}</Mono></div>
       </div>
 
       <div className="flex gap-2">

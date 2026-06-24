@@ -4,10 +4,14 @@ import type { TransactionStatus, TransactionType } from "@/types/portfolio";
 export function StatusBadge({ status }: { status: TransactionStatus }) {
   switch (status) {
     case "approved":
-      return <Badge variant="default" className="bg-green-500">Approved</Badge>;
+      return (
+        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+          Approved
+        </Badge>
+      );
     case "pending":
       return (
-        <Badge variant="outline" className="border-yellow-500 bg-yellow-500/10 text-yellow-500">
+        <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">
           Pending
         </Badge>
       );

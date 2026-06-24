@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default function SignupPage() {
   return (
     <main className="grid min-h-svh lg:grid-cols-2">
-      <section className="flex flex-col gap-4 p-6 md:p-10">
+      <section className="flex flex-col gap-4 p-6 md:p-12">
         <header className="flex justify-center gap-2 md:justify-start">
           <Link href="/" className="flex items-center gap-2 font-medium">
             <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">

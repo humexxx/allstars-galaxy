@@ -5,6 +5,7 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { BoardTaskCard } from "./board-task-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Heading } from "@/components/ui/typography";
 import { MoreHorizontal, Plus } from "lucide-react";
 import {
   DropdownMenu,
@@ -57,8 +58,8 @@ export function BoardColumn({
     >
       <div className="flex items-center justify-between gap-2 px-4 py-3">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold tracking-tight text-foreground">{column.name}</h3>
-          <Badge variant="secondary" className="h-5 rounded-full px-2 text-[11px] font-medium">
+          <Heading level="h6" as="h3">{column.name}</Heading>
+          <Badge variant="secondary" className="h-5 rounded-full px-2 text-2xs font-medium">
             {tasks.length}
           </Badge>
         </div>

@@ -18,14 +18,16 @@ import { cn } from "@/lib/utils";
 const headingVariants = cva("text-foreground text-balance", {
   variants: {
     level: {
-      display:
-        "text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl",
-      h1: "text-3xl font-extrabold tracking-tight sm:text-4xl",
-      h2: "text-2xl font-semibold tracking-tight sm:text-3xl",
-      h3: "text-xl font-semibold tracking-tight sm:text-2xl",
-      h4: "text-lg font-semibold tracking-tight sm:text-xl",
-      h5: "text-base font-semibold tracking-tight sm:text-lg",
-      h6: "text-sm font-semibold tracking-tight sm:text-base",
+      // Weights match the shadcn docs scale: lighter than a typical bold ramp —
+      // hero is bold, the page title semibold, every sub-level medium. Keep in
+      // sync with the weight column in docs/TYPOGRAPHY.md.
+      display: "text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl",
+      h1: "text-3xl font-semibold tracking-tight sm:text-4xl",
+      h2: "text-2xl font-medium tracking-tight sm:text-3xl",
+      h3: "text-xl font-medium tracking-tight sm:text-2xl",
+      h4: "text-lg font-medium tracking-tight sm:text-xl",
+      h5: "text-base font-medium tracking-tight sm:text-lg",
+      h6: "text-sm font-medium tracking-tight sm:text-base",
     },
   },
   defaultVariants: {
@@ -86,12 +88,14 @@ function defaultTagForLevel(level: HeadingProps["level"]): HeadingTag {
 const textVariants = cva("", {
   variants: {
     variant: {
-      lead: "text-xl text-muted-foreground",
-      body: "text-base leading-7 text-foreground",
+      // Mobile-first lead. Sizes match the docs/TYPOGRAPHY.md Text table.
+      lead: "text-lg text-muted-foreground sm:text-xl",
       "body-lg": "text-base leading-7 text-foreground",
-      large: "text-lg font-semibold text-foreground",
+      // Portal default. 14px (text-sm) — the de-facto body size used across the
+      // app — not text-base. Keep in sync with docs/TYPOGRAPHY.md.
+      body: "text-sm leading-6 text-foreground",
       muted: "text-sm text-muted-foreground",
-      small: "text-sm font-medium leading-none text-foreground",
+      small: "text-xs text-muted-foreground",
     },
     weight: {
       normal: "font-normal",

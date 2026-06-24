@@ -18,12 +18,12 @@ export function LandingNav() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-neutral-200/80 bg-white/70 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b bg-background/70 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
         <div className="flex items-center gap-8">
           <Link
             href="/"
-            className="flex items-center gap-2 text-[15px] font-semibold tracking-tight"
+            className="flex items-center gap-2 text-base font-semibold tracking-tight"
           >
             <GalaxyLogo variant="light" className="size-6" />
             Allstars Galaxy
@@ -33,7 +33,7 @@ export function LandingNav() {
               <a
                 key={link.label}
                 href={link.href}
-                className="text-sm text-neutral-500 transition-colors hover:text-neutral-900"
+                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
                 {link.label}
               </a>
@@ -44,13 +44,13 @@ export function LandingNav() {
         <div className="hidden items-center gap-2 md:flex">
           <Link
             href="/login"
-            className="rounded-full px-3 py-1.5 text-[13px] font-medium text-neutral-700 transition-colors hover:text-neutral-900"
+            className="rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             Log in
           </Link>
           <Link
             href="/signup"
-            className="inline-flex h-8 items-center justify-center rounded-full bg-neutral-900 px-4 text-[13px] font-medium text-white transition hover:bg-neutral-800"
+            className="inline-flex h-8 items-center justify-center rounded-full bg-foreground px-4 text-sm font-medium text-background transition hover:bg-foreground/90"
           >
             Get started
             <ArrowRight className="ml-1 size-3" />
@@ -61,7 +61,7 @@ export function LandingNav() {
           type="button"
           aria-label={open ? "Close menu" : "Open menu"}
           aria-expanded={open}
-          className="grid size-9 place-items-center rounded-full text-neutral-900 hover:bg-neutral-100 md:hidden"
+          className="grid size-9 place-items-center rounded-full text-foreground hover:bg-muted md:hidden"
           onClick={() => setOpen((v) => !v)}
         >
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
@@ -69,14 +69,14 @@ export function LandingNav() {
       </div>
 
       {open && (
-        <div className="border-t border-neutral-200 bg-white md:hidden">
+        <div className="border-t bg-background md:hidden">
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-1 px-6 py-3">
             {NAV_LINKS.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
                 onClick={() => setOpen(false)}
-                className="rounded-md px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
+                className="rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
               >
                 {link.label}
               </a>
@@ -84,13 +84,13 @@ export function LandingNav() {
             <div className="mt-2 flex gap-2">
               <Link
                 href="/login"
-                className="flex-1 rounded-full border border-neutral-300 px-4 py-2 text-center text-sm font-medium text-neutral-900"
+                className="flex-1 rounded-full border px-4 py-2 text-center text-sm font-medium text-foreground"
               >
                 Log in
               </Link>
               <Link
                 href="/signup"
-                className="flex-1 rounded-full bg-neutral-900 px-4 py-2 text-center text-sm font-medium text-white"
+                className="flex-1 rounded-full bg-foreground px-4 py-2 text-center text-sm font-medium text-background"
               >
                 Get started
               </Link>

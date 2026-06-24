@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Text } from "@/components/ui/typography";
 import { Plus, Trash2 } from "lucide-react";
 import {
   createRoadPathMilestoneAction,
@@ -95,9 +96,9 @@ export function MilestoneList({ roadPathId, milestones, onRefresh }: MilestoneLi
         ))}
 
         {milestones.length === 0 && !showForm && (
-          <p className="text-sm text-muted-foreground text-center py-4">
+          <Text variant="muted" className="text-center py-4">
             No milestones yet
-          </p>
+          </Text>
         )}
       </div>
 

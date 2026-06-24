@@ -15,12 +15,9 @@ export const metadata: Metadata = {
     "The calm command center for your finances, your week and the goals that connect them.",
 };
 
-// Landing intentionally locks its palette to neutral whites/blacks regardless of
-// the user's theme — we use Tailwind neutral-* tokens directly instead of the
-// theme-aware bg-background / text-foreground variables.
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-neutral-900 antialiased">
+    <div className="min-h-screen bg-background text-foreground antialiased">
       <LandingNav />
       <main>
         <LandingHero />

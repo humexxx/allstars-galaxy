@@ -10,7 +10,7 @@ import {
   Wallet,
 } from "lucide-react";
 
-import { Heading } from "@/components/ui/typography";
+import { Eyebrow, Heading, Text } from "@/components/ui/typography";
 
 type ModuleItem = {
   icon: typeof Wallet;
@@ -90,67 +90,66 @@ const MODULES: ModuleItem[] = [
 
 export function LandingModules() {
   return (
-    <section
-      id="modules"
-      className="border-b border-neutral-200/80 bg-white py-24"
-    >
+    <section id="modules" className="border-b bg-background py-24">
       <div className="mx-auto max-w-6xl px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <span className="text-xs font-medium uppercase tracking-widest text-neutral-400">
-            Product
-          </span>
-          <Heading level="h2" className="mt-3 text-neutral-900">
+          <Eyebrow>Product</Eyebrow>
+          <Heading level="h2" className="mt-3">
             One galaxy. Many orbits.
           </Heading>
-          <p className="mt-4 text-neutral-500">
+          <Text variant="muted" className="mt-4">
             Six modules live today, one on the way. Each is useful on its own —
             and they really shine when they talk to each other.
-          </p>
+          </Text>
         </div>
 
-        <div className="mt-14 grid gap-px overflow-hidden rounded-xl border border-neutral-200 bg-neutral-200 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-12 grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2 lg:grid-cols-3">
           {MODULES.map(({ icon: Icon, title, description, href, status }) => {
             const isSoon = status === "soon";
             const body = (
               <div
-                className={`group relative h-full bg-white p-6 transition-colors sm:p-8 ${
-                  isSoon ? "" : "hover:bg-neutral-50"
+                className={`group relative h-full bg-card p-6 transition-colors sm:p-8 ${
+                  isSoon ? "" : "hover:bg-muted"
                 }`}
               >
-                <div className="mb-5 inline-flex h-9 w-9 items-center justify-center rounded-md border border-neutral-200 bg-neutral-50 text-neutral-700 transition-colors group-hover:border-neutral-300 group-hover:text-neutral-900">
+                <div className="mb-6 inline-flex h-9 w-9 items-center justify-center rounded-md border bg-muted text-muted-foreground transition-colors group-hover:text-foreground">
                   <Icon className="h-4 w-4" />
                 </div>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-medium tracking-tight">
+                    <Heading
+                      level="h4"
+                      as="h3"
+                      className="text-lg font-medium sm:text-lg"
+                    >
                       {title}
-                    </h3>
+                    </Heading>
                     {isSoon && (
-                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Soon
                       </span>
                     )}
                   </div>
                   {!isSoon && (
-                    <ArrowUpRight className="size-4 shrink-0 text-neutral-300 transition group-hover:text-neutral-900" />
+                    <ArrowUpRight className="size-4 shrink-0 text-muted-foreground/50 transition group-hover:text-foreground" />
                   )}
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-neutral-500">
+                <Text variant="muted" className="mt-2 leading-relaxed">
                   {description}
-                </p>
+                </Text>
               </div>
             );
 
             if (isSoon || !href) {
               return (
-                <div key={title} className="bg-white">
+                <div key={title} className="bg-card">
                   {body}
                 </div>
               );
             }
 
             return (
-              <Link key={title} href={href} className="bg-white">
+              <Link key={title} href={href} className="bg-card">
                 {body}
               </Link>
             );

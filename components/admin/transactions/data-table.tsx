@@ -8,6 +8,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { Text } from "@/components/ui/typography";
 import type { AdminTransactionRow } from "@/types/transaction";
 import { TransactionRow } from "./transaction-row";
 
@@ -38,8 +39,10 @@ export function DataTable({ data }: DataTableProps) {
                         ))
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                                No transactions match the current filters.
+                            <TableCell colSpan={7} className="h-24 text-center">
+                                <Text variant="muted">
+                                    No transactions match the current filters.
+                                </Text>
                             </TableCell>
                         </TableRow>
                     )}

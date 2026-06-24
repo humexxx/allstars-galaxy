@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { AppCard } from "@/components/more-apps/app-card";
+import { Text } from "@/components/ui/typography";
 import type { AppListing } from "@/app/portal/more-apps/apps-data";
 
 const STORAGE_KEY = "more-apps:hidden";
@@ -104,9 +105,9 @@ export function MoreAppsList({ items }: { items: AppWithScreenshot[] }) {
           ))}
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">
+        <Text variant="muted">
           All apps are hidden. Expand the section below to unhide some.
-        </p>
+        </Text>
       )}
 
       {hiddenList.length > 0 && (

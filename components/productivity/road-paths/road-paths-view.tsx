@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/typography";
 import { Plus, RefreshCw } from "lucide-react";
 import { RoadPathCard } from "./road-path-card";
 import { CreateRoadPathDialog } from "./create-road-path-dialog";
@@ -53,9 +54,9 @@ export function RoadPathsView({ initialRoadPaths }: RoadPathsViewProps) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
+        <Text variant="muted">
           Track your long-term goals and create automated tasks
-        </p>
+        </Text>
         <CreateRoadPathDialog onSuccess={loadData}>
           <Button>
             <Plus className="mr-2 h-4 w-4" />
@@ -66,7 +67,7 @@ export function RoadPathsView({ initialRoadPaths }: RoadPathsViewProps) {
 
       {roadPaths.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 gap-4">
-          <p className="text-muted-foreground">No road paths yet. Create your first one!</p>
+          <Text variant="muted">No road paths yet. Create your first one!</Text>
           <CreateRoadPathDialog onSuccess={loadData}>
             <Button>
               <Plus className="mr-2 h-4 w-4" />

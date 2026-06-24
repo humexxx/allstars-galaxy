@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Check, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { Mono, Text } from "@/components/ui/typography";
 import { approveTransaction, rejectTransaction } from "@/app/actions/admin-transactions";
 import { toast } from "sonner";
 import type { AdminTransactionRow } from "@/types/transaction";
@@ -65,7 +66,9 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
 
   return (
     <TableRow>
-      <TableCell>{format(new Date(transaction.date), "PPP")}</TableCell>
+      <TableCell>
+        <Mono>{format(new Date(transaction.date), "PPP")}</Mono>
+      </TableCell>
       <TableCell>
         {transaction.user ? (
           <div className="flex items-center gap-2">
@@ -78,16 +81,16 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
-              <span className="text-sm font-medium">
+              <Text as="span" variant="body" weight="medium">
                 {transaction.user.fullName || "Unknown"}
-              </span>
-              <span className="text-xs text-muted-foreground">
+              </Text>
+              <Mono className="text-xs text-muted-foreground">
                 {transaction.user.email}
-              </span>
+              </Mono>
             </div>
           </div>
         ) : (
-          <span className="text-sm text-muted-foreground">Unknown User</span>
+          <Text as="span" variant="muted">Unknown User</Text>
         )}
       </TableCell>
       <TableCell>
@@ -96,7 +99,7 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
         </Badge>
       </TableCell>
       <TableCell>
-        <span className="font-medium">${transaction.amount}</span>
+        <Mono className="font-medium">${transaction.amount}</Mono>
       </TableCell>
       <TableCell>
         <Badge variant={getStatusVariant(transaction.status)}>
@@ -106,26 +109,26 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
       <TableCell>
         {transaction.approvedBy && transaction.approvedAt && (
           <div className="flex flex-col text-sm">
-            <span className="font-medium text-green-600">
+            <span className="font-medium text-emerald-600 dark:text-emerald-400">
               {transaction.approvedBy.fullName || transaction.approvedBy.email}
             </span>
-            <span className="text-xs text-muted-foreground">
+            <Mono className="text-xs text-muted-foreground">
               {format(new Date(transaction.approvedAt), "PPp")}
-            </span>
+            </Mono>
           </div>
         )}
         {transaction.rejectedBy && transaction.rejectedAt && (
           <div className="flex flex-col text-sm">
-            <span className="font-medium text-red-600">
+            <span className="font-medium text-rose-600 dark:text-rose-400">
               {transaction.rejectedBy.fullName || transaction.rejectedBy.email}
             </span>
-            <span className="text-xs text-muted-foreground">
+            <Mono className="text-xs text-muted-foreground">
               {format(new Date(transaction.rejectedAt), "PPp")}
-            </span>
+            </Mono>
           </div>
         )}
         {!transaction.approvedBy && !transaction.rejectedBy && (
-          <span className="text-sm text-muted-foreground">-</span>
+          <Text as="span" variant="muted">-</Text>
         )}
       </TableCell>
       <TableCell className="text-right">
@@ -136,7 +139,7 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
                 <Button
                   size="icon"
                   variant="outline"
-                  className="h-8 w-8 text-green-600"
+                  className="h-8 w-8 text-emerald-600 dark:text-emerald-400"
                   aria-label={`Approve $${transaction.amount} ${transaction.type} for ${userDisplayName}`}
                   disabled={isPending}
                 >
@@ -169,7 +172,7 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
                 <Button
                   size="icon"
                   variant="outline"
-                  className="h-8 w-8 text-red-600"
+                  className="h-8 w-8 text-rose-600 dark:text-rose-400"
                   aria-label={`Reject $${transaction.amount} ${transaction.type} for ${userDisplayName}`}
                   disabled={isPending}
                 >

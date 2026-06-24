@@ -40,51 +40,58 @@ export function FootballView({ leagues }: FootballViewProps) {
     [league],
   );
 
-  const defaultTab: TabKey = league.league.hasKnockout ? "overview" : "table";
+  const hasKnockoutData = !!league.knockout && league.knockout.length > 0;
+  const defaultTab: TabKey = hasKnockoutData
+    ? "knockout"
+    : league.league.hasKnockout
+      ? "overview"
+      : "table";
 
   return (
-    <SportShell
-      emoji="⚽"
-      title={league.league.name}
-      subtitle={`${league.league.region} · Season ${league.league.season}`}
-      controls={
-        <Select
-          value={leagueId}
-          onValueChange={(v) => setLeagueId(v as FootballLeagueId)}
-        >
-          <SelectTrigger className="w-[220px]">
-            <SelectValue placeholder="League" />
-          </SelectTrigger>
-          <SelectContent>
-            {leagues.map((l) => (
-              <SelectItem key={l.league.id} value={l.league.id}>
-                {l.league.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      }
-    >
-      <Tabs defaultValue={defaultTab} className="space-y-5">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="matches" disabled={league.matches.length === 0}>
-            Matches
-          </TabsTrigger>
-          <TabsTrigger value="table" disabled={league.standings.length === 0}>
-            Table
-          </TabsTrigger>
-          {league.league.hasKnockout && (
-            <TabsTrigger
-              value="knockout"
-              disabled={!league.knockout || league.knockout.length === 0}
-            >
-              Knockout
+    // Keyed by league: leagues differ in which tabs exist (knockout vs table),
+    // and an uncontrolled Tabs keeps its old value when the active trigger
+    // unmounts — switching UCL→La Liga stranded the view on a blank "knockout"
+    // tab. Remounting re-resolves defaultTab for the new league.
+    <Tabs key={leagueId} defaultValue={defaultTab} className="space-y-6">
+      <SportShell
+        emoji="⚽"
+        title={league.league.name}
+        subtitle={`${league.league.region} · Season ${league.league.season}`}
+        controls={
+          <Select
+            value={leagueId}
+            onValueChange={(v) => setLeagueId(v as FootballLeagueId)}
+          >
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="League" />
+            </SelectTrigger>
+            <SelectContent>
+              {leagues.map((l) => (
+                <SelectItem key={l.league.id} value={l.league.id}>
+                  {l.league.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+        tabs={
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="matches" disabled={league.matches.length === 0}>
+              Matches
             </TabsTrigger>
-          )}
-        </TabsList>
-
-        <TabsContent value="overview" className="space-y-5">
+            <TabsTrigger value="table" disabled={league.standings.length === 0}>
+              Table
+            </TabsTrigger>
+            {league.league.hasKnockout && (
+              <TabsTrigger value="knockout" disabled={!hasKnockoutData}>
+                Knockout
+              </TabsTrigger>
+            )}
+          </TabsList>
+        }
+      >
+        <TabsContent value="overview" className="space-y-6">
           <OverviewLayout
             matches={
               <MatchesGrid
@@ -135,8 +142,8 @@ export function FootballView({ leagues }: FootballViewProps) {
             </Card>
           </TabsContent>
         )}
-      </Tabs>
-    </SportShell>
+      </SportShell>
+    </Tabs>
   );
 }
 
@@ -148,7 +155,7 @@ function OverviewLayout({
   standings: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
+    <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
       <section className="space-y-3">
         <Eyebrow>Matches</Eyebrow>
         {matches}
@@ -181,7 +188,7 @@ function MatchesGrid({
     <div className="space-y-4">
       {Object.entries(grouped).map(([label, group]) => (
         <div key={label} className="space-y-2">
-          <Eyebrow className="text-[10px]">{label}</Eyebrow>
+          <Eyebrow className="text-2xs">{label}</Eyebrow>
           <div className="grid gap-2 sm:grid-cols-2">
             {group.map((match) => (
               <ScoreCard key={match.id} match={match} teams={teamsMap} />

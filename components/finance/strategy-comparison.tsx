@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TrendingDown, Zap, Clock } from "lucide-react";
 
+import { Heading, Mono, Text } from "@/components/ui/typography";
 import { formatCurrency } from "@/lib/utils/format";
 import type { DebtStrategy, StrategyComparison } from "@/types/finance";
 
@@ -41,12 +42,12 @@ export function StrategyComparisonCard({
               <Zap className="h-5 w-5 text-amber-500" />
               Debt payoff strategy
             </CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <Text variant="muted" className="mt-1">
               Same plan, three strategies. Pick the one that fits — math vs. momentum.
-            </p>
+            </Text>
           </div>
           {comparison.interestSaved > 0 && (
-            <Badge variant="outline" className="gap-1 border-green-500/40 text-green-700 dark:text-green-300">
+            <Badge variant="outline" className="gap-1 border-emerald-500/30 bg-emerald-500/10 font-mono tabular-nums text-emerald-700 dark:text-emerald-300">
               <TrendingDown className="h-3 w-3" />
               {STRATEGY_LABEL[comparison.recommended]} saves {formatCurrency(comparison.interestSaved)}
             </Badge>
@@ -64,10 +65,10 @@ export function StrategyComparisonCard({
                 key={key}
                 className={`relative rounded-md border p-4 ${
                   isCurrent ? "border-foreground" : ""
-                } ${isBest && key !== "none" ? "bg-green-500/5" : ""}`}
+                } ${isBest && key !== "none" ? "bg-emerald-500/10" : ""}`}
               >
                 <div className="flex items-center justify-between">
-                  <p className="font-semibold">{STRATEGY_LABEL[key]}</p>
+                  <Heading level="h6" as="p">{STRATEGY_LABEL[key]}</Heading>
                   {isCurrent && <Badge variant="secondary" className="text-xs">Active</Badge>}
                 </div>
                 <dl className="mt-3 space-y-2 text-sm">
@@ -76,7 +77,7 @@ export function StrategyComparisonCard({
                       Total interest paid
                     </dt>
                     <dd className="text-lg font-semibold">
-                      {formatCurrency(data.totalInterestPaid)}
+                      <Mono>{formatCurrency(data.totalInterestPaid)}</Mono>
                     </dd>
                   </div>
                   <div className="flex items-center justify-between border-t pt-2">
@@ -86,14 +87,14 @@ export function StrategyComparisonCard({
                     </dt>
                     <dd className="text-sm font-medium">
                       {data.monthsToDebtFree !== null
-                        ? `${data.monthsToDebtFree} mo`
+                        ? <Mono>{data.monthsToDebtFree} mo</Mono>
                         : "—"}
                     </dd>
                   </div>
                   <div className="flex items-center justify-between">
                     <dt className="text-xs text-muted-foreground">Ending net worth</dt>
                     <dd className="text-sm font-medium">
-                      {formatCurrency(data.endingNetWorth)}
+                      <Mono>{formatCurrency(data.endingNetWorth)}</Mono>
                     </dd>
                   </div>
                 </dl>
@@ -102,10 +103,10 @@ export function StrategyComparisonCard({
           })}
         </div>
         {comparison.interestSaved === 0 && (
-          <p className="mt-4 text-xs text-muted-foreground">
+          <Text variant="small" className="mt-4">
             With your current debts the three strategies tie — they only diverge when
             you have multiple debts with different rates and balances.
-          </p>
+          </Text>
         )}
       </CardContent>
     </Card>

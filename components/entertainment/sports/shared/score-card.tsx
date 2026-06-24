@@ -85,17 +85,23 @@ export function ScoreCard({ match, teams, className }: ScoreCardProps) {
       <div className="flex flex-col items-end justify-center gap-0.5 border-l pl-3 text-right">
         <span
           className={cn(
-            "inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground",
+            "inline-flex items-center gap-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground",
             isLive && "text-emerald-600",
           )}
         >
           {isLive && <Circle className="h-2 w-2 animate-pulse fill-current" />}
           {formatStatus(match)}
         </span>
-        {scheduled && (
-          <Mono className="text-[10px] text-muted-foreground">
+        {scheduled ? (
+          <Mono className="text-2xs text-muted-foreground">
             {formatKickoffTime(match.kickoff)}
           </Mono>
+        ) : (
+          !isLive && (
+            <Mono className="text-2xs text-muted-foreground">
+              {formatKickoffShort(match.kickoff)}
+            </Mono>
+          )
         )}
       </div>
       <ChevronRight className="pointer-events-none absolute right-1.5 top-1/2 hidden h-3 w-3 -translate-y-1/2 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 lg:block" />
@@ -131,7 +137,7 @@ function TeamRow({
           {team.shortName}
         </span>
         {redCard && (
-          <span className="h-3 w-2 rounded-[1.5px] bg-rose-600" aria-label="Red card" />
+          <span className="h-3 w-2 rounded-xs bg-rose-600" aria-label="Red card" />
         )}
       </div>
       {!scheduled && score !== null && (

@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { PlanEditor } from "@/components/finance/plan-editor";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import {
@@ -14,6 +11,10 @@ import {
   listInvestmentMethods,
   projectPlanWithPortfolio,
 } from "@/lib/services/finance-plan-service";
+import {
+  buildCalibratedPlan,
+  getRecentMonthlySnapshots,
+} from "@/lib/services/finance-snapshot-service";
 
 export const dynamic = "force-dynamic";
 
@@ -36,42 +37,67 @@ export default async function PlanDetailPage({ params }: PageProps) {
   const plan = await getPlanWithLines(id, ctx.effectiveUserId);
   if (!plan) notFound();
 
-  const [portfolioValue, autoInvestRate, investmentMethods] = await Promise.all([
-    plan.includePortfolio
-      ? getPortfolioValueForUser(ctx.effectiveUserId)
-      : Promise.resolve(0),
-    getAutoInvestRate(plan),
-    listInvestmentMethods({ includeDisabled: true }),
-  ]);
+  // Calibrate from the latest confirmation so the projection (and the chart's
+  // forward line) starts from the user's most recent real numbers instead of
+  // the original plan baseline. Returns the plan unchanged when there are no
+  // confirmations. The raw `plan` is still what the editor mutates.
+  const baseline = await buildCalibratedPlan(plan);
 
-  const projection = await projectPlanWithPortfolio(plan, ctx.effectiveUserId);
+  const [portfolioValue, autoInvestRate, investmentMethods, history] =
+    await Promise.all([
+      baseline.includePortfolio
+        ? getPortfolioValueForUser(ctx.effectiveUserId)
+        : Promise.resolve(0),
+      getAutoInvestRate(baseline),
+      listInvestmentMethods({ includeDisabled: true }),
+      // Real recorded history for the chart's past (today → backwards). 36
+      // months covers the largest horizon's ~25% past budget; empty for fresh
+      // plans, which fall back to the projected past.
+      getRecentMonthlySnapshots(
+        plan.id,
+        ctx.effectiveUserId,
+        36,
+        new Date(),
+        plan.confirmationDayOfMonth
+      ),
+    ]);
+
+  const projection = await projectPlanWithPortfolio(baseline, ctx.effectiveUserId);
+  // Raw (un-calibrated) projection — spans back to the plan's start. The chart
+  // uses it to re-simulate the past when there are no real snapshots yet, so
+  // confirming the current period (which calibrates `projection` to start at
+  // today) doesn't blank the chart's history. Same object when no confirmation.
+  const pastProjection =
+    baseline === plan
+      ? projection
+      : await projectPlanWithPortfolio(plan, ctx.effectiveUserId);
   // Strategy comparison only meaningful when there's something to compare.
   const comparison =
-    plan.debts.length > 0
-      ? compareDebtStrategies(plan, plan.incomes, plan.expenses, plan.debts, {
-          portfolioValue,
-          autoInvestRate,
-        })
+    baseline.debts.length > 0
+      ? compareDebtStrategies(
+          baseline,
+          baseline.incomes,
+          baseline.expenses,
+          baseline.debts,
+          { portfolioValue, autoInvestRate }
+        )
       : null;
 
   return (
     <section className="space-y-4">
-      <div>
-        <Button variant="ghost" size="sm" asChild className="-ml-2">
-          <Link href="/portal/plans">
-            <ArrowLeft className="mr-1 h-4 w-4" /> Back to plans
-          </Link>
-        </Button>
-      </div>
       <PlanEditor
         plan={plan}
+        baseline={baseline}
         projection={projection}
+        pastProjection={pastProjection}
+        history={history}
         comparison={comparison}
         investmentMethods={investmentMethods}
         title={plan.name}
         description={
           plan.description ?? "Add income, expenses and debts to refine the projection."
         }
+        backHref="/portal/plans"
       />
     </section>
   );

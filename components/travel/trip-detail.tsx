@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Suspense, useMemo, useState, useTransition } from "react";
-import { format } from "date-fns";
 import {
   ArrowLeft,
   CalendarDays,
@@ -35,52 +34,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Eyebrow, Mono } from "@/components/ui/typography";
+import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { deleteTripAction } from "@/app/actions/travel";
+import {
+  formatDateRange,
+  formatTripMoney,
+  tripDurationLabel,
+} from "@/lib/travel/format";
 import type { TripWithRelations } from "@/types/travel";
 
 import { TripForm } from "./trip-form";
 import { TripItinerary } from "./trip-itinerary";
 import { TripGallery } from "./trip-gallery";
 import { TripSharePanel } from "./trip-share-panel";
-
-function parseTripDate(value: string): Date {
-  const [y, m, d] = value.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function formatDateRange(start: string, end: string | null): string {
-  const s = parseTripDate(start);
-  if (!end || start === end) return format(s, "EEE, MMM d, yyyy");
-  const e = parseTripDate(end);
-  const sameYear = s.getFullYear() === e.getFullYear();
-  if (sameYear) {
-    return `${format(s, "EEE, MMM d")} – ${format(e, "EEE, MMM d, yyyy")}`;
-  }
-  return `${format(s, "MMM d, yyyy")} – ${format(e, "MMM d, yyyy")}`;
-}
-
-function tripDays(start: string, end: string | null): number {
-  const s = parseTripDate(start);
-  const e = end ? parseTripDate(end) : s;
-  return Math.round((e.getTime() - s.getTime()) / 86_400_000) + 1;
-}
-
-export function formatTripMoney(value: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(value);
-  } catch {
-    // Unknown currency code falls back to plain number prefixed with code.
-    return `${currency} ${value.toFixed(2)}`;
-  }
-}
 
 type TripDetailProps = {
   trip: TripWithRelations;
@@ -149,7 +117,7 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 p-6 text-white">
-            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{trip.title}</h1>
+            <Heading level="h1" className="text-white">{trip.title}</Heading>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
               {trip.destination && (
                 <span className="inline-flex items-center gap-1.5">
@@ -183,7 +151,7 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
         <StatCard
           icon={CalendarDays}
           label="Duration"
-          value={`${tripDays(trip.startDate, trip.endDate)} day${tripDays(trip.startDate, trip.endDate) === 1 ? "" : "s"}`}
+          value={tripDurationLabel(trip.startDate, trip.endDate)}
         />
         <StatCard icon={ListChecks} label="Items" value={String(trip.items.length)} />
         <StatCard
@@ -205,9 +173,9 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
 
       {trip.description && (
         <Card>
-          <CardContent className="p-5">
+          <CardContent className="p-6">
             <Eyebrow className="mb-2 block">About this trip</Eyebrow>
-            <p className="whitespace-pre-wrap text-sm text-foreground/90">{trip.description}</p>
+            <Text className="whitespace-pre-wrap text-foreground/90">{trip.description}</Text>
           </CardContent>
         </Card>
       )}
@@ -267,8 +235,8 @@ function StatCard({
           <Icon className="h-4 w-4" />
         </div>
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-          <p className="truncate text-sm font-semibold">{value}</p>
+          <Text variant="small" className="uppercase tracking-wider">{label}</Text>
+          <Text weight="semibold" className="truncate tabular-nums">{value}</Text>
         </div>
       </CardContent>
     </Card>

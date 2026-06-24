@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 
+import { Heading, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 type EmptyStateProps = {
@@ -35,10 +36,8 @@ export function EmptyState({
               </div>
             )}
             <div className="space-y-2">
-              <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
-              {description && (
-                <p className="text-sm text-muted-foreground">{description}</p>
-              )}
+              <Heading level="h3" as="h2">{title}</Heading>
+              {description && <Text variant="muted">{description}</Text>}
             </div>
             {action && <div className="w-full">{action}</div>}
           </div>
@@ -56,10 +55,8 @@ export function EmptyState({
     >
       {Icon && <Icon className="h-8 w-8 text-muted-foreground" />}
       <div className="space-y-1">
-        <p className="text-sm font-medium">{title}</p>
-        {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        )}
+        <Text className="font-medium">{title}</Text>
+        {description && <Text variant="muted">{description}</Text>}
       </div>
       {action}
     </div>

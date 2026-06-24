@@ -17,6 +17,7 @@ import {
   RadioGroup,
   RadioGroupItem,
 } from "@/components/ui/radio-group";
+import { Eyebrow, Text } from "@/components/ui/typography";
 
 import type { DebtPaymentType } from "@/types/finance";
 
@@ -189,9 +190,9 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
               inputMode="decimal"
               placeholder="0.02"
             />
-            <p className="text-xs text-muted-foreground">
+            <Text variant="small">
               Decimal (0.02 = 2% per month).
-            </p>
+            </Text>
           </div>
         </div>
 
@@ -250,9 +251,9 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
         )}
 
         <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <Eyebrow as="div" className="tracking-wide">
             Schedule
-          </div>
+          </Eyebrow>
           <RecurrenceFields
             recurrenceType={recurrenceType}
             setRecurrenceType={setRecurrenceType}

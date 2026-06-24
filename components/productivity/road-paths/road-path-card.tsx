@@ -1,7 +1,8 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Heading, Text } from "@/components/ui/typography";
 import { Button } from "@/components/ui/button";
 import { Calendar, Target, MoreHorizontal } from "lucide-react";
 import {
@@ -47,11 +48,11 @@ export function RoadPathCard({ roadPath, onClick, onRefresh }: RoadPathCardProps
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <CardTitle className="text-lg">{roadPath.title}</CardTitle>
+            <Heading level="h4" as="h3">{roadPath.title}</Heading>
             {roadPath.description && (
-              <CardDescription className="mt-1 line-clamp-2">
+              <Text variant="muted" className="mt-1 line-clamp-2">
                 {roadPath.description}
-              </CardDescription>
+              </Text>
             )}
           </div>
           <DropdownMenu>

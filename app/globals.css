@@ -4,6 +4,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Dense-data micro size — one step below `text-xs` (12px). The standard token
+   for badges, calendar cells, score tickers and chart ticks. Use `text-2xs`
+   instead of arbitrary `text-[10px]`/`text-[11px]`. See docs/TYPOGRAPHY.md. */
+@utility text-2xs {
+  font-size: 0.625rem;
+  line-height: 0.875rem;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -86,7 +94,9 @@
   --chart-3: oklch(0.71 0.13 215);
   --chart-4: oklch(0.61 0.11 222);
   --chart-5: oklch(0.52 0.09 223);
-  --sidebar: oklch(0.985 0 0);
+  /* Sidebar sits flush with the page background, separated only by its right
+     border — the shadcn docs look, rather than a tinted panel. */
+  --sidebar: oklch(1 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.61 0.11 222);
   --sidebar-primary-foreground: oklch(0.98 0.02 201);
@@ -130,7 +140,9 @@
   --chart-3: oklch(0.71 0.13 215);
   --chart-4: oklch(0.61 0.11 222);
   --chart-5: oklch(0.52 0.09 223);
-  --sidebar: oklch(0.205 0 0);
+  /* Match the page background in dark mode too, so the sidebar reads as part
+     of the shell instead of a lighter floating panel. */
+  --sidebar: oklch(0.145 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.80 0.13 212);
   --sidebar-primary-foreground: oklch(0.30 0.05 230);

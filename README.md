@@ -72,6 +72,8 @@ Full format and scope rules: [CLAUDE.md → Commit messages & releases](CLAUDE.m
 - [docs/modules/](docs/modules/) — one short doc per product module.
 - [docs/TYPOGRAPHY.md](docs/TYPOGRAPHY.md) — Geist + UI typography primitives
   (required reading before touching UI).
+- [docs/SPACING.md](docs/SPACING.md) — spacing scale + app-shell offsets
+  (required reading before touching UI).
 - [docs/AGENTS.md](docs/AGENTS.md) — **rules for agents** on how to keep this
   documentation in sync as code changes (segmented updates, no rewrites).
 - [.github/skills/](.github/skills/) — reusable agent playbooks (DB migration,

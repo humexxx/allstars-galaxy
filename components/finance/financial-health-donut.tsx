@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { Mono } from "@/components/ui/typography";
 import { formatCurrency } from "@/lib/utils/format";
 
 type FinancialHealthDonutProps = {
@@ -37,9 +38,9 @@ function statusFor(ratio: number, hasIncome: boolean): Status {
 }
 
 const TONE_TEXT: Record<Status["tone"], string> = {
-  positive: "text-green-600",
-  warning: "text-amber-600",
-  negative: "text-red-600",
+  positive: "text-emerald-600 dark:text-emerald-400",
+  warning: "text-amber-600 dark:text-amber-400",
+  negative: "text-rose-600 dark:text-rose-400",
   muted: "text-muted-foreground",
 };
 
@@ -138,14 +139,15 @@ export function FinancialHealthDonut({
           >
             {displayedPercent}
           </span>
-          <span className={`text-[10px] font-medium ${TONE_TEXT[status.tone]}`}>
+          <span className={`text-2xs font-medium ${TONE_TEXT[status.tone]}`}>
             {status.label}
           </span>
         </div>
       </div>
       {showFooter && hasIncome && (
-        <div className="text-[11px] text-muted-foreground">
-          {formatCurrency(obligations)} of {formatCurrency(income)}
+        <div className="text-2xs text-muted-foreground">
+          <Mono>{formatCurrency(obligations)}</Mono> of{" "}
+          <Mono>{formatCurrency(income)}</Mono>
         </div>
       )}
     </div>

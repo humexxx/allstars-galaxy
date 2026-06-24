@@ -5,6 +5,7 @@ import type {
   financePlanDebts,
   financePlanLineOverrides,
   financePlanSnapshots,
+  financePlanSnapshotDebts,
   financePlanConfirmations,
   financePlanDebtConfirmations,
 } from "@/db/schema";
@@ -18,6 +19,7 @@ export type FinancePlanLineOverride =
 export type OverrideSide = "income" | "expense" | "debt";
 export type OverrideAction = "skip" | "reschedule" | "amount";
 export type FinancePlanSnapshot = typeof financePlanSnapshots.$inferSelect;
+export type FinancePlanSnapshotDebt = typeof financePlanSnapshotDebts.$inferSelect;
 export type FinancePlanConfirmation = typeof financePlanConfirmations.$inferSelect;
 export type FinancePlanDebtConfirmation = typeof financePlanDebtConfirmations.$inferSelect;
 

@@ -7,16 +7,16 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eyebrow, Mono } from "@/components/ui/typography";
-import { cn } from "@/lib/utils";
+import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import type { F1Data } from "@/types/sports";
 
 import { SportShell } from "../shared/sport-shell";
+import { StatusPill } from "../shared/status-pill";
+import { SportsTh } from "../shared/table-primitives";
 
 type F1ViewProps = {
   data: F1Data;
@@ -24,18 +24,19 @@ type F1ViewProps = {
 
 export function F1View({ data }: F1ViewProps) {
   return (
-    <SportShell
-      emoji="🏎️"
-      title="Formula 1"
-      subtitle={`${data.season} Season`}
-    >
-      <Tabs defaultValue="drivers" className="space-y-5">
-        <TabsList>
-          <TabsTrigger value="drivers">Drivers</TabsTrigger>
-          <TabsTrigger value="constructors">Constructors</TabsTrigger>
-          <TabsTrigger value="races">Races</TabsTrigger>
-        </TabsList>
-
+    <Tabs defaultValue="drivers" className="space-y-6">
+      <SportShell
+        emoji="🏎️"
+        title="Formula 1"
+        subtitle={`${data.season} Season`}
+        tabs={
+          <TabsList>
+            <TabsTrigger value="drivers">Drivers</TabsTrigger>
+            <TabsTrigger value="constructors">Constructors</TabsTrigger>
+            <TabsTrigger value="races">Races</TabsTrigger>
+          </TabsList>
+        }
+      >
         <TabsContent value="drivers">
           <Card>
             <CardContent className="p-0">
@@ -45,21 +46,21 @@ export function F1View({ data }: F1ViewProps) {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/40 hover:bg-muted/40">
-                    <TableHead className="w-12 text-xs uppercase tracking-wide text-muted-foreground">
+                    <SportsTh className="w-12">
                       Rank
-                    </TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+                    </SportsTh>
+                    <SportsTh>
                       Driver
-                    </TableHead>
-                    <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">
+                    </SportsTh>
+                    <SportsTh className="text-right">
                       Points
-                    </TableHead>
-                    <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">
+                    </SportsTh>
+                    <SportsTh className="text-right">
                       Wins
-                    </TableHead>
-                    <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">
+                    </SportsTh>
+                    <SportsTh className="text-right">
                       Podiums
-                    </TableHead>
+                    </SportsTh>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -73,7 +74,7 @@ export function F1View({ data }: F1ViewProps) {
                           <span className="text-base leading-none">{d.flagEmoji}</span>
                           <div className="leading-tight">
                             <div className="text-sm font-medium">{d.shortName}</div>
-                            <div className="text-xs text-muted-foreground">{d.team}</div>
+                            <Text variant="small" as="div">{d.team}</Text>
                           </div>
                         </div>
                       </TableCell>
@@ -100,21 +101,21 @@ export function F1View({ data }: F1ViewProps) {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/40 hover:bg-muted/40">
-                    <TableHead className="w-12 text-xs uppercase tracking-wide text-muted-foreground">
+                    <SportsTh className="w-12">
                       Rank
-                    </TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+                    </SportsTh>
+                    <SportsTh>
                       Team
-                    </TableHead>
-                    <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">
+                    </SportsTh>
+                    <SportsTh className="text-right">
                       Points
-                    </TableHead>
-                    <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">
+                    </SportsTh>
+                    <SportsTh className="text-right">
                       Wins
-                    </TableHead>
-                    <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">
+                    </SportsTh>
+                    <SportsTh className="text-right">
                       Podiums
-                    </TableHead>
+                    </SportsTh>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -158,29 +159,17 @@ export function F1View({ data }: F1ViewProps) {
                     <div className="flex items-center gap-2">
                       <span className="text-xl leading-none">{race.flagEmoji}</span>
                       <div className="leading-tight">
-                        <div className="text-xs text-muted-foreground">
+                        <Text variant="small" as="div">
                           Round {race.round}
-                        </div>
+                        </Text>
                         <div className="text-sm font-semibold">{race.name}</div>
                       </div>
                     </div>
-                    <span
-                      className={cn(
-                        "rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
-                        race.status === "completed" &&
-                          "bg-muted text-muted-foreground",
-                        race.status === "upcoming" &&
-                          "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-                        race.status === "live" &&
-                          "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-                      )}
-                    >
-                      {race.status}
-                    </span>
+                    <StatusPill status={race.status} />
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <Text variant="small" as="div">
                     {race.circuit} · {race.location}
-                  </div>
+                  </Text>
                   <Mono className="block text-xs text-muted-foreground">
                     {new Date(race.date).toLocaleDateString(undefined, {
                       weekday: "short",
@@ -204,7 +193,7 @@ export function F1View({ data }: F1ViewProps) {
             ))}
           </div>
         </TabsContent>
-      </Tabs>
-    </SportShell>
+      </SportShell>
+    </Tabs>
   );
 }

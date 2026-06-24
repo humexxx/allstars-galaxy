@@ -45,6 +45,7 @@ vi.mock("./finance-snapshot-service", () => ({
 }));
 
 import {
+  autoConfirmSkippedPeriods,
   getConfirmationStatus,
   getLatestConfirmation,
   getPlanForConfirmation,
@@ -543,6 +544,132 @@ describe("saveConfirmation", () => {
     expect(result).toEqual(row);
     expect(errSpy).toHaveBeenCalledOnce();
     errSpy.mockRestore();
+  });
+});
+
+// ---------- autoConfirmSkippedPeriods ----------
+
+describe("autoConfirmSkippedPeriods", () => {
+  // tx.insert(confirmations).values(...).onConflictDoNothing(...).returning()
+  function mockTxInsertAuto(row: FinancePlanConfirmation | null) {
+    const chain: Record<string, ReturnType<typeof vi.fn>> = {};
+    chain.values = vi.fn().mockReturnValue(chain);
+    chain.onConflictDoNothing = vi.fn().mockReturnValue(chain);
+    chain.returning = vi.fn().mockResolvedValue(row ? [row] : []);
+    return chain;
+  }
+  function mockTxInsertDebts() {
+    const chain: Record<string, ReturnType<typeof vi.fn>> = {};
+    chain.values = vi.fn().mockResolvedValue(undefined);
+    return chain;
+  }
+
+  it("is a no-op when confirmationDayOfMonth=0 (feature disabled)", async () => {
+    const plan = buildPlan({ confirmationDayOfMonth: 0 });
+
+    const result = await autoConfirmSkippedPeriods(
+      plan,
+      USER_ID,
+      new Date(Date.UTC(2026, 5, 15))
+    );
+
+    expect(result).toEqual({ confirmationsCreated: 0 });
+    expect(selectImpl).not.toHaveBeenCalled();
+    expect(txInsertImpl).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when the latest confirmation IS the current period", async () => {
+    const plan = buildPlan({ confirmationDayOfMonth: 1 });
+
+    // #1 existing months, #2 latest confirmation, #3 its debt rows.
+    selectImpl
+      .mockReturnValueOnce(makeSelectChain([{ month: "2026-05-01" }]))
+      .mockReturnValueOnce(
+        makeSelectChain([buildConfirmation({ confirmationMonth: "2026-05-01" })])
+      )
+      .mockReturnValueOnce(makeSelectChain([]));
+
+    const result = await autoConfirmSkippedPeriods(
+      plan,
+      USER_ID,
+      new Date(Date.UTC(2026, 4, 15)) // May 15 → current period May 1
+    );
+
+    expect(result).toEqual({ confirmationsCreated: 0 });
+    expect(txInsertImpl).not.toHaveBeenCalled();
+    expect(createConfirmationSnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it("auto-confirms a skipped closed period with source 'auto' + per-debt rows", async () => {
+    const plan = buildPlan({ confirmationDayOfMonth: 1 });
+
+    // Latest confirmation is April; May was skipped; today is in June.
+    selectImpl
+      .mockReturnValueOnce(makeSelectChain([{ month: "2026-04-01" }])) // existing months
+      .mockReturnValueOnce(
+        makeSelectChain([buildConfirmation({ confirmationMonth: "2026-04-01" })])
+      ) // latest
+      .mockReturnValueOnce(makeSelectChain([])); // latest's debt rows
+
+    // Projected opening of the skipped May period.
+    getProjectedStateForMonthMock.mockResolvedValueOnce({
+      ...buildProjectionMonth(),
+      savings: 4321,
+      investments: 1000,
+      debts: [
+        {
+          debtId: "d1",
+          name: "Card",
+          balance: 600,
+          scheduledPayment: 0,
+          extraPayment: 0,
+          interestAccrued: 0,
+        },
+      ],
+    });
+
+    const autoRow = buildConfirmation({
+      id: "auto-conf",
+      confirmationMonth: "2026-05-01",
+    });
+    const insertAuto = mockTxInsertAuto(autoRow);
+    const insertDebts = mockTxInsertDebts();
+    txInsertImpl
+      .mockReturnValueOnce(insertAuto)
+      .mockReturnValueOnce(insertDebts);
+    createConfirmationSnapshotMock.mockResolvedValue(undefined);
+
+    const result = await autoConfirmSkippedPeriods(
+      plan,
+      USER_ID,
+      new Date(Date.UTC(2026, 5, 15)) // June 15 → current period June 1
+    );
+
+    expect(result).toEqual({ confirmationsCreated: 1 });
+
+    // Confirmation row written for May with source 'auto'.
+    const confPayload = insertAuto.values.mock.calls[0][0];
+    expect(confPayload).toMatchObject({
+      planId: PLAN_ID,
+      confirmationMonth: "2026-05-01",
+      confirmedSavings: "4321.00",
+      confirmedInvestments: "1000.00",
+      source: "auto",
+    });
+    expect(insertAuto.onConflictDoNothing).toHaveBeenCalledOnce();
+
+    // Per-debt breakdown written.
+    const debtPayload = insertDebts.values.mock.calls[0][0];
+    expect(debtPayload).toEqual([
+      { confirmationId: "auto-conf", debtId: "d1", confirmedBalance: "600.00" },
+    ]);
+
+    // Audit snapshot dated at the skipped period's anchor.
+    expect(createConfirmationSnapshotMock).toHaveBeenCalledWith(
+      PLAN_ID,
+      USER_ID,
+      new Date(Date.UTC(2026, 4, 1))
+    );
   });
 });
 

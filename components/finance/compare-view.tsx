@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Heading, Mono, Text } from "@/components/ui/typography";
 
 import { formatCurrency } from "@/lib/utils/format";
 import type { Projection } from "@/types/finance";
@@ -26,9 +27,15 @@ type Metric = "netWorth" | "totalDebt" | "savings";
 
 type CompareViewProps = {
   projections: Projection[];
+  /** When false, hide the per-plan "Ending state" cards — used when the host
+   *  page (e.g. the plans list) already shows those numbers on each plan card. */
+  showEndingState?: boolean;
 };
 
-export function CompareView({ projections }: CompareViewProps) {
+export function CompareView({
+  projections,
+  showEndingState = true,
+}: CompareViewProps) {
   const [selected, setSelected] = useState<Set<string>>(
     new Set(projections.map((p) => p.plan.id))
   );
@@ -95,13 +102,14 @@ export function CompareView({ projections }: CompareViewProps) {
         </CardHeader>
         <CardContent>
           {filtered.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Select at least one plan above.</p>
+            <Text variant="muted">Select at least one plan above.</Text>
           ) : (
             <ComparePlansChart projections={filtered} metric={metric} />
           )}
         </CardContent>
       </Card>
 
+      {showEndingState && (
       <Card>
         <CardHeader>
           <CardTitle>Ending state per plan</CardTitle>
@@ -115,7 +123,7 @@ export function CompareView({ projections }: CompareViewProps) {
                 style={{ borderLeftColor: p.plan.color, borderLeftWidth: 4 }}
               >
                 <div className="flex items-center justify-between">
-                  <p className="font-medium">{p.plan.name}</p>
+                  <Heading level="h6" as="p">{p.plan.name}</Heading>
                   {p.monthsToDebtFree !== null && (
                     <Badge variant="outline">Debt-free in {p.monthsToDebtFree} mo</Badge>
                   )}
@@ -123,16 +131,18 @@ export function CompareView({ projections }: CompareViewProps) {
                 <dl className="mt-3 space-y-1 text-sm">
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Savings</dt>
-                    <dd>{formatCurrency(p.endingSavings)}</dd>
+                    <dd><Mono>{formatCurrency(p.endingSavings)}</Mono></dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Debt</dt>
-                    <dd>{formatCurrency(p.endingDebt)}</dd>
+                    <dd><Mono>{formatCurrency(p.endingDebt)}</Mono></dd>
                   </div>
                   <div className="flex justify-between border-t pt-1 font-semibold">
                     <dt>Net worth</dt>
-                    <dd className={p.endingNetWorth >= 0 ? "text-green-600" : "text-red-600"}>
-                      {formatCurrency(p.endingNetWorth)}
+                    <dd>
+                      <Mono className={p.endingNetWorth >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
+                        {formatCurrency(p.endingNetWorth)}
+                      </Mono>
                     </dd>
                   </div>
                 </dl>
@@ -141,6 +151,7 @@ export function CompareView({ projections }: CompareViewProps) {
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

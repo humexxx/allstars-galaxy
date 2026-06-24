@@ -1,14 +1,20 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { toast } from "sonner";
 
 import {
+  ArrowLeft,
+  CalendarDays,
   Camera,
   ChevronDown,
   ClipboardCheck,
   Clock,
+  LineChart,
+  type LucideIcon,
   Star,
+  Table2,
   TrendingDown,
   Zap,
 } from "lucide-react";
@@ -23,6 +29,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -31,7 +44,7 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Heading, Text } from "@/components/ui/typography";
+import { Heading, Mono, Text } from "@/components/ui/typography";
 
 import { useRegisterDevTool } from "@/components/dev-tools/dev-tools-context";
 import { runDailySnapshotsAction } from "@/app/actions/dev-tools";
@@ -43,16 +56,17 @@ import { PlanLineEditor } from "./plan-line-editor";
 import { PlanDebtEditor } from "./plan-debt-editor";
 import { PlanForm, type InvestmentMethodOption } from "./plan-form";
 import { ProjectionTable } from "./projection-table";
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
-// Recharts is one of the heaviest deps in the app — lazy-load the chart so
-// the projection editor's initial bundle stays small. The chart lives below
-// the fold (table/form first), so the swap to a skeleton is unobtrusive.
+// Recharts is one of the heaviest deps in the app — lazy-load the chart so the
+// projection editor's initial bundle stays small. The skeleton matches the
+// rendered chart's responsive height so swapping in the real chart doesn't
+// shift the hero (it's the first thing on screen).
 const ProjectionChart = dynamic(
   () => import("./projection-chart").then((mod) => mod.ProjectionChart),
   {
     ssr: false,
-    loading: () => <Skeleton className="h-80 w-full" />,
+    loading: () => <Skeleton className="h-72 w-full sm:h-80 lg:h-full" />,
   }
 );
 
@@ -73,7 +87,18 @@ import {
 } from "@/app/actions/finance-plans";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
-import { periodRangeFor } from "@/lib/finance/period";
+import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  isDateInPeriod,
+  monthsInPeriod,
+  periodIndexForDate,
+  periodRangeFor,
+} from "@/lib/finance/period";
+import {
+  buildChartSeries,
+  computeProjectionWindow,
+  type PlanHistoryPoint,
+} from "@/lib/finance/chart-series";
 import type {
   DebtStrategy,
   FinancePlanWithLines,
@@ -81,22 +106,87 @@ import type {
   StrategyComparison,
 } from "@/types/finance";
 
+/** Figures for one accounting period, previewed in the sidebar while hovering
+ *  a chart point. Health/surplus derive from these, so they're not stored. */
+type PeriodFigures = {
+  /** Chip label, e.g. "Apr 2026". */
+  label: string;
+  income: number;
+  livingExpenses: number;
+  minDebtPayments: number;
+  totalDebt: number;
+};
+
+// Chip label for the hovered period — UTC for the same reason as the chart's
+// axis formatter (projection dates are UTC midnights).
+const HOVER_PERIOD_LABEL = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/**
+ * Animates toward `target` whenever it changes (easeOutQuint, like the health
+ * donut), so the sidebar figures count up/down on hover instead of snapping.
+ * Initial render starts AT the target — no mount animation.
+ */
+function useAnimatedNumber(target: number, duration = 350): number {
+  const [display, setDisplay] = useState(target);
+  useEffect(() => {
+    let cancelled = false;
+    let from: number | null = null;
+    const start = performance.now();
+    const ease = (t: number) => 1 - Math.pow(1 - t, 5);
+    const tick = (now: number) => {
+      if (cancelled) return;
+      const t = Math.min(1, (now - start) / duration);
+      setDisplay((curr) => {
+        if (from === null) from = curr;
+        return from + (target - from) * ease(t);
+      });
+      if (t < 1) requestAnimationFrame(tick);
+    };
+    const raf = requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [target, duration]);
+  return display;
+}
+
 type PlanEditorProps = {
   plan: FinancePlanWithLines;
+  /** Plan calibrated from the latest confirmation — drives the projection and
+   *  the "today" seed. Equals `plan` when there are no confirmations. The raw
+   *  `plan` is what the line/debt editors mutate. */
+  baseline: FinancePlanWithLines;
   projection: Projection;
+  /** Raw (un-calibrated) projection — re-simulates the chart's past when there
+   *  are no real snapshots, so confirming the current period doesn't blank the
+   *  chart history. Equals `projection` when there are no confirmations. */
+  pastProjection: Projection;
+  /** Real monthly snapshots for the chart's past (newest-last). */
+  history: PlanHistoryPoint[];
   comparison: StrategyComparison | null;
   investmentMethods: InvestmentMethodOption[];
   title: string;
   description: string;
+  /** When set, renders a back-arrow before the title linking here. */
+  backHref?: string;
 };
 
 export function PlanEditor({
   plan,
+  baseline,
   projection,
+  pastProjection,
+  history,
   comparison,
   investmentMethods,
   title,
   description,
+  backHref,
 }: PlanEditorProps) {
   const [, startTransition] = useTransition();
 
@@ -112,9 +202,23 @@ export function PlanEditor({
       });
     });
 
-  // "Today" snapshot — the projection's first row is the calibrated starting
-  // state, which is the most actionable reference for the cards and gauge.
-  const today = projection.months[0];
+  // "Today" snapshot — locate the projection row for the accounting period that
+  // actually CONTAINS today. Using months[0] (the plan/calibration START period)
+  // went stale as time passed or when the last confirmation was old, so the
+  // cards/gauge could show start-of-plan figures labelled "now". The projection
+  // is built from `baseline`, so index relative to its startMonth + anchor day.
+  const currentPeriodIdx = Math.min(
+    Math.max(
+      0,
+      periodIndexForDate(
+        baseline.startMonth,
+        baseline.confirmationDayOfMonth,
+        new Date()
+      )
+    ),
+    Math.max(0, projection.months.length - 1)
+  );
+  const today = projection.months[currentPeriodIdx];
   const income = today?.income ?? 0;
   const livingExpenses = today?.expenses ?? 0;
   const minDebtPayments = today?.scheduledDebtPayments ?? 0;
@@ -134,73 +238,119 @@ export function PlanEditor({
 
   const totalDebt = today?.totalDebt ?? 0;
 
-  // Filter income / expense lines to ONLY those that contribute to the
-  // current projection month, so the breakdown tooltips don't show one-time
-  // entries from other months or recurring entries outside their active
-  // window. Mirrors what `projectPlan` itself counts toward `today.income`
-  // / `today.expenses`, so the tooltip total matches the card value.
-  const currentMonthDate = today?.date ?? new Date(plan.startMonth);
-  const currentYear = currentMonthDate.getUTCFullYear();
-  const currentMonthIdx = currentMonthDate.getUTCMonth();
-  const planStartMonthDate = new Date(plan.startMonth);
-  const isLineInCurrentMonth = (
-    line:
-      | FinancePlanWithLines["incomes"][number]
-      | FinancePlanWithLines["expenses"][number]
-  ): boolean => {
-    if (line.kind === "one_time") {
-      const d = readDateParts(line.date);
-      return !!d && d.year === currentYear && d.month === currentMonthIdx;
-    }
-    // Recurring: hit-day must exist (catches off-cycle every_n_months) AND
-    // fall inside [startDate, endDate] at day precision. Incomes carry the
-    // window; expenses don't, so we read defensively from the line type.
-    const hitDay = recurringHitDayInMonth(
-      line,
-      currentYear,
-      currentMonthIdx,
-      planStartMonthDate
-    );
-    if (hitDay === null) return false;
-    const startISO = "startDate" in line ? line.startDate : null;
-    const endISO = "endDate" in line ? line.endDate : null;
-    return hitDayWithinWindow(currentYear, currentMonthIdx, hitDay, startISO, endISO);
-  };
-  const activeIncomes = plan.incomes.filter(isLineInCurrentMonth);
-  const activeExpenses = plan.expenses.filter(isLineInCurrentMonth);
+  // Chart-hover preview: while the pointer is over a chart point, the sidebar
+  // cards show THAT period's figures (with a backdrop + period chip so it reads
+  // as "not the present"); on leave they snap back to the current period.
+  // Health/surplus are pure functions of these inputs, so nothing is stored.
+  const [hoverFigures, setHoverFigures] = useState<PeriodFigures | null>(null);
+  const isPreview = hoverFigures !== null;
+  const dIncome = hoverFigures?.income ?? income;
+  const dLivingExpenses = hoverFigures?.livingExpenses ?? livingExpenses;
+  const dMinDebtPayments = hoverFigures?.minDebtPayments ?? minDebtPayments;
+  const dFixedOutflow = dLivingExpenses + dMinDebtPayments;
+  const dSurplus = dIncome - dFixedOutflow;
+  const dTotalDebt = hoverFigures?.totalDebt ?? totalDebt;
 
-  // Debt-line lookups: payment-this-month for the Living-expenses tooltip,
-  // current balance for the Total-debt tooltip.
-  const debtPaymentLines = (today?.debts ?? []).map((d) => ({
-    name: d.name,
-    scheduled: d.scheduledPayment,
-    extra: d.extraPayment,
-  }));
-  const debtBalanceLines = (today?.debts ?? []).map((d) => ({
-    name: d.name,
-    balance: d.balance,
-  }));
-
-  // Period anchoring: when the plan confirms on a day other than the 1st (or
-  // the disabled sentinel 0), the projection rows are custom accounting
-  // periods, not calendar months. Reflect that in the card wording and show
-  // the exact date window so the numbers aren't misread as a calendar month.
+  // Current accounting PERIOD. With an anchor day (confirmationDayOfMonth) the
+  // period runs anchor→anchor and straddles two calendar months — e.g. day 5
+  // ⇒ Apr 5 – May 4 — so every "what's active / when does it land" question
+  // below is answered against THIS window, not a single calendar month. Day 0/1
+  // falls back to the plain calendar month.
   const anchorDay = plan.confirmationDayOfMonth;
+  const effectiveAnchorDay = anchorDay > 0 ? anchorDay : 1;
   const isPeriodMode = anchorDay > 1;
-  const periodRange = isPeriodMode
-    ? periodRangeFor(currentMonthDate, anchorDay)
-    : null;
+  const currentMonthDate = today?.date ?? new Date(plan.startMonth);
+  const currentPeriod = periodRangeFor(currentMonthDate, effectiveAnchorDay);
+  const planStartMonthDate = new Date(plan.startMonth);
+
   const fmtPeriodDay = (d: Date): string =>
     new Intl.DateTimeFormat("en-US", {
       month: "short",
       day: "numeric",
       timeZone: "UTC",
     }).format(d);
-  const periodLabel = periodRange
-    ? `${fmtPeriodDay(periodRange.start)} – ${fmtPeriodDay(periodRange.end)}`
+  const periodLabel = isPeriodMode
+    ? `${fmtPeriodDay(currentPeriod.start)} – ${fmtPeriodDay(currentPeriod.end)}`
     : null;
   const incomeLabel = isPeriodMode ? "Period income" : "Monthly income";
   const expensesLabel = isPeriodMode ? "Period expenses" : "Living expenses";
+
+  // The exact date a line lands on within the current period, or null when it
+  // doesn't hit this period. Walks the 1–2 calendar months the period touches,
+  // so an anchor-day window (e.g. a paycheque on the 2nd that belongs to the
+  // Apr 5 – May 4 period as May 2) resolves correctly instead of being judged
+  // against only the period's start month.
+  const lineHitDateInPeriod = (
+    line:
+      | FinancePlanWithLines["incomes"][number]
+      | FinancePlanWithLines["expenses"][number]
+  ): Date | null => {
+    if (line.kind === "one_time") {
+      const d = readDateParts(line.date);
+      if (!d) return null;
+      const dt = new Date(Date.UTC(d.year, d.month, d.day));
+      return isDateInPeriod(dt, currentPeriod) ? dt : null;
+    }
+    // Recurring: incomes carry a [startDate, endDate] window; expenses don't,
+    // so we read it defensively from the line type.
+    const startISO = "startDate" in line ? line.startDate : null;
+    const endISO = "endDate" in line ? line.endDate : null;
+    for (const { year, monthIdx } of monthsInPeriod(currentPeriod)) {
+      const hitDay = recurringHitDayInMonth(line, year, monthIdx, planStartMonthDate);
+      if (hitDay === null) continue;
+      const dt = new Date(Date.UTC(year, monthIdx, hitDay));
+      if (!isDateInPeriod(dt, currentPeriod)) continue;
+      if (!hitDayWithinWindow(year, monthIdx, hitDay, startISO, endISO)) continue;
+      return dt;
+    }
+    return null;
+  };
+
+  // Pair each active line with its hit date and sort chronologically — this
+  // drives both the breakdown dialogs' order and their per-line date hint.
+  const datedSorted = <L,>(
+    lines: readonly L[],
+    dateOf: (line: L) => Date | null
+  ): { line: L; date: Date }[] =>
+    lines
+      .map((line) => ({ line, date: dateOf(line) }))
+      .filter((r): r is { line: L; date: Date } => r.date !== null)
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  const activeIncomeRows = datedSorted(plan.incomes, lineHitDateInPeriod);
+  const activeExpenseRows = datedSorted(plan.expenses, lineHitDateInPeriod);
+
+  // Debt payment day within the period (monthly debts hit once per period).
+  const debtHitDateInPeriod = (debtId: string): Date | null => {
+    const debt = plan.debts.find((d) => d.id === debtId);
+    if (!debt) return null;
+    for (const { year, monthIdx } of monthsInPeriod(currentPeriod)) {
+      const hitDay = recurringHitDayInMonth(debt, year, monthIdx, planStartMonthDate);
+      if (hitDay === null) continue;
+      const dt = new Date(Date.UTC(year, monthIdx, hitDay));
+      if (isDateInPeriod(dt, currentPeriod)) return dt;
+    }
+    return null;
+  };
+
+  // Debt-line lookups: scheduled payment-this-period (sorted by payment date)
+  // for the expenses breakdown, current balance for the total-debt breakdown.
+  const debtPaymentRows = (today?.debts ?? [])
+    .map((d) => ({
+      name: d.name,
+      amount: d.scheduledPayment,
+      date: debtHitDateInPeriod(d.debtId),
+    }))
+    .sort((a, b) => {
+      if (a.date && b.date) return a.date.getTime() - b.date.getTime();
+      if (a.date) return -1;
+      if (b.date) return 1;
+      return 0;
+    });
+  const debtBalanceLines = (today?.debts ?? []).map((d) => ({
+    name: d.name,
+    balance: d.balance,
+  }));
 
   // Label for the confirmation dialog header. Period mode shows the window
   // (e.g. "Apr 5 – May 4"); calendar mode shows month + year.
@@ -212,11 +362,37 @@ export function PlanEditor({
       timeZone: "UTC",
     }).format(currentMonthDate);
 
-  // Controlled tab value so the dropdown items (Setup / Settings) can drive
-  // the same surface as the visible TabsTriggers (Overview / Calendar).
-  const [tab, setTab] = useState<"overview" | "setup" | "calendar" | "settings">(
-    "overview"
-  );
+  // Controlled tab value. Overview is the primary surface (it hosts the
+  // Graph / Table / Calendar view-switcher); Setup / Settings are reached via
+  // the More dropdown.
+  const [tab, setTab] = useState<"overview" | "setup" | "settings">("overview");
+
+  // Debt payoff strategy lives in the Overview sidebar now (not the chart card),
+  // so its open/close state + change handler are owned here and threaded into
+  // the `sidebar` node below. Only meaningful when the plan has debts.
+  const [strategyOpen, setStrategyOpen] = useState(false);
+  const currentStrategy = plan.debtStrategy as DebtStrategy;
+  const debtComparison = plan.debts.length > 0 ? comparison : null;
+  const handleChangeStrategy = (next: DebtStrategy) =>
+    wrap(() =>
+      updatePlanAction({
+        id: plan.id,
+        name: plan.name,
+        description: plan.description ?? null,
+        startMonth: plan.startMonth,
+        monthsAhead: plan.monthsAhead,
+        initialSavings: plan.initialSavings,
+        monthlySavingsRate: plan.monthlySavingsRate,
+        includePortfolio: plan.includePortfolio,
+        surplusToDebtsPercent: plan.surplusToDebtsPercent,
+        debtStrategy: next,
+        autoInvestPercent: plan.autoInvestPercent,
+        autoInvestMethodId: plan.autoInvestMethodId,
+        initialInvestments: plan.initialInvestments,
+        confirmationDayOfMonth: plan.confirmationDayOfMonth,
+        color: plan.color,
+      })
+    );
 
   // Dev-tools: force-open the monthly confirmation dialog from this plan,
   // bypassing the date + dismiss gates so the whole confirm-and-update flow
@@ -265,222 +441,246 @@ export function PlanEditor({
 
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="space-y-6">
-      {/* Header: title + subtitle + tabs share the left column; the gauge
-          anchors the right column. `items-end` aligns the bottom of the
-          gauge with the bottom of the TabsList so both sit on the same
-          baseline, regardless of the gauge's larger height. */}
-      <div className="flex flex-wrap items-end justify-between gap-6">
-        {/* space-y-7 between the title block and the tabs gives the tabs
-            visual room to breathe and matches the original PageHeader gap. On
-            mobile this column fills the row so the compact gauge can pin to the
-            title's top-right; on desktop it shrinks back and the full gauge
-            anchors the far-right column (below). */}
-        <div className="min-w-0 flex-1 space-y-7 sm:flex-none">
-          {/* Title row: text on the left; on mobile the compact gauge sits in
-              the top-right corner to reclaim the vertical space its own row
-              used to eat. Hidden from `sm` up, where the full gauge takes over. */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 space-y-1">
-              {/* Match the original PageHeader's title size: text-2xl + bold.
-                  Heading "h3" is the closest variant; override semibold→bold. */}
-              <Heading level="h3" className="font-bold">
-                {title}
-              </Heading>
-              <Text variant="muted">{description}</Text>
-              {periodLabel && (
-                <Text variant="muted" className="font-mono text-xs">
-                  Current period · {periodLabel}
-                </Text>
-              )}
-            </div>
-            <div className="shrink-0 sm:hidden">
-              <FinancialHealthDonut
-                obligations={fixedOutflow}
-                income={income}
-                size={96}
-                showFooter={false}
-              />
-            </div>
-          </div>
-          {/* Primary tabs (Overview / Calendar) sit in the TabsList; Setup
-              and Settings — used less often and more "admin"-flavoured —
-              live in the More dropdown next to it. */}
-          <div className="flex flex-wrap items-center gap-2">
-            <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="calendar">Calendar</TabsTrigger>
-            </TabsList>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant={moreActive ? "default" : "outline"}
-                  size="sm"
-                  className="h-9"
-                >
-                  {moreLabel}
-                  <ChevronDown className="ml-1 h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem onSelect={() => setTab("setup")}>
-                  Setup
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setTab("settings")}>
-                  Settings
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+      {/* Header: title block on the left, tabs on the right of the SAME row so
+          the chart sits higher (visible on load without scrolling). The
+          financial-health gauge moved into the Overview sidebar (next to the
+          chart), so the header stays lightweight on every tab. Wraps to two
+          rows on mobile. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+        {/* Title block sits flush with the content/card edge; the back-arrow
+            hangs in the left gutter via absolute positioning so it doesn't
+            indent the title or description. */}
+        <div className="relative min-w-0 space-y-1">
+          {backHref && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              asChild
+              className="absolute top-0 -left-8 text-muted-foreground"
+            >
+              <Link href={backHref} aria-label="Back to plans">
+                <ArrowLeft className="size-4" />
+              </Link>
+            </Button>
+          )}
+          {/* Compact page title: Heading "h3" (text-2xl at ≥640px) at the
+              page-title weight (font-semibold), matching the shadcn docs scale. */}
+          <Heading level="h3" className="font-semibold">
+            {title}
+          </Heading>
+          <Text variant="muted">{description}</Text>
+          {periodLabel && (
+            <Text variant="muted" className="font-mono text-xs">
+              Current period · {periodLabel}
+            </Text>
+          )}
         </div>
-        {/* Desktop gauge: keeps the original right-column position, bottom-
-            aligned with the tabs. Hidden on mobile, where the compact gauge
-            above takes its place. */}
-        <div className="hidden sm:block">
-          <FinancialHealthDonut obligations={fixedOutflow} income={income} />
+        {/* Overview is the primary surface (Graph / Table / Calendar live in
+            its in-panel switcher); Setup and Settings — used less often and more
+            "admin"-flavoured — live in the More dropdown next to it. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+          </TabsList>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant={moreActive ? "default" : "outline"}
+                size="sm"
+                className="h-9"
+              >
+                {moreLabel}
+                <ChevronDown className="ml-1 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onSelect={() => setTab("setup")}>
+                Setup
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setTab("settings")}>
+                Settings
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
       <TabsContent value="overview" className="space-y-6">
-        {/* Mobile: a single horizontal-scroll rail where each card is ~44% wide
-            so a quarter of the third card peeks in to signal there's more to
-            scroll. The scrollbar is hidden and scroll snaps card-to-card. From
-            `sm` up it falls back to the regular 2- then 4-column grid.
-            `overflow-x-auto` also clips the cross axis, so `py-1` keeps the
-            cards' ring + shadow from being shaved top/bottom. NO horizontal
-            margin/padding: a negative `-mx-1` shifted the first card 4px left
-            of the title and the projection card below it; the 1px faint ring
-            on the scroll edges is not worth the misalignment. */}
-        <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto py-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:py-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
-          <SummaryCard
-            className="w-[44%] shrink-0 snap-start sm:w-auto"
-            label={incomeLabel}
-            value={income}
-            tone="positive"
-            sublabel="From all active sources"
-            breakdown={
-              <BreakdownList
-                items={activeIncomes.map((i) => ({
-                  name: i.name,
-                  amount: Number(i.monthlyAmount),
-                }))}
-                emptyLabel="No income sources yet"
-                total={income}
-              />
-            }
-          />
-          <SummaryCard
-            className="w-[44%] shrink-0 snap-start sm:w-auto"
-            label={expensesLabel}
-            value={fixedOutflow}
-            sublabel="Includes debt minimums"
-            breakdown={
-              <BreakdownList
-                groups={[
-                  {
-                    heading: "Expenses",
-                    items: activeExpenses.map((e) => ({
-                      name: e.name,
-                      amount: Number(e.monthlyAmount),
-                    })),
-                  },
-                  {
-                    heading: "Debt minimums",
-                    items: debtPaymentLines.map((d) => ({
-                      name: d.name,
-                      amount: d.scheduled,
-                    })),
-                  },
-                ]}
-                emptyLabel="No fixed obligations yet"
-                total={fixedOutflow}
-              />
-            }
-          />
-          <SummaryCard
-            className="w-[44%] shrink-0 snap-start sm:w-auto"
-            label="Total debt"
-            value={totalDebt}
-            tone={totalDebt > 0 ? "negative" : undefined}
-            sublabel={
-              plan.debts.length === 0
-                ? "No active debts"
-                : projection.monthsToDebtFree !== null
-                ? `Debt-free in ${projection.monthsToDebtFree} mo`
-                : "Not within plan horizon"
-            }
-            breakdown={
-              <BreakdownList
-                items={debtBalanceLines.map((d) => ({
-                  name: d.name,
-                  amount: d.balance,
-                }))}
-                emptyLabel="No active debts"
-                total={totalDebt}
-              />
-            }
-          />
-          <SummaryCard
-            className="w-[44%] shrink-0 snap-start sm:w-auto"
-            label="Surplus"
-            value={surplus}
-            tone={surplus >= 0 ? "positive" : "negative"}
-            sublabel={
-              surplus > 0 ? (
-                <div className="space-y-0.5">
-                  <SublabelLine
-                    label="→ Extra debt"
-                    amount={extraDebtPayments}
-                  />
-                  <SublabelLine
-                    label="→ Savings & invest"
-                    amount={Math.max(0, toWealth)}
-                  />
-                </div>
-              ) : surplus === 0 ? (
-                "Nothing left after fixed obligations"
-              ) : (
-                "Plan spends more than it earns"
-              )
-            }
-            breakdown={
-              <SurplusBreakdown
-                income={income}
-                livingExpenses={livingExpenses}
-                minDebtPayments={minDebtPayments}
-                surplus={surplus}
-                toExtraDebt={extraDebtPayments}
-                toInvestments={investmentsContribution}
-                toSavings={savingsContribution}
-              />
-            }
-          />
-        </div>
-
         <ProjectionPanel
           projection={projection}
-          plan={plan}
-          comparison={plan.debts.length > 0 ? comparison : null}
-          currentStrategy={plan.debtStrategy as DebtStrategy}
-          onChangeStrategy={(next) =>
-            wrap(() =>
-              updatePlanAction({
-                id: plan.id,
-                name: plan.name,
-                description: plan.description ?? null,
-                startMonth: plan.startMonth,
-                monthsAhead: plan.monthsAhead,
-                initialSavings: plan.initialSavings,
-                monthlySavingsRate: plan.monthlySavingsRate,
-                includePortfolio: plan.includePortfolio,
-                surplusToDebtsPercent: plan.surplusToDebtsPercent,
-                debtStrategy: next,
-                autoInvestPercent: plan.autoInvestPercent,
-                autoInvestMethodId: plan.autoInvestMethodId,
-                initialInvestments: plan.initialInvestments,
-                confirmationDayOfMonth: plan.confirmationDayOfMonth,
-                color: plan.color,
-              })
-            )
+          pastProjection={pastProjection}
+          baseline={baseline}
+          history={history}
+          onHoverFigures={setHoverFigures}
+          calendar={
+            <PlanCalendar
+              plan={plan}
+              onAddIncome={(input) =>
+                wrap(() => addPlanIncomeAction(plan.id, input))
+              }
+              onAddExpense={(input) =>
+                wrap(() => addPlanExpenseAction(plan.id, input))
+              }
+              onUpdateIncome={(id, input) =>
+                wrap(() => updatePlanIncomeAction(plan.id, { id, ...input }))
+              }
+              onUpdateExpense={(id, input) =>
+                wrap(() => updatePlanExpenseAction(plan.id, { id, ...input }))
+              }
+              onUpdateDebt={(id, input) =>
+                wrap(() => updatePlanDebtAction(plan.id, { id, ...input }))
+              }
+              onUpsertOverride={(input) =>
+                wrap(() => upsertLineOverrideAction(plan.id, input))
+              }
+              onDeleteOverride={(input) =>
+                wrap(() => deleteLineOverrideAction(plan.id, input))
+              }
+            />
+          }
+          sidebar={
+            // Condensed Polymarket-style rail (right 1/4 on desktop, stacked
+            // under the chart on mobile): a figures card — health gauge on top,
+            // cycle figures as compact rows (tap a row for its breakdown) — and,
+            // below it, the debt payoff strategy card when the plan has debts.
+            <>
+            <Card
+              className={cn(
+                // lg:flex-1 — fills the sidebar column so its bottom edge tracks
+                // the main panel's fixed height (see ProjectionPanel's grid).
+                "relative transition-all duration-200 lg:flex-1",
+                isPreview && "bg-muted/40 ring-1 ring-foreground/10"
+              )}
+            >
+              {isPreview && (
+                <div className="pointer-events-none absolute -top-2.5 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-background px-2.5 py-0.5 text-2xs font-medium shadow-sm">
+                  {hoverFigures.label}
+                </div>
+              )}
+              <CardContent className="space-y-4 pt-6">
+                <div className="flex flex-col items-center gap-1.5">
+                  <FinancialHealthDonut
+                    obligations={dFixedOutflow}
+                    income={dIncome}
+                    size={120}
+                    showFooter={false}
+                  />
+                  <Text variant="small" as="p" className="text-2xs uppercase tracking-wide">
+                    {isPeriodMode ? "Period health" : "Monthly health"}
+                  </Text>
+                </div>
+                <div>
+                  <StatRow
+                    label={incomeLabel}
+                    value={dIncome}
+                    tone="positive"
+                    breakdown={
+                      <BreakdownList
+                        items={activeIncomeRows.map((r) => ({
+                          name: r.line.name,
+                          amount: Number(r.line.monthlyAmount),
+                          hint: fmtPeriodDay(r.date),
+                        }))}
+                        emptyLabel="No income sources yet"
+                        total={income}
+                      />
+                    }
+                  />
+                  <StatRow
+                    label={expensesLabel}
+                    value={dFixedOutflow}
+                    breakdown={
+                      <BreakdownList
+                        groups={[
+                          {
+                            heading: "Expenses",
+                            items: activeExpenseRows.map((r) => ({
+                              name: r.line.name,
+                              amount: Number(r.line.monthlyAmount),
+                              hint: fmtPeriodDay(r.date),
+                            })),
+                          },
+                          {
+                            heading: "Debt minimums",
+                            items: debtPaymentRows.map((d) => ({
+                              name: d.name,
+                              amount: d.amount,
+                              hint: d.date ? fmtPeriodDay(d.date) : undefined,
+                            })),
+                          },
+                        ]}
+                        emptyLabel="No fixed obligations yet"
+                        total={fixedOutflow}
+                      />
+                    }
+                  />
+                  <StatRow
+                    label="Total debt"
+                    value={dTotalDebt}
+                    tone={dTotalDebt > 0 ? "negative" : undefined}
+                    hint={
+                      plan.debts.length === 0
+                        ? undefined
+                        : projection.monthsToDebtFree !== null
+                        ? `Debt-free in ${projection.monthsToDebtFree} mo`
+                        : "Beyond horizon"
+                    }
+                    breakdown={
+                      <BreakdownList
+                        items={debtBalanceLines.map((d) => ({
+                          name: d.name,
+                          amount: d.balance,
+                        }))}
+                        emptyLabel="No active debts"
+                        total={totalDebt}
+                      />
+                    }
+                  />
+                  <StatRow
+                    label="Surplus"
+                    value={dSurplus}
+                    tone={dSurplus >= 0 ? "positive" : "negative"}
+                    hint={dSurplus < 0 ? "Spends more than it earns" : undefined}
+                    breakdown={
+                      <SurplusBreakdown
+                        income={income}
+                        livingExpenses={livingExpenses}
+                        minDebtPayments={minDebtPayments}
+                        surplus={surplus}
+                        toExtraDebt={extraDebtPayments}
+                        toInvestments={investmentsContribution}
+                        toSavings={savingsContribution}
+                      />
+                    }
+                  />
+                </div>
+              </CardContent>
+            </Card>
+            {debtComparison && (
+              <Card>
+                <CardHeader className="pb-0">
+                  <CardTitle className="text-2xs font-medium uppercase tracking-wide text-muted-foreground lg:text-xs">
+                    Debt payoff strategy
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-3">
+                  <StrategyBadge
+                    comparison={debtComparison}
+                    currentStrategy={currentStrategy}
+                    open={strategyOpen}
+                    onToggle={() => setStrategyOpen((v) => !v)}
+                  />
+                  {strategyOpen && (
+                    <StrategyPicker
+                      comparison={debtComparison}
+                      currentStrategy={currentStrategy}
+                      onChange={handleChangeStrategy}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            )}
+            </>
           }
         />
       </TabsContent>
@@ -542,33 +742,6 @@ export function PlanEditor({
         </Card>
       </TabsContent>
 
-      <TabsContent value="calendar">
-        <PlanCalendar
-          plan={plan}
-          onAddIncome={(input) =>
-            wrap(() => addPlanIncomeAction(plan.id, input))
-          }
-          onAddExpense={(input) =>
-            wrap(() => addPlanExpenseAction(plan.id, input))
-          }
-          onUpdateIncome={(id, input) =>
-            wrap(() => updatePlanIncomeAction(plan.id, { id, ...input }))
-          }
-          onUpdateExpense={(id, input) =>
-            wrap(() => updatePlanExpenseAction(plan.id, { id, ...input }))
-          }
-          onUpdateDebt={(id, input) =>
-            wrap(() => updatePlanDebtAction(plan.id, { id, ...input }))
-          }
-          onUpsertOverride={(input) =>
-            wrap(() => upsertLineOverrideAction(plan.id, input))
-          }
-          onDeleteOverride={(input) =>
-            wrap(() => deleteLineOverrideAction(plan.id, input))
-          }
-        />
-      </TabsContent>
-
       <TabsContent value="settings" className="space-y-4">
         <MainPlanToggle plan={plan} wrap={wrap} />
         <PlanForm plan={plan} investmentMethods={investmentMethods} />
@@ -625,14 +798,14 @@ function MainPlanToggle({
             }`}
           />
           <div className="space-y-0.5">
-            <p className="text-sm font-medium">
+            <Text weight="medium">
               {plan.isMain ? "Main plan" : "Set as main plan"}
-            </p>
-            <p className="text-xs text-muted-foreground">
+            </Text>
+            <Text variant="small">
               {plan.isMain
                 ? "This is the plan the dashboard follows and the only one that fires the monthly confirmation prompt."
                 : "Make this the plan the dashboard follows. The current main plan will lose the flag."}
-            </p>
+            </Text>
           </div>
         </div>
         {!plan.isMain && (
@@ -658,14 +831,25 @@ function MainPlanToggle({
 
 type ProjectionPanelProps = {
   projection: Projection;
-  /** Plan with lines, needed so the Today KPI can back out income / expense
-   *  that hasn't hit yet this month. */
-  plan: FinancePlanWithLines;
-  /** Pre-computed projections for the three debt strategies — null when the
-   *  plan has no debts (the comparison is meaningless). */
-  comparison: StrategyComparison | null;
-  currentStrategy: DebtStrategy;
-  onChangeStrategy: (next: DebtStrategy) => Promise<void>;
+  /** Raw (un-calibrated) projection for re-simulating the chart's past when
+   *  there are no real snapshots. See PlanEditorProps. */
+  pastProjection: Projection;
+  /** Confirmation-calibrated plan — drives the projection and the "today"
+   *  partial-month seed (its startMonth/initials match `projection`). The Today
+   *  KPI uses it to back out income / expense that hasn't hit yet this month. */
+  baseline: FinancePlanWithLines;
+  /** Real monthly snapshots for the chart's past (newest-last). */
+  history: PlanHistoryPoint[];
+  /** The Calendar view of the switcher (PlanCalendar, built by the parent which
+   *  owns the line/debt mutation handlers). Brings its own Card. */
+  calendar: React.ReactNode;
+  /** Right-hand sidebar content (health gauge + cycle figures + debt strategy).
+   *  Rendered in the narrow column beside the chart on desktop, stacked below
+   *  the chart on mobile. */
+  sidebar: React.ReactNode;
+  /** Receives the hovered chart point's period figures (null on leave / when
+   *  hovering today's point) so the parent can preview them in the sidebar. */
+  onHoverFigures?: (figures: PeriodFigures | null) => void;
 };
 
 const STRATEGY_LABEL: Record<DebtStrategy, string> = {
@@ -692,6 +876,117 @@ const HORIZON_PRESETS: ReadonlyArray<{ months: number; label: string }> = [
   { months: 60, label: "5 yr" },
   { months: 120, label: "10 yr" },
 ];
+
+// The three views the Overview switcher alternates between (order = swipe order).
+const PLAN_VIEWS = ["chart", "table", "calendar"] as const;
+type PlanView = (typeof PLAN_VIEWS)[number];
+const PLAN_VIEW_LABEL: Record<PlanView, string> = {
+  chart: "Graph",
+  table: "Table",
+  calendar: "Calendar",
+};
+const PLAN_VIEW_ICON: Record<PlanView, LucideIcon> = {
+  chart: LineChart,
+  table: Table2,
+  calendar: CalendarDays,
+};
+
+// Segmented control for the view switcher — clear on every device. On mobile a
+// swipe + the dots below offer the carousel-style alternative.
+function ViewSwitcher({
+  value,
+  onChange,
+}: {
+  value: PlanView;
+  onChange: (next: PlanView) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Plan view"
+      className="inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
+    >
+      {PLAN_VIEWS.map((v) => {
+        const Icon = PLAN_VIEW_ICON[v];
+        const active = value === v;
+        return (
+          <button
+            key={v}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(v)}
+            className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition ${
+              active
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {PLAN_VIEW_LABEL[v]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// True when `target` sits inside a horizontally-scrollable element (up to
+// `boundary`). Used so a swipe that begins on the projection table — which
+// scrolls sideways on mobile — pans the table instead of changing the view.
+function isInHorizontalScroller(
+  target: HTMLElement | null,
+  boundary: HTMLElement
+): boolean {
+  let node: HTMLElement | null = target;
+  while (node && node !== boundary) {
+    const overflowX = getComputedStyle(node).overflowX;
+    if (
+      (overflowX === "auto" || overflowX === "scroll") &&
+      node.scrollWidth > node.clientWidth + 1
+    ) {
+      return true;
+    }
+    node = node.parentElement;
+  }
+  return false;
+}
+
+// Touch swipe → previous/next view. Requires a deliberate horizontal gesture
+// (≥60px, clearly more horizontal than vertical) and ignores swipes that begin
+// inside a sideways-scrolling region. No wrap-around at the ends.
+function useSwitcherSwipe(view: PlanView, goView: (next: PlanView) => void) {
+  const startX = useRef<number | null>(null);
+  const startY = useRef<number | null>(null);
+  const ignore = useRef(false);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    startX.current = t.clientX;
+    startY.current = t.clientY;
+    ignore.current = isInHorizontalScroller(
+      e.target as HTMLElement,
+      e.currentTarget as HTMLElement
+    );
+  };
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const sx = startX.current;
+    const sy = startY.current;
+    startX.current = null;
+    startY.current = null;
+    if (sx === null || sy === null || ignore.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - sx;
+    const dy = t.clientY - sy;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const idx = PLAN_VIEWS.indexOf(view);
+    const nextIdx = dx < 0 ? idx + 1 : idx - 1;
+    if (nextIdx < 0 || nextIdx >= PLAN_VIEWS.length) return;
+    goView(PLAN_VIEWS[nextIdx]);
+  };
+
+  return { onTouchStart, onTouchEnd };
+}
 
 // Day-of-month a recurring line lands on in (year, monthIdx). Mirrors the
 // calendar's resolver so the Today snapshot can ask "did this entry hit
@@ -784,51 +1079,69 @@ function hitDayWithinWindow(
 }
 
 /**
- * Computes today's net worth as a *partial-month* snapshot built from
- * scratch — NOT from the projection's end-of-month aggregate. This matches
+ * Computes today's net worth as a *partial-period* snapshot built from
+ * scratch — NOT from the projection's end-of-period aggregate. This matches
  * the user's mental model: "what does my bank/debt look like right now,
- * given what has actually hit so far this month?".
+ * given what has actually hit so far this period?".
+ *
+ * Period-aware: the accounting period that contains today is located via
+ * `periodIndexForDate` and spans 1–2 calendar months (anchored on the plan's
+ * confirmation day). We walk EACH touched month and apply only the hits that
+ * fall inside the period AND on/before today — so a day-15 anchor with today on
+ * the 6th correctly settles the part of the period that already elapsed in the
+ * previous calendar month.
  *
  * Algorithm:
- *   1. Seed savings/investments/per-debt balances from end-of-previous-month
- *      (= start of current month). For month 0, use the plan's initial state.
- *   2. Walk every income/expense line; if its hit-day this month is ≤ today,
+ *   1. Seed savings/investments/per-debt balances from the previous period's
+ *      close (= this period's opening). For period 0, use the plan's initials.
+ *   2. Walk every income/expense line; if a hit lands in the period and ≤ today,
  *      apply it as cash in/out of savings.
- *   3. For each debt, if the scheduled payment day this month is ≤ today,
+ *   3. For each debt, if its scheduled payment has hit in the period by today,
  *      subtract the scheduled payment from savings and swap the debt balance
- *      for the projection's end-of-month value (captures interest + extra).
- *      Payments after today leave the balance at start-of-month.
+ *      for the projection's end-of-period value (captures interest + extra).
+ *      Payments still ahead leave the balance at period-opening.
  *   4. Net worth = savings + investments + portfolio − total debt.
  *
- * Trade-offs: extra payments only happen at month-end (after surplus routing)
- * so subtracting them from savings mid-month would be wrong; instead they
- * stay in the debt balance via the EoM swap. Mid-month interest accrual is
- * approximated by trusting the projection's EoM balance once today >= payment
- * day; before payment day, the start-of-month balance carries no interest at
- * all (mild under-statement for high-rate debts in the first ~half of a
- * month, accepted to keep the snapshot O(lines) instead of a full re-walk).
+ * Trade-offs: extra payments only happen at period-end (after surplus routing)
+ * so subtracting them from savings mid-period would be wrong; instead they stay
+ * in the debt balance via the end-of-period swap. Mid-period interest accrual
+ * is approximated by trusting the projection's end-of-period balance once the
+ * payment has hit; before that, the opening balance carries no interest (mild
+ * under-statement for high-rate debts early in a period, accepted to keep the
+ * snapshot O(lines) instead of a full re-walk).
  */
 function computeTodaySnapshot(
   plan: FinancePlanWithLines,
-  projection: Projection
+  projection: Projection,
+  anchorDay: number
 ): TodaySnapshot | null {
   const now = new Date();
   const planStart = new Date(plan.startMonth);
-  const planStartKey =
-    planStart.getUTCFullYear() * 12 + planStart.getUTCMonth();
-  const todayKey = now.getUTCFullYear() * 12 + now.getUTCMonth();
-  const monthOffset = todayKey - planStartKey;
+  const monthOffset = periodIndexForDate(planStart, anchorDay, now);
 
   if (monthOffset < 0 || monthOffset >= projection.months.length) return null;
 
   const currentMonth = projection.months[monthOffset];
-  const year = now.getUTCFullYear();
-  const monthIdx = now.getUTCMonth();
-  const todayDay = now.getUTCDate();
+  // The accounting period that contains today (1–2 calendar months).
+  const period = periodRangeFor(now, anchorDay > 0 ? anchorDay : 1);
+  const periodStartMs = period.start.getTime();
+  const periodEndMs = period.end.getTime();
+  const nowMs = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate()
+  );
+  const touchedMonths = monthsInPeriod(period);
 
-  // Seed from end-of-previous-month — that's exactly the state at start of
-  // the current month, including any surplus routed to savings in prior
-  // months. For month 0, fall back to the plan's initial figures.
+  // A hit on (year, monthIdx, day) counts when it lands inside the current
+  // period AND has already occurred (on/before today).
+  const hitIsLive = (year: number, monthIdx: number, day: number): boolean => {
+    const ms = Date.UTC(year, monthIdx, day);
+    return ms >= periodStartMs && ms <= periodEndMs && ms <= nowMs;
+  };
+
+  // Seed from the previous period's close (= this period's opening). For the
+  // first period, fall back to the plan's initial figures.
   const prevMonth = monthOffset > 0 ? projection.months[monthOffset - 1] : null;
   let savings = prevMonth ? prevMonth.savings : parseFloat(plan.initialSavings);
   const investments = prevMonth
@@ -847,43 +1160,56 @@ function computeTodaySnapshot(
   for (const inc of plan.incomes) {
     if (inc.kind === "one_time") {
       const d = readDateParts(inc.date);
-      if (d && d.year === year && d.month === monthIdx && d.day <= todayDay) {
+      if (d && hitIsLive(d.year, d.month, d.day)) {
         savings += Number(inc.monthlyAmount);
       }
       continue;
     }
-    const hitDay = recurringHitDayInMonth(inc, year, monthIdx, planStart);
-    if (hitDay === null || hitDay > todayDay) continue;
-    if (!hitDayWithinWindow(year, monthIdx, hitDay, inc.startDate, inc.endDate)) {
-      continue;
+    for (const cm of touchedMonths) {
+      const hitDay = recurringHitDayInMonth(inc, cm.year, cm.monthIdx, planStart);
+      if (hitDay === null || !hitIsLive(cm.year, cm.monthIdx, hitDay)) continue;
+      if (
+        !hitDayWithinWindow(cm.year, cm.monthIdx, hitDay, inc.startDate, inc.endDate)
+      ) {
+        continue;
+      }
+      savings += Number(inc.monthlyAmount);
     }
-    savings += Number(inc.monthlyAmount);
   }
   for (const exp of plan.expenses) {
     if (exp.kind === "one_time") {
       const d = readDateParts(exp.date);
-      if (d && d.year === year && d.month === monthIdx && d.day <= todayDay) {
+      if (d && hitIsLive(d.year, d.month, d.day)) {
         savings -= Number(exp.monthlyAmount);
       }
       continue;
     }
-    // Expenses don't carry a start/end window in the schema; the hit-day
-    // check is sufficient.
-    const hitDay = recurringHitDayInMonth(exp, year, monthIdx, planStart);
-    if (hitDay === null || hitDay > todayDay) continue;
-    savings -= Number(exp.monthlyAmount);
+    // Expenses don't carry a start/end window in the schema; the hit check is
+    // sufficient.
+    for (const cm of touchedMonths) {
+      const hitDay = recurringHitDayInMonth(exp, cm.year, cm.monthIdx, planStart);
+      if (hitDay === null || !hitIsLive(cm.year, cm.monthIdx, hitDay)) continue;
+      savings -= Number(exp.monthlyAmount);
+    }
   }
 
-  // ---- Debt payments hit this month ---------------------------------------
+  // ---- Debt payments that have hit so far this period ----------------------
   for (const debt of plan.debts) {
     const eomDebt = currentMonth.debts.find((d) => d.debtId === debt.id);
     if (!eomDebt) continue;
-    const hitDay = recurringHitDayInMonth(debt, year, monthIdx, planStart);
-    if (hitDay === null || hitDay > todayDay) continue;
-    // Scheduled payment already left the bank by today. Extra payments
-    // happen at month-end (after surplus routing) so we don't deduct them
-    // from savings here — but we do trust the projection's end-of-month
-    // balance for accuracy (captures interest + extra).
+    let hit = false;
+    for (const cm of touchedMonths) {
+      const hitDay = recurringHitDayInMonth(debt, cm.year, cm.monthIdx, planStart);
+      if (hitDay !== null && hitIsLive(cm.year, cm.monthIdx, hitDay)) {
+        hit = true;
+        break;
+      }
+    }
+    if (!hit) continue;
+    // Scheduled payment already left the bank this period. Extra payments
+    // happen at period-end (after surplus routing) so we don't deduct them
+    // here — but we trust the projection's end-of-period balance for accuracy
+    // (captures interest + extra).
     savings -= eomDebt.scheduledPayment;
     debtBalances.set(debt.id, eomDebt.balance);
   }
@@ -900,39 +1226,6 @@ function computeTodaySnapshot(
   };
 }
 
-function computeProjectionWindow(
-  projection: Projection,
-  totalMonths: number
-): {
-  startIndex: number;
-  count: number;
-  pastCount: number;
-  todayIndex: number; // index in the SLICED window
-} {
-  // ~25% of the window is past, the rest is future.
-  const targetPast = Math.max(1, Math.round(totalMonths * 0.25));
-  // Projection dates are generated at UTC midnight. Comparing them against
-  // the user's LOCAL year/month would shift a month in negative-offset
-  // timezones (e.g. UTC-5 sees May 1 UTC as Apr 30 local) and the chart
-  // would treat plan-start = May as if today were Apr. Use UTC on both sides
-  // so the bucket comparison is stable.
-  const now = new Date();
-  const todayKey = now.getUTCFullYear() * 12 + now.getUTCMonth();
-  let projIdx = projection.months.findIndex(
-    (m) => m.date.getUTCFullYear() * 12 + m.date.getUTCMonth() === todayKey
-  );
-  if (projIdx === -1) projIdx = 0;
-  const pastCount = Math.min(targetPast, projIdx);
-  const startIndex = Math.max(0, projIdx - pastCount);
-  const count = Math.min(totalMonths, projection.months.length - startIndex);
-  return {
-    startIndex,
-    count,
-    pastCount,
-    todayIndex: pastCount, // boundary point in the slice
-  };
-}
-
 /**
  * Projection chart with a header that surfaces the headline number — how much
  * the net worth is expected to grow over the chosen horizon. Preset buttons
@@ -941,14 +1234,25 @@ function computeProjectionWindow(
  */
 function ProjectionPanel({
   projection,
-  plan,
-  comparison,
-  currentStrategy,
-  onChangeStrategy,
+  pastProjection,
+  baseline,
+  history,
+  calendar,
+  sidebar,
+  onHoverFigures,
 }: ProjectionPanelProps) {
-  // Strategy picker — collapsed by default, surfacing just a compact badge in
-  // the header. Expands to show the three comparison cards inline.
-  const [strategyOpen, setStrategyOpen] = useState(false);
+  // View switcher — Graph (chart) / Table / Calendar. Segmented control (every
+  // device) sits at the BOTTOM, Polymarket-style; horizontal swipe on touch
+  // changes view too. A plain fade on switch — no horizontal slide, so nothing
+  // clips the active view's card.
+  const [view, setView] = useState<PlanView>("chart");
+  const goView = (next: PlanView) => {
+    // Leaving the chart view unmounts it mid-hover — drop any active preview
+    // so the sidebar doesn't stay stuck on a hovered period.
+    onHoverFigures?.(null);
+    setView(next);
+  };
+  const swipe = useSwitcherSwipe(view, goView);
 
   // Horizon — 12 mo by default; bumps up to 2 / 5 / 10 yr when the user picks
   // a preset above the chart.
@@ -957,148 +1261,249 @@ function ProjectionPanel({
     Math.min(12, maxAvailable)
   );
 
+  // Accounting-period anchor (the plan's confirmation day). The window / chart /
+  // today-seed all resolve "today" against this so a non-1 anchor lands on the
+  // period that actually contains today, not a raw calendar-month bucket.
+  const anchorDay = baseline.confirmationDayOfMonth;
+
   // Window with the active horizon: ~25% past + 75% future. Edges shift when
-  // the plan started recently so we never look past data we don't have.
-  const window = computeProjectionWindow(projection, horizonMonths);
+  // the plan started recently so we never look past data we don't have. Used
+  // for the KPIs + the monthly-breakdown table (both are forecast views).
+  const window = computeProjectionWindow(
+    projection,
+    horizonMonths,
+    new Date(),
+    anchorDay
+  );
+
+  // Chart series: real snapshots for the past, calibrated projection for the
+  // future. Falls back to the projection-only window when there's no history.
+  const chartSeries = buildChartSeries(
+    history,
+    projection,
+    horizonMonths,
+    new Date(),
+    anchorDay,
+    pastProjection
+  );
+
+  // Per-point period figures for the sidebar hover preview. Flows (income /
+  // expenses / debt minimums) come from the projection month sharing the
+  // point's period — the calibrated one first, falling back to the raw past
+  // projection for periods before the calibration start. Debt prefers the
+  // point's own value (the REAL snapshot balance for past points).
+  const pointFigures = useMemo<(PeriodFigures | null)[]>(() => {
+    const effAnchor = anchorDay > 0 ? anchorDay : 1;
+    return chartSeries.points.map((p) => {
+      const inSamePeriod = (m: { date: Date }) =>
+        periodIndexForDate(m.date, effAnchor, p.date) === 0;
+      const m =
+        projection.months.find(inSamePeriod) ??
+        pastProjection.months.find(inSamePeriod);
+      if (!m) return null;
+      return {
+        label: HOVER_PERIOD_LABEL.format(p.date),
+        income: m.income,
+        livingExpenses: m.expenses,
+        minDebtPayments: m.scheduledDebtPayments,
+        totalDebt: p.totalDebt ?? m.totalDebt,
+      };
+    });
+  }, [chartSeries.points, projection, pastProjection, anchorDay]);
+
+  // Hovering today's point is "the present" — treat it as no preview so the
+  // sidebar only takes the backdrop/chip treatment for OTHER periods.
+  const handleHoverIndex = (idx: number | null): void => {
+    if (!onHoverFigures) return;
+    if (idx === null || idx === chartSeries.pastCount) {
+      onHoverFigures(null);
+      return;
+    }
+    onHoverFigures(pointFigures[idx] ?? null);
+  };
   const todayMonthIdx = window.startIndex + window.pastCount;
   const todayMonth = projection.months[todayMonthIdx];
-  // "Next month" forecast — the month-end projection for the month right after
-  // today. Falls back to undefined when we're already at the last month of
-  // the plan (the KPI is hidden in that case).
+  // "Next period" forecast — the projection for the period right after today.
+  // Falls back to undefined when we're already at the last period of the plan
+  // (the KPI is hidden in that case).
   const nextMonth = projection.months[todayMonthIdx + 1];
   const futureMonth =
     projection.months[window.startIndex + window.count - 1] ?? todayMonth;
-  // Day-aware "today" net worth: strips income/expense from the month-end
+  // Day-aware "today" net worth: strips income/expense from the period-end
   // value when they haven't actually hit yet (e.g. paycheque on day 30 when
-  // today is day 25). Falls back to month-end when we're outside the
+  // today is day 25). Falls back to period-end when we're outside the
   // projection range.
-  const todaySnapshot = computeTodaySnapshot(plan, projection);
+  // Refine against the CALIBRATED baseline — its startMonth + initials match
+  // the projection we're refining, so period indexing and the period-0 seed
+  // line up with confirmed reality.
+  const todaySnapshot = computeTodaySnapshot(baseline, projection, anchorDay);
   const today = todaySnapshot?.netWorth ?? todayMonth?.netWorth ?? 0;
   const next = nextMonth?.netWorth;
   const future = futureMonth?.netWorth ?? today;
 
-  return (
-    <Card>
-      <CardHeader className="space-y-4 pb-2">
-        {/* Title left, strategy picker pinned top-right. `items-start` +
-            no-wrap keeps the badge in the corner on mobile (the title block
-            shrinks via `min-w-0` and its description wraps) instead of the
-            badge dropping to its own full-width row below. */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <CardTitle>Projection</CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Solid line is past, dashed is forecast
-            </p>
-          </div>
-          {comparison && (
-            <StrategyBadge
-              comparison={comparison}
-              currentStrategy={currentStrategy}
-              open={strategyOpen}
-              onToggle={() => setStrategyOpen((v) => !v)}
-            />
-          )}
-        </div>
-
-        {/* Today / End-of-window KPIs share a row with the horizon picker.
-            The KPIs cluster on the left; the picker sits on the right via
-            `ml-auto` so it lines up with the Strategy card above on wide
-            viewports and wraps neatly underneath on narrow ones. */}
-        <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Today {todayMonth ? `(${FORMATTER.format(todayMonth.date)})` : ""}
-            </p>
-            <p
-              className={`text-base font-semibold sm:text-lg ${
-                today >= 0 ? "text-green-600" : "text-red-600"
-              }`}
-            >
-              {formatCurrency(today)}
-            </p>
-          </div>
-          {nextMonth && next !== undefined && (
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                Next month ({FORMATTER.format(nextMonth.date)})
-              </p>
-              <p
-                className={`text-base font-semibold sm:text-lg ${
-                  next >= 0 ? "text-green-600" : "text-red-600"
-                }`}
-              >
-                {formatCurrency(next)}
-              </p>
-            </div>
-          )}
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              End of window{" "}
-              {futureMonth ? `(${FORMATTER.format(futureMonth.date)})` : ""}
-            </p>
-            <p
-              className={`text-base font-semibold sm:text-lg ${
-                future >= 0 ? "text-green-600" : "text-red-600"
-              }`}
-            >
-              {formatCurrency(future)}
-            </p>
-          </div>
-          <div
-            role="group"
-            aria-label="Projection horizon"
-            className="ml-auto inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
+  // Forecast header (Today / Next / End KPIs + horizon picker) — shared by the
+  // Graph and Table views (both are horizon-driven forecast views). It sits in
+  // the card header so the number reads as the headline, Polymarket-style.
+  const forecastHeader = (
+    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-1">
+        <div>
+          <Text variant="small" as="p" className="text-2xs uppercase tracking-wide">
+            Today {todayMonth ? FORMATTER.format(todayMonth.date) : ""}
+          </Text>
+          <Mono
+            as="p"
+            className={`text-xl font-bold sm:text-2xl ${
+              today >= 0
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-rose-600 dark:text-rose-400"
+            }`}
           >
-            {HORIZON_PRESETS.map((preset) => {
-              const disabled = preset.months > maxAvailable;
-              const active = horizonMonths === preset.months;
-              return (
-                <button
-                  key={preset.months}
-                  type="button"
-                  onClick={() => setHorizonMonths(preset.months)}
-                  disabled={disabled}
-                  aria-pressed={active}
-                  className={`rounded px-3 py-1 text-xs font-medium transition ${
-                    active
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
+            {formatCurrency(today)}
+          </Mono>
+        </div>
+        {nextMonth && next !== undefined && (
+          <div>
+            <Text variant="small" as="p" className="text-2xs uppercase tracking-wide">
+              Next {FORMATTER.format(nextMonth.date)}
+            </Text>
+            <Mono
+              as="p"
+              className={`text-sm font-semibold ${
+                next >= 0
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-rose-600 dark:text-rose-400"
+              }`}
+            >
+              {formatCurrency(next)}
+            </Mono>
+          </div>
+        )}
+        <div>
+          <Text variant="small" as="p" className="text-2xs uppercase tracking-wide">
+            End {futureMonth ? FORMATTER.format(futureMonth.date) : ""}
+          </Text>
+          <Mono
+            as="p"
+            className={`text-sm font-semibold ${
+              future >= 0
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-rose-600 dark:text-rose-400"
+            }`}
+          >
+            {formatCurrency(future)}
+          </Mono>
+        </div>
+      </div>
+      <div
+        role="group"
+        aria-label="Projection horizon"
+        className="inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
+      >
+        {HORIZON_PRESETS.map((preset) => {
+          const disabled = preset.months > maxAvailable;
+          const active = horizonMonths === preset.months;
+          return (
+            <button
+              key={preset.months}
+              type="button"
+              onClick={() => setHorizonMonths(preset.months)}
+              disabled={disabled}
+              aria-pressed={active}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition ${
+                active
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
+            >
+              {preset.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  return (
+    // Polymarket-style hero: the main panel fills 3/4 of the row on desktop, the
+    // narrow sidebar (gauge + cycle figures + debt strategy) rides the right
+    // 1/4. One column on mobile.
+    //
+    // Equal heights on desktop: the view area is FIXED at lg:h-[640px] — every
+    // view (graph / table / calendar) fills exactly that box, scrolling
+    // internally when taller — and the sidebar column is lg:min-h-[640px] so its
+    // cards stretch to the same bottom edge (min- rather than fixed, so the
+    // expanded strategy picker can grow past it instead of clipping). Keep the
+    // two values in sync. On mobile everything sizes naturally.
+    <div className="grid gap-4 lg:grid-cols-4 lg:items-start">
+      {/* min-w-0 on both grid children: grid items default to min-width:auto,
+          so wide content (the table, recharts' measured svg) would inflate the
+          column past the viewport on mobile instead of shrinking. */}
+      <div className="min-w-0 space-y-3 lg:col-span-3">
+        {/* Active view. Swipe handlers on the stable wrapper; the keyed child
+            fades in on switch (no horizontal slide → nothing clips the card's
+            border/shadow). The active view brings its own Card. */}
+        <div
+          className="touch-pan-y lg:h-[640px]"
+          onTouchStart={swipe.onTouchStart}
+          onTouchEnd={swipe.onTouchEnd}
+        >
+          <div key={view} className="animate-in fade-in-0 duration-200 lg:h-full">
+            {view === "calendar" ? (
+              // The calendar card is taller than the panel box — scroll it
+              // inside so the Calendar view keeps the same footprint.
+              <div className="lg:h-full lg:overflow-y-auto">{calendar}</div>
+            ) : (
+              <Card className="lg:h-full">
+                <CardHeader className="gap-3 pb-3">{forecastHeader}</CardHeader>
+                <CardContent
+                  className={
+                    view === "chart"
+                      ? "pt-0 lg:min-h-0 lg:flex-1"
+                      : "pt-0 lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
+                  }
                 >
-                  {preset.label}
-                </button>
-              );
-            })}
+                  {view === "chart" ? (
+                    <ProjectionChart
+                      points={chartSeries.points}
+                      pastCount={chartSeries.pastCount}
+                      color={projection.plan.color}
+                      heightClass="h-72 sm:h-80 lg:h-full"
+                      onHoverIndex={handleHoverIndex}
+                    />
+                  ) : (
+                    <ProjectionTable
+                      projection={projection}
+                      monthsToShow={window.count}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
 
-        {comparison && strategyOpen && (
-          <StrategyPicker
-            comparison={comparison}
-            currentStrategy={currentStrategy}
-            onChange={onChangeStrategy}
-          />
-        )}
-      </CardHeader>
-      <CardContent className="space-y-8">
-        <ProjectionChart
-          projection={projection}
-          monthsToShow={window.count}
-          startIndex={window.startIndex}
-          pastCount={window.pastCount}
-        />
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Monthly breakdown</h3>
-          <ProjectionTable projection={projection} monthsToShow={window.count} />
+        {/* View switcher — Graph / Table / Calendar — pinned at the BOTTOM,
+            Polymarket-style, centered. Works as tabs on every device; swipe
+            switches too on touch. */}
+        <div className="flex justify-center pt-1">
+          <ViewSwitcher value={view} onChange={goView} />
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      {/* flex column so the figures card (lg:flex-1, set by the parent) absorbs
+          the leftover height and the sidebar's bottom edge lines up with the
+          main panel's. */}
+      <div className="flex min-w-0 flex-col gap-3 lg:min-h-[640px] lg:gap-4">
+        {sidebar}
+      </div>
+    </div>
   );
 }
 
-// Compact badge in the projection header that shows the active strategy + how
-// much it saves vs. the worst option. Click to open the full picker below.
+// Full-width row (sits in the sidebar's "Debt payoff strategy" card) showing
+// the active strategy + how much it saves vs. the worst option. Click to expand
+// the stacked picker below.
 function StrategyBadge({
   comparison,
   currentStrategy,
@@ -1116,37 +1521,34 @@ function StrategyBadge({
       type="button"
       onClick={onToggle}
       aria-expanded={open}
-      className="flex shrink-0 items-start gap-2 rounded-md border bg-muted/20 px-3 py-2 text-left transition hover:bg-muted/40"
+      className="flex w-full items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-2 text-xs transition hover:bg-muted/40"
     >
-      <Zap className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-      <div className="space-y-0.5">
-        <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-          Strategy
-        </div>
-        <div className="text-sm font-semibold">
+      <span className="flex min-w-0 items-center gap-1.5">
+        <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+        <span className="truncate font-semibold">
           {STRATEGY_LABEL[currentStrategy]}
-        </div>
+        </span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1.5">
         {saves > 0 && (
-          // Hidden on mobile so the badge stays narrow enough to pin top-right
-          // next to the title without crushing the description. The savings
-          // figure still shows on desktop and inside the expanded picker.
-          <div className="hidden items-center gap-1 text-[11px] text-green-700 sm:flex dark:text-green-300">
+          <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
             <TrendingDown className="h-3 w-3" />
-            saves {formatCurrency(saves)} vs. worst
-          </div>
+            {formatCurrency(saves)}
+          </span>
         )}
-      </div>
-      <ChevronDown
-        className={`mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
-          open ? "rotate-180" : ""
-        }`}
-      />
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </span>
     </button>
   );
 }
 
-// Clickable 3-up grid. Selecting a non-active card persists the new strategy
-// via onChange; the chart re-renders once the server revalidates the page.
+// Stacked option list (lives in the narrow sidebar). Selecting a non-active
+// option persists the new strategy via onChange; the chart re-renders once the
+// server revalidates the page.
 function StrategyPicker({
   comparison,
   currentStrategy,
@@ -1168,7 +1570,7 @@ function StrategyPicker({
   );
 
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid gap-2">
       {rows.map(({ key, data }) => {
         const isCurrent = key === currentStrategy;
         const isBest =
@@ -1181,14 +1583,14 @@ function StrategyPicker({
             disabled={isCurrent}
             onClick={() => void onChange(key)}
             aria-pressed={isCurrent}
-            className={`relative rounded-md border p-4 text-left transition ${
+            className={`relative rounded-md border p-3 text-left transition ${
               isCurrent
                 ? "cursor-default border-foreground bg-muted/40"
                 : "hover:border-foreground/60 hover:bg-muted/30"
-            } ${isBest && !isCurrent ? "bg-green-500/5" : ""}`}
+            } ${isBest && !isCurrent ? "bg-emerald-500/10" : ""}`}
           >
             <div className="flex items-center justify-between">
-              <p className="font-semibold">{STRATEGY_LABEL[key]}</p>
+              <Heading level="h6" as="p">{STRATEGY_LABEL[key]}</Heading>
               {isCurrent && (
                 <Badge variant="secondary" className="text-xs">
                   Active
@@ -1201,7 +1603,7 @@ function StrategyPicker({
                   Total interest paid
                 </dt>
                 <dd className="text-lg font-semibold">
-                  {formatCurrency(data.totalInterestPaid)}
+                  <Mono>{formatCurrency(data.totalInterestPaid)}</Mono>
                 </dd>
               </div>
               <div className="flex items-center justify-between border-t pt-2">
@@ -1211,21 +1613,21 @@ function StrategyPicker({
                 </dt>
                 <dd className="text-sm font-medium">
                   {data.monthsToDebtFree !== null
-                    ? `${data.monthsToDebtFree} mo`
+                    ? <Mono>{data.monthsToDebtFree} mo</Mono>
                     : "—"}
                 </dd>
               </div>
               <div className="flex items-center justify-between">
                 <dt className="text-xs text-muted-foreground">Ending net worth</dt>
                 <dd className="text-sm font-medium">
-                  {formatCurrency(data.endingNetWorth)}
+                  <Mono>{formatCurrency(data.endingNetWorth)}</Mono>
                 </dd>
               </div>
             </dl>
             {!isCurrent && (
-              <p className="mt-3 text-[11px] italic text-muted-foreground">
+              <Text variant="small" as="p" className="mt-3 text-2xs italic">
                 Click to switch
-              </p>
+              </Text>
             )}
           </button>
         );
@@ -1234,73 +1636,93 @@ function StrategyPicker({
   );
 }
 
-function SummaryCard({
+/**
+ * Compact label/value row for the condensed Overview sidebar. Tapping a row
+ * (when it has a `breakdown`) opens the per-line detail — a bottom **sheet** on
+ * mobile (thumb-reachable), a centered **dialog** on desktop (a bottom sheet
+ * reads as a stray panel pinned to the corner on a wide screen).
+ */
+function StatRow({
   label,
   value,
   tone,
-  sublabel,
+  hint,
   breakdown,
-  className,
 }: {
   label: string;
-  value: number | string;
+  value: number;
   tone?: "positive" | "negative";
-  sublabel?: React.ReactNode;
+  /** Optional one-line context shown under the value (e.g. "Debt-free in 8 mo"). */
+  hint?: string;
   breakdown?: React.ReactNode;
-  /** Extra classes for the card root — used to size cards inside the mobile
-   *  horizontal-scroll rail (peek of the next card) vs the desktop grid. */
-  className?: string;
 }) {
-  const display =
-    typeof value === "number" ? formatCurrency(value) : value;
+  const isMobile = useIsMobile();
+  // Count up/down toward the latest value (e.g. while a chart point is
+  // hovered) instead of snapping. No-op on mount and for static values.
+  const animatedValue = useAnimatedNumber(value);
   const colorClass =
     tone === "positive"
-      ? "text-green-600"
+      ? "text-emerald-600 dark:text-emerald-400"
       : tone === "negative"
-      ? "text-red-600"
+      ? "text-rose-600 dark:text-rose-400"
       : "";
 
-  const card = (
-    <Card
-      size="sm"
-      className={cn(
-        breakdown &&
-          "cursor-pointer text-left transition hover:border-foreground/30 focus-visible:border-foreground/40 focus-visible:outline-none",
-        className
-      )}
-    >
-      <CardHeader className="pb-1">
-        <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground lg:text-xs">
-          {label}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-0.5">
-        <p className={`text-lg font-semibold sm:text-xl lg:text-2xl ${colorClass}`}>
-          {display}
-        </p>
-        {sublabel && (
-          <div className="line-clamp-2 text-[11px] text-muted-foreground lg:line-clamp-none lg:text-xs">
-            {sublabel}
-          </div>
+  const inner = (
+    <>
+      <Text variant="small" as="span">{label}</Text>
+      <span className="text-right">
+        <Mono className={`block text-sm font-semibold ${colorClass}`}>
+          {formatCurrency(animatedValue)}
+        </Mono>
+        {hint && (
+          <Text variant="small" as="span" className="block text-2xs">
+            {hint}
+          </Text>
         )}
-      </CardContent>
-    </Card>
+      </span>
+    </>
   );
 
-  if (!breakdown) return card;
+  const rowClass = "flex items-center justify-between gap-3 border-t py-2";
+
+  if (!breakdown) {
+    return <div className={rowClass}>{inner}</div>;
+  }
+
+  const trigger = (
+    <button
+      type="button"
+      aria-label={`Show ${label} breakdown`}
+      className={`${rowClass} w-full text-left transition hover:bg-muted/30`}
+    >
+      {inner}
+    </button>
+  );
+
+  if (isMobile) {
+    return (
+      <Sheet>
+        <SheetTrigger asChild>{trigger}</SheetTrigger>
+        <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>{label}</SheetTitle>
+          </SheetHeader>
+          <div className="px-4 pb-6">{breakdown}</div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
 
   return (
-    <Sheet>
-      <SheetTrigger asChild aria-label={`Show ${label} breakdown`}>
-        {card}
-      </SheetTrigger>
-      <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto sm:max-w-md">
-        <SheetHeader>
-          <SheetTitle>{label}</SheetTitle>
-        </SheetHeader>
-        <div className="px-4 pb-6">{breakdown}</div>
-      </SheetContent>
-    </Sheet>
+    <Dialog>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{label}</DialogTitle>
+        </DialogHeader>
+        <div className="pb-1">{breakdown}</div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1323,7 +1745,7 @@ function BreakdownList({
   const sections: BreakdownGroup[] = groups ?? [{ items: items ?? [] }];
   const hasAny = sections.some((g) => g.items.length > 0);
   if (!hasAny) {
-    return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
+    return <Text variant="muted">{emptyLabel}</Text>;
   }
   return (
     <div className="space-y-3 text-sm">
@@ -1331,7 +1753,7 @@ function BreakdownList({
         section.items.length === 0 ? null : (
           <div key={gi} className="space-y-1.5">
             {section.heading && (
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {section.heading}
               </div>
             )}
@@ -1339,17 +1761,19 @@ function BreakdownList({
               {section.items.map((item, idx) => (
                 <li
                   key={`${item.name}-${idx}`}
-                  className="flex items-baseline justify-between gap-4"
+                  className="flex items-start justify-between gap-4"
                 >
-                  <span className="truncate">
-                    {item.name}
+                  <span className="min-w-0">
+                    <span className="block truncate">{item.name}</span>
                     {item.hint && (
-                      <span className="ml-1 text-muted-foreground">· {item.hint}</span>
+                      <Text variant="small" as="span" className="mt-0.5 block">
+                        {item.hint}
+                      </Text>
                     )}
                   </span>
-                  <span className="font-mono tabular-nums">
+                  <Mono className="shrink-0">
                     {formatCurrency(item.amount)}
-                  </span>
+                  </Mono>
                 </li>
               ))}
             </ul>
@@ -1358,20 +1782,12 @@ function BreakdownList({
       )}
       <div className="flex items-baseline justify-between gap-4 border-t pt-2 font-semibold">
         <span>Total</span>
-        <span className="font-mono tabular-nums">{formatCurrency(total)}</span>
+        <Mono>{formatCurrency(total)}</Mono>
       </div>
     </div>
   );
 }
 
-function SublabelLine({ label, amount }: { label: string; amount: number }) {
-  return (
-    <div className="flex items-baseline justify-between gap-2">
-      <span>{label}</span>
-      <span className="font-mono tabular-nums">{formatCurrency(amount)}</span>
-    </div>
-  );
-}
 
 function SurplusBreakdown({
   income,
@@ -1404,33 +1820,33 @@ function SurplusBreakdown({
               {r.op && <span className="mr-1 text-muted-foreground">{r.op}</span>}
               {r.label}
             </span>
-            <span className="font-mono tabular-nums">{r.value}</span>
+            <Mono>{r.value}</Mono>
           </li>
         ))}
       </ul>
       <div className="flex items-baseline justify-between gap-4 border-t pt-2 font-semibold">
         <span>= Surplus</span>
-        <span
-          className={`font-mono tabular-nums ${
-            surplus >= 0 ? "text-green-600" : "text-red-600"
-          }`}
+        <Mono
+          className={
+            surplus >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+          }
         >
           {formatCurrency(surplus)}
-        </span>
+        </Mono>
       </div>
       {surplus > 0 && (
         <ul className="space-y-1.5 border-t pt-2 text-muted-foreground">
           <li className="flex items-baseline justify-between gap-4">
             <span>→ Extra debt</span>
-            <span className="font-mono tabular-nums">{formatCurrency(toExtraDebt)}</span>
+            <Mono>{formatCurrency(toExtraDebt)}</Mono>
           </li>
           <li className="flex items-baseline justify-between gap-4">
             <span>→ Investments</span>
-            <span className="font-mono tabular-nums">{formatCurrency(toInvestments)}</span>
+            <Mono>{formatCurrency(toInvestments)}</Mono>
           </li>
           <li className="flex items-baseline justify-between gap-4">
             <span>→ Savings</span>
-            <span className="font-mono tabular-nums">{formatCurrency(toSavings)}</span>
+            <Mono>{formatCurrency(toSavings)}</Mono>
           </li>
         </ul>
       )}

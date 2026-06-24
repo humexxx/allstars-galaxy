@@ -9,7 +9,11 @@ import {
   financePlans,
 } from "@/db/schema";
 
-import { periodAnchorIso, periodStartFor } from "@/lib/finance/period";
+import {
+  nextPeriodStart,
+  periodAnchorIso,
+  periodStartFor,
+} from "@/lib/finance/period";
 
 import { getPlanWithLines } from "./finance-plan-service";
 import {
@@ -167,6 +171,7 @@ export async function saveConfirmation(
         confirmedSavings: input.confirmedSavings,
         confirmedInvestments: input.confirmedInvestments,
         notes: input.notes ?? null,
+        source: "user",
       })
       .onConflictDoUpdate({
         target: [
@@ -177,6 +182,8 @@ export async function saveConfirmation(
           confirmedSavings: input.confirmedSavings,
           confirmedInvestments: input.confirmedInvestments,
           notes: input.notes ?? null,
+          // A manual confirm over an auto-rolled row promotes it to "user".
+          source: "user",
           confirmedAt: new Date(),
         },
       })
@@ -209,6 +216,112 @@ export async function saveConfirmation(
   }
 
   return conf;
+}
+
+/**
+ * Roll the baseline forward through any CLOSED period the user left
+ * unconfirmed. Designed to run from the daily cron before snapshots.
+ *
+ * Rule (matches the product intent "don't advance debts automatically unless a
+ * whole period was skipped"):
+ *   - The CURRENT period is never auto-confirmed — the user is still prompted.
+ *   - Every period strictly between the latest confirmation (or the plan start
+ *     when there is none) and the current period is fully closed. For each one
+ *     that has no confirmation yet, create a `source: "auto"` confirmation
+ *     recording that period's projected OPENING (= the prior period's close),
+ *     chaining the baseline forward one period at a time.
+ *
+ * Auto rows are best-estimates: the UI can flag them, and `getConfirmationStatus`
+ * still prompts for the current period so the user can supply real numbers.
+ * No-op when the feature is disabled (`confirmationDayOfMonth === 0`).
+ */
+export async function autoConfirmSkippedPeriods(
+  plan: FinancePlanWithLines,
+  userId: string,
+  today: Date = new Date()
+): Promise<{ confirmationsCreated: number }> {
+  const anchor = plan.confirmationDayOfMonth;
+  if (anchor === 0) return { confirmationsCreated: 0 };
+
+  const currStart = periodStartFor(today, anchor);
+
+  // Period months already confirmed (any source) for this plan.
+  const existing = await db
+    .select({ month: financePlanConfirmations.confirmationMonth })
+    .from(financePlanConfirmations)
+    .where(eq(financePlanConfirmations.planId, plan.id));
+  const confirmedMonths = new Set(existing.map((r) => r.month));
+
+  const latest = await getLatestConfirmation(plan.id);
+  const baselineStart = latest
+    ? periodStartFor(new Date(latest.confirmationMonth), anchor)
+    : periodStartFor(new Date(plan.startMonth), anchor);
+
+  let confirmationsCreated = 0;
+  // Walk forward from the period AFTER the baseline up to (but not including)
+  // the current period — those are the closed periods.
+  let cursor = nextPeriodStart(baselineStart, anchor);
+  // Hard cap so a misconfigured/very-old plan can't spin forever.
+  let guard = 0;
+  while (cursor.getTime() < currStart.getTime() && guard < 600) {
+    guard += 1;
+    const monthKey = isoDate(cursor);
+    if (!confirmedMonths.has(monthKey)) {
+      // Projected opening of this skipped period, calibrated from the latest
+      // confirmation so far (which includes any auto rows we just wrote).
+      const opening = await getProjectedStateForMonth(plan, userId, cursor);
+      if (opening) {
+        const inserted = await db.transaction(async (tx) => {
+          const [row] = await tx
+            .insert(financePlanConfirmations)
+            .values({
+              planId: plan.id,
+              confirmationMonth: monthKey,
+              confirmedSavings: opening.savings.toFixed(2),
+              confirmedInvestments: opening.investments.toFixed(2),
+              notes: null,
+              source: "auto",
+            })
+            .onConflictDoNothing({
+              target: [
+                financePlanConfirmations.planId,
+                financePlanConfirmations.confirmationMonth,
+              ],
+            })
+            .returning();
+
+          // onConflictDoNothing returns nothing when the row already existed
+          // (race with a concurrent run) — bail without writing debt rows.
+          if (!row) return null;
+
+          if (opening.debts.length > 0) {
+            await tx.insert(financePlanDebtConfirmations).values(
+              opening.debts.map((d) => ({
+                confirmationId: row.id,
+                debtId: d.debtId,
+                confirmedBalance: Math.max(0, d.balance).toFixed(2),
+              }))
+            );
+          }
+          return row;
+        });
+
+        if (inserted) {
+          confirmedMonths.add(monthKey);
+          confirmationsCreated += 1;
+          // Audit snapshot tagged `confirmation`, mirroring saveConfirmation.
+          try {
+            await createConfirmationSnapshot(plan.id, userId, cursor);
+          } catch (err) {
+            console.error("auto-confirm snapshot failed:", err);
+          }
+        }
+      }
+    }
+    cursor = nextPeriodStart(cursor, anchor);
+  }
+
+  return { confirmationsCreated };
 }
 
 /**

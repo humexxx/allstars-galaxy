@@ -183,6 +183,13 @@
       "when": 1780074043724,
       "tag": "0025_dazzling_puppet_master",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1780777933276,
+      "tag": "0026_cheerful_young_avengers",
+      "breakpoints": true
     }
   ]
 }

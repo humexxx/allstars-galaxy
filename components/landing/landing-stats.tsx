@@ -1,14 +1,16 @@
+import { Text } from "@/components/ui/typography";
+
 // Proof strip — quiet sentence on the left, the actual module surface area
 // on the right. Labels match the live modules in app/portal/* so the strip
 // doubles as a one-line product map.
 export function LandingStats() {
   return (
-    <section className="border-b border-neutral-200/80 bg-white">
+    <section className="border-b bg-background">
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-6 py-12 sm:flex-row sm:justify-between">
-        <p className="text-sm text-neutral-500">
+        <Text variant="muted">
           Built for people who think in systems, not in spreadsheets
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm font-medium text-neutral-400">
+        </Text>
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm font-medium text-muted-foreground">
           <span>Portfolio</span>
           <span>·</span>
           <span>Methods</span>

@@ -15,6 +15,16 @@ export const financeSnapshotSourceEnum = z.enum([
 
 export type FinanceSnapshotSource = z.infer<typeof financeSnapshotSourceEnum>;
 
+/**
+ * Mirrors `financeConfirmationSourceEnum` in db/schema.ts. "user" = the human
+ * confirmed; "auto" = the cron rolled the baseline through a skipped period.
+ */
+export const financeConfirmationSourceEnum = z.enum(["user", "auto"]);
+
+export type FinanceConfirmationSource = z.infer<
+  typeof financeConfirmationSourceEnum
+>;
+
 export const manualFinanceSnapshotFormSchema = z.object({
   planId: z.string().uuid(),
   date: z.coerce.date(),

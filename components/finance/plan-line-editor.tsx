@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Heading, Text } from "@/components/ui/typography";
 import { formatCurrency } from "@/lib/utils/format";
 import {
   LineFormDialog,
@@ -84,10 +85,8 @@ export function PlanLineEditor({
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold">{title}</h3>
-          {description && (
-            <p className="text-xs text-muted-foreground">{description}</p>
-          )}
+          <Heading level="h5" as="h3">{title}</Heading>
+          {description && <Text variant="small">{description}</Text>}
         </div>
         <Button
           size="sm"

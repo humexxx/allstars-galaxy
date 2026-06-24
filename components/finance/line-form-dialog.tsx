@@ -43,6 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Eyebrow, Text } from "@/components/ui/typography";
 
 export type LineKind = "recurring" | "one_time";
 export type LineVariant = "income" | "expense";
@@ -374,9 +375,9 @@ function ScheduleSection({
 
   return (
     <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <Eyebrow as="div" className="tracking-wide">
         Schedule
-      </div>
+      </Eyebrow>
 
       <div className="space-y-1.5">
         <Label>Type</Label>
@@ -457,10 +458,10 @@ function ScheduleSection({
                 />
               </div>
             </div>
-            <p className="pt-1.5 text-xs text-muted-foreground">
+            <Text variant="small" className="pt-1.5">
               Limit when this income is active. Leave both empty to run from
               plan start to end.
-            </p>
+            </Text>
           </CollapsibleContent>
         </Collapsible>
       )}
@@ -536,10 +537,10 @@ export function RecurrenceFields({
             inputMode="numeric"
             placeholder="1"
           />
-          <p className="text-xs text-muted-foreground">
+          <Text variant="small">
             When in the month this {noun} hits (1–31). Day 31 clamps to the
             last day of months that don&apos;t have it.
-          </p>
+          </Text>
         </div>
       )}
 
@@ -580,12 +581,12 @@ export function RecurrenceFields({
                 ))}
               </SelectContent>
             </Select>
-            <span className="text-muted-foreground">of every month</span>
+            <Text variant="muted" as="span">of every month</Text>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <Text variant="small">
             Pick <strong>Last</strong> to always use the last occurrence of the
             chosen weekday (handles months that have only four).
-          </p>
+          </Text>
         </div>
       )}
 
@@ -594,7 +595,7 @@ export function RecurrenceFields({
           <div className="space-y-1.5">
             <Label>Occurs</Label>
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Every</span>
+              <Text variant="muted" as="span">Every</Text>
               <Input
                 value={intervalMonths != null ? String(intervalMonths) : ""}
                 onChange={(e) => {
@@ -608,7 +609,7 @@ export function RecurrenceFields({
                 className="w-[64px] text-center"
                 aria-label="Interval in months"
               />
-              <span className="text-muted-foreground">months on day</span>
+              <Text variant="muted" as="span">months on day</Text>
               <Input
                 id={domInputId}
                 value={dayOfMonth}
@@ -619,10 +620,10 @@ export function RecurrenceFields({
                 aria-label="Day of month"
               />
             </div>
-            <p className="text-xs text-muted-foreground">
+            <Text variant="small">
               Interval is 1–12 months. Day clamps to the last day in shorter
               months.
-            </p>
+            </Text>
           </div>
           <div className="space-y-1.5">
             <Label>First month</Label>
@@ -632,10 +633,10 @@ export function RecurrenceFields({
               placeholder="Plan start"
               clearable
             />
-            <p className="text-xs text-muted-foreground">
+            <Text variant="small">
               The month the cycle first lands on. Leave empty to anchor to the
               plan&apos;s start month.
-            </p>
+            </Text>
           </div>
         </div>
       )}

@@ -18,6 +18,7 @@ import { CreateColumnDialog } from "./create-column-dialog";
 import { CreateTaskDialog } from "./create-task-dialog";
 import { Maximize2, Minimize2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Heading, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import {
   createBoardColumnAction,
@@ -249,7 +250,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
       >
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold tracking-tight">Task Board</h1>
+            <Heading level="h1">Task Board</Heading>
             {isSyncing ? (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <RefreshCw className="size-3 animate-spin" />
@@ -257,7 +258,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
               </span>
             ) : null}
           </div>
-          <p className="text-sm text-muted-foreground">Manage your tasks with a visual board</p>
+          <Text variant="muted">Manage your tasks with a visual board</Text>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -278,7 +279,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
 
       {columns.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed">
-          <p className="text-sm text-muted-foreground">No columns yet. Create your first column to start.</p>
+          <Text variant="muted">No columns yet. Create your first column to start.</Text>
         </div>
       ) : (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

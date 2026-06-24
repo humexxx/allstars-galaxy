@@ -568,6 +568,37 @@ describe("projectPlan — portfolio + clamping", () => {
     const projection = projectPlan(plan, [], [], [], { portfolioValue: -500 });
     expect(projection.months[0].portfolioValue).toBe(0);
   });
+
+  it("carries a sustained deficit as negative cash instead of clipping at 0", () => {
+    // Spends 1000/mo, earns 500/mo → −500 cash flow each month. The shortfall
+    // must accumulate (savings goes negative) so net worth reflects it, rather
+    // than silently clipping savings to 0 and over-stating net worth.
+    const plan = buildPlan({ monthsAhead: 3, initialSavings: "100" });
+    const income = buildIncome({ monthlyAmount: "500" });
+    const expense = buildExpense({ monthlyAmount: "1000" });
+
+    const projection = projectPlan(plan, [income], [expense], []);
+
+    expect(projection.months[0].savings).toBeCloseTo(-400, 2);
+    expect(projection.months[1].savings).toBeCloseTo(-900, 2);
+    expect(projection.months[2].savings).toBeCloseTo(-1400, 2);
+    expect(projection.endingNetWorth).toBeCloseTo(-1400, 2);
+  });
+
+  it("does not pay savings interest on a negative (overdraft) balance", () => {
+    // Even with a savings rate set, a negative balance earns nothing.
+    const plan = buildPlan({
+      monthsAhead: 1,
+      initialSavings: "0",
+      monthlySavingsRate: "0.05",
+    });
+    const expense = buildExpense({ monthlyAmount: "200" });
+
+    const projection = projectPlan(plan, [], [expense], []);
+    // −200 carried, no interest applied on the negative balance.
+    expect(projection.months[0].savings).toBeCloseTo(-200, 2);
+    expect(projection.months[0].savingsInterest).toBe(0);
+  });
 });
 
 // ---------- compareDebtStrategies ----------

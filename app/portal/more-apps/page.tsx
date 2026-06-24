@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/portal/page-header";
+import { Text } from "@/components/ui/typography";
 import { requireAdminOrRedirect } from "@/lib/services/auth-server";
 import { MoreAppsList } from "@/components/more-apps/more-apps-list";
 import { getScreenshotUrl } from "@/lib/services/screenshot-service";
@@ -65,7 +66,7 @@ export default async function MoreAppsPage() {
         description="Quick links to my other apps and projects."
       />
       {apps.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No apps to show yet.</p>
+        <Text variant="muted">No apps to show yet.</Text>
       ) : (
         <MoreAppsList
           items={apps.map((app, i) => ({ app, screenshotUrl: screenshots[i] }))}

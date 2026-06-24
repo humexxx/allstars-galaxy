@@ -1,18 +1,17 @@
 "use client";
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { MoreHorizontal, TrendingDown, TrendingUp } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
-import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, formatSignedCurrency, formatSignedPercent } from "@/lib/utils/format";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Mono, Text } from "@/components/ui/typography";
+import { cn } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatSignedCurrency,
+  formatSignedPercent,
+} from "@/lib/utils/format";
 import type { PortfolioAsset } from "@/types/portfolio";
 
 type PortfolioAssetsTableProps = {
@@ -30,93 +29,98 @@ export function PortfolioAssetsTable({ assets }: PortfolioAssetsTableProps) {
   }
 
   return (
-    <div className="rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Holdings</TableHead>
-            <TableHead>Avg Buy Price</TableHead>
-            <TableHead>Profit/Loss</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {assets.map((asset) => {
-            const profitTone = asset.profitLoss >= 0 ? "text-green-500" : "text-red-500";
+    <div className="divide-y rounded-lg border bg-card">
+      {assets.map((asset) => (
+        <AssetRow key={asset.investmentMethod.id} asset={asset} />
+      ))}
+    </div>
+  );
+}
 
-            return (
-              <TableRow key={asset.investmentMethod.id}>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                      <span className="text-sm font-semibold text-primary">
-                        {asset.investmentMethod.name.substring(0, 2).toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{asset.investmentMethod.name}</span>
-                        {asset.hasPendingTransactions && (
-                          <Badge variant="outline" className="text-xs">
-                            Pending
-                          </Badge>
-                        )}
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {asset.investmentMethod.author}
-                      </span>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col">
-                    {asset.holdingAmount > 0 && (
-                      <>
-                        <span className="font-medium">{formatCurrency(asset.holdingAmount)}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {asset.investmentMethod.monthlyRoi}% Monthly ROI
-                        </span>
-                      </>
-                    )}
-                    {asset.pendingAmount > 0 && asset.holdingAmount > 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        +{formatCurrency(asset.pendingAmount)} pending
-                      </span>
-                    )}
-                    {asset.holdingAmount === 0 && asset.pendingAmount > 0 && (
-                      <>
-                        <span className="font-medium text-muted-foreground">
-                          {formatCurrency(asset.pendingAmount)}
-                        </span>
-                        <span className="text-xs text-muted-foreground">Awaiting approval</span>
-                      </>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>{formatCurrency(asset.totalInvested)}</TableCell>
-                <TableCell>
-                  <div className="flex flex-col">
-                    <span className={profitTone}>{formatSignedCurrency(asset.profitLoss)}</span>
-                    <span className={`text-xs ${profitTone}`}>
-                      {formatSignedPercent(asset.profitLossPercentage)}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Actions for ${asset.investmentMethod.name}`}
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+function AssetRow({ asset }: { asset: PortfolioAsset }) {
+  const positive = asset.profitLoss >= 0;
+  const profitTone = positive
+    ? "text-emerald-600 dark:text-emerald-400"
+    : "text-rose-600 dark:text-rose-400";
+  const Trend = positive ? TrendingUp : TrendingDown;
+
+  const holdingAmountVisible = asset.holdingAmount > 0;
+  const pendingOnly = !holdingAmountVisible && asset.pendingAmount > 0;
+
+  return (
+    <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
+      {/* Identity — avatar + name + sub-meta */}
+      <div className="flex items-center gap-3 sm:flex-1 sm:min-w-0">
+        <span
+          aria-hidden
+          className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary"
+        >
+          {asset.investmentMethod.name.substring(0, 2).toUpperCase()}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <Text className="truncate font-medium">
+              {asset.investmentMethod.name}
+            </Text>
+            {asset.hasPendingTransactions && (
+              <Badge variant="outline" className="h-4 px-1.5 text-2xs">
+                Pending
+              </Badge>
+            )}
+          </div>
+          <Mono className="text-xs text-muted-foreground tabular-nums">
+            {asset.investmentMethod.author}
+            {asset.investmentMethod.monthlyRoi !== undefined &&
+              ` · ${asset.investmentMethod.monthlyRoi}% ROI/mo`}
+          </Mono>
+        </div>
+      </div>
+
+      {/* Holdings — primary metric */}
+      <div className="flex items-baseline gap-2 sm:w-40 sm:justify-end">
+        {holdingAmountVisible && (
+          <>
+            <Mono className="text-base font-semibold tabular-nums sm:text-lg">
+              {formatCurrency(asset.holdingAmount)}
+            </Mono>
+            {asset.pendingAmount > 0 && (
+              <Mono className="text-xs text-muted-foreground tabular-nums">
+                +{formatCurrency(asset.pendingAmount)}
+              </Mono>
+            )}
+          </>
+        )}
+        {pendingOnly && (
+          <Mono className="text-base font-medium tabular-nums text-muted-foreground sm:text-lg">
+            {formatCurrency(asset.pendingAmount)}
+          </Mono>
+        )}
+      </div>
+
+      {/* Profit/Loss — delta indicator §7 */}
+      <div className="flex items-baseline gap-2 sm:w-44 sm:justify-end">
+        <Mono className={cn("text-base font-semibold tabular-nums sm:text-lg", profitTone)}>
+          {formatSignedCurrency(asset.profitLoss)}
+        </Mono>
+        <span className={cn("inline-flex items-center gap-0.5 text-xs font-medium", profitTone)}>
+          <Trend className="size-3" />
+          <Mono className="tabular-nums">
+            {formatSignedPercent(asset.profitLossPercentage).replace(/^[+-]/, "")}
+          </Mono>
+        </span>
+      </div>
+
+      {/* Action */}
+      <div className="flex justify-end sm:w-auto sm:shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          aria-label={`Actions for ${asset.investmentMethod.name}`}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }

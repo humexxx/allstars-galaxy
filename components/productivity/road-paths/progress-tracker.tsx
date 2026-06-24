@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Text, Mono } from "@/components/ui/typography";
 import { Plus } from "lucide-react";
 import {
   createRoadPathProgressAction,
@@ -60,21 +61,21 @@ export function ProgressTracker({ roadPathId, progress, unit, onRefresh }: Progr
         {sortedProgress.map((entry) => (
           <div key={entry.id} className="flex items-center justify-between p-2 rounded-lg border">
             <div>
-              <p className="font-medium">{parseFloat(entry.value)} {unit}</p>
-              <p className="text-xs text-muted-foreground">
-                {entry.date && format(new Date(entry.date), "MMM d, yyyy")}
-              </p>
+              <Text weight="medium"><Mono>{parseFloat(entry.value)}</Mono> {unit}</Text>
+              <Text variant="small">
+                {entry.date && <Mono>{format(new Date(entry.date), "MMM d, yyyy")}</Mono>}
+              </Text>
             </div>
             {entry.notes && (
-              <p className="text-sm text-muted-foreground">{entry.notes}</p>
+              <Text variant="muted">{entry.notes}</Text>
             )}
           </div>
         ))}
 
         {sortedProgress.length === 0 && !showForm && (
-          <p className="text-sm text-muted-foreground text-center py-4">
+          <Text variant="muted" className="text-center py-4">
             No progress recorded yet
-          </p>
+          </Text>
         )}
       </div>
 

@@ -230,7 +230,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <Heading level="h3" className="font-bold">
+              <Heading level="h3" className="font-semibold">
                 {data.portfolio.name}
               </Heading>
               <Badge variant="secondary" className="text-xs">
@@ -415,19 +415,19 @@ function PortfolioKpiCard({
   action?: React.ReactNode;
 }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+    <Card size="sm">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
         <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {label}
         </CardTitle>
         {action}
       </CardHeader>
       <CardContent className="space-y-1">
-        <Mono className={cn("block text-2xl font-semibold", toneClass(tone))}>
+        <Mono className={cn("block text-xl font-semibold tabular-nums sm:text-2xl", toneClass(tone))}>
           {value}
         </Mono>
         {sublabel && (
-          <div className="text-xs text-muted-foreground">{sublabel}</div>
+          <Text variant="small" as="div">{sublabel}</Text>
         )}
       </CardContent>
     </Card>
@@ -435,7 +435,7 @@ function PortfolioKpiCard({
 }
 
 function toneClass(tone?: "positive" | "negative"): string {
-  if (tone === "positive") return "text-green-600";
-  if (tone === "negative") return "text-red-600";
+  if (tone === "positive") return "text-emerald-600 dark:text-emerald-400";
+  if (tone === "negative") return "text-rose-600 dark:text-rose-400";
   return "";
 }

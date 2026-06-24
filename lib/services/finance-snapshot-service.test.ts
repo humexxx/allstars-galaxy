@@ -36,9 +36,12 @@ vi.mock("./finance-plan-service", () => ({
 }));
 
 const getLatestConfirmationMock = vi.fn();
+const autoConfirmSkippedPeriodsMock = vi.fn();
 vi.mock("./finance-confirmation-service", () => ({
   getLatestConfirmation: (...args: unknown[]) =>
     getLatestConfirmationMock(...args),
+  autoConfirmSkippedPeriods: (...args: unknown[]) =>
+    autoConfirmSkippedPeriodsMock(...args),
 }));
 
 import {
@@ -141,11 +144,21 @@ function makeSelectChain(rows: unknown[]) {
   return chain;
 }
 
-function makeInsertChain() {
-  // db.insert(table).values(payload) is awaited directly. The chain's `values`
-  // returns a resolved promise so `await db.insert(...).values(...)` works.
+function makeInsertChain(snapshotId = "snap-id") {
+  // Two shapes are exercised:
+  //   - snapshot parent: db.insert(t).values(payload).returning({ id })
+  //   - debt children:   await db.insert(t).values(payload)
+  // So `values()` returns an object that is BOTH awaitable (thenable resolving
+  // undefined) AND carries `.returning()` (resolving the inserted id rows).
+  const valuesResult = {
+    returning: vi.fn().mockResolvedValue([{ id: snapshotId }]),
+    then: (
+      resolve: (v: unknown) => unknown,
+      reject?: (e: unknown) => unknown
+    ): Promise<unknown> => Promise.resolve(undefined).then(resolve, reject),
+  };
   const chain = {
-    values: vi.fn().mockResolvedValue(undefined),
+    values: vi.fn().mockReturnValue(valuesResult),
   };
   return chain;
 }
@@ -180,6 +193,7 @@ afterEach(() => {
   getAutoInvestRateMock.mockReset();
   projectPlanMock.mockReset();
   getLatestConfirmationMock.mockReset();
+  autoConfirmSkippedPeriodsMock.mockReset();
   vi.useRealTimers();
 });
 
@@ -192,19 +206,39 @@ describe("createConfirmationSnapshot", () => {
     getAutoInvestRateMock.mockResolvedValue(0);
   });
 
-  it("inserts a snapshot row tagged as 'confirmation' with the computed state", async () => {
-    getPlanWithLinesMock.mockResolvedValueOnce(buildPlan());
+  it("inserts a snapshot row tagged as 'confirmation' with the OPENING state", async () => {
+    getPlanWithLinesMock.mockResolvedValueOnce(
+      buildPlan({ startMonth: new Date(Date.UTC(2026, 0, 1)) })
+    );
+    // Snapshots record the period OPENING (= previous period's close), not the
+    // projected period close. Date in period 1 → opening = month[0].
     projectPlanMock.mockReturnValueOnce({
-      months: [buildProjectionMonth({ savings: 100, investments: 200, totalDebt: 50, netWorth: 250 })],
+      months: [
+        buildProjectionMonth({
+          monthOffset: 0,
+          savings: 100,
+          investments: 200,
+          totalDebt: 50,
+          netWorth: 250,
+        }),
+        buildProjectionMonth({
+          monthOffset: 1,
+          savings: 999,
+          investments: 888,
+          totalDebt: 0,
+          netWorth: 1887,
+        }),
+      ],
     });
 
     const insertChain = makeInsertChain();
     insertImpl.mockReturnValueOnce(insertChain);
 
-    const date = new Date(Date.UTC(2026, 0, 15));
+    const date = new Date(Date.UTC(2026, 1, 15));
     const result = await createConfirmationSnapshot(PLAN_ID, USER_ID, date);
 
     expect(result).toEqual({ created: true });
+    // No debts on month[0] → only the parent snapshot insert, no child rows.
     expect(insertImpl).toHaveBeenCalledOnce();
     expect(insertChain.values).toHaveBeenCalledOnce();
     const payload = insertChain.values.mock.calls[0][0];
@@ -220,6 +254,60 @@ describe("createConfirmationSnapshot", () => {
     // Confirmation snapshots NEVER consult the idempotency lookup — there
     // should be no select calls (no ownership check either, by design).
     expect(selectImpl).not.toHaveBeenCalled();
+  });
+
+  it("writes a per-debt breakdown child row for each debt in the state", async () => {
+    getPlanWithLinesMock.mockResolvedValueOnce(
+      buildPlan({ startMonth: new Date(Date.UTC(2026, 0, 1)) })
+    );
+    projectPlanMock.mockReturnValueOnce({
+      months: [
+        buildProjectionMonth({
+          monthOffset: 0,
+          savings: 100,
+          totalDebt: 1500,
+          debts: [
+            {
+              debtId: "d1",
+              name: "Card",
+              balance: 1000,
+              scheduledPayment: 0,
+              extraPayment: 0,
+              interestAccrued: 0,
+            },
+            {
+              debtId: "d2",
+              name: "Loan",
+              balance: 500,
+              scheduledPayment: 0,
+              extraPayment: 0,
+              interestAccrued: 0,
+            },
+          ],
+        }),
+        buildProjectionMonth({ monthOffset: 1 }),
+      ],
+    });
+
+    const parentChain = makeInsertChain("snap-xyz");
+    const childChain = makeInsertChain();
+    insertImpl
+      .mockReturnValueOnce(parentChain)
+      .mockReturnValueOnce(childChain);
+
+    await createConfirmationSnapshot(
+      PLAN_ID,
+      USER_ID,
+      new Date(Date.UTC(2026, 1, 15))
+    );
+
+    expect(insertImpl).toHaveBeenCalledTimes(2);
+    expect(childChain.values).toHaveBeenCalledOnce();
+    const debtRows = childChain.values.mock.calls[0][0];
+    expect(debtRows).toEqual([
+      { snapshotId: "snap-xyz", debtId: "d1", balance: "1000.00" },
+      { snapshotId: "snap-xyz", debtId: "d2", balance: "500.00" },
+    ]);
   });
 
   it("returns { created: false } when the plan cannot be loaded", async () => {
@@ -567,6 +655,36 @@ describe("getRecentMonthlySnapshots", () => {
     expect(result[1].netWorth).toBe(650);
   });
 
+  it("buckets by accounting PERIOD (anchorDay) so straddling snapshots collapse per period", async () => {
+    mockOwnershipOk();
+    // anchorDay=15 → periods are e.g. Feb 15–Mar 14, Mar 15–Apr 14. Feb 28 and
+    // Mar 5 BOTH belong to the Feb-15 period and must collapse to one point
+    // (the latest, Mar 5). A calendar-month dedup would wrongly keep both.
+    const mar5 = new Date(Date.UTC(2026, 2, 5));
+    const feb28 = new Date(Date.UTC(2026, 1, 28));
+    const apr20 = new Date(Date.UTC(2026, 3, 20)); // Apr 15 period
+    selectImpl.mockReturnValueOnce(
+      makeSelectChain([
+        { date: mar5, savings: "30", investments: "40", totalDebt: "5", netWorth: "65" },
+        { date: feb28, savings: "29", investments: "39", totalDebt: "6", netWorth: "62" },
+        { date: apr20, savings: "20", investments: "30", totalDebt: "7", netWorth: "43" },
+      ])
+    );
+
+    const result = await getRecentMonthlySnapshots(
+      PLAN_ID,
+      USER_ID,
+      6,
+      new Date(Date.UTC(2026, 4, 1)),
+      15
+    );
+
+    // Two periods: Feb15 (represented by mar5) + Apr15 (apr20), ascending.
+    expect(result).toHaveLength(2);
+    expect(result[0].date).toEqual(mar5);
+    expect(result[1].date).toEqual(apr20);
+  });
+
   it("uses default monthsBack=3 and current date when omitted", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(Date.UTC(2026, 5, 15)));
@@ -589,7 +707,7 @@ describe("getProjectedStateForMonth", () => {
     getAutoInvestRateMock.mockResolvedValue(0);
   });
 
-  it("returns the projection month matching the requested target date", async () => {
+  it("returns the OPENING of the resolved period (previous period's close)", async () => {
     const plan = buildPlan({
       startMonth: new Date(Date.UTC(2026, 0, 1)),
     });
@@ -601,7 +719,9 @@ describe("getProjectedStateForMonth", () => {
     ];
     projectPlanMock.mockReturnValueOnce({ months });
 
-    // Target = April 2026 = offset 3 → clamped to last month (idx 2).
+    // Target = April 2026 = offset 3 → clamped to last period (idx 2). The
+    // pre-fill returns that period's OPENING = the previous period's close
+    // (idx 1 → 200), not its close (300).
     const result = await getProjectedStateForMonth(
       plan,
       USER_ID,
@@ -609,7 +729,7 @@ describe("getProjectedStateForMonth", () => {
     );
 
     expect(result).not.toBeNull();
-    expect(result?.savings).toBe(300);
+    expect(result?.savings).toBe(200);
   });
 
   it("returns null when projection yields no months", async () => {
@@ -753,7 +873,7 @@ describe("getProjectedStateForMonth", () => {
     expect(opts.portfolioValue).toBe(0);
   });
 
-  it("snaps the target date to the first of the month before resolving", async () => {
+  it("snaps the target date to the period anchor before resolving", async () => {
     const plan = buildPlan({
       startMonth: new Date(Date.UTC(2026, 0, 1)),
     });
@@ -764,13 +884,14 @@ describe("getProjectedStateForMonth", () => {
     ];
     projectPlanMock.mockReturnValueOnce({ months });
 
-    // Mid-month February 2026 → startOfMonthUtc snaps to Feb 1 → offset 1.
+    // Mid-month February 2026 → period anchor Feb 1 → offset 1. The pre-fill
+    // returns the OPENING of period 1 = period 0's close (idx 0 → 100).
     const result = await getProjectedStateForMonth(
       plan,
       USER_ID,
       new Date(Date.UTC(2026, 1, 27))
     );
 
-    expect(result?.savings).toBe(200);
+    expect(result?.savings).toBe(100);
   });
 });

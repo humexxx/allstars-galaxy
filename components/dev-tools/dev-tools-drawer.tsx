@@ -13,7 +13,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { Text } from "@/components/ui/typography";
+import { Eyebrow, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 import {
@@ -75,9 +75,9 @@ export function DevToolsDrawer() {
               <div className="space-y-6">
                 {grouped.map(({ section, items }) => (
                   <section key={section} className="space-y-2">
-                    <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      {section}
-                    </h3>
+                    <Eyebrow asChild className="text-2xs">
+                      <h3>{section}</h3>
+                    </Eyebrow>
                     <ul className="space-y-2">
                       {items.map((helper) => (
                         <li key={helper.id ?? helper.kind}>

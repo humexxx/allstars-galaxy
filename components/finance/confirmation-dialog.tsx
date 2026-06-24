@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Mono, Text } from "@/components/ui/typography";
 
 import { saveConfirmationAction } from "@/app/actions/finance-confirmations";
 import { formatCurrency } from "@/lib/utils/format";
@@ -109,9 +110,9 @@ export function ConfirmationDialog({
                 value={savings}
                 onChange={(e) => setSavings(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                Projected: {formatCurrency(projected.savings)}
-              </p>
+              <Text variant="small">
+                Projected: <Mono>{formatCurrency(projected.savings)}</Mono>
+              </Text>
             </div>
             <div className="space-y-1">
               <Label htmlFor="conf-investments">Investments</Label>
@@ -121,9 +122,9 @@ export function ConfirmationDialog({
                 value={investments}
                 onChange={(e) => setInvestments(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                Projected: {formatCurrency(projected.investments)}
-              </p>
+              <Text variant="small">
+                Projected: <Mono>{formatCurrency(projected.investments)}</Mono>
+              </Text>
             </div>
           </div>
 
@@ -136,10 +137,10 @@ export function ConfirmationDialog({
                   return (
                     <div key={d.id} className="grid grid-cols-2 items-center gap-3">
                       <div>
-                        <p className="text-sm font-medium">{d.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Projected: {formatCurrency(projectedDebt?.balance ?? 0)}
-                        </p>
+                        <Text variant="body" weight="medium">{d.name}</Text>
+                        <Text variant="small">
+                          Projected: <Mono>{formatCurrency(projectedDebt?.balance ?? 0)}</Mono>
+                        </Text>
                       </div>
                       <Input
                         inputMode="decimal"

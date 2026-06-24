@@ -1,22 +1,30 @@
 "use client";
 
+import { useState } from "react";
 import { ArrowDown, ArrowUp, Minus, Trophy } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eyebrow, Mono } from "@/components/ui/typography";
-import { cn } from "@/lib/utils";
+import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import type { RacquetData } from "@/types/sports";
 
 import { SportShell } from "../shared/sport-shell";
+import { StatusPill } from "../shared/status-pill";
+import { SportsTh } from "../shared/table-primitives";
 
 type TourTab = { value: string; label: string; data: RacquetData };
 
@@ -29,34 +37,46 @@ type RacquetViewProps = {
 
 export function RacquetView({ emoji, title, subtitle, tours }: RacquetViewProps) {
   const defaultTour = tours[0]?.value ?? "main";
+  const [tourValue, setTourValue] = useState<string>(defaultTour);
+  const activeTour = tours.find((t) => t.value === tourValue) ?? tours[0];
+
   return (
-    <SportShell emoji={emoji} title={title} subtitle={subtitle}>
-      <Tabs defaultValue={defaultTour} className="space-y-5">
-        <TabsList>
-          {tours.map((tour) => (
-            <TabsTrigger key={tour.value} value={tour.value}>
-              {tour.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        {tours.map((tour) => (
-          <TabsContent key={tour.value} value={tour.value} className="space-y-5">
-            <Tabs defaultValue="rankings">
-              <TabsList variant="line">
-                <TabsTrigger value="rankings">Rankings</TabsTrigger>
-                <TabsTrigger value="tournaments">Tournaments</TabsTrigger>
-              </TabsList>
-              <TabsContent value="rankings" className="mt-3">
-                <RankingsTable data={tour.data} />
-              </TabsContent>
-              <TabsContent value="tournaments" className="mt-3">
-                <TournamentsList data={tour.data} />
-              </TabsContent>
-            </Tabs>
-          </TabsContent>
-        ))}
-      </Tabs>
-    </SportShell>
+    <Tabs defaultValue="rankings" className="space-y-6">
+      <SportShell
+        emoji={emoji}
+        title={title}
+        subtitle={subtitle}
+        controls={
+          tours.length > 1 ? (
+            <Select value={tourValue} onValueChange={setTourValue}>
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder="Tour" />
+              </SelectTrigger>
+              <SelectContent>
+                {tours.map((tour) => (
+                  <SelectItem key={tour.value} value={tour.value}>
+                    {tour.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null
+        }
+        tabs={
+          <TabsList>
+            <TabsTrigger value="rankings">Rankings</TabsTrigger>
+            <TabsTrigger value="tournaments">Tournaments</TabsTrigger>
+          </TabsList>
+        }
+      >
+        <TabsContent value="rankings">
+          <RankingsTable data={activeTour.data} />
+        </TabsContent>
+        <TabsContent value="tournaments">
+          <TournamentsList data={activeTour.data} />
+        </TabsContent>
+      </SportShell>
+    </Tabs>
   );
 }
 
@@ -67,23 +87,23 @@ function RankingsTable({ data }: { data: RacquetData }) {
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead className="w-12 text-xs uppercase tracking-wide text-muted-foreground">
+              <SportsTh className="w-12">
                 Rank
-              </TableHead>
-              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh>
                 Player
-              </TableHead>
-              <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-right">
                 Points
-              </TableHead>
-              <TableHead className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+              </SportsTh>
+              <SportsTh className="text-center">
                 Move
-              </TableHead>
+              </SportsTh>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.rankings.map((p) => (
-              <TableRow key={p.position}>
+            {data.rankings.map((p, idx) => (
+              <TableRow key={`${p.position}-${p.name}-${idx}`}>
                 <TableCell className="text-sm tabular-nums text-muted-foreground">
                   {p.position}
                 </TableCell>
@@ -138,22 +158,11 @@ function TournamentsList({ data }: { data: RacquetData }) {
           <CardContent className="space-y-2 py-1">
             <div className="flex items-start justify-between gap-2">
               <div className="leading-tight">
-                <Eyebrow className="text-[10px]">{t.surface ?? "Tour"}</Eyebrow>
+                <Eyebrow className="text-2xs">{t.surface ?? "Tour"}</Eyebrow>
                 <div className="text-sm font-semibold">{t.name}</div>
-                <div className="text-xs text-muted-foreground">{t.location}</div>
+                <Text variant="small" as="div">{t.location}</Text>
               </div>
-              <span
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
-                  t.status === "completed" && "bg-muted text-muted-foreground",
-                  t.status === "upcoming" &&
-                    "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-                  t.status === "live" &&
-                    "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-                )}
-              >
-                {t.status}
-              </span>
+              <StatusPill status={t.status} />
             </div>
             <Mono className="block text-xs text-muted-foreground">
               {formatRange(t.startDate, t.endDate)}

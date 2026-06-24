@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Heading, Text, Mono } from "@/components/ui/typography";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { MilestoneList } from "./milestone-list";
 import { ProgressTracker } from "./progress-tracker";
@@ -63,9 +64,9 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
-          <h2 className="text-2xl font-bold">{roadPath.title}</h2>
+          <Heading level="h2">{roadPath.title}</Heading>
           {roadPath.description && (
-            <p className="text-muted-foreground">{roadPath.description}</p>
+            <Text variant="muted">{roadPath.description}</Text>
           )}
         </div>
       </div>
@@ -78,11 +79,11 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
           <CardContent>
             <div className="space-y-2">
               <Progress value={progressPercentage} />
-              <p className="text-2xl font-bold">{progressPercentage}%</p>
+              <Mono as="p" className="text-2xl font-bold">{progressPercentage}%</Mono>
               {stats && roadPath.targetValue && (
-                <p className="text-sm text-muted-foreground">
-                  {currentValue} / {roadPath.targetValue} {roadPath.unit}
-                </p>
+                <Text variant="muted">
+                  <Mono>{currentValue}</Mono> / <Mono>{roadPath.targetValue}</Mono> {roadPath.unit}
+                </Text>
               )}
             </div>
           </CardContent>
@@ -94,10 +95,10 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
           </CardHeader>
           <CardContent>
             <div className="space-y-1">
-              <p className="text-2xl font-bold">
+              <Mono as="p" className="text-2xl font-bold">
                 {stats?.completedMilestones ?? 0} / {stats?.totalMilestones ?? 0}
-              </p>
-              <p className="text-sm text-muted-foreground">completed</p>
+              </Mono>
+              <Text variant="muted">completed</Text>
             </div>
           </CardContent>
         </Card>
@@ -109,10 +110,10 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
             </CardHeader>
             <CardContent>
               <div className="space-y-1">
-                <p className="text-2xl font-bold">{stats.daysRemaining}</p>
-                <p className="text-sm text-muted-foreground">
-                  days until {format(new Date(roadPath.targetDate), "MMM d, yyyy")}
-                </p>
+                <Mono as="p" className="text-2xl font-bold">{stats.daysRemaining}</Mono>
+                <Text variant="muted">
+                  days until <Mono>{format(new Date(roadPath.targetDate), "MMM d, yyyy")}</Mono>
+                </Text>
               </div>
             </CardContent>
           </Card>
@@ -122,8 +123,8 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Milestones</CardTitle>
-            <CardDescription>Break down your goal into smaller milestones</CardDescription>
+            <Heading level="h5" as="h3">Milestones</Heading>
+            <Text variant="muted">Break down your goal into smaller milestones</Text>
           </CardHeader>
           <CardContent>
             <MilestoneList
@@ -136,8 +137,8 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Progress Tracking</CardTitle>
-            <CardDescription>Track your progress over time</CardDescription>
+            <Heading level="h5" as="h3">Progress Tracking</Heading>
+            <Text variant="muted">Track your progress over time</Text>
           </CardHeader>
           <CardContent>
             <ProgressTracker

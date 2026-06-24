@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
-import { Heading } from "@/components/ui/typography";
+import { Eyebrow, Heading, Text } from "@/components/ui/typography";
 
 // Closing CTA — soft radial gradient anchored at the bottom, same shape as
 // trim-success's "Empieza a ver tu inventario claro" section.
@@ -9,7 +9,7 @@ export function LandingCta() {
   return (
     <section
       id="galaxy"
-      className="relative overflow-hidden border-b border-neutral-200/80 bg-white"
+      className="relative overflow-hidden border-b bg-background"
     >
       <div
         aria-hidden
@@ -20,27 +20,25 @@ export function LandingCta() {
         }}
       />
       <div className="relative mx-auto max-w-3xl px-6 py-28 text-center">
-        <span className="text-xs font-medium uppercase tracking-widest text-neutral-400">
-          Manifesto
-        </span>
-        <Heading level="h2" className="mt-3 text-neutral-900">
+        <Eyebrow>Manifesto</Eyebrow>
+        <Heading level="h2" className="mt-3">
           Your finances orbit something bigger.
         </Heading>
-        <p className="mt-4 text-neutral-500">
+        <Text variant="muted" className="mt-4">
           Capital is the gravity. But your goals, your projects and your
           wellbeing are the planets that make the picture worth looking at.
-        </p>
+        </Text>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
             href="/signup"
-            className="inline-flex h-11 items-center justify-center rounded-full bg-neutral-900 px-6 text-[14px] font-medium text-white transition hover:bg-neutral-800"
+            className="inline-flex h-11 items-center justify-center rounded-full bg-foreground px-6 text-sm font-medium text-background transition hover:bg-foreground/90"
           >
             Start free
             <ArrowRight className="ml-1 h-4 w-4" />
           </Link>
           <Link
             href="/login"
-            className="inline-flex h-11 items-center justify-center rounded-full border border-neutral-200 bg-white px-6 text-[14px] font-medium text-neutral-900 transition hover:bg-neutral-50"
+            className="inline-flex h-11 items-center justify-center rounded-full border bg-background px-6 text-sm font-medium text-foreground transition hover:bg-muted"
           >
             I already have an account
           </Link>

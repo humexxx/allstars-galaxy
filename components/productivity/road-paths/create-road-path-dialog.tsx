@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Text } from "@/components/ui/typography";
 import { createRoadPathAction } from "@/app/actions/road-path";
 import { createRoadPathSchema, type CreateRoadPathInput } from "@/schemas/road-path";
 import { toast } from "sonner";
@@ -168,9 +169,9 @@ export function CreateRoadPathDialog({ onSuccess, children }: CreateRoadPathDial
                       <SelectItem value="monthly">Monthly</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
+                  <Text variant="small">
                     Tasks will be created automatically at the start of each day based on this frequency
-                  </p>
+                  </Text>
                 </div>
 
                 {taskFrequency && (

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Text } from "@/components/ui/typography";
 import { createClient } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
@@ -226,7 +227,7 @@ export function PhotoPicker({
               </>
             )}
           </Button>
-          <p className="text-xs text-muted-foreground">JPG, PNG, WebP up to 10 MB.</p>
+          <Text variant="small">JPG, PNG, WebP up to 10 MB.</Text>
         </TabsContent>
 
         <TabsContent value="url" className="space-y-2">

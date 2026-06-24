@@ -8,11 +8,17 @@ import { User } from "@supabase/supabase-js";
 
 import { Logo } from "@/components/logo";
 import { ModeToggle } from "@/components/mode-toggle";
+import { CommandMenu } from "@/components/command-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NavUser } from "./nav-user";
 import { stopImpersonationAction } from "@/app/actions/impersonation";
+import {
+  headerNav,
+  isHeaderItemActive,
+  type Role,
+} from "@/components/portal/nav-config";
 import { cn } from "@/lib/utils";
 
 type ImpersonatedUser = {
@@ -24,60 +30,15 @@ type ImpersonatedUser = {
 type AppHeaderProps = {
   realUser: User;
   impersonatedUser: ImpersonatedUser | null;
-  /** Effective role from the server context (DB-backed). Drives whether
-   *  the Admin link surfaces in the horizontal nav. */
-  role?: "admin" | "user";
+  /** Effective role from the server context (DB-backed). Drives whether the
+   *  Admin link surfaces in the horizontal nav. */
+  role?: Role;
   isImpersonating?: boolean;
 };
 
-// Top-level horizontal nav, mirrors the shadcn docs header.
-//
-// `prefixes` is what we match against the current pathname to decide which
-// link is active — the LINK href is just the user's destination on click.
-// Listing prefixes explicitly avoids edge cases (e.g. /portal would match
-// every sub-route under it).
-const HEADER_NAV: Array<{
-  label: string;
-  href: string;
-  prefixes: string[];
-  adminOnly?: boolean;
-}> = [
-  { label: "Dashboard", href: "/portal", prefixes: ["/portal"] },
-  {
-    label: "Finance",
-    href: "/portal/portfolio",
-    prefixes: ["/portal/portfolio", "/portal/investment-methods", "/portal/plans"],
-  },
-  {
-    label: "Productivity",
-    href: "/portal/productivity/board",
-    prefixes: ["/portal/productivity"],
-  },
-  {
-    label: "Entertainment",
-    href: "/portal/entertainment/travel-planner",
-    prefixes: ["/portal/entertainment"],
-  },
-  {
-    label: "Admin",
-    href: "/portal/admin/users",
-    prefixes: ["/portal/admin", "/portal/more-apps"],
-    adminOnly: true,
-  },
-];
-
-function isNavItemActive(pathname: string, prefixes: string[]): boolean {
-  // The dashboard entry uses exact-match because its prefix "/portal"
-  // would otherwise highlight on every route under the portal.
-  if (prefixes.length === 1 && prefixes[0] === "/portal") {
-    return pathname === "/portal";
-  }
-  return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-}
-
 // Header height is 56px (`h-14`). The sidebar offsets itself by the same
-// amount via `top-14 h-[calc(100svh-3.5rem)]` in app-sidebar.tsx — keep
-// them in sync if you adjust this.
+// amount via `top-14 h-[calc(100svh-3.5rem)]` in app-sidebar.tsx — keep them
+// in sync if you adjust this.
 export function AppHeader({
   realUser,
   impersonatedUser,
@@ -87,9 +48,6 @@ export function AppHeader({
   const [isStopping, startStop] = useTransition();
   const isImpersonating = isImpersonatingProp ?? impersonatedUser !== null;
   const pathname = usePathname();
-  // Hide admin nav while impersonating so the active session can't appear
-  // privileged on someone else's behalf — matches the sidebar's gating.
-  const showAdminNav = role === "admin" && !isImpersonating;
 
   const userData = {
     name:
@@ -109,24 +67,31 @@ export function AppHeader({
     });
   };
 
-  const navItems = HEADER_NAV.filter((item) => !item.adminOnly || showAdminNav);
+  const navItems = headerNav(role, isImpersonating);
 
   return (
     <header
       className={cn(
-        "sticky top-0 z-40 flex h-14 shrink-0 items-center gap-4 border-b bg-background px-3 sm:px-6",
-        isImpersonating &&
-          "border-amber-500/40 bg-amber-100/60 dark:bg-amber-500/15"
+        "sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 px-3 sm:gap-4 sm:px-6",
+        // Frosted bar like the shadcn docs site — flat, no bottom divider, with
+        // a solid fallback where backdrop-filter isn't supported. The only time
+        // we frame it is while impersonating, to keep that state obvious.
+        isImpersonating
+          ? "border-b border-amber-500/40 bg-amber-100/70 dark:bg-amber-500/15"
+          : "bg-background/95 supports-[backdrop-filter]:bg-background/60 backdrop-blur"
       )}
     >
-      {/* Brand: compact logo + name on the far left, inline with the rest
-          of the bar — no vertical separator, no "zone" wrapper. Matches
-          shadcn's docs header where the mark is just the first inline
-          element of one flat strip. */}
+      {/* Trigger only on mobile — it opens the sidebar sheet. On desktop the
+          sidebar is always visible (like the shadcn docs), so no collapse
+          control is shown. */}
+      <SidebarTrigger className="shrink-0 md:hidden" />
+
+      {/* Brand: compact mark + wordmark, the first inline element of one flat
+          strip (no separators, no "zone" wrapper) — matches shadcn's header. */}
       <Link
         href="/portal"
         aria-label="Allstars Galaxy"
-        className="flex shrink-0 items-center gap-2 rounded-md transition-colors hover:opacity-80"
+        className="flex shrink-0 items-center gap-2 rounded-md transition-opacity hover:opacity-80"
       >
         <Logo className="size-5" />
         <span className="hidden text-sm font-semibold tracking-tight sm:inline">
@@ -134,25 +99,19 @@ export function AppHeader({
         </span>
       </Link>
 
-      {/* Trigger collapses the sidebar — kept inline next to the brand
-          like Linear / Vercel rather than tucked into the sidebar itself. */}
-      <SidebarTrigger className="shrink-0" />
-
-      {/* Horizontal section nav — mirrors the sidebar groups for quick
-          jumps. Hidden below md so small screens fall back to the sidebar
-          (opened via the trigger). */}
-      <nav className="hidden items-center gap-1 md:flex">
+      {/* Top-level section nav — flat text links (no pills), mirroring the
+          sidebar groups for quick jumps. Hidden below md so small screens
+          rely on the sidebar (opened via the trigger). */}
+      <nav className="hidden items-center gap-4 text-sm md:flex lg:gap-6">
         {navItems.map((item) => {
-          const active = isNavItemActive(pathname, item.prefixes);
+          const active = isHeaderItemActive(pathname, item);
           return (
             <Link
               key={item.label}
               href={item.href}
               className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                active
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
+                "font-medium transition-colors hover:text-foreground",
+                active ? "text-foreground" : "text-foreground/70"
               )}
             >
               {item.label}
@@ -161,7 +120,7 @@ export function AppHeader({
         })}
       </nav>
 
-      {/* Flexible spacer pushes utilities to the far right; impersonation
+      {/* Flexible spacer pushes utilities to the far right; the impersonation
           banner sits centred when active. */}
       <div className="flex flex-1 items-center justify-center gap-2">
         {isImpersonating && (
@@ -198,6 +157,7 @@ export function AppHeader({
             {isStopping ? "Stopping…" : "Stop impersonating"}
           </Button>
         )}
+        <CommandMenu role={role} isImpersonating={isImpersonating} />
         <ModeToggle />
         <NavUser user={userData} />
       </div>

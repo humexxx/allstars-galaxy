@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Mono } from "@/components/ui/typography";
 import { formatCurrency } from "@/lib/utils/format";
 import type { Projection, ProjectionMonth } from "@/types/finance";
 
@@ -197,14 +198,16 @@ export function ProjectionTable({ projection, monthsToShow }: ProjectionTablePro
               {rows.map((m) => (
                 <TableRow key={m.monthOffset} data-month-offset={m.monthOffset}>
                   <TableCell className="font-medium">
-                    {MONTH_FORMATTER.format(m.date)}
+                    <Mono>{MONTH_FORMATTER.format(m.date)}</Mono>
                   </TableCell>
-                  <TableCell className="text-right">{formatCurrency(m.income)}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">
-                    {formatCurrency(m.expenses)}
+                  <TableCell className="text-right">
+                    <Mono>{formatCurrency(m.income)}</Mono>
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground">
-                    {formatCurrency(m.scheduledDebtPayments)}
+                    <Mono>{formatCurrency(m.expenses)}</Mono>
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground">
+                    <Mono>{formatCurrency(m.scheduledDebtPayments)}</Mono>
                   </TableCell>
                   <TableCell className="text-right">
                     {(() => {
@@ -218,27 +221,29 @@ export function ProjectionTable({ projection, monthsToShow }: ProjectionTablePro
                       }
                       const isPositive = net > 0;
                       return (
-                        <span
-                          className={isPositive ? "text-green-600" : "text-red-600"}
+                        <Mono
+                          className={isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}
                           title={`Earned ${formatCurrency(m.investmentsInterest + m.savingsInterest)} · Paid ${formatCurrency(m.totalInterestAccrued)}`}
                         >
                           {isPositive ? "+" : "−"}
                           {formatCurrency(Math.abs(net))}
-                        </span>
+                        </Mono>
                       );
                     })()}
                   </TableCell>
                   {hasInvestments && (
-                    <TableCell className="text-right text-blue-600">
+                    <TableCell className="text-right font-mono tabular-nums text-primary">
                       {formatCurrency(m.investments)}
                     </TableCell>
                   )}
-                  <TableCell className="text-right">
+                  <TableCell className="text-right font-mono tabular-nums">
                     {formatCurrency(m.totalDebt)}
                   </TableCell>
                   <TableCell
-                    className={`text-right font-semibold ${
-                      m.netWorth >= 0 ? "text-green-600" : "text-red-600"
+                    className={`text-right font-mono font-semibold tabular-nums ${
+                      m.netWorth >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-rose-600 dark:text-rose-400"
                     }`}
                   >
                     {formatCurrency(m.netWorth)}

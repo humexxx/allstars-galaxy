@@ -1229,11 +1229,13 @@ export function projectPlan(
       savingsContribution = cashAfterDebts - investmentsContribution;
     }
 
-    // Step 6: compound interest on both buckets. Cap savings at 0 — a negative
-    // balance would represent an overdraft, which we don't model and shouldn't
-    // earn interest. Net worth can still be negative via outstanding debt.
-    const savingsBeforeInterest = Math.max(0, savings + savingsContribution);
-    const savingsInterest = savingsBeforeInterest * savingsRate;
+    // Step 6: compound interest on both buckets. Savings may go NEGATIVE — a
+    // sustained deficit (expenses + debt service > income) is carried forward as
+    // negative cash so net worth reflects the real shortfall instead of silently
+    // clipping it to zero (which over-stated the projection). Interest only
+    // accrues on a positive balance: an overdraft doesn't earn the savings rate.
+    const savingsBeforeInterest = savings + savingsContribution;
+    const savingsInterest = Math.max(0, savingsBeforeInterest) * savingsRate;
     // Round to cents each month to avoid floating-point drift over 120 iterations.
     savings = Math.round((savingsBeforeInterest + savingsInterest) * 100) / 100;
 

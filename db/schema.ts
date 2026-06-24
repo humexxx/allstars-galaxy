@@ -11,6 +11,10 @@ export const taskPriorityEnum = pgEnum("task_priority", ["low", "medium", "high"
 export const debtPaymentTypeEnum = pgEnum("debt_payment_type", ["fixed", "percent_of_balance"]);
 export const debtStrategyEnum = pgEnum("debt_strategy", ["avalanche", "snowball", "none"]);
 export const financeSnapshotSourceEnum = pgEnum("finance_snapshot_source", ["system_cron", "confirmation", "manual"]);
+// "user" = the human confirmed their real numbers. "auto" = the cron rolled the
+// baseline forward through a period the user left unconfirmed (best-estimate,
+// still re-promptable). Lets the UI flag auto rows and keeps the chart honest.
+export const financeConfirmationSourceEnum = pgEnum("finance_confirmation_source", ["user", "auto"]);
 export const financePlanLineKindEnum = pgEnum("finance_plan_line_kind", ["recurring", "one_time"]);
 // Shape of a recurring entry's cadence.
 //   monthly_day      — hits dayOfMonth every month (current default behaviour)
@@ -376,6 +380,31 @@ export const financePlanSnapshots = pgTable(
 );
 
 /**
+ * Per-debt balance breakdown for a snapshot. Mirrors
+ * finance_plan_debt_confirmations: the snapshot keeps the aggregate `totalDebt`
+ * for fast reads, while this child table records each debt's balance at the
+ * snapshot date so the per-debt history (each card/loan's curve over time) is
+ * reconstructable, not just the total.
+ */
+export const financePlanSnapshotDebts = pgTable(
+  "finance_plan_snapshot_debts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    snapshotId: uuid("snapshot_id")
+      .notNull()
+      .references(() => financePlanSnapshots.id, { onDelete: "cascade" }),
+    debtId: uuid("debt_id")
+      .notNull()
+      .references(() => financePlanDebts.id, { onDelete: "cascade" }),
+    balance: numeric("balance", { precision: 20, scale: 2 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("finance_plan_snapshot_debts_uniq").on(t.snapshotId, t.debtId),
+    index("finance_plan_snapshot_debts_debt_id_idx").on(t.debtId),
+  ]
+);
+
+/**
  * User-confirmed actuals for a given month. The user is prompted on the
  * configured `confirmationDayOfMonth` to confirm their real savings,
  * investments and current debt balances. These numbers replace the
@@ -395,6 +424,8 @@ export const financePlanConfirmations = pgTable(
       .notNull()
       .default("0"),
     notes: text("notes"),
+    // Who created this confirmation — see financeConfirmationSourceEnum.
+    source: financeConfirmationSourceEnum("source").notNull().default("user"),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

@@ -51,6 +51,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Heading, Mono, Text } from "@/components/ui/typography";
 import { formatCurrency } from "@/lib/utils/format";
 import {
   periodRangeFor,
@@ -1197,9 +1198,9 @@ export function PlanCalendar({
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <h3 className="min-w-[180px] text-center text-lg font-semibold">
+            <Heading level="h5" as="h3" className="min-w-[180px] text-center">
               {monthLabel}
-            </h3>
+            </Heading>
             <Button
               variant="ghost"
               size="icon"
@@ -1271,7 +1272,7 @@ export function PlanCalendar({
 
         <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
-            <span className="inline-block size-2 rounded-full bg-green-500" />
+            <span className="inline-block size-2 rounded-full bg-emerald-500" />
             Income
           </span>
           <span className="flex items-center gap-1">
@@ -1279,17 +1280,17 @@ export function PlanCalendar({
             Expense
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block size-2 rounded-full bg-red-500" />
+            <span className="inline-block size-2 rounded-full bg-rose-500" />
             Debt
           </span>
-          <span className="ml-auto text-[10px] italic text-muted-foreground/70">
+          <span className="ml-auto text-2xs italic text-muted-foreground/70">
             Click an entry to edit · drag the ⋮ handle to move · click a day cell to expand
           </span>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="grid grid-cols-7 gap-1 text-center text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
             <div key={d} className="py-1">
               {d}
@@ -1628,8 +1629,8 @@ function SummaryTile({
     good === null
       ? "text-muted-foreground"
       : good
-        ? "text-green-600 dark:text-green-400"
-        : "text-red-600 dark:text-red-400";
+        ? "text-emerald-600 dark:text-emerald-400"
+        : "text-rose-600 dark:text-rose-400";
   const arrow = direction === "up" ? "▲" : direction === "down" ? "▼" : "·";
 
   const displayValue = signedValue
@@ -1637,26 +1638,24 @@ function SummaryTile({
     : formatCurrency(value);
   const valueColor = signedValue
     ? value >= 0
-      ? "text-green-700 dark:text-green-300"
-      : "text-red-700 dark:text-red-300"
+      ? "text-emerald-700 dark:text-emerald-300"
+      : "text-rose-700 dark:text-rose-300"
     : "";
 
   return (
     <div className="rounded-md border bg-card p-2.5">
-      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <Text variant="small" as="div" className="text-2xs font-medium uppercase tracking-wide">
         {label}
-      </div>
-      <div
-        className={`mt-0.5 font-mono text-base font-semibold tabular-nums ${valueColor}`}
-      >
+      </Text>
+      <Mono as="div" className={`mt-0.5 text-base font-semibold ${valueColor}`}>
         {displayValue}
-      </div>
-      <div className={`text-[10px] font-mono tabular-nums ${deltaColor}`}>
+      </Mono>
+      <Mono as="div" className={`text-2xs ${deltaColor}`}>
         {arrow}{" "}
         {direction === "flat"
           ? "no change"
           : `${formatCurrency(Math.abs(deltaRounded))} vs prev`}
-      </div>
+      </Mono>
     </div>
   );
 }
@@ -1774,8 +1773,8 @@ function CalendarCell({
         <span
           className={
             isCurrent
-              ? "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 font-mono text-[11px] font-semibold text-primary-foreground"
-              : "px-1 py-0.5 font-mono text-[11px]"
+              ? "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 font-mono text-2xs font-semibold text-primary-foreground"
+              : "px-1 py-0.5 font-mono text-2xs"
           }
         >
           {day.getDate()}
@@ -1799,7 +1798,7 @@ function CalendarCell({
               onClick={() => onAdd("income")}
               className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
             >
-              <span className="inline-block size-2 rounded-full bg-green-500" />
+              <span className="inline-block size-2 rounded-full bg-emerald-500" />
               Add income
             </button>
             <button
@@ -1847,7 +1846,7 @@ function CalendarCell({
                     onToggleExpand();
                   }
                 }}
-                className="cursor-pointer rounded px-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground data-[state=delayed-open]:bg-muted data-[state=instant-open]:bg-muted data-[state=delayed-open]:text-foreground data-[state=instant-open]:text-foreground"
+                className="cursor-pointer rounded px-1 text-2xs text-muted-foreground hover:bg-muted hover:text-foreground data-[state=delayed-open]:bg-muted data-[state=instant-open]:bg-muted data-[state=delayed-open]:text-foreground data-[state=instant-open]:text-foreground"
               >
                 +{extra} more
               </li>
@@ -1907,7 +1906,7 @@ function EntryChip({
         }
       }}
       aria-label={`Edit ${entry.name}`}
-      className={`group/entry flex cursor-pointer items-stretch gap-1 rounded text-[10px] outline-none focus-visible:ring-2 focus-visible:ring-current ${chipPalette(entry.side)}`}
+      className={`group/entry flex cursor-pointer items-stretch gap-1 rounded text-2xs outline-none focus-visible:ring-2 focus-visible:ring-current ${chipPalette(entry.side)}`}
     >
       <span
         draggable
@@ -1921,10 +1920,10 @@ function EntryChip({
         <GripVertical className="h-3 w-3" />
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0 py-1">
-        <span className="truncate text-[11px] font-medium leading-tight">
+        <span className="truncate text-2xs font-medium leading-tight">
           {entry.name}
         </span>
-        <span className="font-mono text-[10px] tabular-nums leading-tight opacity-90">
+        <span className="font-mono text-2xs tabular-nums leading-tight opacity-90">
           {formatCurrency(entry.amount)}
         </span>
       </div>
@@ -1984,10 +1983,10 @@ function EntryChip({
 
 function chipPalette(side: EntrySide): string {
   return side === "income"
-    ? "bg-green-500/10 text-green-700 dark:text-green-300"
+    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
     : side === "expense"
       ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-      : "bg-red-500/10 text-red-700 dark:text-red-300";
+      : "bg-rose-500/10 text-rose-700 dark:text-rose-300";
 }
 
 // Listing of entries hidden behind "+N more" plus a per-side / net total for
@@ -2000,10 +1999,10 @@ function HiddenEntriesTooltipBody({ allEntries }: { allEntries: DayEntry[] }) {
 
   return (
     <div className="space-y-2">
-      <div className="text-[11px] opacity-80">
+      <div className="text-2xs opacity-80">
         {hidden.length} more {hidden.length === 1 ? "entry" : "entries"} on this day
       </div>
-      <ul className="space-y-0.5 text-[11px]">
+      <ul className="space-y-0.5 text-2xs">
         {hidden.map((e) => (
           <li
             key={`${e.side}-${e.id}`}
@@ -2013,49 +2012,45 @@ function HiddenEntriesTooltipBody({ allEntries }: { allEntries: DayEntry[] }) {
               <span
                 className={`inline-block size-1.5 shrink-0 rounded-full ${
                   e.side === "income"
-                    ? "bg-green-500"
+                    ? "bg-emerald-500"
                     : e.side === "expense"
                       ? "bg-amber-500"
-                      : "bg-red-500"
+                      : "bg-rose-500"
                 }`}
                 aria-hidden
               />
               <span className="truncate">{e.name}</span>
             </span>
-            <span className="font-mono tabular-nums opacity-90">
+            <Mono className="opacity-90">
               {formatCurrency(e.amount)}
-            </span>
+            </Mono>
           </li>
         ))}
       </ul>
 
-      <div className="space-y-0.5 border-t border-background/20 pt-1.5 text-[11px]">
-        <div className="text-[10px] uppercase tracking-wide opacity-60">
+      <div className="space-y-0.5 border-t border-background/20 pt-1.5 text-2xs">
+        <div className="text-2xs uppercase tracking-wide opacity-60">
           Day total
         </div>
         {totals.income > 0 && (
-          <TotalRow label="Income" amount={totals.income} sign="+" color="text-green-400" />
+          <TotalRow label="Income" amount={totals.income} sign="+" color="text-emerald-400" />
         )}
         {totals.expense > 0 && (
           <TotalRow label="Expense" amount={totals.expense} sign="−" color="text-amber-400" />
         )}
         {totals.debt > 0 && (
-          <TotalRow label="Debt" amount={totals.debt} sign="−" color="text-red-400" />
+          <TotalRow label="Debt" amount={totals.debt} sign="−" color="text-rose-400" />
         )}
         <div className="flex items-baseline justify-between gap-3 border-t border-background/20 pt-1 font-semibold">
           <span>Net</span>
-          <span
-            className={`font-mono tabular-nums ${
-              net >= 0 ? "text-green-400" : "text-red-400"
-            }`}
-          >
+          <Mono className={net >= 0 ? "text-emerald-400" : "text-rose-400"}>
             {net >= 0 ? "+" : "−"}
             {formatCurrency(Math.abs(net))}
-          </span>
+          </Mono>
         </div>
       </div>
 
-      <div className="text-[10px] italic opacity-60">Click to expand</div>
+      <div className="text-2xs italic opacity-60">Click to expand</div>
     </div>
   );
 }
@@ -2074,10 +2069,10 @@ function TotalRow({
   return (
     <div className="flex items-baseline justify-between gap-3">
       <span className="opacity-80">{label}</span>
-      <span className={`font-mono tabular-nums ${color}`}>
+      <Mono className={color}>
         {sign}
         {formatCurrency(amount)}
-      </span>
+      </Mono>
     </div>
   );
 }

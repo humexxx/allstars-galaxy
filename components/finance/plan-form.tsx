@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Mono, Text } from "@/components/ui/typography";
 
 import { createPlanAction, updatePlanAction } from "@/app/actions/finance-plans";
 import type { DebtStrategy, FinancePlan } from "@/types/finance";
@@ -210,9 +211,9 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                   onChange={(e) => setMonthsAhead(e.target.value)}
                   required
                 />
-                <p className="text-xs text-muted-foreground">
+                <Text variant="small">
                   Minimum 12 months · default 120 (10 years).
-                </p>
+                </Text>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="plan-savings">Initial savings</Label>
@@ -232,9 +233,9 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                   onChange={(e) => setMonthlyRate(e.target.value)}
                   placeholder="0.007"
                 />
-                <p className="text-xs text-muted-foreground">
+                <Text variant="small">
                   Decimal monthly rate. 0.007 ≈ 0.70% per month.
-                </p>
+                </Text>
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label>Chart color</Label>
@@ -258,9 +259,9 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                   <Label htmlFor="plan-include-portfolio" className="cursor-pointer">
                     Include current portfolio in net worth
                   </Label>
-                  <p className="text-xs text-muted-foreground">
+                  <Text variant="small">
                     Adds your live portfolio value to the projection&apos;s net worth line.
-                  </p>
+                  </Text>
                 </div>
                 <Switch
                   id="plan-include-portfolio"
@@ -280,10 +281,10 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                   value={confirmationDay}
                   onChange={(e) => setConfirmationDay(e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground">
+                <Text variant="small">
                   Day of the month (1–28) when a dialog will ask you to confirm your
                   real balances. Set to <strong>0</strong> to disable.
-                </p>
+                </Text>
               </div>
             </div>
           </form>
@@ -293,11 +294,11 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
       <Card>
         <CardHeader>
           <CardTitle>Debt acceleration</CardTitle>
-          <p className="text-sm text-muted-foreground">
+          <Text variant="muted">
             When your monthly cash flow is positive, route part of the surplus into
             extra debt principal. Avalanche almost always pays less interest, but
             snowball is easier to stick with.
-          </p>
+          </Text>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between rounded-md border p-3">
@@ -305,10 +306,10 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
               <Label htmlFor="plan-accelerate" className="cursor-pointer">
                 Apply surplus to debts
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <Text variant="small">
                 Off → all surplus goes to savings. On → split surplus between extra debt
                 payments and savings using the slider below.
-              </p>
+              </Text>
             </div>
             <Switch
               id="plan-accelerate"
@@ -322,8 +323,8 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
               <div className="flex items-end justify-between">
                 <Label>Surplus aggressiveness</Label>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-xl font-semibold tracking-tight">{surplusPct}%</span>
-                  <span className="text-xs text-muted-foreground">{percentLabel(surplusPct)}</span>
+                  <Mono className="text-xl font-semibold tracking-tight">{surplusPct}%</Mono>
+                  <Text variant="small" as="span">{percentLabel(surplusPct)}</Text>
                 </div>
               </div>
               <Slider
@@ -335,12 +336,12 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                 aria-label="Surplus to debts percentage"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>30% · keeps savings growing</span>
-                <span>100% · all-in on debt</span>
+                <Text variant="small" as="span">30% · keeps savings growing</Text>
+                <Text variant="small" as="span">100% · all-in on debt</Text>
               </div>
-              <p className="text-xs text-muted-foreground">
+              <Text variant="small">
                 Recommended starting point: <strong>60%</strong>.
-              </p>
+              </Text>
             </div>
 
             <div className="space-y-3">
@@ -356,10 +357,10 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                 >
                   <RadioGroupItem id="strategy-avalanche" value="avalanche" className="mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium">Avalanche · highest interest first</p>
-                    <p className="text-xs text-muted-foreground">
+                    <Text variant="body" weight="medium">Avalanche · highest interest first</Text>
+                    <Text variant="small">
                       Mathematically optimal — minimises total interest paid.
-                    </p>
+                    </Text>
                   </div>
                 </label>
                 <label
@@ -368,10 +369,10 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                 >
                   <RadioGroupItem id="strategy-snowball" value="snowball" className="mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium">Snowball · smallest balance first</p>
-                    <p className="text-xs text-muted-foreground">
+                    <Text variant="body" weight="medium">Snowball · smallest balance first</Text>
+                    <Text variant="small">
                       Psychologically optimal — quick wins to build momentum.
-                    </p>
+                    </Text>
                   </div>
                 </label>
               </RadioGroup>
@@ -383,11 +384,11 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
       <Card>
         <CardHeader>
           <CardTitle>Auto-invest</CardTitle>
-          <p className="text-sm text-muted-foreground">
+          <Text variant="muted">
             After surplus → debts runs, route part of what&apos;s left into a compounding
             investments bucket modelled against an investment method&apos;s monthly ROI.
             The investments balance grows every month and counts toward your net worth.
-          </p>
+          </Text>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between rounded-md border p-3">
@@ -395,10 +396,10 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
               <Label htmlFor="plan-autoinvest" className="cursor-pointer">
                 Auto-invest the remainder
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <Text variant="small">
                 Off → all the remainder stays as savings. On → split between
                 investments and savings using the slider.
-              </p>
+              </Text>
             </div>
             <Switch
               id="plan-autoinvest"
@@ -417,7 +418,7 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
             <div className="space-y-3">
               <div className="flex items-end justify-between">
                 <Label>Share of remainder → investments</Label>
-                <span className="text-xl font-semibold tracking-tight">{investPct}%</span>
+                <Mono className="text-xl font-semibold tracking-tight">{investPct}%</Mono>
               </div>
               <Slider
                 value={[investPct]}
@@ -428,8 +429,8 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                 aria-label="Auto-invest percentage"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>10% · most stays as savings</span>
-                <span>100% · all remainder invested</span>
+                <Text variant="small" as="span">10% · most stays as savings</Text>
+                <Text variant="small" as="span">100% · all remainder invested</Text>
               </div>
             </div>
 
@@ -445,7 +446,7 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                       <span className="flex items-center gap-2">
                         {m.name} · {m.monthlyRoi}%/mo
                         {!m.enabled && (
-                          <Badge variant="outline" className="text-[10px]">
+                          <Badge variant="outline" className="text-2xs">
                             Disabled in portfolio
                           </Badge>
                         )}
@@ -454,10 +455,10 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
+              <Text variant="small">
                 Disabled methods can be used here as hypothetical scenarios. They are
                 hidden from your real portfolio.
-              </p>
+              </Text>
             </div>
 
             <div className="space-y-2">
@@ -468,9 +469,9 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                 value={initialInvestments}
                 onChange={(e) => setInitialInvestments(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
+              <Text variant="small">
                 Opening balance for the investments bucket at the start month.
-              </p>
+              </Text>
             </div>
           </div>
         </CardContent>

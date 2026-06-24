@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Heading, Text } from "@/components/ui/typography";
 import {
   Select,
   SelectContent,
@@ -103,12 +104,12 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
   return (
     <div className="space-y-3">
       <div>
-        <h3 className="text-base font-semibold">Debts</h3>
-        <p className="text-xs text-muted-foreground">
+        <Heading level="h5" as="h3">Debts</Heading>
+        <Text variant="small">
           Use <strong>Fixed</strong> for loans with a constant monthly payment, and{" "}
           <strong>% of balance</strong> for credit cards (the minimum shrinks as the
           balance drops, which produces a naturally curving payoff line).
-        </p>
+        </Text>
       </div>
 
       {debts.length === 0 ? (

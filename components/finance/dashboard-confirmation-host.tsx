@@ -3,6 +3,7 @@ import {
   getPlanWithLines,
 } from "@/lib/services/finance-plan-service";
 import { getConfirmationStatus } from "@/lib/services/finance-confirmation-service";
+import { periodRangeFor } from "@/lib/finance/period";
 
 import { ConfirmationPrompt } from "./confirmation-prompt";
 
@@ -11,6 +12,14 @@ import { ConfirmationPrompt } from "./confirmation-prompt";
 const MONTH_LABEL = new Intl.DateTimeFormat("en-US", {
   month: "long",
   year: "numeric",
+  timeZone: "UTC",
+});
+
+// Period-mode label shows the actual window (e.g. "Jun 15 – Jul 14") so the
+// popup matches the plan editor's dialog instead of collapsing to a month name.
+const DAY_LABEL = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
   timeZone: "UTC",
 });
 
@@ -36,11 +45,22 @@ export async function DashboardConfirmationHost({ userId }: { userId: string }) 
     balance: d.balance,
   }));
 
+  // status.monthAnchor is the period start (ISO). In period mode (anchor day
+  // > 1) show the window; otherwise the month + year.
+  const anchorIso = new Date(status.monthAnchor);
+  const monthLabel =
+    main.confirmationDayOfMonth > 1
+      ? (() => {
+          const range = periodRangeFor(anchorIso, main.confirmationDayOfMonth);
+          return `${DAY_LABEL.format(range.start)} – ${DAY_LABEL.format(range.end)}`;
+        })()
+      : MONTH_LABEL.format(anchorIso);
+
   return (
     <ConfirmationPrompt
       planId={main.id}
       planName={main.name}
-      monthLabel={MONTH_LABEL.format(new Date(status.monthAnchor))}
+      monthLabel={monthLabel}
       projected={{
         savings: status.projectedState.savings,
         investments: status.projectedState.investments,

@@ -107,6 +107,46 @@ export function periodAnchorIso(date: Date, day: number): string {
 }
 
 /**
+ * Index of the period containing `target` relative to the period containing
+ * `from`, both anchored on `day` (0 normalises to 1). 0 = same period, 1 =
+ * next, −1 = previous.
+ *
+ * This is the period-correct way to map a calendar date to a `projection.months`
+ * slot. A naive `year*12 + month` subtraction silently mis-counts by a whole
+ * period whenever the anchor day isn't the 1st (e.g. anchor day 15: today the
+ * 6th still belongs to *last* month's period). Because consecutive period
+ * starts are exactly one calendar month apart, the month diff between the two
+ * period STARTS equals the period offset — which is why this resolves correctly
+ * for any anchor day.
+ */
+export function periodIndexForDate(from: Date, day: number, target: Date): number {
+  const anchorDay = day > 0 ? day : 1;
+  const a = periodStartFor(from, anchorDay);
+  const b = periodStartFor(target, anchorDay);
+  return (
+    (b.getUTCFullYear() - a.getUTCFullYear()) * 12 +
+    (b.getUTCMonth() - a.getUTCMonth())
+  );
+}
+
+/**
+ * The 1 or 2 calendar months a period overlaps (a period lives entirely in one
+ * month or straddles a single month boundary). Used by day-aware walkers that
+ * need to resolve a recurring entry's hit-day in each touched calendar month.
+ */
+export function monthsInPeriod(
+  period: Period
+): { year: number; monthIdx: number }[] {
+  const sY = period.start.getUTCFullYear();
+  const sM = period.start.getUTCMonth();
+  const eY = period.end.getUTCFullYear();
+  const eM = period.end.getUTCMonth();
+  const first = { year: sY, monthIdx: sM };
+  if (sY === eY && sM === eM) return [first];
+  return [first, { year: eY, monthIdx: eM }];
+}
+
+/**
  * Inclusive day count of the period (Jan 15 → Feb 14 = 31).
  */
 export function periodLengthDays(period: Period): number {

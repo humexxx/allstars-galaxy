@@ -1,120 +1,113 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
- * Skeleton that mirrors the PlanEditor silhouette (back button + header with
- * donut + 4 KPI cards + projection card). Keeping the same spacing
- * (`space-y-6`, `gap-4`, grid breakpoints) as the real layout makes the swap
- * to the rendered editor feel like content filling in rather than a layout
- * shift.
+ * Skeleton that mirrors the PlanEditor silhouette: a lightweight header (title +
+ * Overview tab + More) and the Polymarket-style Overview hero — a 3/4 main panel
+ * (view-switcher toolbar + the default Graph view) beside the 1/4 gauge / cycle
+ * / strategy sidebar. Matching spacing + breakpoints keeps the swap to the real
+ * editor a content fill-in, not a layout shift.
  */
 export default function PlanDetailLoading() {
   return (
     <section className="space-y-4" aria-hidden="true">
-      {/* Back-to-plans button */}
-      <Skeleton className="h-8 w-32 -ml-2" />
-
       <div className="space-y-6">
-        {/* Header row mirrors PlanEditor: on mobile the compact 88px gauge
-            pins to the title's top-right; from `sm` up the left column shrinks
-            and the full 110px gauge anchors the far-right column. */}
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div className="min-w-0 flex-1 space-y-7 sm:flex-none">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0 space-y-1">
-                <Skeleton className="h-7 w-48" />
-                <Skeleton className="h-4 w-96 max-w-full" />
-                {/* "Current period · …" line (period-mode plans) */}
-                <Skeleton className="h-3 w-40" />
-              </div>
-              {/* Compact mobile gauge (96×96), hidden from `sm` up. */}
-              <Skeleton className="h-[96px] w-[96px] shrink-0 rounded-full sm:hidden" />
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {/* TabsList: two visible triggers */}
-              <div className="bg-muted/60 inline-flex h-9 items-center gap-1 rounded-md p-1">
-                <Skeleton className="h-7 w-20" />
-                <Skeleton className="h-7 w-20" />
-              </div>
-              {/* "More" dropdown trigger */}
-              <Skeleton className="h-9 w-20" />
-            </div>
+        {/* Header: title + subtitle on the left, Overview tab + More on the
+            right (the back arrow lives in the title's left gutter). */}
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+          <div className="min-w-0 space-y-1">
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-4 w-96 max-w-full" />
+            {/* "Current period · …" line (period-mode plans) */}
+            <Skeleton className="h-3 w-40" />
           </div>
-          {/* Desktop gauge (110×110), hidden on mobile where the compact one
-              above takes its place. */}
-          <Skeleton className="hidden h-[110px] w-[110px] rounded-full sm:block" />
+          <div className="flex flex-wrap items-center gap-2">
+            {/* TabsList: a single Overview trigger */}
+            <div className="bg-muted/60 inline-flex h-9 items-center gap-1 rounded-md p-1">
+              <Skeleton className="h-7 w-20" />
+            </div>
+            {/* "More" dropdown trigger */}
+            <Skeleton className="h-9 w-20" />
+          </div>
         </div>
 
-        {/* 4 KPI cards: a horizontal-scroll rail on mobile (each ~44% wide so
-            the third peeks in), a 2- then 4-column grid from `sm` up. Matches
-            the real Overview rail so the swap doesn't shift. */}
-        <div className="flex gap-3 overflow-x-auto py-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:py-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <SummaryCardSkeleton key={i} />
-          ))}
-        </div>
-
-        {/* Projection panel: header (title + horizon presets) + chart + footer */}
-        <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
-          <div className="space-y-1.5 p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-2">
-                <Skeleton className="h-5 w-40" />
-                <Skeleton className="h-4 w-64 max-w-full" />
-              </div>
-              {/* Horizon presets: 12 mo / 2 yr / 5 yr / 10 yr */}
-              <div className="flex items-center gap-1">
-                <Skeleton className="h-8 w-14" />
-                <Skeleton className="h-8 w-12" />
-                <Skeleton className="h-8 w-12" />
-                <Skeleton className="h-8 w-14" />
-              </div>
-            </div>
-            {/* Strategy badge row (collapsible, when debts exist) */}
-            <div className="pt-2">
-              <Skeleton className="h-9 w-full max-w-md" />
-            </div>
-          </div>
-          <div className="p-6 pt-0 space-y-4">
-            {/* Chart canvas — height matches the rendered Recharts container */}
-            <Skeleton className="h-72 w-full" />
-            {/* Footer KPIs that sit under the chart */}
-            <div className="grid gap-3 sm:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="space-y-2 rounded-md border p-3"
-                >
-                  <Skeleton className="h-3 w-20" />
-                  <Skeleton className="h-6 w-28" />
+        {/* Overview hero: 3/4 main panel + 1/4 sidebar (stacked on mobile). */}
+        <div className="grid gap-4 lg:grid-cols-4 lg:items-start">
+          <div className="min-w-0 space-y-3 lg:col-span-3">
+            {/* Default Graph view card — fixed panel height on lg (matches
+                ProjectionPanel's lg:h-[640px] view box) */}
+            <div className="flex flex-col rounded-xl border bg-card text-card-foreground shadow-sm lg:h-[640px]">
+              <div className="flex flex-col gap-3 p-6 pb-3">
+                {/* KPIs (Today / Next / End) + horizon presets share the top row */}
+                <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+                  <div className="flex items-end gap-6">
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-3 w-16" />
+                      <Skeleton className="h-7 w-28" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-3 w-14" />
+                      <Skeleton className="h-5 w-20" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-3 w-14" />
+                      <Skeleton className="h-5 w-20" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Skeleton className="h-8 w-14" />
+                    <Skeleton className="h-8 w-12" />
+                    <Skeleton className="h-8 w-12" />
+                    <Skeleton className="h-8 w-14" />
+                  </div>
                 </div>
-              ))}
+              </div>
+              <div className="p-6 pt-0 lg:min-h-0 lg:flex-1">
+                {/* Chart canvas — fills the fixed-height card on lg */}
+                <Skeleton className="h-72 w-full sm:h-80 lg:h-full" />
+              </div>
+            </div>
+
+            {/* View-switcher (Graph / Table / Calendar) pinned at the bottom */}
+            <div className="flex justify-center pt-1">
+              <div className="bg-muted/30 inline-flex items-center gap-1 rounded-md border p-1">
+                <Skeleton className="h-7 w-20" />
+                <Skeleton className="h-7 w-20" />
+                <Skeleton className="h-7 w-24" />
+              </div>
+            </div>
+          </div>
+
+          {/* Sidebar: condensed figures card (gauge + rows, stretches) + debt
+              strategy card — column min-height matches the main panel box */}
+          <div className="flex min-w-0 flex-col gap-3 lg:min-h-[640px] lg:gap-4">
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm lg:flex-1">
+              <div className="space-y-4 p-6">
+                <div className="flex flex-col items-center gap-1.5">
+                  <Skeleton className="h-[120px] w-[120px] rounded-full" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+                <div>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between gap-3 border-t py-2.5"
+                    >
+                      <Skeleton className="h-3 w-20" />
+                      <Skeleton className="h-4 w-16" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+              <div className="space-y-3 p-6">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-9 w-full" />
+              </div>
             </div>
           </div>
         </div>
       </div>
     </section>
-  );
-}
-
-/**
- * Mirrors the compact `SummaryCard` (size="sm") used in the Overview rail: an
- * uppercase label, a hero number, and a sublabel — no chevron (the breakdown
- * now opens in a sheet). On mobile the wrapper is ~44% wide and non-shrinking
- * so the cards line up with the real horizontal rail; from `sm` up it fills
- * its grid cell.
- */
-function SummaryCardSkeleton() {
-  return (
-    <div className="w-[44%] shrink-0 sm:w-auto">
-      <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-        <div className="px-4 pt-4 pb-1">
-          <Skeleton className="h-3 w-24" />
-        </div>
-        <div className="space-y-1 px-4 pb-4">
-          <Skeleton className="h-6 w-28" />
-          <Skeleton className="h-3 w-32 max-w-full" />
-        </div>
-      </div>
-    </div>
   );
 }

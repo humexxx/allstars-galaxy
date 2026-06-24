@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { PlanEditor } from "@/components/finance/plan-editor";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import {
@@ -56,10 +53,24 @@ export default async function PlanDetailPage({ params }: PageProps) {
       // Real recorded history for the chart's past (today → backwards). 36
       // months covers the largest horizon's ~25% past budget; empty for fresh
       // plans, which fall back to the projected past.
-      getRecentMonthlySnapshots(plan.id, ctx.effectiveUserId, 36),
+      getRecentMonthlySnapshots(
+        plan.id,
+        ctx.effectiveUserId,
+        36,
+        new Date(),
+        plan.confirmationDayOfMonth
+      ),
     ]);
 
   const projection = await projectPlanWithPortfolio(baseline, ctx.effectiveUserId);
+  // Raw (un-calibrated) projection — spans back to the plan's start. The chart
+  // uses it to re-simulate the past when there are no real snapshots yet, so
+  // confirming the current period (which calibrates `projection` to start at
+  // today) doesn't blank the chart's history. Same object when no confirmation.
+  const pastProjection =
+    baseline === plan
+      ? projection
+      : await projectPlanWithPortfolio(plan, ctx.effectiveUserId);
   // Strategy comparison only meaningful when there's something to compare.
   const comparison =
     baseline.debts.length > 0
@@ -74,17 +85,11 @@ export default async function PlanDetailPage({ params }: PageProps) {
 
   return (
     <section className="space-y-4">
-      <div>
-        <Button variant="ghost" size="sm" asChild className="-ml-2">
-          <Link href="/portal/plans">
-            <ArrowLeft className="mr-1 h-4 w-4" /> Back to plans
-          </Link>
-        </Button>
-      </div>
       <PlanEditor
         plan={plan}
         baseline={baseline}
         projection={projection}
+        pastProjection={pastProjection}
         history={history}
         comparison={comparison}
         investmentMethods={investmentMethods}
@@ -92,6 +97,7 @@ export default async function PlanDetailPage({ params }: PageProps) {
         description={
           plan.description ?? "Add income, expenses and debts to refine the projection."
         }
+        backHref="/portal/plans"
       />
     </section>
   );

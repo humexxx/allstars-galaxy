@@ -5,10 +5,15 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/portal/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PlansList } from "@/components/finance/plans-list";
+import { PlansList, type PlanSummary } from "@/components/finance/plans-list";
+import { PlansWorkspace } from "@/components/finance/plans-workspace";
 
 import { requireEffectiveContext } from "@/lib/services/impersonation";
-import { listUserPlans } from "@/lib/services/finance-plan-service";
+import {
+  getPlanWithLines,
+  listUserPlans,
+  projectPlanWithPortfolio,
+} from "@/lib/services/finance-plan-service";
 
 export const metadata: Metadata = {
   title: "Plans | Allstars Galaxy",
@@ -21,25 +26,40 @@ export default async function FinancePlansPage() {
   const ctx = await requireEffectiveContext();
   const plans = await listUserPlans(ctx.effectiveUserId);
 
+  // Project every plan so each card can surface its outcome (debt-free date +
+  // projected net worth) and the plans can be stacked in one comparison chart.
+  // Personal-finance plans are few, so the per-plan projection cost is fine.
+  const projections = await Promise.all(
+    plans.map(async (p) => {
+      const full = await getPlanWithLines(p.id, ctx.effectiveUserId);
+      return projectPlanWithPortfolio(full!, ctx.effectiveUserId);
+    })
+  );
+
+  const summaries: Record<string, PlanSummary> = Object.fromEntries(
+    projections.map((proj) => [
+      proj.plan.id,
+      {
+        monthsToDebtFree: proj.monthsToDebtFree,
+        endingNetWorth: proj.endingNetWorth,
+        endingDebt: proj.endingDebt,
+        endDate: proj.months.at(-1)?.date ?? null,
+      },
+    ])
+  );
+
   return (
     <section className="space-y-6">
       <PageHeader
         title="Finance Plans"
         description="Build scenarios for your income, expenses, debts and projected net worth."
         actions={
-          <div className="flex items-center gap-2">
-            {plans.length >= 2 && (
-              <Button variant="outline" asChild>
-                <Link href="/portal/plans/compare">Compare plans</Link>
-              </Button>
-            )}
-            <Button asChild>
-              <Link href="/portal/plans/new">
-                <Plus className="mr-1 h-4 w-4" />
-                New plan
-              </Link>
-            </Button>
-          </div>
+          <Button asChild>
+            <Link href="/portal/plans/new">
+              <Plus className="mr-1 h-4 w-4" />
+              New plan
+            </Link>
+          </Button>
         }
       />
 
@@ -57,8 +77,14 @@ export default async function FinancePlansPage() {
             </Button>
           }
         />
+      ) : plans.length === 1 ? (
+        <PlansList plans={plans} summaries={summaries} />
       ) : (
-        <PlansList plans={plans} />
+        <PlansWorkspace
+          plans={plans}
+          summaries={summaries}
+          projections={projections}
+        />
       )}
     </section>
   );

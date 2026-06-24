@@ -1,5 +1,7 @@
 import type { Projection } from "@/types/finance";
 
+import { periodIndexForDate } from "./period";
+
 /** One real recorded monthly snapshot point (from `getRecentMonthlySnapshots`),
  *  used to draw the chart's past from actuals rather than a re-simulation. */
 export type PlanHistoryPoint = {
@@ -10,24 +12,32 @@ export type PlanHistoryPoint = {
   netWorth: number;
 };
 
-/** One net-worth point on the chart timeline. */
-export type ChartPoint = { date: Date; netWorth: number };
-
-const monthKey = (d: Date): number => d.getUTCFullYear() * 12 + d.getUTCMonth();
+/** One net-worth point on the chart timeline. `totalDebt` / `investments` ride
+ *  along for the hover tooltip only — they are NOT plotted as lines. */
+export type ChartPoint = {
+  date: Date;
+  netWorth: number;
+  totalDebt?: number;
+  investments?: number;
+};
 
 /**
- * Pure-projection window: ~25% past + ~75% future, anchored on today's month.
+ * Pure-projection window: ~25% past + ~75% future, anchored on today's period.
  * Used for the forecast KPIs and the monthly-breakdown table, and as the chart
  * fallback when there are no real snapshots yet.
  *
- * Projection dates are generated at UTC midnight, so the today-bucket compare
- * is done in UTC on both sides — a local year/month would shift a month in
- * negative-offset timezones and mis-place "today".
+ * "today" is resolved against the plan's accounting periods via
+ * `periodIndexForDate` (not a raw `year*12+month` bucket), so a non-1
+ * `anchorDay` lands on the period that actually contains today instead of
+ * mis-counting by a period for the part of the month before the anchor. Pass
+ * the plan's `confirmationDayOfMonth` as `anchorDay`; the default of 1 keeps
+ * calendar-month behaviour for callers that don't care.
  */
 export function computeProjectionWindow(
   projection: Projection,
   totalMonths: number,
-  today: Date = new Date()
+  today: Date = new Date(),
+  anchorDay: number = 1
 ): {
   startIndex: number;
   count: number;
@@ -35,9 +45,14 @@ export function computeProjectionWindow(
   todayIndex: number;
 } {
   const targetPast = Math.max(1, Math.round(totalMonths * 0.25));
-  const todayKey = monthKey(today);
-  let projIdx = projection.months.findIndex((m) => monthKey(m.date) === todayKey);
-  if (projIdx === -1) projIdx = 0;
+  const base = projection.months[0]?.date;
+  let projIdx = base ? periodIndexForDate(base, anchorDay, today) : 0;
+  // Clamp into range: today before the projection → first period; past the
+  // end → last period (so the window never points outside the data).
+  if (projIdx < 0) projIdx = 0;
+  else if (projIdx > projection.months.length - 1) {
+    projIdx = Math.max(0, projection.months.length - 1);
+  }
   const pastCount = Math.min(targetPast, projIdx);
   const startIndex = Math.max(0, projIdx - pastCount);
   const count = Math.min(totalMonths, projection.months.length - startIndex);
@@ -45,50 +60,113 @@ export function computeProjectionWindow(
 }
 
 /**
- * Build the chart's net-worth series: months BEFORE the current calendar month
- * come from REAL recorded snapshots (today → backwards), the current month and
- * forward from the (confirmation-calibrated) projection. The two halves line up
- * because both are bucketed by calendar month (`year*12 + month`), so a
- * period-anchored projection date (e.g. day-15) and a snapshot dated day-30 of
- * the same month share one x-slot. `pastCount` is the solid/dashed boundary.
+ * Build the chart's net-worth series: periods that have CLOSED before today's
+ * period come from REAL recorded snapshots (solid line); today's period and
+ * forward come from the (confirmation-calibrated) projection (dashed).
+ * `pastCount` is the solid/dashed boundary.
  *
- * Falls back to a pure-projection window (the historical re-simulated past)
- * when there are no usable snapshots yet — fresh plans before the cron has run
- * a few times — so the chart is never empty.
+ * Both sides are bucketed by accounting PERIOD (`periodIndexForDate`), not raw
+ * calendar month, so a non-1 `anchorDay` keeps the boundary on the period that
+ * truly contains today — and a snapshot dated day-30 still aligns with the
+ * day-15 projection period it belongs to. Pass the plan's
+ * `confirmationDayOfMonth` as `anchorDay`; default 1 = calendar months.
+ *
+ * Falls back to a pure-projection window (the re-simulated past) when there are
+ * no usable snapshots yet — fresh plans before the cron has run a few times —
+ * so the chart is never empty.
+ *
+ * `pastProjection` (optional) is the RAW, un-calibrated projection. The main
+ * `projection` is calibrated to the latest confirmation, so after the user
+ * confirms the CURRENT period it begins at today — leaving no past months to
+ * re-simulate and erasing the chart's history. When there are no real snapshots
+ * for the past, we synthesize the past line from `pastProjection` instead (it
+ * still spans back to the plan's start), so confirming today never blanks the
+ * chart. Real snapshots always take precedence when present.
  */
 export function buildChartSeries(
   history: PlanHistoryPoint[],
   projection: Projection,
   horizonMonths: number,
-  today: Date = new Date()
+  today: Date = new Date(),
+  anchorDay: number = 1,
+  pastProjection?: Projection
 ): { points: ChartPoint[]; pastCount: number } {
-  const currentKey = monthKey(today);
   const pastBudget = Math.max(1, Math.round(horizonMonths * 0.25));
+  const base = projection.months[0]?.date;
 
-  // Real past: snapshots strictly before this month, the latest `pastBudget`.
-  const past = history
-    .filter((h) => monthKey(h.date) < currentKey)
-    .slice(-pastBudget)
-    .map((h) => ({ date: h.date, netWorth: h.netWorth }));
+  // Period index of today relative to the projection's first period. Periods
+  // before this one have closed (real/past); this one and later are forecast.
+  const todayIdx = base ? periodIndexForDate(base, anchorDay, today) : 0;
 
-  // Future: the projection from the current calendar month forward.
-  const futureStart = projection.months.findIndex(
-    (m) => monthKey(m.date) >= currentKey
-  );
+  // Real past: snapshots whose period closed before today's period, latest
+  // `pastBudget` of them.
+  const past = base
+    ? history
+        .filter((h) => periodIndexForDate(base, anchorDay, h.date) < todayIdx)
+        .slice(-pastBudget)
+        .map((h) => ({
+          date: h.date,
+          netWorth: h.netWorth,
+          totalDebt: h.totalDebt,
+          investments: h.investments,
+        }))
+    : [];
 
-  if (past.length === 0 || futureStart === -1) {
-    // No real history (or today sits outside the projection) → re-simulated
-    // window, identical to the pre-snapshot behaviour.
-    const w = computeProjectionWindow(projection, horizonMonths, today);
+  // Re-simulated past from the RAW projection — used only when there are no real
+  // snapshots for the closed periods (e.g. right after confirming the current
+  // period, which calibrates `projection` to start at today). Bucketed by the
+  // same `base`/`anchorDay`, so periods strictly before today.
+  const simPast =
+    past.length === 0 && pastProjection && base
+      ? pastProjection.months
+          .filter((m) => periodIndexForDate(base, anchorDay, m.date) < todayIdx)
+          .slice(-pastBudget)
+          .map((m) => ({
+            date: m.date,
+            netWorth: m.netWorth,
+            totalDebt: m.totalDebt,
+            investments: m.investments,
+          }))
+      : [];
+
+  const effectivePast = past.length > 0 ? past : simPast;
+
+  // Future: the projection from today's period forward.
+  const futureStart = base
+    ? projection.months.findIndex(
+        (m) => periodIndexForDate(base, anchorDay, m.date) >= todayIdx
+      )
+    : -1;
+
+  if (effectivePast.length === 0 || futureStart === -1) {
+    // No real history nor a re-simulable past (or today sits outside the
+    // projection) → pure-projection window, identical to the original behaviour.
+    const w = computeProjectionWindow(projection, horizonMonths, today, anchorDay);
     const slice = projection.months
       .slice(w.startIndex, w.startIndex + w.count)
-      .map((m) => ({ date: m.date, netWorth: m.netWorth }));
+      .map((m) => ({
+        date: m.date,
+        netWorth: m.netWorth,
+        totalDebt: m.totalDebt,
+        investments: m.investments,
+      }));
     return { points: slice, pastCount: w.pastCount };
   }
 
   const future = projection.months
-    .slice(futureStart, futureStart + Math.max(1, horizonMonths - past.length))
-    .map((m) => ({ date: m.date, netWorth: m.netWorth }));
+    .slice(
+      futureStart,
+      futureStart + Math.max(1, horizonMonths - effectivePast.length)
+    )
+    .map((m) => ({
+      date: m.date,
+      netWorth: m.netWorth,
+      totalDebt: m.totalDebt,
+      investments: m.investments,
+    }));
 
-  return { points: [...past, ...future], pastCount: past.length };
+  return {
+    points: [...effectivePast, ...future],
+    pastCount: effectivePast.length,
+  };
 }

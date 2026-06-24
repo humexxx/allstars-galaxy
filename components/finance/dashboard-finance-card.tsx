@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { ArrowRight, PlusCircle, TrendingUp, Wallet } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Heading, Mono, Text } from "@/components/ui/typography";
+import { cn } from "@/lib/utils";
 
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
 import { formatCurrency } from "@/lib/utils/format";
@@ -15,6 +17,8 @@ import {
   listUserPlans,
   projectPlan,
 } from "@/lib/services/finance-plan-service";
+import { buildCalibratedPlan } from "@/lib/services/finance-snapshot-service";
+import { periodIndexForDate } from "@/lib/finance/period";
 
 // UTC-anchored — projection.months[i].date is generated at UTC midnight; local
 // formatting would shift a month for users in negative-offset timezones.
@@ -34,15 +38,15 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     return (
       <Card className="col-span-full">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <Heading level="h5" as="h2" className="flex items-center gap-2">
             <Wallet className="h-5 w-5" />
             Finance plan
-          </CardTitle>
+          </Heading>
         </CardHeader>
         <CardContent className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">
+          <Text variant="muted">
             Build a plan to project your savings, debts and net worth month by month.
-          </p>
+          </Text>
           <Button asChild>
             <Link href="/portal/plans/new">
               <PlusCircle className="mr-1 h-4 w-4" /> Create plan
@@ -53,10 +57,6 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     );
   }
 
-  // Follow the user's main plan. Fallback to the most recently updated when
-  // none is marked main (shouldn't happen after the data migration, but
-  // protects new users between the create-first-plan moment and the auto
-  // is_main flip if anything got out of sync).
   const featured =
     (await getMainPlan(userId)) ??
     plans.slice().sort(
@@ -65,45 +65,94 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   const full = await getPlanWithLines(featured.id, userId);
   if (!full) return null;
 
-  const [portfolioValue, autoInvestRate] = await Promise.all([
-    full.includePortfolio ? getPortfolioValueForUser(userId) : Promise.resolve(0),
-    getAutoInvestRate(full),
-  ]);
-  const projection = projectPlan(full, full.incomes, full.expenses, full.debts, {
-    portfolioValue,
-    autoInvestRate,
-    overrides: full.overrides,
-  });
+  // Calibrate from the latest confirmation so the card reflects the user's real
+  // numbers (the [id] page does the same). Raw plan would ignore confirmations.
+  const baseline = await buildCalibratedPlan(full);
 
-  // Keep the dashboard mini focused on the next 12 months so the line is readable.
-  const points = projection.months.slice(0, 12).map((m) => ({
+  const [portfolioValue, autoInvestRate] = await Promise.all([
+    baseline.includePortfolio
+      ? getPortfolioValueForUser(userId)
+      : Promise.resolve(0),
+    getAutoInvestRate(baseline),
+  ]);
+  const projection = projectPlan(
+    baseline,
+    baseline.incomes,
+    baseline.expenses,
+    baseline.debts,
+    { portfolioValue, autoInvestRate, overrides: baseline.overrides }
+  );
+
+  // Locate the accounting period that contains today (not months[0], the plan
+  // START period) so the "now" figures and the 12-period preview track reality.
+  const lastIdx = Math.max(0, projection.months.length - 1);
+  const todayIdx = Math.min(
+    Math.max(
+      0,
+      periodIndexForDate(baseline.startMonth, baseline.confirmationDayOfMonth, new Date())
+    ),
+    lastIdx
+  );
+  const todayMonth = projection.months[todayIdx];
+
+  const points = projection.months.slice(todayIdx, todayIdx + 12).map((m) => ({
     month: MONTH_FMT.format(m.date),
     netWorth: Math.round(m.netWorth),
   }));
 
-  const firstMonth = projection.months[0];
-  const currentNetWorth = firstMonth?.netWorth ?? 0;
-  const endNetWorth = projection.months.slice(0, 12).at(-1)?.netWorth ?? currentNetWorth;
+  const currentNetWorth = todayMonth?.netWorth ?? 0;
+  const endNetWorth =
+    projection.months[Math.min(todayIdx + 12, lastIdx)]?.netWorth ??
+    currentNetWorth;
   const delta = endNetWorth - currentNetWorth;
+  const totalDebt = todayMonth?.totalDebt ?? 0;
+
+  const kpis: Array<{ label: string; value: string; tone?: "neutral" | "positive" | "negative" | "primary" }> = [
+    { label: "Savings now", value: formatCurrency(todayMonth?.savings ?? 0) },
+    { label: "Investments", value: formatCurrency(todayMonth?.investments ?? 0), tone: "primary" },
+    { label: "Debt now", value: formatCurrency(totalDebt) },
+    {
+      label: "Debt-free in",
+      value:
+        projection.monthsToDebtFree !== null
+          ? `${projection.monthsToDebtFree} mo`
+          : full.debts.length === 0
+          ? "—"
+          : ">range",
+    },
+    {
+      label: "Net worth",
+      value: formatCurrency(currentNetWorth),
+      tone: currentNetWorth >= 0 ? "positive" : "negative",
+    },
+  ];
 
   return (
     <Card className="col-span-full">
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Wallet className="h-5 w-5" />
-              {featured.name}
-            </CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
+          <div className="min-w-0 flex-1 space-y-1">
+            <Heading level="h5" as="h2" className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 shrink-0" />
+              <span className="truncate">{featured.name}</span>
+            </Heading>
+            <Text variant="muted" className="font-mono tabular-nums">
               12-month projection · updated {featured.updatedAt.toLocaleDateString()}
-            </p>
+            </Text>
           </div>
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="gap-1">
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className={cn(
+                "gap-1 font-mono tabular-nums",
+                delta >= 0
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  : "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+              )}
+            >
               <TrendingUp className="h-3 w-3" />
               {delta >= 0 ? "+" : ""}
-              {formatCurrency(delta)} in 12 mo
+              {formatCurrency(delta)} · 12 mo
             </Badge>
             <Button variant="outline" size="sm" asChild>
               <Link href={`/portal/plans/${featured.id}`}>
@@ -114,57 +163,10 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-4 sm:grid-cols-5">
-          <div className="rounded-md border p-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Savings now
-            </p>
-            <p className="mt-1 text-xl font-semibold">
-              {formatCurrency(parseFloat(full.initialSavings))}
-            </p>
-          </div>
-          <div className="rounded-md border p-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Investments
-            </p>
-            <p className="mt-1 text-xl font-semibold text-blue-600">
-              {formatCurrency(parseFloat(full.initialInvestments))}
-            </p>
-          </div>
-          <div className="rounded-md border p-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Debt now
-            </p>
-            <p className="mt-1 text-xl font-semibold">
-              {formatCurrency(
-                full.debts.reduce((s, d) => s + parseFloat(d.initialBalance), 0)
-              )}
-            </p>
-          </div>
-          <div className="rounded-md border p-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Debt-free in
-            </p>
-            <p className="mt-1 text-xl font-semibold">
-              {projection.monthsToDebtFree !== null
-                ? `${projection.monthsToDebtFree} mo`
-                : full.debts.length === 0
-                ? "—"
-                : ">range"}
-            </p>
-          </div>
-          <div className="rounded-md border p-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Net worth (now)
-            </p>
-            <p
-              className={`mt-1 text-xl font-semibold ${
-                currentNetWorth >= 0 ? "text-green-600" : "text-red-600"
-              }`}
-            >
-              {formatCurrency(currentNetWorth)}
-            </p>
-          </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          {kpis.map((k) => (
+            <KpiTile key={k.label} {...k} />
+          ))}
         </div>
 
         <div className="mt-4">
@@ -172,5 +174,33 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function KpiTile({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "positive" | "negative" | "primary";
+}) {
+  return (
+    <div className="rounded-md border bg-card/50 p-3">
+      <Text variant="small" className="uppercase tracking-wide">
+        {label}
+      </Text>
+      <Mono
+        className={cn(
+          "mt-1 block text-lg font-semibold tabular-nums sm:text-xl",
+          tone === "positive" && "text-emerald-600 dark:text-emerald-400",
+          tone === "negative" && "text-rose-600 dark:text-rose-400",
+          tone === "primary" && "text-primary"
+        )}
+      >
+        {value}
+      </Mono>
+    </div>
   );
 }

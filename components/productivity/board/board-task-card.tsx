@@ -72,7 +72,7 @@ export function BoardTaskCard({ task, isOverlay, onDelete }: BoardTaskCardProps)
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-1 items-start gap-1.5">
           <GripVertical
-            className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/40 opacity-0 transition group-hover:opacity-100"
+            className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/40 opacity-60 transition sm:opacity-0 sm:group-hover:opacity-100"
             aria-hidden="true"
           />
           <Heading level="h6" as="h4">{task.title}</Heading>
@@ -83,7 +83,7 @@ export function BoardTaskCard({ task, isOverlay, onDelete }: BoardTaskCardProps)
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-6 shrink-0 text-muted-foreground/60 opacity-0 transition group-hover:opacity-100 hover:text-foreground"
+                className="size-9 shrink-0 text-muted-foreground/60 opacity-60 transition hover:text-foreground sm:size-6 sm:opacity-0 sm:group-hover:opacity-100"
               >
                 <MoreHorizontal className="size-3.5" />
                 <span className="sr-only">Task options</span>

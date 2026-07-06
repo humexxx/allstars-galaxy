@@ -8,7 +8,7 @@ import { LoginForm } from "@/components/login-form"
 import { FormSkeleton } from "@/components/skeletons/form-skeleton"
 
 export const metadata: Metadata = {
-  title: "Log in | Allstars Galaxy",
+  title: "Log in",
   description: "Sign in to your Allstars Galaxy workspace.",
 }
 

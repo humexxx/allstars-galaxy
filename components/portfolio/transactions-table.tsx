@@ -68,9 +68,9 @@ export function TransactionsTable({ transactions }: TransactionsTableProps) {
                         {transaction.investmentMethod.name.substring(0, 2).toUpperCase()}
                       </span>
                     </div>
-                    <div className="flex flex-col">
-                      <Text as="span" className="font-medium">{transaction.investmentMethod.name}</Text>
-                      <Text variant="small" as="span">
+                    <div className="flex min-w-0 flex-col">
+                      <Text as="span" className="max-w-40 truncate font-medium">{transaction.investmentMethod.name}</Text>
+                      <Text variant="small" as="span" className="max-w-40 truncate">
                         {transaction.investmentMethod.author}
                       </Text>
                     </div>

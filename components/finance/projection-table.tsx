@@ -177,12 +177,12 @@ export function ProjectionTable({ projection, monthsToShow }: ProjectionTablePro
       <div className="rounded-md border">
         <div
           ref={scrollContainerRef}
-          className="max-h-[480px] overflow-auto scroll-smooth"
+          className="max-h-120 overflow-auto scroll-smooth"
         >
           <Table>
             <TableHeader className="sticky top-0 bg-background">
               <TableRow>
-                <TableHead className="w-[80px]">Month</TableHead>
+                <TableHead className="w-20">Month</TableHead>
                 <TableHead className="text-right">Income</TableHead>
                 <TableHead className="text-right">Expenses</TableHead>
                 <TableHead className="text-right">Debt pmt</TableHead>

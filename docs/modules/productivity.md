@@ -1,7 +1,7 @@
 # Productivity
 
 > **Status:** Active
-> **Last reviewed:** 2026-05-24
+> **Last reviewed:** 2026-07-02
 
 ## Overview
 Two surfaces: a personal kanban *board* for day-to-day tasks, and *road paths*
@@ -43,4 +43,4 @@ auto-generated tasks.
 - Conventional Commits scope: *(add `productivity` to [`commitlint.config.mjs`](../../commitlint.config.mjs) before first commit here)*
 - Auto-task generation runs on the daily cron — see `task-automation.ts`.
 - Board UI keeps optimistic state locally with explicit rollback on error (not via React 19's `useOptimistic`) because the DnD reorder queue depends on a stable local state model.
-- `app/portal/productivity/loading.tsx` provides a column-grid skeleton for the board.
+- `app/portal/productivity/loading.tsx` provides a column-grid skeleton for the board; `app/portal/productivity/error.tsx` is the module error boundary.

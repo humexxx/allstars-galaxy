@@ -1,29 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { saveConfirmation } from "@/lib/services/finance-confirmation-service";
-
-const confirmationSchema = z.object({
-  planId: z.string().uuid(),
-  confirmedSavings: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid amount"),
-  confirmedInvestments: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid amount"),
-  notes: z.string().max(1000).optional().nullable(),
-  debtBalances: z.array(
-    z.object({
-      debtId: z.string().uuid(),
-      confirmedBalance: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid balance"),
-    }),
-  ),
-});
-
-export type ConfirmActualsInput = z.infer<typeof confirmationSchema>;
+import { confirmationSchema, type ConfirmationData } from "@/schemas/finance-confirmations";
 
 export async function saveConfirmationAction(
-  input: ConfirmActualsInput,
+  input: ConfirmationData,
 ): Promise<ActionResult> {
   return safe("finance-confirmations", async () => {
     const ctx = await requireEffectiveContext();

@@ -12,7 +12,11 @@ import { NFL_DATA } from "@/lib/data/sports/nfl";
 import { PADEL_DATA } from "@/lib/data/sports/padel";
 import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
-import { getFootballData } from "@/lib/services/football-data-service";
+import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
+import {
+  getFootballData,
+  getWorldCupData,
+} from "@/lib/services/football-data-service";
 import { getF1Data } from "@/lib/services/jolpica-f1-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
@@ -83,13 +87,14 @@ export async function getDashboardSportsSummary(
   userId: string
 ): Promise<DashboardSportHighlight[]> {
   const favIds = await listUserFavoriteSportIds(userId);
-  const [lolData, f1Data, footballLeagues, padelData, tennisData] =
+  const [lolData, f1Data, footballLeagues, worldCupData, padelData, tennisData] =
     await Promise.all([
       favIds.includes("lol") ? getLolData() : Promise.resolve(null),
       favIds.includes("f1") ? getF1Data() : Promise.resolve(null),
       favIds.includes("football")
         ? getFootballData()
         : Promise.resolve(null),
+      favIds.includes("worldcup") ? getWorldCupData() : Promise.resolve(null),
       favIds.includes("padel") ? getPadelData() : Promise.resolve(null),
       favIds.includes("tennis") ? getTennisData() : Promise.resolve(null),
     ]);
@@ -99,6 +104,7 @@ export async function getDashboardSportsSummary(
         lolData,
         f1Data,
         footballLeagues,
+        worldCupData,
         padelData,
         tennisData,
       }),
@@ -110,6 +116,7 @@ type HighlightContext = {
   lolData: LolData | null;
   f1Data: F1Data | null;
   footballLeagues: FootballLeagueData[] | null;
+  worldCupData: FootballLeagueData | null;
   padelData: PadelData | null;
   tennisData: TennisData | null;
 };
@@ -125,6 +132,8 @@ function buildHighlight(
   switch (sportId) {
     case "football":
       return footballHighlight(base, ctx.footballLeagues);
+    case "worldcup":
+      return worldCupHighlight(base, ctx.worldCupData ?? WORLD_CUP_DATA);
     case "nba":
       return nbaHighlight(base);
     case "f1":
@@ -163,6 +172,33 @@ function footballHighlight(
     secondary: leaderTeam
       ? { label: "League leader", value: `${leaderTeam.shortName} · ${leader.points} pts` }
       : undefined,
+  };
+}
+
+function worldCupHighlight(
+  base: HighlightBase,
+  data: FootballLeagueData,
+): DashboardSportHighlight {
+  const teamsMap = new Map<string, Team>(data.teams.map((t) => [t.id, t]));
+  const featured = pickFeaturedMatch(data.matches);
+  const lastResult = data.matches
+    .filter((m) => m.status === "ft" || m.status === "aet" || m.status === "pen")
+    .sort((a, b) => new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime())[0];
+  const secondary =
+    lastResult && lastResult.id !== featured?.id
+      ? { label: "Latest result", value: matchHeadline(lastResult, teamsMap) }
+      : undefined;
+
+  return {
+    ...base,
+    headline: featured
+      ? matchHeadline(featured, teamsMap)
+      : data.league.name,
+    context: featured?.stageLabel
+      ? `${featured.stageLabel} · ${data.league.name}`
+      : data.league.name,
+    tone: featured ? matchTone(featured) : "upcoming",
+    secondary,
   };
 }
 

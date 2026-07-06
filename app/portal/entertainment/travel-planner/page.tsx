@@ -11,7 +11,7 @@ import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { listUserTrips } from "@/lib/services/travel-service";
 
 export const metadata: Metadata = {
-  title: "Travel Planner | Allstars Galaxy",
+  title: "Travel Planner",
   description: "Plan, organise and share your trips",
 };
 

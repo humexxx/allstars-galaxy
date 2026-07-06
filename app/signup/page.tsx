@@ -8,7 +8,7 @@ import { SignupForm } from "@/components/signup-form"
 import { FormSkeleton } from "@/components/skeletons/form-skeleton"
 
 export const metadata: Metadata = {
-  title: "Sign up | Allstars Galaxy",
+  title: "Sign up",
   description: "Create your Allstars Galaxy account.",
 }
 

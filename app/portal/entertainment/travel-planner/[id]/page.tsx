@@ -16,9 +16,9 @@ export async function generateMetadata({
   const { id } = await params;
   const ctx = await requireEffectiveContext();
   const trip = await getTripWithRelations(id, ctx.effectiveUserId);
-  if (!trip) return { title: "Trip | Allstars Galaxy" };
+  if (!trip) return { title: "Trip" };
   return {
-    title: `${trip.title} | Travel Planner`,
+    title: trip.title,
     description: trip.description ?? trip.destination ?? undefined,
   };
 }

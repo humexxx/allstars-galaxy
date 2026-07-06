@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, timestamp, pgSchema, real, pgEnum, numeric, index, boolean, integer, date, check, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, timestamp, pgSchema, real, pgEnum, numeric, index, boolean, integer, date, check, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
@@ -216,12 +216,20 @@ export const financePlans = pgTable(
     // confirmation host and the dashboard Finance card both follow the
     // main plan; non-main plans never auto-prompt for monthly confirmation.
     isMain: boolean("is_main").notNull().default(false),
+    // Scenario plans: when set, this plan is a derived what-if of another
+    // plan. Deleting the base detaches the scenario (SET NULL) instead of
+    // cascading — the scenario keeps working standalone.
+    basedOnPlanId: uuid("based_on_plan_id").references(
+      (): AnyPgColumn => financePlans.id,
+      { onDelete: "set null" }
+    ),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("finance_plans_user_id_idx").on(t.userId),
     index("finance_plans_auto_invest_method_id_idx").on(t.autoInvestMethodId),
+    index("finance_plans_based_on_plan_id_idx").on(t.basedOnPlanId),
     // Partial unique index: enforce at most one main plan per user. Postgres
     // partial indexes don't count rows where `is_main = false`, so the
     // constraint kicks in only on the rows we care about.
@@ -930,3 +938,19 @@ export const userSportsPreferences = pgTable(
     index("user_sports_preferences_user_id_idx").on(t.userId),
   ]
 );
+
+// Portal-wide user preferences — one row per user, created lazily on first
+// write. Absence of a row means "all defaults" (the service layer owns the
+// default values so no backfill migration is needed when adding a column).
+export const userPreferences = pgTable("user_preferences", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" })
+    .unique(),
+  // Decorative module mascot shown after page content (e.g. the miner on
+  // finance pages). Toggleable from /portal/settings.
+  showContextAvatar: boolean("show_context_avatar").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});

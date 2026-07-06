@@ -7,7 +7,7 @@ import { asc } from "drizzle-orm";
 import { InvestmentMethodsView } from "@/components/portfolio/investment-methods-view";
 
 export const metadata: Metadata = {
-  title: "Investment Methods | Allstars Galaxy",
+  title: "Investment Methods",
   description: "Explore available investment methods and strategies",
 };
 

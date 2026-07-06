@@ -5,7 +5,7 @@ import { getUserRoadPaths } from "@/lib/services/road-path-service";
 import { PageHeader } from "@/components/portal/page-header";
 
 export const metadata: Metadata = {
-  title: "Road Paths | Allstars Galaxy",
+  title: "Road Paths",
   description: "Track your long-term goals and progress",
 };
 

@@ -42,7 +42,7 @@ export function TransactionFilters() {
         isPending ? "opacity-90" : "opacity-100"
       }`}
     >
-      <div className="flex w-full flex-col gap-2 sm:w-[18rem]">
+      <div className="flex w-full flex-col gap-2 sm:w-72">
         <span className="text-sm font-medium">User ID</span>
         <Input
           placeholder="Filter by User ID..."
@@ -52,7 +52,7 @@ export function TransactionFilters() {
         />
       </div>
 
-      <div className="flex w-full flex-col gap-2 sm:w-[12.5rem]">
+      <div className="flex w-full flex-col gap-2 sm:w-50">
         <span className="text-sm font-medium">Status</span>
         <Select
           value={status}
@@ -71,7 +71,7 @@ export function TransactionFilters() {
         </Select>
       </div>
 
-      <div className="flex w-full flex-col gap-2 sm:w-[12.5rem]">
+      <div className="flex w-full flex-col gap-2 sm:w-50">
         <span className="text-sm font-medium">Type</span>
         <Select
           value={type}

@@ -120,11 +120,11 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead className="w-[140px]">Balance</TableHead>
-                <TableHead className="w-[130px]">Rate (mo.)</TableHead>
-                <TableHead className="w-[150px]">Payment</TableHead>
-                <TableHead className="w-[200px]">Type</TableHead>
-                <TableHead className="w-[50px]" />
+                <TableHead className="w-36">Balance</TableHead>
+                <TableHead className="w-32">Rate (mo.)</TableHead>
+                <TableHead className="w-38">Payment</TableHead>
+                <TableHead className="w-50">Type</TableHead>
+                <TableHead className="w-12" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -150,7 +150,7 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
             inputMode="decimal"
             value={draft.initialBalance}
             onChange={(e) => setDraft({ ...draft, initialBalance: e.target.value })}
-            className="max-w-[140px]"
+            className="max-w-36"
             aria-label="New debt balance"
           />
           <Input
@@ -158,7 +158,7 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
             inputMode="decimal"
             value={draft.monthlyInterestRate}
             onChange={(e) => setDraft({ ...draft, monthlyInterestRate: e.target.value })}
-            className="max-w-[130px]"
+            className="max-w-32"
             aria-label="New debt monthly rate"
           />
           <Select
@@ -167,7 +167,7 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
               setDraft({ ...draft, paymentType: v as DebtPaymentType })
             }
           >
-            <SelectTrigger className="max-w-[200px]">
+            <SelectTrigger className="max-w-50">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -184,7 +184,7 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
               inputMode="decimal"
               value={draft.minPaymentPercent}
               onChange={(e) => setDraft({ ...draft, minPaymentPercent: e.target.value })}
-              className="max-w-[160px]"
+              className="max-w-40"
               aria-label="Minimum payment percent"
             />
             <Input
@@ -192,7 +192,7 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
               inputMode="decimal"
               value={draft.minPaymentFloor}
               onChange={(e) => setDraft({ ...draft, minPaymentFloor: e.target.value })}
-              className="max-w-[160px]"
+              className="max-w-40"
               aria-label="Minimum payment floor"
             />
             <span className="text-xs text-muted-foreground">
@@ -206,7 +206,7 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
               inputMode="decimal"
               value={draft.monthlyPayment}
               onChange={(e) => setDraft({ ...draft, monthlyPayment: e.target.value })}
-              className="max-w-[200px]"
+              className="max-w-50"
               aria-label="New debt monthly payment"
             />
           </div>

@@ -11,7 +11,7 @@ import type {
 } from "@/types/sports";
 
 const JOLPICA_BASE_URL = "https://api.jolpi.ca/ergast/f1";
-const REVALIDATE_SECONDS = 1800;
+const REVALIDATE_SECONDS = 300;
 
 type JolpicaDriver = {
   driverId: string;

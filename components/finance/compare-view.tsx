@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Heading, Mono, Text } from "@/components/ui/typography";
+import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 
 import { formatCurrency } from "@/lib/utils/format";
 import type { Projection } from "@/types/finance";
@@ -59,9 +59,7 @@ export function CompareView({
     <div className="space-y-6">
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-            Plans in chart
-          </CardTitle>
+          <Eyebrow as="div">Plans in chart</Eyebrow>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3">

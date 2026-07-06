@@ -27,16 +27,18 @@ import type {
   UpdateTripItemInput,
 } from "@/schemas/travel";
 
+import { ensureOwnedRow } from "./ownership";
+
 // ---------- helpers ----------
 
 async function ensureTripOwnership(tripId: string, userId: string): Promise<void> {
-  const [row] = await db
-    .select({ userId: trips.userId })
-    .from(trips)
-    .where(eq(trips.id, tripId));
-  if (!row || row.userId !== userId) {
-    throw new Error("Trip not found");
-  }
+  await ensureOwnedRow({
+    table: trips,
+    idColumn: trips.id,
+    id: tripId,
+    userId,
+    entity: "Trip",
+  });
 }
 
 // URL-safe random token. 24 bytes → 32 chars base64url, ~192 bits of entropy.

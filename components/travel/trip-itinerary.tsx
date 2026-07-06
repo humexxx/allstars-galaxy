@@ -221,7 +221,7 @@ function ItemRow({
         <Button
           size="icon"
           variant="ghost"
-          className="h-7 w-7"
+          className="h-9 w-9 sm:h-7 sm:w-7"
           onClick={() => setEditing(true)}
           aria-label="Edit item"
         >
@@ -230,7 +230,7 @@ function ItemRow({
         <Button
           size="icon"
           variant="ghost"
-          className="h-7 w-7 text-destructive hover:text-destructive"
+          className="h-9 w-9 text-destructive hover:text-destructive sm:h-7 sm:w-7"
           disabled={isPending}
           onClick={handleDelete}
           aria-label="Delete item"

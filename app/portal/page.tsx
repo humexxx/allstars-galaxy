@@ -8,7 +8,7 @@ import { DashboardTravelCard } from "@/components/travel/dashboard-travel-card";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 
 export const metadata: Metadata = {
-  title: "Dashboard | Allstars Galaxy",
+  title: "Dashboard",
   description: "Your investment dashboard",
 };
 

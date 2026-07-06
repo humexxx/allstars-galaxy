@@ -12,7 +12,7 @@ import type {
 } from "@/types/sports";
 
 const BASE_URL = "https://padelapi.org/api";
-const REVALIDATE_SECONDS = 1800;
+const REVALIDATE_SECONDS = 300;
 const RANKING_LIMIT = 15;
 
 type PadelApiPlayer = {

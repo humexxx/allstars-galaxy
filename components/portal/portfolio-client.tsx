@@ -8,13 +8,9 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Heading, Mono, Text } from "@/components/ui/typography";
+import { Card, CardContent } from "@/components/ui/card";
+import { StatCard, statToneClass } from "@/components/ui/stat-card";
+import { Heading, Text } from "@/components/ui/typography";
 import {
   Tabs,
   TabsContent,
@@ -350,7 +346,7 @@ function PortfolioKpiGrid({
 }) {
   const profitTone = stats.allTimeProfit >= 0 ? "positive" : "negative";
   const profitSublabel = (
-    <span className={cn("font-medium", toneClass(profitTone))}>
+    <span className={cn("font-medium", statToneClass(profitTone))}>
       {stats.allTimeProfit >= 0 ? "up" : "down"}{" "}
       {formatPercent(Math.abs(stats.allTimeProfitPercentage))}
     </span>
@@ -358,7 +354,7 @@ function PortfolioKpiGrid({
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <PortfolioKpiCard
+      <StatCard
         label="Total value"
         value={hideValues ? "****" : formatCurrency(stats.totalValue)}
         tone="positive"
@@ -379,18 +375,18 @@ function PortfolioKpiGrid({
           </button>
         }
       />
-      <PortfolioKpiCard
+      <StatCard
         label="All-time profit"
         value={hideValues ? "****" : formatSignedCurrency(stats.allTimeProfit)}
         tone={profitTone}
         sublabel={profitSublabel}
       />
-      <PortfolioKpiCard
+      <StatCard
         label="Cost basis"
         value={hideValues ? "****" : formatCurrency(stats.costBasis)}
         sublabel="Total invested"
       />
-      <PortfolioKpiCard
+      <StatCard
         label="Active positions"
         value={String(stats.activeTransactions)}
         sublabel={`${stats.totalInvestmentMethods} method${
@@ -399,43 +395,4 @@ function PortfolioKpiGrid({
       />
     </div>
   );
-}
-
-function PortfolioKpiCard({
-  label,
-  value,
-  sublabel,
-  tone,
-  action,
-}: {
-  label: string;
-  value: string;
-  sublabel?: React.ReactNode;
-  tone?: "positive" | "negative";
-  action?: React.ReactNode;
-}) {
-  return (
-    <Card size="sm">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {label}
-        </CardTitle>
-        {action}
-      </CardHeader>
-      <CardContent className="space-y-1">
-        <Mono className={cn("block text-xl font-semibold tabular-nums sm:text-2xl", toneClass(tone))}>
-          {value}
-        </Mono>
-        {sublabel && (
-          <Text variant="small" as="div">{sublabel}</Text>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function toneClass(tone?: "positive" | "negative"): string {
-  if (tone === "positive") return "text-emerald-600 dark:text-emerald-400";
-  if (tone === "negative") return "text-rose-600 dark:text-rose-400";
-  return "";
 }

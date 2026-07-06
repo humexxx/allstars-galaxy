@@ -6,7 +6,7 @@ import type { Metadata } from "next"
 import { ForgotPasswordForm } from "@/components/forgot-password-form"
 
 export const metadata: Metadata = {
-  title: "Reset password | Allstars Galaxy",
+  title: "Reset password",
   description: "Request a password reset for your Allstars Galaxy account.",
 }
 

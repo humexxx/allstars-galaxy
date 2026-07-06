@@ -16,7 +16,7 @@ import {
 } from "@/lib/services/finance-plan-service";
 
 export const metadata: Metadata = {
-  title: "Plans | Allstars Galaxy",
+  title: "Plans",
   description: "Compare scenarios for your personal finances",
 };
 

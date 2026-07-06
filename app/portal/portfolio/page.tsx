@@ -14,7 +14,7 @@ import type { PortfolioTransaction } from "@/types/portfolio";
 import PortfolioClientPage from "@/components/portal/portfolio-client";
 
 export const metadata: Metadata = {
-  title: "Portfolio | Allstars Galaxy",
+  title: "Portfolio",
   description: "View and manage your investment portfolio",
 };
 

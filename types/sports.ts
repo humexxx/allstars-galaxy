@@ -6,6 +6,7 @@ import type { userSportsPreferences } from "@/db/schema";
 
 export type SportId =
   | "football"
+  | "worldcup"
   | "padel"
   | "f1"
   | "nba"
@@ -166,7 +167,8 @@ export type FootballLeagueId =
   | "uefa-champions-league"
   | "la-liga"
   | "premier-league"
-  | "serie-a";
+  | "serie-a"
+  | "world-cup";
 
 export type FootballLeague = {
   id: FootballLeagueId;
@@ -179,11 +181,19 @@ export type FootballLeague = {
   season: string;
 };
 
+/** One group table for tournaments played in groups (World Cup, Euro). */
+export type FootballGroupStandings = {
+  label: string;
+  standings: Standing[];
+};
+
 export type FootballLeagueData = {
   league: FootballLeague;
   teams: Team[];
   matches: Match[];
   standings: Standing[];
+  /** Group-stage tables for cup tournaments; empty for domestic leagues. */
+  groups?: FootballGroupStandings[];
   knockout?: BracketRound[];
 };
 

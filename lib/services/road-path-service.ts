@@ -18,6 +18,18 @@ import type {
   CreateRoadPathProgressData,
 } from "@/schemas/road-path";
 
+import { ensureOwnedRow } from "./ownership";
+
+async function ensureRoadPathOwnership(roadPathId: string, userId: string): Promise<void> {
+  await ensureOwnedRow({
+    table: roadPaths,
+    idColumn: roadPaths.id,
+    id: roadPathId,
+    userId,
+    entity: "Road path",
+  });
+}
+
 export async function getUserRoadPaths(userId: string): Promise<RoadPathWithDetails[]> {
   const paths = await db.query.roadPaths.findMany({
     where: eq(roadPaths.userId, userId),
@@ -121,13 +133,7 @@ export async function deleteRoadPath(roadPathId: string, userId: string): Promis
 }
 
 export async function getRoadPathMilestones(roadPathId: string, userId: string): Promise<RoadPathMilestone[]> {
-  const path = await db.query.roadPaths.findFirst({
-    where: and(eq(roadPaths.id, roadPathId), eq(roadPaths.userId, userId)),
-  });
-
-  if (!path) {
-    throw new Error("Road path not found");
-  }
+  await ensureRoadPathOwnership(roadPathId, userId);
 
   const milestones = await db.query.roadPathMilestones.findMany({
     where: eq(roadPathMilestones.roadPathId, roadPathId),
@@ -141,13 +147,7 @@ export async function createRoadPathMilestone(
   userId: string,
   data: CreateRoadPathMilestoneData
 ): Promise<RoadPathMilestone> {
-  const path = await db.query.roadPaths.findFirst({
-    where: and(eq(roadPaths.id, data.roadPathId), eq(roadPaths.userId, userId)),
-  });
-
-  if (!path) {
-    throw new Error("Road path not found");
-  }
+  await ensureRoadPathOwnership(data.roadPathId, userId);
 
   const [milestone] = await db
     .insert(roadPathMilestones)
@@ -215,13 +215,7 @@ export async function deleteRoadPathMilestone(milestoneId: string, userId: strin
 }
 
 export async function getNextMilestoneOrder(roadPathId: string, userId: string): Promise<number> {
-  const path = await db.query.roadPaths.findFirst({
-    where: and(eq(roadPaths.id, roadPathId), eq(roadPaths.userId, userId)),
-  });
-
-  if (!path) {
-    throw new Error("Road path not found");
-  }
+  await ensureRoadPathOwnership(roadPathId, userId);
 
   const milestones = await db.query.roadPathMilestones.findMany({
     where: eq(roadPathMilestones.roadPathId, roadPathId),
@@ -238,13 +232,7 @@ export async function getRoadPathProgress(
   startDate?: Date,
   endDate?: Date
 ): Promise<RoadPathProgress[]> {
-  const path = await db.query.roadPaths.findFirst({
-    where: and(eq(roadPaths.id, roadPathId), eq(roadPaths.userId, userId)),
-  });
-
-  if (!path) {
-    throw new Error("Road path not found");
-  }
+  await ensureRoadPathOwnership(roadPathId, userId);
 
   const conditions = [eq(roadPathProgress.roadPathId, roadPathId)];
 
@@ -267,33 +255,29 @@ export async function createRoadPathProgress(
   userId: string,
   data: CreateRoadPathProgressData
 ): Promise<RoadPathProgress> {
-  const path = await db.query.roadPaths.findFirst({
-    where: and(eq(roadPaths.id, data.roadPathId), eq(roadPaths.userId, userId)),
+  await ensureRoadPathOwnership(data.roadPathId, userId);
+
+  return await db.transaction(async (tx) => {
+    const [progress] = await tx
+      .insert(roadPathProgress)
+      .values({
+        roadPathId: data.roadPathId,
+        value: data.value.toString(),
+        notes: data.notes,
+        date: data.date ?? new Date(),
+      })
+      .returning();
+
+    await tx
+      .update(roadPaths)
+      .set({
+        currentValue: data.value.toString(),
+        updatedAt: new Date(),
+      })
+      .where(eq(roadPaths.id, data.roadPathId));
+
+    return progress;
   });
-
-  if (!path) {
-    throw new Error("Road path not found");
-  }
-
-  const [progress] = await db
-    .insert(roadPathProgress)
-    .values({
-      roadPathId: data.roadPathId,
-      value: data.value.toString(),
-      notes: data.notes,
-      date: data.date ?? new Date(),
-    })
-    .returning();
-
-  await db
-    .update(roadPaths)
-    .set({
-      currentValue: data.value.toString(),
-      updatedAt: new Date(),
-    })
-    .where(eq(roadPaths.id, data.roadPathId));
-
-  return progress;
 }
 
 export async function deleteRoadPathProgress(progressId: string, userId: string): Promise<void> {

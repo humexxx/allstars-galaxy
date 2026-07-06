@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
 import { requireAdmin } from "@/lib/services/auth-server";
 import { createApprovalSnapshot } from "@/lib/services/snapshot-service";
@@ -9,15 +8,14 @@ import {
   approveTransactionById,
   rejectTransactionById,
 } from "@/lib/services/transaction-service";
-
-const transactionIdSchema = z.string().uuid();
+import { adminTransactionIdSchema } from "@/schemas/admin";
 
 export async function approveTransaction(
   transactionId: string,
 ): Promise<{ success: true }> {
   const admin = await requireAdmin();
 
-  const parsed = transactionIdSchema.safeParse(transactionId);
+  const parsed = adminTransactionIdSchema.safeParse(transactionId);
   if (!parsed.success) throw new Error("Invalid ID");
 
   const { portfolioId, transactionDate } = await approveTransactionById(
@@ -40,7 +38,7 @@ export async function rejectTransaction(
 ): Promise<{ success: true }> {
   const admin = await requireAdmin();
 
-  const parsed = transactionIdSchema.safeParse(transactionId);
+  const parsed = adminTransactionIdSchema.safeParse(transactionId);
   if (!parsed.success) throw new Error("Invalid ID");
 
   await rejectTransactionById(admin.id, parsed.data);

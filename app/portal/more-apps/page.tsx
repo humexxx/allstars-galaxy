@@ -14,7 +14,7 @@ import {
 } from "./apps-data";
 
 export const metadata: Metadata = {
-  title: "More Apps | Allstars Galaxy",
+  title: "More Apps",
   description: "Quick links to my other apps and projects.",
 };
 

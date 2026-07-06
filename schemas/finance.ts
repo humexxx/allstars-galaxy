@@ -96,6 +96,9 @@ export const createFinancePlanSchema = z.object({
 
 export const updateFinancePlanSchema = createFinancePlanSchema.extend({
   id: z.string().uuid(),
+  // Scenario link. Only settable via update (scenarios are created by cloning);
+  // null detaches the scenario from its base plan.
+  basedOnPlanId: z.string().uuid().nullable().optional(),
 });
 
 // Income line shape + refinement. kind=one_time needs a date; kind=recurring

@@ -1,3 +1,4 @@
+import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
 import type {
   BracketRound,
   FootballLeagueData,
@@ -174,8 +175,11 @@ const LEAGUES: Record<FootballLeagueId, FootballLeagueData> = {
     matches: [],
     standings: [],
   },
+  "world-cup": WORLD_CUP_DATA,
 };
 
+// The World Cup is intentionally NOT part of the football hub's league list —
+// it has its own sport tab. It lives in LEAGUES only for mock fallback lookup.
 export const FOOTBALL_LEAGUE_IDS: FootballLeagueId[] = [
   "uefa-champions-league",
   "la-liga",

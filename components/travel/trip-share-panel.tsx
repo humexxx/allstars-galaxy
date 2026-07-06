@@ -218,7 +218,7 @@ function ShareRow({
           type="button"
           size="icon"
           variant="outline"
-          className="h-7 w-7"
+          className="h-9 w-9 sm:h-7 sm:w-7"
           onClick={onCopy}
           aria-label="Copy link"
         >

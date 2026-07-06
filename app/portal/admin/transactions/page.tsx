@@ -6,7 +6,7 @@ import { requireAdminOrRedirect } from "@/lib/services/auth-server";
 import { PageHeader } from "@/components/portal/page-header";
 
 export const metadata: Metadata = {
-  title: "Transaction Management | Allstars Galaxy",
+  title: "Transaction Management",
   description: "Approve or reject user transactions and manage investment requests",
 };
 

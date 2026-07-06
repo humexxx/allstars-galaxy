@@ -396,6 +396,13 @@ describe("deleteManualSnapshots", () => {
 });
 
 // ---------- createManualSnapshotsForAllPortfolios ----------
+//
+// Batched query order:
+//   1. select portfolio listing
+//   2. select grouped balances (only portfolios with matching tx appear)
+//   3. (only if zero-value balances) select grouped future-tx check
+//   4. (only if zero-value balances) selectDistinctOn latest snapshots
+//   5. single bulk insert
 
 describe("createManualSnapshotsForAllPortfolios", () => {
   it("throws when there are no portfolios", async () => {
@@ -411,10 +418,8 @@ describe("createManualSnapshotsForAllPortfolios", () => {
     selectQueue = [
       // 1. portfolio listing
       [{ id: PORTFOLIO_A }, { id: PORTFOLIO_B }],
-      // 2. createManualSnapshot for A: sum query → 500 created
-      [{ totalValue: "500.00", count: 2 }],
-      // 3. createManualSnapshot for B: sum query → 0 count, skip
-      [{ totalValue: "0", count: 0 }],
+      // 2. grouped balances — B has no matching tx, so no group row → skipped
+      [{ portfolioId: PORTFOLIO_A, totalValue: "500.00" }],
     ];
 
     const result = await createManualSnapshotsForAllPortfolios(date);
@@ -423,18 +428,23 @@ describe("createManualSnapshotsForAllPortfolios", () => {
     expect(result.snapshotsCreated).toBe(1);
     expect(result.totalValue).toBe(500);
     expect(insertMock).toHaveBeenCalledOnce();
-    const payload = insertValues.mock.calls[0][0] as {
+    const rows = insertValues.mock.calls[0][0] as Array<{
+      portfolioId: string;
       source: string;
       date: Date;
-    };
-    expect(payload.source).toBe("manual");
-    expect(payload.date).toBe(date);
+      totalValue: string;
+    }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].portfolioId).toBe(PORTFOLIO_A);
+    expect(rows[0].source).toBe("manual");
+    expect(rows[0].date).toBe(date);
+    expect(rows[0].totalValue).toBe("500.00");
   });
 
   it("forwards the source override into every snapshot", async () => {
     selectQueue = [
       [{ id: PORTFOLIO_A }],
-      [{ totalValue: "10.00", count: 1 }],
+      [{ portfolioId: PORTFOLIO_A, totalValue: "10.00" }],
     ];
 
     const result = await createManualSnapshotsForAllPortfolios(
@@ -443,8 +453,82 @@ describe("createManualSnapshotsForAllPortfolios", () => {
     );
 
     expect(result.snapshotsCreated).toBe(1);
-    const payload = insertValues.mock.calls[0][0] as { source: string };
-    expect(payload.source).toBe("admin_enforce");
+    const rows = insertValues.mock.calls[0][0] as Array<{ source: string }>;
+    expect(rows[0].source).toBe("admin_enforce");
+  });
+
+  it("replicates the zero-value branch semantics per portfolio", async () => {
+    const PORTFOLIO_C = "00000000-0000-0000-0000-0000000000cc";
+    const PORTFOLIO_D = "00000000-0000-0000-0000-0000000000dd";
+    selectQueue = [
+      // 1. portfolio listing
+      [
+        { id: PORTFOLIO_A },
+        { id: PORTFOLIO_B },
+        { id: PORTFOLIO_C },
+        { id: PORTFOLIO_D },
+      ],
+      // 2. grouped balances — all zero except A
+      [
+        { portfolioId: PORTFOLIO_A, totalValue: "100.00" },
+        { portfolioId: PORTFOLIO_B, totalValue: "0" }, // future tx → skip
+        { portfolioId: PORTFOLIO_C, totalValue: "0" }, // last snapshot > 0 → create
+        { portfolioId: PORTFOLIO_D, totalValue: "0" }, // last snapshot = 0 → skip
+      ],
+      // 3. future-tx check for zero-value portfolios
+      [{ portfolioId: PORTFOLIO_B }],
+      // 4. latest snapshots for zero-value portfolios
+      [
+        { portfolioId: PORTFOLIO_C, totalValue: "800.00" },
+        { portfolioId: PORTFOLIO_D, totalValue: "0.00" },
+      ],
+    ];
+
+    const result = await createManualSnapshotsForAllPortfolios(new Date());
+
+    expect(result.portfoliosProcessed).toBe(4);
+    expect(result.snapshotsCreated).toBe(2);
+    expect(result.totalValue).toBe(100);
+    const rows = insertValues.mock.calls[0][0] as Array<{
+      portfolioId: string;
+      totalValue: string;
+    }>;
+    expect(rows.map((r) => r.portfolioId)).toEqual([PORTFOLIO_A, PORTFOLIO_C]);
+    expect(rows[1].totalValue).toBe("0.00");
+  });
+
+  it("creates a zero-value snapshot for manual source when no prior snapshot exists", async () => {
+    selectQueue = [
+      [{ id: PORTFOLIO_A }],
+      [{ portfolioId: PORTFOLIO_A, totalValue: "0" }],
+      // no future tx
+      [],
+      // no prior snapshot
+      [],
+    ];
+
+    const result = await createManualSnapshotsForAllPortfolios(new Date());
+
+    expect(result.snapshotsCreated).toBe(1);
+    expect(result.totalValue).toBe(0);
+    expect(insertMock).toHaveBeenCalledOnce();
+  });
+
+  it("skips zero-value portfolios without a prior snapshot for non-manual sources", async () => {
+    selectQueue = [
+      [{ id: PORTFOLIO_A }],
+      [{ portfolioId: PORTFOLIO_A, totalValue: "0" }],
+      [],
+      [],
+    ];
+
+    const result = await createManualSnapshotsForAllPortfolios(
+      new Date(),
+      "admin_approval"
+    );
+
+    expect(result.snapshotsCreated).toBe(0);
+    expect(insertMock).not.toHaveBeenCalled();
   });
 });
 

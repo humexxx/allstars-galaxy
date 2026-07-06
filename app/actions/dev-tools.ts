@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+
 import { safe, type ActionResult } from "@/lib/actions/safe";
 import { requireAdmin } from "@/lib/services/auth-server";
 import { createDailyFinanceSnapshots } from "@/lib/services/finance-snapshot-service";
@@ -29,6 +31,8 @@ export async function runDailySnapshotsAction(): Promise<
     const today = new Date();
     const finance = await createDailyFinanceSnapshots(today);
     const portfolio = await createDailySnapshots();
+
+    revalidatePath("/portal/portfolio");
 
     return {
       success: true,

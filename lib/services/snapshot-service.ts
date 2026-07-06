@@ -131,6 +131,14 @@ export async function deleteManualSnapshots(portfolioId: string): Promise<void> 
  * the given date / source. Used by the admin "take a snapshot for everyone"
  * tool when end-of-month interest is applied. Returns totals so the caller
  * can confirm what happened.
+ *
+ * Batched: at most 5 queries regardless of portfolio count (portfolio
+ * listing, grouped balances, future-tx check + latest-snapshot lookup for
+ * zero-value portfolios only, one bulk insert). Replicates the exact
+ * per-portfolio semantics of createSnapshotForPortfolio: portfolios with no
+ * matching transactions are skipped; zero-value portfolios are skipped when
+ * future transactions exist, created when the last snapshot was non-zero, and
+ * (for manual / admin_enforce sources) created when no prior snapshot exists.
  */
 export async function createManualSnapshotsForAllPortfolios(
   date: Date,
@@ -141,18 +149,97 @@ export async function createManualSnapshotsForAllPortfolios(
     throw new Error("No portfolios found");
   }
 
-  let totalValue = 0;
-  let snapshotsCreated = 0;
-  for (const portfolio of allPortfolios) {
-    const result = await createManualSnapshot(portfolio.id, date, source);
-    if (result.created) {
-      totalValue += result.totalValue;
-      snapshotsCreated++;
+  // Grouped rows only exist for portfolios with >= 1 matching transaction,
+  // which reproduces the old "count === 0 → skip" branch for free.
+  const balances = await db
+    .select({
+      portfolioId: transactions.portfolioId,
+      totalValue: sql<string>`COALESCE(SUM(${transactions.currentValue}), 0)`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.status, "approved"),
+        eq(transactions.type, "buy"),
+        lte(transactions.date, date)
+      )
+    )
+    .groupBy(transactions.portfolioId);
+
+  const zeroValueIds = balances
+    .filter((b) => parseFloat(b.totalValue) === 0)
+    .map((b) => b.portfolioId);
+
+  const portfoliosWithFutureTx = new Set<string>();
+  const latestByPortfolio = new Map<string, number>();
+
+  if (zeroValueIds.length > 0) {
+    const futureTx = await db
+      .select({ portfolioId: transactions.portfolioId })
+      .from(transactions)
+      .where(
+        and(
+          inArray(transactions.portfolioId, zeroValueIds),
+          eq(transactions.status, "approved"),
+          eq(transactions.type, "buy"),
+          gt(transactions.date, date)
+        )
+      )
+      .groupBy(transactions.portfolioId);
+    for (const row of futureTx) {
+      portfoliosWithFutureTx.add(row.portfolioId);
+    }
+
+    const latestSnapshots = await db
+      .selectDistinctOn([portfolioSnapshots.portfolioId], {
+        portfolioId: portfolioSnapshots.portfolioId,
+        totalValue: portfolioSnapshots.totalValue,
+      })
+      .from(portfolioSnapshots)
+      .where(inArray(portfolioSnapshots.portfolioId, zeroValueIds))
+      .orderBy(portfolioSnapshots.portfolioId, desc(portfolioSnapshots.date));
+    for (const snapshot of latestSnapshots) {
+      latestByPortfolio.set(snapshot.portfolioId, parseFloat(snapshot.totalValue));
     }
   }
 
+  let totalValue = 0;
+  const rowsToInsert: (typeof portfolioSnapshots.$inferInsert)[] = [];
+
+  for (const balance of balances) {
+    const value = parseFloat(balance.totalValue);
+    let shouldCreate = value > 0;
+
+    if (value === 0) {
+      if (portfoliosWithFutureTx.has(balance.portfolioId)) {
+        continue;
+      }
+
+      const lastValue = latestByPortfolio.get(balance.portfolioId) ?? null;
+      if (lastValue !== null && lastValue > 0) {
+        shouldCreate = true;
+      } else if ((source === "manual" || source === "admin_enforce") && lastValue !== 0) {
+        shouldCreate = true;
+      }
+    }
+
+    if (shouldCreate) {
+      rowsToInsert.push({
+        portfolioId: balance.portfolioId,
+        date,
+        totalValue: value.toFixed(2),
+        source,
+      });
+      totalValue += value;
+    }
+  }
+
+  if (rowsToInsert.length > 0) {
+    await db.insert(portfolioSnapshots).values(rowsToInsert);
+  }
+
   return {
-    snapshotsCreated,
+    snapshotsCreated: rowsToInsert.length,
     totalValue,
     portfoliosProcessed: allPortfolios.length,
   };

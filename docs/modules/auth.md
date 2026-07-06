@@ -1,7 +1,7 @@
 # Auth
 
 > **Status:** Active
-> **Last reviewed:** 2026-05-24
+> **Last reviewed:** 2026-07-05
 
 ## Overview
 Supabase-backed authentication: email/password login, signup, password reset,
@@ -12,7 +12,12 @@ and SSR-friendly session management. Server-side action wrappers
 - `/login`
 - `/signup`
 - `/forgot-password`
-- `/auth/callback` — OAuth / email confirmation callback
+- `/auth/callback` — OAuth / email confirmation callback. Surfaces failures
+  instead of bouncing silently: provider `error`/`error_description` params, a
+  missing `code`, and `exchangeCodeForSession` errors all redirect to
+  `/login?error=<message>`, which the login form renders in its alert box.
+  (Previously a failed exchange still redirected to `/portal`, whose layout
+  bounced back to `/login` with no explanation.)
 
 ## Server actions — `/app/actions/`
 - `auth.ts` — `signOutAction` (server-side sign-out + redirect to `/login`). Login / signup / password reset still use the Supabase client directly because they depend on `window.location.origin` for redirect URLs.
@@ -23,6 +28,7 @@ and SSR-friendly session management. Server-side action wrappers
 
 ## Schemas — `/schemas/`
 - `user.ts`
+- `auth.ts` — `loginSchema`, `signupSchema`, `forgotPasswordSchema` (+ `Data` types) backing the RHF auth forms
 
 ## Types — `/types/`
 - `user.ts`
@@ -43,3 +49,12 @@ and SSR-friendly session management. Server-side action wrappers
 - See [`/app/actions/AGENTS.md`](../../app/actions/AGENTS.md) and
   [`/lib/services/AGENTS.md`](../../lib/services/AGENTS.md) for the canonical
   patterns.
+- The three auth forms use react-hook-form + `zodResolver` with schemas from
+  `/schemas/auth.ts`; submit buttons disable on `isSubmitting`.
+- **Google OAuth requires Supabase dashboard config** (not in this repo):
+  Auth → URL Configuration must allow-list every `redirect_to` origin —
+  `http://localhost:3010/auth/callback` for dev and
+  `https://allstars-galaxy.vercel.app/auth/callback` for prod. A `redirect_to`
+  missing from the allow-list makes Supabase fall back to the Site URL after
+  the Google handshake, dropping the code exchange (symptom: Google login
+  "does nothing" / lands logged-out).

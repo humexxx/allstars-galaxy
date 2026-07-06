@@ -1,7 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +26,10 @@ import { Badge } from "@/components/ui/badge";
 import { Mono, Text } from "@/components/ui/typography";
 
 import { createPlanAction, updatePlanAction } from "@/app/actions/finance-plans";
+import {
+  createFinancePlanSchema,
+  type CreateFinancePlanInput,
+} from "@/schemas/finance";
 import type { DebtStrategy, FinancePlan } from "@/types/finance";
 
 export type InvestmentMethodOption = {
@@ -37,13 +44,12 @@ type PlanFormProps = {
   investmentMethods: InvestmentMethodOption[];
 };
 
+// The month input holds a "YYYY-MM" string; the schema's z.coerce.date()
+// parses it as UTC month start on submit.
+type PlanFormValues = z.input<typeof createFinancePlanSchema>;
+
 function toMonthInputValue(date: Date): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-function fromMonthInputValue(value: string): Date {
-  const [y, m] = value.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, 1));
 }
 
 const COLORS = [
@@ -66,19 +72,8 @@ function percentLabel(pct: number): string {
   return "Very aggressive";
 }
 
-export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
+export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.ReactElement {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [name, setName] = useState(plan?.name ?? "");
-  const [description, setDescription] = useState(plan?.description ?? "");
-  const [startMonth, setStartMonth] = useState(
-    toMonthInputValue(plan?.startMonth ?? new Date())
-  );
-  // Default 120 (10 years) for new plans matches the schema default and lets the
-  // chart densifier kick in (first 12 months monthly, then year-ends after).
-  const [monthsAhead, setMonthsAhead] = useState(String(plan?.monthsAhead ?? 120));
-  const [initialSavings, setInitialSavings] = useState(plan?.initialSavings ?? "0");
-  const [monthlyRate, setMonthlyRate] = useState(plan?.monthlySavingsRate ?? "0");
   const [includePortfolio, setIncludePortfolio] = useState(
     plan?.includePortfolio ?? false
   );
@@ -110,54 +105,54 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
   const [investMethodId, setInvestMethodId] = useState<string>(
     plan?.autoInvestMethodId ?? investmentMethods[0]?.id ?? ""
   );
-  const [initialInvestments, setInitialInvestments] = useState(
-    plan?.initialInvestments ?? "0"
-  );
 
-  // Monthly confirmation prompt: 0 disables, 1..28 sets the trigger day.
-  const [confirmationDay, setConfirmationDay] = useState<string>(
-    String(plan?.confirmationDayOfMonth ?? 1)
-  );
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<PlanFormValues, unknown, CreateFinancePlanInput>({
+    resolver: zodResolver(createFinancePlanSchema),
+    defaultValues: {
+      name: plan?.name ?? "",
+      description: plan?.description ?? "",
+      startMonth: toMonthInputValue(plan?.startMonth ?? new Date()),
+      // Default 120 (10 years) for new plans matches the schema default and lets the
+      // chart densifier kick in (first 12 months monthly, then year-ends after).
+      monthsAhead: plan?.monthsAhead ?? 120,
+      initialSavings: plan?.initialSavings ?? "0",
+      monthlySavingsRate: plan?.monthlySavingsRate ?? "0",
+      initialInvestments: plan?.initialInvestments ?? "0",
+      // Monthly confirmation prompt: 0 disables, 1..28 sets the trigger day.
+      confirmationDayOfMonth: plan?.confirmationDayOfMonth ?? 1,
+    },
+  });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Plan needs a name");
-      return;
+  const onSubmit = async (data: CreateFinancePlanInput): Promise<void> => {
+    const surplusValue = accelerate ? (surplusPct / 100).toFixed(4) : "0";
+    const investValue = autoInvest && investMethodId ? (investPct / 100).toFixed(4) : "0";
+    const payload = {
+      ...data,
+      name: data.name.trim(),
+      description: data.description?.trim() || null,
+      includePortfolio,
+      surplusToDebtsPercent: surplusValue,
+      debtStrategy: strategy,
+      autoInvestPercent: investValue,
+      autoInvestMethodId: autoInvest && investMethodId ? investMethodId : null,
+      color,
+    };
+
+    const result = plan
+      ? await updatePlanAction({ id: plan.id, ...payload })
+      : await createPlanAction(payload);
+
+    if (result.success) {
+      toast.success(plan ? "Plan saved" : "Plan created");
+      router.push(`/portal/plans/${result.data!.id}`);
+      router.refresh();
+    } else {
+      toast.error(result.error);
     }
-
-    startTransition(async () => {
-      const surplusValue = accelerate ? (surplusPct / 100).toFixed(4) : "0";
-      const investValue = autoInvest && investMethodId ? (investPct / 100).toFixed(4) : "0";
-      const payload = {
-        name: name.trim(),
-        description: description.trim() || null,
-        startMonth: fromMonthInputValue(startMonth),
-        monthsAhead: Number(monthsAhead) || 24,
-        initialSavings: initialSavings || "0",
-        monthlySavingsRate: monthlyRate || "0",
-        includePortfolio,
-        surplusToDebtsPercent: surplusValue,
-        debtStrategy: strategy,
-        autoInvestPercent: investValue,
-        autoInvestMethodId: autoInvest && investMethodId ? investMethodId : null,
-        initialInvestments: initialInvestments || "0",
-        confirmationDayOfMonth: Math.max(0, Math.min(28, Number(confirmationDay) || 0)),
-        color,
-      };
-
-      const result = plan
-        ? await updatePlanAction({ id: plan.id, ...payload })
-        : await createPlanAction(payload);
-
-      if (result.success) {
-        toast.success(plan ? "Plan saved" : "Plan created");
-        router.push(`/portal/plans/${result.data!.id}`);
-        router.refresh();
-      } else {
-        toast.error(result.error);
-      }
-    });
   };
 
   return (
@@ -167,37 +162,43 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
           <CardTitle>{plan ? "Plan settings" : "New plan"}</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} id="plan-form" className="space-y-4">
+          <form onSubmit={handleSubmit(onSubmit)} id="plan-form" className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="plan-name">Name</Label>
                 <Input
                   id="plan-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
                   placeholder="Base scenario"
                   required
+                  {...register("name")}
                 />
+                {errors.name && (
+                  <p className="text-sm text-destructive">{errors.name.message}</p>
+                )}
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="plan-description">Description</Label>
                 <Textarea
                   id="plan-description"
-                  value={description ?? ""}
-                  onChange={(e) => setDescription(e.target.value)}
                   placeholder="Notes about this scenario"
                   rows={2}
+                  {...register("description")}
                 />
+                {errors.description && (
+                  <p className="text-sm text-destructive">{errors.description.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="plan-start">Start month</Label>
                 <Input
                   id="plan-start"
                   type="month"
-                  value={startMonth}
-                  onChange={(e) => setStartMonth(e.target.value)}
                   required
+                  {...register("startMonth")}
                 />
+                {errors.startMonth && (
+                  <p className="text-sm text-destructive">{errors.startMonth.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="plan-months">Months ahead</Label>
@@ -207,10 +208,12 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                   min={12}
                   max={120}
                   step={1}
-                  value={monthsAhead}
-                  onChange={(e) => setMonthsAhead(e.target.value)}
                   required
+                  {...register("monthsAhead", { valueAsNumber: true })}
                 />
+                {errors.monthsAhead && (
+                  <p className="text-sm text-destructive">{errors.monthsAhead.message}</p>
+                )}
                 <Text variant="small">
                   Minimum 12 months · default 120 (10 years).
                 </Text>
@@ -220,19 +223,27 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                 <Input
                   id="plan-savings"
                   inputMode="decimal"
-                  value={initialSavings}
-                  onChange={(e) => setInitialSavings(e.target.value)}
+                  {...register("initialSavings", {
+                    setValueAs: (v: string) => (v === "" ? "0" : v),
+                  })}
                 />
+                {errors.initialSavings && (
+                  <p className="text-sm text-destructive">{errors.initialSavings.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="plan-rate">Monthly savings rate</Label>
                 <Input
                   id="plan-rate"
                   inputMode="decimal"
-                  value={monthlyRate}
-                  onChange={(e) => setMonthlyRate(e.target.value)}
                   placeholder="0.007"
+                  {...register("monthlySavingsRate", {
+                    setValueAs: (v: string) => (v === "" ? "0" : v),
+                  })}
                 />
+                {errors.monthlySavingsRate && (
+                  <p className="text-sm text-destructive">{errors.monthlySavingsRate.message}</p>
+                )}
                 <Text variant="small">
                   Decimal monthly rate. 0.007 ≈ 0.70% per month.
                 </Text>
@@ -278,9 +289,15 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
                   min={0}
                   max={28}
                   step={1}
-                  value={confirmationDay}
-                  onChange={(e) => setConfirmationDay(e.target.value)}
+                  {...register("confirmationDayOfMonth", {
+                    setValueAs: (v: string) => (v === "" ? 0 : Number(v)),
+                  })}
                 />
+                {errors.confirmationDayOfMonth && (
+                  <p className="text-sm text-destructive">
+                    {errors.confirmationDayOfMonth.message}
+                  </p>
+                )}
                 <Text variant="small">
                   Day of the month (1–28) when a dialog will ask you to confirm your
                   real balances. Set to <strong>0</strong> to disable.
@@ -466,9 +483,13 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
               <Input
                 id="plan-init-investments"
                 inputMode="decimal"
-                value={initialInvestments}
-                onChange={(e) => setInitialInvestments(e.target.value)}
+                {...register("initialInvestments", {
+                  setValueAs: (v: string) => (v === "" ? "0" : v),
+                })}
               />
+              {errors.initialInvestments && (
+                <p className="text-sm text-destructive">{errors.initialInvestments.message}</p>
+              )}
               <Text variant="small">
                 Opening balance for the investments bucket at the start month.
               </Text>
@@ -481,8 +502,8 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps) {
         <Button type="button" variant="ghost" onClick={() => router.back()}>
           Cancel
         </Button>
-        <Button type="submit" form="plan-form" disabled={isPending}>
-          {isPending ? "Saving…" : plan ? "Save changes" : "Create plan"}
+        <Button type="submit" form="plan-form" disabled={isSubmitting}>
+          {isSubmitting ? "Saving…" : plan ? "Save changes" : "Create plan"}
         </Button>
       </div>
     </div>

@@ -10,40 +10,44 @@ import {
 import { Input } from "@/components/ui/input"
 import { Heading, Text } from "@/components/ui/typography"
 import { AuthService } from "@/lib/services/auth-service"
+import { forgotPasswordSchema, type ForgotPasswordData } from "@/schemas/auth"
 import { useState } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 import Link from "next/link"
 
 export function ForgotPasswordForm({
   className,
   ...props
 }: React.ComponentProps<"form">) {
-  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setIsLoading(true)
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ForgotPasswordData>({
+    resolver: zodResolver(forgotPasswordSchema),
+  })
+
+  const onSubmit = async (data: ForgotPasswordData): Promise<void> => {
     setError(null)
     setSuccess(false)
 
-    const formData = new FormData(event.currentTarget)
-    const email = formData.get("email") as string
-
     try {
-      await AuthService.resetPasswordForEmail(email)
+      await AuthService.resetPasswordForEmail(data.email)
       setSuccess(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error sending reset email")
-    } finally {
-      setIsLoading(false)
     }
   }
 
   return (
     <form
       className={cn("flex flex-col gap-6", className)}
-      onSubmit={handleSubmit}
+      onSubmit={handleSubmit(onSubmit)}
+      noValidate
       {...props}
     >
       <FieldGroup>
@@ -72,12 +76,13 @@ export function ForgotPasswordForm({
 
         <Field>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" name="email" type="email" placeholder="m@example.com" autoComplete="email" required />
+          <Input id="email" type="email" placeholder="m@example.com" autoComplete="email" {...register("email")} />
+          {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
         </Field>
-        
+
         <Field>
-          <Button type="submit" disabled={isLoading || success} className="w-full">
-            {isLoading ? "Sending..." : "Send Reset Link"}
+          <Button type="submit" disabled={isSubmitting || success} className="w-full">
+            {isSubmitting ? "Sending..." : "Send Reset Link"}
           </Button>
         </Field>
 

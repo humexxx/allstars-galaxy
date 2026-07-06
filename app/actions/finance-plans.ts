@@ -150,6 +150,30 @@ export async function clonePlanAction(planId: string, newName: string) {
   });
 }
 
+/** Clone + link: the new plan keeps a basedOnPlanId reference to the source,
+ *  so its chart can overlay the base plan's projection as a ghost line. */
+export async function createScenarioAction(planId: string, newName: string) {
+  return safe("finance-plans", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = z.string().uuid().safeParse(planId);
+    const nameParsed = z.string().min(1).max(120).safeParse(newName);
+    if (!idParsed.success || !nameParsed.success) {
+      return { success: false as const, error: "Invalid input" };
+    }
+    const plan = await clonePlan(ctx.effectiveUserId, idParsed.data, nameParsed.data, {
+      asScenario: true,
+    });
+    await logImpersonatedMutation({
+      action: "financePlan.createScenario",
+      entityTable: "finance_plans",
+      entityId: plan.id,
+      metadata: { sourcePlanId: idParsed.data },
+    });
+    revalidatePath(PLAN_PATH);
+    return { success: true as const, data: plan };
+  });
+}
+
 // ---------- incomes ----------
 
 export async function addPlanIncomeAction(planId: string, input: PlanIncomeInput) {

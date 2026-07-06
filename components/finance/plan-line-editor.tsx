@@ -105,10 +105,10 @@ export function PlanLineEditor({
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead className="w-[110px]">Type</TableHead>
-                <TableHead className="w-[140px]">Amount</TableHead>
+                <TableHead className="w-28">Type</TableHead>
+                <TableHead className="w-36">Amount</TableHead>
                 <TableHead>Schedule</TableHead>
-                <TableHead className="w-[80px]" />
+                <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
             <TableBody>

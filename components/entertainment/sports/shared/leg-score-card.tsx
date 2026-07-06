@@ -73,6 +73,7 @@ export function LegScoreCard({ match, teams, className }: LegScoreCardProps) {
       )}
       {!hasAggregate && match.date && (
         <div className="mt-2 border-t pt-1.5 text-2xs text-muted-foreground">
+          {match.winnerTeamId ? "FT · " : ""}
           {new Date(match.date).toLocaleDateString(undefined, {
             weekday: "short",
             month: "short",

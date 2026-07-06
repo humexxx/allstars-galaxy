@@ -43,7 +43,8 @@ import {
   periodLengthDays,
 } from "@/lib/finance/period";
 
-import { getUserPortfolio, getPortfolioStats } from "./portfolio-service";
+import { getUserPortfolio, getPortfolioStats, getPortfolioAssets } from "./portfolio-service";
+import { ensureOwnedRow } from "./ownership";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -88,13 +89,13 @@ function parseISODateLocal(
 }
 
 async function ensureOwnership(planId: string, userId: string): Promise<void> {
-  const [row] = await db
-    .select({ userId: financePlans.userId })
-    .from(financePlans)
-    .where(eq(financePlans.id, planId));
-  if (!row || row.userId !== userId) {
-    throw new Error("Plan not found");
-  }
+  await ensureOwnedRow({
+    table: financePlans,
+    idColumn: financePlans.id,
+    id: planId,
+    userId,
+    entity: "Plan",
+  });
 }
 
 // ---------- plan CRUD ----------
@@ -192,6 +193,13 @@ export async function updatePlan(
   data: UpdateFinancePlanInput
 ): Promise<FinancePlan> {
   await ensureOwnership(data.id, userId);
+  if (data.basedOnPlanId != null) {
+    if (data.basedOnPlanId === data.id) {
+      throw new Error("A plan cannot be based on itself");
+    }
+    // The base plan must exist and belong to the same user.
+    await ensureOwnership(data.basedOnPlanId, userId);
+  }
   const [plan] = await db
     .update(financePlans)
     .set({
@@ -209,6 +217,8 @@ export async function updatePlan(
       initialInvestments: data.initialInvestments,
       confirmationDayOfMonth: data.confirmationDayOfMonth,
       color: data.color,
+      // undefined leaves the link untouched; null explicitly detaches.
+      basedOnPlanId: data.basedOnPlanId,
       updatedAt: new Date(),
     })
     .where(eq(financePlans.id, data.id))
@@ -285,7 +295,8 @@ export async function getMainPlan(userId: string): Promise<FinancePlan | null> {
 export async function clonePlan(
   userId: string,
   sourcePlanId: string,
-  newName: string
+  newName: string,
+  options: { asScenario?: boolean } = {}
 ): Promise<FinancePlan> {
   const source = await getPlanWithLines(sourcePlanId, userId);
   if (!source) throw new Error("Plan not found");
@@ -306,7 +317,11 @@ export async function clonePlan(
       autoInvestPercent: source.autoInvestPercent,
       autoInvestMethodId: source.autoInvestMethodId,
       initialInvestments: source.initialInvestments,
+      // Keep the accounting-period anchor: without it the clone falls back to
+      // day 1 and its periods drift out of alignment with the source plan.
+      confirmationDayOfMonth: source.confirmationDayOfMonth,
       color: source.color,
+      basedOnPlanId: options.asScenario ? source.id : null,
     })
     .returning();
 
@@ -859,6 +874,11 @@ function orderDebtsByStrategy(
 
 type ProjectOptions = {
   portfolioValue?: number;
+  /** Monthly growth rate (decimal) compounded onto portfolioValue each period.
+   *  Callers derive it from the value-weighted ROI of the user's holdings via
+   *  getPortfolioWeightedMonthlyRoi. 0 (default) holds the portfolio flat —
+   *  the pre-growth behaviour. */
+  portfolioMonthlyGrowthRate?: number;
   /** Monthly ROI (decimal) for the auto-invest account. Looked up from the plan's
    *  autoInvestMethodId by the calling page. Ignored if plan.autoInvestPercent = 0. */
   autoInvestRate?: number;
@@ -884,8 +904,10 @@ type ProjectOptions = {
  *      bucket. The remainder goes to savings.
  *   6. Savings + investments accrue their monthly compound interest.
  *
- * portfolioValue (the user's live portfolio) is added to net worth but does not
- * earn the savings or investment rate (it grows independently in its own module).
+ * portfolioValue (the user's live portfolio) is added to net worth. It never
+ * earns the savings or investment rate; instead it compounds monthly at
+ * portfolioMonthlyGrowthRate (the blended ROI of the user's holdings), or is
+ * held flat when the rate is 0.
  */
 export function projectPlan(
   plan: FinancePlan,
@@ -895,6 +917,7 @@ export function projectPlan(
   options: ProjectOptions = {}
 ): Projection {
   const portfolioValue = Math.max(0, options.portfolioValue ?? 0);
+  const portfolioGrowthRate = Math.max(0, options.portfolioMonthlyGrowthRate ?? 0);
   // Guard against negative ROI configurations — investments never shrink.
   const autoInvestRate = Math.max(0, options.autoInvestRate ?? 0);
 
@@ -984,6 +1007,7 @@ export function projectPlan(
 
   let savings = num(plan.initialSavings);
   let investments = num(plan.initialInvestments);
+  let portfolio = portfolioValue;
   const debtStates: DebtRuntimeState[] = debts.map((d) => ({
     id: d.id,
     name: d.name,
@@ -1245,8 +1269,12 @@ export function projectPlan(
       Math.round((investmentsBeforeInterest + investmentsInterest) * 100) / 100;
     totalInvestmentsInterestAcrossMonths += investmentsInterest;
 
+    // The live portfolio compounds at its blended holdings ROI, on the same
+    // period-end cadence as savings/investments. Rate 0 → held flat.
+    portfolio = Math.round(portfolio * (1 + portfolioGrowthRate) * 100) / 100;
+
     const totalDebt = debtStates.reduce((s, d) => s + d.balance, 0);
-    const netWorth = savings + investments + portfolioValue - totalDebt;
+    const netWorth = savings + investments + portfolio - totalDebt;
 
     if (monthsToDebtFree === null && totalDebt <= DEBT_PAID_EPS && debts.length > 0) {
       monthsToDebtFree = m + 1;
@@ -1268,7 +1296,7 @@ export function projectPlan(
       investmentsContribution,
       investmentsInterest,
       totalDebt,
-      portfolioValue,
+      portfolioValue: portfolio,
       netWorth,
       debts: debtStates.map((d) => {
         const m = monthly.get(d.id)!;
@@ -1291,7 +1319,7 @@ export function projectPlan(
     endingSavings: savings,
     endingInvestments: investments,
     endingDebt,
-    endingNetWorth: savings + investments + portfolioValue - endingDebt,
+    endingNetWorth: savings + investments + portfolio - endingDebt,
     monthsToDebtFree,
     totalInterestPaid: totalInterestPaidAcrossAllDebts,
     totalInvestmentsInterest: totalInvestmentsInterestAcrossMonths,
@@ -1367,6 +1395,27 @@ export async function getPortfolioValueForUser(userId: string): Promise<number> 
 }
 
 /**
+ * Value-weighted average monthly ROI (as a decimal) of the user's current
+ * portfolio holdings. Weights each investment method's monthly ROI by the
+ * holding value. Returns 0 when the user has no portfolio or no holdings,
+ * which makes projections hold the portfolio flat (the safe fallback).
+ */
+export async function getPortfolioWeightedMonthlyRoi(userId: string): Promise<number> {
+  const portfolio = await getUserPortfolio(userId);
+  if (!portfolio) return 0;
+  const assets = await getPortfolioAssets(portfolio.id);
+  let weightedRoi = 0;
+  let totalWeight = 0;
+  for (const asset of assets) {
+    if (asset.holdingAmount <= 0) continue;
+    // monthly_roi is stored as a percentage (e.g. "0.7000" = 0.70%).
+    weightedRoi += asset.holdingAmount * (num(asset.investmentMethod.monthlyRoi) / 100);
+    totalWeight += asset.holdingAmount;
+  }
+  return totalWeight > 0 ? weightedRoi / totalWeight : 0;
+}
+
+/**
  * Resolves the monthly ROI (as a decimal) of the plan's auto-invest method, or
  * 0 if none is linked. Used to compound the investments bucket during projection.
  */
@@ -1387,12 +1436,14 @@ export async function projectPlanWithPortfolio(
   plan: FinancePlanWithLines,
   userId: string
 ): Promise<Projection> {
-  const [portfolioValue, autoInvestRate] = await Promise.all([
+  const [portfolioValue, portfolioMonthlyGrowthRate, autoInvestRate] = await Promise.all([
     plan.includePortfolio ? getPortfolioValueForUser(userId) : Promise.resolve(0),
+    plan.includePortfolio ? getPortfolioWeightedMonthlyRoi(userId) : Promise.resolve(0),
     getAutoInvestRate(plan),
   ]);
   return projectPlan(plan, plan.incomes, plan.expenses, plan.debts, {
     portfolioValue,
+    portfolioMonthlyGrowthRate,
     autoInvestRate,
     overrides: plan.overrides,
   });

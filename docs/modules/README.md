@@ -12,6 +12,7 @@ restructuring.
 | Entertainment / Travel | [entertainment.md](./entertainment.md) | `travel`, `entertainment` |
 | Admin (users, transactions, impersonation) | [admin.md](./admin.md) | `admin`¹ / `auth` |
 | Auth | [auth.md](./auth.md) | `auth` |
+| Settings (user preferences, module mascot) | [settings.md](./settings.md) | `portal` |
 
 ¹ Scope not yet in [`commitlint.config.mjs`](../../commitlint.config.mjs) —
 add it the first time you commit there.

@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import type { Projection } from "@/types/finance";
+
 import { PlanEditor } from "@/components/finance/plan-editor";
+import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import {
   compareDebtStrategies,
@@ -15,6 +18,7 @@ import {
   buildCalibratedPlan,
   getRecentMonthlySnapshots,
 } from "@/lib/services/finance-snapshot-service";
+import { getUserPortfolio } from "@/lib/services/portfolio-service";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +31,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const ctx = await requireEffectiveContext();
   const plan = await getPlanWithLines(id, ctx.effectiveUserId);
   return {
-    title: plan ? `${plan.name} | Allstars Galaxy` : "Plan | Allstars Galaxy",
+    title: plan ? plan.name : "Plan",
   };
 }
 
@@ -62,6 +66,33 @@ export default async function PlanDetailPage({ params }: PageProps) {
       ),
     ]);
 
+  // Scenario plans overlay their base plan's projection as a ghost line so the
+  // delta is visible directly on the chart. Calibrated the same way as the
+  // scenario itself; null when the plan is standalone or the base was deleted.
+  let ghost: { name: string; color: string; projection: Projection } | null = null;
+  if (plan.basedOnPlanId) {
+    const basePlan = await getPlanWithLines(plan.basedOnPlanId, ctx.effectiveUserId);
+    if (basePlan) {
+      const baseBaseline = await buildCalibratedPlan(basePlan);
+      ghost = {
+        name: basePlan.name,
+        color: basePlan.color,
+        projection: await projectPlanWithPortfolio(baseBaseline, ctx.effectiveUserId),
+      };
+    }
+  }
+
+  // Recorded portfolio history feeds the chart's past segment of the portfolio
+  // series when the plan includes the portfolio.
+  let portfolioHistory: { date: Date; value: number }[] = [];
+  if (baseline.includePortfolio) {
+    const portfolio = await getUserPortfolio(ctx.effectiveUserId);
+    if (portfolio) {
+      const points = await getPortfolioPerformanceData(portfolio.id, "All");
+      portfolioHistory = points.map((p) => ({ date: new Date(p.date), value: p.value }));
+    }
+  }
+
   const projection = await projectPlanWithPortfolio(baseline, ctx.effectiveUserId);
   // Raw (un-calibrated) projection — spans back to the plan's start. The chart
   // uses it to re-simulate the past when there are no real snapshots yet, so
@@ -93,6 +124,9 @@ export default async function PlanDetailPage({ params }: PageProps) {
         history={history}
         comparison={comparison}
         investmentMethods={investmentMethods}
+        ghost={ghost}
+        portfolioHistory={portfolioHistory}
+        portfolioValue={portfolioValue}
         title={plan.name}
         description={
           plan.description ?? "Add income, expenses and debts to refine the projection."

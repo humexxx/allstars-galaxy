@@ -18,8 +18,3 @@ export type UserListItem = {
   role: "admin" | "user" | null;
   avatarUrl: string | null;
 };
-
-import { z } from "zod"
-import { userFormSchema } from "@/schemas/user"
-
-export type UserFormData = z.infer<typeof userFormSchema>

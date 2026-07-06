@@ -124,8 +124,8 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
             <TableHeader>
               <TableRow>
                 <TableHead>User</TableHead>
-                <TableHead className="w-[120px]">Role</TableHead>
-                <TableHead className="w-[60px] text-right">Actions</TableHead>
+                <TableHead className="w-30">Role</TableHead>
+                <TableHead className="w-16 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

@@ -12,6 +12,7 @@ import { NFL_DATA } from "@/lib/data/sports/nfl";
 import { PADEL_DATA } from "@/lib/data/sports/padel";
 import { SPORTS } from "@/lib/data/sports/registry";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
+import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
 import type {
   F1Data,
   FootballLeagueData,
@@ -28,6 +29,7 @@ import { NbaView } from "./sports/nba-view";
 import { NflView } from "./sports/nfl-view";
 import { PadelView } from "./sports/padel-view";
 import { TennisView } from "./sports/tennis-view";
+import { WorldCupView } from "./sports/world-cup-view";
 
 const FOOTBALL_LEAGUES = getFootballLeagues();
 
@@ -41,6 +43,8 @@ type SportsHubProps = {
   f1Data?: F1Data;
   /** Live football leagues from football-data.org; falls back to mocks when omitted. */
   footballLeagues?: FootballLeagueData[];
+  /** Live FIFA World Cup data from football-data.org; falls back to mock when omitted. */
+  worldCupData?: FootballLeagueData;
   /** Live padel data from Padel API; falls back to mock when omitted. */
   padelData?: PadelData;
   /** Live tennis data from TheSportsDB; falls back to mock when omitted. */
@@ -53,6 +57,7 @@ export function SportsHub({
   lolData,
   f1Data,
   footballLeagues,
+  worldCupData,
   padelData,
   tennisData,
 }: SportsHubProps) {
@@ -84,6 +89,7 @@ export function SportsHub({
         lolData={lolData}
         f1Data={f1Data}
         footballLeagues={footballLeagues}
+        worldCupData={worldCupData}
         padelData={padelData}
         tennisData={tennisData}
       />
@@ -142,6 +148,7 @@ function SportContent({
   lolData,
   f1Data,
   footballLeagues,
+  worldCupData,
   padelData,
   tennisData,
 }: {
@@ -149,12 +156,15 @@ function SportContent({
   lolData?: LolData;
   f1Data?: F1Data;
   footballLeagues?: FootballLeagueData[];
+  worldCupData?: FootballLeagueData;
   padelData?: PadelData;
   tennisData?: TennisData;
 }) {
   switch (sport) {
     case "football":
       return <FootballView leagues={footballLeagues ?? FOOTBALL_LEAGUES} />;
+    case "worldcup":
+      return <WorldCupView data={worldCupData ?? WORLD_CUP_DATA} />;
     case "f1":
       return <F1View data={f1Data ?? F1_DATA} />;
     case "nba":

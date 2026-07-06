@@ -3,22 +3,18 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 import { requireAdmin } from "@/lib/services/auth-server";
 import { IMPERSONATION_COOKIE } from "@/lib/services/impersonation";
-
-const impersonateSchema = z.object({
-  userId: z.string().uuid(),
-});
+import { impersonationSchema } from "@/schemas/impersonation";
 
 export async function startImpersonationAction(formData: FormData) {
   const admin = await requireAdmin();
 
-  const parsed = impersonateSchema.safeParse({
+  const parsed = impersonationSchema.safeParse({
     userId: formData.get("userId"),
   });
   if (!parsed.success) {

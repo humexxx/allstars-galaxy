@@ -5,6 +5,7 @@ import { z } from "zod";
 // hitting the service / DB.
 export const sportIdSchema = z.enum([
   "football",
+  "worldcup",
   "padel",
   "f1",
   "nba",

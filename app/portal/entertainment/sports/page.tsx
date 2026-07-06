@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/portal/page-header";
 import { ManageFavoritesSheet } from "@/components/entertainment/sports/manage-favorites-sheet";
 import { SportsHub } from "@/components/entertainment/sports/sports-hub";
-import { getFootballData } from "@/lib/services/football-data-service";
+import { getFootballData, getWorldCupData } from "@/lib/services/football-data-service";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { getF1Data } from "@/lib/services/jolpica-f1-service";
 import { getLolData } from "@/lib/services/lolesports-service";
@@ -12,7 +12,7 @@ import { listUserFavoriteSportIds } from "@/lib/services/sports-service";
 import { getTennisData } from "@/lib/services/thesportsdb-tennis-service";
 
 export const metadata: Metadata = {
-  title: "Sports | Allstars Galaxy",
+  title: "Sports",
   description: "Live scores, standings and brackets across your favourite sports.",
 };
 
@@ -25,6 +25,7 @@ export default async function SportsPage() {
     lolData,
     f1Data,
     footballLeagues,
+    worldCupData,
     padelData,
     tennisData,
   ] = await Promise.all([
@@ -32,6 +33,7 @@ export default async function SportsPage() {
     getLolData(),
     getF1Data(),
     getFootballData(),
+    getWorldCupData(),
     getPadelData(),
     getTennisData(),
   ]);
@@ -40,7 +42,7 @@ export default async function SportsPage() {
     <section className="space-y-6">
       <PageHeader
         title="Sports"
-        description="Live scores, tables, tournaments and brackets across football, F1, NBA, tennis, padel, NFL and League of Legends."
+        description="Live scores, tables, tournaments and brackets across football, the World Cup, F1, NBA, tennis, padel, NFL and League of Legends."
         actions={<ManageFavoritesSheet favoriteSportIds={favorites} />}
       />
       <SportsHub
@@ -48,6 +50,7 @@ export default async function SportsPage() {
         lolData={lolData}
         f1Data={f1Data}
         footballLeagues={footballLeagues}
+        worldCupData={worldCupData}
         padelData={padelData}
         tennisData={tennisData}
       />

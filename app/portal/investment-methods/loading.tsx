@@ -1,8 +1,10 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { PortalPageContainer } from "@/components/portal/page-container"
 
 export default function InvestmentMethodsLoading() {
   return (
-    <section className="space-y-6" aria-hidden="true">
+    <PortalPageContainer>
+      <section className="space-y-6" aria-hidden="true">
       <div className="space-y-2">
         <Skeleton className="h-7 w-56" />
         <Skeleton className="h-4 w-72" />
@@ -13,6 +15,7 @@ export default function InvestmentMethodsLoading() {
           <Skeleton key={i} className="h-40 w-full" />
         ))}
       </div>
-    </section>
+      </section>
+    </PortalPageContainer>
   )
 }

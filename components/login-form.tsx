@@ -29,8 +29,12 @@ function safeNext(raw: string | null): string {
 
 export function LoginForm({
   className,
+  /** Hides the sign-up link while the app isn't taking new accounts. The real
+   *  gate is server-side (see lib/auth/signups.ts); this just avoids offering
+   *  a door that's shut. */
+  signupsOpen = true,
   ...props
-}: React.ComponentProps<"form">) {
+}: React.ComponentProps<"form"> & { signupsOpen?: boolean }) {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -145,12 +149,14 @@ export function LoginForm({
           </Button>
         </Field>
 
-        <div className="text-center text-sm">
-          Don&apos;t have an account?{" "}
-          <Link href={signupHref} className="underline underline-offset-4">
-            Sign up
-          </Link>
-        </div>
+        {signupsOpen && (
+          <div className="text-center text-sm">
+            Don&apos;t have an account?{" "}
+            <Link href={signupHref} className="underline underline-offset-4">
+              Sign up
+            </Link>
+          </div>
+        )}
       </FieldGroup>
     </form>
   )

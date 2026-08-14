@@ -5,6 +5,7 @@ import type { Metadata } from "next"
 import { Suspense } from "react"
 
 import { LoginForm } from "@/components/login-form"
+import { signupsAllowed } from "@/lib/auth/signups"
 import { FormSkeleton } from "@/components/skeletons/form-skeleton"
 
 export const metadata: Metadata = {
@@ -27,7 +28,7 @@ export default function LoginPage() {
         <div className="flex flex-1 items-center justify-center">
           <div className="w-full max-w-xs" aria-label="Login form">
             <Suspense fallback={<FormSkeleton rows={2} />}>
-              <LoginForm />
+              <LoginForm signupsOpen={signupsAllowed()} />
             </Suspense>
           </div>
         </div>

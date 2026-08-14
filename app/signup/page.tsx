@@ -6,6 +6,9 @@ import { Suspense } from "react"
 
 import { SignupForm } from "@/components/signup-form"
 import { FormSkeleton } from "@/components/skeletons/form-skeleton"
+import { Button } from "@/components/ui/button"
+import { Heading, Text } from "@/components/ui/typography"
+import { signupsAllowed } from "@/lib/auth/signups"
 
 export const metadata: Metadata = {
   title: "Sign up",
@@ -26,9 +29,26 @@ export default function SignupPage() {
         </header>
         <div className="flex flex-1 items-center justify-center">
           <div className="w-full max-w-xs" aria-label="Signup form">
-            <Suspense fallback={<FormSkeleton rows={3} />}>
-              <SignupForm />
-            </Suspense>
+            {signupsAllowed() ? (
+              <Suspense fallback={<FormSkeleton rows={3} />}>
+                <SignupForm />
+              </Suspense>
+            ) : (
+              /* Server-side, so the form never reaches the browser while
+                 signups are closed. */
+              <div className="space-y-3 text-center">
+                <Heading level="h3" as="h1">
+                  Signups are closed
+                </Heading>
+                <Text variant="muted">
+                  Allstars Galaxy isn&apos;t taking new accounts right now. If
+                  you already have one, you can still sign in.
+                </Text>
+                <Button asChild className="w-full">
+                  <Link href="/login">Go to login</Link>
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </section>

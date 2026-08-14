@@ -1,7 +1,7 @@
 # Finance
 
 > **Status:** Active
-> **Last reviewed:** 2026-07-02
+> **Last reviewed:** 2026-08-11
 
 ## Overview
 Personal financial planning: users build *plans* (scenarios) with incomes,
@@ -15,30 +15,77 @@ calibrated. Health scoring and scenario comparison are part of this module.
 - `/portal/plans/compare` — side-by-side scenario comparison
 
 ## Server actions — `/app/actions/`
-- `finance-plans.ts` — CRUD + lifecycle for finance plans (create, update, delete, clone, set-as-main) and projection calculations
+- `finance-plans.ts` — CRUD + lifecycle for finance plans (create, update, delete, clone, set-as-main, `setPlanColorAction`) and projection calculations
 - `finance-confirmations.ts` — save monthly confirmation snapshots and per-debt balance confirmations
 - `dev-tools.ts` — `runDailySnapshotsAction` (admin-only): runs the daily finance + portfolio snapshot job on demand, surfaced via the dev drawer
 
 ## Services — `/lib/services/`
-- `finance-plan-service.ts`
+- `finance-plan-service.ts` — also exports `getFinanceMood` (request-cached; the
+  main plan's outcome as a mascot pose), the pure `deriveFinanceMood`, and
+  `setPlanColor` (colour-only update for the rail swatch)
 - `finance-confirmation-service.ts` — confirmations + `autoConfirmSkippedPeriods` (cron baseline roll-forward)
 - `finance-snapshot-service.ts`
 - `interest-service.ts` — interest/ROI math (shared with [Portfolio](./portfolio.md))
 
 ## Schemas — `/schemas/`
-- `finance.ts`
+- `finance.ts` — includes `planColorSchema` (colour-only update; restricted to a
+  `var(--chart-N)` token or a 6-digit hex, since the value is written into a
+  `style` attribute and an SVG `stroke`)
 - `finance-snapshot.ts`
 - `finance-confirmations.ts` — `confirmationSchema` / `ConfirmationData` (monthly actuals payload; shared by the action and `finance-confirmation-service`)
 
 ## Types — `/types/`
-- `finance.ts`
+- `finance.ts` — includes `PlanSummary` (per-plan outcome shown on the rail) and
+  `FinanceMood` (mascot pose)
 - `snapshot.ts`
 
 ## Components
 `components/finance/` — plan editors, projection charts, confirmation dialogs,
-strategy comparisons, the plans-list workspace
+strategy comparisons, the plans workspace
 ([`plans-workspace.tsx`](../../components/finance/plans-workspace.tsx)), and the
 [`FinancialHealthDonut`](../../components/finance/financial-health-donut.tsx).
+
+`/portal/plans` renders the workspace for **any** number of plans (a lone plan
+still gets its projection curve). Rail rows drive the chart:
+
+- the checkbox adds or removes a series;
+- pointing at a row emphasizes it and the ⋯ menu pins that emphasis (the pin
+  lives there so it is reachable on touch) — `ComparePlansChart` takes a
+  `focusedPlanId` and fades every other line back;
+- the colour swatch opens [`plan-color-picker.tsx`](../../components/finance/plan-color-picker.tsx):
+  the theme palette plus a native custom input, saved through
+  `setPlanColorAction`.
+
+The metric tabs are **Net worth / Total debt** (Savings was dropped from both
+the index and `compare/`). The horizon `Select` above the chart picks how many
+periods are plotted
+(default 24, of which `PAST_MONTHS` = 3 sit before today). Periods up to today
+draw solid and everything after draws dashed — each plan is two `Line`s sharing
+the boundary row, mirroring the single-plan chart in the same file. Today's row
+gets the shared `TodayPulseDot`, rendered on the past series only (the future
+series shares that row and would stack a second marker). The window
+comes from `computeProjectionWindow`, whose `pastMonths` argument overrides its
+default ~25%-of-range past slice.
+
+The old single-plan card list (`plans-list.tsx`) was removed when the workspace
+took over that case; its `PlanSummary` type now lives in `/types/finance.ts`.
+
+On `/portal/plans/[id]` the chart is interactive both ways: **hovering** a
+point previews that period's cash-flow figures in the sidebar, and **clicking**
+it commits — any other period opens
+[`period-compare-dialog.tsx`](../../components/finance/period-compare-dialog.tsx)
+(that period's balances against today's, with deltas coloured by polarity — debt
+going up is not an improvement), while clicking **today's** point opens the
+`ConfirmationDialog` instead, since the present is something you record rather
+than forecast. `ProjectionChart` exposes this as `onSelectIndex`, resolved from
+the same `activeTooltipIndex` as the hover handler so the whole column is
+clickable rather than the 4px dot.
+
+The finance mascot ([`context-avatar.tsx`](../../components/portal/context-avatar.tsx))
+is mounted by [`app/portal/plans/layout.tsx`](../../app/portal/plans/layout.tsx)
+and posed by `getFinanceMood`, so it reads as a status glyph
+(`idle` / `steady` / `thriving` / `strained`) rather than decoration. It is
+gated on the `showContextAvatar` preference — see [Settings](./settings.md).
 
 ## DB tables — `db/schema.ts`
 - `finance_plans` — user's financial scenarios

@@ -23,7 +23,7 @@ const ComparePlansChart = dynamic(
   }
 );
 
-type Metric = "netWorth" | "totalDebt" | "savings";
+type Metric = "netWorth" | "totalDebt";
 
 type CompareViewProps = {
   projections: Projection[];
@@ -93,7 +93,6 @@ export function CompareView({
               <TabsList>
                 <TabsTrigger value="netWorth">Net worth</TabsTrigger>
                 <TabsTrigger value="totalDebt">Total debt</TabsTrigger>
-                <TabsTrigger value="savings">Savings</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>

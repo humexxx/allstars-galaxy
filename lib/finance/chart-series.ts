@@ -37,14 +37,23 @@ export function computeProjectionWindow(
   projection: Projection,
   totalMonths: number,
   today: Date = new Date(),
-  anchorDay: number = 1
+  anchorDay: number = 1,
+  /**
+   * Fixed number of past periods to include. Omit for the default ~25% of the
+   * range — the plans comparison chart pins it (3 months) so the past stays a
+   * constant sliver no matter how long a horizon the user selects.
+   */
+  pastMonths?: number
 ): {
   startIndex: number;
   count: number;
   pastCount: number;
   todayIndex: number;
 } {
-  const targetPast = Math.max(1, Math.round(totalMonths * 0.25));
+  const targetPast = Math.max(
+    1,
+    pastMonths ?? Math.round(totalMonths * 0.25)
+  );
   const base = projection.months[0]?.date;
   let projIdx = base ? periodIndexForDate(base, anchorDay, today) : 0;
   // Clamp into range: today before the projection → first period; past the

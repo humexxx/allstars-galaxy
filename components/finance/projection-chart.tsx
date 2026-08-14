@@ -10,17 +10,14 @@ import {
   YAxis,
 } from "recharts";
 
-import {
-  layoutMilestoneLabels,
-  type MilestonePlacement,
-} from "@/lib/finance/milestone-layout";
+import { computeProjectionWindow } from "@/lib/finance/chart-series";
+import { DEFAULT_FINANCE_MILESTONES } from "@/lib/finance/milestones";
 
 import {
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
   ChartTooltip,
-  ChartTooltipContent,
 } from "@/components/ui/chart";
 import {
   Tooltip,
@@ -40,12 +37,6 @@ const MONTH_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-// Net-worth milestones we annotate on the chart. Picked so they land on the
-// values users most often care about; intermediate ticks come from the y-axis.
-const MILESTONES = [
-  0, 10_000, 20_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 2_000_000,
-  5_000_000, 10_000_000,
-] as const;
 
 // Stable chart config — the line stroke is overridden per-plan inside the
 // component so this only needs the label.
@@ -91,26 +82,22 @@ function formatTimeGap(monthsFromToday: number): string {
 const LABEL_WIDTH = 80;
 const LABEL_WIDTH_NARROW = 56;
 const LABEL_HEIGHT = 18;
-// Narrow-container thresholds for the responsive chart bits (px). 640 tracks
+// Narrow-container threshold for the responsive chart bits (px). 640 tracks
 // Tailwind's `sm` breakpoint, applied to the CHART's width, not the viewport —
 // the chart also narrows inside the desktop 3/4-column layout.
 const NARROW_CONTAINER = 640;
-const MAX_LABELS_NARROW = 4;
 
 function MilestoneLabel(props: {
   milestone: number;
   tooltip: string;
-  /** Stagger row from the collision layout: 0 = base, 1 = raised. */
-  row: 0 | 1;
   widthPx: number;
   viewBox?: { x?: number; y?: number };
 }) {
   // (viewBox.x, viewBox.y) is the top of the vertical reference line. Centre
-  // the label horizontally on the line, then nudge it just above the top —
-  // one extra label-height up when the collision layout staggered it to row 1.
+  // the label horizontally on the line and nudge it just above the top. Every
+  // label uses the same offset, so they all read along one line.
   const cx = props.viewBox?.x ?? 0;
-  const top =
-    (props.viewBox?.y ?? 0) - LABEL_HEIGHT - 2 - props.row * (LABEL_HEIGHT + 2);
+  const top = (props.viewBox?.y ?? 0) - LABEL_HEIGHT - 2;
   return (
     <foreignObject
       x={cx - props.widthPx / 2}
@@ -319,6 +306,10 @@ type ProjectionChartProps = {
    *  moves over the chart, and `null` when it leaves. Lets the page preview
    *  that period's figures elsewhere (e.g. the sidebar cards). */
   onHoverIndex?: (idx: number | null) => void;
+  /** Fires with the clicked point's index. Hover previews a period; this is the
+   *  commit — the page opens a dialog for it. Omit to leave the chart
+   *  read-only (no pointer cursor). */
+  onSelectIndex?: (idx: number) => void;
   /** Base plan's net worth aligned per point (scenario ghost line). Nulls skip
    *  the point. Omit to render no ghost. */
   ghostValues?: (number | null)[];
@@ -327,6 +318,9 @@ type ProjectionChartProps = {
   /** Portfolio value aligned per point (own series in var(--chart-4)). Nulls
    *  skip the point. Omit to render no portfolio series. */
   portfolioValues?: (number | null)[];
+  /** Net-worth milestones to annotate, from the user's global preference.
+   *  Every one that the trajectory crosses gets a labelled reference line. */
+  milestones?: readonly number[];
 };
 
 export function ProjectionChart({
@@ -335,9 +329,11 @@ export function ProjectionChart({
   color,
   heightClass = "h-80",
   onHoverIndex,
+  onSelectIndex,
   ghostValues,
   ghostLabel,
   portfolioValues,
+  milestones = DEFAULT_FINANCE_MILESTONES,
 }: ProjectionChartProps) {
   // Only notify the parent when the hovered index actually changes — recharts
   // fires onMouseMove continuously, and re-setting parent state every frame
@@ -394,7 +390,7 @@ export function ProjectionChart({
     // The tooltip captures "how far from today" so users can read the
     // distance to (or since) the milestone without doing the math.
     const cross: { x: number; milestone: number; tooltip: string }[] = [];
-    for (const m of MILESTONES) {
+    for (const m of milestones) {
       for (let i = 1; i < rows.length; i++) {
         const prev = rows[i - 1].rawValue;
         const curr = rows[i].rawValue;
@@ -414,7 +410,7 @@ export function ProjectionChart({
     }
 
     return { data: rows, crossings: cross };
-  }, [points, pastCount, ghostValues, portfolioValues]);
+  }, [points, pastCount, ghostValues, portfolioValues, milestones]);
 
   const xMax = Math.max(0, data.length - 1);
 
@@ -437,28 +433,10 @@ export function ProjectionChart({
   const labelWidthPx = isNarrow ? LABEL_WIDTH_NARROW : LABEL_WIDTH;
   const yAxisWidth = isNarrow ? 40 : 48;
 
-  // Collision-aware milestone label placement: stagger into a second row or
-  // drop the lowest-priority labels when the crossings sit too close for the
-  // chart's real width. Until the first measurement lands, render everything
-  // on the base row (the pre-layout behaviour).
-  const placements = useMemo<MilestonePlacement[]>(() => {
-    if (containerWidth === null) {
-      return crossings.map((c) => ({ x: c.x, milestone: c.milestone, row: 0 }));
-    }
-    // Keep the margin + y-axis constants in sync with the LineChart props
-    // below — the px math assumes the same plot width the chart renders.
-    const plotWidth = Math.max(1, containerWidth - 10 - 20 - yAxisWidth);
-    return layoutMilestoneLabels(crossings, {
-      pxPerUnit: plotWidth / Math.max(1, xMax),
-      labelWidthPx,
-      todayX: pastCount,
-      maxLabels: isNarrow ? MAX_LABELS_NARROW : undefined,
-    });
-  }, [crossings, containerWidth, xMax, pastCount, isNarrow, labelWidthPx, yAxisWidth]);
-  const placementByMilestone = new Map(placements.map((p) => [p.milestone, p]));
-  // The second label row needs extra headroom; only pay for it when used.
-  const hasSecondRow = placements.some((p) => p.row === 1);
-
+  // Every crossing gets a label, all on one row at the same height. There is
+  // deliberately no stagger and no drop: the milestone list is user-configured
+  // now (Settings → Finance), so how many labels share the axis is the user's
+  // call, not something the chart should silently override.
   // Today = the boundary index (pastCount): solid past meets dashed future.
   // Render the pulse there on the PAST series only; the future series skips
   // that index so we don't stack two markers on the same point.
@@ -485,7 +463,8 @@ export function ProjectionChart({
       <ChartContainer config={config} className={`${heightClass} w-full`}>
         <LineChart
           data={data}
-          margin={{ left: 10, right: 20, top: hasSecondRow ? 48 : 30, bottom: 0 }}
+          margin={{ left: 10, right: 20, top: 30, bottom: 0 }}
+          className={onSelectIndex ? "cursor-pointer" : undefined}
           onMouseMove={(state) => {
             const raw = state?.activeTooltipIndex;
             const idx =
@@ -495,6 +474,17 @@ export function ProjectionChart({
             emitHover(idx);
           }}
           onMouseLeave={() => emitHover(null)}
+          onClick={(state) => {
+            if (!onSelectIndex) return;
+            // Same index source as the hover handler — recharts resolves the
+            // nearest point for us, so a click anywhere in its column counts
+            // (the 4px dots would be a brutal target otherwise).
+            const raw = (state as { activeTooltipIndex?: number } | undefined)
+              ?.activeTooltipIndex;
+            if (typeof raw === "number" && raw >= 0 && raw < data.length) {
+              onSelectIndex(raw);
+            }
+          }}
         >
           {/* Horizontal-only grid (vertical={false}) matches the shadcn
               Line-Label example — the vertical milestone markers below carry
@@ -527,32 +517,25 @@ export function ProjectionChart({
           {/* Milestone crossings — vertical dashed line at the EXACT fractional
               x where the trajectory hits the milestone. The numeric x-axis lets
               the line land between months so distinct milestones don't collide.
-              Labels go through the collision layout: crowded ones stagger onto
-              a second row or drop (the line still renders), so nothing
-              overlaps on narrow charts. Hovering a label surfaces the time-gap
-              tooltip ("in about 5 months", "3 months ago"). */}
-          {crossings.map((c) => {
-            const placement = placementByMilestone.get(c.milestone);
-            return (
-              <ReferenceLine
-                key={c.milestone}
-                x={c.x}
-                stroke="currentColor"
-                strokeOpacity={0.35}
-                strokeDasharray="4 4"
-                label={
-                  placement ? (
-                    <MilestoneLabel
-                      milestone={c.milestone}
-                      tooltip={c.tooltip}
-                      row={placement.row}
-                      widthPx={labelWidthPx}
-                    />
-                  ) : undefined
-                }
-              />
-            );
-          })}
+              Every crossing gets its label, all at the same height — the list
+              is user-configured, so the count is their call. Hovering a label
+              surfaces the time-gap tooltip ("in about 5 months"). */}
+          {crossings.map((c) => (
+            <ReferenceLine
+              key={c.milestone}
+              x={c.x}
+              stroke="currentColor"
+              strokeOpacity={0.35}
+              strokeDasharray="4 4"
+              label={
+                <MilestoneLabel
+                  milestone={c.milestone}
+                  tooltip={c.tooltip}
+                  widthPx={labelWidthPx}
+                />
+              }
+            />
+          ))}
           <ChartTooltip
             content={<PointTooltip lineColor={lineColor} ghostLabel={ghostLabel} />}
           />
@@ -641,15 +624,88 @@ export function ProjectionChart({
   );
 }
 
+/**
+ * Dot renderer for the comparison chart: nothing anywhere except today's row,
+ * where it drops the shared `TodayPulseDot`. Plotting a dot per period would
+ * bury the lines once more than one plan is on the chart.
+ *
+ * `boundary < 0` means no window is applied, so there is no "today" to mark.
+ */
+function renderTodayDot(color: string, boundary: number, dimmed: boolean) {
+  const Dot = (props: {
+    cx?: number;
+    cy?: number;
+    index?: number;
+    payload?: { idx?: number };
+  }) => {
+    const { cx, cy, index, payload } = props;
+    const key = `today-${index ?? "x"}`;
+    if (cx == null || cy == null || boundary < 0 || payload?.idx !== boundary) {
+      return <g key={key} />;
+    }
+    return (
+      <g key={key} opacity={dimmed ? 0.22 : 1}>
+        <TodayPulseDot cx={cx} cy={cy} color={color} />
+      </g>
+    );
+  };
+  return Dot;
+}
+
+/**
+ * Tooltip for the comparison chart. Reads the hovered row directly rather than
+ * the Recharts payload, because every plan contributes two series (solid past +
+ * dashed future) that both carry a value on the boundary row — the default
+ * content would list that plan twice there.
+ */
+function ComparePlansTooltip(props: {
+  active?: boolean;
+  payload?: Array<{ payload: Record<string, string | number | null> }>;
+  seriesByPlan: Array<{ proj: Projection; key: string }>;
+}) {
+  const { active, payload, seriesByPlan } = props;
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload;
+  if (!row) return null;
+
+  return (
+    <div className="grid min-w-[10rem] gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
+      <div className="font-medium">{String(row.month ?? "")}</div>
+      <div className="grid gap-1">
+        {seriesByPlan.map(({ proj, key }) => {
+          const value = row[`${key}Past`] ?? row[`${key}Future`];
+          if (value == null) return null;
+          return (
+            <TooltipRow
+              key={key}
+              swatch={proj.plan.color}
+              label={proj.plan.name}
+              value={formatMoneyFull(Number(value))}
+              valueClass={Number(value) < 0 ? "text-rose-600" : undefined}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 type CompareChartProps = {
   projections: Projection[];
-  metric: "netWorth" | "totalDebt" | "savings";
+  metric: "netWorth" | "totalDebt";
   /** Tailwind height class(es) for the chart container. Defaults to `h-96`. */
   heightClass?: string;
   /** Tailwind class(es) applied to the legend wrapper — pass e.g.
    *  "hidden sm:flex" when another surface (the workspace rail) already
    *  names and colours each series, so small screens skip the redundancy. */
   legendClassName?: string;
+  /** Plan to emphasize: its line thickens while every other one fades back.
+   *  Null (the default) draws all lines equally. */
+  focusedPlanId?: string | null;
+  /** How many periods to plot. Omit to draw the whole projection. */
+  months?: number;
+  /** How many of those periods sit before today. Ignored without `months`. */
+  pastMonths?: number;
 };
 
 export function ComparePlansChart({
@@ -657,6 +713,9 @@ export function ComparePlansChart({
   metric,
   heightClass = "h-96",
   legendClassName,
+  focusedPlanId = null,
+  months,
+  pastMonths = 3,
 }: CompareChartProps) {
   if (projections.length === 0) return null;
 
@@ -668,50 +727,149 @@ export function ComparePlansChart({
   }));
 
   const maxMonths = Math.max(...projections.map((p) => p.months.length));
-  const data = Array.from({ length: maxMonths }, (_, i) => {
-    const row: Record<string, string | number> = {
-      month: projections[0].months[i]
-        ? MONTH_FORMATTER.format(projections[0].months[i].date)
-        : `M+${i + 1}`,
+
+  // Window the plot around today. Rows are indexed (not calendar-joined), so
+  // the boundary is derived from the first projection's dates — the same basis
+  // the row labels already use.
+  const window = months
+    ? computeProjectionWindow(projections[0], months, new Date(), 1, pastMonths)
+    : { startIndex: 0, count: maxMonths, pastCount: 0, todayIndex: 0 };
+  const boundary = months ? window.pastCount : -1;
+
+  const data = Array.from({ length: window.count }, (_, i) => {
+    const srcIdx = window.startIndex + i;
+    const row: Record<string, string | number | null> = {
+      month: projections[0].months[srcIdx]
+        ? MONTH_FORMATTER.format(projections[0].months[srcIdx].date)
+        : `M+${srcIdx + 1}`,
+      // Carried so the dot renderer can spot today's row from the payload
+      // rather than trusting Recharts' per-series index (the past series is
+      // null-padded, so the two don't line up).
+      idx: i,
     };
     for (const { proj, key } of seriesByPlan) {
-      const m = proj.months[i];
-      row[key] = m ? Number(m[metric].toFixed(2)) : 0;
+      const m = proj.months[srcIdx];
+      const value = m ? Number(m[metric].toFixed(2)) : 0;
+      // The boundary row carries BOTH keys so the solid and dashed segments
+      // meet instead of leaving a gap at today.
+      row[`${key}Past`] = boundary < 0 || i <= boundary ? value : null;
+      // Without a window there is no "today" to split on, so everything is one
+      // solid line and the dashed series stays empty (rendering both would lay
+      // a dashed line straight over the solid one).
+      row[`${key}Future`] = boundary >= 0 && i >= boundary ? value : null;
     }
     return row;
   });
 
+  // Keyed by the real dataKeys: ChartLegendContent resolves labels through
+  // `item.dataKey`, so a bare `series0` entry would leave the legend swatches
+  // unlabelled now that each plan draws `series0Past` + `series0Future`.
   const compareConfig: ChartConfig = seriesByPlan.reduce((acc, { proj, key }) => {
-    acc[key] = { label: proj.plan.name, color: proj.plan.color };
+    const entry = { label: proj.plan.name, color: proj.plan.color };
+    acc[`${key}Past`] = entry;
+    acc[`${key}Future`] = entry;
     return acc;
   }, {} as ChartConfig);
 
+  // A fixed axis width reserved room for labels that are rarely that wide — on
+  // a 375px card that cost ~14% of the plot area. Size it to the widest tick we
+  // actually render instead. 8px/glyph is an upper bound for Geist digits at
+  // text-xs (measured: "350k" needs 40px including the 4px tick margin — at
+  // 7px/glyph it clipped by 4px), and the +10 keeps a little headroom.
+  const widestTick = data.reduce((widest, row) => {
+    for (const { key } of seriesByPlan) {
+      const v = row[`${key}Past`] ?? row[`${key}Future`];
+      const label = formatMoneyTick(Number(v) || 0);
+      if (label.length > widest.length) widest = label;
+    }
+    return widest;
+  }, "0");
+  const yAxisWidth = Math.max(32, widestTick.length * 8 + 10);
+
   return (
     <ChartContainer config={compareConfig} className={`${heightClass} w-full`}>
-      <LineChart data={data} margin={{ left: 10, right: 10, top: 10, bottom: 0 }}>
-        <CartesianGrid vertical={false} strokeDasharray="3 3" strokeOpacity={0.4} />
+      {/* No left margin: the YAxis already reserves its own label gutter, so a
+          margin on top of it is pure dead space. */}
+      <LineChart data={data} margin={{ left: 0, right: 4, top: 10, bottom: 0 }}>
+        {/* Full grid here (unlike the single-plan chart above, which stays
+            horizontal-only because its milestone markers already carry the x
+            axis). Kept recessive — dashed and low opacity — so it reads as
+            background, never competing with the series. */}
+        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.4} />
         <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} minTickGap={32} />
         <YAxis
           tickLine={false}
           axisLine={false}
-          tickMargin={8}
-          width={48}
+          tickMargin={4}
+          width={yAxisWidth}
           tickFormatter={formatMoneyTick}
         />
-        <ChartTooltip content={<ChartTooltipContent />} />
+        {/* Each plan is two series (solid past, dashed future) that overlap at
+            today, so the stock tooltip would list every plan twice on that row.
+            This one reads the row once instead. */}
+        <ChartTooltip
+          content={<ComparePlansTooltip seriesByPlan={seriesByPlan} />}
+        />
+        {/* Explicit payload in plan order. Without it the legend mirrors the
+            render order, which we re-sort so the focused line paints on top —
+            so the legend would reshuffle every time the pointer moved. */}
         <ChartLegend
+          payload={seriesByPlan.map(({ proj, key }) => ({
+            dataKey: `${key}Past`,
+            value: proj.plan.name,
+            type: "line" as const,
+            color: proj.plan.color,
+          }))}
           content={<ChartLegendContent className={legendClassName} />}
         />
-        {seriesByPlan.map(({ key }) => (
-          <Line
-            key={key}
-            dataKey={key}
-            type="monotone"
-            stroke={`var(--color-${key})`}
-            strokeWidth={2}
-            dot={false}
-          />
-        ))}
+        {/* Recharts paints children in order, so the focused series has to go
+            last or the dimmed lines draw over the one we're highlighting. */}
+        {[...seriesByPlan]
+          .sort(
+            (a, b) =>
+              Number(a.proj.plan.id === focusedPlanId) -
+              Number(b.proj.plan.id === focusedPlanId)
+          )
+          .flatMap(({ proj, key }) => {
+            const dimmed =
+              focusedPlanId !== null && proj.plan.id !== focusedPlanId;
+            const shared = {
+              type: "monotone" as const,
+              strokeWidth: dimmed ? 1.5 : focusedPlanId ? 3 : 2,
+              strokeOpacity: dimmed ? 0.22 : 1,
+              dot: false as const,
+              // Recharts animates on every prop change; re-running the 300ms
+              // draw-in each time the focus moves makes the rail feel laggy.
+              isAnimationActive: false,
+              connectNulls: false,
+            };
+            return [
+              <Line
+                key={`${key}Past`}
+                dataKey={`${key}Past`}
+                stroke={`var(--color-${key}Past)`}
+                {...shared}
+                // "You are here" pulse where solid meets dashed — the same
+                // marker the single-plan chart uses. Only on the past series;
+                // the future one shares that row and would stack a second one.
+                dot={renderTodayDot(
+                  `var(--color-${key}Past)`,
+                  boundary,
+                  dimmed
+                )}
+              />,
+              // Dashed = projected. Kept out of the legend so each plan is
+              // named once.
+              <Line
+                key={`${key}Future`}
+                dataKey={`${key}Future`}
+                stroke={`var(--color-${key}Future)`}
+                legendType="none"
+                strokeDasharray="6 4"
+                {...shared}
+              />,
+            ];
+          })}
       </LineChart>
     </ChartContainer>
   );

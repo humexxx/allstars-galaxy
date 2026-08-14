@@ -4,13 +4,20 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { Copy, MoreHorizontal, Star, Trash2 } from "lucide-react";
+import { Copy, Highlighter, MoreHorizontal, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mono, Text } from "@/components/ui/typography";
 import {
@@ -35,9 +42,9 @@ import {
   deletePlanAction,
   setMainPlanAction,
 } from "@/app/actions/finance-plans";
+import { PlanColorPicker } from "./plan-color-picker";
 import { formatCurrency } from "@/lib/utils/format";
-import type { FinancePlan, Projection } from "@/types/finance";
-import type { PlanSummary } from "./plans-list";
+import type { FinancePlan, PlanSummary, Projection } from "@/types/finance";
 
 // Same rationale as plan-editor / compare-view: defer recharts to a lazy chunk
 // so the list page's first paint stays light.
@@ -49,13 +56,25 @@ const ComparePlansChart = dynamic(
   }
 );
 
-type Metric = "netWorth" | "totalDebt" | "savings";
+type Metric = "netWorth" | "totalDebt";
 
 const METRIC_LABEL: Record<Metric, string> = {
   netWorth: "Net worth",
   totalDebt: "Total debt",
-  savings: "Savings",
 };
+
+/** Horizon options, in periods. `0` means "as far as the projections run". */
+const RANGES = [
+  { value: "12", label: "12 months" },
+  { value: "24", label: "24 months" },
+  { value: "36", label: "3 years" },
+  { value: "60", label: "5 years" },
+  { value: "0", label: "Full plan" },
+] as const;
+
+const DEFAULT_RANGE = "24";
+/** Periods before today kept in view, regardless of the horizon picked. */
+const PAST_MONTHS = 3;
 
 const POSITIVE = "text-emerald-600 dark:text-emerald-400";
 const NEGATIVE = "text-rose-600 dark:text-rose-400";
@@ -65,6 +84,10 @@ const NEGATIVE = "text-rose-600 dark:text-rose-400";
  * rail of plans on the right (stacked below on mobile). The rail rows double as
  * the chart's series toggles — checking a plan adds its line to the chart —
  * while still linking through to the plan and exposing clone / delete / set-main.
+ *
+ * Rows also drive emphasis: pointing at one fades every other series back, and
+ * its colour swatch pins that focus so it survives the pointer leaving (and is
+ * reachable on touch, where there is no hover at all).
  */
 export function PlansWorkspace({
   plans,
@@ -82,6 +105,21 @@ export function PlansWorkspace({
     new Set(plans.map((p) => p.id))
   );
   const [metric, setMetric] = useState<Metric>("netWorth");
+  const [range, setRange] = useState<string>(DEFAULT_RANGE);
+  // "Full plan" still windows (so past stays solid and future dashed) — it just
+  // uses the longest projection as the horizon.
+  const longestProjection = useMemo(
+    () => Math.max(1, ...projections.map((p) => p.months.length)),
+    [projections]
+  );
+  const months = Number(range) || longestProjection;
+  // Two sources of emphasis: pointing at a rail row (transient) and pinning one
+  // via its colour swatch (sticky, and the only route on touch, where there is
+  // no hover). A pin always wins over a hover.
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+  const focusedId = pinnedId ?? hoveredId;
+  const focusedPlan = plans.find((p) => p.id === focusedId) ?? null;
 
   const filtered = useMemo(
     () => projections.filter((p) => selected.has(p.plan.id)),
@@ -138,30 +176,59 @@ export function PlansWorkspace({
 
   return (
     <>
-      {/* Hero grid: chart fills 3/4 on desktop, the narrow plan rail rides the
-          right 1/4. Single column on mobile (chart first, then the rail).
-          `lg:items-start` keeps the rail from stretching to the chart height. */}
+      {/* Hero grid: chart fills 2/3 on desktop, the plan rail rides the right
+          1/3 — a quarter squeezed plan names down to ~4 characters. Single
+          column on mobile (chart first, then the rail). */}
       {/* min-w-0 on both grid children: grid items default to min-width:auto,
           so recharts' measured svg would inflate the column past the viewport
           on mobile instead of shrinking. No items-start — the rail card
           stretches to match the chart card's height. */}
-      <div className="grid gap-4 lg:grid-cols-4">
-        <Card className="min-w-0 lg:col-span-3">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="min-w-0 lg:col-span-2">
           <CardHeader className="pb-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle>Projection comparison</CardTitle>
-              <Tabs value={metric} onValueChange={(v) => setMetric(v as Metric)}>
-                <TabsList>
-                  {(Object.keys(METRIC_LABEL) as Metric[]).map((m) => (
-                    <TabsTrigger key={m} value={m}>
-                      {METRIC_LABEL[m]}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
+              <div className="flex min-w-0 items-center gap-2">
+                <CardTitle>Projection comparison</CardTitle>
+                {focusedPlan && (
+                  <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+                    <span
+                      className="size-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: focusedPlan.color }}
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">{focusedPlan.name}</span>
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={range} onValueChange={setRange}>
+                  <SelectTrigger size="sm" className="w-[9.5rem]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RANGES.map((r) => (
+                      <SelectItem key={r.value} value={r.value}>
+                        {r.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Tabs value={metric} onValueChange={(v) => setMetric(v as Metric)}>
+                  <TabsList>
+                    {(Object.keys(METRIC_LABEL) as Metric[]).map((m) => (
+                      <TabsTrigger key={m} value={m}>
+                        {METRIC_LABEL[m]}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              </div>
             </div>
           </CardHeader>
-          <CardContent>
+          {/* The Card default of px-6 costs 48 of a 375px screen before a
+              single pixel of chart is drawn. Data ink wins on phones; desktop
+              keeps the standard gutter. */}
+          <CardContent className="px-3 sm:px-6">
             {filtered.length === 0 ? (
               <div className="flex h-64 items-center justify-center sm:h-80 lg:h-[460px]">
                 <Text variant="muted">Select at least one plan to chart.</Text>
@@ -171,6 +238,9 @@ export function PlansWorkspace({
                 projections={filtered}
                 metric={metric}
                 heightClass="h-64 sm:h-80 lg:h-[460px]"
+                focusedPlanId={focusedId}
+                months={months}
+                pastMonths={PAST_MONTHS}
               />
             )}
           </CardContent>
@@ -181,6 +251,9 @@ export function PlansWorkspace({
             <CardTitle className="text-2xs font-medium uppercase tracking-wide text-muted-foreground lg:text-xs">
               Your plans
             </CardTitle>
+            <Text variant="small" className="text-muted-foreground">
+              Point at a plan to highlight it. Its dot sets the line colour.
+            </Text>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2">
@@ -190,24 +263,33 @@ export function PlansWorkspace({
                 return (
                   <li
                     key={plan.id}
-                    className="flex items-center gap-2.5 rounded-lg border p-2.5 transition-colors hover:border-foreground/20"
+                    onMouseEnter={() => setHoveredId(plan.id)}
+                    onMouseLeave={() =>
+                      setHoveredId((cur) => (cur === plan.id ? null : cur))
+                    }
+                    className={`flex items-center gap-2.5 rounded-lg border p-2.5 transition-colors hover:border-foreground/20 ${
+                      focusedId === plan.id ? "border-foreground/30 bg-muted/50" : ""
+                    }`}
                   >
                     <Checkbox
                       checked={inChart}
                       onCheckedChange={() => toggle(plan.id)}
                       aria-label={`Toggle ${plan.name} in chart`}
                     />
-                    <span
-                      className="h-3 w-3 shrink-0 rounded-full"
-                      style={{ backgroundColor: plan.color }}
-                      aria-hidden="true"
+                    <PlanColorPicker
+                      plan={plan}
+                      pinned={pinnedId === plan.id}
+                      onChanged={() => router.refresh()}
                     />
                     <Link
                       href={`/portal/plans/${plan.id}`}
                       className="min-w-0 flex-1"
                     >
                       <div className="flex items-center gap-1.5">
-                        <span className="truncate text-sm font-medium">
+                        <span
+                          className="truncate text-sm font-medium"
+                          title={plan.name}
+                        >
                           {plan.name}
                         </span>
                         {plan.isMain && (
@@ -254,6 +336,21 @@ export function PlansWorkspace({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {/* Pinning lives here rather than on the swatch (which
+                            now opens the colour picker) so it stays reachable
+                            on touch, where there is no hover to highlight. */}
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            setPinnedId((cur) =>
+                              cur === plan.id ? null : plan.id
+                            )
+                          }
+                        >
+                          <Highlighter className="mr-2 h-4 w-4" />
+                          {pinnedId === plan.id
+                            ? "Stop highlighting"
+                            : "Highlight in chart"}
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() => handleSetMain(plan)}
                           disabled={plan.isMain}

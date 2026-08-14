@@ -89,11 +89,23 @@
   --ring: oklch(0.708 0 0);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
-  --chart-1: oklch(0.87 0.12 207);
-  --chart-2: oklch(0.80 0.13 212);
-  --chart-3: oklch(0.71 0.13 215);
-  --chart-4: oklch(0.61 0.11 222);
-  --chart-5: oklch(0.52 0.09 223);
+  /* Categorical series palette — identity, not magnitude. These slots colour
+     SEPARATE things (one plan vs another, one trip vs another), so they are
+     distinct hues in a fixed order, never a light-to-dark ramp of one hue.
+     The previous values were a cyan ramp (hue 207→223): two adjacent plans
+     came out ΔE 7.1 apart in normal vision — under the ≥15 floor, i.e. not
+     reliably distinguishable — and three slots sat under 3:1 on white.
+
+     Slot 1 keeps the brand cyan. The order was chosen by enumerating
+     permutations and taking the best worst-adjacent separation, then verified
+     with the dataviz validator (light surface #ffffff):
+       CVD ΔE 16.3 (target ≥8) · normal-vision ΔE 19.6 (floor ≥15)
+     Re-run the validator before touching any of these. */
+  --chart-1: oklch(0.6095 0.11 221.99);   /* #0f91b2 cyan (brand) */
+  --chart-2: oklch(0.6708 0.175 40.64);   /* #eb6834 orange */
+  --chart-3: oklch(0.4331 0.1671 283.62); /* #4a3aa7 violet */
+  --chart-4: oklch(0.7163 0.1412 357.39); /* #e87ba4 magenta */
+  --chart-5: oklch(0.7644 0.1612 75.12);  /* #eda100 yellow */
   /* Sidebar sits flush with the page background, separated only by its right
      border — the shadcn docs look, rather than a tinted panel. */
   --sidebar: oklch(1 0 0);
@@ -135,11 +147,14 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0.12 207);
-  --chart-2: oklch(0.80 0.13 212);
-  --chart-3: oklch(0.71 0.13 215);
-  --chart-4: oklch(0.61 0.11 222);
-  --chart-5: oklch(0.52 0.09 223);
+  /* Same five hues, re-stepped for the dark card surface (#343434) — a
+     selected dark palette, not an automatic flip of the light one. Verified:
+     CVD ΔE 13.2 (target ≥8) · normal-vision ΔE 19.3 (floor ≥15). */
+  --chart-1: oklch(0.6599 0.1177 220.36); /* #12a2c4 cyan (brand) */
+  --chart-2: oklch(0.6221 0.1726 40.11);  /* #d95926 orange */
+  --chart-3: oklch(0.6696 0.1452 286.83); /* #9085e9 violet */
+  --chart-4: oklch(0.6224 0.1712 0.84);   /* #d55181 magenta */
+  --chart-5: oklch(0.6699 0.1425 73.23);  /* #c98500 yellow */
   /* Match the page background in dark mode too, so the sidebar reads as part
      of the shell instead of a lighter floating panel. */
   --sidebar: oklch(0.145 0 0);

@@ -6,6 +6,7 @@ import type { Projection } from "@/types/finance";
 import { PlanEditor } from "@/components/finance/plan-editor";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { getUserPreferences } from "@/lib/services/user-preferences-service";
 import {
   compareDebtStrategies,
   getAutoInvestRate,
@@ -46,6 +47,9 @@ export default async function PlanDetailPage({ params }: PageProps) {
   // the original plan baseline. Returns the plan unchanged when there are no
   // confirmations. The raw `plan` is still what the editor mutates.
   const baseline = await buildCalibratedPlan(plan);
+
+  // Milestones are a global user preference, not plan data — edited in Settings.
+  const preferences = await getUserPreferences(ctx.effectiveUserId);
 
   const [portfolioValue, autoInvestRate, investmentMethods, history] =
     await Promise.all([
@@ -127,6 +131,7 @@ export default async function PlanDetailPage({ params }: PageProps) {
         ghost={ghost}
         portfolioHistory={portfolioHistory}
         portfolioValue={portfolioValue}
+        milestones={preferences.financeMilestones}
         title={plan.name}
         description={
           plan.description ?? "Add income, expenses and debts to refine the projection."

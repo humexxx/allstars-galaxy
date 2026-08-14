@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, timestamp, pgSchema, real, pgEnum, numeric, index, boolean, integer, date, check, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, jsonb, text, uuid, timestamp, pgSchema, real, pgEnum, numeric, index, boolean, integer, date, check, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
@@ -951,6 +951,11 @@ export const userPreferences = pgTable("user_preferences", {
   // Decorative module mascot shown after page content (e.g. the miner on
   // finance pages). Toggleable from /portal/settings.
   showContextAvatar: boolean("show_context_avatar").notNull().default(true),
+  // Net-worth milestones annotated on the projection charts. Global (not
+  // per-plan) and editable from /portal/settings. NULL means "never touched
+  // it" and falls back to the built-in list in code — a default here would
+  // freeze today's list into every existing row.
+  financeMilestones: jsonb("finance_milestones").$type<number[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

@@ -30,6 +30,15 @@ shown after the content of module pages; on Finance it mines for gold.
 - `user_preferences` — one row per user, created lazily on first write; absence of a row means "all defaults" (the service layer owns the default values)
 
 ## Notes
+- **Net-worth milestones** (`user_preferences.finance_milestones`, jsonb) are a
+  GLOBAL preference, not plan data — one list applies to every plan's chart.
+  `NULL` means "never customised" and falls back to
+  `DEFAULT_FINANCE_MILESTONES` in [`lib/finance/milestones.ts`](../../lib/finance/milestones.ts)
+  (client-safe, because `user-preferences-service` is `server-only` and the
+  chart needs the same defaults). An empty array IS a choice — no reference
+  lines — so only `null` falls back. Labels render on ONE row and are never
+  dropped, by explicit product decision: the user picks the list, so the count
+  is theirs; `MAX_MILESTONES` (12) is the guard rail.
 - Conventional Commits scope: `portal` (no dedicated `settings` scope yet — add it to `commitlint.config.mjs` if the module grows).
 - Reached from the user dropdown ([`components/nav-user.tsx`](../../components/nav-user.tsx)), not the sidebar nav sections.
 - Each module's layout owns rendering the mascot (e.g. `app/portal/plans/layout.tsx` — see [finance.md](./finance.md)); this module only owns the preference itself.

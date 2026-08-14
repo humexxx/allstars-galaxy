@@ -1,8 +1,10 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { PortalPageContainer } from "@/components/portal/page-container"
 
 export default function MoreAppsLoading() {
   return (
-    <section className="space-y-6" aria-hidden="true">
+    <PortalPageContainer>
+      <section className="space-y-6" aria-hidden="true">
       <div className="space-y-2">
         <Skeleton className="h-7 w-48" />
         <Skeleton className="h-4 w-72" />
@@ -12,6 +14,7 @@ export default function MoreAppsLoading() {
           <Skeleton key={i} className="h-48 w-full" />
         ))}
       </div>
-    </section>
+      </section>
+    </PortalPageContainer>
   )
 }

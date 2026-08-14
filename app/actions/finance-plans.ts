@@ -20,6 +20,7 @@ import {
   deleteLineOverride,
   deletePlan,
   setMainPlan,
+  setPlanColor,
   updateDebt,
   updateExpense,
   updateIncome,
@@ -32,6 +33,7 @@ import {
   lineOverrideSchema,
   planDebtSchema,
   planExpenseSchema,
+  planColorSchema,
   planIncomeSchema,
   updateFinancePlanSchema,
   updatePlanDebtSchema,
@@ -40,6 +42,7 @@ import {
   type CreateFinancePlanInput,
   type DeleteLineOverrideInput,
   type LineOverrideInput,
+  type PlanColorInput,
   type PlanDebtInput,
   type PlanExpenseInput,
   type PlanIncomeInput,
@@ -126,6 +129,26 @@ export async function setMainPlanAction(planId: string) {
     // Revalidate dashboard + plans list — both surfaces follow the main flag.
     revalidatePath(PLAN_PATH);
     revalidatePath("/portal");
+    return { success: true as const };
+  });
+}
+
+export async function setPlanColorAction(input: PlanColorInput) {
+  return safe("finance-plans", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = planColorSchema.safeParse(input);
+    if (!parsed.success) {
+      return { success: false as const, error: "Unsupported colour" };
+    }
+    await setPlanColor(ctx.effectiveUserId, parsed.data.id, parsed.data.color);
+    await logImpersonatedMutation({
+      action: "financePlan.setColour",
+      entityTable: "finance_plans",
+      entityId: parsed.data.id,
+      after: { color: parsed.data.color },
+    });
+    revalidatePath(PLAN_PATH);
+    revalidatePath(pathForPlan(parsed.data.id));
     return { success: true as const };
   });
 }

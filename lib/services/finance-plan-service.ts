@@ -14,6 +14,7 @@ import { and, asc, eq } from "drizzle-orm";
 
 import type {
   DebtStrategy,
+  FinanceMood,
   FinancePlan,
   FinancePlanDebt,
   FinancePlanExpense,
@@ -280,6 +281,19 @@ export async function setMainPlan(
       .set({ isMain: true })
       .where(eq(financePlans.id, planId));
   });
+}
+
+/** Repaints a single plan without touching any other field. */
+export async function setPlanColor(
+  userId: string,
+  planId: string,
+  color: string
+): Promise<void> {
+  await ensureOwnership(planId, userId);
+  await db
+    .update(financePlans)
+    .set({ color, updatedAt: new Date() })
+    .where(eq(financePlans.id, planId));
 }
 
 /** Returns the user's main plan, or null if none has been marked. */
@@ -1448,6 +1462,49 @@ export async function projectPlanWithPortfolio(
     overrides: plan.overrides,
   });
 }
+
+/**
+ * Reads a projection as one of four moods, used to pose the finance mascot.
+ *
+ * | mood       | when                                                    |
+ * | ---------- | ------------------------------------------------------- |
+ * | `strained` | the plan ends underwater (negative net worth)            |
+ * | `steady`   | solvent, but debt outlives the horizon or growth is flat |
+ * | `thriving` | debt cleared **and** net worth grew over the horizon     |
+ *
+ * Exported for tests; prefer `getFinanceMood` from app code.
+ */
+export function deriveFinanceMood(projection: Projection): FinanceMood {
+  const first = projection.months[0];
+  const last = projection.months.at(-1);
+  if (!last) return "idle";
+
+  if (projection.endingNetWorth < 0) return "strained";
+
+  const debtCleared =
+    projection.monthsToDebtFree !== null || projection.endingDebt <= 0.01;
+  const grew = first ? last.netWorth > first.netWorth : last.netWorth > 0;
+
+  return debtCleared && grew ? "thriving" : "steady";
+}
+
+/**
+ * Mood of the user's main plan. Wrapped in React's `cache()` so the plans
+ * layout and any page rendering in the same request share one computation;
+ * `getPlanWithLines` is itself cached, so this adds no extra DB round-trip when
+ * the page already loaded that plan.
+ */
+export const getFinanceMood = cache(async function getFinanceMood(
+  userId: string
+): Promise<FinanceMood> {
+  const plan = await getMainPlan(userId);
+  if (!plan) return "idle";
+
+  const full = await getPlanWithLines(plan.id, userId);
+  if (!full) return "idle";
+
+  return deriveFinanceMood(await projectPlanWithPortfolio(full, userId));
+});
 
 export async function listInvestmentMethods(
   options: { includeDisabled?: boolean } = {}

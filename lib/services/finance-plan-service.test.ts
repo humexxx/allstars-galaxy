@@ -16,6 +16,7 @@ vi.mock("@/db", () => ({
 
 import {
   compareDebtStrategies,
+  deriveFinanceMood,
   projectPlan,
 } from "./finance-plan-service";
 import type {
@@ -719,5 +720,83 @@ describe("projectPlan — confirmation-day anchored periods", () => {
 describe("internal helper", () => {
   it("compiles closeTo without runtime use", () => {
     expect(closeTo(1.0)).toBeDefined();
+  });
+});
+
+describe("deriveFinanceMood", () => {
+  // Only the fields deriveFinanceMood reads; the rest of Projection is noise.
+  const projection = (over: {
+    months?: Array<{ netWorth: number }>;
+    endingNetWorth?: number;
+    endingDebt?: number;
+    monthsToDebtFree?: number | null;
+  }) =>
+    ({
+      months: over.months ?? [{ netWorth: 0 }, { netWorth: 100 }],
+      endingNetWorth: over.endingNetWorth ?? 100,
+      endingDebt: over.endingDebt ?? 0,
+      // `??` would collapse an explicit null (debt never cleared) back into the
+      // default, silently turning those cases into "debt cleared".
+      monthsToDebtFree:
+        "monthsToDebtFree" in over ? over.monthsToDebtFree : 12,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    }) as any;
+
+  it("is idle when the projection has no months", () => {
+    expect(deriveFinanceMood(projection({ months: [] }))).toBe("idle");
+  });
+
+  it("is strained when the plan ends underwater", () => {
+    expect(
+      deriveFinanceMood(projection({ endingNetWorth: -5_000 }))
+    ).toBe("strained");
+  });
+
+  it("prefers strained over thriving when net worth is negative", () => {
+    expect(
+      deriveFinanceMood(
+        projection({
+          endingNetWorth: -1,
+          endingDebt: 0,
+          monthsToDebtFree: 3,
+          months: [{ netWorth: -10 }, { netWorth: -1 }],
+        })
+      )
+    ).toBe("strained");
+  });
+
+  it("is thriving when debt clears and net worth grows", () => {
+    expect(
+      deriveFinanceMood(
+        projection({
+          months: [{ netWorth: 1_000 }, { netWorth: 50_000 }],
+          monthsToDebtFree: 18,
+        })
+      )
+    ).toBe("thriving");
+  });
+
+  it("treats a zero ending balance as debt cleared", () => {
+    expect(
+      deriveFinanceMood(
+        projection({ monthsToDebtFree: null, endingDebt: 0.005 })
+      )
+    ).toBe("thriving");
+  });
+
+  it("is steady when debt outlives the horizon", () => {
+    expect(
+      deriveFinanceMood(
+        projection({ monthsToDebtFree: null, endingDebt: 12_000 })
+      )
+    ).toBe("steady");
+  });
+
+  it("is steady when solvent but net worth did not grow", () => {
+    expect(
+      deriveFinanceMood(
+        projection({ months: [{ netWorth: 900 }, { netWorth: 400 }] })
+      )
+    ).toBe("steady");
   });
 });

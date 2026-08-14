@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/portal/page-header";
+import { PortalPageContainer } from "@/components/portal/page-container";
 import { DashboardFinanceCard } from "@/components/finance/dashboard-finance-card";
 import { DashboardConfirmationHost } from "@/components/finance/dashboard-confirmation-host";
 import { DashboardSportsCard } from "@/components/entertainment/sports/dashboard-sports-card";
@@ -18,7 +19,8 @@ export default async function PortalPage() {
   const ctx = await requireEffectiveContext();
 
   return (
-    <section className="space-y-6">
+    <PortalPageContainer>
+      <section className="space-y-6">
       <PageHeader
         title="Dashboard"
         description="Snapshots from across your workspace."
@@ -29,6 +31,7 @@ export default async function PortalPage() {
         <DashboardSportsCard userId={ctx.effectiveUserId} />
       </div>
       <DashboardConfirmationHost userId={ctx.effectiveUserId} />
-    </section>
+      </section>
+    </PortalPageContainer>
   );
 }

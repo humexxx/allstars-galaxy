@@ -5,6 +5,7 @@ import { investmentMethods } from "@/db/schema";
 import { asc } from "drizzle-orm";
 
 import { InvestmentMethodsView } from "@/components/portfolio/investment-methods-view";
+import { PortalPageContainer } from "@/components/portal/page-container";
 
 export const metadata: Metadata = {
   title: "Investment Methods",
@@ -22,5 +23,9 @@ export default async function InvestmentMethodsPage() {
     .from(investmentMethods)
     .orderBy(asc(investmentMethods.author), asc(investmentMethods.name));
 
-  return <InvestmentMethodsView methods={methods} />;
+  return (
+    <PortalPageContainer>
+      <InvestmentMethodsView methods={methods} />
+    </PortalPageContainer>
+  );
 }

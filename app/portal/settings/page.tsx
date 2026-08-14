@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/portal/page-header";
-import { PreferencesForm } from "@/components/settings/preferences-form";
+import { PortalPageContainer } from "@/components/portal/page-container";
+import { SettingsShell } from "@/components/settings/settings-shell";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { getUserPreferences } from "@/lib/services/user-preferences-service";
 
@@ -17,12 +18,14 @@ export default async function SettingsPage() {
   const preferences = await getUserPreferences(ctx.effectiveUserId);
 
   return (
-    <section className="space-y-6">
+    <PortalPageContainer>
+      <section className="space-y-6">
       <PageHeader
         title="Settings"
         description="Personal preferences for your portal experience."
       />
-      <PreferencesForm preferences={preferences} />
-    </section>
+      <SettingsShell preferences={preferences} />
+      </section>
+    </PortalPageContainer>
   );
 }

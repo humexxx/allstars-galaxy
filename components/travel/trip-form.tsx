@@ -89,7 +89,9 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
                   placeholder="Summer in Lisbon"
                   required
                   autoFocus
-                  {...register("title", { setValueAs: (v: string) => v.trim() })}
+                  {...register("title", {
+                    setValueAs: (v: string | null) => v?.trim() ?? "",
+                  })}
                 />
                 {errors.title && (
                   <p className="text-sm text-destructive">{errors.title.message}</p>
@@ -102,7 +104,7 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
                   id="trip-destination"
                   placeholder="Lisbon, Portugal"
                   {...register("destination", {
-                    setValueAs: (v: string) => v.trim() || null,
+                    setValueAs: (v: string | null) => v?.trim() || null,
                   })}
                 />
               </div>
@@ -138,7 +140,8 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
                     placeholder="USD"
                     className="uppercase"
                     {...register("currency", {
-                      setValueAs: (v: string) => v.trim().toUpperCase() || "USD",
+                      setValueAs: (v: string | null) =>
+                        v?.trim().toUpperCase() || "USD",
                     })}
                   />
                   {errors.currency && (
@@ -177,7 +180,7 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
                   placeholder="What is this trip about?"
                   rows={3}
                   {...register("description", {
-                    setValueAs: (v: string) => v.trim() || null,
+                    setValueAs: (v: string | null) => v?.trim() || null,
                   })}
                 />
               </div>

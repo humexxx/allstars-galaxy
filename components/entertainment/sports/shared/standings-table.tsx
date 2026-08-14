@@ -38,7 +38,7 @@ export function StandingsTable({
   const hasForm = showForm && standings.some((s) => s.form && s.form.length > 0);
 
   return (
-    <div className={cn("overflow-x-auto rounded-lg border", className)}>
+    <div className={cn("relative overflow-x-auto rounded-lg border", className)}>
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">

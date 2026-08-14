@@ -109,7 +109,7 @@ function SportSelector({
   sports: typeof SPORTS;
 }) {
   return (
-    <div className="-mx-2 flex gap-2 overflow-x-auto px-2 pb-1">
+    <div className="relative -mx-2 flex gap-2 overflow-x-auto px-2 pb-1">
       {sports.map((sport) => {
         const isActive = sport.id === active;
         const isFav = favSet.has(sport.id);

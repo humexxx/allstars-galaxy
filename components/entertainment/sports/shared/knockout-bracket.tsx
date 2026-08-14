@@ -114,7 +114,7 @@ function MobileBracket({
       <div
         role="tablist"
         aria-label="Knockout rounds"
-        className="-mx-1 flex gap-1 overflow-x-auto px-1"
+        className="relative -mx-1 flex gap-1 overflow-x-auto px-1"
       >
         {rounds.map((round, i) => (
           <button

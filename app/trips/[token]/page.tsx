@@ -40,7 +40,7 @@ export async function generateMetadata({
   const view = await getPublicTripByToken(token);
   if (!view) {
     return {
-      title: "Trip not found | Allstars Galaxy",
+      title: "Trip not found",
       description: "This share link is no longer available.",
     };
   }
@@ -62,7 +62,7 @@ export async function generateMetadata({
 
   return {
     metadataBase: new URL(baseUrl),
-    title: `${title} | Allstars Galaxy`,
+    title,
     description,
     openGraph: {
       title,

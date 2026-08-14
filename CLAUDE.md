@@ -118,6 +118,19 @@ Never introduce another font family. The smallest sanctioned size is `text-2xs`
 (10px); never use arbitrary `text-[Npx]`. For spacing, reuse the Tailwind scale —
 never arbitrary `[...]` padding/margin/gap (see SPACING.md).
 
+### Chart colours
+`--chart-1..5` in [`app/globals.css`](app/globals.css) are a **categorical**
+series palette — five distinct hues in a fixed order, encoding *identity* (which
+plan, which trip). They are deliberately **not** a light-to-dark ramp of one hue:
+that encodes magnitude, and it made two adjacent plans indistinguishable
+(ΔE 7.1 in normal vision, against a ≥15 floor).
+
+Assign slots in order, never cycle them, and never hand-pick a replacement:
+the palette is validated (lightness band, chroma floor, colour-vision
+separation, contrast). Re-run the validator from the `dataviz` skill before
+changing any slot, in **both** modes — the dark steps are chosen for the dark
+surface, not derived from the light ones.
+
 ### Language
 All code, comments, and documentation in **English**.
 
@@ -163,7 +176,15 @@ The pre-flight check in `drizzle.config.ts` will refuse to run if `DIRECT_URL`
 is missing and `DATABASE_URL` points at the transaction pooler.
 
 ### Security
-- All server actions use `authenticatedAction` or `adminAction` from `@/lib/services/auth-server`
+- Every server action opens with an auth gate — never trust the caller:
+  - **User-scoped actions** → `requireEffectiveContext()` from
+    `@/lib/services/impersonation`, then scope every query to
+    `ctx.effectiveUserId` (this is what honours an active impersonation
+    session).
+  - **Admin-only actions** → `requireAdmin()` / `requireAdminCached()` from
+    `@/lib/services/auth-server`.
+  - **Plain "is signed in" checks** → `requireAuth()` / `requireAuthCached()`
+    from the same module.
 - All service queries filter by `userId` for ownership
 - Always validate input with Zod
 - No secrets in client code
@@ -218,7 +239,15 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
 DATABASE_URL    # Supabase transaction pooler (:6543) — used by the app at runtime
 DIRECT_URL      # Supabase session pooler (:5432) — used by drizzle-kit only
 CRON_SECRET
+ALLOW_SIGNUPS  # "true" opens new accounts; anything else (incl. unset) closes them
 ```
+
+**`ALLOW_SIGNUPS` is fail-closed and app-side only.** It gates `/signup`, the
+login page's sign-up link, and the OAuth callback (which rejects an account
+created by that very sign-in — OAuth is a signup path too). It does **not** stop
+a direct `auth.signUp` call: that runs in the browser against Supabase with the
+publishable key. Pair it with Supabase's own *Allow new users to sign up*
+toggle, which is the actual enforcement. See [`lib/auth/signups.ts`](lib/auth/signups.ts).
 
 Optional (feature-gated, each sport falls back to mock when unset):
 ```
@@ -269,7 +298,8 @@ provider with current data).
    [`commitlint.config.mjs`](commitlint.config.mjs) `scope-enum`.
 
 ### New Server Action
-- Import `authenticatedAction` from `@/lib/services/auth-server`
+- Open with the auth gate — `requireEffectiveContext()` for user-scoped work,
+  `requireAdmin()` for admin-only (see **Security** above)
 - Define Zod schema, call service, revalidate paths
 - See [`/app/actions/AGENTS.md`](app/actions/AGENTS.md) for the canonical
   pattern.

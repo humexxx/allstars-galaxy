@@ -17,6 +17,10 @@ import { createClient } from "@/lib/supabase-server";
  */
 export async function signOutAction(): Promise<never> {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  // `scope: "local"` ends the session for THIS browser only. Supabase defaults
+  // to "global", which revokes every refresh token the user holds — logging out
+  // on a laptop would silently sign them out on their phone too. A deliberate
+  // "sign out everywhere" belongs in its own action.
+  await supabase.auth.signOut({ scope: "local" });
   redirect("/login");
 }

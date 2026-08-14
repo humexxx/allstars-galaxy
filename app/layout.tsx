@@ -8,7 +8,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 
 export const metadata: Metadata = {
-  title: "Allstars Galaxy",
+  title: { template: "%s | Allstars Galaxy", default: "Allstars Galaxy" },
   description: "Allstars Galaxy Application",
   // app/icon.svg is auto-picked by Next.js as the primary favicon. The
   // light/dark variants in /public are referenced explicitly so the app

@@ -11,7 +11,10 @@ import {
 import { Input } from "@/components/ui/input"
 import { Heading, Text } from "@/components/ui/typography"
 import { AuthService } from "@/lib/services/auth-service"
+import { loginSchema, type LoginData } from "@/schemas/auth"
 import { useState } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 
@@ -26,50 +29,58 @@ function safeNext(raw: string | null): string {
 
 export function LoginForm({
   className,
+  /** Hides the sign-up link while the app isn't taking new accounts. The real
+   *  gate is server-side (see lib/auth/signups.ts); this just avoids offering
+   *  a door that's shut. */
+  signupsOpen = true,
   ...props
-}: React.ComponentProps<"form">) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+}: React.ComponentProps<"form"> & { signupsOpen?: boolean }) {
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
+  // OAuth failures come back as ?error= from /auth/callback — surface them.
+  const [error, setError] = useState<string | null>(searchParams.get("error"))
   const next = safeNext(searchParams.get("next"))
   const signupHref =
     next === "/portal" ? "/signup" : `/signup?next=${encodeURIComponent(next)}`
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setIsLoading(true)
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginData>({
+    resolver: zodResolver(loginSchema),
+  })
+
+  const onSubmit = async (data: LoginData): Promise<void> => {
     setError(null)
 
-    const formData = new FormData(event.currentTarget)
-    const email = formData.get("email") as string
-    const password = formData.get("password") as string
-
     try {
-      await AuthService.loginWithPassword(email, password)
+      await AuthService.loginWithPassword(data.email, data.password)
       router.push(next)
       router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error initializing login")
-    } finally {
-      setIsLoading(false)
     }
   }
 
+  const isLoading = isSubmitting || isGoogleLoading
+
   async function handleGoogleLogin() {
-    setIsLoading(true)
+    setIsGoogleLoading(true)
     try {
       await AuthService.signInWithGoogle(next === "/portal" ? null : next)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error with Google login")
-      setIsLoading(false)
+      setIsGoogleLoading(false)
     }
   }
 
   return (
     <form
       className={cn("flex flex-col gap-6", className)}
-      onSubmit={handleSubmit}
+      onSubmit={handleSubmit(onSubmit)}
+      noValidate
       {...props}
     >
       <FieldGroup>
@@ -92,7 +103,8 @@ export function LoginForm({
 
         <Field>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" name="email" type="email" placeholder="m@example.com" autoComplete="email" required />
+          <Input id="email" type="email" placeholder="m@example.com" autoComplete="email" {...register("email")} />
+          {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
         </Field>
         <Field>
           <div className="flex items-center">
@@ -104,11 +116,12 @@ export function LoginForm({
               Forgot your password?
             </Link>
           </div>
-          <Input id="password" name="password" type="password" autoComplete="current-password" required />
+          <Input id="password" type="password" autoComplete="current-password" {...register("password")} />
+          {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
         </Field>
         <Field>
           <Button type="submit" disabled={isLoading} className="w-full">
-            {isLoading ? "Logging in..." : "Login"}
+            {isSubmitting ? "Logging in..." : "Login"}
           </Button>
         </Field>
         <FieldSeparator>Or continue with</FieldSeparator>
@@ -136,12 +149,14 @@ export function LoginForm({
           </Button>
         </Field>
 
-        <div className="text-center text-sm">
-          Don&apos;t have an account?{" "}
-          <Link href={signupHref} className="underline underline-offset-4">
-            Sign up
-          </Link>
-        </div>
+        {signupsOpen && (
+          <div className="text-center text-sm">
+            Don&apos;t have an account?{" "}
+            <Link href={signupHref} className="underline underline-offset-4">
+              Sign up
+            </Link>
+          </div>
+        )}
       </FieldGroup>
     </form>
   )

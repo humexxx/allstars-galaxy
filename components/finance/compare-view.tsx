@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Heading, Mono, Text } from "@/components/ui/typography";
+import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 
 import { formatCurrency } from "@/lib/utils/format";
 import type { Projection } from "@/types/finance";
@@ -23,7 +23,7 @@ const ComparePlansChart = dynamic(
   }
 );
 
-type Metric = "netWorth" | "totalDebt" | "savings";
+type Metric = "netWorth" | "totalDebt";
 
 type CompareViewProps = {
   projections: Projection[];
@@ -59,9 +59,7 @@ export function CompareView({
     <div className="space-y-6">
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-            Plans in chart
-          </CardTitle>
+          <Eyebrow as="div">Plans in chart</Eyebrow>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3">
@@ -95,7 +93,6 @@ export function CompareView({
               <TabsList>
                 <TabsTrigger value="netWorth">Net worth</TabsTrigger>
                 <TabsTrigger value="totalDebt">Total debt</TabsTrigger>
-                <TabsTrigger value="savings">Savings</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>

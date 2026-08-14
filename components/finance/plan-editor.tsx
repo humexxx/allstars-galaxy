@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import {
@@ -10,12 +11,12 @@ import {
   Camera,
   ChevronDown,
   ClipboardCheck,
-  Clock,
+  GitBranch,
   LineChart,
   type LucideIcon,
   Star,
   Table2,
-  TrendingDown,
+  Unlink,
   Zap,
 } from "lucide-react";
 
@@ -43,6 +44,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Heading, Mono, Text } from "@/components/ui/typography";
 
@@ -50,6 +52,7 @@ import { useRegisterDevTool } from "@/components/dev-tools/dev-tools-context";
 import { runDailySnapshotsAction } from "@/app/actions/dev-tools";
 
 import { ConfirmationDialog } from "./confirmation-dialog";
+import { PeriodCompareDialog } from "./period-compare-dialog";
 import { FinancialHealthDonut } from "./financial-health-donut";
 import { PlanCalendar } from "./plan-calendar";
 import { PlanLineEditor } from "./plan-line-editor";
@@ -74,6 +77,7 @@ import {
   addPlanDebtAction,
   addPlanExpenseAction,
   addPlanIncomeAction,
+  createScenarioAction,
   deleteLineOverrideAction,
   deletePlanDebtAction,
   deletePlanExpenseAction,
@@ -97,12 +101,15 @@ import {
 import {
   buildChartSeries,
   computeProjectionWindow,
+  mapGhostValues,
+  mapPortfolioValues,
   type PlanHistoryPoint,
 } from "@/lib/finance/chart-series";
 import type {
   DebtStrategy,
   FinancePlanWithLines,
   Projection,
+  ProjectionMonth,
   StrategyComparison,
 } from "@/types/finance";
 
@@ -155,6 +162,13 @@ function useAnimatedNumber(target: number, duration = 350): number {
   return display;
 }
 
+/** Base plan overlay data for scenario plans (plans with basedOnPlanId). */
+type GhostPlan = {
+  name: string;
+  color: string;
+  projection: Projection;
+};
+
 type PlanEditorProps = {
   plan: FinancePlanWithLines;
   /** Plan calibrated from the latest confirmation — drives the projection and
@@ -170,6 +184,15 @@ type PlanEditorProps = {
   history: PlanHistoryPoint[];
   comparison: StrategyComparison | null;
   investmentMethods: InvestmentMethodOption[];
+  /** Base plan's calibrated projection when this plan is a scenario. */
+  ghost?: GhostPlan | null;
+  /** Recorded portfolio value history — the past segment of the chart's
+   *  portfolio series when the plan includes the portfolio. */
+  portfolioHistory?: { date: Date; value: number }[];
+  /** Live portfolio value (0 when the plan excludes the portfolio). */
+  portfolioValue?: number;
+  /** Net-worth milestones from the user's global preference. */
+  milestones?: readonly number[];
   title: string;
   description: string;
   /** When set, renders a back-arrow before the title linking here. */
@@ -184,10 +207,14 @@ export function PlanEditor({
   history,
   comparison,
   investmentMethods,
+  ghost = null,
+  portfolioHistory = [],
+  milestones,
   title,
   description,
   backHref,
 }: PlanEditorProps) {
+  const router = useRouter();
   const [, startTransition] = useTransition();
 
   const wrap = <T,>(fn: () => Promise<{ success: boolean; error?: string } & T>) =>
@@ -367,39 +394,59 @@ export function PlanEditor({
   // the More dropdown.
   const [tab, setTab] = useState<"overview" | "setup" | "settings">("overview");
 
-  // Debt payoff strategy lives in the Overview sidebar now (not the chart card),
-  // so its open/close state + change handler are owned here and threaded into
-  // the `sidebar` node below. Only meaningful when the plan has debts.
-  const [strategyOpen, setStrategyOpen] = useState(false);
+  // Debt payoff strategy lives in the Overview sidebar (not the chart card),
+  // so its change handler is owned here and threaded into the `sidebar` node
+  // below. Only meaningful when the plan has debts.
   const currentStrategy = plan.debtStrategy as DebtStrategy;
   const debtComparison = plan.debts.length > 0 ? comparison : null;
+  // updateFinancePlanSchema defaults every field, so a partial payload would
+  // silently reset the ones left out — every single-field update below must
+  // send the FULL current plan and override just its field.
+  const fullPlanPayload = () => ({
+    id: plan.id,
+    name: plan.name,
+    description: plan.description ?? null,
+    startMonth: plan.startMonth,
+    monthsAhead: plan.monthsAhead,
+    initialSavings: plan.initialSavings,
+    monthlySavingsRate: plan.monthlySavingsRate,
+    includePortfolio: plan.includePortfolio,
+    surplusToDebtsPercent: plan.surplusToDebtsPercent,
+    debtStrategy: plan.debtStrategy as DebtStrategy,
+    autoInvestPercent: plan.autoInvestPercent,
+    autoInvestMethodId: plan.autoInvestMethodId,
+    initialInvestments: plan.initialInvestments,
+    confirmationDayOfMonth: plan.confirmationDayOfMonth,
+    color: plan.color,
+  });
   const handleChangeStrategy = (next: DebtStrategy) =>
+    wrap(() => updatePlanAction({ ...fullPlanPayload(), debtStrategy: next }));
+
+  // Chart-level portfolio switch — persists to the plan's includePortfolio
+  // flag (same setting as the Settings form), then refreshes so the server
+  // recomputes the projection with the portfolio value + blended growth.
+  const handleTogglePortfolio = (next: boolean) =>
     wrap(() =>
-      updatePlanAction({
-        id: plan.id,
-        name: plan.name,
-        description: plan.description ?? null,
-        startMonth: plan.startMonth,
-        monthsAhead: plan.monthsAhead,
-        initialSavings: plan.initialSavings,
-        monthlySavingsRate: plan.monthlySavingsRate,
-        includePortfolio: plan.includePortfolio,
-        surplusToDebtsPercent: plan.surplusToDebtsPercent,
-        debtStrategy: next,
-        autoInvestPercent: plan.autoInvestPercent,
-        autoInvestMethodId: plan.autoInvestMethodId,
-        initialInvestments: plan.initialInvestments,
-        confirmationDayOfMonth: plan.confirmationDayOfMonth,
-        color: plan.color,
-      })
+      updatePlanAction({ ...fullPlanPayload(), includePortfolio: next })
     );
+
+  // Spin off a linked what-if copy of this plan and jump straight into it.
+  const handleCreateScenario = () =>
+    wrap(async () => {
+      const result = await createScenarioAction(plan.id, `${plan.name} (scenario)`);
+      if (result.success && result.data) {
+        toast.success("Scenario created");
+        router.push(`/portal/plans/${result.data.id}`);
+      }
+      return result;
+    });
 
   // Dev-tools: force-open the monthly confirmation dialog from this plan,
   // bypassing the date + dismiss gates so the whole confirm-and-update flow
   // can be exercised on demand. The helper is built once via useState so it
   // keeps a stable identity (useRegisterDevTool re-registers on identity
   // change, which would loop with an inline object).
-  const [devConfirmOpen, setDevConfirmOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [forceConfirmationTool] = useState(() => ({
     id: "finance:force-confirmation",
     kind: "action" as const,
@@ -408,7 +455,7 @@ export function PlanEditor({
       "Open the monthly confirmation + balance-update dialog now, ignoring the confirmation day and the per-day dismiss.",
     section: "Finance",
     icon: ClipboardCheck,
-    onRun: () => setDevConfirmOpen(true),
+    onRun: () => setConfirmOpen(true),
   }));
   useRegisterDevTool(forceConfirmationTool);
 
@@ -465,9 +512,17 @@ export function PlanEditor({
           )}
           {/* Compact page title: Heading "h3" (text-2xl at ≥640px) at the
               page-title weight (font-semibold), matching the shadcn docs scale. */}
-          <Heading level="h3" className="font-semibold">
-            {title}
-          </Heading>
+          <div className="flex flex-wrap items-center gap-2">
+            <Heading level="h3" className="font-semibold">
+              {title}
+            </Heading>
+            {ghost && (
+              <Badge variant="outline" className="gap-1 text-xs">
+                <GitBranch className="h-3 w-3" />
+                Based on: {ghost.name}
+              </Badge>
+            )}
+          </div>
           <Text variant="muted">{description}</Text>
           {periodLabel && (
             <Text variant="muted" className="font-mono text-xs">
@@ -500,6 +555,9 @@ export function PlanEditor({
               <DropdownMenuItem onSelect={() => setTab("settings")}>
                 Settings
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void handleCreateScenario()}>
+                Create scenario
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -511,7 +569,13 @@ export function PlanEditor({
           pastProjection={pastProjection}
           baseline={baseline}
           history={history}
+          ghost={ghost}
+          portfolioHistory={portfolioHistory}
+          portfolioEnabled={plan.includePortfolio}
+          onTogglePortfolio={handleTogglePortfolio}
           onHoverFigures={setHoverFigures}
+          milestones={milestones}
+          onConfirmToday={() => setConfirmOpen(true)}
           calendar={
             <PlanCalendar
               plan={plan}
@@ -557,7 +621,7 @@ export function PlanEditor({
                   {hoverFigures.label}
                 </div>
               )}
-              <CardContent className="space-y-4 pt-6">
+              <CardContent className="space-y-4 pt-4">
                 <div className="flex flex-col items-center gap-1.5">
                   <FinancialHealthDonut
                     obligations={dFixedOutflow}
@@ -656,27 +720,25 @@ export function PlanEditor({
                 </div>
               </CardContent>
             </Card>
+            {ghost && (
+              <ScenarioDeltaCard ghost={ghost} projection={projection} />
+            )}
             {debtComparison && (
-              <Card>
+              <Card className="min-h-0">
                 <CardHeader className="pb-0">
                   <CardTitle className="text-2xs font-medium uppercase tracking-wide text-muted-foreground lg:text-xs">
                     Debt payoff strategy
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3 pt-3">
-                  <StrategyBadge
+                {/* All three options on screen with their cost, rather than a
+                    badge you have to expand: the choice is a trade-off, and
+                    hiding the alternatives hid the trade-off. */}
+                <CardContent className="min-h-0 overflow-y-auto pt-3">
+                  <StrategyPicker
                     comparison={debtComparison}
                     currentStrategy={currentStrategy}
-                    open={strategyOpen}
-                    onToggle={() => setStrategyOpen((v) => !v)}
+                    onChange={handleChangeStrategy}
                   />
-                  {strategyOpen && (
-                    <StrategyPicker
-                      comparison={debtComparison}
-                      currentStrategy={currentStrategy}
-                      onChange={handleChangeStrategy}
-                    />
-                  )}
                 </CardContent>
               </Card>
             )}
@@ -744,15 +806,52 @@ export function PlanEditor({
 
       <TabsContent value="settings" className="space-y-4">
         <MainPlanToggle plan={plan} wrap={wrap} />
+        {plan.basedOnPlanId && (
+          <Card>
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+              <div className="flex items-center gap-3">
+                <GitBranch className="h-5 w-5 shrink-0 text-muted-foreground" />
+                <div className="space-y-0.5">
+                  <Text weight="medium">Scenario plan</Text>
+                  <Text variant="small">
+                    {ghost
+                      ? `Based on "${ghost.name}" — its projection shows as a reference line on this plan's chart.`
+                      : "Linked to a base plan that could not be loaded."}
+                  </Text>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  wrap(async () => {
+                    const result = await updatePlanAction({
+                      ...fullPlanPayload(),
+                      basedOnPlanId: null,
+                    });
+                    if (result.success) toast.success("Detached from base plan");
+                    return result;
+                  })
+                }
+              >
+                <Unlink className="mr-1.5 h-3.5 w-3.5" />
+                Detach
+              </Button>
+            </CardContent>
+          </Card>
+        )}
         <PlanForm plan={plan} investmentMethods={investmentMethods} />
       </TabsContent>
 
-      {/* Dev-only: force-openable confirmation dialog (see the dev drawer's
-          Finance section). Saving it writes a real confirmation and
-          recalibrates the projection, exactly like the dashboard prompt. */}
+      {/* The confirmation dialog for the CURRENT period. Reached by clicking
+          today's point on the chart (clicking any other point compares that
+          period instead), and force-openable from the dev drawer's Finance
+          section. Saving it writes a real confirmation and recalibrates the
+          projection, exactly like the dashboard prompt. */}
       <ConfirmationDialog
-        open={devConfirmOpen}
-        onOpenChange={setDevConfirmOpen}
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
         planId={plan.id}
         planName={plan.name}
         monthLabel={confirmDialogLabel}
@@ -829,6 +928,71 @@ function MainPlanToggle({
   );
 }
 
+/**
+ * Sidebar card for scenario plans: names the base plan and shows the
+ * horizon-independent deltas — ending net worth and months-to-debt-free —
+ * between this scenario and its base. Green when the scenario wins.
+ */
+function ScenarioDeltaCard({
+  ghost,
+  projection,
+}: {
+  ghost: GhostPlan;
+  projection: Projection;
+}) {
+  const netWorthDelta = projection.endingNetWorth - ghost.projection.endingNetWorth;
+  const scenarioDebtFree = projection.monthsToDebtFree;
+  const baseDebtFree = ghost.projection.monthsToDebtFree;
+  const debtFreeDelta =
+    scenarioDebtFree !== null && baseDebtFree !== null
+      ? scenarioDebtFree - baseDebtFree
+      : null;
+  return (
+    <Card>
+      <CardHeader className="pb-0">
+        <CardTitle className="text-2xs font-medium uppercase tracking-wide text-muted-foreground lg:text-xs">
+          Scenario vs base
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1 pt-3">
+        <Text variant="small" as="p" className="flex items-center gap-1.5 pb-1">
+          <GitBranch className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{ghost.name}</span>
+        </Text>
+        <div className="flex items-center justify-between gap-3 border-t py-2">
+          <Text variant="small" as="span">Ending net worth</Text>
+          <Mono
+            className={`text-sm font-semibold ${
+              netWorthDelta >= 0
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-rose-600 dark:text-rose-400"
+            }`}
+          >
+            {netWorthDelta >= 0 ? "+" : "−"}
+            {formatCurrency(Math.abs(netWorthDelta))}
+          </Mono>
+        </div>
+        {debtFreeDelta !== null && (
+          <div className="flex items-center justify-between gap-3 border-t py-2">
+            <Text variant="small" as="span">Debt-free</Text>
+            <Mono
+              className={`text-sm font-semibold ${
+                debtFreeDelta <= 0
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-rose-600 dark:text-rose-400"
+              }`}
+            >
+              {debtFreeDelta === 0
+                ? "same"
+                : `${Math.abs(debtFreeDelta)} mo ${debtFreeDelta < 0 ? "sooner" : "later"}`}
+            </Mono>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 type ProjectionPanelProps = {
   projection: Projection;
   /** Raw (un-calibrated) projection for re-simulating the chart's past when
@@ -850,6 +1014,19 @@ type ProjectionPanelProps = {
   /** Receives the hovered chart point's period figures (null on leave / when
    *  hovering today's point) so the parent can preview them in the sidebar. */
   onHoverFigures?: (figures: PeriodFigures | null) => void;
+  /** Clicking TODAY's point isn't a preview — it's "record what actually
+   *  happened", so the parent opens the confirmation dialog instead. */
+  onConfirmToday?: () => void;
+  /** Base plan overlay when this plan is a scenario (ghost line + delta). */
+  ghost?: GhostPlan | null;
+  /** Recorded portfolio history for the portfolio series' past segment. */
+  portfolioHistory?: { date: Date; value: number }[];
+  /** Net-worth milestones annotated on the chart (user preference). */
+  milestones?: readonly number[];
+  /** Current includePortfolio flag; drives the chart's Portfolio switch. */
+  portfolioEnabled: boolean;
+  /** Persists a new includePortfolio value (full-payload plan update). */
+  onTogglePortfolio: (next: boolean) => Promise<void>;
 };
 
 const STRATEGY_LABEL: Record<DebtStrategy, string> = {
@@ -914,6 +1091,7 @@ function ViewSwitcher({
             key={v}
             type="button"
             aria-pressed={active}
+            aria-label={PLAN_VIEW_LABEL[v]}
             onClick={() => onChange(v)}
             className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition ${
               active
@@ -922,7 +1100,11 @@ function ViewSwitcher({
             }`}
           >
             <Icon className="h-3.5 w-3.5" />
-            {PLAN_VIEW_LABEL[v]}
+            {/* Icon-only on phones: this now shares a row with the Portfolio
+                switch and four horizon presets, and the labels pushed that
+                cluster onto three lines. The icons are distinct and the
+                aria-label carries the name. */}
+            <span className="hidden sm:inline">{PLAN_VIEW_LABEL[v]}</span>
           </button>
         );
       })}
@@ -1240,6 +1422,12 @@ function ProjectionPanel({
   calendar,
   sidebar,
   onHoverFigures,
+  onConfirmToday,
+  milestones,
+  ghost = null,
+  portfolioHistory = [],
+  portfolioEnabled,
+  onTogglePortfolio,
 }: ProjectionPanelProps) {
   // View switcher — Graph (chart) / Table / Calendar. Segmented control (every
   // device) sits at the BOTTOM, Polymarket-style; horizontal swipe on touch
@@ -1287,6 +1475,39 @@ function ProjectionPanel({
     pastProjection
   );
 
+  // Scenario ghost: the base plan's net worth aligned to this chart's points
+  // (matched by accounting period — the base can have a different startMonth).
+  // Hidden via the "vs base" chip without losing the alignment work.
+  const [showGhost, setShowGhost] = useState(true);
+  const ghostValues = useMemo<(number | null)[] | undefined>(
+    () =>
+      ghost && showGhost
+        ? mapGhostValues(chartSeries.points, ghost.projection, anchorDay)
+        : undefined,
+    [ghost, showGhost, chartSeries.points, anchorDay]
+  );
+
+  // Portfolio series: recorded snapshots for the past, the projection's
+  // (growing) portfolioValue for the future. Only when the plan includes it.
+  const [portfolioPending, setPortfolioPending] = useState(false);
+  const portfolioValues = useMemo<(number | null)[] | undefined>(
+    () =>
+      portfolioEnabled
+        ? mapPortfolioValues(
+            chartSeries.points,
+            portfolioHistory,
+            projection,
+            chartSeries.pastCount,
+            anchorDay
+          )
+        : undefined,
+    [portfolioEnabled, chartSeries, portfolioHistory, projection, anchorDay]
+  );
+  const handlePortfolioSwitch = (next: boolean) => {
+    setPortfolioPending(true);
+    void onTogglePortfolio(next).finally(() => setPortfolioPending(false));
+  };
+
   // Per-point period figures for the sidebar hover preview. Flows (income /
   // expenses / debt minimums) come from the projection month sharing the
   // point's period — the calibrated one first, falling back to the raw past
@@ -1321,6 +1542,34 @@ function ProjectionPanel({
     }
     onHoverFigures(pointFigures[idx] ?? null);
   };
+
+  // Full projection month behind each chart point, resolved by accounting
+  // PERIOD (not calendar month) for the same reason as `pointFigures`.
+  const monthByPoint = useMemo<(ProjectionMonth | null)[]>(() => {
+    const effAnchor = anchorDay > 0 ? anchorDay : 1;
+    return chartSeries.points.map((p) => {
+      const inSamePeriod = (m: { date: Date }) =>
+        periodIndexForDate(m.date, effAnchor, p.date) === 0;
+      return (
+        projection.months.find(inSamePeriod) ??
+        pastProjection.months.find(inSamePeriod) ??
+        null
+      );
+    });
+  }, [chartSeries.points, projection, pastProjection, anchorDay]);
+
+  const [comparedIdx, setComparedIdx] = useState<number | null>(null);
+
+  // Clicking today means "record what actually happened", not "preview" — so it
+  // hands off to the confirmation dialog. Every other point opens the compare
+  // dialog for that period.
+  const handleSelectIndex = (idx: number): void => {
+    if (idx === chartSeries.pastCount) {
+      onConfirmToday?.();
+      return;
+    }
+    setComparedIdx(idx);
+  };
   const todayMonthIdx = window.startIndex + window.pastCount;
   const todayMonth = projection.months[todayMonthIdx];
   // "Next period" forecast — the projection for the period right after today.
@@ -1340,6 +1589,21 @@ function ProjectionPanel({
   const today = todaySnapshot?.netWorth ?? todayMonth?.netWorth ?? 0;
   const next = nextMonth?.netWorth;
   const future = futureMonth?.netWorth ?? today;
+
+  // Horizon-end delta vs the base plan (scenario only) — matched by period so
+  // a different base startMonth still compares the same calendar window.
+  const ghostFuture =
+    ghost && futureMonth
+      ? ghost.projection.months.find(
+          (m) =>
+            periodIndexForDate(
+              m.date,
+              anchorDay > 0 ? anchorDay : 1,
+              futureMonth.date
+            ) === 0
+        )?.netWorth ?? null
+      : null;
+  const endDelta = ghostFuture !== null ? future - ghostFuture : null;
 
   // Forecast header (Today / Next / End KPIs + horizon picker) — shared by the
   // Graph and Table views (both are horizon-driven forecast views). It sits in
@@ -1393,33 +1657,78 @@ function ProjectionPanel({
           >
             {formatCurrency(future)}
           </Mono>
+          {endDelta !== null && (
+            <Text
+              variant="small"
+              as="p"
+              className={`text-2xs ${
+                endDelta >= 0
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-rose-600 dark:text-rose-400"
+              }`}
+            >
+              {endDelta >= 0 ? "+" : "−"}
+              {formatCurrency(Math.abs(endDelta))} vs base
+            </Text>
+          )}
         </div>
       </div>
-      <div
-        role="group"
-        aria-label="Projection horizon"
-        className="inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
-      >
-        {HORIZON_PRESETS.map((preset) => {
-          const disabled = preset.months > maxAvailable;
-          const active = horizonMonths === preset.months;
-          return (
-            <button
-              key={preset.months}
-              type="button"
-              onClick={() => setHorizonMonths(preset.months)}
-              disabled={disabled}
-              aria-pressed={active}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition ${
-                active
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
-            >
-              {preset.label}
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* View first — it decides what the rest of this cluster even applies
+            to (Portfolio and the horizon presets only shape the Graph). */}
+        <ViewSwitcher value={view} onChange={goView} />
+        {/* Chart toggles: portfolio series (persists to the plan) and the
+            scenario ghost line (view-only). Sit beside the horizon presets so
+            everything that shapes the chart lives in one cluster. */}
+        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 py-1.5 text-xs font-medium text-muted-foreground">
+          <Switch
+            checked={portfolioEnabled}
+            onCheckedChange={handlePortfolioSwitch}
+            disabled={portfolioPending}
+            aria-label="Include portfolio in the projection"
+          />
+          Portfolio
+        </label>
+        {ghost && (
+          <button
+            type="button"
+            onClick={() => setShowGhost((v) => !v)}
+            aria-pressed={showGhost}
+            className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
+              showGhost
+                ? "bg-background text-foreground shadow-sm"
+                : "bg-muted/30 text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            vs base
+          </button>
+        )}
+        <div
+          role="group"
+          aria-label="Projection horizon"
+          className="inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
+        >
+          {HORIZON_PRESETS.map((preset) => {
+            const disabled = preset.months > maxAvailable;
+            const active = horizonMonths === preset.months;
+            return (
+              <button
+                key={preset.months}
+                type="button"
+                onClick={() => setHorizonMonths(preset.months)}
+                disabled={disabled}
+                aria-pressed={active}
+                className={`rounded px-2.5 py-1 text-xs font-medium transition ${
+                  active
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -1470,6 +1779,11 @@ function ProjectionPanel({
                       color={projection.plan.color}
                       heightClass="h-72 sm:h-80 lg:h-full"
                       onHoverIndex={handleHoverIndex}
+                      onSelectIndex={handleSelectIndex}
+                      milestones={milestones}
+                      ghostValues={ghostValues}
+                      ghostLabel={ghost?.name}
+                      portfolioValues={portfolioValues}
                     />
                   ) : (
                     <ProjectionTable
@@ -1483,72 +1797,39 @@ function ProjectionPanel({
           </div>
         </div>
 
-        {/* View switcher — Graph / Table / Calendar — pinned at the BOTTOM,
-            Polymarket-style, centered. Works as tabs on every device; swipe
-            switches too on touch. */}
-        <div className="flex justify-center pt-1">
-          <ViewSwitcher value={view} onChange={goView} />
-        </div>
       </div>
 
       {/* flex column so the figures card (lg:flex-1, set by the parent) absorbs
           the leftover height and the sidebar's bottom edge lines up with the
           main panel's. */}
-      <div className="flex min-w-0 flex-col gap-3 lg:min-h-[640px] lg:gap-4">
+      <div className="flex min-w-0 flex-col gap-3 lg:h-[640px] lg:gap-4">
         {sidebar}
       </div>
+
+      <PeriodCompareDialog
+        open={comparedIdx !== null}
+        onOpenChange={(next) => {
+          if (!next) setComparedIdx(null);
+        }}
+        todayLabel={
+          chartSeries.points[chartSeries.pastCount]
+            ? HOVER_PERIOD_LABEL.format(
+                chartSeries.points[chartSeries.pastCount].date
+              )
+            : "Today"
+        }
+        todayMonth={monthByPoint[chartSeries.pastCount] ?? null}
+        targetLabel={
+          comparedIdx !== null && chartSeries.points[comparedIdx]
+            ? HOVER_PERIOD_LABEL.format(chartSeries.points[comparedIdx].date)
+            : ""
+        }
+        targetMonth={comparedIdx !== null ? monthByPoint[comparedIdx] : null}
+      />
     </div>
   );
 }
 
-// Full-width row (sits in the sidebar's "Debt payoff strategy" card) showing
-// the active strategy + how much it saves vs. the worst option. Click to expand
-// the stacked picker below.
-function StrategyBadge({
-  comparison,
-  currentStrategy,
-  open,
-  onToggle,
-}: {
-  comparison: StrategyComparison;
-  currentStrategy: DebtStrategy;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const saves = comparison.interestSaved;
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      className="flex w-full items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-2 text-xs transition hover:bg-muted/40"
-    >
-      <span className="flex min-w-0 items-center gap-1.5">
-        <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-        <span className="truncate font-semibold">
-          {STRATEGY_LABEL[currentStrategy]}
-        </span>
-      </span>
-      <span className="flex shrink-0 items-center gap-1.5">
-        {saves > 0 && (
-          <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
-            <TrendingDown className="h-3 w-3" />
-            {formatCurrency(saves)}
-          </span>
-        )}
-        <ChevronDown
-          className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </span>
-    </button>
-  );
-}
-
-// Stacked option list (lives in the narrow sidebar). Selecting a non-active
-// option persists the new strategy via onChange; the chart re-renders once the
-// server revalidates the page.
 function StrategyPicker({
   comparison,
   currentStrategy,
@@ -1570,65 +1851,66 @@ function StrategyPicker({
   );
 
   return (
-    <div className="grid gap-2">
+    <div role="radiogroup" aria-label="Debt payoff strategy" className="grid gap-1.5">
       {rows.map(({ key, data }) => {
         const isCurrent = key === currentStrategy;
-        const isBest =
-          key !== "none" &&
-          Math.abs(data.totalInterestPaid - minInterest) < 0.5;
+        // What this option costs against the cheapest one — the number that
+        // actually decides it, so it sits on the row instead of behind a click.
+        const costVsBest = data.totalInterestPaid - minInterest;
+        const isCheapest = costVsBest < 0.5;
         return (
           <button
             key={key}
             type="button"
+            role="radio"
+            aria-checked={isCurrent}
             disabled={isCurrent}
             onClick={() => void onChange(key)}
-            aria-pressed={isCurrent}
-            className={`relative rounded-md border p-3 text-left transition ${
+            className={cn(
+              "flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left transition",
               isCurrent
                 ? "cursor-default border-foreground bg-muted/40"
                 : "hover:border-foreground/60 hover:bg-muted/30"
-            } ${isBest && !isCurrent ? "bg-emerald-500/10" : ""}`}
-          >
-            <div className="flex items-center justify-between">
-              <Heading level="h6" as="p">{STRATEGY_LABEL[key]}</Heading>
-              {isCurrent && (
-                <Badge variant="secondary" className="text-xs">
-                  Active
-                </Badge>
-              )}
-            </div>
-            <dl className="mt-3 space-y-2 text-sm">
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Total interest paid
-                </dt>
-                <dd className="text-lg font-semibold">
-                  <Mono>{formatCurrency(data.totalInterestPaid)}</Mono>
-                </dd>
-              </div>
-              <div className="flex items-center justify-between border-t pt-2">
-                <dt className="text-xs text-muted-foreground">
-                  <Clock className="mr-1 inline h-3 w-3" />
-                  Debt-free in
-                </dt>
-                <dd className="text-sm font-medium">
-                  {data.monthsToDebtFree !== null
-                    ? <Mono>{data.monthsToDebtFree} mo</Mono>
-                    : "—"}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between">
-                <dt className="text-xs text-muted-foreground">Ending net worth</dt>
-                <dd className="text-sm font-medium">
-                  <Mono>{formatCurrency(data.endingNetWorth)}</Mono>
-                </dd>
-              </div>
-            </dl>
-            {!isCurrent && (
-              <Text variant="small" as="p" className="mt-3 text-2xs italic">
-                Click to switch
-              </Text>
             )}
+          >
+            <span className="flex min-w-0 items-center gap-1.5">
+              {/* Radio dot: selection can't ride on the border alone. */}
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "size-2 shrink-0 rounded-full",
+                  isCurrent ? "bg-foreground" : "bg-muted-foreground/30"
+                )}
+              />
+              <span className="truncate text-xs font-medium">
+                {STRATEGY_LABEL[key]}
+              </span>
+              {isCheapest && (
+                <Zap
+                  className="size-3 shrink-0 text-amber-500"
+                  aria-label="Cheapest"
+                />
+              )}
+            </span>
+            <span className="flex shrink-0 flex-col items-end leading-tight">
+              <Mono className="text-2xs tabular-nums text-muted-foreground">
+                {data.monthsToDebtFree !== null
+                  ? `${data.monthsToDebtFree} mo`
+                  : "beyond horizon"}
+              </Mono>
+              <Mono
+                className={cn(
+                  "text-2xs tabular-nums",
+                  isCheapest
+                    ? "text-emerald-700 dark:text-emerald-300"
+                    : "text-muted-foreground"
+                )}
+              >
+                {isCheapest
+                  ? "cheapest"
+                  : `+${formatCurrency(costVsBest)}`}
+              </Mono>
+            </span>
           </button>
         );
       })}

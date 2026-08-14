@@ -84,14 +84,18 @@ export function AppHeader({
       {/* Trigger only on mobile — it opens the sidebar sheet. On desktop the
           sidebar is always visible (like the shadcn docs), so no collapse
           control is shown. */}
-      <SidebarTrigger className="shrink-0 md:hidden" />
+      <SidebarTrigger className="size-9 shrink-0 md:hidden" />
 
       {/* Brand: compact mark + wordmark, the first inline element of one flat
           strip (no separators, no "zone" wrapper) — matches shadcn's header. */}
       <Link
         href="/portal"
         aria-label="Allstars Galaxy"
-        className="flex shrink-0 items-center gap-2 rounded-md transition-opacity hover:opacity-80"
+        // Below sm the wordmark is hidden, so the link would collapse to the
+        // 20px mark — under the 24px minimum tap target. The negative margin
+        // cancels the padding, so the hit area grows to 36px without moving
+        // the mark; from sm up the box is exactly what it was.
+        className="-m-2 flex shrink-0 items-center gap-2 rounded-md p-2 transition-opacity hover:opacity-80 sm:m-0 sm:p-0"
       >
         <Logo className="size-5" />
         <span className="hidden text-sm font-semibold tracking-tight sm:inline">

@@ -1,7 +1,7 @@
 # Admin
 
 > **Status:** Active
-> **Last reviewed:** 2026-05-24
+> **Last reviewed:** 2026-07-02
 
 ## Overview
 Admin-only operations: user management, transaction approval queue, and
@@ -27,6 +27,8 @@ impersonation (with audit trail).
 ## Schemas — `/schemas/`
 - `user.ts`
 - `transaction.ts`
+- `admin.ts` — `updateUserRoleSchema`, `adminTransactionIdSchema`
+- `impersonation.ts` — `impersonationSchema`
 
 ## Types — `/types/`
 - `user.ts`
@@ -43,5 +45,5 @@ impersonation (with audit trail).
 - Conventional Commits scope: *(no dedicated scope — use `auth` for role changes, `portfolio` for transaction approvals, or add `admin` to [`commitlint.config.mjs`](../../commitlint.config.mjs))*
 - All actions in this module **must** use `adminAction` from `@/lib/services/auth-server` (not `authenticatedAction`).
 - Impersonation must always write to `impersonation_logs` — never bypass.
-- Admin actions throw on error (caught by `app/portal/error.tsx`); they do **not** return `{ success: false, error }`.
-- `app/portal/admin/loading.tsx` provides a table skeleton for the admin pages.
+- Admin actions throw on error (caught by `app/portal/admin/error.tsx`, falling back to `app/portal/error.tsx`); they do **not** return `{ success: false, error }`.
+- `app/portal/admin/loading.tsx` provides a table skeleton; `app/portal/admin/error.tsx` is the module error boundary.

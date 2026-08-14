@@ -5,8 +5,8 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/portal/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PlansList, type PlanSummary } from "@/components/finance/plans-list";
 import { PlansWorkspace } from "@/components/finance/plans-workspace";
+import type { PlanSummary } from "@/types/finance";
 
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import {
@@ -16,7 +16,7 @@ import {
 } from "@/lib/services/finance-plan-service";
 
 export const metadata: Metadata = {
-  title: "Plans | Allstars Galaxy",
+  title: "Plans",
   description: "Compare scenarios for your personal finances",
 };
 
@@ -77,9 +77,10 @@ export default async function FinancePlansPage() {
             </Button>
           }
         />
-      ) : plans.length === 1 ? (
-        <PlansList plans={plans} summaries={summaries} />
       ) : (
+        // One plan or twenty: the workspace is the same surface. A single plan
+        // still gets its projection curve, and the rail grows into a real
+        // comparison as scenarios are added.
         <PlansWorkspace
           plans={plans}
           summaries={summaries}

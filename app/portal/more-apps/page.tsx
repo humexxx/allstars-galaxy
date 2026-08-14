@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/portal/page-header";
+import { PortalPageContainer } from "@/components/portal/page-container";
 import { Text } from "@/components/ui/typography";
 import { requireAdminOrRedirect } from "@/lib/services/auth-server";
 import { MoreAppsList } from "@/components/more-apps/more-apps-list";
@@ -14,7 +15,7 @@ import {
 } from "./apps-data";
 
 export const metadata: Metadata = {
-  title: "More Apps | Allstars Galaxy",
+  title: "More Apps",
   description: "Quick links to my other apps and projects.",
 };
 
@@ -60,7 +61,8 @@ export default async function MoreAppsPage() {
   );
 
   return (
-    <section className="space-y-6">
+    <PortalPageContainer>
+      <section className="space-y-6">
       <PageHeader
         title="More apps"
         description="Quick links to my other apps and projects."
@@ -72,6 +74,7 @@ export default async function MoreAppsPage() {
           items={apps.map((app, i) => ({ app, screenshotUrl: screenshots[i] }))}
         />
       )}
-    </section>
+      </section>
+    </PortalPageContainer>
   );
 }

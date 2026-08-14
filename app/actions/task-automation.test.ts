@@ -4,8 +4,9 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
-vi.mock("@/lib/services/auth-server", () => ({
-  requireAuth: vi.fn(),
+vi.mock("@/lib/services/impersonation", () => ({
+  requireEffectiveContext: vi.fn(),
+  logImpersonatedMutation: vi.fn(),
 }));
 
 vi.mock("@/lib/services/task-automation-service", () => ({
@@ -14,7 +15,7 @@ vi.mock("@/lib/services/task-automation-service", () => ({
 }));
 
 import { revalidatePath } from "next/cache";
-import { requireAuth } from "@/lib/services/auth-server";
+import { requireEffectiveContext } from "@/lib/services/impersonation";
 import {
   createAutomatedTasksForAllRoadPaths,
   createAutomatedTasksForRoadPath,
@@ -30,9 +31,13 @@ const USER_ID = "00000000-0000-4000-8000-000000000001";
 const ROAD_PATH_ID = "11111111-1111-4111-8111-111111111111";
 
 beforeEach(() => {
-  vi.mocked(requireAuth).mockResolvedValue({
-    id: USER_ID,
-  } as unknown as Awaited<ReturnType<typeof requireAuth>>);
+  vi.mocked(requireEffectiveContext).mockResolvedValue({
+    realUser: { id: USER_ID } as never,
+    realRole: "user",
+    impersonatedUser: null,
+    effectiveUserId: USER_ID,
+    isImpersonating: false,
+  });
 });
 
 afterEach(() => {
@@ -53,7 +58,7 @@ describe("createAutomatedTaskAction", () => {
       data: task,
       message: "Task created successfully",
     });
-    expect(requireAuth).toHaveBeenCalledTimes(1);
+    expect(requireEffectiveContext).toHaveBeenCalledTimes(1);
     expect(createAutomatedTasksForRoadPath).toHaveBeenCalledWith(
       USER_ID,
       ROAD_PATH_ID,
@@ -96,7 +101,7 @@ describe("createAutomatedTaskAction", () => {
   });
 
   it("propagates an unauthenticated rejection without calling the service", async () => {
-    vi.mocked(requireAuth).mockRejectedValueOnce(new Error("Unauthorized"));
+    vi.mocked(requireEffectiveContext).mockRejectedValueOnce(new Error("Unauthorized"));
 
     await expect(
       createAutomatedTaskAction(ROAD_PATH_ID),
@@ -135,7 +140,7 @@ describe("createAutomatedTasksForAllAction", () => {
       data: tasks,
       message: "3 task(s) created",
     });
-    expect(requireAuth).toHaveBeenCalledTimes(1);
+    expect(requireEffectiveContext).toHaveBeenCalledTimes(1);
     expect(createAutomatedTasksForAllRoadPaths).toHaveBeenCalledWith(USER_ID);
     expect(revalidatePath).toHaveBeenCalledWith("/portal/productivity");
     expect(revalidatePath).toHaveBeenCalledTimes(1);
@@ -157,7 +162,7 @@ describe("createAutomatedTasksForAllAction", () => {
   });
 
   it("propagates the unauthenticated rejection", async () => {
-    vi.mocked(requireAuth).mockRejectedValueOnce(new Error("Unauthorized"));
+    vi.mocked(requireEffectiveContext).mockRejectedValueOnce(new Error("Unauthorized"));
 
     await expect(createAutomatedTasksForAllAction()).rejects.toThrow(
       "Unauthorized",

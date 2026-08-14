@@ -16,6 +16,8 @@ import {
 } from "@/lib/finance/period";
 
 import { getPlanWithLines } from "./finance-plan-service";
+import { ensureOwnedRow } from "./ownership";
+import type { ConfirmationData } from "@/schemas/finance-confirmations";
 import {
   createConfirmationSnapshot,
   getProjectedStateForMonth,
@@ -47,17 +49,14 @@ async function ensurePlanOwnership(
   planId: string,
   userId: string
 ): Promise<{ confirmationDayOfMonth: number }> {
-  const [row] = await db
-    .select({
-      userId: financePlans.userId,
-      confirmationDayOfMonth: financePlans.confirmationDayOfMonth,
-    })
-    .from(financePlans)
-    .where(eq(financePlans.id, planId));
-  if (!row || row.userId !== userId) {
-    throw new Error("Plan not found");
-  }
-  return { confirmationDayOfMonth: row.confirmationDayOfMonth };
+  const plan = await ensureOwnedRow({
+    table: financePlans,
+    idColumn: financePlans.id,
+    id: planId,
+    userId,
+    entity: "Plan",
+  });
+  return { confirmationDayOfMonth: plan.confirmationDayOfMonth };
 }
 
 // ---------- public API ----------
@@ -138,21 +137,13 @@ export async function getConfirmationStatus(
   };
 }
 
-export type ConfirmActualsInput = {
-  planId: string;
-  confirmedSavings: string;
-  confirmedInvestments: string;
-  notes?: string | null;
-  debtBalances: { debtId: string; confirmedBalance: string }[];
-};
-
 /**
  * Save (upsert) a user confirmation for the current month and write a paired
  * snapshot tagged `confirmation` so the audit timeline has both events.
  */
 export async function saveConfirmation(
   userId: string,
-  input: ConfirmActualsInput,
+  input: ConfirmationData,
   today: Date = new Date()
 ): Promise<FinancePlanConfirmation> {
   const { confirmationDayOfMonth } = await ensurePlanOwnership(

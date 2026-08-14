@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { PortalPageContainer } from "@/components/portal/page-container";
 import { DevToolsProvider } from "@/components/dev-tools/dev-tools-context";
 import { DevToolsDrawer } from "@/components/dev-tools/dev-tools-drawer";
 import { getEffectiveContext } from "@/lib/services/impersonation";
@@ -43,8 +42,10 @@ export default async function PortalLayout({
               isImpersonating={ctx.isImpersonating}
             />
             <SidebarInset>
+              {/* No container here: each route renders its own
+                  `PortalPageContainer` and declares the width it needs. */}
               <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
-                <PortalPageContainer>{children}</PortalPageContainer>
+                {children}
               </main>
             </SidebarInset>
           </div>

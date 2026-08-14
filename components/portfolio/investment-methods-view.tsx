@@ -240,9 +240,7 @@ function KpiCard({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {label}
-        </CardTitle>
+        <Eyebrow as="div">{label}</Eyebrow>
         {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground" />}
       </CardHeader>
       <CardContent className="space-y-1">

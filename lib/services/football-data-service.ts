@@ -3,11 +3,13 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 
 import { getFootballLeague, getFootballLeagues } from "@/lib/data/sports/football";
+import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
 import { orderMatchesForDisplay } from "@/lib/sports/match-order";
 import type {
   BracketMatch,
   BracketRound,
   BracketRoundId,
+  FootballGroupStandings,
   FootballLeagueData,
   FootballLeagueId,
   FormResult,
@@ -19,7 +21,10 @@ import type {
 } from "@/types/sports";
 
 const BASE_URL = "https://api.football-data.org/v4";
-const REVALIDATE_SECONDS = 1800;
+// 5 minutes: short enough that live scores are near-current when the user
+// lands, long enough to stay well inside football-data's free 10 req/min
+// (a full cold refresh is 9 calls: 4 comps × 2 + 1 World Cup).
+const REVALIDATE_SECONDS = 300;
 // Wide enough to stay populated for competitions between rounds (e.g. UCL
 // knockout, or a domestic league in its off-week). Matches are capped below.
 const MATCH_WINDOW_DAYS = 60;
@@ -69,12 +74,15 @@ const COMPETITIONS: CompetitionConfig[] = [
   },
 ];
 
+// Knockout fixtures whose participants are not decided yet (e.g. World Cup
+// quarter-finals while the round of 16 is in play) come back with every team
+// field null.
 type FdTeam = {
-  id: number;
-  name: string;
-  shortName?: string;
-  tla?: string;
-  crest?: string;
+  id: number | null;
+  name: string | null;
+  shortName?: string | null;
+  tla?: string | null;
+  crest?: string | null;
 };
 
 type FdScore = {
@@ -202,6 +210,13 @@ const ZONE_BAND_DEFAULTS: Record<FootballLeagueId, (pos: number, total: number) 
     if (pos <= 24) return "playoff";
     return null;
   },
+  // 2026 format: top 2 advance directly, the 8 best third-placed teams join
+  // them — mark 3rd as "playoff" since advancing depends on other groups.
+  "world-cup": (pos) => {
+    if (pos <= 2) return "champions";
+    if (pos === 3) return "playoff";
+    return null;
+  },
 };
 
 function slugify(input: string): string {
@@ -213,15 +228,17 @@ function slugify(input: string): string {
     .replace(/^-|-$/g, "");
 }
 
-function teamFromFd(team: FdTeam): Team {
-  const shortName = team.shortName ?? team.name;
+function teamFromFd(team: FdTeam | null | undefined): Team | null {
+  const name = team?.name;
+  if (!name) return null;
+  const shortName = team.shortName ?? name;
   const code = team.tla ?? shortName.slice(0, 3).toUpperCase();
   return {
     id: slugify(shortName),
-    name: team.name,
+    name,
     shortName,
     code,
-    logoUrl: team.crest,
+    logoUrl: team.crest ?? undefined,
     primaryColor: undefined,
   };
 }
@@ -292,10 +309,12 @@ function mapStandings(
 ): { standings: Standing[]; teams: Team[] } {
   const teamsMap = new Map<string, Team>();
   const total = rows.length;
-  const standings: Standing[] = rows.map((row) => {
+  const standings: Standing[] = [];
+  for (const row of rows) {
     const team = teamFromFd(row.team);
+    if (!team) continue;
     if (!teamsMap.has(team.id)) teamsMap.set(team.id, team);
-    return {
+    standings.push({
       position: row.position,
       teamId: team.id,
       played: row.playedGames,
@@ -307,8 +326,8 @@ function mapStandings(
       points: row.points,
       form: parseForm(row.form),
       band: ZONE_BAND_DEFAULTS[competition.internalId](row.position, total),
-    };
-  });
+    });
+  }
   return { standings, teams: Array.from(teamsMap.values()) };
 }
 
@@ -316,23 +335,27 @@ function mapMatches(
   matches: FdMatch[],
   teamsMap: Map<string, Team>,
 ): Match[] {
-  return matches
-    .map((m): Match => {
-      const home = teamFromFd(m.homeTeam);
-      const away = teamFromFd(m.awayTeam);
-      if (!teamsMap.has(home.id)) teamsMap.set(home.id, home);
-      if (!teamsMap.has(away.id)) teamsMap.set(away.id, away);
-      return {
-        id: `m-${m.id}`,
-        homeTeamId: home.id,
-        awayTeamId: away.id,
-        homeScore: m.score.fullTime.home,
-        awayScore: m.score.fullTime.away,
-        kickoff: m.utcDate,
-        status: mapMatchStatus(m.status, m.score),
-        stageLabel: matchStageLabel(m),
-      };
+  const mapped: Match[] = [];
+  for (const m of matches) {
+    const home = teamFromFd(m.homeTeam);
+    const away = teamFromFd(m.awayTeam);
+    // TBD-vs-TBD fixtures (undecided knockout pairings) belong in the bracket,
+    // not the flat match list.
+    if (!home || !away) continue;
+    if (!teamsMap.has(home.id)) teamsMap.set(home.id, home);
+    if (!teamsMap.has(away.id)) teamsMap.set(away.id, away);
+    mapped.push({
+      id: `m-${m.id}`,
+      homeTeamId: home.id,
+      awayTeamId: away.id,
+      homeScore: m.score.fullTime.home,
+      awayScore: m.score.fullTime.away,
+      kickoff: m.utcDate,
+      status: mapMatchStatus(m.status, m.score),
+      stageLabel: matchStageLabel(m),
     });
+  }
+  return mapped;
 }
 
 type FdScoreWithWinner = FdScore & {
@@ -341,15 +364,19 @@ type FdScoreWithWinner = FdScore & {
 
 // Knockout rounds we render, ordered final-ward. PLAYOFFS (UCL's pre-R16
 // knockout) is intentionally omitted to keep the bracket to four clean columns.
+// LAST_32 and THIRD_PLACE only occur in cup tournaments (World Cup).
 const KNOCKOUT_ROUND_ORDER: Array<{
   stage: string;
   id: BracketRoundId;
   label: string;
 }> = [
+  { stage: "LAST_32", id: "round-of-32", label: "Round of 32" },
+  { stage: "ROUND_OF_32", id: "round-of-32", label: "Round of 32" },
   { stage: "LAST_16", id: "round-of-16", label: "Round of 16" },
   { stage: "ROUND_OF_16", id: "round-of-16", label: "Round of 16" },
   { stage: "QUARTER_FINALS", id: "quarter-final", label: "Quarterfinals" },
   { stage: "SEMI_FINALS", id: "semi-final", label: "Semifinals" },
+  { stage: "THIRD_PLACE", id: "third-place", label: "Third place" },
   { stage: "FINAL", id: "final", label: "Final" },
 ];
 
@@ -372,20 +399,27 @@ function buildRoundFromStage(
   );
   const ties = new Map<
     string,
-    { homeId: string; awayId: string; legs: FdMatch[] }
+    { homeId: string | null; awayId: string | null; legs: FdMatch[] }
   >();
 
   for (const m of sorted) {
     const home = teamFromFd(m.homeTeam);
     const away = teamFromFd(m.awayTeam);
-    if (!teamsMap.has(home.id)) teamsMap.set(home.id, home);
-    if (!teamsMap.has(away.id)) teamsMap.set(away.id, away);
-    const key = tieKey(home.id, away.id);
+    if (home && !teamsMap.has(home.id)) teamsMap.set(home.id, home);
+    if (away && !teamsMap.has(away.id)) teamsMap.set(away.id, away);
+    // Undecided pairings (TBD teams) can't be keyed by team set — keep each
+    // fixture as its own single-leg tie so the bracket still shows the slot.
+    const key =
+      home && away ? tieKey(home.id, away.id) : `fixture-${m.id}`;
     const existing = ties.get(key);
     if (existing) {
       existing.legs.push(m);
     } else {
-      ties.set(key, { homeId: home.id, awayId: away.id, legs: [m] });
+      ties.set(key, {
+        homeId: home?.id ?? null,
+        awayId: away?.id ?? null,
+        legs: [m],
+      });
     }
   }
 
@@ -415,7 +449,7 @@ function buildRoundFromStage(
     // Two legs. Leg 2 swaps home/away, so re-orient to the tie's home team.
     const l1 = leg1.score.fullTime;
     const l2 = leg2.score.fullTime;
-    const l2HomeForTie = leg2.homeTeam && teamFromFd(leg2.homeTeam).id === homeId;
+    const l2HomeForTie = teamFromFd(leg2.homeTeam)?.id === homeId;
     const leg2HomeGoals = l2HomeForTie ? l2.home : l2.away;
     const leg2AwayGoals = l2HomeForTie ? l2.away : l2.home;
     // Aggregate + winner exist only once BOTH legs are final. Summing with
@@ -482,6 +516,188 @@ function buildKnockoutBracket(
 
   return rounds.length > 0 ? rounds : undefined;
 }
+
+function prettyGroupLabel(key: string): string {
+  const short = key.match(/^GROUP_(\w+)$/);
+  if (short) return `Group ${short[1]}`;
+  return key
+    .toLowerCase()
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/**
+ * Derive per-group tables from GROUP_STAGE matches. Cup tournaments (World
+ * Cup) expose standings as 12 separate group blocks; computing them from the
+ * matches we already fetched saves the extra standings request.
+ */
+function buildGroupStandings(
+  matches: FdMatch[],
+  teamsMap: Map<string, Team>,
+): FootballGroupStandings[] {
+  const byGroup = new Map<string, FdMatch[]>();
+  for (const m of matches) {
+    if (m.stage !== "GROUP_STAGE" || !m.group) continue;
+    (byGroup.get(m.group) ?? byGroup.set(m.group, []).get(m.group)!).push(m);
+  }
+
+  type Row = {
+    team: Team;
+    played: number;
+    won: number;
+    drawn: number;
+    lost: number;
+    goalsFor: number;
+    goalsAgainst: number;
+    points: number;
+  };
+
+  const groups: FootballGroupStandings[] = [];
+  const sortedGroups = [...byGroup.entries()].sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  for (const [groupKey, groupMatches] of sortedGroups) {
+    const rows = new Map<string, Row>();
+    const rowFor = (team: Team): Row => {
+      const existing = rows.get(team.id);
+      if (existing) return existing;
+      const created: Row = {
+        team,
+        played: 0,
+        won: 0,
+        drawn: 0,
+        lost: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        points: 0,
+      };
+      rows.set(team.id, created);
+      return created;
+    };
+
+    for (const m of groupMatches) {
+      const home = teamFromFd(m.homeTeam);
+      const away = teamFromFd(m.awayTeam);
+      if (!home || !away) continue;
+      if (!teamsMap.has(home.id)) teamsMap.set(home.id, home);
+      if (!teamsMap.has(away.id)) teamsMap.set(away.id, away);
+      const homeRow = rowFor(home);
+      const awayRow = rowFor(away);
+      if (m.status !== "FINISHED") continue;
+      const hg = m.score.fullTime.home;
+      const ag = m.score.fullTime.away;
+      if (hg === null || ag === null) continue;
+      homeRow.played += 1;
+      awayRow.played += 1;
+      homeRow.goalsFor += hg;
+      homeRow.goalsAgainst += ag;
+      awayRow.goalsFor += ag;
+      awayRow.goalsAgainst += hg;
+      if (hg > ag) {
+        homeRow.won += 1;
+        homeRow.points += 3;
+        awayRow.lost += 1;
+      } else if (hg < ag) {
+        awayRow.won += 1;
+        awayRow.points += 3;
+        homeRow.lost += 1;
+      } else {
+        homeRow.drawn += 1;
+        awayRow.drawn += 1;
+        homeRow.points += 1;
+        awayRow.points += 1;
+      }
+    }
+
+    const ordered = [...rows.values()].sort(
+      (a, b) =>
+        b.points - a.points ||
+        b.goalsFor - b.goalsAgainst - (a.goalsFor - a.goalsAgainst) ||
+        b.goalsFor - a.goalsFor ||
+        a.team.shortName.localeCompare(b.team.shortName),
+    );
+    const total = ordered.length;
+    groups.push({
+      label: prettyGroupLabel(groupKey),
+      standings: ordered.map((row, idx) => ({
+        position: idx + 1,
+        teamId: row.team.id,
+        played: row.played,
+        won: row.won,
+        drawn: row.drawn,
+        lost: row.lost,
+        goalsFor: row.goalsFor,
+        goalsAgainst: row.goalsAgainst,
+        points: row.points,
+        band: ZONE_BAND_DEFAULTS["world-cup"](idx + 1, total),
+      })),
+    });
+  }
+  return groups;
+}
+
+const WORLD_CUP: CompetitionConfig = {
+  internalId: "world-cup",
+  code: "WC",
+  shortName: "World Cup",
+  name: "FIFA World Cup 2026",
+  region: "FIFA",
+  hasKnockout: true,
+};
+
+async function fetchWorldCupFromApi(): Promise<FootballLeagueData> {
+  // One full-season matches call covers the group tables AND the bracket; the
+  // standings endpoint is skipped to stay inside the free 10 req/min budget.
+  const matchesRes = await fetchFd<FdMatchesResponse>(
+    `/competitions/${WORLD_CUP.code}/matches`,
+  );
+  if (matchesRes.matches.length === 0) {
+    throw new Error("football-data: empty World Cup season");
+  }
+  const teamsMap = new Map<string, Team>();
+  const groups = buildGroupStandings(matchesRes.matches, teamsMap);
+  const knockout = buildKnockoutBracket(matchesRes.matches, teamsMap);
+  const matches = orderMatchesForDisplay(
+    mapMatches(matchesRes.matches, teamsMap),
+    (m) => m.kickoff,
+    (m) => m.status,
+    MAX_MATCHES,
+  );
+  const seasonYear = matchesRes.matches[0]?.utcDate.slice(0, 4) ?? "2026";
+
+  return {
+    league: {
+      id: WORLD_CUP.internalId,
+      name: WORLD_CUP.name,
+      shortName: WORLD_CUP.shortName,
+      region: WORLD_CUP.region,
+      hasKnockout: true,
+      season: seasonYear,
+    },
+    teams: Array.from(teamsMap.values()),
+    matches,
+    standings: [],
+    groups,
+    knockout,
+  };
+}
+
+export const getWorldCupData = unstable_cache(
+  async (): Promise<FootballLeagueData> => {
+    try {
+      return await fetchWorldCupFromApi();
+    } catch (err) {
+      console.warn(
+        "football-data World Cup unavailable, falling back to mock:",
+        err,
+      );
+      return WORLD_CUP_DATA;
+    }
+  },
+  ["football-data:world-cup"],
+  { revalidate: REVALIDATE_SECONDS, tags: ["sports:worldcup"] },
+);
 
 async function fetchLeague(
   competition: CompetitionConfig,

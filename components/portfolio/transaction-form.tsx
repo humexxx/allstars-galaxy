@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Calendar as CalendarIcon, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,13 +16,22 @@ import {
 } from "@/components/ui/popover";
 import {
   Field,
+  FieldError,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
 import { UserSelector } from "@/components/user-selector";
 import { Mono, Text } from "@/components/ui/typography";
 import { format } from "date-fns";
+import { createTransactionSchema } from "@/schemas/transaction";
 import type { InvestmentMethod } from "@/types/portfolio";
+
+const transactionFormSchema = createTransactionSchema.omit({
+  investmentMethodId: true,
+});
+
+type TransactionFormInput = z.input<typeof transactionFormSchema>;
+type TransactionFormData = z.output<typeof transactionFormSchema>;
 
 type User = {
   id: string;
@@ -55,30 +67,43 @@ export function TransactionForm({
   isSubmitting = false,
 }: TransactionFormProps) {
   const [activeTab, setActiveTab] = useState<"buy" | "withdrawal">("buy");
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState<Date>(new Date());
-  const [notes, setNotes] = useState("");
-  const [selectedUserId, setSelectedUserId] = useState<string>(adminUserId || "");
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    control,
+    formState: { errors },
+  } = useForm<TransactionFormInput, unknown, TransactionFormData>({
+    resolver: zodResolver(transactionFormSchema),
+    defaultValues: {
+      amount: "",
+      date: new Date(),
+      notes: "",
+      userId: adminUserId || undefined,
+    },
+  });
+
+  const amount = useWatch({ control, name: "amount" });
+  const date = useWatch({ control, name: "date" }) as Date;
+  const selectedUserId = useWatch({ control, name: "userId" });
 
   const fee = "0";
   const total = amount ? (parseFloat(amount) + parseFloat(fee)).toFixed(2) : "0";
 
-  const handleSubmit = () => {
-    if (!amount || parseFloat(amount) <= 0) return;
-    if (isAdmin && !selectedUserId) return;
-    
+  const submit = (data: TransactionFormData): void => {
     onSubmit({
-      amount,
-      date,
-      notes: notes || undefined,
-      ...(isAdmin && selectedUserId ? { userId: selectedUserId } : {}),
+      amount: data.amount,
+      date: data.date,
+      notes: data.notes || undefined,
+      ...(isAdmin && data.userId ? { userId: data.userId } : {}),
     });
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <form onSubmit={handleSubmit(submit)} className="flex flex-col gap-6">
       <div className="flex gap-2 rounded-lg bg-muted p-1">
         <Button
+          type="button"
           variant={activeTab === "buy" ? "default" : "ghost"}
           className="flex-1"
           onClick={() => setActiveTab("buy")}
@@ -86,6 +111,7 @@ export function TransactionForm({
           Buy
         </Button>
         <Button
+          type="button"
           variant={activeTab === "withdrawal" ? "default" : "ghost"}
           className="flex-1"
           disabled
@@ -133,10 +159,11 @@ export function TransactionForm({
             <FieldLabel htmlFor="user">User</FieldLabel>
             <UserSelector
               users={users}
-              value={selectedUserId}
-              onValueChange={setSelectedUserId}
+              value={selectedUserId ?? ""}
+              onValueChange={(value) => setValue("userId", value)}
               placeholder="Select a user"
             />
+            <FieldError errors={[errors.userId]} />
           </Field>
         )}
 
@@ -149,10 +176,10 @@ export function TransactionForm({
               type="number"
               placeholder="0.00"
               className="pl-10"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              {...register("amount")}
             />
           </div>
+          <FieldError errors={[errors.amount]} />
         </Field>
 
         <div className="grid grid-cols-3 gap-4">
@@ -162,6 +189,7 @@ export function TransactionForm({
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
+                    type="button"
                     variant="outline"
                     className="w-full justify-start text-left font-normal"
                   >
@@ -173,7 +201,7 @@ export function TransactionForm({
                   <Calendar
                     mode="single"
                     selected={date}
-                    onSelect={(d) => d && setDate(d)}
+                    onSelect={(d) => d && setValue("date", d)}
                     autoFocus
                     disabled={(date) => date > new Date()}
                   />
@@ -181,6 +209,7 @@ export function TransactionForm({
               </Popover>
             ) : (
               <Button
+                type="button"
                 variant="outline"
                 className="w-full justify-start text-left font-normal"
                 disabled
@@ -207,10 +236,10 @@ export function TransactionForm({
           <Textarea
             id="notes"
             placeholder="Optional notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
             rows={3}
+            {...register("notes")}
           />
+          <FieldError errors={[errors.notes]} />
         </Field>
       </FieldGroup>
 
@@ -220,11 +249,17 @@ export function TransactionForm({
       </div>
 
       <div className="flex gap-2">
-        <Button onClick={onCancel} variant="outline" className="flex-1" disabled={isSubmitting}>
+        <Button
+          type="button"
+          onClick={onCancel}
+          variant="outline"
+          className="flex-1"
+          disabled={isSubmitting}
+        >
           Cancel
         </Button>
         <Button
-          onClick={handleSubmit}
+          type="submit"
           className="flex-1"
           disabled={
             isSubmitting ||
@@ -236,6 +271,6 @@ export function TransactionForm({
           {isSubmitting ? "Adding…" : "Add Transaction"}
         </Button>
       </div>
-    </div>
+    </form>
   );
 }

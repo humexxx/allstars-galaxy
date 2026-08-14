@@ -37,14 +37,23 @@ export function computeProjectionWindow(
   projection: Projection,
   totalMonths: number,
   today: Date = new Date(),
-  anchorDay: number = 1
+  anchorDay: number = 1,
+  /**
+   * Fixed number of past periods to include. Omit for the default ~25% of the
+   * range — the plans comparison chart pins it (3 months) so the past stays a
+   * constant sliver no matter how long a horizon the user selects.
+   */
+  pastMonths?: number
 ): {
   startIndex: number;
   count: number;
   pastCount: number;
   todayIndex: number;
 } {
-  const targetPast = Math.max(1, Math.round(totalMonths * 0.25));
+  const targetPast = Math.max(
+    1,
+    pastMonths ?? Math.round(totalMonths * 0.25)
+  );
   const base = projection.months[0]?.date;
   let projIdx = base ? periodIndexForDate(base, anchorDay, today) : 0;
   // Clamp into range: today before the projection → first period; past the
@@ -83,6 +92,57 @@ export function computeProjectionWindow(
  * still spans back to the plan's start), so confirming today never blanks the
  * chart. Real snapshots always take precedence when present.
  */
+/**
+ * Aligns a base plan's projection ("ghost") to an already-built chart series.
+ * Matching is by accounting PERIOD, never by array index — the base plan can
+ * have a different startMonth, so index i of one projection is not index i of
+ * the other. Points whose period the ghost projection doesn't cover map to
+ * null (the chart skips them).
+ */
+export function mapGhostValues(
+  points: readonly ChartPoint[],
+  ghost: Projection,
+  anchorDay: number = 1
+): (number | null)[] {
+  const effAnchor = anchorDay > 0 ? anchorDay : 1;
+  return points.map((p) => {
+    const m = ghost.months.find(
+      (gm) => periodIndexForDate(gm.date, effAnchor, p.date) === 0
+    );
+    return m ? m.netWorth : null;
+  });
+}
+
+/**
+ * Portfolio series aligned to a chart series: past points (indexes before
+ * `pastCount`) read the latest recorded portfolio snapshot inside the point's
+ * period; today and forward read the projection's (growing) portfolioValue,
+ * matched by period. Nulls where neither side has data — the chart connects
+ * across gaps.
+ */
+export function mapPortfolioValues(
+  points: readonly ChartPoint[],
+  history: readonly { date: Date; value: number }[],
+  projection: Projection,
+  pastCount: number,
+  anchorDay: number = 1
+): (number | null)[] {
+  const effAnchor = anchorDay > 0 ? anchorDay : 1;
+  return points.map((p, i) => {
+    if (i < pastCount) {
+      let latest: number | null = null;
+      for (const h of history) {
+        if (periodIndexForDate(h.date, effAnchor, p.date) === 0) latest = h.value;
+      }
+      return latest;
+    }
+    const m = projection.months.find(
+      (pm) => periodIndexForDate(pm.date, effAnchor, p.date) === 0
+    );
+    return m ? m.portfolioValue : null;
+  });
+}
+
 export function buildChartSeries(
   history: PlanHistoryPoint[],
   projection: Projection,

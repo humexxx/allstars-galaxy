@@ -19,7 +19,7 @@ interface DataTableProps {
 export function DataTable({ data }: DataTableProps) {
     return (
         <div className="rounded-md border">
-            <div className="w-full overflow-x-auto">
+            <div className="relative w-full overflow-x-auto">
             <Table>
                 <TableHeader>
                     <TableRow>

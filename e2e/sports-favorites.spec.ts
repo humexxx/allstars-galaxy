@@ -1,4 +1,6 @@
 import { test, expect } from "./fixtures";
+// Derived from the registry so adding a sport can't silently drift this spec.
+import { SPORTS } from "../lib/data/sports/registry";
 
 test.describe("Sports favorites", () => {
   test.beforeEach(async ({ cleanFavorites }) => {
@@ -19,28 +21,22 @@ test.describe("Sports favorites", () => {
     ).toHaveAttribute("href", "/portal/entertainment/sports");
   });
 
-  test("sheet lists all 7 sports with switches off", async ({ page }) => {
+  test("sheet lists every registered sport with switches off", async ({ page }) => {
     await page.goto("/portal/entertainment/sports");
     await page.getByRole("button", { name: /Manage favorites/i }).click();
 
     const sheet = page.getByRole("dialog", { name: /Favorite sports/i });
     await expect(sheet).toBeVisible();
 
-    for (const label of [
-      "Football",
-      "Padel",
-      "Formula 1",
-      "NBA",
-      "Tennis",
-      "American Football",
-      "League of Legends",
-    ]) {
-      await expect(sheet.getByText(label, { exact: true }).first()).toBeVisible();
+    for (const sport of SPORTS) {
+      await expect(
+        sheet.getByText(sport.label, { exact: true }).first()
+      ).toBeVisible();
     }
 
     const switches = sheet.getByRole("switch");
-    await expect(switches).toHaveCount(7);
-    for (let i = 0; i < 7; i++) {
+    await expect(switches).toHaveCount(SPORTS.length);
+    for (let i = 0; i < SPORTS.length; i++) {
       await expect(switches.nth(i)).not.toBeChecked();
     }
   });
@@ -102,6 +98,7 @@ test.describe("Sports favorites", () => {
     await page.getByRole("button", { name: /Manage favorites/i }).click();
     const sheet = page.getByRole("dialog", { name: /Favorite sports/i });
     await sheet.getByRole("switch", { name: /Toggle NBA as favorite/i }).click();
+    await expect(sheet.locator(".animate-spin")).toHaveCount(0);
     await sheet.getByRole("button", { name: "Done" }).click();
     await expect(page.getByRole("button", { name: /Manage favorites/i })).toContainText("1");
 
@@ -112,6 +109,11 @@ test.describe("Sports favorites", () => {
     await expect(
       sheet2.getByRole("switch", { name: /Toggle NBA as favorite/i })
     ).not.toBeChecked();
+    // The switch flips optimistically, so an unchecked switch does NOT mean the
+    // server action committed. Wait for the row spinner to clear (same reason
+    // as the two-toggle test above) — otherwise /portal can be rendered from
+    // the pre-delete state and still show the sport as followed.
+    await expect(sheet2.locator(".animate-spin")).toHaveCount(0);
     await sheet2.getByRole("button", { name: "Done" }).click();
 
     // Dashboard back to CTA.

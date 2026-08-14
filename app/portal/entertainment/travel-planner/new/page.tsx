@@ -8,7 +8,7 @@ import { FormSkeleton } from "@/components/skeletons/form-skeleton";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 
 export const metadata: Metadata = {
-  title: "New trip | Allstars Galaxy",
+  title: "New trip",
 };
 
 export const dynamic = "force-dynamic";

@@ -20,6 +20,7 @@ import {
   autoConfirmSkippedPeriods,
   getLatestConfirmation,
 } from "./finance-confirmation-service";
+import { ensureOwnedRow } from "./ownership";
 import { periodStartFor } from "@/lib/finance/period";
 import type {
   FinancePlanWithLines,
@@ -302,13 +303,13 @@ export async function listSnapshots(
 // ---------- internal ----------
 
 async function ensurePlanOwnership(planId: string, userId: string): Promise<void> {
-  const [row] = await db
-    .select({ userId: financePlans.userId })
-    .from(financePlans)
-    .where(eq(financePlans.id, planId));
-  if (!row || row.userId !== userId) {
-    throw new Error("Plan not found");
-  }
+  await ensureOwnedRow({
+    table: financePlans,
+    idColumn: financePlans.id,
+    id: planId,
+    userId,
+    entity: "Plan",
+  });
 }
 
 /**

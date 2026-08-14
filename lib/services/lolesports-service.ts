@@ -23,7 +23,7 @@ import type {
 // hard-coded constant, not user-specific.
 const LOLESPORTS_BASE_URL = "https://esports-api.lolesports.com/persisted/gw";
 const LOLESPORTS_API_KEY = "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z";
-const REVALIDATE_SECONDS = 1800;
+const REVALIDATE_SECONDS = 300;
 
 const TARGET_REGIONS: Array<{ slug: string; region: LolRegion }> = [
   { slug: "lec", region: "lec" },

@@ -77,8 +77,10 @@ export function CommandMenu({
         onClick={() => setOpen(true)}
         aria-label="Search"
         className={cn(
-          "relative h-8 w-8 justify-center rounded-md bg-muted/50 px-0 text-sm font-normal text-muted-foreground shadow-none",
-          "sm:w-44 sm:justify-start sm:px-3 md:w-56 lg:w-64"
+          // Icon-only square on phones (sized for touch), full search field
+          // from sm up where the pointer is a mouse.
+          "relative size-9 justify-center rounded-md bg-muted/50 px-0 text-sm font-normal text-muted-foreground shadow-none",
+          "sm:h-8 sm:w-44 sm:justify-start sm:px-3 md:w-56 lg:w-64"
         )}
       >
         <SearchIcon className="size-4 sm:hidden" />

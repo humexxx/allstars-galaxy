@@ -22,6 +22,9 @@ test.describe("Admin — smoke", () => {
     const response = await page.goto("/portal/admin/users");
     expect(response?.status(), `expected 2xx, got ${response?.status()}`).toBeLessThan(400);
 
+    // `goto` resolves before the non-admin redirect lands, so reading the URL
+    // straight away still reports /portal/admin and the skip below never fires.
+    await page.waitForLoadState("networkidle");
     const settled = new URL(page.url()).pathname;
     if (!settled.startsWith("/portal/admin")) {
       test.skip(true, `Test user is not admin (landed on ${settled}); skipping admin assertions`);
@@ -37,6 +40,7 @@ test.describe("Admin — smoke", () => {
     const response = await page.goto("/portal/admin/transactions");
     expect(response?.status()).toBeLessThan(400);
 
+    await page.waitForLoadState("networkidle");
     const settled = new URL(page.url()).pathname;
     if (!settled.startsWith("/portal/admin")) {
       test.skip(true, `Test user is not admin (landed on ${settled}); skipping admin assertions`);

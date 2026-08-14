@@ -11,7 +11,7 @@ import type {
 } from "@/types/sports";
 
 const BASE_URL = "https://www.thesportsdb.com/api/v1/json/3";
-const REVALIDATE_SECONDS = 1800;
+const REVALIDATE_SECONDS = 300;
 const ATP_LEAGUE_ID = "4464";
 const WTA_LEAGUE_ID = "4517";
 

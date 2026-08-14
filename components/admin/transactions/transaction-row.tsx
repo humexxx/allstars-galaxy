@@ -80,11 +80,11 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
                   "?"}
               </AvatarFallback>
             </Avatar>
-            <div className="flex flex-col">
+            <div className="flex min-w-0 flex-col">
               <Text as="span" variant="body" weight="medium">
                 {transaction.user.fullName || "Unknown"}
               </Text>
-              <Mono className="text-xs text-muted-foreground">
+              <Mono className="max-w-48 truncate text-xs text-muted-foreground">
                 {transaction.user.email}
               </Mono>
             </div>

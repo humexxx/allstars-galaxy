@@ -1,22 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
 import { requireAdmin } from "@/lib/services/auth-server";
 import { updateUserRole } from "@/lib/services/user-service";
-
-const updateRoleSchema = z.object({
-  userId: z.string().uuid(),
-  role: z.enum(["admin", "user"]),
-});
+import { updateUserRoleSchema, type UpdateUserRoleData } from "@/schemas/admin";
 
 export async function updateUserRoleAction(
-  input: z.infer<typeof updateRoleSchema>,
+  input: UpdateUserRoleData,
 ): Promise<{ success: true }> {
   const admin = await requireAdmin();
 
-  const parsed = updateRoleSchema.safeParse(input);
+  const parsed = updateUserRoleSchema.safeParse(input);
   if (!parsed.success) {
     throw new Error("Invalid input");
   }

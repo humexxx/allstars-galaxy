@@ -3,8 +3,3 @@ export interface ApiResponse<T> {
   error?: string
   message?: string
 }
-
-export interface ApiRequest {
-  data: unknown
-  userId?: string
-}

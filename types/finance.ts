@@ -87,3 +87,17 @@ export type StrategyComparison = {
   interestSaved: number; // savings of recommended vs worst
   monthsSaved: number; // months saved by recommended vs worst
 };
+
+/** Card/rail-level outcome of a projection, precomputed server-side. */
+export type PlanSummary = {
+  monthsToDebtFree: number | null;
+  endingNetWorth: number;
+  endingDebt: number;
+  endDate: Date | null;
+};
+
+/**
+ * How the finance module's mascot should read the user's main plan. Derived by
+ * `getFinanceMood` — see the mood table in `components/portal/context-avatar.tsx`.
+ */
+export type FinanceMood = "idle" | "thriving" | "steady" | "strained";

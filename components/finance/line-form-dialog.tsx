@@ -555,7 +555,7 @@ export function RecurrenceFields({
               value={weekOfMonth != null ? String(weekOfMonth) : ""}
               onValueChange={(v) => setWeekOfMonth(parseInt(v, 10))}
             >
-              <SelectTrigger className="w-[110px]">
+              <SelectTrigger className="w-28">
                 <SelectValue placeholder="Pick" />
               </SelectTrigger>
               <SelectContent>
@@ -570,7 +570,7 @@ export function RecurrenceFields({
               value={dayOfWeek != null ? String(dayOfWeek) : ""}
               onValueChange={(v) => setDayOfWeek(parseInt(v, 10))}
             >
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-36">
                 <SelectValue placeholder="Pick day" />
               </SelectTrigger>
               <SelectContent>
@@ -606,7 +606,7 @@ export function RecurrenceFields({
                 }}
                 inputMode="numeric"
                 placeholder="3"
-                className="w-[64px] text-center"
+                className="w-16 text-center"
                 aria-label="Interval in months"
               />
               <Text variant="muted" as="span">months on day</Text>
@@ -616,7 +616,7 @@ export function RecurrenceFields({
                 onChange={(e) => setDayOfMonth(e.target.value)}
                 inputMode="numeric"
                 placeholder="1"
-                className="w-[64px] text-center"
+                className="w-16 text-center"
                 aria-label="Day of month"
               />
             </div>
@@ -697,7 +697,7 @@ function DatePicker({
           variant="ghost"
           size="icon"
           aria-label="Clear date"
-          className="absolute right-0 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          className="absolute right-0 top-1/2 h-9 w-9 -translate-y-1/2 text-muted-foreground hover:text-foreground sm:h-7 sm:w-7"
           onClick={(e) => {
             // Don't open the popover when the user only meant to clear.
             e.stopPropagation();
@@ -778,13 +778,13 @@ function MonthPicker({
             </span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[260px] p-3" align="start">
+        <PopoverContent className="w-64 p-3" align="start">
           <div className="flex items-center justify-between">
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="h-9 w-9 sm:h-7 sm:w-7"
               onClick={() => setViewYear((y) => y - 1)}
               aria-label="Previous year"
             >
@@ -795,7 +795,7 @@ function MonthPicker({
               type="button"
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="h-9 w-9 sm:h-7 sm:w-7"
               onClick={() => setViewYear((y) => y + 1)}
               aria-label="Next year"
             >
@@ -839,7 +839,7 @@ function MonthPicker({
           variant="ghost"
           size="icon"
           aria-label="Clear month"
-          className="absolute right-0 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          className="absolute right-0 top-1/2 h-9 w-9 -translate-y-1/2 text-muted-foreground hover:text-foreground sm:h-7 sm:w-7"
           onClick={(e) => {
             e.stopPropagation();
             onChange(null);

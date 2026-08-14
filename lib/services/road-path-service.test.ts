@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// road-path-service mixes two access shapes:
+// road-path-service mixes three access shapes:
 //   - `db.query.<table>.findMany / findFirst` (relational query API)
+//   - `db.select().from().where()` (ownership checks via `ensureOwnedRow`)
 //   - `db.insert / update / delete` (builder API, terminated by `.returning()`
 //     or `.where()`).
-// We mock both at the `@/db` boundary so the service can be exercised without
-// a real Postgres connection.
+// We mock all of them at the `@/db` boundary so the service can be exercised
+// without a real Postgres connection.
 
 const roadPathsFindMany = vi.fn();
 const roadPathsFindFirst = vi.fn();
@@ -14,12 +15,14 @@ const roadPathMilestonesFindFirst = vi.fn();
 const roadPathProgressFindMany = vi.fn();
 const roadPathProgressFindFirst = vi.fn();
 
+const selectMock = vi.fn();
 const insertMock = vi.fn();
 const updateMock = vi.fn();
 const deleteMock = vi.fn();
 
 vi.mock("@/db", () => ({
   db: {
+    select: (...args: unknown[]) => selectMock(...args),
     query: {
       roadPaths: {
         findMany: (...args: unknown[]) => roadPathsFindMany(...args),
@@ -37,6 +40,12 @@ vi.mock("@/db", () => ({
     insert: (...args: unknown[]) => insertMock(...args),
     update: (...args: unknown[]) => updateMock(...args),
     delete: (...args: unknown[]) => deleteMock(...args),
+    transaction: (cb: (tx: unknown) => Promise<unknown>) =>
+      cb({
+        insert: (...args: unknown[]) => insertMock(...args),
+        update: (...args: unknown[]) => updateMock(...args),
+        delete: (...args: unknown[]) => deleteMock(...args),
+      }),
   },
 }));
 
@@ -70,6 +79,16 @@ const MILESTONE_ID = "00000000-0000-0000-0000-0000000000bb";
 const PROGRESS_ID = "00000000-0000-0000-0000-0000000000cc";
 
 // ---------- chain builders ----------
+
+function mockOwnershipSelect(rows: unknown[]) {
+  // ensureOwnedRow: db.select().from(roadPaths).where(eq(id)) -> rows
+  const chain = {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockResolvedValue(rows),
+  };
+  selectMock.mockReturnValueOnce(chain);
+  return chain;
+}
 
 function mockInsertReturning<T>(row: T) {
   // db.insert(table).values(...).returning() -> [row]
@@ -345,7 +364,7 @@ describe("deleteRoadPath", () => {
 
 describe("getRoadPathMilestones", () => {
   it("returns milestones ordered by `order` ascending", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(buildPath());
+    mockOwnershipSelect([buildPath()]);
     const milestones = [
       buildMilestone({ id: "m1", order: 0 }),
       buildMilestone({ id: "m2", order: 1 }),
@@ -357,7 +376,7 @@ describe("getRoadPathMilestones", () => {
   });
 
   it("throws when the parent path is not owned by the user", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(undefined);
+    mockOwnershipSelect([buildPath()]); // owned by USER_ID
 
     await expect(
       getRoadPathMilestones(ROAD_PATH_ID, OTHER_USER_ID)
@@ -370,7 +389,7 @@ describe("getRoadPathMilestones", () => {
 
 describe("createRoadPathMilestone", () => {
   it("inserts a milestone after verifying ownership", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(buildPath());
+    mockOwnershipSelect([buildPath()]);
     const created = buildMilestone();
     const chain = mockInsertReturning(created);
 
@@ -391,7 +410,7 @@ describe("createRoadPathMilestone", () => {
   });
 
   it("throws when parent path does not exist for the user", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(undefined);
+    mockOwnershipSelect([]);
 
     await expect(
       createRoadPathMilestone(USER_ID, {
@@ -498,7 +517,7 @@ describe("deleteRoadPathMilestone", () => {
 
 describe("getNextMilestoneOrder", () => {
   it("returns 0 when no milestones exist yet", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(buildPath());
+    mockOwnershipSelect([buildPath()]);
     roadPathMilestonesFindMany.mockResolvedValueOnce([]);
 
     const next = await getNextMilestoneOrder(ROAD_PATH_ID, USER_ID);
@@ -506,7 +525,7 @@ describe("getNextMilestoneOrder", () => {
   });
 
   it("returns max(order) + 1 when milestones exist", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(buildPath());
+    mockOwnershipSelect([buildPath()]);
     // The service queries with order desc + limit 1, so the first row is the max.
     roadPathMilestonesFindMany.mockResolvedValueOnce([
       buildMilestone({ order: 4 }),
@@ -517,7 +536,7 @@ describe("getNextMilestoneOrder", () => {
   });
 
   it("throws when the parent path is missing", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(undefined);
+    mockOwnershipSelect([]);
 
     await expect(
       getNextMilestoneOrder(ROAD_PATH_ID, USER_ID)
@@ -529,7 +548,7 @@ describe("getNextMilestoneOrder", () => {
 
 describe("getRoadPathProgress", () => {
   it("returns all progress entries when no date range provided", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(buildPath());
+    mockOwnershipSelect([buildPath()]);
     const rows = [
       buildProgress({ id: "p1" }),
       buildProgress({ id: "p2", date: new Date("2026-03-01") }),
@@ -546,7 +565,7 @@ describe("getRoadPathProgress", () => {
   });
 
   it("includes both startDate and endDate conditions when provided", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(buildPath());
+    mockOwnershipSelect([buildPath()]);
     roadPathProgressFindMany.mockResolvedValueOnce([]);
 
     await getRoadPathProgress(
@@ -561,7 +580,7 @@ describe("getRoadPathProgress", () => {
   });
 
   it("accepts startDate only", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(buildPath());
+    mockOwnershipSelect([buildPath()]);
     roadPathProgressFindMany.mockResolvedValueOnce([]);
 
     await getRoadPathProgress(ROAD_PATH_ID, USER_ID, new Date("2026-06-01"));
@@ -569,7 +588,7 @@ describe("getRoadPathProgress", () => {
   });
 
   it("throws when the parent path is missing", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(undefined);
+    mockOwnershipSelect([]);
 
     await expect(
       getRoadPathProgress(ROAD_PATH_ID, USER_ID)
@@ -582,7 +601,7 @@ describe("getRoadPathProgress", () => {
 
 describe("createRoadPathProgress", () => {
   it("inserts a progress row AND updates parent currentValue", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(buildPath());
+    mockOwnershipSelect([buildPath()]);
     const created = buildProgress({ value: "42" });
     const insertChain = mockInsertReturning(created);
     const updateChain = mockUpdateNoReturning();
@@ -611,7 +630,7 @@ describe("createRoadPathProgress", () => {
   });
 
   it("defaults missing `date` to now", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(buildPath());
+    mockOwnershipSelect([buildPath()]);
     const insertChain = mockInsertReturning(buildProgress());
     mockUpdateNoReturning();
 
@@ -625,7 +644,7 @@ describe("createRoadPathProgress", () => {
   });
 
   it("throws when the parent path is missing", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(undefined);
+    mockOwnershipSelect([]);
 
     await expect(
       createRoadPathProgress(USER_ID, {

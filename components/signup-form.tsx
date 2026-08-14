@@ -12,7 +12,10 @@ import {
 import { Input } from "@/components/ui/input"
 import { Heading, Text } from "@/components/ui/typography"
 import { AuthService } from "@/lib/services/auth-service"
+import { signupSchema, type SignupData } from "@/schemas/auth"
 import { useState } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 
@@ -20,7 +23,7 @@ export function SignupForm({
   className,
   ...props
 }: React.ComponentProps<"form">) {
-  const [isLoading, setIsLoading] = useState(false)
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -31,25 +34,22 @@ export function SignupForm({
     nextRaw && nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : null
   const loginHref = next ? `/login?next=${encodeURIComponent(next)}` : "/login"
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setIsLoading(true)
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<SignupData>({
+    resolver: zodResolver(signupSchema),
+    defaultValues: {
+      email: prefillEmail,
+    },
+  })
+
+  const onSubmit = async (data: SignupData): Promise<void> => {
     setError(null)
 
-    const formData = new FormData(event.currentTarget)
-    const name = formData.get("name") as string
-    const email = formData.get("email") as string
-    const password = formData.get("password") as string
-    const confirmPassword = formData.get("confirm-password") as string
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match")
-      setIsLoading(false)
-      return
-    }
-
     try {
-      await AuthService.signUpWithEmail(email, password, name, next)
+      await AuthService.signUpWithEmail(data.email, data.password, data.name, next)
       // Usually signup requires email confirmation, so we might want to show a message
       // But for now let's just push to home or show success
       const params = new URLSearchParams({
@@ -59,25 +59,26 @@ export function SignupForm({
       router.push(`/login?${params.toString()}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error initializing signup")
-    } finally {
-      setIsLoading(false)
     }
   }
 
+  const isLoading = isSubmitting || isGoogleLoading
+
   async function handleGoogleLogin() {
-    setIsLoading(true)
+    setIsGoogleLoading(true)
     try {
       await AuthService.signInWithGoogle(next)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error with Google login")
-      setIsLoading(false)
+      setIsGoogleLoading(false)
     }
   }
 
   return (
     <form
       className={cn("flex flex-col gap-6", className)}
-      onSubmit={handleSubmit}
+      onSubmit={handleSubmit(onSubmit)}
+      noValidate
       {...props}
     >
       <FieldGroup>
@@ -100,30 +101,36 @@ export function SignupForm({
 
         <Field>
           <FieldLabel htmlFor="name">Full Name</FieldLabel>
-          <Input id="name" name="name" type="text" placeholder="John Doe" autoComplete="name" required />
+          <Input id="name" type="text" placeholder="John Doe" autoComplete="name" {...register("name")} />
+          {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
         </Field>
         <Field>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" name="email" type="email" placeholder="m@example.com" autoComplete="email" defaultValue={prefillEmail} required />
+          <Input id="email" type="email" placeholder="m@example.com" autoComplete="email" {...register("email")} />
+          {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
           <FieldDescription>
             We&apos;ll use this to contact you. We won&apos;t share your email.
           </FieldDescription>
         </Field>
         <Field>
           <FieldLabel htmlFor="password">Password</FieldLabel>
-          <Input id="password" name="password" type="password" autoComplete="new-password" required />
+          <Input id="password" type="password" autoComplete="new-password" {...register("password")} />
+          {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
           <FieldDescription>
             Must be at least 8 characters.
           </FieldDescription>
         </Field>
         <Field>
           <FieldLabel htmlFor="confirm-password">Confirm Password</FieldLabel>
-          <Input id="confirm-password" name="confirm-password" type="password" autoComplete="new-password" required />
+          <Input id="confirm-password" type="password" autoComplete="new-password" {...register("confirmPassword")} />
+          {errors.confirmPassword && (
+            <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>
+          )}
           <FieldDescription>Please confirm your password.</FieldDescription>
         </Field>
         <Field>
           <Button type="submit" disabled={isLoading} className="w-full">
-            {isLoading ? "Creating account..." : "Create Account"}
+            {isSubmitting ? "Creating account..." : "Create Account"}
           </Button>
         </Field>
         <FieldSeparator>Or continue with</FieldSeparator>

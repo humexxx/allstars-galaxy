@@ -177,12 +177,15 @@ export function ProjectionTable({ projection, monthsToShow }: ProjectionTablePro
       <div className="rounded-md border">
         <div
           ref={scrollContainerRef}
-          className="max-h-[480px] overflow-auto scroll-smooth"
+          className="max-h-120 overflow-auto scroll-smooth"
         >
-          <Table>
+          {/* One step down from the primitive's text-sm: this table is a dense
+              wall of currency, and 14px numerals made every column shout. The
+              header steps with it so the grid still reads as one block. */}
+          <Table className="text-xs">
             <TableHeader className="sticky top-0 bg-background">
               <TableRow>
-                <TableHead className="w-[80px]">Month</TableHead>
+                <TableHead className="w-20">Month</TableHead>
                 <TableHead className="text-right">Income</TableHead>
                 <TableHead className="text-right">Expenses</TableHead>
                 <TableHead className="text-right">Debt pmt</TableHead>

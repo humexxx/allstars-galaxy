@@ -20,6 +20,7 @@ import {
   deleteLineOverride,
   deletePlan,
   setMainPlan,
+  setPlanColor,
   updateDebt,
   updateExpense,
   updateIncome,
@@ -32,6 +33,7 @@ import {
   lineOverrideSchema,
   planDebtSchema,
   planExpenseSchema,
+  planColorSchema,
   planIncomeSchema,
   updateFinancePlanSchema,
   updatePlanDebtSchema,
@@ -40,6 +42,7 @@ import {
   type CreateFinancePlanInput,
   type DeleteLineOverrideInput,
   type LineOverrideInput,
+  type PlanColorInput,
   type PlanDebtInput,
   type PlanExpenseInput,
   type PlanIncomeInput,
@@ -130,6 +133,26 @@ export async function setMainPlanAction(planId: string) {
   });
 }
 
+export async function setPlanColorAction(input: PlanColorInput) {
+  return safe("finance-plans", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = planColorSchema.safeParse(input);
+    if (!parsed.success) {
+      return { success: false as const, error: "Unsupported colour" };
+    }
+    await setPlanColor(ctx.effectiveUserId, parsed.data.id, parsed.data.color);
+    await logImpersonatedMutation({
+      action: "financePlan.setColour",
+      entityTable: "finance_plans",
+      entityId: parsed.data.id,
+      after: { color: parsed.data.color },
+    });
+    revalidatePath(PLAN_PATH);
+    revalidatePath(pathForPlan(parsed.data.id));
+    return { success: true as const };
+  });
+}
+
 export async function clonePlanAction(planId: string, newName: string) {
   return safe("finance-plans", async () => {
     const ctx = await requireEffectiveContext();
@@ -141,6 +164,30 @@ export async function clonePlanAction(planId: string, newName: string) {
     const plan = await clonePlan(ctx.effectiveUserId, idParsed.data, nameParsed.data);
     await logImpersonatedMutation({
       action: "financePlan.clone",
+      entityTable: "finance_plans",
+      entityId: plan.id,
+      metadata: { sourcePlanId: idParsed.data },
+    });
+    revalidatePath(PLAN_PATH);
+    return { success: true as const, data: plan };
+  });
+}
+
+/** Clone + link: the new plan keeps a basedOnPlanId reference to the source,
+ *  so its chart can overlay the base plan's projection as a ghost line. */
+export async function createScenarioAction(planId: string, newName: string) {
+  return safe("finance-plans", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = z.string().uuid().safeParse(planId);
+    const nameParsed = z.string().min(1).max(120).safeParse(newName);
+    if (!idParsed.success || !nameParsed.success) {
+      return { success: false as const, error: "Invalid input" };
+    }
+    const plan = await clonePlan(ctx.effectiveUserId, idParsed.data, nameParsed.data, {
+      asScenario: true,
+    });
+    await logImpersonatedMutation({
+      action: "financePlan.createScenario",
       entityTable: "finance_plans",
       entityId: plan.id,
       metadata: { sourcePlanId: idParsed.data },

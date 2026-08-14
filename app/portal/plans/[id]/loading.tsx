@@ -79,9 +79,9 @@ export default function PlanDetailLoading() {
 
           {/* Sidebar: condensed figures card (gauge + rows, stretches) + debt
               strategy card — column min-height matches the main panel box */}
-          <div className="flex min-w-0 flex-col gap-3 lg:min-h-[640px] lg:gap-4">
+          <div className="flex min-w-0 flex-col gap-3 lg:h-[640px] lg:gap-4">
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm lg:flex-1">
-              <div className="space-y-4 p-6">
+              <div className="space-y-4 px-6 pt-4 pb-6">
                 <div className="flex flex-col items-center gap-1.5">
                   <Skeleton className="h-[120px] w-[120px] rounded-full" />
                   <Skeleton className="h-3 w-24" />
@@ -100,9 +100,13 @@ export default function PlanDetailLoading() {
               </div>
             </div>
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-              <div className="space-y-3 p-6">
+              <div className="space-y-3 px-6 pt-6 pb-6">
                 <Skeleton className="h-3 w-28" />
-                <Skeleton className="h-9 w-full" />
+                <div className="grid gap-1.5">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-[52px] w-full rounded-md" />
+                  ))}
+                </div>
               </div>
             </div>
           </div>

@@ -213,6 +213,8 @@ export async function requireThing(id: string, userId: string): Promise<Thing> {
 
 ### Always Verify Ownership
 
+For standalone ownership checks (load by id, throw `"<Entity> not found"` when the row is missing or belongs to another user), use the canonical `ensureOwnedRow` helper from [`ownership.ts`](ownership.ts) instead of hand-rolling the select — it returns the row so callers can reuse its fields.
+
 ```typescript
 // ✅ GOOD - Checks userId
 export async function updateThing(id: string, userId: string, data: UpdateData): Promise<Thing> {

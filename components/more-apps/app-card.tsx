@@ -82,7 +82,7 @@ export function AppCard({
 
   // Treat the dropdown as the single home for secondary actions. Console
   // link, hide / unhide all live here — keeps the card header tidy and
-  // mirrors the plans-list pattern (3-dots in the corner).
+  // mirrors the plans-workspace rail pattern (3-dots in the corner).
   const hasMenuItems = Boolean(consoleUrl) || Boolean(onHide) || Boolean(onShow);
 
   return (

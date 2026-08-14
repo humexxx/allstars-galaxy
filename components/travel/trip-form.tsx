@@ -1,15 +1,19 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
+import type { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { createTripAction, updateTripAction } from "@/app/actions/travel";
+import { createTripSchema, type CreateTripInput } from "@/schemas/travel";
 import type { Trip } from "@/types/travel";
 
 import { PhotoPicker } from "./photo-picker";
@@ -22,11 +26,13 @@ const COLORS = [
   "var(--chart-5)",
 ];
 
+type TripFormValues = z.input<typeof createTripSchema>;
+
 function todayIso(): string {
   return format(new Date(), "yyyy-MM-dd");
 }
 
-export function TripForm({ trip }: { trip?: Trip }) {
+export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -35,47 +41,32 @@ export function TripForm({ trip }: { trip?: Trip }) {
   // the source of truth and a stale URL param shouldn't overwrite it.
   const seedStartDate = trip?.startDate ?? searchParams.get("startDate") ?? todayIso();
 
-  const [title, setTitle] = useState(trip?.title ?? "");
-  const [destination, setDestination] = useState(trip?.destination ?? "");
-  const [description, setDescription] = useState(trip?.description ?? "");
-  const [startDate, setStartDate] = useState(seedStartDate);
-  const [endDate, setEndDate] = useState(trip?.endDate ?? "");
-  const [currency, setCurrency] = useState(trip?.currency ?? "USD");
-  const [color, setColor] = useState(trip?.color ?? COLORS[0]);
-  const [coverPhotoUrl, setCoverPhotoUrl] = useState<string | null>(
-    trip?.coverPhotoUrl ?? null
-  );
+  const {
+    register,
+    handleSubmit,
+    control,
+    formState: { errors },
+  } = useForm<TripFormValues, unknown, CreateTripInput>({
+    resolver: zodResolver(createTripSchema),
+    defaultValues: {
+      title: trip?.title ?? "",
+      destination: trip?.destination ?? null,
+      description: trip?.description ?? null,
+      startDate: seedStartDate,
+      endDate: trip?.endDate ?? null,
+      coverPhotoUrl: trip?.coverPhotoUrl ?? null,
+      currency: trip?.currency ?? "USD",
+      color: trip?.color ?? COLORS[0],
+    },
+  });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) {
-      toast.error("Trip needs a title");
-      return;
-    }
-    if (!startDate) {
-      toast.error("Pick a start date");
-      return;
-    }
-    if (endDate && endDate < startDate) {
-      toast.error("End date must be on or after start date");
-      return;
-    }
+  const startDate = useWatch({ control, name: "startDate" });
 
+  const onSubmit = (values: CreateTripInput): void => {
     startTransition(async () => {
-      const payload = {
-        title: title.trim(),
-        destination: destination.trim() || null,
-        description: description.trim() || null,
-        startDate,
-        endDate: endDate || null,
-        coverPhotoUrl,
-        currency: currency.trim().toUpperCase() || "USD",
-        color,
-      };
-
       const result = trip
-        ? await updateTripAction({ id: trip.id, ...payload })
-        : await createTripAction(payload);
+        ? await updateTripAction({ id: trip.id, ...values })
+        : await createTripAction(values);
 
       if (result.success) {
         toast.success(trip ? "Trip saved" : "Trip created");
@@ -88,51 +79,55 @@ export function TripForm({ trip }: { trip?: Trip }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div className="grid gap-6 md:grid-cols-2">
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="trip-title">Title</Label>
                 <Input
                   id="trip-title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
                   placeholder="Summer in Lisbon"
                   required
                   autoFocus
+                  {...register("title", {
+                    setValueAs: (v: string | null) => v?.trim() ?? "",
+                  })}
                 />
+                {errors.title && (
+                  <p className="text-sm text-destructive">{errors.title.message}</p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="trip-destination">Destination</Label>
                 <Input
                   id="trip-destination"
-                  value={destination ?? ""}
-                  onChange={(e) => setDestination(e.target.value)}
                   placeholder="Lisbon, Portugal"
+                  {...register("destination", {
+                    setValueAs: (v: string | null) => v?.trim() || null,
+                  })}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="trip-start">Start</Label>
-                  <Input
-                    id="trip-start"
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    required
-                  />
+                  <Input id="trip-start" type="date" required {...register("startDate")} />
+                  {errors.startDate && (
+                    <p className="text-sm text-destructive">{errors.startDate.message}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="trip-end">End</Label>
                   <Input
                     id="trip-end"
                     type="date"
-                    value={endDate ?? ""}
                     min={startDate || undefined}
-                    onChange={(e) => setEndDate(e.target.value)}
+                    {...register("endDate", { setValueAs: (v: string) => v || null })}
                   />
+                  {errors.endDate && (
+                    <p className="text-sm text-destructive">{errors.endDate.message}</p>
+                  )}
                 </div>
               </div>
 
@@ -141,28 +136,40 @@ export function TripForm({ trip }: { trip?: Trip }) {
                   <Label htmlFor="trip-currency">Currency</Label>
                   <Input
                     id="trip-currency"
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value.toUpperCase())}
                     maxLength={3}
                     placeholder="USD"
+                    className="uppercase"
+                    {...register("currency", {
+                      setValueAs: (v: string | null) =>
+                        v?.trim().toUpperCase() || "USD",
+                    })}
                   />
+                  {errors.currency && (
+                    <p className="text-sm text-destructive">{errors.currency.message}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Color</Label>
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {COLORS.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        aria-label={`Use color ${c}`}
-                        onClick={() => setColor(c)}
-                        className={`h-7 w-7 rounded-full border-2 ${
-                          color === c ? "border-foreground" : "border-transparent"
-                        }`}
-                        style={{ backgroundColor: c }}
-                      />
-                    ))}
-                  </div>
+                  <Controller
+                    control={control}
+                    name="color"
+                    render={({ field }) => (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {COLORS.map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            aria-label={`Use color ${c}`}
+                            onClick={() => field.onChange(c)}
+                            className={`h-7 w-7 rounded-full border-2 ${
+                              field.value === c ? "border-foreground" : "border-transparent"
+                            }`}
+                            style={{ backgroundColor: c }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  />
                 </div>
               </div>
 
@@ -170,21 +177,28 @@ export function TripForm({ trip }: { trip?: Trip }) {
                 <Label htmlFor="trip-description">Notes</Label>
                 <Textarea
                   id="trip-description"
-                  value={description ?? ""}
-                  onChange={(e) => setDescription(e.target.value)}
                   placeholder="What is this trip about?"
                   rows={3}
+                  {...register("description", {
+                    setValueAs: (v: string | null) => v?.trim() || null,
+                  })}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
               <Label>Cover photo</Label>
-              <PhotoPicker
-                folder={trip?.id ?? "covers"}
-                previewUrl={coverPhotoUrl}
-                onPick={(r) => setCoverPhotoUrl(r.url)}
-                onClear={() => setCoverPhotoUrl(null)}
+              <Controller
+                control={control}
+                name="coverPhotoUrl"
+                render={({ field }) => (
+                  <PhotoPicker
+                    folder={trip?.id ?? "covers"}
+                    previewUrl={field.value ?? null}
+                    onPick={(r) => field.onChange(r.url)}
+                    onClear={() => field.onChange(null)}
+                  />
+                )}
               />
             </div>
       </div>

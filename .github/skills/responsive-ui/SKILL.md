@@ -57,15 +57,70 @@ the full table. Don't re-add fixed sizes on top.
    flush against the rail. Use horizontal-only negatives: `-mx-1 px-1` (cancels,
    no shift) **plus** `py-1` (no negative). Verified: this keeps the 24px
    `space-y-6` gap (measured 28px = 24 + 4px padding) vs ~0 with `-m-1`.
-3. **Dev-tool helpers need a stable identity.** `useRegisterDevTool` re-registers
+3. **An `overflow-x` rail MUST also be `relative`.** `overflow` only clips
+   descendants whose containing block is inside the scroller. Anything
+   `position: absolute` — including Tailwind's `sr-only`, which every icon
+   button ships — resolves against the nearest *positioned* ancestor instead.
+   In the portal that is `SidebarInset`, so the labels paint at their full
+   un-scrolled x offset, inflate the document's scroll width and the **entire
+   page** scrolls sideways on phones. Measured on the task board: document
+   `scrollWidth` 882px on a 375px viewport; adding `relative` to the rail →
+   375px. `min-w-0` on the shell does **not** fix this (the inset is already
+   375px wide — the overflow is painted, not laid out), and `overflow: hidden`
+   higher up only masks it. The shadcn `Table` primitive already gets this
+   right — copy it: `relative w-full overflow-x-auto`.
+4. **Dev-tool helpers need a stable identity.** `useRegisterDevTool` re-registers
    on identity change; an inline object loops. Build it once with
    `useState(() => ({...}))` (not `useMemo(() => ({...}), [])`, which the React
    Compiler lint rejects when deps are empty).
 
-## Verifying layout without auth
+## Auditing every portal route at once (preferred)
 
-Portal pages are behind Supabase auth and you must **not** enter passwords to log
-in. To measure spacing/sizes:
+Portal pages are behind Supabase auth and you must **not** type a password
+yourself — but you don't have to. The Playwright setup project already logs the
+dedicated test user in from `.env.test` and persists `playwright/.auth/user.json`,
+so a throwaway spec inherits a real session and can walk **every** authenticated
+route unattended:
+
+```ts
+// e2e/zz-audit.spec.ts — delete before committing
+test.use({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true });
+
+test("audit", async ({ page }) => {
+  test.setTimeout(600_000); // the config's 30s per-test cap kills a multi-route walk
+  for (const route of ROUTES) {
+    await page.goto(route, { waitUntil: "networkidle" });
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+    );
+    await page.screenshot({ path: `/tmp/audit/${route.replace(/\//g, "_")}.png`, fullPage: true });
+  }
+});
+```
+
+Run it with `npx playwright test e2e/zz-audit.spec.ts --project=chromium`.
+`document.scrollWidth - clientWidth` is the single best regression signal: it
+should be **0 on every route**. A full-page screenshot wider than 375px means
+something escaped the shell.
+
+Two measurement traps:
+
+- **`getBoundingClientRect()` is not the tap target.** `Switch` and
+  `RadioGroupItem` render small but extend their hit area with
+  `after:-inset-x-3 after:-inset-y-2`, so a 32×18 switch is really 56×34. Judge
+  a target by clicking at an offset, not by its box.
+- **`document.elementFromPoint()` does not report pseudo-element hits** in
+  Chromium — it returns whatever sits underneath, so a probe built on it will
+  report those extended hit areas as failures. Real pointer events *do* dispatch
+  to the originating element; confirm with `page.mouse.click()` and assert the
+  state changed.
+
+Remember to **delete the spec** (and `test-results/`) when you're done, and undo
+any state the audit toggled on the test user.
+
+## Verifying a single widget without auth
+
+When you only need to measure one component's spacing/sizes:
 
 1. Create a throwaway **public** route (anything outside `/portal/`, e.g.
    `app/spacing-check/page.tsx`) that reproduces the exact markup/classes. Wrap a
@@ -84,6 +139,12 @@ in. To measure spacing/sizes:
 
 - [ ] Desktop (≥640px) sizes/spacing unchanged — diff only adds `sm:`/base steps.
 - [ ] Headings via `<Heading>`; hero numbers use the mobile-first stat pattern.
-- [ ] Any `overflow-x` rail has `py-*` room and no negative vertical margin.
+- [ ] Any `overflow-x` rail is `relative`, has `py-*` room, and no negative
+      vertical margin.
+- [ ] Interactive controls are ≥36px on phones (`size-9`); where a control is
+      denser on desktop, step it *up* for mobile (`size-9 sm:size-8`), never
+      down. Icon-only links need padding — a bare `size-5` mark is a 20px tap
+      target.
+- [ ] Checked the page at 375px wide and `document.scrollWidth === 375`.
 - [ ] Measured the result in the browser; threw away the test route.
 - [ ] If the type scale itself changed, update `docs/TYPOGRAPHY.md` in the same commit.

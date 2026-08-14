@@ -12,9 +12,10 @@ import { getAllUsers } from "@/lib/services/user-service";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import type { PortfolioTransaction } from "@/types/portfolio";
 import PortfolioClientPage from "@/components/portal/portfolio-client";
+import { PortalPageContainer } from "@/components/portal/page-container";
 
 export const metadata: Metadata = {
-  title: "Portfolio | Allstars Galaxy",
+  title: "Portfolio",
   description: "View and manage your investment portfolio",
 };
 
@@ -69,5 +70,9 @@ export default async function PortfolioPage() {
     currentUserId: userId,
   };
 
-  return <PortfolioClientPage data={data} />;
+  return (
+    <PortalPageContainer>
+      <PortfolioClientPage data={data} />
+    </PortalPageContainer>
+  );
 }

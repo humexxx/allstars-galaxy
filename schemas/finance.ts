@@ -94,8 +94,25 @@ export const createFinancePlanSchema = z.object({
   color: z.string().min(1).max(60).default("var(--chart-1)"),
 });
 
+/**
+ * Colour-only update, so the rail's swatch picker doesn't have to round-trip
+ * the whole plan through `updateFinancePlanSchema` (which requires every
+ * field). Restricted to a theme token or a 6-digit hex: the value is written
+ * straight into a `style` attribute and an SVG `stroke`, so arbitrary CSS has
+ * no business there.
+ */
+export const planColorSchema = z.object({
+  id: z.string().uuid(),
+  color: z
+    .string()
+    .regex(/^(#[0-9a-fA-F]{6}|var\(--chart-[1-5]\))$/, "Unsupported colour"),
+});
+
 export const updateFinancePlanSchema = createFinancePlanSchema.extend({
   id: z.string().uuid(),
+  // Scenario link. Only settable via update (scenarios are created by cloning);
+  // null detaches the scenario from its base plan.
+  basedOnPlanId: z.string().uuid().nullable().optional(),
 });
 
 // Income line shape + refinement. kind=one_time needs a date; kind=recurring
@@ -243,6 +260,7 @@ export type DeleteLineOverrideInput = z.infer<typeof deleteLineOverrideSchema>;
 
 export type CreateFinancePlanInput = z.infer<typeof createFinancePlanSchema>;
 export type UpdateFinancePlanInput = z.infer<typeof updateFinancePlanSchema>;
+export type PlanColorInput = z.infer<typeof planColorSchema>;
 export type PlanIncomeInput = z.infer<typeof planIncomeSchema>;
 export type UpdatePlanIncomeInput = z.infer<typeof updatePlanIncomeSchema>;
 export type PlanExpenseInput = z.infer<typeof planExpenseSchema>;

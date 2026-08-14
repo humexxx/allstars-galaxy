@@ -60,8 +60,10 @@ test.describe("Travel planner — trip lifecycle", () => {
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: /^Delete$/ }).click();
 
-    // After delete we should be off the detail page.
-    await page.waitForURL(/\/portal\/entertainment\/travel-planner(\/|$)/);
+    // After delete we should be off the detail page. Anchor the match to the
+    // overview URL — `(\/|$)` also matches the detail page we're still on, so
+    // it resolved instantly and the assertion below raced the server action.
+    await page.waitForURL(/\/portal\/entertainment\/travel-planner$/);
     // And the trip should no longer be on the overview.
     await page.goto("/portal/entertainment/travel-planner");
     await expect(page.getByText(uniqueTitle)).toHaveCount(0);

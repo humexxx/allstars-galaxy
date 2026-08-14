@@ -26,8 +26,9 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
+import { Eyebrow, Heading, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { Trip } from "@/types/travel";
 
@@ -107,7 +108,10 @@ export function TripsOverview({ trips }: TripsOverviewProps) {
       </TabsList>
 
       <TabsContent value="upcoming" className="space-y-8">
-        <TripGrid trips={upcoming} empty="No upcoming trips. Create one to start planning." />
+        <TripGrid
+          trips={upcoming}
+          empty={{ title: "No upcoming trips", description: "Create one to start planning." }}
+        />
         {past.length > 0 && (
           <section className="space-y-3">
             <Eyebrow>Past</Eyebrow>
@@ -129,16 +133,12 @@ function TripGrid({
   dimmed = false,
 }: {
   trips: Trip[];
-  empty?: string;
+  empty?: { title: string; description?: string };
   dimmed?: boolean;
-}) {
+}): React.ReactElement | null {
   if (trips.length === 0) {
     if (!empty) return null;
-    return (
-      <div className="rounded-lg border border-dashed p-8 text-center">
-        <Text variant="muted">{empty}</Text>
-      </div>
-    );
+    return <EmptyState title={empty.title} description={empty.description} />;
   }
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -314,7 +314,7 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
               <div
                 key={key}
                 className={cn(
-                  "group relative min-h-[88px] bg-background p-1.5",
+                  "group relative min-h-22 bg-background p-1.5",
                   !inMonth && "bg-muted/20 text-muted-foreground"
                 )}
               >

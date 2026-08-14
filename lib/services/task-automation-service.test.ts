@@ -1,15 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// task-automation-service uses two surfaces:
+// task-automation-service uses three surfaces:
 //   - `db.query.roadPaths.findFirst/findMany` and `db.query.boardColumns.findFirst`
 //     for reads (relational query API).
-//   - `db.update(roadPaths).set(...).where(...)` for stamping `lastTaskCreatedAt`.
-// `createBoardTask` and `getNextTaskOrder` are pulled from ./board-service, so we
-// stub that module rather than re-mocking the full builder chain underneath.
+//   - `db.transaction(tx => ...)` wrapping `tx.insert(boardTasks)` +
+//     `tx.update(roadPaths)` for the task-create + stamp write pair.
+// `getNextTaskOrder` is pulled from ./board-service, so we stub that module
+// rather than re-mocking the full builder chain underneath.
 
 const roadPathsFindFirst = vi.fn();
 const roadPathsFindMany = vi.fn();
 const boardColumnsFindFirst = vi.fn();
+const insertMock = vi.fn();
 const updateMock = vi.fn();
 
 vi.mock("@/db", () => ({
@@ -23,15 +25,19 @@ vi.mock("@/db", () => ({
         findFirst: (...args: unknown[]) => boardColumnsFindFirst(...args),
       },
     },
+    insert: (...args: unknown[]) => insertMock(...args),
     update: (...args: unknown[]) => updateMock(...args),
+    transaction: (cb: (tx: unknown) => Promise<unknown>) =>
+      cb({
+        insert: (...args: unknown[]) => insertMock(...args),
+        update: (...args: unknown[]) => updateMock(...args),
+      }),
   },
 }));
 
-const createBoardTaskMock = vi.fn();
 const getNextTaskOrderMock = vi.fn();
 
 vi.mock("./board-service", () => ({
-  createBoardTask: (...args: unknown[]) => createBoardTaskMock(...args),
   getNextTaskOrder: (...args: unknown[]) => getNextTaskOrderMock(...args),
 }));
 
@@ -97,12 +103,22 @@ function buildTask(overrides: Partial<BoardTask> = {}): BoardTask {
 }
 
 function mockUpdateChain() {
-  // db.update(roadPaths).set(...).where(...) — resolves with no .returning()
+  // tx.update(roadPaths).set(...).where(...) — resolves with no .returning()
   const chain = {
     set: vi.fn().mockReturnThis(),
     where: vi.fn().mockResolvedValue(undefined),
   };
   updateMock.mockReturnValue(chain);
+  return chain;
+}
+
+function mockInsertChain(rows: BoardTask[]) {
+  // tx.insert(boardTasks).values(...).returning() -> rows
+  const chain = {
+    values: vi.fn().mockReturnThis(),
+    returning: vi.fn().mockResolvedValue(rows),
+  };
+  insertMock.mockReturnValue(chain);
   return chain;
 }
 
@@ -297,7 +313,7 @@ describe("createAutomatedTasksForRoadPath", () => {
     await expect(
       createAutomatedTasksForRoadPath(USER_ID, ROAD_PATH_ID)
     ).rejects.toThrow("Road path not found");
-    expect(createBoardTaskMock).not.toHaveBeenCalled();
+    expect(insertMock).not.toHaveBeenCalled();
   });
 
   it("returns null (no-op) when autoCreateTasks is false", async () => {
@@ -308,7 +324,7 @@ describe("createAutomatedTasksForRoadPath", () => {
     const result = await createAutomatedTasksForRoadPath(USER_ID, ROAD_PATH_ID);
     expect(result).toBeNull();
     expect(boardColumnsFindFirst).not.toHaveBeenCalled();
-    expect(createBoardTaskMock).not.toHaveBeenCalled();
+    expect(insertMock).not.toHaveBeenCalled();
   });
 
   it("returns null when taskFrequency is missing", async () => {
@@ -318,7 +334,7 @@ describe("createAutomatedTasksForRoadPath", () => {
 
     const result = await createAutomatedTasksForRoadPath(USER_ID, ROAD_PATH_ID);
     expect(result).toBeNull();
-    expect(createBoardTaskMock).not.toHaveBeenCalled();
+    expect(insertMock).not.toHaveBeenCalled();
   });
 
   it("returns null when the schedule says it is too soon", async () => {
@@ -344,7 +360,7 @@ describe("createAutomatedTasksForRoadPath", () => {
     ).rejects.toThrow(
       "Todo column not found. Please initialize board columns first."
     );
-    expect(createBoardTaskMock).not.toHaveBeenCalled();
+    expect(insertMock).not.toHaveBeenCalled();
   });
 
   it("creates a task in the Todo column and stamps lastTaskCreatedAt", async () => {
@@ -363,7 +379,7 @@ describe("createAutomatedTasksForRoadPath", () => {
     });
     getNextTaskOrderMock.mockResolvedValueOnce(3);
     const created = buildTask({ title: "Daily: Read", order: 3 });
-    createBoardTaskMock.mockResolvedValueOnce(created);
+    const insertChain = mockInsertChain([created]);
     const updateChain = mockUpdateChain();
 
     const result = await createAutomatedTasksForRoadPath(USER_ID, ROAD_PATH_ID);
@@ -371,10 +387,10 @@ describe("createAutomatedTasksForRoadPath", () => {
     expect(result).toEqual(created);
 
     // Task creation payload
-    expect(createBoardTaskMock).toHaveBeenCalledTimes(1);
-    const [calledUserId, payload] = createBoardTaskMock.mock.calls[0];
-    expect(calledUserId).toBe(USER_ID);
+    expect(insertMock).toHaveBeenCalledTimes(1);
+    const payload = insertChain.values.mock.calls[0][0];
     expect(payload).toMatchObject({
+      userId: USER_ID,
       columnId: COLUMN_ID,
       roadPathId: ROAD_PATH_ID,
       title: "Daily: Read",
@@ -405,7 +421,7 @@ describe("createAutomatedTasksForAllRoadPaths", () => {
     expect(result).toEqual([]);
     // No paths => no need to even look up the Todo column.
     expect(boardColumnsFindFirst).not.toHaveBeenCalled();
-    expect(createBoardTaskMock).not.toHaveBeenCalled();
+    expect(insertMock).not.toHaveBeenCalled();
   });
 
   it("returns [] when no candidate paths are due yet", async () => {
@@ -444,10 +460,10 @@ describe("createAutomatedTasksForAllRoadPaths", () => {
     ).rejects.toThrow(
       "Todo column not found. Please initialize board columns first."
     );
-    expect(createBoardTaskMock).not.toHaveBeenCalled();
+    expect(insertMock).not.toHaveBeenCalled();
   });
 
-  it("creates one task per eligible path and stamps each", async () => {
+  it("batch-creates one task per eligible path and stamps them in one update", async () => {
     const pathA = buildPath({
       id: "p-a",
       title: "Read",
@@ -474,63 +490,62 @@ describe("createAutomatedTasksForAllRoadPaths", () => {
       userId: USER_ID,
       name: "Todo",
     });
-    getNextTaskOrderMock
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(1);
+    getNextTaskOrderMock.mockResolvedValueOnce(0);
     const taskA = buildTask({ id: "t-a", title: "Daily: Read", order: 0 });
     const taskB = buildTask({ id: "t-b", title: "Weekly: Run", order: 1 });
-    createBoardTaskMock
-      .mockResolvedValueOnce(taskA)
-      .mockResolvedValueOnce(taskB);
+    const insertChain = mockInsertChain([taskA, taskB]);
     mockUpdateChain();
 
     const result = await createAutomatedTasksForAllRoadPaths(USER_ID);
 
     expect(result).toEqual([taskA, taskB]);
-    expect(createBoardTaskMock).toHaveBeenCalledTimes(2);
-    expect(updateMock).toHaveBeenCalledTimes(2);
-    // Column should only be looked up once for the whole batch (perf contract).
+
+    // Single bulk insert with in-memory incremented orders (perf contract).
+    expect(insertMock).toHaveBeenCalledTimes(1);
+    const rows = insertChain.values.mock.calls[0][0];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      userId: USER_ID,
+      columnId: COLUMN_ID,
+      roadPathId: "p-a",
+      title: "Daily: Read",
+      order: 0,
+    });
+    expect(rows[1]).toMatchObject({
+      roadPathId: "p-b",
+      title: "Weekly: Run",
+      order: 1,
+    });
+
+    // Base order computed once, single stamp update, single column lookup.
+    expect(getNextTaskOrderMock).toHaveBeenCalledTimes(1);
+    expect(updateMock).toHaveBeenCalledTimes(1);
     expect(boardColumnsFindFirst).toHaveBeenCalledTimes(1);
   });
 
-  it("continues processing other paths when one task creation fails", async () => {
+  it("rejects atomically when the bulk insert fails (no partial stamps)", async () => {
     const pathA = buildPath({
       id: "p-a",
       title: "Read",
       taskFrequency: "daily",
       lastTaskCreatedAt: daysAgo(2),
     });
-    const pathB = buildPath({
-      id: "p-b",
-      title: "Run",
-      taskFrequency: "daily",
-      lastTaskCreatedAt: daysAgo(2),
-    });
-    roadPathsFindMany.mockResolvedValueOnce([pathA, pathB]);
+    roadPathsFindMany.mockResolvedValueOnce([pathA]);
     boardColumnsFindFirst.mockResolvedValueOnce({
       id: COLUMN_ID,
       userId: USER_ID,
       name: "Todo",
     });
-    getNextTaskOrderMock
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(1);
-    const taskB = buildTask({ id: "t-b", title: "Daily: Run", order: 1 });
-    createBoardTaskMock
-      .mockRejectedValueOnce(new Error("DB error"))
-      .mockResolvedValueOnce(taskB);
+    getNextTaskOrderMock.mockResolvedValueOnce(0);
+    insertMock.mockReturnValueOnce({
+      values: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockRejectedValue(new Error("DB error")),
+    });
     mockUpdateChain();
 
-    // Silence the expected console.error for the failed task.
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    const result = await createAutomatedTasksForAllRoadPaths(USER_ID);
-
-    expect(result).toEqual([taskB]);
-    // First path failed → no stamp update; second path succeeded → 1 update.
-    expect(updateMock).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-
-    errorSpy.mockRestore();
+    await expect(createAutomatedTasksForAllRoadPaths(USER_ID)).rejects.toThrow(
+      "DB error"
+    );
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });

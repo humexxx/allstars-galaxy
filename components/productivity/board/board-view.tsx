@@ -285,7 +285,13 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div
             className={cn(
-              "-mx-1 flex min-h-0 flex-1 gap-3 overflow-x-auto px-1 pb-2",
+              // `relative` is load-bearing: it makes the rail the containing
+              // block for its absolutely-positioned descendants. Without it the
+              // per-column `sr-only` labels resolve against SidebarInset (the
+              // nearest positioned ancestor), escape this scroller's clip and
+              // stretch the document to the rail's full scroll width — the whole
+              // page scrolls sideways on phones. `min-w-0` does not fix it.
+              "relative -mx-1 flex min-h-0 flex-1 gap-3 overflow-x-auto px-1 pb-2",
               isExpanded && "px-4 sm:px-6 lg:px-8"
             )}
           >

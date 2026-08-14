@@ -1,10 +1,10 @@
 import "server-only";
 
 import { db } from "@/db";
-import { roadPaths, boardColumns } from "@/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { roadPaths, boardColumns, boardTasks } from "@/db/schema";
+import { eq, and, isNull, inArray } from "drizzle-orm";
 import type { RoadPathFrequency, BoardTask } from "@/types";
-import { createBoardTask, getNextTaskOrder } from "./board-service";
+import { getNextTaskOrder } from "./board-service";
 
 export function shouldCreateTask(
   frequency: RoadPathFrequency,
@@ -84,25 +84,32 @@ export async function createAutomatedTasksForRoadPath(userId: string, roadPathId
 
   const order = await getNextTaskOrder(todoColumn.id, userId);
   const taskTitle = getTaskTitle(roadPath.title, roadPath.taskFrequency as RoadPathFrequency);
+  const now = new Date();
 
-  const task = await createBoardTask(userId, {
-    columnId: todoColumn.id,
-    roadPathId: roadPath.id,
-    title: taskTitle,
-    description: roadPath.description,
-    order,
-    dueDate: new Date(),
+  return await db.transaction(async (tx) => {
+    const [task] = await tx
+      .insert(boardTasks)
+      .values({
+        userId,
+        columnId: todoColumn.id,
+        roadPathId: roadPath.id,
+        title: taskTitle,
+        description: roadPath.description,
+        order,
+        dueDate: now,
+      })
+      .returning();
+
+    await tx
+      .update(roadPaths)
+      .set({
+        lastTaskCreatedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(roadPaths.id, roadPathId));
+
+    return task;
   });
-
-  await db
-    .update(roadPaths)
-    .set({
-      lastTaskCreatedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(roadPaths.id, roadPathId));
-
-  return task;
 }
 
 export async function createAutomatedTasksForAllRoadPaths(userId: string): Promise<BoardTask[]> {
@@ -137,34 +144,37 @@ export async function createAutomatedTasksForAllRoadPaths(userId: string): Promi
     throw new Error("Todo column not found. Please initialize board columns first.");
   }
 
-  const createdTasks: BoardTask[] = [];
+  // 3. Compute the base order ONCE (was previously one query per path) and
+  //    increment in memory — same 0,1,2… sequence the loop produced.
+  const baseOrder = await getNextTaskOrder(todoColumn.id, userId);
+  const now = new Date();
 
-  for (const path of eligiblePaths) {
-    try {
-      const order = await getNextTaskOrder(todoColumn.id, userId);
-      const taskTitle = getTaskTitle(path.title, path.taskFrequency as RoadPathFrequency);
+  const taskRows = eligiblePaths.map((path, index) => ({
+    userId,
+    columnId: todoColumn.id,
+    roadPathId: path.id,
+    title: getTaskTitle(path.title, path.taskFrequency as RoadPathFrequency),
+    description: path.description,
+    order: baseOrder + index,
+    dueDate: now,
+  }));
 
-      const task = await createBoardTask(userId, {
-        columnId: todoColumn.id,
-        roadPathId: path.id,
-        title: taskTitle,
-        description: path.description,
-        order,
-        dueDate: new Date(),
-      });
+  // 4. One bulk insert + one stamp update, atomic.
+  return await db.transaction(async (tx) => {
+    const createdTasks = await tx.insert(boardTasks).values(taskRows).returning();
 
-      await db
-        .update(roadPaths)
-        .set({ lastTaskCreatedAt: new Date(), updatedAt: new Date() })
-        .where(eq(roadPaths.id, path.id));
+    await tx
+      .update(roadPaths)
+      .set({ lastTaskCreatedAt: now, updatedAt: now })
+      .where(
+        inArray(
+          roadPaths.id,
+          eligiblePaths.map((path) => path.id)
+        )
+      );
 
-      createdTasks.push(task);
-    } catch (error) {
-      console.error(`Failed to create task for road path ${path.id}:`, error);
-    }
-  }
-
-  return createdTasks;
+    return createdTasks;
+  });
 }
 
 export async function getNextTaskDueDate(frequency: RoadPathFrequency, lastDate?: Date): Promise<Date> {

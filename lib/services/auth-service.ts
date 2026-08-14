@@ -79,9 +79,11 @@ export class AuthService {
     return data
   }
   
+  // "local" scope keeps the sign-out to this browser; see signOutAction in
+  // app/actions/auth.ts for why we don't take Supabase's "global" default.
   static async signOut(): Promise<void> {
     const supabase = createClient()
-    const { error } = await supabase.auth.signOut()
+    const { error } = await supabase.auth.signOut({ scope: "local" })
     if (error) {
         throw error
     }
@@ -101,6 +103,6 @@ export class AuthService {
 
 export async function signOut(): Promise<void> {
   const supabase = createClient();
-  await supabase.auth.signOut();
+  await supabase.auth.signOut({ scope: "local" });
 }
 

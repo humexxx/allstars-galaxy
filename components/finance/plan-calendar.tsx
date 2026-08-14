@@ -1198,7 +1198,7 @@ export function PlanCalendar({
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Heading level="h5" as="h3" className="min-w-[180px] text-center">
+            <Heading level="h5" as="h3" className="min-w-0 text-center sm:min-w-45">
               {monthLabel}
             </Heading>
             <Button
@@ -1787,7 +1787,7 @@ function CalendarCell({
               // Don't bubble — the cell's onClick would otherwise toggle expand
               // when the user just wants the Add popover.
               onClick={(e) => e.stopPropagation()}
-              className="rounded p-0.5 opacity-0 transition hover:bg-muted group-hover:opacity-100 focus-visible:opacity-100"
+              className="rounded p-0.5 opacity-60 transition hover:bg-muted focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
@@ -1936,7 +1936,7 @@ function EntryChip({
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
             aria-label={`More actions for ${entry.name}`}
-            className="flex shrink-0 cursor-pointer items-center pl-0.5 pr-1 opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 group-hover/entry:opacity-60"
+            className="flex shrink-0 cursor-pointer items-center pl-0.5 pr-1 opacity-60 transition-opacity hover:opacity-100 focus-visible:opacity-100 sm:opacity-0 sm:group-hover/entry:opacity-60"
           >
             <MoreHorizontal className="h-3 w-3" />
           </button>

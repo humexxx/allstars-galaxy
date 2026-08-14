@@ -85,13 +85,14 @@ export function MonthPicker() {
           </Button>
 
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="icon" onClick={() => changeYear(-1)}>
+            <Button variant="ghost" size="icon" aria-label="Previous year" onClick={() => changeYear(-1)}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="font-medium text-sm">{date.getFullYear()}</span>
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Next year"
               onClick={() => changeYear(1)}
               disabled={date.getFullYear() >= currentYear}
             >

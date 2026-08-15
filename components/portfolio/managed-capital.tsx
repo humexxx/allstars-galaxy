@@ -1,8 +1,18 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Filter, X } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   ChartContainer,
   ChartLegend,
@@ -13,14 +23,13 @@ import {
 import { Mono, Text } from "@/components/ui/typography";
 import { formatCurrency } from "@/lib/utils/format";
 import type { ChartConfig } from "@/types/chart";
-
-export type ManagedCapital = {
-  points: { date: string; own: number; thirdParty: number }[];
-  ownContributed: number;
-  thirdPartyContributed: number;
-  ownHolding: number;
-  thirdPartyHolding: number;
-};
+import {
+  aggregateManagedCapital,
+  filterContributions,
+  NO_FILTERS,
+  type ManagedCapitalFilters,
+  type ManagedContribution,
+} from "@/lib/finance/managed-capital";
 
 const config = {
   own: { label: "Yours", color: "var(--chart-1)" },
@@ -44,7 +53,41 @@ const DATE = new Intl.DateTimeFormat("en-US", {
  * Two distinct hues, never one blended total: the whole point is that the
  * second half is not the owner's money.
  */
-export function ManagedCapitalCard({ data }: { data: ManagedCapital }) {
+export function ManagedCapitalCard({
+  contributions,
+}: {
+  contributions: ManagedContribution[];
+}) {
+  // View-only, like the plan chart's third-party toggle: nothing is persisted,
+  // and a reload comes back to "everything".
+  const [filters, setFilters] = useState<ManagedCapitalFilters>(NO_FILTERS);
+
+  const methods = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of contributions) m.set(c.methodId, c.methodName);
+    return [...m.entries()].map(([id, name]) => ({ id, name }));
+  }, [contributions]);
+
+  const investors = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of contributions) m.set(c.investorId, c.investorName);
+    return [...m.entries()].map(([id, name]) => ({ id, name }));
+  }, [contributions]);
+
+  const data = useMemo(
+    () => aggregateManagedCapital(filterContributions(contributions, filters)),
+    [contributions, filters]
+  );
+
+  const activeCount = filters.methodIds.length + filters.investorIds.length;
+  const toggle = (key: "methodIds" | "investorIds", id: string) =>
+    setFilters((f) => ({
+      ...f,
+      [key]: f[key].includes(id)
+        ? f[key].filter((x) => x !== id)
+        : [...f[key], id],
+    }));
+
   const totalHolding = data.ownHolding + data.thirdPartyHolding;
   const share =
     totalHolding > 0 ? (data.ownHolding / totalHolding) * 100 : 100;
@@ -66,6 +109,45 @@ export function ManagedCapitalCard({ data }: { data: ManagedCapital }) {
               Present value. Only the first figure is your patrimony.
             </Text>
           </div>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Filter className="mr-1 size-3.5" />
+                Filters
+                {activeCount > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 text-2xs">
+                    {activeCount}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 space-y-4">
+              <FilterGroup
+                title="Method"
+                options={methods}
+                selected={filters.methodIds}
+                onToggle={(id) => toggle("methodIds", id)}
+              />
+              <FilterGroup
+                title="Investor"
+                options={investors}
+                selected={filters.investorIds}
+                onToggle={(id) => toggle("investorIds", id)}
+              />
+              {activeCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setFilters(NO_FILTERS)}
+                >
+                  <X className="mr-1 size-3.5" />
+                  Clear filters
+                </Button>
+              )}
+            </PopoverContent>
+          </Popover>
           <div className="flex flex-wrap items-end gap-6">
             <div>
               <Text variant="small" className="text-muted-foreground">
@@ -114,6 +196,12 @@ export function ManagedCapitalCard({ data }: { data: ManagedCapital }) {
             {share.toFixed(1)}% of what you manage is your own.
           </Text>
         </div>
+
+        {rows.length === 0 && (
+          <Text variant="small" className="text-muted-foreground">
+            Nothing matches these filters.
+          </Text>
+        )}
 
         {rows.length > 1 && (
           <div className="space-y-1">
@@ -164,5 +252,46 @@ export function ManagedCapitalCard({ data }: { data: ManagedCapital }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** One labelled group of checkboxes inside the filter popover. */
+function FilterGroup({
+  title,
+  options,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  options: { id: string; name: string }[];
+  selected: string[];
+  onToggle: (id: string) => void;
+}) {
+  if (options.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      <Text variant="small" className="font-medium text-foreground">
+        {title}
+      </Text>
+      <div className="space-y-1.5">
+        {options.map((o) => (
+          <label
+            key={o.id}
+            className="flex cursor-pointer items-center gap-2 text-sm"
+          >
+            <Checkbox
+              checked={selected.includes(o.id)}
+              onCheckedChange={() => onToggle(o.id)}
+            />
+            <span className="truncate">{o.name}</span>
+          </label>
+        ))}
+      </div>
+      {selected.length === 0 && (
+        <Text variant="small" className="text-muted-foreground">
+          All included.
+        </Text>
+      )}
+    </div>
   );
 }

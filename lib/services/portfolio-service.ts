@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { portfolios, transactions, investmentMethods, users } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import type { Portfolio, PortfolioTransaction, PortfolioStats, PortfolioAsset, MethodInvestors } from "@/types/portfolio";
+import type { ManagedContribution } from "@/lib/finance/managed-capital";
 
 export async function getUserPortfolio(userId: string): Promise<Portfolio | null> {
   const portfolio = await db.query.portfolios.findFirst({
@@ -290,32 +291,30 @@ export async function getMethodInvestors(
 }
 
 /**
- * Capital under an admin's management over time, split into their own money
- * and other people's.
+ * Flat list of approved buys across the methods an admin runs, ready for the
+ * pure aggregator in `lib/finance/managed-capital`.
  *
- * This plots **contributed capital** (each approved buy's `initialValue`,
- * accumulated by date) — NOT valuation over time. There is no per-investor
- * historical valuation in the schema: `currentValue` is a single present-day
- * figure, so drawing it as a curve would invent history that was never
- * recorded.
+ * Rows rather than a finished series: the card filters by method and investor
+ * in the browser, so it needs the detail. The aggregation itself lives in one
+ * pure function used by both sides.
  *
- * `own` and `thirdParty` stay separate all the way through. The owner's
- * patrimony is the `own` half; the rest is other people's money that merely
- * passes through their methods.
+ * Note this is CONTRIBUTED capital plus a present-day holding per row — there
+ * is no per-investor historical valuation in the schema, so nothing here can
+ * honestly be drawn as a value curve over time.
  */
-export async function getManagedCapitalSeries(ownerUserId: string): Promise<{
-  points: { date: string; own: number; thirdParty: number }[];
-  ownContributed: number;
-  thirdPartyContributed: number;
-  ownHolding: number;
-  thirdPartyHolding: number;
-}> {
+export async function getManagedContributions(
+  ownerUserId: string
+): Promise<ManagedContribution[]> {
   const rows = await db
     .select({
       date: transactions.date,
       initialValue: transactions.initialValue,
       currentValue: transactions.currentValue,
+      methodId: investmentMethods.id,
+      methodName: investmentMethods.name,
       investorId: portfolios.userId,
+      investorName: users.fullName,
+      investorEmail: users.email,
     })
     .from(investmentMethods)
     .innerJoin(
@@ -323,6 +322,7 @@ export async function getManagedCapitalSeries(ownerUserId: string): Promise<{
       eq(transactions.investmentMethodId, investmentMethods.id)
     )
     .innerJoin(portfolios, eq(transactions.portfolioId, portfolios.id))
+    .innerJoin(users, eq(portfolios.userId, users.id))
     .where(
       and(
         eq(investmentMethods.ownerUserId, ownerUserId),
@@ -331,34 +331,14 @@ export async function getManagedCapitalSeries(ownerUserId: string): Promise<{
       )
     );
 
-  const sorted = [...rows].sort((a, b) => a.date.getTime() - b.date.getTime());
-
-  let own = 0;
-  let thirdParty = 0;
-  let ownHolding = 0;
-  let thirdPartyHolding = 0;
-  const byDay = new Map<string, { own: number; thirdParty: number }>();
-
-  for (const r of sorted) {
-    const contributed = parseFloat(r.initialValue || "0");
-    const holding = parseFloat(r.currentValue || "0");
-    if (r.investorId === ownerUserId) {
-      own += contributed;
-      ownHolding += holding;
-    } else {
-      thirdParty += contributed;
-      thirdPartyHolding += holding;
-    }
-    // One point per day: several buys on the same date are one step on the
-    // chart, not a cluster of identical x values.
-    byDay.set(r.date.toISOString().slice(0, 10), { own, thirdParty });
-  }
-
-  return {
-    points: [...byDay.entries()].map(([date, v]) => ({ date, ...v })),
-    ownContributed: own,
-    thirdPartyContributed: thirdParty,
-    ownHolding,
-    thirdPartyHolding,
-  };
+  return rows.map((r) => ({
+    date: r.date.toISOString().slice(0, 10),
+    methodId: r.methodId,
+    methodName: r.methodName,
+    investorId: r.investorId,
+    investorName: r.investorName || r.investorEmail || "Unknown user",
+    isOwn: r.investorId === ownerUserId,
+    contributed: parseFloat(r.initialValue || "0"),
+    holding: parseFloat(r.currentValue || "0"),
+  }));
 }

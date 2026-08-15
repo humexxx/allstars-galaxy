@@ -6,7 +6,7 @@ import {
   getPortfolioStats,
   getPortfolioTransactions,
   getMethodInvestors,
-  getManagedCapitalSeries,
+  getManagedContributions,
 } from "@/lib/services/portfolio-service";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
 import { getAllUsers } from "@/lib/services/user-service";
@@ -31,8 +31,8 @@ export default async function PortfolioPage() {
   // Only meaningful for someone who runs methods; everyone else gets [] and
   // never sees the tab.
   const investorsPromise = getMethodInvestors(userId);
-  const managedPromise = getManagedCapitalSeries(userId);
-  const [portfolio, methods, users, methodInvestors, managedCapital] =
+  const managedPromise = getManagedContributions(userId);
+  const [portfolio, methods, users, methodInvestors, managedContributions] =
     await Promise.all([
     getUserPortfolio(userId),
     // ALL methods, enabled or not: the Methods tab renders
@@ -78,7 +78,7 @@ export default async function PortfolioPage() {
     isAdmin,
     users,
     methodInvestors,
-    managedCapital,
+    managedContributions,
     currentUserId: userId,
   };
 

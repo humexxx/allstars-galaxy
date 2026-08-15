@@ -1,5 +1,55 @@
-import { PageSkeleton } from "@/components/skeletons/page-skeleton"
+import { Skeleton } from "@/components/ui/skeleton"
 
+/**
+ * Mirrors the PlansWorkspace silhouette: page header with its action, then the
+ * hero grid — the projection-comparison card across 2/3 and the plan rail on
+ * the right third. The generic PageSkeleton promised a four-card grid, so the
+ * swap to the real layout read as a jump rather than content filling in.
+ *
+ * Keep the grid, the chart height and the rail row height in sync with
+ * `components/finance/plans-workspace.tsx`.
+ */
 export default function PlansLoading() {
-  return <PageSkeleton cards={4} cardHeight="h-40" />
+  return (
+    <section className="space-y-6" aria-hidden="true">
+      {/* PageHeader: title + description on the left, "New plan" on the right */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-48" />
+          <Skeleton className="h-4 w-80 max-w-full" />
+        </div>
+        <Skeleton className="h-9 w-28 shrink-0" />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* Projection comparison */}
+        <div className="min-w-0 rounded-xl border bg-card shadow-sm lg:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-6 pt-6 pb-2">
+            <Skeleton className="h-5 w-44" />
+            <div className="flex flex-wrap items-center gap-2">
+              {/* horizon select + metric tabs */}
+              <Skeleton className="h-8 w-38" />
+              <Skeleton className="h-9 w-52" />
+            </div>
+          </div>
+          <div className="px-3 pb-6 sm:px-6">
+            <Skeleton className="h-64 w-full sm:h-80 lg:h-[460px]" />
+          </div>
+        </div>
+
+        {/* Your plans rail */}
+        <div className="min-w-0 rounded-xl border bg-card shadow-sm">
+          <div className="space-y-2 px-6 pt-6 pb-2">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-3 w-full" />
+          </div>
+          <div className="space-y-2 px-6 pb-6">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-[72px] w-full rounded-lg" />
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
 }

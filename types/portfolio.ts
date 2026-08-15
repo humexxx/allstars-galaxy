@@ -40,3 +40,24 @@ export interface PortfolioAsset {
   profitLoss: number;
   profitLossPercentage: number;
 }
+
+/** One person's position inside a method someone else owns. */
+export interface MethodInvestor {
+  userId: string;
+  email: string | null;
+  fullName: string | null;
+  invested: number;
+  holding: number;
+  withdrawn: number;
+}
+
+/** An owned method plus everyone invested in it. Read-only aggregate — this
+ *  never contributes to the owner's net worth. */
+export interface MethodInvestors {
+  methodId: string;
+  methodName: string;
+  enabled: boolean;
+  investors: MethodInvestor[];
+  totalInvested: number;
+  totalHolding: number;
+}

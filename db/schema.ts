@@ -72,7 +72,17 @@ export const investmentMethods = pgTable("investment_methods", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   description: text("description"),
+  // Display credit for the strategy. Free text and NOT the owner — `author`
+  // predates ownership and is what the catalogue groups by on screen.
   author: text("author").notNull(),
+  // The admin who runs this method. Other users invest through them, so this
+  // is what "who is invested in MY methods" is keyed on. Nullable: a method
+  // without an owner is the old global-catalogue behaviour and still works.
+  // SET NULL rather than cascade — deleting an admin must never delete a
+  // method other people hold money in.
+  ownerUserId: uuid("owner_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   riskLevel: riskLevelEnum("risk_level").notNull(),
   monthlyRoi: numeric("monthly_roi", { precision: 7, scale: 4 }).notNull(),
   // Disabled methods are hidden from portfolio transaction selectors but still

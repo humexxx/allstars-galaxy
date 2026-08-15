@@ -45,6 +45,18 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `app_state` — global key-value (cron state, etc.) — also touched by other modules
 
 ## Notes
+- **Methods have an owner.** `investment_methods.owner_user_id` (nullable, FK
+  SET NULL) is the admin who runs the method; other users invest through them.
+  NULL keeps the old global-catalogue behaviour. `author` is unrelated — it is
+  free-text display credit and predates ownership.
+- **`getMethodInvestors(ownerUserId)`** aggregates who holds money in an admin's
+  methods, mirroring `getPortfolioAssets` maths exactly so the owner sees the
+  same figure the investor sees. Surfaced as an **Investors** tab that only
+  appears for users who own methods.
+- **Third-party capital never touches net worth.** It is a read-only aggregate,
+  computed on the fly, deliberately outside the KPI grid — folding it in would
+  inflate the owner's patrimony with money that isn't theirs. Same reason the
+  planned chart toggle keeps it on its own series (see the design memo).
 - **Investment Methods lives inside Portfolio** (Methods tab), not its own
   route. `/portal/investment-methods` is a permanent redirect — the landing
   page links there from two places — and the sidebar entry is gone. The page

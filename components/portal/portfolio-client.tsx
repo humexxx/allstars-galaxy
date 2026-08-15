@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InvestmentMethodsView } from "@/components/portfolio/investment-methods-view";
+import { MethodInvestorsView } from "@/components/portfolio/method-investors";
 import { StatCard, statToneClass } from "@/components/ui/stat-card";
 import { Heading, Text } from "@/components/ui/typography";
 import {
@@ -48,6 +49,7 @@ import type {
   Portfolio,
   PortfolioStats,
   PortfolioTransaction,
+  MethodInvestors,
 } from "@/types/portfolio";
 
 type ChartDataPoint = {
@@ -69,6 +71,9 @@ type PortfolioData = {
   methods: InvestmentMethod[];
   isAdmin: boolean;
   users?: User[];
+  /** Methods this user owns + who holds money in them. Empty for everyone
+   *  who doesn't run any. Never folded into the portfolio totals. */
+  methodInvestors: MethodInvestors[];
   currentUserId: string;
 };
 
@@ -93,6 +98,9 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   const router = useRouter();
   // The transaction form only ever offered live methods; the Methods tab gets
   // the full list because it filters (and can reveal disabled) itself.
+  // The Investors tab only exists for people who actually run methods.
+  const ownsMethods = data.methodInvestors.length > 0;
+
   const enabledMethods = useMemo(
     () => data.methods.filter((m) => m.enabled),
     [data.methods]
@@ -216,6 +224,9 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="methods">Methods</TabsTrigger>
+            {ownsMethods && (
+              <TabsTrigger value="investors">Investors</TabsTrigger>
+            )}
           </TabsList>
           <TabsContent value="overview">
             <EmptyPortfolio onAddTransaction={() => setIsDialogOpen(true)} />
@@ -223,6 +234,12 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           <TabsContent value="methods">
             <InvestmentMethodsView methods={data.methods} />
           </TabsContent>
+
+          {ownsMethods && (
+            <TabsContent value="investors">
+              <MethodInvestorsView methods={data.methodInvestors} />
+            </TabsContent>
+          )}
         </Tabs>
         <AddTransactionDialog
           open={isDialogOpen}

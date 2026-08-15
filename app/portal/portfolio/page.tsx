@@ -5,6 +5,7 @@ import {
   getUserPortfolio,
   getPortfolioStats,
   getPortfolioTransactions,
+  getMethodInvestors,
 } from "@/lib/services/portfolio-service";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
 import { getAllUsers } from "@/lib/services/user-service";
@@ -26,7 +27,10 @@ export default async function PortfolioPage() {
   const userId = ctx.effectiveUserId;
 
   const usersPromise = isAdmin ? getAllUsers() : Promise.resolve([]);
-  const [portfolio, methods, users] = await Promise.all([
+  // Only meaningful for someone who runs methods; everyone else gets [] and
+  // never sees the tab.
+  const investorsPromise = getMethodInvestors(userId);
+  const [portfolio, methods, users, methodInvestors] = await Promise.all([
     getUserPortfolio(userId),
     // ALL methods, enabled or not: the Methods tab renders
     // InvestmentMethodsView, which filters to enabled itself and exposes a dev
@@ -34,6 +38,7 @@ export default async function PortfolioPage() {
     // (the transaction form) filter below.
     db.select().from(investmentMethods),
     usersPromise,
+    investorsPromise,
   ]);
 
   let stats = null;
@@ -68,6 +73,7 @@ export default async function PortfolioPage() {
     methods,
     isAdmin,
     users,
+    methodInvestors,
     currentUserId: userId,
   };
 

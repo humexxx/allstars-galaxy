@@ -1,9 +1,9 @@
 import "server-only";
 
 import { db } from "@/db";
-import { portfolios, transactions, investmentMethods } from "@/db/schema";
+import { portfolios, transactions, investmentMethods, users } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import type { Portfolio, PortfolioTransaction, PortfolioStats, PortfolioAsset } from "@/types/portfolio";
+import type { Portfolio, PortfolioTransaction, PortfolioStats, PortfolioAsset, MethodInvestors } from "@/types/portfolio";
 
 export async function getUserPortfolio(userId: string): Promise<Portfolio | null> {
   const portfolio = await db.query.portfolios.findFirst({
@@ -201,4 +201,90 @@ export async function getTransactionCurrentValue(transactionId: string) {
     growth,
     growthPercentage,
   };
+}
+
+/**
+ * Who is invested in the methods a given admin owns, and how much.
+ *
+ * The per-investor maths mirrors `getPortfolioAssets` exactly — approved buys
+ * contribute `initialValue` to invested and `currentValue` to holdings,
+ * approved withdrawals accumulate separately. Diverging here would show the
+ * admin a different number than the investor sees in their own portfolio,
+ * which is worse than showing nothing.
+ *
+ * This is a READ-ONLY aggregate. It never feeds net worth: third-party capital
+ * is not the admin's patrimony.
+ */
+export async function getMethodInvestors(
+  ownerUserId: string
+): Promise<MethodInvestors[]> {
+  const rows = await db
+    .select({
+      methodId: investmentMethods.id,
+      methodName: investmentMethods.name,
+      methodEnabled: investmentMethods.enabled,
+      investorId: users.id,
+      investorEmail: users.email,
+      investorName: users.fullName,
+      type: transactions.type,
+      status: transactions.status,
+      total: transactions.total,
+      initialValue: transactions.initialValue,
+      currentValue: transactions.currentValue,
+    })
+    .from(investmentMethods)
+    .leftJoin(
+      transactions,
+      eq(transactions.investmentMethodId, investmentMethods.id)
+    )
+    .leftJoin(portfolios, eq(transactions.portfolioId, portfolios.id))
+    .leftJoin(users, eq(portfolios.userId, users.id))
+    .where(eq(investmentMethods.ownerUserId, ownerUserId));
+
+  const byMethod = new Map<string, MethodInvestors>();
+
+  for (const r of rows) {
+    if (!byMethod.has(r.methodId)) {
+      byMethod.set(r.methodId, {
+        methodId: r.methodId,
+        methodName: r.methodName,
+        enabled: r.methodEnabled,
+        investors: [],
+        totalInvested: 0,
+        totalHolding: 0,
+      });
+    }
+    // A method with no transactions still belongs in the list — "nobody has
+    // invested yet" is information the owner wants.
+    if (!r.investorId || r.status !== "approved") continue;
+
+    const method = byMethod.get(r.methodId)!;
+    let investor = method.investors.find((i) => i.userId === r.investorId);
+    if (!investor) {
+      investor = {
+        userId: r.investorId,
+        email: r.investorEmail,
+        fullName: r.investorName,
+        invested: 0,
+        holding: 0,
+        withdrawn: 0,
+      };
+      method.investors.push(investor);
+    }
+
+    if (r.type === "buy") {
+      investor.invested += parseFloat(r.initialValue || "0");
+      investor.holding += parseFloat(r.currentValue || "0");
+    } else if (r.type === "withdrawal") {
+      investor.withdrawn += parseFloat(r.total || "0");
+    }
+  }
+
+  for (const method of byMethod.values()) {
+    method.investors.sort((a, b) => b.holding - a.holding);
+    method.totalInvested = method.investors.reduce((s, i) => s + i.invested, 0);
+    method.totalHolding = method.investors.reduce((s, i) => s + i.holding, 0);
+  }
+
+  return [...byMethod.values()].sort((a, b) => b.totalHolding - a.totalHolding);
 }

@@ -1,0 +1,2 @@
+ALTER TABLE "investment_methods" ADD COLUMN "owner_user_id" uuid;--> statement-breakpoint
+ALTER TABLE "investment_methods" ADD CONSTRAINT "investment_methods_owner_user_id_users_id_fk" FOREIGN KEY ("owner_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;

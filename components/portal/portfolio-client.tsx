@@ -260,6 +260,22 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
 
   const stats = data.stats;
 
+  // Built once and handed to whichever branch renders it, so the empty state
+  // and the chart itself can't drift apart between the two.
+  const performanceChart =
+    data.chartData.length > 0 ? (
+      <PerformanceChart data={data.chartData} />
+    ) : (
+      <Card className="flex h-96 items-center justify-center bg-card">
+        <div className="text-center">
+          <Text variant="muted">Not enough data for the chart.</Text>
+          <Text variant="small" className="mt-1">
+            Approve transactions or capture a snapshot to seed history.
+          </Text>
+        </div>
+      </Card>
+    );
+
   return (
     <>
       <div className="space-y-6">
@@ -324,34 +340,24 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            {/* Owners get the own-vs-managed split first: it frames every
-                figure below it, which are theirs alone. */}
-            {ownsMethods && <ManagedCapitalCard contributions={data.managedContributions} />}
+            {/* Owners get the own-vs-managed split framing everything below,
+                which is theirs alone. The performance chart lives INSIDE that
+                card as a second view — one chart card either way, never two
+                competing ones. Everyone else sees the standard chart. */}
+            {ownsMethods ? (
+              <ManagedCapitalCard
+                contributions={data.managedContributions}
+                performance={performanceChart}
+              />
+            ) : (
+              showCharts && performanceChart
+            )}
             {stats && (
               <PortfolioKpiGrid
                 stats={stats}
                 hideValues={hideValues}
                 onToggleHideValues={() => setHideValues((v) => !v)}
               />
-            )}
-
-            {showCharts && (
-              <div className="grid gap-6 lg:grid-cols-3">
-                <div className="lg:col-span-3">
-                  {data.chartData.length > 0 ? (
-                    <PerformanceChart data={data.chartData} />
-                  ) : (
-                    <Card className="flex h-96 items-center justify-center bg-card">
-                      <div className="text-center">
-                        <Text variant="muted">Not enough data for the chart.</Text>
-                        <Text variant="small" className="mt-1">
-                          Approve transactions or capture a snapshot to seed history.
-                        </Text>
-                      </div>
-                    </Card>
-                  )}
-                </div>
-              </div>
             )}
           </TabsContent>
 

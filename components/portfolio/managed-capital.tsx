@@ -55,9 +55,16 @@ const DATE = new Intl.DateTimeFormat("en-US", {
  */
 export function ManagedCapitalCard({
   contributions,
+  performance,
 }: {
   contributions: ManagedContribution[];
+  /** The standard portfolio value history, folded into this card so owners
+   *  get ONE chart card rather than two stacked ones. Kept as a separate view
+   *  rather than a second axis: value and contributed capital are different
+   *  measures, and sharing an axis would distort both. */
+  performance: React.ReactNode;
 }) {
+  const [view, setView] = useState<"performance" | "split">("performance");
   // View-only, like the plan chart's third-party toggle: nothing is persisted,
   // and a reload comes back to "everything".
   const [filters, setFilters] = useState<ManagedCapitalFilters>(NO_FILTERS);
@@ -110,6 +117,28 @@ export function ManagedCapitalCard({
             </Text>
           </div>
 
+          <div className="flex items-center gap-2">
+            <div
+              role="group"
+              aria-label="Chart view"
+              className="inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
+            >
+              {(["performance", "split"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setView(v)}
+                  aria-pressed={view === v}
+                  className={`rounded px-2.5 py-1 text-xs font-medium transition ${
+                    view === v
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {v === "performance" ? "Performance" : "Capital split"}
+                </button>
+              ))}
+            </div>
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm">
@@ -148,6 +177,7 @@ export function ManagedCapitalCard({
               )}
             </PopoverContent>
           </Popover>
+          </div>
           <div className="flex flex-wrap items-end gap-6">
             <div>
               <Text variant="small" className="text-muted-foreground">
@@ -197,6 +227,10 @@ export function ManagedCapitalCard({
           </Text>
         </div>
 
+        {view === "performance" ? (
+          performance
+        ) : (
+          <>
         {rows.length === 0 && (
           <Text variant="small" className="text-muted-foreground">
             Nothing matches these filters.
@@ -249,6 +283,8 @@ export function ManagedCapitalCard({
               </AreaChart>
             </ChartContainer>
           </div>
+        )}
+          </>
         )}
       </CardContent>
     </Card>

@@ -313,6 +313,9 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="transactions">Transactions</TabsTrigger>
             <TabsTrigger value="methods">Methods</TabsTrigger>
+            {ownsMethods && (
+              <TabsTrigger value="investors">Investors</TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -357,6 +360,12 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           <TabsContent value="methods">
             <InvestmentMethodsView methods={data.methods} />
           </TabsContent>
+
+          {ownsMethods && (
+            <TabsContent value="investors">
+              <MethodInvestorsView methods={data.methodInvestors} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 

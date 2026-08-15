@@ -14,6 +14,7 @@ import { MethodInvestorsView } from "@/components/portfolio/method-investors";
 import { ManagedCapitalCard } from "@/components/portfolio/managed-capital";
 import type { ManagedContribution } from "@/lib/finance/managed-capital";
 import { StatCard, statToneClass } from "@/components/ui/stat-card";
+import { Sparkline } from "@/components/portfolio/sparkline";
 import { Heading, Text } from "@/components/ui/typography";
 import {
   Tabs,
@@ -340,10 +341,20 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            {/* Owners get the own-vs-managed split framing everything below,
-                which is theirs alone. The performance chart lives INSIDE that
-                card as a second view — one chart card either way, never two
-                competing ones. Everyone else sees the standard chart. */}
+            {/* Headline numbers first, trend second — attention lands on the
+                top row, so the figures people came for go there. */}
+            {stats && (
+              <PortfolioKpiGrid
+                stats={stats}
+                hideValues={hideValues}
+                onToggleHideValues={() => setHideValues((v) => !v)}
+                sparkline={data.chartData}
+              />
+            )}
+
+            {/* One chart card either way: owners get the performance chart as a
+                view INSIDE the managed-capital card, everyone else gets it on
+                its own. Never two competing chart cards. */}
             {ownsMethods ? (
               <ManagedCapitalCard
                 contributions={data.managedContributions}
@@ -351,13 +362,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
               />
             ) : (
               showCharts && performanceChart
-            )}
-            {stats && (
-              <PortfolioKpiGrid
-                stats={stats}
-                hideValues={hideValues}
-                onToggleHideValues={() => setHideValues((v) => !v)}
-              />
             )}
           </TabsContent>
 
@@ -432,10 +436,14 @@ function PortfolioKpiGrid({
   stats,
   hideValues,
   onToggleHideValues,
+  sparkline,
 }: {
   stats: PortfolioStats;
   hideValues: boolean;
   onToggleHideValues: () => void;
+  /** Value history behind the headline figure — drawn as a bare trend line,
+   *  no axes, so the number carries a direction without a second chart. */
+  sparkline: ChartDataPoint[];
 }) {
   const profitTone = stats.allTimeProfit >= 0 ? "positive" : "negative";
   const profitSublabel = (
@@ -452,6 +460,7 @@ function PortfolioKpiGrid({
         value={hideValues ? "****" : formatCurrency(stats.totalValue)}
         tone="positive"
         sublabel="Current market value"
+        chart={hideValues ? undefined : <Sparkline data={sparkline} />}
         action={
           <button
             type="button"

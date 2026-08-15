@@ -12,6 +12,11 @@ type StatCardProps = {
   sublabel?: ReactNode;
   tone?: StatCardTone;
   action?: ReactNode;
+  /** Optional bare trend line under the figure — a sparkline, no axes and no
+   *  labels. It gives the number a direction without spending a whole chart
+   *  on it. Keep it decorative: anything the reader must be able to read
+   *  precisely belongs in `sublabel`. */
+  chart?: ReactNode;
   className?: string;
 };
 
@@ -27,6 +32,7 @@ export function StatCard({
   sublabel,
   tone,
   action,
+  chart,
   className,
 }: StatCardProps) {
   return (
@@ -48,6 +54,11 @@ export function StatCard({
           <Text variant="small" as="div">
             {sublabel}
           </Text>
+        )}
+        {chart && (
+          <div aria-hidden="true" className="pt-1">
+            {chart}
+          </div>
         )}
       </CardContent>
     </Card>

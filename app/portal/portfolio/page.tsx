@@ -1,6 +1,5 @@
 import { db } from "@/db";
 import { investmentMethods } from "@/db/schema";
-import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import {
   getUserPortfolio,
@@ -29,9 +28,11 @@ export default async function PortfolioPage() {
   const usersPromise = isAdmin ? getAllUsers() : Promise.resolve([]);
   const [portfolio, methods, users] = await Promise.all([
     getUserPortfolio(userId),
-    // Disabled methods are hidden from the portfolio (they only exist as
-    // hypothetical scenarios for finance plans).
-    db.select().from(investmentMethods).where(eq(investmentMethods.enabled, true)),
+    // ALL methods, enabled or not: the Methods tab renders
+    // InvestmentMethodsView, which filters to enabled itself and exposes a dev
+    // toggle for the disabled ones. Consumers that only want the live set
+    // (the transaction form) filter below.
+    db.select().from(investmentMethods),
     usersPromise,
   ]);
 

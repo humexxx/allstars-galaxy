@@ -3,12 +3,13 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Camera, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
+import { Camera, Download, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { InvestmentMethodsView } from "@/components/portfolio/investment-methods-view";
 import { StatCard, statToneClass } from "@/components/ui/stat-card";
 import { Heading, Text } from "@/components/ui/typography";
 import {
@@ -90,6 +91,13 @@ const PerformanceChart = dynamic(
 
 export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   const router = useRouter();
+  // The transaction form only ever offered live methods; the Methods tab gets
+  // the full list because it filters (and can reveal disabled) itself.
+  const enabledMethods = useMemo(
+    () => data.methods.filter((m) => m.enabled),
+    [data.methods]
+  );
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [showCharts, setShowCharts] = useState(true);
   const [hideValues, setHideValues] = useState(false);
@@ -199,13 +207,27 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   };
 
   if (!data.portfolio) {
+    // No portfolio yet — but the methods catalogue used to be its own page and
+    // needs nothing from a portfolio, so it stays reachable. Browsing methods
+    // is exactly what you do BEFORE you have one.
     return (
       <>
-        <EmptyPortfolio onAddTransaction={() => setIsDialogOpen(true)} />
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="methods">Methods</TabsTrigger>
+          </TabsList>
+          <TabsContent value="overview">
+            <EmptyPortfolio onAddTransaction={() => setIsDialogOpen(true)} />
+          </TabsContent>
+          <TabsContent value="methods">
+            <InvestmentMethodsView methods={data.methods} />
+          </TabsContent>
+        </Tabs>
         <AddTransactionDialog
           open={isDialogOpen}
           onClose={() => setIsDialogOpen(false)}
-          methods={data.methods}
+          methods={enabledMethods}
           onSubmit={handleAddTransaction}
           isAdmin={data.isAdmin}
           users={data.users}
@@ -239,6 +261,30 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             </Text>
           </div>
           <div className="flex items-center gap-2">
+            {/* A plain link, not a fetch + blob: the browser handles the
+                download natively and the route's Content-Disposition names the
+                file. Disabled with no rows so it can't hand back a header-only
+                CSV. */}
+            <Button
+              asChild={data.transactions.length > 0}
+              variant="outline"
+              disabled={data.transactions.length === 0}
+              title={
+                data.transactions.length === 0
+                  ? "No transactions to export yet"
+                  : undefined
+              }
+            >
+              {data.transactions.length > 0 ? (
+                <a href="/api/portfolio/export" download>
+                  <Download className="mr-1 h-4 w-4" /> Export CSV
+                </a>
+              ) : (
+                <span>
+                  <Download className="mr-1 h-4 w-4" /> Export CSV
+                </span>
+              )}
+            </Button>
             <Button onClick={() => setIsDialogOpen(true)}>
               <Plus className="mr-1 h-4 w-4" /> Add transaction
             </Button>
@@ -249,6 +295,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="transactions">Transactions</TabsTrigger>
+            <TabsTrigger value="methods">Methods</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -287,13 +334,19 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* The deep view of the methods catalogue, folded in from what used
+              to be its own /portal/investment-methods page. */}
+          <TabsContent value="methods">
+            <InvestmentMethodsView methods={data.methods} />
+          </TabsContent>
         </Tabs>
       </div>
 
       <AddTransactionDialog
         open={isDialogOpen}
         onClose={() => setIsDialogOpen(false)}
-        methods={data.methods}
+        methods={enabledMethods}
         onSubmit={handleAddTransaction}
         isAdmin={data.isAdmin}
         users={data.users}

@@ -45,6 +45,17 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `app_state` — global key-value (cron state, etc.) — also touched by other modules
 
 ## Notes
+- **Investment Methods lives inside Portfolio** (Methods tab), not its own
+  route. `/portal/investment-methods` is a permanent redirect — the landing
+  page links there from two places — and the sidebar entry is gone. The page
+  fetches ALL methods (enabled + disabled) because `InvestmentMethodsView`
+  filters to enabled itself and has a dev toggle for the rest; the transaction
+  form gets the enabled subset. The tabs render **even without a portfolio**,
+  so the catalogue stays browsable before you own anything.
+- **CSV export** of the transaction history: `GET /api/portfolio/export`,
+  gated by `requireEffectiveContext` so an impersonating admin exports what
+  they see. Cells starting with `=`, `+`, `-` or `@` are prefixed with a quote
+  — Excel and Sheets execute those as formulas.
 - Conventional Commits scope: `portfolio` *(not in commitlint allowlist — add it to [`commitlint.config.mjs`](../../commitlint.config.mjs) if you start committing here often, or use `finance` if the change is on shared math)*
 - Daily cron at `/api/cron/daily` writes snapshots and applies monthly compound interest on the 1st.
 - `createDailySnapshots` must use `inArray(...)` for the "latest snapshot per portfolio" lookup — a raw ``sql`... = ANY(${ids})` `` makes Drizzle emit `ANY(($1, $2))` (a row tuple), which Postgres rejects once there's more than one portfolio. That bug silently broke every daily portfolio snapshot from 2026-05-26 until the `inArray` fix.

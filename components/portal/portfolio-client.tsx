@@ -11,6 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InvestmentMethodsView } from "@/components/portfolio/investment-methods-view";
 import { MethodInvestorsView } from "@/components/portfolio/method-investors";
+import {
+  ManagedCapitalCard,
+  type ManagedCapital,
+} from "@/components/portfolio/managed-capital";
 import { StatCard, statToneClass } from "@/components/ui/stat-card";
 import { Heading, Text } from "@/components/ui/typography";
 import {
@@ -74,6 +78,8 @@ type PortfolioData = {
   /** Methods this user owns + who holds money in them. Empty for everyone
    *  who doesn't run any. Never folded into the portfolio totals. */
   methodInvestors: MethodInvestors[];
+  /** Own vs third-party capital across the methods this user runs. */
+  managedCapital: ManagedCapital;
   currentUserId: string;
 };
 
@@ -319,6 +325,9 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
+            {/* Owners get the own-vs-managed split first: it frames every
+                figure below it, which are theirs alone. */}
+            {ownsMethods && <ManagedCapitalCard data={data.managedCapital} />}
             {stats && (
               <PortfolioKpiGrid
                 stats={stats}

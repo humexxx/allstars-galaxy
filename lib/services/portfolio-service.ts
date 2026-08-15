@@ -288,3 +288,77 @@ export async function getMethodInvestors(
 
   return [...byMethod.values()].sort((a, b) => b.totalHolding - a.totalHolding);
 }
+
+/**
+ * Capital under an admin's management over time, split into their own money
+ * and other people's.
+ *
+ * This plots **contributed capital** (each approved buy's `initialValue`,
+ * accumulated by date) — NOT valuation over time. There is no per-investor
+ * historical valuation in the schema: `currentValue` is a single present-day
+ * figure, so drawing it as a curve would invent history that was never
+ * recorded.
+ *
+ * `own` and `thirdParty` stay separate all the way through. The owner's
+ * patrimony is the `own` half; the rest is other people's money that merely
+ * passes through their methods.
+ */
+export async function getManagedCapitalSeries(ownerUserId: string): Promise<{
+  points: { date: string; own: number; thirdParty: number }[];
+  ownContributed: number;
+  thirdPartyContributed: number;
+  ownHolding: number;
+  thirdPartyHolding: number;
+}> {
+  const rows = await db
+    .select({
+      date: transactions.date,
+      initialValue: transactions.initialValue,
+      currentValue: transactions.currentValue,
+      investorId: portfolios.userId,
+    })
+    .from(investmentMethods)
+    .innerJoin(
+      transactions,
+      eq(transactions.investmentMethodId, investmentMethods.id)
+    )
+    .innerJoin(portfolios, eq(transactions.portfolioId, portfolios.id))
+    .where(
+      and(
+        eq(investmentMethods.ownerUserId, ownerUserId),
+        eq(transactions.status, "approved"),
+        eq(transactions.type, "buy")
+      )
+    );
+
+  const sorted = [...rows].sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  let own = 0;
+  let thirdParty = 0;
+  let ownHolding = 0;
+  let thirdPartyHolding = 0;
+  const byDay = new Map<string, { own: number; thirdParty: number }>();
+
+  for (const r of sorted) {
+    const contributed = parseFloat(r.initialValue || "0");
+    const holding = parseFloat(r.currentValue || "0");
+    if (r.investorId === ownerUserId) {
+      own += contributed;
+      ownHolding += holding;
+    } else {
+      thirdParty += contributed;
+      thirdPartyHolding += holding;
+    }
+    // One point per day: several buys on the same date are one step on the
+    // chart, not a cluster of identical x values.
+    byDay.set(r.date.toISOString().slice(0, 10), { own, thirdParty });
+  }
+
+  return {
+    points: [...byDay.entries()].map(([date, v]) => ({ date, ...v })),
+    ownContributed: own,
+    thirdPartyContributed: thirdParty,
+    ownHolding,
+    thirdPartyHolding,
+  };
+}

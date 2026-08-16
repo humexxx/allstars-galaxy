@@ -29,6 +29,7 @@ Per-module reference docs live in [`docs/modules/`](docs/modules/).
 | [`docs/modules/<module>.md`](docs/modules/) | One file per product module: routes, actions, services, schemas, tables |
 | [`docs/TYPOGRAPHY.md`](docs/TYPOGRAPHY.md) | Font system + UI typography primitives (required for UI work) |
 | [`docs/SPACING.md`](docs/SPACING.md) | Spacing/padding/margin scale + app-shell offsets (required for UI work) |
+| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Environment failures that look like app bugs (DNS/`ENOTFOUND`, resolver cache) |
 | [`/app/actions/AGENTS.md`](app/actions/AGENTS.md) | Server-action patterns (the *how*) |
 | [`/lib/services/AGENTS.md`](lib/services/AGENTS.md) | Service-layer patterns (the *how*) |
 | [`.github/skills/`](.github/skills/) | Reusable playbooks: DB migration, service creation, server action creation, responsive UI, data-density UI patterns |

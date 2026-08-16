@@ -107,9 +107,14 @@ metadata. Interest math is shared with [Finance](./finance.md).
   come from their own contributions priced on their own dates, so it is what
   their money actually bought. Its `profitLoss` is the OWNER's number: the
   investor's return is fixed and never varies.
-- **Four tabs, not five.** Investors and Margin were both owner-only views of
-  the same methods, so they are two sections of one **Managed** tab (margin
-  first — the answer — then who is invested). Non-owners see three.
+- **Three tabs: Overview, Transactions, Methods.** Managed was folded away once
+  its parts had better homes — the headline figures and the chart are the
+  Overview for an owner, capital per method is on the method cards, and the
+  allocation is in the method editor. What was left was a duplicate. The
+  per-person breakdown moved under the chart it explains; the **Reprice
+  contributions** action moved to the dev drawer, since the daily cron does it
+  and on-demand only matters right after changing an allocation.
+  `MarginView` and `MethodInvestorsView` were deleted with it.
 - **Transactions lists two tables sharing ONE component.** The owner's own
   history and what other people did in the methods they run
   (`getInvestorTransactions`, which keeps pending and rejected rows so the

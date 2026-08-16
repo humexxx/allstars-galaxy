@@ -4,7 +4,7 @@ import { Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { StatCard, maskValue } from "@/components/ui/stat-card";
-import { formatCurrency, formatPercent } from "@/lib/utils/format";
+import { formatCurrency } from "@/lib/utils/format";
 
 export type OwnerKpis = {
   /** Cash everyone put in, the owner's included. */
@@ -82,11 +82,7 @@ export function OwnerKpiGrid({
         value={money(kpis.deployed)}
         percent={pct(vsContributed)}
         tone={vsContributed !== null && vsContributed < 0 ? "negative" : "positive"}
-        sublabel={
-          vsContributed === null
-            ? "What the money actually bought"
-            : `${formatPercent(vsContributed)} vs contributed`
-        }
+        sublabel="Against what was contributed"
       />
 
       <StatCard

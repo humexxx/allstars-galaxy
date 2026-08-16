@@ -27,6 +27,11 @@ import { Mono, Text } from "@/components/ui/typography";
 import { createPriceAssetAction, setAllocationsAction } from "@/app/actions/allocations";
 import { allocationTotal, isCompleteAllocation } from "@/lib/finance/allocation";
 
+export type MethodAllocationSummary = {
+  methodId: string;
+  allocations: { assetId: string; symbol: string; percent: number }[];
+};
+
 export type AssetOption = {
   id: string;
   symbol: string;

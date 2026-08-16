@@ -3,24 +3,23 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Camera, Download, Eye, EyeOff, ListFilter, Plus, Trash2 } from "lucide-react";
+import { Camera, Download, Eye, EyeOff, ListFilter, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InvestmentMethodsView } from "@/components/portfolio/investment-methods-view";
-import { MarginView } from "@/components/portal/margin-view";
 import type { AssetOption } from "@/components/portal/allocation-dialog";
-import type { MethodAllocationSummary } from "@/components/portal/margin-view";
+import type { MethodAllocationSummary } from "@/components/portal/allocation-dialog";
 import { MarginChart } from "@/components/portal/margin-chart";
+import { InvestorBreakdown } from "@/components/portal/investor-breakdown";
 import { MethodEditorDialog } from "@/components/portfolio/method-editor-dialog";
 import { AllocationDialog } from "@/components/portal/allocation-dialog";
 import type { MarginHistoryInputView } from "@/components/portal/margin-chart";
 import { OwnerKpiGrid } from "@/components/portal/owner-kpi-grid";
 import type { InvestorBreakdownRow } from "@/components/portal/investor-breakdown";
 import type { MarginOverview } from "@/lib/services/margin-service";
-import { MethodInvestorsView } from "@/components/portfolio/method-investors";
 
 import { StatCard, maskValue, statToneClass } from "@/components/ui/stat-card";
 import { Sparkline } from "@/components/portfolio/sparkline";
@@ -57,6 +56,7 @@ import { useRegisterDevTool } from "@/components/dev-tools/dev-tools-context";
 
 import { createTransactionAction } from "@/app/actions/transactions";
 import { deleteManualSnapshotsAction } from "@/app/actions/portfolio-snapshots";
+import { repriceContributionsAction } from "@/app/actions/allocations";
 import type {
   InvestmentMethod,
   Portfolio,
@@ -229,6 +229,33 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
     }),
     [hideValues]
   );
+  const repriceTool = useMemo(
+    () =>
+      ownsMethods
+        ? {
+            id: "portfolio:reprice",
+            kind: "action" as const,
+            label: "Reprice contributions",
+            description:
+              "Value any approved contribution that has no allocation yet, at the price on the day it landed.",
+            section: "Admin",
+            icon: RefreshCw,
+            onRun: async () => {
+              const result = await repriceContributionsAction();
+              if (!result?.success) {
+                toast.error(result?.error ?? "Could not reprice");
+                return;
+              }
+              const priced = result.data?.priced ?? 0;
+              if (priced > 0) toast.success(`Priced ${priced} contribution split(s)`);
+              else toast.info("Nothing new to price");
+              router.refresh();
+            },
+          }
+        : null,
+    [ownsMethods, router]
+  );
+
   const manualSnapshotTool = useMemo(
     () =>
       data.isAdmin
@@ -263,6 +290,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
 
   useRegisterDevTool(showChartsTool);
   useRegisterDevTool(hideValuesTool);
+  useRegisterDevTool(repriceTool);
   useRegisterDevTool(manualSnapshotTool);
   useRegisterDevTool(clearSnapshotsTool);
 
@@ -313,7 +341,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="methods">Methods</TabsTrigger>
-            {ownsMethods && <TabsTrigger value="managed">Managed</TabsTrigger>}
           </TabsList>
           <TabsContent value="overview">
             <EmptyPortfolio onAddTransaction={() => setIsDialogOpen(true)} />
@@ -329,27 +356,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             />
           </TabsContent>
 
-          {ownsMethods && (
-            <TabsContent value="managed" className="space-y-8">
-              {data.margin && (
-                <MarginView
-                  methods={data.margin.methods}
-                  totals={data.margin.totals}
-                  unconfigured={data.margin.unconfigured}
-                  assets={data.priceAssets}
-                  allocations={data.methodAllocations}
-                  investors={data.investorBreakdown}
-                  hideValues={hideValues}
-                />
-              )}
-              <div className="space-y-3">
-                <Heading level="h5" as="h2" className="text-muted-foreground">
-                  Who is invested
-                </Heading>
-                <MethodInvestorsView methods={data.methodInvestors} />
-              </div>
-            </TabsContent>
-          )}
         </Tabs>
         <AddTransactionDialog
           open={isDialogOpen}
@@ -440,7 +446,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="transactions">Transactions</TabsTrigger>
             <TabsTrigger value="methods">Methods</TabsTrigger>
-            {ownsMethods && <TabsTrigger value="managed">Managed</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -469,14 +474,34 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                 the gap between the two lines is the margin. Everyone else gets
                 the ordinary performance chart. */}
             {ownsMethods ? (
-              <Card className="bg-card">
-                <CardContent>
-                  <MarginChart
-                    input={data.marginHistoryInput}
-                    hideValues={hideValues}
-                  />
-                </CardContent>
-              </Card>
+              <>
+                <Card className="bg-card">
+                  <CardContent>
+                    <MarginChart
+                      input={data.marginHistoryInput}
+                      hideValues={hideValues}
+                    />
+                  </CardContent>
+                </Card>
+
+                {data.investorBreakdown.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <Heading level="h5" as="h2" className="text-muted-foreground">
+                        By person
+                      </Heading>
+                      <Text variant="small" className="text-muted-foreground">
+                        What each investor put in, what it bought, and what the promise
+                        costs you.
+                      </Text>
+                    </div>
+                    <InvestorBreakdown
+                      rows={data.investorBreakdown}
+                      hideValues={hideValues}
+                    />
+                  </div>
+                )}
+              </>
             ) : (
               showCharts && performanceChart
             )}
@@ -560,27 +585,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             />
           </TabsContent>
 
-          {ownsMethods && (
-            <TabsContent value="managed" className="space-y-8">
-              {data.margin && (
-                <MarginView
-                  methods={data.margin.methods}
-                  totals={data.margin.totals}
-                  unconfigured={data.margin.unconfigured}
-                  assets={data.priceAssets}
-                  allocations={data.methodAllocations}
-                  investors={data.investorBreakdown}
-                  hideValues={hideValues}
-                />
-              )}
-              <div className="space-y-3">
-                <Heading level="h5" as="h2" className="text-muted-foreground">
-                  Who is invested
-                </Heading>
-                <MethodInvestorsView methods={data.methodInvestors} />
-              </div>
-            </TabsContent>
-          )}
         </Tabs>
       </div>
 

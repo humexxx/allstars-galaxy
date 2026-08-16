@@ -59,7 +59,11 @@ export function StatCard({
         {action}
       </CardHeader>
       <CardContent className="space-y-1">
-        <div className="flex flex-wrap items-baseline gap-x-2">
+        {/* One row, never wrapping. Letting the share drop to its own line
+            gave cards different heights and knocked every sublabel out of
+            alignment across the grid — and which cards wrapped depended on how
+            long that card's number happened to be. */}
+        <div className="flex items-baseline gap-x-2 whitespace-nowrap">
           <Mono
             className={cn(
               "text-xl font-semibold tabular-nums sm:text-2xl",
@@ -69,7 +73,9 @@ export function StatCard({
             {value}
           </Mono>
           {percent && (
-            <Mono className={cn("text-sm tabular-nums", statToneClass(tone))}>
+            <Mono
+              className={cn("text-xs tabular-nums opacity-70", statToneClass(tone))}
+            >
               {percent}
             </Mono>
           )}

@@ -95,6 +95,14 @@ metadata. Interest math is shared with [Finance](./finance.md).
   ETFs, forex; needs `MASSIVE_API_KEY`; free Basic tier is end-of-day at 5
   req/min) and keyless **CoinGecko** (crypto only). `source = "manual"` is the
   escape hatch for anything neither covers — the cron never touches those.
+- **Everything is on Massive, deliberately.** CoinGecko returns live spot and
+  Massive returns the previous close; mixing them would value some holdings at
+  one instant and the rest at another, making the margin a blend of two
+  different moments. The CoinGecko fetcher stays for coins Massive doesn't
+  list, but nothing uses it today.
+- **Licensed indices are 403 on the free tier** — verified: `I:SPX` is refused,
+  `I:NDX` is not. The ETF tracking the same index is free, so the catalogue
+  lists **SPY** (S&P 500) and **QQQ** (Nasdaq-100) rather than the indices.
 - **The 5 req/min free tier shapes the fetch strategy.** All crypto comes back
   in ONE grouped daily-bar call; everything else is quoted per ticker via
   `/prev` (which resolves the last *trading* day itself, so weekends aren't a

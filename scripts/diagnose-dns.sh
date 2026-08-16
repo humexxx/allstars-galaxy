@@ -75,25 +75,43 @@ case "$GAI" in
     echo "holding the bad state has not been restarted — restart the dev server."
     ;;
   *)
-    case "$DIRECT$UP$PUB" in
-      *OK*|*[0-9].[0-9]*)
-        echo "THE SYSTEM RESOLVER IS WEDGED — this is the usual case."
-        echo
-        echo "Everything can resolve except getaddrinfo, so the network and your"
-        echo "DNS server are fine; mDNSResponder is serving a stale negative"
-        echo "answer. Flush it (needs your password):"
-        echo
-        echo "    sudo killall -HUP mDNSResponder"
-        echo
-        echo "Then RESTART the dev server — Node processes cache resolutions and"
-        echo "will keep failing until they do."
-        ;;
-      *)
-        echo "DNS IS DOWN BELOW THE RESOLVER — nothing can resolve this name."
-        echo "Check Wi-Fi, then whether a VPN has taken over DNS:"
-        echo "    scutil --dns | head -20"
-        echo "    ifconfig | grep '^utun'"
-        ;;
-    esac
+    # Order matters. Test the upstream FIRST: when the configured resolver is
+    # the thing that failed, the negative answer cached by mDNSResponder is a
+    # consequence, and flushing it just buys a few seconds until the next
+    # hiccup poisons it again.
+    if [ -z "$UP" ] && [ -n "$PUB" ]; then
+      echo "YOUR CONFIGURED DNS SERVER IS FAILING — $NS did not answer,"
+      echo "while 1.1.1.1 answered the same query fine."
+      echo
+      echo "These outages are brief (tens of seconds) but macOS caches the"
+      echo "failure as \"this name does not exist\", so the app stays broken"
+      echo "long after the resolver recovers."
+      echo
+      echo "Unstick it now (needs your password):"
+      echo
+      echo "    sudo killall -HUP mDNSResponder"
+      echo
+      echo "Stop it recurring by adding a fallback resolver, so a hiccup falls"
+      echo "through to one that works instead of being cached as a failure:"
+      echo
+      echo "    networksetup -setdnsservers Wi-Fi $NS 1.1.1.1 8.8.8.8"
+      echo
+      echo "Then RESTART the dev server — Node caches resolutions per process."
+    elif [ -n "$UP" ] || [ -n "$PUB" ]; then
+      echo "THE SYSTEM RESOLVER IS WEDGED."
+      echo
+      echo "DNS servers answer, but getaddrinfo does not — mDNSResponder is"
+      echo "serving a stale negative answer. Flush it (needs your password):"
+      echo
+      echo "    sudo killall -HUP mDNSResponder"
+      echo
+      echo "Then RESTART the dev server — Node processes cache resolutions and"
+      echo "will keep failing until they do."
+    else
+      echo "DNS IS DOWN EVERYWHERE — no resolver answered, public ones included."
+      echo "Check Wi-Fi, then whether a VPN has taken over DNS:"
+      echo "    scutil --dns | head -20"
+      echo "    ifconfig | grep '^utun'"
+    fi
     ;;
 esac

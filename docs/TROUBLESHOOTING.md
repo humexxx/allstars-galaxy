@@ -21,17 +21,30 @@ the same machine, at the same moment. Nothing in the app changed.
 
 ### The short version
 
-Your Mac keeps a little notebook of "what address does this name have?". If a
-lookup fails once — a Wi-Fi blip, a VPN flapping, the router taking too long —
-macOS writes down **"this name doesn't exist"** and keeps repeating that answer
-for a while instead of asking again.
+Two things go wrong together, and only fixing one of them is why this keeps
+coming back.
 
-Tools like `nslookup` and `dig` ignore the notebook and ask the DNS server
-directly, so they work. Your app doesn't ignore it, so it keeps getting the
-wrong answer. Tearing the page out of the notebook fixes it instantly:
+**The trigger:** your router's DNS service drops out for short windows — tens
+of seconds at a time. During one, nothing can look up anything through it.
+
+**The amplifier:** when a lookup fails, macOS writes down *"this name does not
+exist"* and keeps repeating that answer well after the router has recovered.
+So a 30-second router hiccup turns into minutes of a broken app.
+
+Tools like `dig` and `nslookup` ask a DNS server directly and skip that
+notebook, which is why they work while your app does not.
+
+Unstick it now:
 
 ```bash
 sudo killall -HUP mDNSResponder
+```
+
+Stop it happening again, by giving the Mac a second DNS server to fall through
+to instead of caching a failure:
+
+```bash
+networksetup -setdnsservers Wi-Fi 192.168.40.1 1.1.1.1 8.8.8.8
 ```
 
 ### The technical version
@@ -44,34 +57,62 @@ macOS has two independent paths to resolve a name, and they do not share state:
 | Direct DNS query | `dig`, `nslookup`, Node's `dns.resolve*` | UDP/53 straight to the nameserver |
 
 `mDNSResponder` caches **negative** answers (NXDOMAIN / SERVFAIL), not just
-positive ones. When a query fails transiently, that failure is cached and every
-subsequent `getaddrinfo` for the same name returns `ENOTFOUND` until the
-negative TTL expires — while anything using the direct path keeps resolving
-perfectly, because it never consults that cache.
+positive ones. When the upstream resolver fails to answer, that failure is
+cached and every subsequent `getaddrinfo` returns `ENOTFOUND` until the
+negative TTL expires — while anything using the direct path against a
+*different* server keeps resolving perfectly.
 
 Node's driver uses `dns.lookup`, which is `getaddrinfo`. That is the entire
 reason the app fails while your terminal looks healthy.
 
-### Evidence this is what happened here (2026-08-15)
+### Evidence (2026-08-15)
 
-Measured at the same instant, against `aws-1-us-east-2.pooler.supabase.com`:
+Caught mid-failure by `scripts/diagnose-dns.sh`:
 
 ```
-dns.lookup   (getaddrinfo)  -> ENOTFOUND
-dns.resolve4 (direct query) -> 13.58.13.125      ✅
-nslookup                    -> 3.131.201.192     ✅
-dscacheutil -q host         -> 3 addresses       ✅
+1. getaddrinfo (Node dns.lookup)   FAIL:ENOTFOUND
+2. direct DNS (Node dns.resolve4)  FAIL:ESERVFAIL
+3. upstream 192.168.40.1           FAIL:no-answer     ← the trigger
+4. public 1.1.1.1                  3.131.201.192      ← same query, fine
+5. TCP to 3.131.201.192            OK                 ← network is up
 ```
 
-Two further observations pin it down:
+Under a minute later the same router answered **20/20** queries for that name
+and 20/20 for an unrelated one, so the outage is intermittent and brief rather
+than a misconfiguration.
 
-- **Restarting the dev server did not fix it.** The bad state outlived the
-  process, so it is system-level, not a Node-side cache.
-- **It healed on its own** some minutes later with no intervention — exactly how
-  a cached negative answer behaves once its TTL runs out.
+That the cache is the amplifier, not just an artefact, is shown by an earlier
+occurrence: `getaddrinfo` kept failing while `dns.resolve4`, `nslookup` and
+`dscacheutil` all succeeded, **the bad state survived a dev-server restart**
+(so it was system-level, not Node's), and it healed with no intervention —
+a negative TTL expiring.
 
-Ruled out: the upstream nameserver (25/25 queries answered, 0 failures) and the
-network (TCP to the resolved IP succeeded throughout).
+### Why one fix is not enough
+
+Flushing `mDNSResponder` clears the cached failure but does nothing about the
+router dropping out again in ten minutes. This machine has **a single upstream
+nameserver and no fallback**:
+
+```
+resolver #1
+  nameserver[0] : 192.168.40.1     # the router — that's the whole list
+```
+
+With one resolver, every hiccup is a total outage *and* gets cached as one.
+Adding a second means the lookup falls through to a server that works, so
+nothing negative is ever cached:
+
+```bash
+networksetup -setdnsservers Wi-Fi 192.168.40.1 1.1.1.1 8.8.8.8
+```
+
+(Needs admin rights. `networksetup -getdnsservers Wi-Fi` shows the current
+list; passing `Empty` restores the DHCP defaults.)
+
+There are also eight `utun` interfaces active (VPN tunnels). VPN clients
+rewrite resolver configuration as they connect and drop, which is a plausible
+cause of the router-side hiccups worth ruling out if the fallback doesn't
+settle it.
 
 ### Diagnose it
 
@@ -83,40 +124,10 @@ It tests each layer separately — `getaddrinfo`, a direct query, your configure
 upstream, a public resolver, and raw TCP — then prints which one is broken and
 what to do. Pass a hostname to check something other than the Supabase pooler.
 
-### Fix it
+### After any fix, restart the dev server
 
-```bash
-sudo killall -HUP mDNSResponder
-```
-
-**Then restart the dev server.** Node keeps its own resolution cache for the
-life of the process, so a server that has already failed will keep failing even
-after the system cache is clean.
-
-### Why it keeps coming back
-
-This machine has **a single upstream nameserver and no fallback**:
-
-```
-resolver #1
-  nameserver[0] : 192.168.40.1     # the router — that's the whole list
-```
-
-With one resolver, any hiccup is a total outage and gets cached as one. There
-are also eight `utun` interfaces active (VPN tunnels), and VPN clients rewrite
-resolver configuration as they connect and drop, which is a common trigger for
-exactly this failure.
-
-Adding a second resolver so a single hiccup is retried elsewhere rather than
-cached as "does not exist":
-
-```bash
-networksetup -setdnsservers Wi-Fi 192.168.40.1 1.1.1.1 8.8.8.8
-```
-
-(That command needs admin rights and changes system network settings — run it
-yourself if you want the change. `networksetup -getdnsservers Wi-Fi` shows the
-current list, and passing `Empty` restores DHCP defaults.)
+Node keeps its own resolution cache for the life of the process, so a server
+that has already failed keeps failing even once the system cache is clean.
 
 ### What NOT to do
 

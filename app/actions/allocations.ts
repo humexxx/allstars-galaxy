@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import { investmentMethods, priceAssets, priceQuotes } from "@/db/schema";
+import { investmentMethods, priceAssets, priceQuotes, users } from "@/db/schema";
 import { safe } from "@/lib/actions/safe";
 import {
   logImpersonatedMutation,
@@ -194,8 +194,7 @@ export async function updateMethodAction(input: UpdateMethodInput) {
       return { success: false as const, error: parsed.error.issues[0].message };
     }
 
-    const { methodId, name, description, author, riskLevel, monthlyRoi, enabled } =
-      parsed.data;
+    const { methodId, name, description, riskLevel, monthlyRoi, enabled } = parsed.data;
 
     if (!(await ownsMethod(methodId, ctx.effectiveUserId))) {
       return { success: false as const, error: "Method not found" };
@@ -206,6 +205,16 @@ export async function updateMethodAction(input: UpdateMethodInput) {
       .from(investmentMethods)
       .where(eq(investmentMethods.id, methodId))
       .limit(1);
+
+    // Credit follows ownership. Falls back to whatever was already there if the
+    // owner has no name on file, so an edit never blanks the field.
+    const [owner] = await db
+      .select({ fullName: users.fullName, email: users.email })
+      .from(users)
+      .where(eq(users.id, ctx.effectiveUserId))
+      .limit(1);
+    const author =
+      owner?.fullName || owner?.email?.split("@")[0] || before?.author || "Unknown";
 
     await db
       .update(investmentMethods)

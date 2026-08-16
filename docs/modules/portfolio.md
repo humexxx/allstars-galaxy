@@ -57,8 +57,9 @@ metadata. Interest math is shared with [Finance](./finance.md).
 ## Notes
 - **Methods have an owner.** `investment_methods.owner_user_id` (nullable, FK
   SET NULL) is the admin who runs the method; other users invest through them.
-  NULL keeps the old global-catalogue behaviour. `author` is unrelated — it is
-  free-text display credit and predates ownership.
+  NULL keeps the old global-catalogue behaviour. `author` is now derived from
+  the owner on update — it started as unrelated free text predating ownership,
+  and the column stays text because methods with no owner still carry a name.
 - **`getMethodInvestors(ownerUserId)`** aggregates who holds money in an admin's
   methods, mirroring `getPortfolioAssets` maths exactly so the owner sees the
   same figure the investor sees. Surfaced as an **Investors** tab that only
@@ -159,6 +160,11 @@ metadata. Interest math is shared with [Finance](./finance.md).
   condition — locked by
   `components/portfolio/investment-methods-view.test.tsx`, which asserts a
   non-owner sees neither even when the data is present in props.
+- **`author` is derived, not entered.** Credit follows ownership: the update
+  action sets it from the owner's account and the schema does not accept it
+  from the client. Letting the two drift apart made the catalogue attribute a
+  method to someone who does not run it. The dialog shows who it is credited
+  to and why it is not editable there.
 - **`monthlyRoi` is not a cosmetic field.** It is what
   `transactions.currentValue` compounds at, so changing it moves what the owner
   owes. The dialog says this next to the input.

@@ -60,7 +60,6 @@ export function MethodEditorDialog({
 
   const [name, setName] = useState(method.name);
   const [description, setDescription] = useState(method.description ?? "");
-  const [author, setAuthor] = useState(method.author);
   const [riskLevel, setRiskLevel] = useState<string>(method.riskLevel);
   const [monthlyRoi, setMonthlyRoi] = useState(String(method.monthlyRoi));
   const [enabled, setEnabled] = useState(method.enabled);
@@ -71,7 +70,6 @@ export function MethodEditorDialog({
         methodId: method.id,
         name,
         description: description || null,
-        author,
         riskLevel: riskLevel as "Low" | "Medium" | "High",
         monthlyRoi: Number(monthlyRoi),
         enabled,
@@ -117,28 +115,22 @@ export function MethodEditorDialog({
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="method-author">Author</Label>
-              <Input
-                id="method-author"
-                value={author}
-                onChange={(e) => setAuthor(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="method-risk">Risk</Label>
-              <Select value={riskLevel} onValueChange={setRiskLevel}>
-                <SelectTrigger id="method-risk">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Low">Low</SelectItem>
-                  <SelectItem value="Medium">Medium</SelectItem>
-                  <SelectItem value="High">High</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="method-risk">Risk</Label>
+            <Select value={riskLevel} onValueChange={setRiskLevel}>
+              <SelectTrigger id="method-risk">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Low">Low</SelectItem>
+                <SelectItem value="Medium">Medium</SelectItem>
+                <SelectItem value="High">High</SelectItem>
+              </SelectContent>
+            </Select>
+            <Text className="text-2xs text-muted-foreground">
+              Credited to {method.author} — the person who runs it. Set from your
+              account, not editable here.
+            </Text>
           </div>
 
           <div className="space-y-2">

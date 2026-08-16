@@ -72,8 +72,11 @@ export const investmentMethods = pgTable("investment_methods", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   description: text("description"),
-  // Display credit for the strategy. Free text and NOT the owner — `author`
-  // predates ownership and is what the catalogue groups by on screen.
+  // Display credit, and what the catalogue groups by on screen. Derived from
+  // `ownerUserId` on every update rather than typed in: credit follows
+  // ownership, and letting the two drift apart made the catalogue attribute a
+  // method to someone who does not run it. Still free text at the column level
+  // because methods predating ownership have a name here and no owner.
   author: text("author").notNull(),
   // The admin who runs this method. Other users invest through them, so this
   // is what "who is invested in MY methods" is keyed on. Nullable: a method

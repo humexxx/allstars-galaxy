@@ -78,7 +78,9 @@ export const updateMethodSchema = z.object({
   methodId: z.string().uuid(),
   name: z.string().trim().min(1, "Name is required").max(120),
   description: z.string().trim().max(500).optional().nullable(),
-  author: z.string().trim().min(1, "Author is required").max(120),
+  // `author` is deliberately absent: it is the person who runs the method, so
+  // it is derived from the owner server-side. Accepting it from the client
+  // would let display credit drift away from who actually owns the thing.
   riskLevel: z.enum(["Low", "Medium", "High"]),
   monthlyRoi: z.coerce
     .number()

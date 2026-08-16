@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Camera, ChevronDown, Download, Eye, EyeOff, ListFilter, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Camera, Download, Eye, EyeOff, ListFilter, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -145,9 +145,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   // Pending and rejected rows matter, but they are the exception you go
   // looking for, not the default reading of a history.
   const [detailedTransactions, setDetailedTransactions] = useState(false);
-  // One aggregated row per investor by default. The full transaction history
-  // is a second question and lives behind a button.
-  const [investorDetail, setInvestorDetail] = useState(false);
 
   const visibleRows = useMemo(() => {
     const approved = <T extends { status: string }>(list: T[]) =>
@@ -191,28 +188,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
         })),
     [data.investorBreakdown, data.investorTransactions]
   );
-
-  // Used only by the detail view: one table per person rather than one merged
-  // list, because these are separate relationships and a running total down a
-  // merged list spans people it should not.
-  const investorGroups = useMemo(() => {
-    const map = new Map<string, TransactionRow[]>();
-    for (const r of visibleRows.investors) {
-      const key = r.investorName ?? "Unknown";
-      const list = map.get(key) ?? [];
-      list.push(r);
-      map.set(key, list);
-    }
-    return [...map.entries()]
-      .map(([name, rows]) => ({
-        name,
-        rows,
-        contributed: rows
-          .filter((r) => r.status === "approved" && r.type === "buy")
-          .reduce((sum, r) => sum + parseFloat(r.total), 0),
-      }))
-      .sort((a, b) => b.contributed - a.contributed);
-  }, [visibleRows.investors]);
 
   const ownerKpis = useMemo(() => {
     const h = data.marginHistory;
@@ -604,58 +579,14 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                     included.
                   </Text>
                 </div>
-                {investorDetail ? (
-                  investorGroups.map((group) => (
-                    <Card key={group.name} className="bg-card">
-                      <CardContent className="space-y-3 p-0 sm:p-6">
-                        <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-4 sm:px-0 sm:pt-0">
-                          <Text className="text-sm font-medium">{group.name}</Text>
-                          <Text className="text-xs text-muted-foreground">
-                            {group.rows.length}{" "}
-                            {group.rows.length === 1 ? "movement" : "movements"} ·{" "}
-                            {hideValues
-                              ? maskValue(formatCurrency(group.contributed))
-                              : formatCurrency(group.contributed)}{" "}
-                            contributed
-                          </Text>
-                        </div>
-                        <TransactionsTable
-                          rows={group.rows}
-                          showStatus={detailedTransactions}
-                          hideValues={hideValues}
-                        />
-                      </CardContent>
-                    </Card>
-                  ))
-                ) : (
-                  <Card className="bg-card">
-                    <CardContent className="p-0 sm:p-6">
-                      <InvestorSummaryTable
-                        rows={investorSummary}
-                        hideValues={hideValues}
-                      />
-                    </CardContent>
-                  </Card>
-                )}
-
-                {investorSummary.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-xs text-muted-foreground"
-                    onClick={() => setInvestorDetail((v) => !v)}
-                  >
-                    <ChevronDown
-                      className={cn(
-                        "size-4 transition-transform",
-                        investorDetail && "rotate-180"
-                      )}
+                <Card className="bg-card">
+                  <CardContent className="p-0 sm:p-6">
+                    <InvestorSummaryTable
+                      rows={investorSummary}
+                      hideValues={hideValues}
                     />
-                    {investorDetail
-                      ? "Back to the summary"
-                      : "See every movement, per investor"}
-                  </Button>
-                )}
+                  </CardContent>
+                </Card>
               </div>
             )}
           </TabsContent>

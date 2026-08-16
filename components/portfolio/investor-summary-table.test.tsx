@@ -24,17 +24,20 @@ describe("InvestorSummaryTable", () => {
     expect(screen.getByText("-$5,123.08")).toBeInTheDocument();
   });
 
-  it("shows what the promise costs as a share of what is owed", () => {
+  it("measures every share against what was contributed", () => {
+    // The same base the transactions table uses, so the two read alike.
     render(<InvestorSummaryTable rows={[YALENA]} />);
 
-    expect(screen.getByText("-70.4%")).toBeInTheDocument();
+    expect(screen.getByText("-76.5%")).toBeInTheDocument();   // P/L
+    expect(screen.getByText("-67.8%")).toBeInTheDocument();   // worth now
+    expect(screen.getByText("+8.62%")).toBeInTheDocument();   // owed has grown
   });
 
   it("masks the amounts but keeps the shares", () => {
     const { container } = render(<InvestorSummaryTable rows={[YALENA]} hideValues />);
 
     expect(container.textContent).not.toContain("6,700");
-    expect(container.textContent).toContain("-70.4%");
+    expect(container.textContent).toContain("-76.5%");
   });
 
   it("explains itself with nobody invested", () => {

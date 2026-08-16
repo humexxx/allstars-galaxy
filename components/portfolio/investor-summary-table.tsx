@@ -29,8 +29,12 @@ export type InvestorSummaryRow = {
  *
  * Listing every movement made this a wall of rows in which the interesting
  * question — how is each person doing, and what does their promise cost — had
- * to be reconstructed by eye. The per-transaction history is a second question
- * and sits behind a button.
+ * to be reconstructed by eye.
+ *
+ * The columns deliberately mirror the tail of `TransactionsTable`: Total,
+ * Worth now, P/L, Owed, same order and same alignment. They measure the same
+ * quantities, and naming them differently made two tables that belong together
+ * look unrelated.
  */
 export function InvestorSummaryTable({
   rows,
@@ -59,11 +63,11 @@ export function InvestorSummaryTable({
         <TableHeader>
           <TableRow>
             <TableHead>Investor</TableHead>
-            <TableHead className="text-right">Movements</TableHead>
-            <TableHead className="text-right">Contributed</TableHead>
+            <TableHead>Movements</TableHead>
+            <TableHead className="text-right">Total</TableHead>
             <TableHead className="text-right">Worth now</TableHead>
-            <TableHead className="text-right">You owe</TableHead>
-            <TableHead className="text-right">Your margin</TableHead>
+            <TableHead className="text-right">P/L</TableHead>
+            <TableHead className="text-right">Owed</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -72,11 +76,13 @@ export function InvestorSummaryTable({
               <TableCell>
                 <Text className="text-xs font-medium">{r.name}</Text>
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell>
                 <Mono className="text-xs tabular-nums">{r.movements}</Mono>
               </TableCell>
               <TableCell className="text-right">
-                <Mono className="text-xs tabular-nums">{money(r.contributed)}</Mono>
+                <Mono className="text-xs font-semibold tabular-nums">
+                  {money(r.contributed)}
+                </Mono>
               </TableCell>
               <TableCell className="text-right">
                 <Mono className="text-xs tabular-nums">{money(r.positionValue)}</Mono>
@@ -98,18 +104,15 @@ export function InvestorSummaryTable({
                 )}
               </TableCell>
               <TableCell className="text-right">
-                <Mono className="text-xs tabular-nums">{money(r.owed)}</Mono>
-              </TableCell>
-              <TableCell className="text-right">
                 <Mono
                   className={cn(
-                    "text-xs font-medium tabular-nums",
+                    "text-xs tabular-nums",
                     statToneClass(r.profitLoss >= 0 ? "positive" : "negative")
                   )}
                 >
                   {money(r.profitLoss)}
                 </Mono>
-                {r.owed > 0 && (
+                {r.contributed > 0 && (
                   <Mono
                     className={cn(
                       "block text-2xs tabular-nums",
@@ -117,7 +120,15 @@ export function InvestorSummaryTable({
                     )}
                   >
                     {r.profitLoss >= 0 ? "+" : ""}
-                    {((r.profitLoss / r.owed) * 100).toFixed(1)}%
+                    {((r.profitLoss / r.contributed) * 100).toFixed(1)}%
+                  </Mono>
+                )}
+              </TableCell>
+              <TableCell className="text-right">
+                <Mono className="text-xs font-medium tabular-nums">{money(r.owed)}</Mono>
+                {r.contributed > 0 && (
+                  <Mono className="block text-2xs tabular-nums text-emerald-600 dark:text-emerald-400">
+                    +{(((r.owed - r.contributed) / r.contributed) * 100).toFixed(2)}%
                   </Mono>
                 )}
               </TableCell>

@@ -17,8 +17,7 @@ import type { MarginChartPoint } from "@/components/portal/margin-chart";
 import type { InvestorBreakdownRow } from "@/components/portal/investor-breakdown";
 import type { MarginOverview } from "@/lib/services/margin-service";
 import { MethodInvestorsView } from "@/components/portfolio/method-investors";
-import { InvestorTransactionsTable } from "@/components/portfolio/investor-transactions-table";
-import type { InvestorTransactionRow } from "@/components/portfolio/investor-transactions-table";
+
 import { ManagedCapitalCard } from "@/components/portfolio/managed-capital";
 import { aggregateManagedCapital } from "@/lib/finance/managed-capital";
 import type { ManagedContribution } from "@/lib/finance/managed-capital";
@@ -42,6 +41,7 @@ import { AddTransactionDialog } from "@/components/portfolio/add-transaction-dia
 import { EmptyPortfolio } from "@/components/portfolio/empty-portfolio";
 import { ManualSnapshotDialog } from "@/components/portfolio/manual-snapshot-dialog";
 import { TransactionsTable } from "@/components/portfolio/transactions-table";
+import type { TransactionRow } from "@/components/portfolio/transactions-table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -101,7 +101,9 @@ type PortfolioData = {
   methodAllocations: MethodAllocationSummary[];
   /** What other people did in the methods this user runs. Empty for everyone
    *  who runs none. */
-  investorTransactions: InvestorTransactionRow[];
+  investorTransactions: TransactionRow[];
+  /** The owner's own history, in the shared row shape. */
+  transactionRows: TransactionRow[];
   /** Margin month by month, for the area chart. */
   marginHistory: MarginChartPoint[];
   /** Per-investor drill-down behind the margin. */
@@ -485,7 +487,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
               )}
               <Card className="bg-card">
                 <CardContent className="p-0 sm:p-6">
-                  <TransactionsTable transactions={data.transactions} />
+                  <TransactionsTable rows={data.transactionRows} hideValues={hideValues} />
                 </CardContent>
               </Card>
             </div>
@@ -503,9 +505,12 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                 </div>
                 <Card className="bg-card">
                   <CardContent className="p-0 sm:p-6">
-                    <InvestorTransactionsTable
+                    <TransactionsTable
                       rows={data.investorTransactions}
+                      showInvestor
                       hideValues={hideValues}
+                      emptyTitle="No outside investors yet"
+                      emptyDescription="Transactions other people make in your methods appear here."
                     />
                   </CardContent>
                 </Card>

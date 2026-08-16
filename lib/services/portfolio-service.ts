@@ -3,7 +3,7 @@ import "server-only";
 import { db } from "@/db";
 import { portfolios, transactions, investmentMethods, users, portfolioSnapshots } from "@/db/schema";
 import { eq, and, inArray, ne, desc } from "drizzle-orm";
-import type { Portfolio, PortfolioTransaction, PortfolioStats, PortfolioAsset, MethodInvestors } from "@/types/portfolio";
+import type { Portfolio, PortfolioTransaction, PortfolioStats, PortfolioAsset, MethodInvestors, TransactionStatus, TransactionType } from "@/types/portfolio";
 import type { ManagedContribution } from "@/lib/finance/managed-capital";
 
 export async function getUserPortfolio(userId: string): Promise<Portfolio | null> {
@@ -412,8 +412,8 @@ export type InvestorTransaction = {
   methodName: string;
   investorName: string;
   investorEmail: string | null;
-  type: string;
-  status: string;
+  type: TransactionType;
+  status: TransactionStatus;
   total: string;
   initialValue: string | null;
   currentValue: string | null;

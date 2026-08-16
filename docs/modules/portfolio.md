@@ -99,12 +99,24 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - **Four tabs, not five.** Investors and Margin were both owner-only views of
   the same methods, so they are two sections of one **Managed** tab (margin
   first — the answer — then who is invested). Non-owners see three.
-- **Transactions lists two tables**, the owner's own history and what other
-  people did in the methods they run (`getInvestorTransactions`, which keeps
-  pending and rejected rows so the owner sees what is waiting on them). They
-  are NOT merged: mixing somebody else's movements into a personal log makes
-  the running totals of both meaningless. The owner's own rows are excluded
-  from the second table because they already appear in the first.
+- **Transactions lists two tables sharing ONE component.** The owner's own
+  history and what other people did in the methods they run
+  (`getInvestorTransactions`, which keeps pending and rejected rows so the
+  owner sees what is waiting on them). `TransactionsTable` takes a normalised
+  `TransactionRow[]` plus `showInvestor` — they were two components with
+  different columns, which made the same fact look like two different things
+  depending on whose row it was. They stay two *tables* though: mixing
+  somebody else's movements into a personal log makes the running totals of
+  both meaningless. The owner's own rows are excluded from the second table
+  because they already appear in the first.
+- **Every transaction row shows the position it created** — units at that
+  day's price (`Bought`), what they are worth now, and the P/L. A contribution
+  is otherwise just an amount, and the whole point of the model is that the
+  amount became specific units at a specific price. `Owed` sits beside it and
+  is deliberately unrelated: the investor's return is fixed whatever the P/L
+  does.
+- **The table renders no border of its own.** It always sits inside a `Card`,
+  and its old `rounded-lg border` drew a second box around the first.
 - **`hideValues` must reach every amount, including inside charts.**
   `ManagedCapitalCard` was missing the prop, so its three headline figures,
   the split chart's axis and its tooltip stayed readable while the KPI grid

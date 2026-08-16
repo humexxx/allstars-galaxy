@@ -250,3 +250,55 @@ function shiftDays(day: string, delta: number): string {
   d.setUTCDate(d.getUTCDate() + delta);
   return d.toISOString().slice(0, 10);
 }
+
+export type TransactionAllocation = {
+  symbol: string;
+  name: string;
+  /** Units bought, signed. */
+  quantity: number;
+  /** Cash routed to this asset. */
+  invested: number;
+  /** The asset's close on the day the money landed — fixed forever. */
+  priceAtPurchase: number;
+};
+
+/**
+ * What each transaction bought, keyed by transaction id.
+ *
+ * Lets a transaction row show the position it created — units at the price of
+ * that day — rather than only the cash that moved. Without it a contribution
+ * is just an amount, and the whole point of the model is that the amount
+ * became a specific number of units at a specific price.
+ */
+export async function getAllocationsByTransaction(
+  transactionIds: string[]
+): Promise<Map<string, TransactionAllocation[]>> {
+  const out = new Map<string, TransactionAllocation[]>();
+  if (transactionIds.length === 0) return out;
+
+  const rows = await db
+    .select({
+      transactionId: transactionAllocations.transactionId,
+      quantity: transactionAllocations.quantity,
+      amount: transactionAllocations.amount,
+      priceAtPurchase: transactionAllocations.priceAtPurchase,
+      symbol: priceAssets.symbol,
+      name: priceAssets.name,
+    })
+    .from(transactionAllocations)
+    .innerJoin(priceAssets, eq(transactionAllocations.assetId, priceAssets.id))
+    .where(inArray(transactionAllocations.transactionId, transactionIds));
+
+  for (const r of rows) {
+    const list = out.get(r.transactionId) ?? [];
+    list.push({
+      symbol: r.symbol,
+      name: r.name,
+      quantity: parseFloat(r.quantity),
+      invested: parseFloat(r.amount),
+      priceAtPurchase: parseFloat(r.priceAtPurchase),
+    });
+    out.set(r.transactionId, list);
+  }
+  return out;
+}

@@ -78,7 +78,7 @@ measured here every time.
 
 ### Evidence (2026-08-15)
 
-Caught mid-failure by `scripts/diagnose-dns.sh`:
+Caught mid-failure by `~/.claude/scripts/diagnose-dns.sh`:
 
 ```
 1. getaddrinfo (Node dns.lookup)   FAIL:ENOTFOUND
@@ -151,8 +151,11 @@ settle it.
 ### Diagnose it
 
 ```bash
-sh scripts/diagnose-dns.sh
+sh ~/.claude/scripts/diagnose-dns.sh
 ```
+
+It lives outside this repo on purpose: the fault is machine-wide, and it is
+needed from whichever project happens to hit it.
 
 It tests each layer separately — `getaddrinfo`, a direct query, your configured
 upstream, a public resolver, and raw TCP — then prints which one is broken and

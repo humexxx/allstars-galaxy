@@ -1,5 +1,7 @@
 "use client";
 
+import { format } from "date-fns";
+
 import {
   Table,
   TableBody,
@@ -8,106 +10,200 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { format } from "date-fns";
-import { formatCurrency, formatSignedPercent, parseDecimal } from "@/lib/utils/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Mono, Text } from "@/components/ui/typography";
+import { maskValue, statToneClass } from "@/components/ui/stat-card";
+import { formatCurrency, formatSignedPercent } from "@/lib/utils/format";
 import { StatusBadge, TypeBadge } from "./transaction-badges";
-import type { PortfolioTransaction } from "@/types/portfolio";
+import type { TransactionStatus, TransactionType } from "@/types/portfolio";
+import { cn } from "@/lib/utils";
 
-type TransactionsTableProps = {
-  transactions: PortfolioTransaction[];
+export type TransactionAllocationView = {
+  symbol: string;
+  quantity: number;
+  invested: number;
+  priceAtPurchase: number;
+  /** Latest price, null when the asset has never been quoted. */
+  price: number | null;
 };
 
-export function TransactionsTable({ transactions }: TransactionsTableProps) {
-  if (transactions.length === 0) {
-    return (
-      <EmptyState
-        title="No transactions yet"
-        description="Add your first transaction to get started."
-      />
-    );
+/**
+ * One normalised row shape for every transaction table.
+ *
+ * The owner's own history and their investors' movements used to be two
+ * components with different columns, which made the same fact look like two
+ * different things depending on whose row it was.
+ */
+export type TransactionRow = {
+  id: string;
+  date: string;
+  methodName: string;
+  methodAuthor?: string | null;
+  /** Only set on rows belonging to somebody else. */
+  investorName?: string | null;
+  type: TransactionType;
+  status: TransactionStatus;
+  total: string;
+  initialValue: string | null;
+  currentValue: string | null;
+  allocations: TransactionAllocationView[];
+};
+
+export function TransactionsTable({
+  rows,
+  showInvestor = false,
+  hideValues = false,
+  emptyTitle = "No transactions yet",
+  emptyDescription = "Add your first transaction to get started.",
+}: {
+  rows: TransactionRow[];
+  /** Adds the Investor column — only meaningful for other people's rows. */
+  showInvestor?: boolean;
+  hideValues?: boolean;
+  emptyTitle?: string;
+  emptyDescription?: string;
+}) {
+  if (rows.length === 0) {
+    return <EmptyState title={emptyTitle} description={emptyDescription} />;
   }
 
+  const money = (v: number | string | null | undefined) => {
+    if (v === null || v === undefined) return "—";
+    const n = typeof v === "string" ? parseFloat(v) : v;
+    if (!Number.isFinite(n)) return "—";
+    const formatted = formatCurrency(n);
+    return hideValues ? maskValue(formatted) : formatted;
+  };
+
   return (
-    <div className="rounded-lg border">
+    // No border here: this table always sits inside a Card, and its own frame
+    // produced a second box around the first.
+    <div className="relative overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Date</TableHead>
-            <TableHead>Investment Method</TableHead>
+            {showInvestor && <TableHead>Investor</TableHead>}
+            <TableHead>Method</TableHead>
             <TableHead>Type</TableHead>
-            <TableHead>Amount</TableHead>
-            <TableHead>Fee</TableHead>
-            <TableHead>Total</TableHead>
-            <TableHead>Initial Value</TableHead>
-            <TableHead>Current Value</TableHead>
+            <TableHead className="text-right">Total</TableHead>
+            <TableHead>Bought</TableHead>
+            <TableHead className="text-right">Worth now</TableHead>
+            <TableHead className="text-right">P/L</TableHead>
+            <TableHead className="text-right">Owed</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead>Notes</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {transactions.map((transaction) => {
-            const isBuy = transaction.type === "buy";
-            const initial = parseDecimal(transaction.initialValue);
-            const current = parseDecimal(transaction.currentValue);
-            const growth = isBuy && initial > 0 ? ((current - initial) / initial) * 100 : null;
+          {rows.map((r) => {
+            const owed = r.currentValue === null ? null : parseFloat(r.currentValue);
+            const initial = r.initialValue === null ? null : parseFloat(r.initialValue);
+            const growth =
+              owed !== null && initial !== null && initial > 0
+                ? ((owed - initial) / initial) * 100
+                : null;
+
+            // What the position this transaction created is worth today.
+            const priced = r.allocations.filter((a) => a.price !== null);
+            const value = priced.reduce((s, a) => s + a.quantity * (a.price ?? 0), 0);
+            const invested = r.allocations.reduce((s, a) => s + a.invested, 0);
+            const pl =
+              r.allocations.length > 0 && priced.length === r.allocations.length
+                ? value - invested
+                : null;
 
             return (
-              <TableRow key={transaction.id}>
-                <TableCell className="font-medium">
-                  <Mono>{format(new Date(transaction.date), "MMM d, yyyy")}</Mono>
-                  <Mono as="div" className="text-xs text-muted-foreground">
-                    {format(new Date(transaction.date), "h:mm a")}
-                  </Mono>
-                </TableCell>
+              <TableRow key={r.id}>
                 <TableCell>
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                      <span className="text-xs font-semibold text-primary">
-                        {transaction.investmentMethod.name.substring(0, 2).toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="flex min-w-0 flex-col">
-                      <Text as="span" className="max-w-40 truncate font-medium">{transaction.investmentMethod.name}</Text>
-                      <Text variant="small" as="span" className="max-w-40 truncate">
-                        {transaction.investmentMethod.author}
-                      </Text>
-                    </div>
-                  </div>
+                  <Mono className="text-xs">{format(new Date(r.date), "MMM d, yyyy")}</Mono>
                 </TableCell>
-                <TableCell><TypeBadge type={transaction.type} /></TableCell>
-                <TableCell><Mono>{formatCurrency(transaction.amount)}</Mono></TableCell>
-                <TableCell><Mono>{formatCurrency(transaction.fee)}</Mono></TableCell>
-                <TableCell className="font-semibold"><Mono>{formatCurrency(transaction.total)}</Mono></TableCell>
+
+                {showInvestor && (
+                  <TableCell>
+                    <Text className="text-xs font-medium">{r.investorName ?? "—"}</Text>
+                  </TableCell>
+                )}
+
                 <TableCell>
-                  {isBuy && transaction.initialValue ? (
-                    <Mono>{formatCurrency(transaction.initialValue)}</Mono>
-                  ) : (
-                    <Text variant="small" as="span">—</Text>
+                  <Text as="span" className="block max-w-40 truncate text-xs font-medium">
+                    {r.methodName}
+                  </Text>
+                  {r.methodAuthor && (
+                    <Text className="max-w-40 truncate text-2xs text-muted-foreground">
+                      {r.methodAuthor}
+                    </Text>
                   )}
                 </TableCell>
+
                 <TableCell>
-                  {isBuy && transaction.currentValue && transaction.initialValue ? (
-                    <div className="flex flex-col">
-                      <Mono className="font-medium">{formatCurrency(transaction.currentValue)}</Mono>
+                  <TypeBadge type={r.type} />
+                </TableCell>
+
+                <TableCell className="text-right">
+                  <Mono className="text-xs font-semibold tabular-nums">{money(r.total)}</Mono>
+                </TableCell>
+
+                {/* The allocation as it stood that day: units at that day's price. */}
+                <TableCell>
+                  {r.allocations.length === 0 ? (
+                    <Text className="text-2xs text-muted-foreground">not priced</Text>
+                  ) : (
+                    r.allocations.map((a) => (
+                      <div key={a.symbol} className="whitespace-nowrap">
+                        <Mono className="text-xs tabular-nums">
+                          {a.quantity.toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })}{" "}
+                          {a.symbol}
+                        </Mono>
+                        <Mono className="block text-2xs text-muted-foreground tabular-nums">
+                          @ {formatCurrency(a.priceAtPurchase)}
+                        </Mono>
+                      </div>
+                    ))
+                  )}
+                </TableCell>
+
+                <TableCell className="text-right">
+                  <Mono className="text-xs tabular-nums">
+                    {r.allocations.length === 0 || priced.length === 0 ? "—" : money(value)}
+                  </Mono>
+                </TableCell>
+
+                <TableCell className="text-right">
+                  <Mono
+                    className={cn(
+                      "text-xs tabular-nums",
+                      statToneClass(pl === null ? "neutral" : pl >= 0 ? "positive" : "negative")
+                    )}
+                  >
+                    {pl === null ? "—" : money(pl)}
+                  </Mono>
+                </TableCell>
+
+                {/* What the investor is promised — fixed, and unrelated to P/L. */}
+                <TableCell className="text-right">
+                  {owed === null ? (
+                    <Text className="text-2xs text-muted-foreground">—</Text>
+                  ) : (
+                    <>
+                      <Mono className="text-xs font-medium tabular-nums">{money(owed)}</Mono>
                       {growth !== null && (
-                        <Mono className={`text-xs ${growth >= 0 ? "text-green-500" : "text-red-500"}`}>
+                        <Mono
+                          className={cn(
+                            "block text-2xs tabular-nums",
+                            statToneClass(growth >= 0 ? "positive" : "negative")
+                          )}
+                        >
                           {formatSignedPercent(growth)}
                         </Mono>
                       )}
-                    </div>
-                  ) : (
-                    <Text variant="small" as="span">—</Text>
+                    </>
                   )}
                 </TableCell>
-                <TableCell><StatusBadge status={transaction.status} /></TableCell>
+
                 <TableCell>
-                  {transaction.notes ? (
-                    <Text variant="muted" as="span">{transaction.notes}</Text>
-                  ) : (
-                    <Text variant="small" as="span">—</Text>
-                  )}
+                  <StatusBadge status={r.status} />
                 </TableCell>
               </TableRow>
             );

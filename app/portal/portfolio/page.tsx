@@ -12,6 +12,8 @@ import {
 } from "@/lib/services/portfolio-service";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
 import { getManagedOverview } from "@/lib/services/margin-service";
+import { getAllocationsByTransaction } from "@/lib/services/allocation-service";
+import { getLatestPrices } from "@/lib/services/price-service";
 import { listPriceAssets } from "@/lib/services/price-service";
 import { getAllUsers } from "@/lib/services/user-service";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
@@ -94,6 +96,28 @@ export default async function PortfolioPage() {
     }
   }
 
+  // Both tables render the same shape, so the allocation lookup is one query
+  // covering every transaction on the page — the owner's and their investors'.
+  const allTxIds = [
+    ...transactions.map((t) => t.id),
+    ...investorTransactions.map((t) => t.id),
+  ];
+  const [allocationsByTx, latestPrices] = await Promise.all([
+    getAllocationsByTransaction(allTxIds),
+    getLatestPrices(priceAssets.map((a) => a.id)),
+  ]);
+  const priceBySymbol = new Map(
+    priceAssets.map((a) => [a.symbol, latestPrices.get(a.id) ?? null])
+  );
+  const withPrices = (txId: string) =>
+    (allocationsByTx.get(txId) ?? []).map((a) => ({
+      symbol: a.symbol,
+      quantity: a.quantity,
+      invested: a.invested,
+      priceAtPurchase: a.priceAtPurchase,
+      price: priceBySymbol.get(a.symbol) ?? null,
+    }));
+
   const data = {
     portfolio,
     stats,
@@ -109,6 +133,18 @@ export default async function PortfolioPage() {
     methodAllocations: managedOverview.allocations,
     marginHistory: managedOverview.history,
     investorBreakdown: managedOverview.investors,
+    transactionRows: transactions.map((t) => ({
+      id: t.id,
+      date: new Date(t.date).toISOString(),
+      methodName: t.investmentMethod.name,
+      methodAuthor: t.investmentMethod.author,
+      type: t.type,
+      status: t.status,
+      total: t.total,
+      initialValue: t.initialValue,
+      currentValue: t.currentValue,
+      allocations: withPrices(t.id),
+    })),
     investorTransactions: investorTransactions.map((t) => ({
       id: t.id,
       date: t.date.toISOString(),
@@ -117,7 +153,9 @@ export default async function PortfolioPage() {
       type: t.type,
       status: t.status,
       total: t.total,
+      initialValue: t.initialValue,
       currentValue: t.currentValue,
+      allocations: withPrices(t.id),
     })),
     priceAssets: priceAssets.map((a) => ({
       id: a.id,

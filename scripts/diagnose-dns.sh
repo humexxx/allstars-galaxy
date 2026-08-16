@@ -66,6 +66,19 @@ else
   echo "5. TCP                             SKIPPED (no IP resolved)"
 fi
 
+# ── 6. iCloud Private Relay ──────────────────────────────────────────────────
+# The usual culprit. It proxies getaddrinfo through Apple's relay while dig and
+# dns.resolve* go straight out over UDP/53 — which is exactly why terminal
+# tools keep working while the app cannot resolve anything.
+if pgrep -q -f networkserviceproxy 2>/dev/null; then
+  RELAY_TUNNELS=$(ifconfig 2>/dev/null | grep -c "mtu 1380" || true)
+  echo "6. iCloud Private Relay            RUNNING (${RELAY_TUNNELS} relay tunnels)"
+  RELAY_ON=1
+else
+  echo "6. iCloud Private Relay            not running"
+  RELAY_ON=0
+fi
+
 echo
 echo "── Verdict ──────────────────────────────────────────────────────────────"
 
@@ -73,6 +86,12 @@ case "$GAI" in
   OK:*)
     echo "DNS is healthy right now. If the app is still failing, the process"
     echo "holding the bad state has not been restarted — restart the dev server."
+    if [ "$RELAY_ON" = "1" ]; then
+      echo
+      echo "Note: iCloud Private Relay is on. It is the usual cause of the"
+      echo "intermittent failures — see docs/TROUBLESHOOTING.md to turn it off"
+      echo "for this network."
+    fi
     ;;
   *)
     # Order matters. Test the upstream FIRST: when the configured resolver is
@@ -100,6 +119,14 @@ case "$GAI" in
     elif [ -n "$UP" ] || [ -n "$PUB" ]; then
       echo "THE SYSTEM RESOLVER IS WEDGED."
       echo
+      if [ "$RELAY_ON" = "1" ]; then
+        echo "iCloud Private Relay is RUNNING, and it is the likely cause:"
+        echo "getaddrinfo resolves through Apple's relay, dig does not — which"
+        echo "is exactly the split you are seeing. Turn it off for this network:"
+        echo "System Settings > Wi-Fi > (network) > Details >"
+        echo "  Limit IP Address Tracking = off"
+        echo
+      fi
       echo "DNS servers answer, but getaddrinfo does not — mDNSResponder is"
       echo "serving a stale negative answer. Flush it (needs your password):"
       echo

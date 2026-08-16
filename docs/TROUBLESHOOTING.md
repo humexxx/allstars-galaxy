@@ -21,27 +21,32 @@ the same machine, at the same moment. Nothing in the app changed.
 
 ### The short version
 
-Two things go wrong together, and only fixing one of them is why this keeps
-coming back.
+**The cause is iCloud Private Relay.**
 
-**The trigger:** your router's DNS service drops out for short windows — tens
-of seconds at a time. During one, nothing can look up anything through it.
+Private Relay makes your Mac ask "where is this server?" through an Apple
+tunnel instead of asking directly. When that tunnel re-establishes — which it
+does periodically and on every network change — the questions travelling
+inside it are lost. Terminal tools ask *outside* the tunnel, which is exactly
+why `dig` and `nslookup` keep working while the app cannot resolve anything.
 
-**The amplifier:** when a lookup fails, macOS writes down *"this name does not
-exist"* and keeps repeating that answer well after the router has recovered.
-So a 30-second router hiccup turns into minutes of a broken app.
+macOS then caches the failure as *"this name does not exist"*, so a few
+seconds of tunnel churn becomes minutes of a broken app.
 
-Tools like `dig` and `nslookup` ask a DNS server directly and skip that
-notebook, which is why they work while your app does not.
+**The fix — turn it off for this network** (keeps it on everywhere else):
 
-Unstick it now:
+> System Settings → Wi-Fi → your network → Details… → **Limit IP Address
+> Tracking = off**
+
+Or globally: System Settings → Apple Account → iCloud → **Private Relay** off.
+
+Then unstick the cached failure and restart the dev server:
 
 ```bash
 sudo killall -HUP mDNSResponder
 ```
 
-Stop it happening again, by giving the Mac a second DNS server to fall through
-to instead of caching a failure:
+A second resolver is worth adding as a safety net either way, so a single
+hiccup falls through instead of being cached as a failure:
 
 ```bash
 networksetup -setdnsservers Wi-Fi 192.168.40.1 1.1.1.1 8.8.8.8
@@ -49,7 +54,8 @@ networksetup -setdnsservers Wi-Fi 192.168.40.1 1.1.1.1 8.8.8.8
 
 ### The technical version
 
-macOS has two independent paths to resolve a name, and they do not share state:
+macOS has two independent paths to resolve a name, and they do not share state
+— and Private Relay only sits on one of them:
 
 | Path | Used by | Goes through |
 | --- | --- | --- |
@@ -64,6 +70,11 @@ negative TTL expires — while anything using the direct path against a
 
 Node's driver uses `dns.lookup`, which is `getaddrinfo`. That is the entire
 reason the app fails while your terminal looks healthy.
+
+Private Relay proxies the `getaddrinfo` path through Apple's ingress/egress
+relays. `dig` and `dns.resolve*` send UDP to port 53 themselves and never
+touch it. So relay churn breaks the app and nothing else — the exact split
+measured here every time.
 
 ### Evidence (2026-08-15)
 
@@ -86,6 +97,29 @@ occurrence: `getaddrinfo` kept failing while `dns.resolve4`, `nslookup` and
 `dscacheutil` all succeeded, **the bad state survived a dev-server restart**
 (so it was system-level, not Node's), and it healed with no intervention —
 a negative TTL expiring.
+
+### Evidence it is Private Relay, and not this project
+
+Measured 2026-08-15:
+
+```
+/usr/libexec/networkserviceproxy   running, 2h19m uptime
+PrivacyProxyNetworkStatus          1  (active on this network)
+utun4  (MTU 1380, relay tunnel)    917 KB in / 531 KB out — real traffic
+scutil --nc list                   no VPN configured
+ps | grep vpn|warp|tailscale|…     nothing
+```
+
+The app was ruled out directly. It fans out to ten external services on a
+dashboard load, so "too many concurrent lookups" was the obvious suspect —
+but firing 60 concurrent lookups across those same hosts produced **0/15**
+subsequent failures. Query volume is not the trigger; relay re-establishment
+is, which is why the failures are time-driven rather than load-driven and why
+they heal on their own.
+
+The project does *amplify* the annoyance: constant background revalidation
+across ten services means more chances to be looking at the screen when the
+relay blinks. It does not cause it.
 
 ### Why one fix is not enough
 

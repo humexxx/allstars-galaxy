@@ -106,7 +106,15 @@ export function PhotoPicker({
         .from(BUCKET)
         .upload(key, file, { cacheControl: "31536000", upsert: false });
       if (uploadErr) {
-        toast.error(uploadErr.message);
+        // Supabase says "Bucket not found", which reads like a broken app
+        // rather than one-time setup nobody has done. Name the fix.
+        const missingBucket = /bucket not found/i.test(uploadErr.message);
+        toast.error(
+          missingBucket
+            ? `Storage isn't set up yet — create a public bucket named "${BUCKET}" in Supabase. Until then, add photos with the URL tab.`
+            : uploadErr.message,
+          missingBucket ? { duration: 10_000 } : undefined
+        );
         return;
       }
       const { data } = supabase.storage.from(BUCKET).getPublicUrl(key);

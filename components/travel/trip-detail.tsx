@@ -49,7 +49,6 @@ import { TripForm } from "./trip-form";
 import { TripItinerary } from "./trip-itinerary";
 import { TripGallery } from "./trip-gallery";
 import { TripSharePanel } from "./trip-share-panel";
-import { TripVideo } from "@/components/travel/trip-video";
 
 type TripDetailProps = {
   trip: TripWithRelations;
@@ -180,8 +179,6 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
           </CardContent>
         </Card>
       )}
-
-      <TripVideo url={trip.youtubeUrl} title={trip.title} />
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">

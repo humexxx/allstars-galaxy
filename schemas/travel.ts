@@ -38,18 +38,6 @@ export const createTripSchema = z
     startDate: isoDate,
     endDate: isoDate.nullable().optional(),
     coverPhotoUrl: z.string().url().max(2000).nullable().optional(),
-    // Validated as a YouTube link specifically, not just any URL: the field
-    // renders an embed, and a non-YouTube address would save fine and then
-    // silently show nothing.
-    youtubeUrl: z
-      .string()
-      .trim()
-      .max(2000)
-      .nullable()
-      .optional()
-      .refine((v) => !v || youtubeVideoId(v) !== null, {
-        message: "Paste a YouTube link (watch, youtu.be, shorts or embed)",
-      }),
     currency: currency.default("USD"),
     color: z.string().min(1).max(60).default("var(--chart-1)"),
   })
@@ -75,15 +63,6 @@ export const updateTripSchema = z
     // Validated as a YouTube link specifically, not just any URL: the field
     // renders an embed, and a non-YouTube address would save fine and then
     // silently show nothing.
-    youtubeUrl: z
-      .string()
-      .trim()
-      .max(2000)
-      .nullable()
-      .optional()
-      .refine((v) => !v || youtubeVideoId(v) !== null, {
-        message: "Paste a YouTube link (watch, youtu.be, shorts or embed)",
-      }),
     currency: currency.default("USD"),
     color: z.string().min(1).max(60).default("var(--chart-1)"),
   })
@@ -103,6 +82,18 @@ export const tripItemSchema = z.object({
   title: z.string().min(1).max(200),
   category: tripItemCategorySchema.default("activity"),
   link: z.string().url().max(2000).nullable().optional(),
+  // Validated as a YouTube link specifically, not just any URL: the field
+  // renders an embed, so a non-YouTube address would save fine and then
+  // silently show nothing.
+  youtubeUrl: z
+    .string()
+    .trim()
+    .max(2000)
+    .nullable()
+    .optional()
+    .refine((v) => !v || youtubeVideoId(v) !== null, {
+      message: "Paste a YouTube link (watch, youtu.be, shorts or embed)",
+    }),
   price: price.nullable().optional(),
   scheduledOn: isoDate.nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),

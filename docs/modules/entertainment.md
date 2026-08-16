@@ -64,7 +64,11 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
-- **Trips carry an optional YouTube link** (`trips.youtube_url`). Stored as the
+- **Trip ITEMS carry an optional YouTube link** (`trip_items.youtube_url`) —
+  a walkthrough of the hotel, a tour of the ship. It briefly lived on `trips`,
+  which was the wrong level: a trip is a container, and it is the individual
+  activity that has a video worth watching. Moved in `0037` before any row
+  used it. Stored as the
   URL the user pasted, never a pre-built embed URL: the video id is derived at
   render time by `lib/travel/youtube.ts`, so a link saved in any of YouTube's
   shapes (`watch?v=`, `youtu.be`, `/shorts/`, `/embed/`, `/live/`) keeps

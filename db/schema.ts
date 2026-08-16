@@ -919,11 +919,6 @@ export const trips = pgTable(
     endDate: date("end_date"),
     // Primary cover image. URL may point to Supabase Storage or any external URL.
     coverPhotoUrl: text("cover_photo_url"),
-    // Optional YouTube link — a walkthrough of the place, a vlog, a trailer.
-    // Stored as the URL the user pasted, NOT a pre-built embed URL: the video
-    // id is derived at render time so a link saved in any of YouTube's several
-    // shapes (watch?v=, youtu.be, /shorts/, /embed/) keeps working.
-    youtubeUrl: text("youtube_url"),
     // Currency code (ISO 4217) used to aggregate item prices into estimates.
     currency: text("currency").notNull().default("USD"),
     color: text("color").notNull().default("var(--chart-1)"),
@@ -950,6 +945,11 @@ export const tripItems = pgTable(
     title: text("title").notNull(),
     category: tripItemCategoryEnum("category").notNull().default("activity"),
     link: text("link"),
+    // Optional YouTube link for THIS activity — a walkthrough of the hotel, a
+    // tour of the ship. Stored as the URL the user pasted, NOT a pre-built
+    // embed: the video id is derived at render time so a link saved in any of
+    // YouTube's several shapes keeps working. See lib/travel/youtube.ts.
+    youtubeUrl: text("youtube_url"),
     // Optional price. Null = "not estimated yet". Currency lives on the parent
     // trip — multi-currency itineraries are out of scope for v1.
     price: numeric("price", { precision: 20, scale: 2 }),

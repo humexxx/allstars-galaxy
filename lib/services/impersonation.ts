@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { impersonationLogs, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import type { User } from "@supabase/supabase-js";
+import type { UserRole } from "@/types/user";
 import {
   getCurrentUserCached,
   getUserRoleCached,
@@ -15,7 +16,7 @@ export const IMPERSONATION_COOKIE = "cg_impersonating";
 
 export type EffectiveContext = {
   realUser: User;
-  realRole: "admin" | "user" | null;
+  realRole: UserRole | null;
   impersonatedUser: { id: string; email: string | null; fullName: string | null } | null;
   effectiveUserId: string;
   isImpersonating: boolean;
@@ -42,9 +43,28 @@ async function loadEffectiveContext(): Promise<EffectiveContext | null> {
   }
 
   const [target] = await db
-    .select({ id: users.id, email: users.email, fullName: users.fullName })
+    .select({
+      id: users.id,
+      email: users.email,
+      fullName: users.fullName,
+      role: users.role,
+    })
     .from(users)
     .where(eq(users.id, impersonatedUserId));
+
+  // The action already refuses to START impersonating an admin, but a role can
+  // change while a session is live: promote the impersonated user and the
+  // cookie would keep granting admin-as-admin access for the rest of its
+  // 30-minute life. Re-checking here closes that window.
+  if (target?.role === "admin") {
+    return {
+      realUser,
+      realRole,
+      impersonatedUser: null,
+      effectiveUserId: realUser.id,
+      isImpersonating: false,
+    };
+  }
 
   if (!target) {
     return {

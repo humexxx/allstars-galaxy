@@ -8,7 +8,12 @@
  * product area.
  */
 
-export type Role = "admin" | "user";
+// The navigation's own alias for the account role. Aliased from the single
+// definition rather than spelled out again — the two drifted the moment a
+// third role appeared.
+import type { UserRole } from "@/types/user";
+
+export type Role = UserRole;
 
 export type NavLeaf = {
   title: string;

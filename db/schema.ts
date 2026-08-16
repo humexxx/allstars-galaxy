@@ -1,7 +1,15 @@
 import { pgTable, jsonb, text, uuid, timestamp, pgSchema, real, pgEnum, numeric, index, boolean, integer, date, check, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
-export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
+// Three kinds of account, and the role answers exactly ONE question: may this
+// person create investment methods?
+//   user     — a client. Invests in methods, creates none.
+//   provider — offers methods that clients choose.
+//   admin    — everything a provider can do, plus impersonation and the admin area.
+// WHICH methods somebody runs is NOT here: that is `investment_methods
+// .owner_user_id`, which the whole app already keys off. Restating it in the
+// role would give two sources of truth that can disagree.
+export const userRoleEnum = pgEnum("user_role", ["admin", "provider", "user"]);
 export const riskLevelEnum = pgEnum("risk_level", ["Low", "Medium", "High"]);
 export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "approved", "rejected", "closed"]);
 export const transactionTypeEnum = pgEnum("transaction_type", ["buy", "withdrawal"]);

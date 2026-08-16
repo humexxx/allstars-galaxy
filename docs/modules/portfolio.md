@@ -147,10 +147,23 @@ metadata. Interest math is shared with [Finance](./finance.md).
   `components/portfolio/managed-capital.test.tsx`, which asserts no `$` survives
   in masked mode. Percentages deliberately stay visible: a share is not a
   balance.
-- **CSV export** of the transaction history: `GET /api/portfolio/export`,
-  gated by `requireEffectiveContext` so an impersonating admin exports what
-  they see. Cells starting with `=`, `+`, `-` or `@` are prefixed with a quote
-  — Excel and Sheets execute those as formulas.
+- **CSV export**: `GET /api/portfolio/export`, gated by
+  `requireEffectiveContext` so an impersonating admin exports what they see.
+  Cells starting with `=`, `+`, `-` or `@` are prefixed with a quote — Excel
+  and Sheets execute those as formulas.
+- **The export carries what the app derives, not just the cash.** For someone
+  who runs methods it includes their investors' rows and, per contribution,
+  the asset, units, price on the day, worth now and P/L. Exporting only
+  amounts while the app derives positions from them hands back a file that
+  cannot answer the questions the screen answers.
+- **Header, rows and totals all derive from one `COLUMNS` array.** They were
+  three hand-written lists of matching length, and they drifted: dropping the
+  Author column from two of them left the totals row one cell long, so every
+  sum landed under the wrong heading. Deriving all three makes that
+  unrepresentable.
+- **A contribution split across assets emits one row per asset**, and only the
+  first carries the cash figures — otherwise a 50/50 split would count its own
+  amount twice in the totals.
 - **A method has a public half and a private half, and the editor says so.**
   Clients see the name, risk and above all the **fixed monthly return** — that
   is the entire product from their side. Where the pooled money actually goes

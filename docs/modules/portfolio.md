@@ -16,7 +16,7 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `transactions.ts` — `createTransactionAction` (replaces the legacy `/api/transactions` route)
 - `portfolio-snapshots.ts` — create manual snapshots of portfolio value
 - `admin-transactions.ts` — admin-only approve/reject of transactions (see [Admin](./admin.md))
-- `holdings.ts` — `upsertHoldingAction`, `deleteHoldingAction`, `createPriceAssetAction`, `setManualPriceAction`; gated on **owning the method**, not merely on being an admin
+- `allocations.ts` — `setAllocationsAction`, `repriceContributionsAction`, `createPriceAssetAction`, `setManualPriceAction`; gated on **owning the method**, not merely on being an admin
 
 ## Services — `/lib/services/`
 - `portfolio-service.ts` — portfolio state and composition
@@ -26,12 +26,13 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `chart-service.ts` — chart data shaping (shared utility)
 - `price-service.ts` — quote storage + provider dispatch (`refreshPrices`, `getLatestPrices`, `listPriceAssets`)
 - `price-providers/` — one module per source: `massive.ts`, `coingecko.ts`, shared `types.ts`
-- `margin-service.ts` — `getMarginOverview(ownerUserId)`, `getMethodHoldings(methodId)`
+- `margin-service.ts` — `getMarginOverview(ownerUserId)`; positions are derived, never stored
+- `allocation-service.ts` — policy CRUD, `backfillTransactionAllocations`, `backfillAllOwners`, `getDerivedHoldings`
 
 ## Schemas — `/schemas/`
 - `transaction.ts`
 - `snapshot.ts`
-- `holdings.ts` — holding upsert/delete, price-asset creation, manual quotes
+- `allocations.ts` — allocation policy, price-asset creation, manual quotes
 
 ## Types — `/types/`
 - `portfolio.ts`
@@ -49,7 +50,8 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `investment_methods` — investment vehicles with risk/ROI metadata
 - `price_assets` — catalogue of quotable assets (`symbol`, `external_id`, `source`)
 - `price_quotes` — append-only price history, one row per fetch
-- `method_holdings` — what each method's pooled capital is deployed in (quantity + cost basis)
+- `method_allocations` — the policy: what share of incoming money goes to which asset
+- `transaction_allocations` — what each contribution actually bought, at that day's price (immutable)
 - `app_state` — global key-value (cron state, etc.) — also touched by other modules
 
 ## Notes
@@ -87,8 +89,19 @@ metadata. Interest math is shared with [Finance](./finance.md).
   [`lib/finance/margin.ts`](../../lib/finance/margin.ts)). You cannot owe
   yourself a fixed return; counting it as debt would understate the margin by
   exactly that stake. It is carried separately as `ownPosition`.
-- **Holdings are quantities, never percentages.** A percentage drifts the
-  moment a price moves and would need recomputing on every quote.
+- **Positions are DERIVED, never typed in.** A method declares an allocation
+  ("100% Cardano"); each approved contribution is split by that rule and priced
+  at the asset's close **on the day it landed**, and the units fall out. The
+  price is stored on `transaction_allocations` precisely so it stops being a
+  question — the close on 2025-08-31 is a fixed fact.
+- **Editing the allocation only moves future money.** Past contributions keep
+  the units they bought. Re-deriving them would mean the owner's position
+  silently rewrote itself every time they changed their mind.
+- **Withdrawals sell units at that day's price**, they do not subtract cash
+  from a unit count — hence the signed `quantity`.
+- **Contributions are priced by the daily cron**, not only on demand: money
+  approved between runs would otherwise be missing from the margin until
+  somebody pressed a button. `Reprice` in the UI is the manual escape hatch.
 - **Prices refresh daily** at 00:30 via `/api/cron/prices` — 30 minutes after
   `/api/cron/daily` so the two don't contend for pooled connections. Providers:
   **Massive** (ex-Polygon.io, rebranded early 2026 — crypto, indices, stocks,

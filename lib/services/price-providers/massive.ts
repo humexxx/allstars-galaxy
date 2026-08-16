@@ -127,6 +127,64 @@ async function fetchOne(
   }
 }
 
+export type HistoricalBar = { day: string; close: number };
+
+/**
+ * Daily closes for one ticker across a date range, in a single request.
+ *
+ * Used to price a contribution at the day it landed. One call covers the whole
+ * range however many dates are needed, which keeps a backfill of many
+ * contributions inside the 5 req/min free tier.
+ *
+ * Returns bars ascending. Days the asset did not trade are simply absent —
+ * callers must fall back to the most recent earlier bar rather than assuming a
+ * bar exists for every calendar date (see `closeOnOrBefore`).
+ */
+export async function fetchDailyCloses(
+  ticker: string,
+  from: string,
+  to: string
+): Promise<{ bars: HistoricalBar[]; error: string | null }> {
+  const apiKey = process.env.MASSIVE_API_KEY;
+  if (!apiKey) return { bars: [], error: "MASSIVE_API_KEY is not set" };
+
+  try {
+    const body = await get(
+      `/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/day/${from}/${to}` +
+        `?adjusted=true&sort=asc&limit=50000`,
+      apiKey
+    );
+    const bars: HistoricalBar[] = [];
+    for (const r of (body as { results?: { t?: number; c?: number }[] }).results ?? []) {
+      if (typeof r.t === "number" && isUsablePrice(r.c)) {
+        bars.push({ day: new Date(r.t).toISOString().slice(0, 10), close: r.c });
+      }
+    }
+    return { bars, error: bars.length === 0 ? `no bars for ${ticker}` : null };
+  } catch (e) {
+    return { bars: [], error: e instanceof Error ? e.message : "history fetch failed" };
+  }
+}
+
+/**
+ * The close on `day`, or the most recent one before it.
+ *
+ * Contributions land on calendar dates; stocks and ETFs do not trade at
+ * weekends. Taking the last known close is what a real purchase would have
+ * been priced at, and it is why `pricedOn` is stored separately from the
+ * contribution date.
+ */
+export function closeOnOrBefore(
+  bars: HistoricalBar[],
+  day: string
+): HistoricalBar | null {
+  let best: HistoricalBar | null = null;
+  for (const bar of bars) {
+    if (bar.day <= day && (!best || bar.day > best.day)) best = bar;
+  }
+  return best;
+}
+
 /**
  * Quote every asset Massive is responsible for.
  *

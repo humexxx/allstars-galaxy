@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 
 import { refreshPrices } from "@/lib/services/price-service";
+import { backfillAllOwners } from "@/lib/services/allocation-service";
 
 /**
  * Daily price refresh for the assets backing investment methods.
@@ -44,11 +45,17 @@ export async function GET(request: NextRequest) {
 
   const result = await refreshPrices();
 
+  // Then price any contribution approved since the last run. Doing it here and
+  // not only on demand is what stops a new investor's money being silently
+  // absent from the margin until somebody presses a button.
+  const backfill = await backfillAllOwners();
+
   // Partial failures are reported, not thrown: one unpriced asset must not
   // discard the quotes that did land.
   return NextResponse.json({
     ok: true,
     ...result,
+    backfill,
     at: new Date().toISOString(),
   });
 }

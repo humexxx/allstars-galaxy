@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -19,23 +19,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Mono, Text } from "@/components/ui/typography";
-import { deleteHoldingAction } from "@/app/actions/holdings";
+import { repriceContributionsAction } from "@/app/actions/allocations";
 import type { MethodMargin } from "@/lib/finance/margin";
 import { formatCurrency } from "@/lib/utils/format";
-import { HoldingDialog, type AssetOption } from "./holding-dialog";
+import { AllocationDialog, type AssetOption } from "./allocation-dialog";
+
+export type MethodAllocationSummary = {
+  methodId: string;
+  allocations: { assetId: string; symbol: string; percent: number }[];
+};
 
 export type MarginViewProps = {
   methods: MethodMargin[];
   totals: { liability: number; assets: number; margin: number; incomplete: boolean };
   unconfigured: boolean;
   assets: AssetOption[];
+  allocations: MethodAllocationSummary[];
   hideValues?: boolean;
-};
-
-type EditTarget = {
-  methodId: string;
-  methodName: string;
-  holding?: { id: string; assetId: string; quantity: number; costBasis: number; note: string | null };
 };
 
 function show(value: number, hidden: boolean): string {
@@ -47,33 +47,43 @@ function show(value: number, hidden: boolean): string {
  * The owner's side of the deal: what the pooled capital is really worth
  * against what was promised to the people who put it in.
  *
- * Investors never see this. They see the fixed return they were sold — that is
- * the whole point of a fixed return. What varies, and what this screen is for,
- * is whether the real deployment is beating that promise or subsidising it.
+ * Positions here are derived — each contribution bought units at that day's
+ * price — so nothing in this table is hand-editable. What IS editable is the
+ * allocation: the rule deciding where the next contribution goes.
  */
 export function MarginView({
   methods,
   totals,
   unconfigured,
   assets,
+  allocations,
   hideValues = false,
 }: MarginViewProps) {
   const router = useRouter();
-  const [editing, setEditing] = useState<EditTarget | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
+  const [editing, setEditing] = useState<{ methodId: string; methodName: string } | null>(
+    null
+  );
+  const [isPending, startTransition] = useTransition();
 
-  const handleDelete = (id: string) => {
-    setPendingDelete(id);
+  const allocationFor = (methodId: string) =>
+    allocations.find((a) => a.methodId === methodId)?.allocations ?? [];
+
+  const reprice = () => {
     startTransition(async () => {
-      const result = await deleteHoldingAction({ id });
-      if (result?.success) {
-        toast.success("Holding removed");
-        router.refresh();
-      } else {
-        toast.error(result?.error ?? "Could not remove the holding");
+      const result = await repriceContributionsAction();
+      if (!result?.success) {
+        toast.error(result?.error ?? "Could not reprice");
+        return;
       }
-      setPendingDelete(null);
+      const { priced, skipped, errors } = result.data ?? {
+        priced: 0,
+        skipped: 0,
+        errors: [] as string[],
+      };
+      if (priced > 0) toast.success(`Priced ${priced} contribution split(s)`);
+      else if (errors.length > 0) toast.error(errors[0]);
+      else toast.info(`Nothing new to price (${skipped} already done)`);
+      router.refresh();
     });
   };
 
@@ -85,8 +95,6 @@ export function MarginView({
       />
     );
   }
-
-  const marginTone = totals.margin >= 0 ? "positive" : "negative";
 
   return (
     <div className="space-y-6">
@@ -104,7 +112,7 @@ export function MarginView({
         <StatCard
           label="Margin"
           value={show(totals.margin, hideValues)}
-          tone={marginTone}
+          tone={totals.margin >= 0 ? "positive" : "negative"}
           sublabel={
             totals.margin >= 0
               ? "Yours after paying everyone"
@@ -124,153 +132,163 @@ export function MarginView({
       )}
 
       {unconfigured && (
-        <div className="rounded-lg border border-dashed p-6 text-center">
+        <div className="space-y-3 rounded-lg border border-dashed p-6 text-center">
           <Text className="text-sm text-muted-foreground">
-            No capital has been assigned yet. Add what each method actually holds and the
-            margin computes itself from live prices.
+            No contribution has been priced yet. Set each method&apos;s allocation, then
+            reprice — every past contribution gets valued at the price on the day it
+            landed.
           </Text>
+          <Button size="sm" variant="outline" onClick={reprice} disabled={isPending}>
+            <RefreshCw className={`size-4 ${isPending ? "animate-spin" : ""}`} />
+            Reprice contributions
+          </Button>
         </div>
       )}
 
       <div className="space-y-4">
-        {methods.map((method) => (
-          <Card key={method.methodId}>
-            <CardHeader className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-1">
-                <CardTitle className="text-base">{method.methodName}</CardTitle>
-                <Text className="text-xs text-muted-foreground">
-                  Owes {show(method.liability, hideValues)}
-                  {method.ownPosition > 0 && (
-                    <> · your own {show(method.ownPosition, hideValues)} is capital, not debt</>
-                  )}
-                </Text>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <Mono
-                    className={`text-lg font-semibold tabular-nums ${statToneClass(
-                      method.margin >= 0 ? "positive" : "negative"
-                    )}`}
-                  >
-                    {show(method.margin, hideValues)}
-                  </Mono>
-                  <Text className="text-2xs text-muted-foreground">
-                    {method.liability > 0
-                      ? `${method.marginPercent >= 0 ? "+" : ""}${method.marginPercent.toFixed(1)}% vs owed`
-                      : "nothing owed"}
+        {methods.map((method) => {
+          const policy = allocationFor(method.methodId);
+          return (
+            <Card key={method.methodId}>
+              <CardHeader className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle className="text-base">{method.methodName}</CardTitle>
+                  <Text className="text-xs text-muted-foreground">
+                    Owes {show(method.liability, hideValues)}
+                    {method.ownPosition > 0 && (
+                      <> · your own {show(method.ownPosition, hideValues)} is capital, not debt</>
+                    )}
                   </Text>
+                  {policy.length > 0 && (
+                    <Text className="text-2xs text-muted-foreground">
+                      New money →{" "}
+                      {policy.map((p) => `${p.percent}% ${p.symbol}`).join(" · ")}
+                    </Text>
+                  )}
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    setEditing({ methodId: method.methodId, methodName: method.methodName })
-                  }
-                >
-                  <Plus className="size-4" />
-                  Holding
-                </Button>
-              </div>
-            </CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <Mono
+                      className={`text-lg font-semibold tabular-nums ${statToneClass(
+                        method.margin >= 0 ? "positive" : "negative"
+                      )}`}
+                    >
+                      {show(method.margin, hideValues)}
+                    </Mono>
+                    <Text className="text-2xs text-muted-foreground">
+                      {method.liability > 0
+                        ? `${method.marginPercent >= 0 ? "+" : ""}${method.marginPercent.toFixed(1)}% vs owed`
+                        : "nothing owed"}
+                    </Text>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setEditing({
+                        methodId: method.methodId,
+                        methodName: method.methodName,
+                      })
+                    }
+                  >
+                    <SlidersHorizontal className="size-4" />
+                    Allocation
+                  </Button>
+                </div>
+              </CardHeader>
 
-            {method.holdings.length > 0 && (
-              <CardContent>
-                <div className="relative overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Asset</TableHead>
-                        <TableHead className="text-right">Quantity</TableHead>
-                        <TableHead className="text-right">Price</TableHead>
-                        <TableHead className="text-right">Value</TableHead>
-                        <TableHead className="w-20" />
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {method.holdings.map((h) => (
-                        <TableRow key={h.id}>
-                          <TableCell>
-                            <Mono className="text-xs font-medium">{h.symbol}</Mono>
-                            <Text className="text-2xs text-muted-foreground">{h.name}</Text>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono className="text-xs tabular-nums">
-                              {h.quantity.toLocaleString(undefined, {
-                                maximumFractionDigits: 8,
-                              })}
-                            </Mono>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {h.price === null ? (
-                              <Badge variant="outline" className="text-2xs">
-                                no price
-                              </Badge>
-                            ) : (
-                              <Mono className="text-xs tabular-nums">
-                                {formatCurrency(h.price)}
-                              </Mono>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono className="text-xs tabular-nums">
-                              {h.price === null
-                                ? "—"
-                                : show(h.quantity * h.price, hideValues)}
-                            </Mono>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex justify-end gap-1">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="size-8"
-                                aria-label={`Edit ${h.symbol}`}
-                                onClick={() =>
-                                  setEditing({
-                                    methodId: method.methodId,
-                                    methodName: method.methodName,
-                                    holding: {
-                                      id: h.id,
-                                      assetId: h.assetId,
-                                      quantity: h.quantity,
-                                      costBasis: h.costBasis,
-                                      note: null,
-                                    },
-                                  })
-                                }
-                              >
-                                <Pencil className="size-3.5" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="size-8 text-destructive"
-                                aria-label={`Remove ${h.symbol}`}
-                                disabled={pendingDelete !== null}
-                                onClick={() => handleDelete(h.id)}
-                              >
-                                <Trash2 className="size-3.5" />
-                              </Button>
-                            </div>
-                          </TableCell>
+              {method.holdings.length > 0 && (
+                <CardContent>
+                  <div className="relative overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Asset</TableHead>
+                          <TableHead className="text-right">Units</TableHead>
+                          <TableHead className="text-right">Invested</TableHead>
+                          <TableHead className="text-right">Price</TableHead>
+                          <TableHead className="text-right">Value</TableHead>
+                          <TableHead className="text-right">P/L</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            )}
-          </Card>
-        ))}
+                      </TableHeader>
+                      <TableBody>
+                        {method.holdings.map((h) => {
+                          const value = h.price === null ? null : h.quantity * h.price;
+                          const pl = value === null ? null : value - h.costBasis;
+                          return (
+                            <TableRow key={h.id}>
+                              <TableCell>
+                                <Mono className="text-xs font-medium">{h.symbol}</Mono>
+                                <Text className="text-2xs text-muted-foreground">
+                                  {h.name}
+                                </Text>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Mono className="text-xs tabular-nums">
+                                  {h.quantity.toLocaleString(undefined, {
+                                    maximumFractionDigits: 4,
+                                  })}
+                                </Mono>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Mono className="text-xs tabular-nums">
+                                  {show(h.costBasis, hideValues)}
+                                </Mono>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {h.price === null ? (
+                                  <Badge variant="outline" className="text-2xs">
+                                    no price
+                                  </Badge>
+                                ) : (
+                                  <Mono className="text-xs tabular-nums">
+                                    {formatCurrency(h.price)}
+                                  </Mono>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Mono className="text-xs tabular-nums">
+                                  {value === null ? "—" : show(value, hideValues)}
+                                </Mono>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Mono
+                                  className={`text-xs tabular-nums ${statToneClass(
+                                    pl === null ? "neutral" : pl >= 0 ? "positive" : "negative"
+                                  )}`}
+                                >
+                                  {pl === null ? "—" : show(pl, hideValues)}
+                                </Mono>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          );
+        })}
       </div>
 
+      {!unconfigured && (
+        <div className="flex justify-end">
+          <Button size="sm" variant="ghost" onClick={reprice} disabled={isPending}>
+            <RefreshCw className={`size-4 ${isPending ? "animate-spin" : ""}`} />
+            Reprice new contributions
+          </Button>
+        </div>
+      )}
+
       {editing && (
-        <HoldingDialog
+        <AllocationDialog
           open
           methodId={editing.methodId}
           methodName={editing.methodName}
           assets={assets}
-          initial={editing.holding}
+          initial={allocationFor(editing.methodId)}
           onClose={() => setEditing(null)}
         />
       )}

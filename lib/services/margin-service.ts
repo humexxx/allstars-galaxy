@@ -1,9 +1,5 @@
 import "server-only";
 
-import { eq, inArray } from "drizzle-orm";
-
-import { db } from "@/db";
-import { methodHoldings, priceAssets } from "@/db/schema";
 import {
   computeMethodMargin,
   splitLiability,
@@ -11,19 +7,26 @@ import {
   type MarginHolding,
   type MethodMargin,
 } from "@/lib/finance/margin";
+import { netPositions } from "@/lib/finance/allocation";
+import { getDerivedHoldings } from "./allocation-service";
 import { getMethodInvestors } from "./portfolio-service";
 import { getLatestPrices } from "./price-service";
 
 export type MarginOverview = {
   methods: MethodMargin[];
   totals: ReturnType<typeof totalMargin>;
-  /** True when nothing has been configured yet — the UI shows an empty state
-   *  rather than a pile of zeroes that look like a loss. */
+  /** True when nothing has been priced yet — the UI shows an empty state
+   *  rather than a pile of zeroes that look like a total loss. */
   unconfigured: boolean;
 };
 
 /**
  * What the owner of the investment methods is really making.
+ *
+ * Positions are DERIVED, never typed in: each contribution was split by the
+ * method's allocation and priced at the day it landed, so the unit count is a
+ * consequence of real money and real historical prices. Editing the allocation
+ * changes where future money goes and leaves the past alone.
  *
  * The owner's own money in their own method is capital, not liability — you
  * cannot owe yourself a fixed return. It is carried separately as
@@ -37,38 +40,43 @@ export async function getMarginOverview(ownerUserId: string): Promise<MarginOver
   }
 
   const methodIds = methods.map((m) => m.methodId);
+  const rows = await getDerivedHoldings(methodIds);
+  const prices = await getLatestPrices([...new Set(rows.map((r) => r.assetId))]);
 
-  const holdingRows = await db
-    .select({
-      id: methodHoldings.id,
-      methodId: methodHoldings.methodId,
-      assetId: methodHoldings.assetId,
-      quantity: methodHoldings.quantity,
-      costBasis: methodHoldings.costBasis,
-      note: methodHoldings.note,
-      symbol: priceAssets.symbol,
-      name: priceAssets.name,
-    })
-    .from(methodHoldings)
-    .innerJoin(priceAssets, eq(methodHoldings.assetId, priceAssets.id))
-    .where(inArray(methodHoldings.methodId, methodIds));
-
-  const prices = await getLatestPrices([...new Set(holdingRows.map((h) => h.assetId))]);
-
-  const byMethod = new Map<string, MarginHolding[]>();
-  for (const h of holdingRows) {
-    const list = byMethod.get(h.methodId) ?? [];
-    list.push({
-      id: h.id,
-      assetId: h.assetId,
-      symbol: h.symbol,
-      name: h.name,
-      quantity: parseFloat(h.quantity),
-      price: prices.get(h.assetId) ?? null,
-      costBasis: parseFloat(h.costBasis),
-    });
-    byMethod.set(h.methodId, list);
+  // Group first by method, then net each asset across that method's
+  // contributions — a withdrawal cancels units bought earlier.
+  const byMethod = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const list = byMethod.get(r.methodId!) ?? [];
+    list.push(r);
+    byMethod.set(r.methodId!, list);
   }
+
+  const holdingsFor = (methodId: string): MarginHolding[] => {
+    const list = byMethod.get(methodId) ?? [];
+    const meta = new Map(list.map((r) => [r.assetId, { symbol: r.symbol, name: r.name }]));
+    const positions = netPositions(
+      list.map((r) => ({
+        assetId: r.assetId,
+        quantity: parseFloat(r.quantity),
+        amount: parseFloat(r.amount),
+      }))
+    );
+
+    return [...positions]
+      // A fully-exited position nets to zero units; showing it as a row would
+      // clutter the table with things no longer held.
+      .filter(([, p]) => Math.abs(p.quantity) > 1e-8)
+      .map(([assetId, p]) => ({
+        id: assetId,
+        assetId,
+        symbol: meta.get(assetId)?.symbol ?? "?",
+        name: meta.get(assetId)?.name ?? "Unknown asset",
+        quantity: p.quantity,
+        price: prices.get(assetId) ?? null,
+        costBasis: p.invested,
+      }));
+  };
 
   const computed = methods.map((m) => {
     const { liability, ownPosition } = splitLiability(m.investors, ownerUserId);
@@ -77,40 +85,13 @@ export async function getMarginOverview(ownerUserId: string): Promise<MarginOver
       methodName: m.methodName,
       liability,
       ownPosition,
-      holdings: byMethod.get(m.methodId) ?? [],
+      holdings: holdingsFor(m.methodId),
     });
   });
 
   return {
     methods: computed,
     totals: totalMargin(computed),
-    unconfigured: holdingRows.length === 0,
+    unconfigured: rows.length === 0,
   };
-}
-
-/** Holdings for one method, for the configuration screen. */
-export async function getMethodHoldings(methodId: string) {
-  const rows = await db
-    .select({
-      id: methodHoldings.id,
-      assetId: methodHoldings.assetId,
-      quantity: methodHoldings.quantity,
-      costBasis: methodHoldings.costBasis,
-      note: methodHoldings.note,
-      symbol: priceAssets.symbol,
-      name: priceAssets.name,
-      source: priceAssets.source,
-    })
-    .from(methodHoldings)
-    .innerJoin(priceAssets, eq(methodHoldings.assetId, priceAssets.id))
-    .where(eq(methodHoldings.methodId, methodId));
-
-  const prices = await getLatestPrices(rows.map((r) => r.assetId));
-
-  return rows.map((r) => ({
-    ...r,
-    quantity: parseFloat(r.quantity),
-    costBasis: parseFloat(r.costBasis),
-    price: prices.get(r.assetId) ?? null,
-  }));
 }

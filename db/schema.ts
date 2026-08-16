@@ -136,12 +136,15 @@ export const priceQuotes = pgTable(
 );
 
 /**
- * How much of an asset a method's pooled capital actually holds. Quantity, not
- * percentage: a percentage would silently re-price itself as the asset moves,
- * which is exactly the drift the margin is meant to expose.
+ * A method's investment policy: what share of incoming money goes to which
+ * asset. Percentages of a method should add up to 100.
+ *
+ * This is the RULE, not the position. It is what the owner edits, and it only
+ * governs money arriving from now on — changing it never rewrites what past
+ * contributions already bought.
  */
-export const methodHoldings = pgTable(
-  "method_holdings",
+export const methodAllocations = pgTable(
+  "method_allocations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     methodId: uuid("method_id")
@@ -150,16 +153,52 @@ export const methodHoldings = pgTable(
     assetId: uuid("asset_id")
       .notNull()
       .references(() => priceAssets.id, { onDelete: "restrict" }),
-    quantity: numeric("quantity", { precision: 24, scale: 8 }).notNull(),
-    /** What the admin paid for this position, for a cost-basis comparison. */
-    costBasis: numeric("cost_basis", { precision: 20, scale: 2 }).notNull().default("0"),
-    note: text("note"),
+    /** Share of each contribution, 0–100. */
+    percent: numeric("percent", { precision: 6, scale: 3 }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
-    index("method_holdings_method_id_idx").on(t.methodId),
-    uniqueIndex("method_holdings_method_asset_uq").on(t.methodId, t.assetId),
+    index("method_allocations_method_id_idx").on(t.methodId),
+    uniqueIndex("method_allocations_method_asset_uq").on(t.methodId, t.assetId),
+  ]
+);
+
+/**
+ * What a single contribution actually bought, priced at the day it landed.
+ *
+ * This is the HISTORICAL FACT and it is immutable once written. Storing the
+ * price here rather than recomputing it later is the whole point: the asset's
+ * price on 2025-08-31 is a fixed truth, and a position derived from it stays
+ * correct no matter how the allocation policy changes afterwards.
+ *
+ * `quantity` is signed by intent: a buy adds units, a withdrawal removes them.
+ */
+export const transactionAllocations = pgTable(
+  "transaction_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => priceAssets.id, { onDelete: "restrict" }),
+    /** Cash from this contribution routed to this asset. */
+    amount: numeric("amount", { precision: 20, scale: 2 }).notNull(),
+    /** The asset's close on (or most recently before) the contribution date. */
+    priceAtPurchase: numeric("price_at_purchase", { precision: 24, scale: 8 }).notNull(),
+    /** amount / priceAtPurchase, negative for a withdrawal. */
+    quantity: numeric("quantity", { precision: 24, scale: 8 }).notNull(),
+    /** The bar's date, which may precede the contribution date when it fell on
+     *  a weekend or holiday and the asset does not trade every day. */
+    pricedOn: timestamp("priced_on", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("transaction_allocations_transaction_id_idx").on(t.transactionId),
+    index("transaction_allocations_asset_id_idx").on(t.assetId),
+    uniqueIndex("transaction_allocations_tx_asset_uq").on(t.transactionId, t.assetId),
   ]
 );
 

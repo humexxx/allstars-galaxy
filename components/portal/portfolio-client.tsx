@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InvestmentMethodsView } from "@/components/portfolio/investment-methods-view";
 import { MarginView } from "@/components/portal/margin-view";
-import type { AssetOption } from "@/components/portal/holding-dialog";
+import type { AssetOption } from "@/components/portal/allocation-dialog";
+import type { MethodAllocationSummary } from "@/components/portal/margin-view";
 import type { MarginOverview } from "@/lib/services/margin-service";
 import { MethodInvestorsView } from "@/components/portfolio/method-investors";
 import { ManagedCapitalCard } from "@/components/portfolio/managed-capital";
@@ -90,8 +91,10 @@ type PortfolioData = {
    *  the fixed return promised to investors. Null for anyone who runs no
    *  methods, and never visible to the investors themselves. */
   margin: MarginOverview | null;
-  /** Catalogue of priceable assets, for configuring holdings. */
+  /** Catalogue of priceable assets, for configuring allocations. */
   priceAssets: AssetOption[];
+  /** Each owned method's allocation policy — where new money goes. */
+  methodAllocations: MethodAllocationSummary[];
   currentUserId: string;
 };
 
@@ -298,6 +301,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                 totals={data.margin.totals}
                 unconfigured={data.margin.unconfigured}
                 assets={data.priceAssets}
+                allocations={data.methodAllocations}
                 hideValues={hideValues}
               />
             </TabsContent>
@@ -489,6 +493,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                 totals={data.margin.totals}
                 unconfigured={data.margin.unconfigured}
                 assets={data.priceAssets}
+                allocations={data.methodAllocations}
                 hideValues={hideValues}
               />
             </TabsContent>

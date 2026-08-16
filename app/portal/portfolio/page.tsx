@@ -11,6 +11,7 @@ import {
 } from "@/lib/services/portfolio-service";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
 import { getMarginOverview } from "@/lib/services/margin-service";
+import { getMethodAllocations } from "@/lib/services/allocation-service";
 import { listPriceAssets } from "@/lib/services/price-service";
 import { getAllUsers } from "@/lib/services/user-service";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
@@ -64,6 +65,19 @@ export default async function PortfolioPage() {
     priceAssetsPromise,
   ]);
 
+  // Allocation policy per owned method. Cheap (one small table) and only
+  // meaningful to the owner, who is the only one who sees the Margin tab.
+  const methodAllocations = await Promise.all(
+    methodInvestors.map(async (m) => ({
+      methodId: m.methodId,
+      allocations: (await getMethodAllocations(m.methodId)).map((a) => ({
+        assetId: a.assetId,
+        symbol: a.symbol,
+        percent: a.percent,
+      })),
+    }))
+  );
+
   let stats = null;
   let transactions: PortfolioTransaction[] = [];
   let chartData: { date: string; value: number }[] = [];
@@ -100,6 +114,7 @@ export default async function PortfolioPage() {
     managedContributions,
     managedSeries,
     margin: methodInvestors.length > 0 ? margin : null,
+    methodAllocations,
     priceAssets: priceAssets.map((a) => ({
       id: a.id,
       symbol: a.symbol,

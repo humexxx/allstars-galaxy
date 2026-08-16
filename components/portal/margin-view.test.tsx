@@ -9,9 +9,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock("@/app/actions/holdings", () => ({
-  deleteHoldingAction: vi.fn(),
-  upsertHoldingAction: vi.fn(),
+vi.mock("@/app/actions/allocations", () => ({
+  setAllocationsAction: vi.fn(),
+  repriceContributionsAction: vi.fn(),
   createPriceAssetAction: vi.fn(),
   setManualPriceAction: vi.fn(),
 }));
@@ -58,6 +58,7 @@ function renderView(over: Partial<Parameters<typeof MarginView>[0]> = {}) {
       }}
       unconfigured={false}
       assets={ASSETS}
+      allocations={[]}
       {...over}
     />
   );
@@ -139,9 +140,29 @@ describe("MarginView", () => {
     expect(screen.getByText(/no investment methods yet/i)).toBeInTheDocument();
   });
 
-  it("prompts for configuration before any capital is assigned", () => {
+  it("prompts to price contributions before anything has been valued", () => {
     renderView({ unconfigured: true });
 
-    expect(screen.getByText(/no capital has been assigned yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/no contribution has been priced yet/i)).toBeInTheDocument();
+  });
+
+  it("shows each method's allocation policy so the next contribution is predictable", () => {
+    renderView({
+      allocations: [
+        {
+          methodId: "m1",
+          allocations: [{ assetId: "asset-ada", symbol: "ADA", percent: 100 }],
+        },
+      ],
+    });
+
+    expect(screen.getByText(/100% ADA/)).toBeInTheDocument();
+  });
+
+  it("reports profit and loss against what was actually invested", () => {
+    // 51,020.4 ADA bought for $6,700, now worth $0.1764 each = $9,000.
+    renderView();
+
+    expect(screen.getByText("$2,300.00")).toBeInTheDocument();
   });
 });

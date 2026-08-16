@@ -225,6 +225,20 @@
       "when": 1786840695250,
       "tag": "0031_eager_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1786847238649,
+      "tag": "0032_flawless_oracle",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1786847244363,
+      "tag": "0033_curly_prism",
+      "breakpoints": true
     }
   ]
 }

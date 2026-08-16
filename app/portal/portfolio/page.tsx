@@ -8,6 +8,7 @@ import {
   getMethodInvestors,
   getManagedContributions,
   getManagedPerformanceSeries,
+  getInvestorTransactions,
 } from "@/lib/services/portfolio-service";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
 import { getMarginOverview } from "@/lib/services/margin-service";
@@ -40,6 +41,7 @@ export default async function PortfolioPage() {
   // Margin is the owner's private view of the same methods; it resolves to an
   // empty overview for anyone who runs none, so it costs nothing to ask for.
   const marginPromise = getMarginOverview(userId);
+  const investorTxPromise = getInvestorTransactions(userId);
   const priceAssetsPromise = listPriceAssets();
   const [
     portfolio,
@@ -50,6 +52,7 @@ export default async function PortfolioPage() {
     managedSeries,
     margin,
     priceAssets,
+    investorTransactions,
   ] = await Promise.all([
     getUserPortfolio(userId),
     // ALL methods, enabled or not: the Methods tab renders
@@ -63,6 +66,7 @@ export default async function PortfolioPage() {
     managedSeriesPromise,
     marginPromise,
     priceAssetsPromise,
+    investorTxPromise,
   ]);
 
   // Allocation policy per owned method. Cheap (one small table) and only
@@ -115,6 +119,16 @@ export default async function PortfolioPage() {
     managedSeries,
     margin: methodInvestors.length > 0 ? margin : null,
     methodAllocations,
+    investorTransactions: investorTransactions.map((t) => ({
+      id: t.id,
+      date: t.date.toISOString(),
+      methodName: t.methodName,
+      investorName: t.investorName,
+      type: t.type,
+      status: t.status,
+      total: t.total,
+      currentValue: t.currentValue,
+    })),
     priceAssets: priceAssets.map((a) => ({
       id: a.id,
       symbol: a.symbol,

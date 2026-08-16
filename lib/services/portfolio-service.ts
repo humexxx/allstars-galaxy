@@ -2,7 +2,7 @@ import "server-only";
 
 import { db } from "@/db";
 import { portfolios, transactions, investmentMethods, users, portfolioSnapshots } from "@/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, ne, desc } from "drizzle-orm";
 import type { Portfolio, PortfolioTransaction, PortfolioStats, PortfolioAsset, MethodInvestors } from "@/types/portfolio";
 import type { ManagedContribution } from "@/lib/finance/managed-capital";
 
@@ -404,4 +404,61 @@ export async function getManagedPerformanceSeries(
       for (const v of latest.values()) total += v;
       return { date: day, value: total };
     });
+}
+
+export type InvestorTransaction = {
+  id: string;
+  date: Date;
+  methodName: string;
+  investorName: string;
+  investorEmail: string | null;
+  type: string;
+  status: string;
+  total: string;
+  initialValue: string | null;
+  currentValue: string | null;
+};
+
+/**
+ * Every transaction other people made in the methods this user runs.
+ *
+ * Unlike `getManagedContributions` this keeps pending and rejected rows: the
+ * owner needs to see what is waiting on them, not only what already settled.
+ * The owner's OWN transactions are excluded because they already appear in
+ * their personal history — listing them twice would double the totals a reader
+ * adds up by eye.
+ */
+export async function getInvestorTransactions(
+  ownerUserId: string
+): Promise<InvestorTransaction[]> {
+  const rows = await db
+    .select({
+      id: transactions.id,
+      date: transactions.date,
+      methodName: investmentMethods.name,
+      investorName: users.fullName,
+      investorEmail: users.email,
+      type: transactions.type,
+      status: transactions.status,
+      total: transactions.total,
+      initialValue: transactions.initialValue,
+      currentValue: transactions.currentValue,
+    })
+    .from(investmentMethods)
+    .innerJoin(transactions, eq(transactions.investmentMethodId, investmentMethods.id))
+    .innerJoin(portfolios, eq(transactions.portfolioId, portfolios.id))
+    .innerJoin(users, eq(portfolios.userId, users.id))
+    .where(
+      and(
+        eq(investmentMethods.ownerUserId, ownerUserId),
+        ne(portfolios.userId, ownerUserId)
+      )
+    )
+    .orderBy(desc(transactions.date));
+
+  return rows.map((r) => ({
+    ...r,
+    date: new Date(r.date),
+    investorName: r.investorName || r.investorEmail?.split("@")[0] || "Unknown",
+  }));
 }

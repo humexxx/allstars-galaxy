@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/chart";
 import { Mono, Text } from "@/components/ui/typography";
 import { formatCurrency } from "@/lib/utils/format";
+import { maskValue } from "@/components/ui/stat-card";
 import type { ChartConfig } from "@/types/chart";
 import {
   aggregateManagedCapital,
@@ -56,14 +57,23 @@ const DATE = new Intl.DateTimeFormat("en-US", {
 export function ManagedCapitalCard({
   contributions,
   performance,
+  hideValues = false,
 }: {
   contributions: ManagedContribution[];
+  /** Masks every amount in this card — the three headline figures, the split
+   *  chart's axis and its tooltip. The owner's chart lives INSIDE this card,
+   *  so without this the "hide values" toggle left the numbers around the
+   *  chart on screen and hid only the KPI grid above it. */
+  hideValues?: boolean;
   /** The standard portfolio value history, folded into this card so owners
    *  get ONE chart card rather than two stacked ones. Kept as a separate view
    *  rather than a second axis: value and contributed capital are different
    *  measures, and sharing an axis would distort both. */
   performance: React.ReactNode;
 }) {
+  const money = (v: number) =>
+    hideValues ? maskValue(formatCurrency(v)) : formatCurrency(v);
+
   const [view, setView] = useState<"performance" | "split">("performance");
   // View-only, like the plan chart's third-party toggle: nothing is persisted,
   // and a reload comes back to "everything".
@@ -184,7 +194,7 @@ export function ManagedCapitalCard({
                 Yours
               </Text>
               <Mono className="block text-lg font-semibold tabular-nums">
-                {formatCurrency(data.ownHolding)}
+                {money(data.ownHolding)}
               </Mono>
             </div>
             <div>
@@ -192,7 +202,7 @@ export function ManagedCapitalCard({
                 For others
               </Text>
               <Mono className="block text-lg font-semibold tabular-nums">
-                {formatCurrency(data.thirdPartyHolding)}
+                {money(data.thirdPartyHolding)}
               </Mono>
             </div>
             <div>
@@ -200,7 +210,7 @@ export function ManagedCapitalCard({
                 Total
               </Text>
               <Mono className="block text-lg font-semibold tabular-nums text-muted-foreground">
-                {formatCurrency(totalHolding)}
+                {money(totalHolding)}
               </Mono>
             </div>
           </div>
@@ -257,10 +267,29 @@ export function ManagedCapitalCard({
                   axisLine={false}
                   width={52}
                   tickFormatter={(v: number) =>
-                    v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)
+                    hideValues
+                      ? totalHolding === 0
+                        ? ""
+                        : `${Math.round((v / totalHolding) * 100)}%`
+                      : v >= 1000
+                        ? `${Math.round(v / 1000)}k`
+                        : String(v)
                   }
                 />
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={
+                        hideValues
+                          ? (value) =>
+                              totalHolding === 0
+                                ? "—"
+                                : `${(((value as number) / totalHolding) * 100).toFixed(1)}%`
+                          : undefined
+                      }
+                    />
+                  }
+                />
                 <ChartLegend content={<ChartLegendContent />} />
                 <Area
                   dataKey="own"

@@ -39,7 +39,7 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `snapshot.ts`
 
 ## Components
-- `components/portal/portfolio-client.tsx` — page shell: plan-style header (Heading h3 + muted Text), 4-card KPI grid (Total value with eye toggle, All-time profit, Cost basis, Active positions), Overview/Transactions tabs. Registers `Show charts`, `Hide values`, and admin `Manual snapshot` / `Clear manual snapshots` into the global dev drawer via `useRegisterDevTool` from `components/dev-tools/`.
+- `components/portal/portfolio-client.tsx` — page shell: plan-style header (Heading h3 + muted Text), 4-card KPI grid (Total value with eye toggle, All-time profit, Cost basis, Active positions), Overview / Transactions / Methods / Managed tabs. Registers `Show charts`, `Hide values`, and admin `Manual snapshot` / `Clear manual snapshots` into the global dev drawer via `useRegisterDevTool` from `components/dev-tools/`.
 - `components/portfolio/investment-methods-view.tsx` — `/portal/investment-methods` view: plan-style header, 4-card KPI grid (Methods, Authors, Avg monthly ROI, Best monthly ROI), inline Risk-profile breakdown bar, grouped-by-author method cards with risk-tinted badges. Registers a `Show disabled methods` toggle in the dev drawer that hot-reveals methods normally filtered out.
 - `components/portfolio/` — supporting pieces: transactions table, performance chart (lazy-loaded), add-transaction dialog, manual-snapshot dialog, asset/allocation views. *Removed in the redesign:* `portfolio-header.tsx`, `stats-cards.tsx` (their concerns moved into `portfolio-client.tsx` and the dev drawer).
 
@@ -74,6 +74,23 @@ metadata. Interest math is shared with [Finance](./finance.md).
   filters to enabled itself and has a dev toggle for the rest; the transaction
   form gets the enabled subset. The tabs render **even without a portfolio**,
   so the catalogue stays browsable before you own anything.
+- **Four tabs, not five.** Investors and Margin were both owner-only views of
+  the same methods, so they are two sections of one **Managed** tab (margin
+  first — the answer — then who is invested). Non-owners see three.
+- **Transactions lists two tables**, the owner's own history and what other
+  people did in the methods they run (`getInvestorTransactions`, which keeps
+  pending and rejected rows so the owner sees what is waiting on them). They
+  are NOT merged: mixing somebody else's movements into a personal log makes
+  the running totals of both meaningless. The owner's own rows are excluded
+  from the second table because they already appear in the first.
+- **`hideValues` must reach every amount, including inside charts.**
+  `ManagedCapitalCard` was missing the prop, so its three headline figures,
+  the split chart's axis and its tooltip stayed readable while the KPI grid
+  masked — and since the owner's performance chart renders INSIDE that card,
+  it read as the chart leaking. Locked by
+  `components/portfolio/managed-capital.test.tsx`, which asserts no `$` survives
+  in masked mode. Percentages deliberately stay visible: a share is not a
+  balance.
 - **CSV export** of the transaction history: `GET /api/portfolio/export`,
   gated by `requireEffectiveContext` so an impersonating admin exports what
   they see. Cells starting with `=`, `+`, `-` or `@` are prefixed with a quote

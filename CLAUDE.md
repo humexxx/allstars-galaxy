@@ -29,7 +29,7 @@ Per-module reference docs live in [`docs/modules/`](docs/modules/).
 | [`docs/modules/<module>.md`](docs/modules/) | One file per product module: routes, actions, services, schemas, tables |
 | [`docs/TYPOGRAPHY.md`](docs/TYPOGRAPHY.md) | Font system + UI typography primitives (required for UI work) |
 | [`docs/SPACING.md`](docs/SPACING.md) | Spacing/padding/margin scale + app-shell offsets (required for UI work) |
-| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Environment failures that look like app bugs (DNS/`ENOTFOUND`, resolver cache) |
+| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Environment failures that look like app bugs (DNS/`ENOTFOUND`, iCloud Private Relay) |
 | [`/app/actions/AGENTS.md`](app/actions/AGENTS.md) | Server-action patterns (the *how*) |
 | [`/lib/services/AGENTS.md`](lib/services/AGENTS.md) | Service-layer patterns (the *how*) |
 | [`.github/skills/`](.github/skills/) | Reusable playbooks: DB migration, service creation, server action creation, responsive UI, data-density UI patterns |
@@ -132,6 +132,30 @@ separation, contrast). Re-run the validator from the `dataviz` skill before
 changing any slot, in **both** modes — the dark steps are chosen for the dark
 surface, not derived from the light ones.
 
+### Roles
+Three, and the role answers exactly one question — may this account create
+investment methods? `user` (client) no, `provider` yes, `admin` yes plus
+impersonation and the admin area. **Which** methods somebody runs is NOT in the
+role: that is `investment_methods.owner_user_id`. `UserRole` in
+[`types/user.ts`](types/user.ts) is the single definition — the union was once
+spelled out by hand in ten files, which is how a role ends up half-added.
+
+### UI gotchas that only show up on screen
+Both live in [`docs/SPACING.md`](docs/SPACING.md) and both read as perfectly
+sensible markup:
+- `Card` already supplies vertical padding. Adding `pt-6` to `CardContent`
+  *doubles* the top gap instead of setting it.
+- `Card` clips its children. A badge meant to straddle its edge must be a
+  sibling, not a child, or it renders sliced in half.
+- To line figures up across a row of cards, pin them to the bottom
+  (`mt-auto`); never try to equalise header heights, and keep variable content
+  *above* the figures.
+
+### Environment troubleshooting
+`sh ~/.claude/scripts/diagnose-dns.sh` — machine-level, kept outside the repo
+because the fault is not this project's. See
+[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
+
 ### Language
 All code, comments, and documentation in **English**.
 
@@ -182,6 +206,12 @@ is missing and `DATABASE_URL` points at the transaction pooler.
     `@/lib/services/impersonation`, then scope every query to
     `ctx.effectiveUserId` (this is what honours an active impersonation
     session).
+  - **Method-owner actions** → `requireProvider()` from
+    `@/lib/services/auth-server` gates the *creation* of investment methods.
+    Everything about a method that already exists is gated on OWNERSHIP
+    (`investment_methods.owner_user_id`), not on the role — see
+    [`docs/modules/auth.md`](docs/modules/auth.md) for why the role answers
+    only that one question.
   - **Admin-only actions** → `requireAdmin()` / `requireAdminCached()` from
     `@/lib/services/auth-server`.
   - **Plain "is signed in" checks** → `requireAuth()` / `requireAuthCached()`

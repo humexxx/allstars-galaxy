@@ -27,7 +27,10 @@ type PerformanceChartProps = {
   }>;
 };
 
-export function PerformanceChart({ data }: PerformanceChartProps) {
+export function PerformanceChart({
+  data,
+  hideValues = false,
+}: PerformanceChartProps & { hideValues?: boolean }) {
   const [timeRange, setTimeRange] = useState<Range>("All");
 
   const filteredData = useMemo(() => {
@@ -58,7 +61,11 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
           </Heading>
           <div className="flex items-baseline gap-2">
             <Mono className="text-2xl font-semibold tabular-nums sm:text-3xl">
-              ${last.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              {hideValues
+                ? `${positive ? "+" : "−"}${Math.abs(deltaPct).toFixed(1)}%`
+                : `$${last.toLocaleString(undefined, {
+                    maximumFractionDigits: 2,
+                  })}`}
             </Mono>
             {filteredData.length > 1 && (
               <Mono
@@ -69,7 +76,12 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
                     : "text-rose-600 dark:text-rose-400"
                 )}
               >
-                {positive ? "↑" : "↓"} ${Math.abs(delta).toLocaleString(undefined, { maximumFractionDigits: 0 })} ({Math.abs(deltaPct).toFixed(1)}%)
+                {positive ? "↑" : "↓"}{" "}
+                {hideValues
+                  ? "over this range"
+                  : `$${Math.abs(delta).toLocaleString(undefined, {
+                      maximumFractionDigits: 0,
+                    })} (${Math.abs(deltaPct).toFixed(1)}%)`}
               </Mono>
             )}
           </div>
@@ -129,7 +141,13 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
             tickMargin={4}
             width={56}
             tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-            tickFormatter={(value) => `$${value.toLocaleString()}`}
+            tickFormatter={(value: number) =>
+              hideValues
+                ? first === 0
+                  ? ""
+                  : `${(((value - first) / first) * 100).toFixed(0)}%`
+                : `$${value.toLocaleString()}`
+            }
             domain={["auto", "auto"]}
           />
           <ChartTooltip
@@ -137,6 +155,16 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
             content={
               <ChartTooltipContent
                 indicator="line"
+                // Hovering must not leak the amount the axis is hiding.
+                formatter={(value) =>
+                  hideValues
+                    ? first === 0
+                      ? "—"
+                      : `${((((value as number) - first) / first) * 100).toFixed(1)}% vs start`
+                    : `$${(value as number).toLocaleString(undefined, {
+                        maximumFractionDigits: 2,
+                      })}`
+                }
                 labelFormatter={(value) => {
                   const date = new Date(value);
                   return date.toLocaleDateString("en-US", {

@@ -20,6 +20,18 @@ type StatCardProps = {
   className?: string;
 };
 
+/**
+ * Masks a figure without changing how much room it takes.
+ *
+ * The old mask was a fixed `****`, which is both narrower than the number it
+ * replaced and a different glyph width, so toggling privacy made every card
+ * resize and the page jump. Bullets in a tabular-nums span occupy one digit
+ * slot each, so a masked value is exactly as wide as the real one.
+ */
+export function maskValue(value: string): string {
+  return "•".repeat(Math.max(3, value.replace(/[^\d]/g, "").length));
+}
+
 export function statToneClass(tone?: StatCardTone): string {
   if (tone === "positive") return "text-emerald-600 dark:text-emerald-400";
   if (tone === "negative") return "text-rose-600 dark:text-rose-400";

@@ -12,8 +12,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { InvestmentMethodsView } from "@/components/portfolio/investment-methods-view";
 import { MethodInvestorsView } from "@/components/portfolio/method-investors";
 import { ManagedCapitalCard } from "@/components/portfolio/managed-capital";
+import { aggregateManagedCapital } from "@/lib/finance/managed-capital";
 import type { ManagedContribution } from "@/lib/finance/managed-capital";
-import { StatCard, statToneClass } from "@/components/ui/stat-card";
+import { StatCard, maskValue, statToneClass } from "@/components/ui/stat-card";
 import { Sparkline } from "@/components/portfolio/sparkline";
 import { Heading, Text } from "@/components/ui/typography";
 import {
@@ -106,6 +107,37 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   // the full list because it filters (and can reveal disabled) itself.
   // The Investors tab only exists for people who actually run methods.
   const ownsMethods = data.methodInvestors.length > 0;
+
+  // "All" = own portfolio + everything managed for others; "mine" strips the
+  // third party back out.
+  const [scope, setScope] = useState<"all" | "mine">("all");
+
+  const managed = useMemo(
+    () => aggregateManagedCapital(data.managedContributions),
+    [data.managedContributions]
+  );
+
+  /**
+   * DISPLAY ONLY. `getPortfolioStats` is scoped to the user's own portfolio and
+   * is what the finance plans read for `includePortfolio` — combining there
+   * would quietly fold other people's money into the owner's projected net
+   * worth. So the combination happens here, in the view, and nowhere else.
+   */
+  const scopedStats = useMemo(() => {
+    const base = data.stats;
+    if (!base || !ownsMethods || scope === "mine") return base;
+    const totalValue = base.totalValue + managed.thirdPartyHolding;
+    const costBasis = base.costBasis + managed.thirdPartyContributed;
+    const allTimeProfit = totalValue - costBasis;
+    return {
+      ...base,
+      totalValue,
+      costBasis,
+      allTimeProfit,
+      allTimeProfitPercentage:
+        costBasis > 0 ? (allTimeProfit / costBasis) * 100 : 0,
+    };
+  }, [data.stats, ownsMethods, scope, managed]);
 
   const enabledMethods = useMemo(
     () => data.methods.filter((m) => m.enabled),
@@ -259,13 +291,13 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
     );
   }
 
-  const stats = data.stats;
+  const stats = scopedStats;
 
   // Built once and handed to whichever branch renders it, so the empty state
   // and the chart itself can't drift apart between the two.
   const performanceChart =
     data.chartData.length > 0 ? (
-      <PerformanceChart data={data.chartData} />
+      <PerformanceChart data={data.chartData} hideValues={hideValues} />
     ) : (
       <Card className="flex h-96 items-center justify-center bg-card">
         <div className="text-center">
@@ -341,6 +373,38 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
+            {/* Scope: combined by default, because what an owner manages IS
+                the headline for them. "Only mine" strips the third party back
+                out. Display-only — see scopedStats. */}
+            {ownsMethods && (
+              <div
+                role="group"
+                aria-label="Figures scope"
+                className="inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
+              >
+                {(
+                  [
+                    ["all", "All capital"],
+                    ["mine", "Only mine"],
+                  ] as const
+                ).map(([v, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setScope(v)}
+                    aria-pressed={scope === v}
+                    className={`rounded px-2.5 py-1 text-xs font-medium transition ${
+                      scope === v
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Headline numbers first, trend second — attention lands on the
                 top row, so the figures people came for go there. */}
             {stats && (
@@ -457,10 +521,14 @@ function PortfolioKpiGrid({
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
         label="Total value"
-        value={hideValues ? "****" : formatCurrency(stats.totalValue)}
+        value={
+          hideValues
+            ? maskValue(formatCurrency(stats.totalValue))
+            : formatCurrency(stats.totalValue)
+        }
         tone="positive"
         sublabel="Current market value"
-        chart={hideValues ? undefined : <Sparkline data={sparkline} />}
+        chart={<Sparkline data={sparkline} />}
         action={
           <button
             type="button"
@@ -479,13 +547,23 @@ function PortfolioKpiGrid({
       />
       <StatCard
         label="All-time profit"
-        value={hideValues ? "****" : formatSignedCurrency(stats.allTimeProfit)}
+        value={
+          hideValues
+            ? `${stats.allTimeProfit >= 0 ? "+" : "−"}${formatPercent(
+                Math.abs(stats.allTimeProfitPercentage)
+              )}`
+            : formatSignedCurrency(stats.allTimeProfit)
+        }
         tone={profitTone}
-        sublabel={profitSublabel}
+        sublabel={hideValues ? "All-time return" : profitSublabel}
       />
       <StatCard
         label="Cost basis"
-        value={hideValues ? "****" : formatCurrency(stats.costBasis)}
+        value={
+          hideValues
+            ? maskValue(formatCurrency(stats.costBasis))
+            : formatCurrency(stats.costBasis)
+        }
         sublabel="Total invested"
       />
       <StatCard

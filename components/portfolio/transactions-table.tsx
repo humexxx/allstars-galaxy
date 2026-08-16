@@ -52,6 +52,7 @@ export type TransactionRow = {
 export function TransactionsTable({
   rows,
   showInvestor = false,
+  showStatus = false,
   hideValues = false,
   emptyTitle = "No transactions yet",
   emptyDescription = "Add your first transaction to get started.",
@@ -59,6 +60,10 @@ export function TransactionsTable({
   rows: TransactionRow[];
   /** Adds the Investor column — only meaningful for other people's rows. */
   showInvestor?: boolean;
+  /** Off by default: the list is filtered to approved rows, so a column
+   *  reading "approved" on every line is a column of noise. It comes back
+   *  with the detailed view, where the other statuses do too. */
+  showStatus?: boolean;
   hideValues?: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
@@ -91,7 +96,7 @@ export function TransactionsTable({
             <TableHead className="text-right">Worth now</TableHead>
             <TableHead className="text-right">P/L</TableHead>
             <TableHead className="text-right">Owed</TableHead>
-            <TableHead>Status</TableHead>
+            {showStatus && <TableHead>Status</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -213,9 +218,11 @@ export function TransactionsTable({
                   )}
                 </TableCell>
 
-                <TableCell>
-                  <StatusBadge status={r.status} />
-                </TableCell>
+                {showStatus && (
+                  <TableCell>
+                    <StatusBadge status={r.status} />
+                  </TableCell>
+                )}
               </TableRow>
             );
           })}

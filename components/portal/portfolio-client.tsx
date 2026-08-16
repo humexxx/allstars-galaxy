@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Camera, Download, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
+import { Camera, Download, Eye, EyeOff, ListFilter, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -139,6 +139,25 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   // the full list because it filters (and can reveal disabled) itself.
   // The Investors tab only exists for people who actually run methods.
   const ownsMethods = data.methodInvestors.length > 0;
+
+  // Approved-only by default: those are the movements that actually happened.
+  // Pending and rejected rows matter, but they are the exception you go
+  // looking for, not the default reading of a history.
+  const [detailedTransactions, setDetailedTransactions] = useState(false);
+
+  const visibleRows = useMemo(() => {
+    const approved = <T extends { status: string }>(list: T[]) =>
+      detailedTransactions ? list : list.filter((t) => t.status === "approved");
+    return {
+      own: approved(data.transactionRows),
+      investors: approved(data.investorTransactions),
+      hiddenCount:
+        data.transactionRows.length +
+        data.investorTransactions.length -
+        approved(data.transactionRows).length -
+        approved(data.investorTransactions).length,
+    };
+  }, [data.transactionRows, data.investorTransactions, detailedTransactions]);
 
   const ownerKpis = useMemo(() => {
     const h = data.marginHistory;
@@ -448,6 +467,26 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           </TabsContent>
 
           <TabsContent value="transactions" className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Text variant="small" className="text-muted-foreground">
+                {detailedTransactions
+                  ? "Every movement, including pending and rejected."
+                  : `Approved movements only${
+                      visibleRows.hiddenCount > 0
+                        ? ` · ${visibleRows.hiddenCount} hidden`
+                        : ""
+                    }`}
+              </Text>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDetailedTransactions((v) => !v)}
+              >
+                <ListFilter className="size-4" />
+                {detailedTransactions ? "Simple view" : "Detailed view"}
+              </Button>
+            </div>
+
             <div className="space-y-3">
               {ownsMethods && (
                 <Heading level="h5" as="h2" className="text-muted-foreground">
@@ -456,7 +495,11 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
               )}
               <Card className="bg-card">
                 <CardContent className="p-0 sm:p-6">
-                  <TransactionsTable rows={data.transactionRows} hideValues={hideValues} />
+                  <TransactionsTable
+                    rows={visibleRows.own}
+                    showStatus={detailedTransactions}
+                    hideValues={hideValues}
+                  />
                 </CardContent>
               </Card>
             </div>
@@ -475,8 +518,9 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                 <Card className="bg-card">
                   <CardContent className="p-0 sm:p-6">
                     <TransactionsTable
-                      rows={data.investorTransactions}
+                      rows={visibleRows.investors}
                       showInvestor
+                      showStatus={detailedTransactions}
                       hideValues={hideValues}
                       emptyTitle="No outside investors yet"
                       emptyDescription="Transactions other people make in your methods appear here."

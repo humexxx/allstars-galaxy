@@ -120,6 +120,12 @@ metadata. Interest math is shared with [Finance](./finance.md).
   somebody else's movements into a personal log makes the running totals of
   both meaningless. The owner's own rows are excluded from the second table
   because they already appear in the first.
+- **Transactions default to approved only, and the Status column is hidden.**
+  A column reading "approved" on every line is a column of noise. Pending and
+  rejected rows matter, but they are the exception you go looking for, not the
+  default reading of a history — a count of what is hidden sits above the
+  table so nothing disappears silently. **Detailed view** (top right) brings
+  back both the other statuses and the column.
 - **Every transaction row shows the position it created** — units at that
   day's price (`Bought`), what they are worth now, and the P/L. A contribution
   is otherwise just an amount, and the whole point of the model is that the

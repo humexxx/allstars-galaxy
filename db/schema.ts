@@ -209,6 +209,92 @@ export const transactionAllocations = pgTable(
   ]
 );
 
+/**
+ * Who is going on a trip.
+ *
+ * `email` is optional and, for now, purely informational — nothing is sent.
+ * A member is not a user account: most travelling companions will never sign
+ * in, and requiring an account to appear on a trip would make the common case
+ * impossible.
+ */
+export const tripMembers = pgTable(
+  "trip_members",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    email: text("email"),
+    /** Share of the trip's cost, 0-100. NULL = split the remainder equally,
+     *  which is what most trips want and what nobody should have to type. */
+    sharePercent: numeric("share_percent", { precision: 6, scale: 3 }),
+    sortOrder: real("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("trip_members_trip_id_idx").on(t.tripId),
+    check(
+      "trip_members_share_chk",
+      sql`${t.sharePercent} IS NULL OR (${t.sharePercent} >= 0 AND ${t.sharePercent} <= 100)`
+    ),
+  ]
+);
+
+/**
+ * Who pays for ONE activity, when it is not the trip's usual split.
+ *
+ * No rows means "split it the way the trip splits". Rows mean this activity is
+ * different — one person covering dinner, two sharing a room. Modelled as an
+ * override rather than a full split table so the common case stores nothing.
+ */
+export const tripItemPayers = pgTable(
+  "trip_item_payers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => tripItems.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => tripMembers.id, { onDelete: "cascade" }),
+    /** NULL = split this activity equally among the listed payers. */
+    sharePercent: numeric("share_percent", { precision: 6, scale: 3 }),
+  },
+  (t) => [
+    index("trip_item_payers_item_id_idx").on(t.itemId),
+    uniqueIndex("trip_item_payers_item_member_uq").on(t.itemId, t.memberId),
+  ]
+);
+
+/**
+ * Money a member has already put in.
+ *
+ * Kept apart from what they OWE: one is a fact about the past, the other is a
+ * consequence of the split. Netting them into a single number would destroy
+ * the ability to say why somebody is square.
+ */
+export const tripContributions = pgTable(
+  "trip_contributions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => tripMembers.id, { onDelete: "cascade" }),
+    amount: numeric("amount", { precision: 20, scale: 2 }).notNull(),
+    note: text("note"),
+    paidOn: date("paid_on"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("trip_contributions_trip_id_idx").on(t.tripId),
+    check("trip_contributions_amount_chk", sql`${t.amount} >= 0`),
+  ]
+);
+
 export const portfolios = pgTable("portfolios", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id")
@@ -956,7 +1042,10 @@ export const tripItems = pgTable(
     price: numeric("price", { precision: 20, scale: 2 }),
     // Calendar day this item happens on (date-only, matches trips date columns).
     // Allows grouping by day in the UI without timezone math.
+    // An activity can span days — a week-long cruise is one activity, not
+    // seven. `scheduledOn` is the start; null `endsOn` means a single day.
     scheduledOn: date("scheduled_on"),
+    endsOn: date("ends_on"),
     notes: text("notes"),
     sortOrder: real("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -980,6 +1069,12 @@ export const tripPhotos = pgTable(
     tripId: uuid("trip_id")
       .notNull()
       .references(() => trips.id, { onDelete: "cascade" }),
+    // When set, the photo belongs to that activity rather than the trip's own
+    // gallery. Nullable rather than a second table: a photo is a photo, and two
+    // tables would mean two uploaders and two delete paths.
+    itemId: uuid("item_id").references((): AnyPgColumn => tripItems.id, {
+      onDelete: "cascade",
+    }),
     url: text("url").notNull(),
     // Storage object key for uploads (e.g. `user-id/trip-id/uuid.jpg`). Null for
     // external URLs. Used at deletion time to remove the underlying file.
@@ -1010,6 +1105,10 @@ export const tripShares = pgTable(
     // Revoked shares stay around as audit history but stop resolving on the
     // public page. Hard delete is also offered in the UI for cleanup.
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    // What the recipient may see. Defaults are the safest reading of "share my
+    // trip": the plan, not the money and not who else is coming.
+    showPrices: boolean("show_prices").notNull().default(false),
+    showMembers: boolean("show_members").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

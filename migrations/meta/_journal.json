@@ -281,6 +281,20 @@
       "when": 1786864717811,
       "tag": "0039_cuddly_vulcan",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1786902849084,
+      "tag": "0040_yummy_firestar",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1786902899505,
+      "tag": "0041_amazing_blue_marvel",
+      "breakpoints": true
     }
   ]
 }

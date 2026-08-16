@@ -78,6 +78,10 @@ computed height, not a spacing step.
 - Card padding comes from the shadcn `Card`/`CardHeader`/`CardContent`
   primitives — don't override it with custom `p-*` unless a design genuinely
   needs it.
+- **`Card` clips its children (`overflow-hidden`).** Anything meant to straddle
+  its edge — a chip at `-top-2.5`, a notch, a floating label — renders sliced in
+  half if it is a *child*. Make it a sibling instead: wrap the card in a
+  `relative` container and position the badge against that.
 - **Never add `pt-6` to `CardContent`.** `Card` already carries the vertical
   padding (`py-6`, or `py-4` at `size="sm"`); `CardContent` supplies only the
   horizontal `px-6`. Adding `pt-6` therefore *doubles* the top gap to 48px

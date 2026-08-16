@@ -608,19 +608,24 @@ export function PlanEditor({
             // cycle figures as compact rows (tap a row for its breakdown) — and,
             // below it, the debt payoff strategy card when the plan has debts.
             <>
-            <Card
-              className={cn(
-                // lg:flex-1 — fills the sidebar column so its bottom edge tracks
-                // the main panel's fixed height (see ProjectionPanel's grid).
-                "relative transition-all duration-200 lg:flex-1",
-                isPreview && "bg-muted/40 ring-1 ring-foreground/10"
-              )}
-            >
+            {/* The preview chip straddles the card's top edge, and `Card`
+                clips its children (`overflow-hidden`) — so it has to be a
+                SIBLING of the card, not a child, or it renders sliced in half.
+                This wrapper is what it positions against. */}
+            <div className="relative flex min-h-0 flex-col lg:flex-1">
               {isPreview && (
                 <div className="pointer-events-none absolute -top-2.5 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-background px-2.5 py-0.5 text-2xs font-medium shadow-sm">
                   {hoverFigures.label}
                 </div>
               )}
+            <Card
+              className={cn(
+                // lg:flex-1 — fills the sidebar column so its bottom edge tracks
+                // the main panel's fixed height (see ProjectionPanel's grid).
+                "transition-all duration-200 lg:flex-1",
+                isPreview && "bg-muted/40 ring-1 ring-foreground/10"
+              )}
+            >
               <CardContent className="space-y-4 pt-4">
                 <div className="flex flex-col items-center gap-1.5">
                   <FinancialHealthDonut
@@ -720,6 +725,7 @@ export function PlanEditor({
                 </div>
               </CardContent>
             </Card>
+            </div>
             {ghost && (
               <ScenarioDeltaCard ghost={ghost} projection={projection} />
             )}

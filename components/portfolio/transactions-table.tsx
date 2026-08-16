@@ -179,6 +179,17 @@ export function TransactionsTable({
                   >
                     {pl === null ? "—" : money(pl)}
                   </Mono>
+                  {pl !== null && invested > 0 && (
+                    <Mono
+                      className={cn(
+                        "block text-2xs tabular-nums",
+                        statToneClass(pl >= 0 ? "positive" : "negative")
+                      )}
+                    >
+                      {pl >= 0 ? "+" : ""}
+                      {((pl / invested) * 100).toFixed(1)}%
+                    </Mono>
+                  )}
                 </TableCell>
 
                 {/* What the investor is promised — fixed, and unrelated to P/L. */}

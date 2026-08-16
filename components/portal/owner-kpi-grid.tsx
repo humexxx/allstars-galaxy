@@ -44,15 +44,24 @@ export function OwnerKpiGrid({
     return hideValues ? maskValue(formatted) : formatted;
   };
 
+  // Every figure carries a share that still reads when the amount is masked.
+  // Contributed is the base everything else is measured against, so its own
+  // share is trivially 100% — it is shown so the row reads consistently.
   const coverage = kpis.liability > 0 ? (kpis.deployed / kpis.liability) * 100 : null;
   const vsContributed =
     kpis.contributed > 0 ? ((kpis.deployed - kpis.contributed) / kpis.contributed) * 100 : null;
+  const owedShare =
+    kpis.contributed > 0 ? (kpis.liability / kpis.contributed) * 100 : null;
+  const marginShare = kpis.liability > 0 ? (kpis.margin / kpis.liability) * 100 : null;
+  const pct = (v: number | null, signed = true) =>
+    v === null ? undefined : `${signed && v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
         label="Contributed"
         value={money(kpis.contributed)}
+        percent="100%"
         sublabel="Cash in, yours and theirs"
         action={
           <Button
@@ -71,6 +80,7 @@ export function OwnerKpiGrid({
       <StatCard
         label="Allocations today"
         value={money(kpis.deployed)}
+        percent={pct(vsContributed)}
         tone={vsContributed !== null && vsContributed < 0 ? "negative" : "positive"}
         sublabel={
           vsContributed === null
@@ -82,6 +92,7 @@ export function OwnerKpiGrid({
       <StatCard
         label="Owed to investors"
         value={money(kpis.liability)}
+        percent={pct(owedShare, false)}
         sublabel={
           coverage === null
             ? "Their promised return"
@@ -92,6 +103,7 @@ export function OwnerKpiGrid({
       <StatCard
         label="Margin"
         value={money(kpis.margin)}
+        percent={pct(marginShare)}
         tone={kpis.margin >= 0 ? "positive" : "negative"}
         sublabel={
           kpis.monthlyChange === null
@@ -102,6 +114,13 @@ export function OwnerKpiGrid({
                 hideValues
                   ? maskValue(formatCurrency(Math.abs(kpis.monthlyChange)))
                   : formatCurrency(Math.abs(kpis.monthlyChange))
+              }${
+                kpis.liability > 0
+                  ? ` (${kpis.monthlyChange >= 0 ? "+" : ""}${(
+                      (kpis.monthlyChange / kpis.liability) *
+                      100
+                    ).toFixed(1)}%)`
+                  : ""
               } this month`
         }
       />

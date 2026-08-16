@@ -11,6 +11,10 @@ type StatCardProps = {
   value: ReactNode;
   sublabel?: ReactNode;
   tone?: StatCardTone;
+  /** Shown beside the figure and NEVER masked. A share is not a balance: it
+   *  says how things stand without revealing how much money is involved,
+   *  which is the whole point of masked mode. */
+  percent?: string;
   action?: ReactNode;
   /** Optional bare trend line under the figure — a sparkline, no axes and no
    *  labels. It gives the number a direction without spending a whole chart
@@ -43,6 +47,7 @@ export function StatCard({
   value,
   sublabel,
   tone,
+  percent,
   action,
   chart,
   className,
@@ -54,14 +59,21 @@ export function StatCard({
         {action}
       </CardHeader>
       <CardContent className="space-y-1">
-        <Mono
-          className={cn(
-            "block text-xl font-semibold tabular-nums sm:text-2xl",
-            statToneClass(tone)
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <Mono
+            className={cn(
+              "text-xl font-semibold tabular-nums sm:text-2xl",
+              statToneClass(tone)
+            )}
+          >
+            {value}
+          </Mono>
+          {percent && (
+            <Mono className={cn("text-sm tabular-nums", statToneClass(tone))}>
+              {percent}
+            </Mono>
           )}
-        >
-          {value}
-        </Mono>
+        </div>
         {sublabel && (
           <Text variant="small" as="div">
             {sublabel}

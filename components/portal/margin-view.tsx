@@ -106,16 +106,30 @@ export function MarginView({
         <StatCard
           label="Deployed value"
           value={show(totals.assets, hideValues)}
+          percent={
+            totals.liability > 0
+              ? `${((totals.assets / totals.liability) * 100).toFixed(1)}%`
+              : undefined
+          }
           sublabel="What the holdings are worth today"
         />
         <StatCard
           label="Owed to investors"
           value={show(totals.liability, hideValues)}
+          percent="100%"
           sublabel="Their promised return, compounded"
         />
         <StatCard
           label="Margin"
           value={show(totals.margin, hideValues)}
+          percent={
+            totals.liability > 0
+              ? `${totals.margin >= 0 ? "+" : ""}${(
+                  (totals.margin / totals.liability) *
+                  100
+                ).toFixed(1)}%`
+              : undefined
+          }
           tone={totals.margin >= 0 ? "positive" : "negative"}
           sublabel={
             totals.margin >= 0
@@ -190,6 +204,12 @@ export function MarginView({
                       )}`}
                     >
                       {show(method.margin, hideValues)}
+                      {method.liability > 0 && (
+                        <span className="ml-2 text-sm">
+                          {method.marginPercent >= 0 ? "+" : ""}
+                          {method.marginPercent.toFixed(1)}%
+                        </span>
+                      )}
                     </Mono>
                     <Text className="text-2xs text-muted-foreground">
                       {method.liability > 0

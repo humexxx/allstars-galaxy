@@ -127,6 +127,19 @@ describe("MarginView", () => {
     expect(screen.getAllByText(/•{3,}/).length).toBeGreaterThan(0);
   });
 
+  it("keeps the percentages readable once the amounts are masked", () => {
+    // The point of masked mode: you can still tell how things stand without
+    // showing anyone how much money is involved. Balances go, shares stay.
+    const { container } = renderView({ hideValues: true });
+
+    for (const balance of ["9,000", "7,277", "1,722", "1,050", "6,700", "2,300"]) {
+      expect(container.textContent).not.toContain(balance);
+    }
+    // 9000 deployed against 7277.87 owed, and the margin as a share of it.
+    expect(container.textContent).toContain("123.7%");
+    expect(container.textContent).toContain("+23.7%");
+  });
+
   it("still prices individual holdings when totals are hidden", () => {
     // A unit price is not a balance — hiding it would make the table
     // unreadable without protecting anything.

@@ -68,6 +68,9 @@ export function InvestorBreakdown({
   };
 
   const active = rows.find((r) => r.investorId === selected) ?? null;
+  // Each chip shows the person's share of the pool, so masked mode still says
+  // who carries most of the money.
+  const totalContributed = rows.reduce((sum, r) => sum + r.contributed, 0);
 
   return (
     <div className="space-y-4">
@@ -97,6 +100,11 @@ export function InvestorBreakdown({
                 )}
               >
                 {money(r.contributed)}
+                {totalContributed > 0 && (
+                  <span className="ml-1 text-muted-foreground">
+                    {((r.contributed / totalContributed) * 100).toFixed(0)}%
+                  </span>
+                )}
               </Mono>
             </span>
           </Button>
@@ -107,15 +115,45 @@ export function InvestorBreakdown({
         <Card>
           <CardContent className="space-y-5 pt-6">
             <div className="grid gap-4 sm:grid-cols-4">
-              <Figure label="Contributed" value={money(active.contributed)} />
+              <Figure label="Contributed" value={money(active.contributed)} percent="100%" />
               <Figure
                 label={active.isOwn ? "Your balance" : "You owe them"}
                 value={money(active.owed)}
+                percent={
+                  active.contributed > 0
+                    ? `+${(
+                        ((active.owed - active.contributed) / active.contributed) *
+                        100
+                      ).toFixed(1)}%`
+                    : undefined
+                }
               />
-              <Figure label="Their money is worth" value={money(active.positionValue)} />
+              <Figure
+                label="Their money is worth"
+                value={money(active.positionValue)}
+                percent={
+                  active.contributed > 0
+                    ? `${(
+                        ((active.positionValue - active.contributed) / active.contributed) *
+                        100
+                      ).toFixed(1)}%`
+                    : undefined
+                }
+                tone={
+                  active.positionValue >= active.contributed ? "positive" : "negative"
+                }
+              />
               <Figure
                 label={active.isOwn ? "Gain on your own" : "Your margin on them"}
                 value={money(active.profitLoss)}
+                percent={
+                  active.owed > 0
+                    ? `${active.profitLoss >= 0 ? "+" : ""}${(
+                        (active.profitLoss / active.owed) *
+                        100
+                      ).toFixed(1)}%`
+                    : undefined
+                }
                 tone={active.profitLoss >= 0 ? "positive" : "negative"}
               />
             </div>
@@ -184,6 +222,17 @@ export function InvestorBreakdown({
                             >
                               {money(pl)}
                             </Mono>
+                            {pl !== null && p.invested > 0 && (
+                              <Mono
+                                className={cn(
+                                  "block text-2xs tabular-nums",
+                                  statToneClass(pl >= 0 ? "positive" : "negative")
+                                )}
+                              >
+                                {pl >= 0 ? "+" : ""}
+                                {((pl / p.invested) * 100).toFixed(1)}%
+                              </Mono>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
@@ -206,18 +255,26 @@ export function InvestorBreakdown({
 function Figure({
   label,
   value,
+  percent,
   tone,
 }: {
   label: string;
   value: string;
+  /** Never masked — it is what remains readable once the amount is hidden. */
+  percent?: string;
   tone?: "positive" | "negative";
 }) {
   return (
     <div className="space-y-1">
       <Text className="text-2xs text-muted-foreground">{label}</Text>
-      <Mono className={cn("block text-lg font-semibold tabular-nums", statToneClass(tone))}>
-        {value}
-      </Mono>
+      <div className="flex flex-wrap items-baseline gap-x-1.5">
+        <Mono className={cn("text-lg font-semibold tabular-nums", statToneClass(tone))}>
+          {value}
+        </Mono>
+        {percent && (
+          <Mono className={cn("text-xs tabular-nums", statToneClass(tone))}>{percent}</Mono>
+        )}
+      </div>
     </div>
   );
 }

@@ -16,7 +16,7 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `transactions.ts` — `createTransactionAction` (replaces the legacy `/api/transactions` route)
 - `portfolio-snapshots.ts` — create manual snapshots of portfolio value
 - `admin-transactions.ts` — admin-only approve/reject of transactions (see [Admin](./admin.md))
-- `allocations.ts` — `setAllocationsAction`, `repriceContributionsAction`, `createPriceAssetAction`, `setManualPriceAction`; gated on **owning the method**, not merely on being an admin
+- `allocations.ts` — `setAllocationsAction`, `repriceContributionsAction`, `createPriceAssetAction`, `setManualPriceAction`, `updateMethodAction`; gated on **owning the method**, not merely on being an admin
 
 ## Services — `/lib/services/`
 - `portfolio-service.ts` — portfolio state and composition
@@ -140,6 +140,22 @@ metadata. Interest math is shared with [Finance](./finance.md).
   gated by `requireEffectiveContext` so an impersonating admin exports what
   they see. Cells starting with `=`, `+`, `-` or `@` are prefixed with a quote
   — Excel and Sheets execute those as formulas.
+- **A method has a public half and a private half, and the editor says so.**
+  Clients see the name, risk and above all the **fixed monthly return** — that
+  is the entire product from their side. Where the pooled money actually goes
+  is internal: it drives the margin and they never see it.
+  `MethodEditorDialog` fences the allocation off in its own labelled block
+  rather than mixing both into one flat form, because an undifferentiated form
+  is how a private figure ends up on a screen it should not be on.
+- **Editing is gated on ownership, not on being an admin.** A method is
+  somebody's product. The edit control only renders for methods in
+  `ownedMethodIds`, and the internal allocation line renders under the same
+  condition — locked by
+  `components/portfolio/investment-methods-view.test.tsx`, which asserts a
+  non-owner sees neither even when the data is present in props.
+- **`monthlyRoi` is not a cosmetic field.** It is what
+  `transactions.currentValue` compounds at, so changing it moves what the owner
+  owes. The dialog says this next to the input.
 - **Margin is the owner's private view.** Investors are sold a *fixed* return;
   the owner deploys the pooled capital elsewhere and keeps the difference.
   `margin = assets - liability`, where liability is the investors' compounded

@@ -21,6 +21,8 @@ import {
   type CreatePriceAssetInput,
   type SetAllocationsInput,
   type SetManualPriceInput,
+  updateMethodSchema,
+  type UpdateMethodInput,
 } from "@/schemas/allocations";
 
 const PORTFOLIO_PATH = "/portal/portfolio";
@@ -172,6 +174,56 @@ export async function setManualPriceAction(input: SetManualPriceInput) {
       action: "priceAsset.manualQuote",
       entityTable: "price_quotes",
       after: { assetId: parsed.data.assetId, price: parsed.data.price },
+    });
+    revalidatePath(PORTFOLIO_PATH);
+    return { success: true as const };
+  });
+}
+
+/**
+ * Edit a method you own.
+ *
+ * Ownership, not admin: a method is somebody's product, and the person who
+ * runs it is the one who gets to change what it promises.
+ */
+export async function updateMethodAction(input: UpdateMethodInput) {
+  return safe("allocations", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = updateMethodSchema.safeParse(input);
+    if (!parsed.success) {
+      return { success: false as const, error: parsed.error.issues[0].message };
+    }
+
+    const { methodId, name, description, author, riskLevel, monthlyRoi, enabled } =
+      parsed.data;
+
+    if (!(await ownsMethod(methodId, ctx.effectiveUserId))) {
+      return { success: false as const, error: "Method not found" };
+    }
+
+    const [before] = await db
+      .select()
+      .from(investmentMethods)
+      .where(eq(investmentMethods.id, methodId))
+      .limit(1);
+
+    await db
+      .update(investmentMethods)
+      .set({
+        name,
+        description: description || null,
+        author,
+        riskLevel,
+        monthlyRoi: monthlyRoi.toFixed(4),
+        enabled,
+      })
+      .where(eq(investmentMethods.id, methodId));
+
+    await logImpersonatedMutation({
+      action: "investmentMethod.update",
+      entityTable: "investment_methods",
+      before: before ? { name: before.name, monthlyRoi: before.monthlyRoi } : undefined,
+      after: { name, monthlyRoi },
     });
     revalidatePath(PORTFOLIO_PATH);
     return { success: true as const };

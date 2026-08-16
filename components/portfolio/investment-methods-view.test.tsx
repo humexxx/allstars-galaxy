@@ -1,0 +1,87 @@
+// @vitest-environment jsdom
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+import { InvestmentMethodsView } from "./investment-methods-view";
+import type { InvestmentMethod } from "@/types/portfolio";
+
+vi.mock("@/components/dev-tools/dev-tools-context", () => ({
+  useRegisterDevTool: vi.fn(),
+}));
+
+const MINE: InvestmentMethod = {
+  id: "m1",
+  name: "Safe Investment",
+  description: "Steady monthly return",
+  author: "Jason",
+  riskLevel: "Low",
+  monthlyRoi: "0.7000",
+  enabled: true,
+} as InvestmentMethod;
+
+const THEIRS: InvestmentMethod = {
+  ...MINE,
+  id: "m2",
+  name: "Someone Else's Fund",
+} as InvestmentMethod;
+
+const ALLOCATIONS = [
+  { methodId: "m1", allocations: [{ assetId: "a1", symbol: "ADA", percent: 100 }] },
+  { methodId: "m2", allocations: [{ assetId: "a1", symbol: "BTC", percent: 100 }] },
+];
+
+describe("InvestmentMethodsView", () => {
+  it("offers an edit control only on methods you run", () => {
+    render(
+      <InvestmentMethodsView
+        methods={[MINE, THEIRS]}
+        ownedMethodIds={["m1"]}
+        allocations={ALLOCATIONS}
+        onEditMethod={vi.fn()}
+      />
+    );
+
+    expect(screen.getByLabelText("Edit Safe Investment")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Edit Someone Else's Fund")).not.toBeInTheDocument();
+  });
+
+  it("never shows the internal allocation of a method you do not run", () => {
+    // The allocation is the owner's private half of the deal. Even when the
+    // data is present in props, it must not reach a card the viewer does not
+    // own — that is what keeps a client from seeing where their money goes.
+    render(
+      <InvestmentMethodsView
+        methods={[MINE, THEIRS]}
+        ownedMethodIds={["m1"]}
+        allocations={ALLOCATIONS}
+        onEditMethod={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/100% ADA/)).toBeInTheDocument();
+    expect(screen.queryByText(/100% BTC/)).not.toBeInTheDocument();
+  });
+
+  it("shows a plain catalogue to someone who runs nothing", () => {
+    render(<InvestmentMethodsView methods={[MINE, THEIRS]} />);
+
+    expect(screen.queryByLabelText(/^Edit /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/100% ADA/)).not.toBeInTheDocument();
+    // The catalogue itself still reads normally. (The name appears more than
+    // once — card title and the grouped-by-author listing.)
+    expect(screen.getAllByText("Safe Investment").length).toBeGreaterThan(0);
+  });
+
+  it("says so when an owned method has no allocation yet", () => {
+    render(
+      <InvestmentMethodsView
+        methods={[MINE]}
+        ownedMethodIds={["m1"]}
+        allocations={[]}
+        onEditMethod={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/no allocation set/i)).toBeInTheDocument();
+  });
+});

@@ -66,3 +66,26 @@ export const setManualPriceSchema = z.object({
 export type SetAllocationsInput = z.infer<typeof setAllocationsSchema>;
 export type CreatePriceAssetInput = z.infer<typeof createPriceAssetSchema>;
 export type SetManualPriceInput = z.infer<typeof setManualPriceSchema>;
+
+/**
+ * Editing a method you own.
+ *
+ * `monthlyRoi` is the fixed return promised to investors and the only figure
+ * they ever see. It is also what `transactions.currentValue` compounds at, so
+ * changing it moves what you owe — it is not a cosmetic field.
+ */
+export const updateMethodSchema = z.object({
+  methodId: z.string().uuid(),
+  name: z.string().trim().min(1, "Name is required").max(120),
+  description: z.string().trim().max(500).optional().nullable(),
+  author: z.string().trim().min(1, "Author is required").max(120),
+  riskLevel: z.enum(["Low", "Medium", "High"]),
+  monthlyRoi: z.coerce
+    .number()
+    .min(0, "A negative promised return makes no sense")
+    .max(100, "That is a monthly percentage, not a multiplier")
+    .finite(),
+  enabled: z.boolean(),
+});
+
+export type UpdateMethodInput = z.infer<typeof updateMethodSchema>;

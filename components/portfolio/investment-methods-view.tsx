@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { EyeOff, Sparkles, TrendingUp, Users } from "lucide-react";
+import { EyeOff, Pencil, Sparkles, TrendingUp, Users } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,12 @@ import type { InvestmentMethod } from "@/types/portfolio";
 
 type InvestmentMethodsViewProps = {
   methods: InvestmentMethod[];
+  /** Ids of the methods this user runs. Only these are editable, and only
+   *  these carry the internal allocation. */
+  ownedMethodIds?: string[];
+  /** Allocation per owned method — never populated for anyone else. */
+  allocations?: { methodId: string; allocations: { assetId: string; symbol: string; percent: number }[] }[];
+  onEditMethod?: (method: InvestmentMethod) => void;
 };
 
 type RiskTone = "low" | "medium" | "high";
@@ -43,7 +50,13 @@ function normaliseRisk(level: string): RiskTone {
   return "low";
 }
 
-export function InvestmentMethodsView({ methods }: InvestmentMethodsViewProps) {
+export function InvestmentMethodsView({
+  methods,
+  ownedMethodIds = [],
+  allocations = [],
+  onEditMethod,
+}: InvestmentMethodsViewProps) {
+  const owned = useMemo(() => new Set(ownedMethodIds), [ownedMethodIds]);
   const [showDisabled, setShowDisabled] = useState(false);
 
   const showDisabledTool = useMemo(
@@ -212,7 +225,18 @@ export function InvestmentMethodsView({ methods }: InvestmentMethodsViewProps) {
 
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {items.map((method) => (
-                    <MethodCard key={method.id} method={method} />
+                    <MethodCard
+                      key={method.id}
+                      method={method}
+                      allocation={
+                        allocations.find((a) => a.methodId === method.id)?.allocations ?? []
+                      }
+                      onEdit={
+                        owned.has(method.id) && onEditMethod
+                          ? () => onEditMethod(method)
+                          : undefined
+                      }
+                    />
                   ))}
                 </div>
               </section>
@@ -255,7 +279,17 @@ function KpiCard({
   );
 }
 
-function MethodCard({ method }: { method: InvestmentMethod }) {
+function MethodCard({
+  method,
+  allocation,
+  onEdit,
+}: {
+  method: InvestmentMethod;
+  allocation: { symbol: string; percent: number }[];
+  /** Absent for methods this user does not run — no edit affordance, and no
+   *  internal allocation shown. */
+  onEdit?: () => void;
+}) {
   const risk = normaliseRisk(method.riskLevel);
   const badge = RISK_BADGE[risk];
   const roi = parseFloat(method.monthlyRoi);
@@ -276,10 +310,31 @@ function MethodCard({ method }: { method: InvestmentMethod }) {
               </Text>
             )}
           </div>
-          <Badge variant="outline" className={cn("shrink-0", badge.className)}>
-            {badge.label}
-          </Badge>
+          <div className="flex shrink-0 items-center gap-1">
+            <Badge variant="outline" className={cn(badge.className)}>
+              {badge.label}
+            </Badge>
+            {onEdit && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-8"
+                aria-label={`Edit ${method.name}`}
+                onClick={onEdit}
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+            )}
+          </div>
         </div>
+        {/* Internal, and only ever rendered for the person who runs it. */}
+        {onEdit && (
+          <Text className="text-2xs text-muted-foreground">
+            {allocation.length === 0
+              ? "No allocation set"
+              : `Invests in ${allocation.map((a) => `${a.percent}% ${a.symbol}`).join(" · ")}`}
+          </Text>
+        )}
       </CardHeader>
       <CardContent>
         <div className="flex items-baseline justify-between border-t pt-3">

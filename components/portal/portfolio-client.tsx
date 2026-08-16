@@ -14,6 +14,8 @@ import { MarginView } from "@/components/portal/margin-view";
 import type { AssetOption } from "@/components/portal/allocation-dialog";
 import type { MethodAllocationSummary } from "@/components/portal/margin-view";
 import { MarginChart } from "@/components/portal/margin-chart";
+import { MethodEditorDialog } from "@/components/portfolio/method-editor-dialog";
+import { AllocationDialog } from "@/components/portal/allocation-dialog";
 import type { MarginHistoryInputView } from "@/components/portal/margin-chart";
 import { OwnerKpiGrid } from "@/components/portal/owner-kpi-grid";
 import type { InvestorBreakdownRow } from "@/components/portal/investor-breakdown";
@@ -158,6 +160,8 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
     [data.methods]
   );
 
+  const [editingMethod, setEditingMethod] = useState<InvestmentMethod | null>(null);
+  const [allocatingMethod, setAllocatingMethod] = useState<InvestmentMethod | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [showCharts, setShowCharts] = useState(true);
   const [hideValues, setHideValues] = useState(false);
@@ -282,7 +286,12 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             <EmptyPortfolio onAddTransaction={() => setIsDialogOpen(true)} />
           </TabsContent>
           <TabsContent value="methods">
-            <InvestmentMethodsView methods={data.methods} />
+            <InvestmentMethodsView
+              methods={data.methods}
+              ownedMethodIds={data.methodInvestors.map((m) => m.methodId)}
+              allocations={data.methodAllocations}
+              onEditMethod={setEditingMethod}
+            />
           </TabsContent>
 
           {ownsMethods && (
@@ -481,7 +490,12 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           {/* The deep view of the methods catalogue, folded in from what used
               to be its own /portal/investment-methods page. */}
           <TabsContent value="methods">
-            <InvestmentMethodsView methods={data.methods} />
+            <InvestmentMethodsView
+              methods={data.methods}
+              ownedMethodIds={data.methodInvestors.map((m) => m.methodId)}
+              allocations={data.methodAllocations}
+              onEditMethod={setEditingMethod}
+            />
           </TabsContent>
 
           {ownsMethods && (
@@ -507,6 +521,35 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           )}
         </Tabs>
       </div>
+
+      {editingMethod && (
+        <MethodEditorDialog
+          method={editingMethod}
+          allocations={
+            data.methodAllocations.find((a) => a.methodId === editingMethod.id)
+              ?.allocations ?? []
+          }
+          onEditAllocation={() => {
+            setAllocatingMethod(editingMethod);
+            setEditingMethod(null);
+          }}
+          onClose={() => setEditingMethod(null)}
+        />
+      )}
+
+      {allocatingMethod && (
+        <AllocationDialog
+          open
+          methodId={allocatingMethod.id}
+          methodName={allocatingMethod.name}
+          assets={data.priceAssets}
+          initial={
+            data.methodAllocations.find((a) => a.methodId === allocatingMethod.id)
+              ?.allocations ?? []
+          }
+          onClose={() => setAllocatingMethod(null)}
+        />
+      )}
 
       <AddTransactionDialog
         open={isDialogOpen}

@@ -81,6 +81,8 @@ type PortfolioData = {
   /** Approved buys across the methods this user runs, own and third-party.
    *  Raw rows so the card can filter by method/investor in the browser. */
   managedContributions: ManagedContribution[];
+  /** Value over time across every portfolio holding this user's methods. */
+  managedSeries: { date: string; value: number }[];
   currentUserId: string;
 };
 
@@ -295,9 +297,17 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
 
   // Built once and handed to whichever branch renders it, so the empty state
   // and the chart itself can't drift apart between the two.
+  // The chart follows the same scope as the figures above it — showing the
+  // combined total in the cards while the curve plotted only the owner's own
+  // portfolio was the inconsistency worth fixing.
+  const chartSeries =
+    ownsMethods && scope === "all" && data.managedSeries.length > 0
+      ? data.managedSeries
+      : data.chartData;
+
   const performanceChart =
-    data.chartData.length > 0 ? (
-      <PerformanceChart data={data.chartData} hideValues={hideValues} />
+    chartSeries.length > 0 ? (
+      <PerformanceChart data={chartSeries} hideValues={hideValues} />
     ) : (
       <Card className="flex h-96 items-center justify-center bg-card">
         <div className="text-center">

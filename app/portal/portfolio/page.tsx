@@ -7,6 +7,7 @@ import {
   getPortfolioTransactions,
   getMethodInvestors,
   getManagedContributions,
+  getManagedPerformanceSeries,
 } from "@/lib/services/portfolio-service";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
 import { getAllUsers } from "@/lib/services/user-service";
@@ -32,7 +33,8 @@ export default async function PortfolioPage() {
   // never sees the tab.
   const investorsPromise = getMethodInvestors(userId);
   const managedPromise = getManagedContributions(userId);
-  const [portfolio, methods, users, methodInvestors, managedContributions] =
+  const managedSeriesPromise = getManagedPerformanceSeries(userId);
+  const [portfolio, methods, users, methodInvestors, managedContributions, managedSeries] =
     await Promise.all([
     getUserPortfolio(userId),
     // ALL methods, enabled or not: the Methods tab renders
@@ -43,6 +45,7 @@ export default async function PortfolioPage() {
     usersPromise,
       investorsPromise,
       managedPromise,
+      managedSeriesPromise,
     ]);
 
   let stats = null;
@@ -79,6 +82,7 @@ export default async function PortfolioPage() {
     users,
     methodInvestors,
     managedContributions,
+    managedSeries,
     currentUserId: userId,
   };
 

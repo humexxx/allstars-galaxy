@@ -1,8 +1,8 @@
 import "server-only";
 
 import { db } from "@/db";
-import { portfolios, transactions, investmentMethods, users } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { portfolios, transactions, investmentMethods, users, portfolioSnapshots } from "@/db/schema";
+import { eq, and, inArray } from "drizzle-orm";
 import type { Portfolio, PortfolioTransaction, PortfolioStats, PortfolioAsset, MethodInvestors } from "@/types/portfolio";
 import type { ManagedContribution } from "@/lib/finance/managed-capital";
 
@@ -341,4 +341,67 @@ export async function getManagedContributions(
     contributed: parseFloat(r.initialValue || "0"),
     holding: parseFloat(r.currentValue || "0"),
   }));
+}
+
+/**
+ * Total value over time across every portfolio that holds one of this admin's
+ * methods — the owner's own included.
+ *
+ * Built from real `portfolio_snapshots`, not re-simulated, so the curve is
+ * what was actually recorded.
+ *
+ * CAVEAT, and it matters: a snapshot is a whole portfolio's value, not the
+ * slice held in this admin's methods. An investor who also holds something
+ * else would be over-counted here. That is exact today (every investor holds
+ * only these methods) but stops being exact the moment it isn't — the fix is
+ * per-method snapshots, which the schema does not have.
+ */
+export async function getManagedPerformanceSeries(
+  ownerUserId: string
+): Promise<{ date: string; value: number }[]> {
+  const holders = await db
+    .selectDistinct({ portfolioId: transactions.portfolioId })
+    .from(transactions)
+    .innerJoin(
+      investmentMethods,
+      eq(transactions.investmentMethodId, investmentMethods.id)
+    )
+    .where(
+      and(
+        eq(investmentMethods.ownerUserId, ownerUserId),
+        eq(transactions.status, "approved")
+      )
+    );
+
+  if (holders.length === 0) return [];
+
+  const ids = holders.map((h) => h.portfolioId);
+  const snaps = await db
+    .select({
+      date: portfolioSnapshots.date,
+      value: portfolioSnapshots.totalValue,
+      portfolioId: portfolioSnapshots.portfolioId,
+    })
+    .from(portfolioSnapshots)
+    .where(inArray(portfolioSnapshots.portfolioId, ids));
+
+  // Portfolios are snapshotted independently, so a given day may only have
+  // rows for some of them. Carry each portfolio's last known value forward
+  // rather than letting the total dip on days a portfolio didn't report.
+  const byDay = new Map<string, Map<string, number>>();
+  for (const s of snaps) {
+    const day = s.date.toISOString().slice(0, 10);
+    if (!byDay.has(day)) byDay.set(day, new Map());
+    byDay.get(day)!.set(s.portfolioId, parseFloat(s.value));
+  }
+
+  const latest = new Map<string, number>();
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, values]) => {
+      for (const [pid, v] of values) latest.set(pid, v);
+      let total = 0;
+      for (const v of latest.values()) total += v;
+      return { date: day, value: total };
+    });
 }

@@ -6,8 +6,6 @@ import {
   getPortfolioStats,
   getPortfolioTransactions,
   getMethodInvestors,
-  getManagedContributions,
-  getManagedPerformanceSeries,
   getInvestorTransactions,
 } from "@/lib/services/portfolio-service";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
@@ -37,8 +35,6 @@ export default async function PortfolioPage() {
   // Only meaningful for someone who runs methods; everyone else gets [] and
   // never sees the tab.
   const investorsPromise = getMethodInvestors(userId);
-  const managedPromise = getManagedContributions(userId);
-  const managedSeriesPromise = getManagedPerformanceSeries(userId);
   // Everything the Managed tab needs in one call. It used to be three
   // independent loaders that each re-queried the same methods, allocations and
   // quotes — eleven round trips against a pooler where a connection costs
@@ -51,8 +47,6 @@ export default async function PortfolioPage() {
     methods,
     users,
     methodInvestors,
-    managedContributions,
-    managedSeries,
     managedOverview,
     priceAssets,
     investorTransactions,
@@ -65,8 +59,6 @@ export default async function PortfolioPage() {
     db.select().from(investmentMethods),
     usersPromise,
     investorsPromise,
-    managedPromise,
-    managedSeriesPromise,
     managedOverviewPromise,
     priceAssetsPromise,
     investorTxPromise,
@@ -127,11 +119,10 @@ export default async function PortfolioPage() {
     isAdmin,
     users,
     methodInvestors,
-    managedContributions,
-    managedSeries,
     margin: methodInvestors.length > 0 ? managedOverview.overview : null,
     methodAllocations: managedOverview.allocations,
     marginHistory: managedOverview.history,
+    marginHistoryInput: managedOverview.historyInput,
     investorBreakdown: managedOverview.investors,
     transactionRows: transactions.map((t) => ({
       id: t.id,

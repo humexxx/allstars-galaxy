@@ -23,7 +23,6 @@ import { repriceContributionsAction } from "@/app/actions/allocations";
 import type { MethodMargin } from "@/lib/finance/margin";
 import { formatCurrency } from "@/lib/utils/format";
 import { AllocationDialog, type AssetOption } from "./allocation-dialog";
-import { MarginChart, type MarginChartPoint } from "./margin-chart";
 import { InvestorBreakdown, type InvestorBreakdownRow } from "./investor-breakdown";
 
 export type MethodAllocationSummary = {
@@ -37,8 +36,6 @@ export type MarginViewProps = {
   unconfigured: boolean;
   assets: AssetOption[];
   allocations: MethodAllocationSummary[];
-  /** Monthly series behind the headline figures. */
-  history: MarginChartPoint[];
   /** Per-person view of what each investor's money bought. */
   investors: InvestorBreakdownRow[];
   hideValues?: boolean;
@@ -63,7 +60,6 @@ export function MarginView({
   unconfigured,
   assets,
   allocations,
-  history,
   investors,
   hideValues = false,
 }: MarginViewProps) {
@@ -72,14 +68,6 @@ export function MarginView({
     null
   );
   const [isPending, startTransition] = useTransition();
-
-  // Month-over-month move in the margin. This is the figure that answers "how
-  // did I do THIS month" — the headline margin is cumulative and barely moves,
-  // so on its own it never shows whether things are getting better or worse.
-  const monthly =
-    history.length >= 2
-      ? history[history.length - 1].margin - history[history.length - 2].margin
-      : null;
 
   const allocationFor = (methodId: string) =>
     allocations.find((a) => a.methodId === methodId)?.allocations ?? [];
@@ -114,17 +102,7 @@ export function MarginView({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="This month"
-          value={
-            monthly === null
-              ? "—"
-              : `${monthly >= 0 ? "+" : "−"}${show(Math.abs(monthly), hideValues)}`
-          }
-          tone={monthly === null ? undefined : monthly >= 0 ? "positive" : "negative"}
-          sublabel="Change in margin since last month"
-        />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           label="Deployed value"
           value={show(totals.assets, hideValues)}
@@ -146,14 +124,6 @@ export function MarginView({
           }
         />
       </div>
-
-      {history.length > 1 && (
-        <Card>
-          <CardContent className="pt-6">
-            <MarginChart data={history} hideValues={hideValues} />
-          </CardContent>
-        </Card>
-      )}
 
       {investors.length > 0 && (
         <div className="space-y-3">

@@ -74,12 +74,23 @@ metadata. Interest math is shared with [Finance](./finance.md).
   filters to enabled itself and has a dev toggle for the rest; the transaction
   form gets the enabled subset. The tabs render **even without a portfolio**,
   so the catalogue stays browsable before you own anything.
-- **The Managed tab answers four questions in order**: how did this month go
-  (`This month` — the month-over-month move in the margin, the only figure that
-  shows direction, since the cumulative margin barely shifts), where does it
-  stand today (the three headline cards), how did it get here (`MarginChart`,
-  an area chart toggling between *Margin* and *Allocations vs owed*), and who
-  is behind it (`InvestorBreakdown`, per person).
+- **Owners and investors see different Overviews, and exactly one chart each.**
+  An investor's portfolio value IS their position, so they keep
+  `PortfolioKpiGrid` and `PerformanceChart`. An owner's "portfolio value" is
+  the sum of what they OWE, so showing it as a headline made a badly underwater
+  book read as growth — they get `OwnerKpiGrid` (Contributed / Allocations
+  today / Owed / Margin) and `MarginChart`.
+- **`MarginChart` plots allocations and liability on one axis.** The gap
+  between the two lines IS the margin; splitting them across two charts would
+  make the reader compute it. Filtering by investor or method re-derives the
+  series in the browser from the raw contributions — no round trip — which is
+  why `getManagedOverview` ships `historyInput` alongside the computed series.
+- **The Managed tab holds the detail**: per-method allocation policy and the
+  per-person breakdown. No chart there — there is one chart in the module.
+- **Removed with this**: `ManagedCapitalCard` (its split view was the second
+  chart), the All-capital/Only-mine scope toggle (it drove a KPI grid and a
+  performance chart that owners no longer see), and the two queries feeding
+  them.
 - **Margin history discounts BACKWARDS from stored `currentValue`**, it does
   not recompute forwards from `initialValue`. The real data compounds 14
   periods across ~11.5 calendar months, so a forward formula disagrees with

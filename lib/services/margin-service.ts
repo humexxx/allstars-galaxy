@@ -22,7 +22,12 @@ import {
   type MethodMargin,
 } from "@/lib/finance/margin";
 import { netPositions } from "@/lib/finance/allocation";
-import { buildMarginHistory, type MarginPoint } from "@/lib/finance/margin-history";
+import {
+  buildMarginHistory,
+  type ContributionUnits,
+  type LiabilityEntry,
+  type MarginPoint,
+} from "@/lib/finance/margin-history";
 import { getDerivedHoldings } from "./allocation-service";
 import { getMethodInvestors } from "./portfolio-service";
 import { getLatestPrices, getMonthlyPrices } from "./price-service";
@@ -304,9 +309,25 @@ export async function getInvestorBreakdown(
   return [...byInvestor.values()].sort((a, b) => b.contributed - a.contributed);
 }
 
+/**
+ * Raw inputs for the margin chart, sent to the browser so it can re-derive the
+ * series under any filter without another round trip. It is a handful of rows
+ * — cheaper to ship than to re-query per filter change.
+ */
+export type MarginHistoryInput = {
+  contributions: (ContributionUnits & { investorId: string; methodId: string })[];
+  liabilities: (LiabilityEntry & { investorId: string; methodId: string })[];
+  /** `assetId|YYYY-MM` -> month-end price, as pairs (a Map is not serialisable). */
+  prices: [string, number][];
+  today: string;
+  investors: { id: string; name: string; isOwn: boolean }[];
+  methods: { id: string; name: string }[];
+};
+
 export type ManagedOverview = {
   overview: MarginOverview;
   history: MarginPoint[];
+  historyInput: MarginHistoryInput;
   investors: InvestorBreakdown[];
   allocations: { methodId: string; allocations: { assetId: string; symbol: string; percent: number }[] }[];
 };
@@ -340,6 +361,14 @@ export async function getManagedOverview(ownerUserId: string): Promise<ManagedOv
       history: [],
       investors: [],
       allocations: [],
+      historyInput: {
+        contributions: [],
+        liabilities: [],
+        prices: [],
+        today: new Date().toISOString().slice(0, 7),
+        investors: [],
+        methods: [],
+      },
     };
   }
 
@@ -385,9 +414,50 @@ export async function getManagedOverview(ownerUserId: string): Promise<ManagedOv
   const assetIds = [...new Set(allocRows.map((r) => r.assetId))];
   const { latest, monthly } = await loadQuotes(assetIds);
 
+  // Which investor each allocation belongs to, so the chart can filter by
+  // person: allocations carry a transaction, and a transaction carries an
+  // investor.
+  const investorByTx = new Map(txRows.map((t) => [t.txId, t.investorId]));
+  const today = new Date().toISOString().slice(0, 7);
+
+  const historyInput: MarginHistoryInput = {
+    contributions: allocRows.map((r) => ({
+      month: new Date(r.pricedOn).toISOString().slice(0, 7),
+      assetId: r.assetId,
+      quantity: parseFloat(r.quantity),
+      amount: parseFloat(r.amount),
+      investorId: investorByTx.get(r.transactionId) ?? "",
+      methodId: r.methodId ?? "",
+    })),
+    liabilities: txRows.map((t) => ({
+      month: new Date(t.date).toISOString().slice(0, 7),
+      currentValue: parseFloat(t.currentValue ?? "0"),
+      monthlyRoi: roiByMethod.get(t.methodId!) ?? 0,
+      isOwn: t.investorId === ownerUserId,
+      investorId: t.investorId,
+      methodId: t.methodId ?? "",
+    })),
+    prices: [...monthly],
+    today,
+    investors: [
+      ...new Map(
+        txRows.map((t) => [
+          t.investorId,
+          {
+            id: t.investorId,
+            name: t.fullName || t.email?.split("@")[0] || "Unknown",
+            isOwn: t.investorId === ownerUserId,
+          },
+        ])
+      ).values(),
+    ],
+    methods: owned.map((m) => ({ id: m.id, name: m.name })),
+  };
+
   return {
     overview: buildOverview(methodInvestors, allocRows, latest, ownerUserId),
     history: buildHistory(allocRows, txRows, roiByMethod, monthly, ownerUserId),
+    historyInput,
     investors: buildInvestors(txRows, allocRows, latest, ownerUserId),
     allocations: owned.map((m) => ({
       methodId: m.id,

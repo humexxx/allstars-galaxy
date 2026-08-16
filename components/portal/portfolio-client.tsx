@@ -13,14 +13,13 @@ import { InvestmentMethodsView } from "@/components/portfolio/investment-methods
 import { MarginView } from "@/components/portal/margin-view";
 import type { AssetOption } from "@/components/portal/allocation-dialog";
 import type { MethodAllocationSummary } from "@/components/portal/margin-view";
-import type { MarginChartPoint } from "@/components/portal/margin-chart";
+import { MarginChart } from "@/components/portal/margin-chart";
+import type { MarginHistoryInputView } from "@/components/portal/margin-chart";
+import { OwnerKpiGrid } from "@/components/portal/owner-kpi-grid";
 import type { InvestorBreakdownRow } from "@/components/portal/investor-breakdown";
 import type { MarginOverview } from "@/lib/services/margin-service";
 import { MethodInvestorsView } from "@/components/portfolio/method-investors";
 
-import { ManagedCapitalCard } from "@/components/portfolio/managed-capital";
-import { aggregateManagedCapital } from "@/lib/finance/managed-capital";
-import type { ManagedContribution } from "@/lib/finance/managed-capital";
 import { StatCard, maskValue, statToneClass } from "@/components/ui/stat-card";
 import { Sparkline } from "@/components/portfolio/sparkline";
 import { Heading, Text } from "@/components/ui/typography";
@@ -86,11 +85,6 @@ type PortfolioData = {
   /** Methods this user owns + who holds money in them. Empty for everyone
    *  who doesn't run any. Never folded into the portfolio totals. */
   methodInvestors: MethodInvestors[];
-  /** Approved buys across the methods this user runs, own and third-party.
-   *  Raw rows so the card can filter by method/investor in the browser. */
-  managedContributions: ManagedContribution[];
-  /** Value over time across every portfolio holding this user's methods. */
-  managedSeries: { date: string; value: number }[];
   /** The owner's side of the deal: real value of the deployed capital against
    *  the fixed return promised to investors. Null for anyone who runs no
    *  methods, and never visible to the investors themselves. */
@@ -104,8 +98,17 @@ type PortfolioData = {
   investorTransactions: TransactionRow[];
   /** The owner's own history, in the shared row shape. */
   transactionRows: TransactionRow[];
-  /** Margin month by month, for the area chart. */
-  marginHistory: MarginChartPoint[];
+  /** Margin month by month, for the headline figures. */
+  marginHistory: {
+    month: string;
+    deployed: number;
+    liability: number;
+    ownPosition: number;
+    margin: number;
+    invested: number;
+  }[];
+  /** Raw inputs so the chart can re-derive under a filter without a round trip. */
+  marginHistoryInput: MarginHistoryInputView;
   /** Per-investor drill-down behind the margin. */
   investorBreakdown: InvestorBreakdownRow[];
   currentUserId: string;
@@ -135,36 +138,20 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   // The Investors tab only exists for people who actually run methods.
   const ownsMethods = data.methodInvestors.length > 0;
 
-  // "All" = own portfolio + everything managed for others; "mine" strips the
-  // third party back out.
-  const [scope, setScope] = useState<"all" | "mine">("all");
-
-  const managed = useMemo(
-    () => aggregateManagedCapital(data.managedContributions),
-    [data.managedContributions]
-  );
-
-  /**
-   * DISPLAY ONLY. `getPortfolioStats` is scoped to the user's own portfolio and
-   * is what the finance plans read for `includePortfolio` — combining there
-   * would quietly fold other people's money into the owner's projected net
-   * worth. So the combination happens here, in the view, and nowhere else.
-   */
-  const scopedStats = useMemo(() => {
-    const base = data.stats;
-    if (!base || !ownsMethods || scope === "mine") return base;
-    const totalValue = base.totalValue + managed.thirdPartyHolding;
-    const costBasis = base.costBasis + managed.thirdPartyContributed;
-    const allTimeProfit = totalValue - costBasis;
+  const ownerKpis = useMemo(() => {
+    const h = data.marginHistory;
+    const last = h[h.length - 1];
+    if (!last) {
+      return { contributed: 0, deployed: 0, liability: 0, margin: 0, monthlyChange: null };
+    }
     return {
-      ...base,
-      totalValue,
-      costBasis,
-      allTimeProfit,
-      allTimeProfitPercentage:
-        costBasis > 0 ? (allTimeProfit / costBasis) * 100 : 0,
+      contributed: last.invested,
+      deployed: last.deployed,
+      liability: last.liability,
+      margin: last.margin,
+      monthlyChange: h.length >= 2 ? last.margin - h[h.length - 2].margin : null,
     };
-  }, [data.stats, ownsMethods, scope, managed]);
+  }, [data.marginHistory]);
 
   const enabledMethods = useMemo(
     () => data.methods.filter((m) => m.enabled),
@@ -307,7 +294,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                   unconfigured={data.margin.unconfigured}
                   assets={data.priceAssets}
                   allocations={data.methodAllocations}
-                  history={data.marginHistory}
                   investors={data.investorBreakdown}
                   hideValues={hideValues}
                 />
@@ -333,17 +319,10 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
     );
   }
 
-  const stats = scopedStats;
+  const stats = data.stats;
 
-  // Built once and handed to whichever branch renders it, so the empty state
-  // and the chart itself can't drift apart between the two.
-  // The chart follows the same scope as the figures above it — showing the
-  // combined total in the cards while the curve plotted only the owner's own
-  // portfolio was the inconsistency worth fixing.
-  const chartSeries =
-    ownsMethods && scope === "all" && data.managedSeries.length > 0
-      ? data.managedSeries
-      : data.chartData;
+  // Only investors see this one; owners get the margin chart instead.
+  const chartSeries = data.chartData;
 
   const performanceChart =
     chartSeries.length > 0 ? (
@@ -421,58 +400,39 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            {/* Scope: combined by default, because what an owner manages IS
-                the headline for them. "Only mine" strips the third party back
-                out. Display-only — see scopedStats. */}
-            {ownsMethods && (
-              <div
-                role="group"
-                aria-label="Figures scope"
-                className="inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
-              >
-                {(
-                  [
-                    ["all", "All capital"],
-                    ["mine", "Only mine"],
-                  ] as const
-                ).map(([v, label]) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setScope(v)}
-                    aria-pressed={scope === v}
-                    className={`rounded px-2.5 py-1 text-xs font-medium transition ${
-                      scope === v
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Headline numbers first, trend second — attention lands on the
-                top row, so the figures people came for go there. */}
-            {stats && (
-              <PortfolioKpiGrid
-                stats={stats}
+            {/* Owners and investors need different headlines. An investor's
+                portfolio value IS their position. An owner's "portfolio value"
+                is the sum of what they OWE, so showing it as the headline made
+                a badly underwater book read as growth. */}
+            {ownsMethods ? (
+              <OwnerKpiGrid
+                kpis={ownerKpis}
                 hideValues={hideValues}
                 onToggleHideValues={() => setHideValues((v) => !v)}
-                sparkline={data.chartData}
               />
+            ) : (
+              stats && (
+                <PortfolioKpiGrid
+                  stats={stats}
+                  hideValues={hideValues}
+                  onToggleHideValues={() => setHideValues((v) => !v)}
+                  sparkline={data.chartData}
+                />
+              )
             )}
 
-            {/* One chart card either way: owners get the performance chart as a
-                view INSIDE the managed-capital card, everyone else gets it on
-                its own. Never two competing chart cards. */}
+            {/* Exactly one chart. Owners get allocations against what is owed —
+                the gap between the two lines is the margin. Everyone else gets
+                the ordinary performance chart. */}
             {ownsMethods ? (
-              <ManagedCapitalCard
-                contributions={data.managedContributions}
-                performance={performanceChart}
-                hideValues={hideValues}
-              />
+              <Card className="bg-card">
+                <CardContent className="pt-6">
+                  <MarginChart
+                    input={data.marginHistoryInput}
+                    hideValues={hideValues}
+                  />
+                </CardContent>
+              </Card>
             ) : (
               showCharts && performanceChart
             )}
@@ -533,7 +493,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                   unconfigured={data.margin.unconfigured}
                   assets={data.priceAssets}
                   allocations={data.methodAllocations}
-                  history={data.marginHistory}
                   investors={data.investorBreakdown}
                   hideValues={hideValues}
                 />

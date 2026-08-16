@@ -1,122 +1,167 @@
 "use client";
 
-import { useState } from "react";
-import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts";
+import { useMemo, useState } from "react";
+import { Area, AreaChart, CartesianGrid, Legend, ReferenceLine, XAxis, YAxis } from "recharts";
+import { SlidersHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Mono, Text } from "@/components/ui/typography";
 import { maskValue } from "@/components/ui/stat-card";
 import { formatCurrency } from "@/lib/utils/format";
+import { buildMarginHistory } from "@/lib/finance/margin-history";
 import { cn } from "@/lib/utils";
 
-export type MarginChartPoint = {
-  month: string;
-  deployed: number;
-  liability: number;
-  ownPosition: number;
-  margin: number;
-  invested: number;
+export type MarginHistoryInputView = {
+  contributions: {
+    month: string;
+    assetId: string;
+    quantity: number;
+    amount: number;
+    investorId: string;
+    methodId: string;
+  }[];
+  liabilities: {
+    month: string;
+    currentValue: number;
+    monthlyRoi: number;
+    isOwn: boolean;
+    investorId: string;
+    methodId: string;
+  }[];
+  prices: [string, number][];
+  today: string;
+  investors: { id: string; name: string; isOwn: boolean }[];
+  methods: { id: string; name: string }[];
 };
-
-type View = "margin" | "allocations";
 
 const CONFIG = {
   deployed: { label: "Allocations", color: "var(--chart-1)" },
   liability: { label: "Owed to investors", color: "var(--chart-2)" },
-  margin: { label: "Margin", color: "var(--chart-3)" },
-  invested: { label: "Contributed", color: "var(--chart-5)" },
 } as const;
 
 /**
- * The margin over time.
+ * The one chart an owner gets: what the deployed capital is really worth
+ * against what is owed, month by month.
  *
- * Two views rather than one crowded chart: "Margin" answers *am I ahead*, and
- * "Allocations" shows the two quantities that produce it — what the deployed
- * capital is worth against what is owed. They share no axis trick; each is
- * plain dollars, so the eye can compare across the toggle.
+ * Both series on one axis on purpose — the gap between them IS the margin, and
+ * the whole point is to see it directly rather than infer it from two charts.
+ * When Allocations sits below Owed, the promise is being paid out of pocket.
  *
- * The zero line is drawn explicitly in the margin view because crossing it is
- * the only event on this chart that changes what the number MEANS: above it
- * the deployment covers the promise, below it the owner is paying for it.
+ * Filtering re-derives the series in the browser from the raw contributions,
+ * which is why no round trip happens when the filter changes.
  */
 export function MarginChart({
-  data,
+  input,
   hideValues = false,
 }: {
-  data: MarginChartPoint[];
+  input: MarginHistoryInputView;
   hideValues?: boolean;
 }) {
-  const [view, setView] = useState<View>("margin");
+  const [investorId, setInvestorId] = useState<string | null>(null);
+  const [methodId, setMethodId] = useState<string | null>(null);
+
+  const data = useMemo(() => {
+    const keep = <T extends { investorId: string; methodId: string }>(rows: T[]) =>
+      rows.filter(
+        (r) =>
+          (investorId === null || r.investorId === investorId) &&
+          (methodId === null || r.methodId === methodId)
+      );
+
+    return buildMarginHistory({
+      contributions: keep(input.contributions),
+      liabilities: keep(input.liabilities),
+      prices: new Map(input.prices),
+      today: input.today,
+    });
+  }, [input, investorId, methodId]);
+
+  const filtered = investorId !== null || methodId !== null;
 
   if (data.length < 2) {
     return (
       <Text variant="small" className="text-muted-foreground">
-        Not enough history yet — the chart needs at least two months of
-        contributions.
+        {filtered
+          ? "Nothing to plot for this filter."
+          : "Not enough history yet — the chart needs at least two months of contributions."}
       </Text>
     );
   }
 
   const latest = data[data.length - 1];
-  const headline = view === "margin" ? latest.margin : latest.deployed;
-
   const money = (v: number) =>
     hideValues ? maskValue(formatCurrency(v)) : formatCurrency(v);
-
-  const axisTick = (v: number) => {
-    if (hideValues) return "";
-    const abs = Math.abs(v);
-    const sign = v < 0 ? "−" : "";
-    return abs >= 1000 ? `${sign}$${Math.round(abs / 1000)}k` : `${sign}$${Math.round(abs)}`;
-  };
 
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
           <Text variant="small" className="text-muted-foreground">
-            {view === "margin" ? "Margin" : "Deployed capital"}
+            Margin {filtered && <span className="text-2xs">(filtered)</span>}
           </Text>
           <Mono
             className={cn(
               "text-2xl font-semibold tabular-nums sm:text-3xl",
-              view === "margin" &&
-                (latest.margin >= 0
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-rose-600 dark:text-rose-400")
+              latest.margin >= 0
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-rose-600 dark:text-rose-400"
             )}
           >
-            {money(headline)}
+            {money(latest.margin)}
           </Mono>
+          <Text className="text-2xs text-muted-foreground">
+            {money(latest.deployed)} deployed against {money(latest.liability)} owed
+          </Text>
         </div>
 
-        <div role="group" aria-label="Chart view" className="flex items-center gap-1">
-          {(
-            [
-              ["margin", "Margin"],
-              ["allocations", "Allocations"],
-            ] as const
-          ).map(([v, label]) => (
-            <Button
-              key={v}
-              variant="ghost"
-              size="sm"
-              data-active={view === v}
-              className="h-7 rounded-full px-3 text-xs text-muted-foreground data-[active=true]:bg-foreground/5 data-[active=true]:text-foreground"
-              onClick={() => setView(v)}
-            >
-              {label}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" data-active={filtered}>
+              <SlidersHorizontal className="size-4" />
+              Filters
+              {filtered && <span className="ml-1 text-2xs">on</span>}
             </Button>
-          ))}
-        </div>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-64 space-y-4">
+            <FilterGroup
+              label="Investor"
+              options={input.investors.map((i) => ({
+                id: i.id,
+                label: i.isOwn ? `${i.name} (you)` : i.name,
+              }))}
+              value={investorId}
+              onChange={setInvestorId}
+            />
+            <FilterGroup
+              label="Method"
+              options={input.methods.map((m) => ({ id: m.id, label: m.name }))}
+              value={methodId}
+              onChange={setMethodId}
+            />
+            {filtered && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setInvestorId(null);
+                  setMethodId(null);
+                }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </PopoverContent>
+        </Popover>
       </div>
 
-      <ChartContainer config={CONFIG} className="h-64 w-full sm:h-72">
+      <ChartContainer config={CONFIG} className="h-64 w-full sm:h-80">
         <AreaChart data={data} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
           <CartesianGrid vertical={false} strokeDasharray="3 3" strokeOpacity={0.4} />
           <XAxis
@@ -138,13 +183,18 @@ export function MarginChart({
             axisLine={false}
             width={hideValues ? 8 : 56}
             tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-            tickFormatter={axisTick}
+            tickFormatter={(v: number) =>
+              hideValues
+                ? ""
+                : Math.abs(v) >= 1000
+                  ? `$${Math.round(v / 1000)}k`
+                  : `$${Math.round(v)}`
+            }
           />
+          <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.4} />
           <ChartTooltip
             content={
               <ChartTooltipContent
-                // The hover is the breakdown: allocations, what is owed, and
-                // the owner's own stake shown apart because it is capital.
                 formatter={(value, name) => (
                   <span className="flex w-full justify-between gap-4">
                     <span className="text-muted-foreground">
@@ -163,41 +213,80 @@ export function MarginChart({
               />
             }
           />
-
-          {view === "margin" ? (
-            <>
-              <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.5} />
-              <Area
-                dataKey="margin"
-                type="monotone"
-                stroke="var(--color-margin)"
-                fill="var(--color-margin)"
-                fillOpacity={0.15}
-                strokeWidth={2}
-              />
-            </>
-          ) : (
-            <>
-              <Area
-                dataKey="deployed"
-                type="monotone"
-                stroke="var(--color-deployed)"
-                fill="var(--color-deployed)"
-                fillOpacity={0.18}
-                strokeWidth={2}
-              />
-              <Area
-                dataKey="liability"
-                type="monotone"
-                stroke="var(--color-liability)"
-                fill="var(--color-liability)"
-                fillOpacity={0.1}
-                strokeWidth={2}
-              />
-            </>
-          )}
+          <Legend
+            verticalAlign="top"
+            height={28}
+            iconType="plainline"
+            formatter={(v) => (
+              <span className="text-xs text-muted-foreground">
+                {CONFIG[v as keyof typeof CONFIG]?.label ?? v}
+              </span>
+            )}
+          />
+          <Area
+            dataKey="liability"
+            type="monotone"
+            stroke="var(--color-liability)"
+            fill="var(--color-liability)"
+            fillOpacity={0.12}
+            strokeWidth={2}
+          />
+          <Area
+            dataKey="deployed"
+            type="monotone"
+            stroke="var(--color-deployed)"
+            fill="var(--color-deployed)"
+            fillOpacity={0.2}
+            strokeWidth={2}
+          />
         </AreaChart>
       </ChartContainer>
+
+      <Text className="text-2xs text-muted-foreground">
+        Where Allocations sits below Owed, the promised return is being covered out
+        of pocket.
+      </Text>
     </section>
+  );
+}
+
+function FilterGroup({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { id: string; label: string }[];
+  value: string | null;
+  onChange: (v: string | null) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Text className="text-2xs font-medium text-muted-foreground">{label}</Text>
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          variant="outline"
+          size="sm"
+          data-active={value === null}
+          className="h-7 rounded-full px-2.5 text-xs data-[active=true]:border-foreground/30 data-[active=true]:bg-foreground/5"
+          onClick={() => onChange(null)}
+        >
+          All
+        </Button>
+        {options.map((o) => (
+          <Button
+            key={o.id}
+            variant="outline"
+            size="sm"
+            data-active={value === o.id}
+            className="h-7 rounded-full px-2.5 text-xs data-[active=true]:border-foreground/30 data-[active=true]:bg-foreground/5"
+            onClick={() => onChange(value === o.id ? null : o.id)}
+          >
+            {o.label}
+          </Button>
+        ))}
+      </div>
+    </div>
   );
 }

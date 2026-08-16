@@ -113,7 +113,7 @@ export function InvestorBreakdown({
 
       {active ? (
         <Card>
-          <CardContent className="space-y-5 pt-6">
+          <CardContent className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-4">
               <Figure label="Contributed" value={money(active.contributed)} percent="100%" />
               <Figure

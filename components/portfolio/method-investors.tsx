@@ -46,7 +46,7 @@ export function MethodInvestorsView({ methods }: { methods: MethodInvestors[] })
 
       {methods.map((m) => (
         <Card key={m.methodId}>
-          <CardContent className="space-y-3 pt-6">
+          <CardContent className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="flex items-center gap-2">
                 <Text variant="small" className="font-medium text-foreground">

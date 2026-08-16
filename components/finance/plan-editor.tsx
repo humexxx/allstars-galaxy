@@ -749,7 +749,7 @@ export function PlanEditor({
 
       <TabsContent value="setup" className="space-y-6">
         <Card>
-          <CardContent className="pt-6">
+          <CardContent>
             <PlanLineEditor
               variant="income"
               title="Income (Entradas)"
@@ -769,7 +769,7 @@ export function PlanEditor({
         </Card>
 
         <Card>
-          <CardContent className="pt-6">
+          <CardContent>
             <PlanLineEditor
               variant="expense"
               title="Expenses (Salidas)"
@@ -789,7 +789,7 @@ export function PlanEditor({
         </Card>
 
         <Card>
-          <CardContent className="pt-6">
+          <CardContent>
             <PlanDebtEditor
               debts={plan.debts}
               onAdd={(input) =>
@@ -808,7 +808,7 @@ export function PlanEditor({
         <MainPlanToggle plan={plan} wrap={wrap} />
         {plan.basedOnPlanId && (
           <Card>
-            <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+            <CardContent className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <GitBranch className="h-5 w-5 shrink-0 text-muted-foreground" />
                 <div className="space-y-0.5">
@@ -887,7 +887,7 @@ function MainPlanToggle({
 }) {
   return (
     <Card>
-      <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+      <CardContent className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Star
             className={`h-5 w-5 shrink-0 ${

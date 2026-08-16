@@ -454,7 +454,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                 the ordinary performance chart. */}
             {ownsMethods ? (
               <Card className="bg-card">
-                <CardContent className="pt-6">
+                <CardContent>
                   <MarginChart
                     input={data.marginHistoryInput}
                     hideValues={hideValues}

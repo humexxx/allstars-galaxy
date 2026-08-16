@@ -78,6 +78,14 @@ computed height, not a spacing step.
 - Card padding comes from the shadcn `Card`/`CardHeader`/`CardContent`
   primitives — don't override it with custom `p-*` unless a design genuinely
   needs it.
+- **Never add `pt-6` to `CardContent`.** `Card` already carries the vertical
+  padding (`py-6`, or `py-4` at `size="sm"`); `CardContent` supplies only the
+  horizontal `px-6`. Adding `pt-6` therefore *doubles* the top gap to 48px
+  instead of setting it, which reads as a stray band of empty space above the
+  first line of content. It is an easy mistake because the class looks like it
+  is establishing padding rather than stacking on top of it — five components
+  in this repo had it. A card with no `CardHeader` needs no top padding at all:
+  `<Card><CardContent>` is already correct.
 - Stack related blocks with `space-y-4`/`space-y-6`; lay rows out with
   `gap-2`/`gap-3`/`gap-4`.
 

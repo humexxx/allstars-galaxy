@@ -98,6 +98,31 @@ describe("InvestmentMethodsView", () => {
     expect(screen.queryByText("Closed Fund")).not.toBeInTheDocument();
   });
 
+  it("shows how much sits in each method you run", () => {
+    render(
+      <InvestmentMethodsView
+        methods={[MINE]}
+        ownedMethodIds={["m1"]}
+        allocations={[]}
+        capital={[
+          { methodId: "m1", invested: 7700, holding: 8327.92, investorCount: 2 },
+        ]}
+        onEditMethod={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("$7,700.00")).toBeInTheDocument();
+    expect(screen.getByText(/2 investors/)).toBeInTheDocument();
+  });
+
+  it("never shows capital for a method the viewer does not run", () => {
+    // A client browsing the catalogue has no business seeing other people's
+    // money, so the prop simply carries nothing for those cards.
+    render(<InvestmentMethodsView methods={[MINE, THEIRS]} />);
+
+    expect(screen.queryByText("Invested")).not.toBeInTheDocument();
+  });
+
   it("says so when an owned method has no allocation yet", () => {
     render(
       <InvestmentMethodsView

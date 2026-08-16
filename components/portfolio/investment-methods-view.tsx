@@ -1,16 +1,27 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { EyeOff, Pencil, Sparkles, TrendingUp, Users } from "lucide-react";
+import { EyeOff, Pencil } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
+import { maskValue } from "@/components/ui/stat-card";
+import { formatCurrency } from "@/lib/utils/format";
 import { useRegisterDevTool } from "@/components/dev-tools/dev-tools-context";
 
 import type { InvestmentMethod } from "@/types/portfolio";
+
+export type MethodCapital = {
+  methodId: string;
+  /** Cash contributed, at face value. */
+  invested: number;
+  /** What those contributions are worth today under the promised return. */
+  holding: number;
+  investorCount: number;
+};
 
 type InvestmentMethodsViewProps = {
   methods: InvestmentMethod[];
@@ -20,6 +31,11 @@ type InvestmentMethodsViewProps = {
   /** Allocation per owned method — never populated for anyone else. */
   allocations?: { methodId: string; allocations: { assetId: string; symbol: string; percent: number }[] }[];
   onEditMethod?: (method: InvestmentMethod) => void;
+  /** Money sitting in each method. Only supplied for methods you run — a
+   *  client browsing the catalogue has no business seeing other people's
+   *  capital. */
+  capital?: MethodCapital[];
+  hideValues?: boolean;
 };
 
 type RiskTone = "low" | "medium" | "high";
@@ -54,6 +70,8 @@ export function InvestmentMethodsView({
   ownedMethodIds = [],
   allocations = [],
   onEditMethod,
+  capital = [],
+  hideValues = false,
 }: InvestmentMethodsViewProps) {
   const owned = useMemo(() => new Set(ownedMethodIds), [ownedMethodIds]);
   const [showDisabled, setShowDisabled] = useState(false);
@@ -83,38 +101,6 @@ export function InvestmentMethodsView({
   const isOwnerView = ownedMethodIds.length > 0;
   const visibleMethods = isOwnerView || showDisabled ? methods : enabledMethods;
 
-  const totals = useMemo(() => {
-    const rois = enabledMethods.map((m) => parseFloat(m.monthlyRoi));
-    const avgRoi =
-      rois.length === 0
-        ? 0
-        : rois.reduce((sum, r) => sum + (Number.isFinite(r) ? r : 0), 0) /
-          rois.length;
-    const best = enabledMethods.reduce<
-      { name: string; roi: number } | null
-    >((acc, m) => {
-      const r = parseFloat(m.monthlyRoi);
-      if (!Number.isFinite(r)) return acc;
-      if (!acc || r > acc.roi) return { name: m.name, roi: r };
-      return acc;
-    }, null);
-    const byRisk = enabledMethods.reduce(
-      (acc, m) => {
-        acc[normaliseRisk(m.riskLevel)] += 1;
-        return acc;
-      },
-      { low: 0, medium: 0, high: 0 } as Record<RiskTone, number>
-    );
-    const disabledCount = methods.length - enabledMethods.length;
-    return {
-      total: enabledMethods.length,
-      avgRoi,
-      best,
-      byRisk,
-      disabledCount,
-    };
-  }, [enabledMethods, methods.length]);
-
   const sortedMethods = useMemo(
     () =>
       [...visibleMethods].sort(
@@ -131,8 +117,9 @@ export function InvestmentMethodsView({
           Investment Methods
         </Heading>
         <Text variant="muted">
-          Strategies available across the catalog — risk profile, monthly ROI
-          and the author behind each vehicle.
+          {isOwnerView
+            ? "The methods you run and the capital sitting in each."
+            : "Strategies you can invest in."}
         </Text>
       </div>
 
@@ -144,64 +131,6 @@ export function InvestmentMethodsView({
         </Card>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCard
-              label="Methods"
-              value={String(totals.total)}
-              sublabel={
-                isOwnerView ? "Everything you run" : "In the catalogue"
-              }
-            />
-            <KpiCard
-              label="Open to new money"
-              value={String(totals.total - totals.disabledCount)}
-              sublabel={
-                totals.disabledCount > 0
-                  ? `${totals.disabledCount} closed`
-                  : "All of them"
-              }
-              icon={Users}
-            />
-            <KpiCard
-              label="Avg monthly ROI"
-              value={`${totals.avgRoi.toFixed(2)}%`}
-              tone="positive"
-              sublabel="Across all enabled methods"
-              icon={TrendingUp}
-            />
-            <KpiCard
-              label="Best monthly ROI"
-              value={
-                totals.best ? `${totals.best.roi.toFixed(2)}%` : "—"
-              }
-              tone="positive"
-              sublabel={totals.best?.name ?? "No methods yet"}
-              icon={Sparkles}
-            />
-          </div>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center justify-between gap-3">
-                <span>Risk profile</span>
-                <span className="text-xs font-normal text-muted-foreground">
-                  {totals.total} enabled
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RiskBar byRisk={totals.byRisk} total={totals.total} />
-            </CardContent>
-          </Card>
-
-          {showDisabled && totals.disabledCount > 0 && (
-            <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              <EyeOff className="h-3.5 w-3.5" /> Dev preview includes{" "}
-              {totals.disabledCount} disabled method
-              {totals.disabledCount === 1 ? "" : "s"}.
-            </div>
-          )}
-
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {sortedMethods.map((method) => (
               <MethodCard
@@ -210,6 +139,8 @@ export function InvestmentMethodsView({
                 allocation={
                   allocations.find((a) => a.methodId === method.id)?.allocations ?? []
                 }
+                capital={capital.find((c) => c.methodId === method.id)}
+                hideValues={hideValues}
                 onEdit={
                   owned.has(method.id) && onEditMethod
                     ? () => onEditMethod(method)
@@ -224,44 +155,17 @@ export function InvestmentMethodsView({
   );
 }
 
-function KpiCard({
-  label,
-  value,
-  sublabel,
-  tone,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  sublabel?: React.ReactNode;
-  tone?: "positive" | "negative";
-  icon?: React.ComponentType<{ className?: string }>;
-}) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <Eyebrow as="div">{label}</Eyebrow>
-        {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground" />}
-      </CardHeader>
-      <CardContent className="space-y-1">
-        <Mono className={cn("block text-2xl font-semibold", toneClass(tone))}>
-          {value}
-        </Mono>
-        {sublabel && (
-          <Text variant="small" as="div">{sublabel}</Text>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function MethodCard({
   method,
   allocation,
+  capital,
+  hideValues = false,
   onEdit,
 }: {
   method: InvestmentMethod;
   allocation: { symbol: string; percent: number }[];
+  capital?: MethodCapital;
+  hideValues?: boolean;
   /** Absent for methods this user does not run — no edit affordance, and no
    *  internal allocation shown. */
   onEdit?: () => void;
@@ -325,76 +229,44 @@ function MethodCard({
               {Number.isFinite(roi) ? `${roi.toFixed(2)}%` : "—"}
             </Mono>
           </div>
-          {!method.enabled && (
+
+          {/* What is actually sitting in this method. Only present for methods
+              this user runs; a client browsing has no business seeing it. */}
+          {capital && (
+            <div className="space-y-0.5 text-right">
+              <Eyebrow>Invested</Eyebrow>
+              <Mono className="block text-2xl font-semibold tabular-nums">
+                {hideValues
+                  ? maskValue(formatCurrency(capital.invested))
+                  : formatCurrency(capital.invested)}
+              </Mono>
+              <Text className="text-2xs text-muted-foreground">
+                {capital.investorCount === 0
+                  ? "nobody yet"
+                  : `${capital.investorCount} ${
+                      capital.investorCount === 1 ? "investor" : "investors"
+                    } · now ${
+                      hideValues
+                        ? maskValue(formatCurrency(capital.holding))
+                        : formatCurrency(capital.holding)
+                    }`}
+              </Text>
+            </div>
+          )}
+
+          {!method.enabled && !capital && (
             <Badge variant="secondary" className="gap-1">
               <EyeOff className="h-3 w-3" /> Disabled
             </Badge>
           )}
         </div>
+
+        {!method.enabled && capital && (
+          <Badge variant="secondary" className="mt-3 gap-1">
+            <EyeOff className="h-3 w-3" /> Closed to new money
+          </Badge>
+        )}
       </CardContent>
     </Card>
   );
-}
-
-function RiskBar({
-  byRisk,
-  total,
-}: {
-  byRisk: Record<RiskTone, number>;
-  total: number;
-}) {
-  if (total === 0) {
-    return (
-      <Text variant="small">No enabled methods to summarise.</Text>
-    );
-  }
-  const segments: { tone: RiskTone; count: number }[] = [
-    { tone: "low", count: byRisk.low },
-    { tone: "medium", count: byRisk.medium },
-    { tone: "high", count: byRisk.high },
-  ];
-  return (
-    <div className="space-y-3">
-      <div className="flex h-2.5 overflow-hidden rounded-full bg-muted">
-        {segments.map((seg) =>
-          seg.count === 0 ? null : (
-            <div
-              key={seg.tone}
-              className={cn("h-full", segmentColor(seg.tone))}
-              style={{ width: `${(seg.count / total) * 100}%` }}
-              aria-label={`${RISK_BADGE[seg.tone].label}: ${seg.count}`}
-            />
-          )
-        )}
-      </div>
-      <ul className="flex flex-wrap gap-x-6 gap-y-2 text-xs">
-        {segments.map((seg) => (
-          <li key={seg.tone} className="flex items-center gap-2">
-            <span
-              aria-hidden
-              className={cn("h-2 w-2 rounded-full", segmentColor(seg.tone))}
-            />
-            <Text variant="small" as="span">
-              {RISK_BADGE[seg.tone].label}
-            </Text>
-            <Mono className="font-medium text-foreground">
-              {seg.count}
-            </Mono>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function segmentColor(tone: RiskTone): string {
-  if (tone === "low") return "bg-emerald-500";
-  if (tone === "medium") return "bg-amber-500";
-  return "bg-rose-500";
-}
-
-function toneClass(tone?: "positive" | "negative"): string {
-  if (tone === "positive") return "text-emerald-600 dark:text-emerald-400";
-  if (tone === "negative") return "text-rose-600 dark:text-rose-400";
-  return "";
 }

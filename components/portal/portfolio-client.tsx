@@ -159,6 +159,20 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
     };
   }, [data.transactionRows, data.investorTransactions, detailedTransactions]);
 
+  // Capital per method, straight off the investor aggregate the Managed tab
+  // already loads. Only methods this user runs appear here, so a client
+  // browsing the catalogue gets nothing.
+  const methodCapital = useMemo(
+    () =>
+      data.methodInvestors.map((m) => ({
+        methodId: m.methodId,
+        invested: m.totalInvested,
+        holding: m.totalHolding,
+        investorCount: m.investors.length,
+      })),
+    [data.methodInvestors]
+  );
+
   const ownerKpis = useMemo(() => {
     const h = data.marginHistory;
     const last = h[h.length - 1];
@@ -309,6 +323,8 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
               methods={data.methods}
               ownedMethodIds={data.methodInvestors.map((m) => m.methodId)}
               allocations={data.methodAllocations}
+              capital={methodCapital}
+              hideValues={hideValues}
               onEditMethod={setEditingMethod}
             />
           </TabsContent>
@@ -538,6 +554,8 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
               methods={data.methods}
               ownedMethodIds={data.methodInvestors.map((m) => m.methodId)}
               allocations={data.methodAllocations}
+              capital={methodCapital}
+              hideValues={hideValues}
               onEditMethod={setEditingMethod}
             />
           </TabsContent>

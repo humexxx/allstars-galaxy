@@ -164,6 +164,16 @@ metadata. Interest math is shared with [Finance](./finance.md).
   the method — two answers to one question. Dropped in `0035`, along with the
   author grouping and the "Authors" KPI in the catalogue (with one owner it
   always read "1"). The methods grid is now flat, enabled first.
+- **The Methods tab is the methods, and nothing else.** The four KPI cards
+  (Methods / Open to new money / Avg ROI / Best ROI) and the risk-profile bar
+  were summary furniture that pushed the actual answer below the fold. Each
+  card now carries the figure that matters: **capital invested in that
+  method**, plus investor count and what it is worth today under the promised
+  return.
+- **Capital is only supplied for methods the viewer runs.** A client browsing
+  the catalogue has no business seeing other people's money, so the prop
+  simply carries nothing for those cards — asserted in
+  `investment-methods-view.test.tsx`.
 - **An owner sees every method they run, disabled included.** Hiding half of
   somebody's own catalogue behind the dev toggle made the tab lie about what
   exists. Clients browsing still see only what they can pick — covered by

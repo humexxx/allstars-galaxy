@@ -123,6 +123,25 @@ describe("InvestmentMethodsView", () => {
     expect(screen.queryByText("Invested")).not.toBeInTheDocument();
   });
 
+  it("keeps a closed method's status with the other badges, not below the figures", () => {
+    // Sitting under the numbers, it pushed them up in whichever card happened
+    // to be closed — which is exactly what broke alignment across the grid.
+    const closed = { ...MINE, id: "m3", name: "Closed Fund", enabled: false } as InvestmentMethod;
+
+    render(
+      <InvestmentMethodsView
+        methods={[closed]}
+        ownedMethodIds={["m3"]}
+        allocations={[]}
+        capital={[{ methodId: "m3", invested: 0, holding: 0, investorCount: 0 }]}
+        onEditMethod={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Closed")).toBeInTheDocument();
+    expect(screen.queryByText("Closed to new money")).not.toBeInTheDocument();
+  });
+
   it("says so when an owned method has no allocation yet", () => {
     render(
       <InvestmentMethodsView

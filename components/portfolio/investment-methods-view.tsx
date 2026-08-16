@@ -181,19 +181,18 @@ function MethodCard({
       )}
     >
       <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="space-y-1">
-            <CardTitle>{method.name}</CardTitle>
-            {method.description && (
-              <Text variant="small" className="line-clamp-2">
-                {method.description}
-              </Text>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <Badge variant="outline" className={cn(badge.className)}>
-              {badge.label}
-            </Badge>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="outline" className={cn("shrink-0", badge.className)}>
+                {badge.label}
+              </Badge>
+              {!method.enabled && (
+                <Badge variant="secondary" className="shrink-0 gap-1">
+                  <EyeOff className="h-3 w-3" /> Closed
+                </Badge>
+              )}
+            </div>
             {onEdit && (
               <Button
                 size="icon"
@@ -206,6 +205,12 @@ function MethodCard({
               </Button>
             )}
           </div>
+          <CardTitle className="line-clamp-1">{method.name}</CardTitle>
+          {method.description && (
+            <Text variant="small" className="line-clamp-2">
+              {method.description}
+            </Text>
+          )}
         </div>
         {/* Internal, and only ever rendered for the person who runs it. */}
         {onEdit && (
@@ -216,7 +221,7 @@ function MethodCard({
           </Text>
         )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="mt-auto">
         <div className="flex items-baseline justify-between border-t pt-3">
           <div className="space-y-0.5">
             <Eyebrow>Monthly ROI</Eyebrow>
@@ -254,18 +259,7 @@ function MethodCard({
             </div>
           )}
 
-          {!method.enabled && !capital && (
-            <Badge variant="secondary" className="gap-1">
-              <EyeOff className="h-3 w-3" /> Disabled
-            </Badge>
-          )}
         </div>
-
-        {!method.enabled && capital && (
-          <Badge variant="secondary" className="mt-3 gap-1">
-            <EyeOff className="h-3 w-3" /> Closed to new money
-          </Badge>
-        )}
       </CardContent>
     </Card>
   );

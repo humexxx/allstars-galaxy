@@ -78,6 +78,13 @@ computed height, not a spacing step.
 - Card padding comes from the shadcn `Card`/`CardHeader`/`CardContent`
   primitives — don't override it with custom `p-*` unless a design genuinely
   needs it.
+- **To line figures up across a row of cards, pin them to the bottom**
+  (`mt-auto` on `CardContent`), don't try to equalise the headers. Cards in a
+  grid row already stretch to a common height, so bottom-aligned content lines
+  up whatever the title and description do — and a title that wraps to two
+  lines in one card is enough to break any header-height scheme. Keep variable
+  status (badges, notes) *above* the figures for the same reason: anything
+  below them shifts them up in whichever card happens to have it.
 - **`Card` clips its children (`overflow-hidden`).** Anything meant to straddle
   its edge — a chip at `-top-2.5`, a notch, a floating label — renders sliced in
   half if it is a *child*. Make it a sibling instead: wrap the card in a

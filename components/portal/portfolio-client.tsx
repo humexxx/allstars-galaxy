@@ -173,6 +173,28 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
     [data.methodInvestors]
   );
 
+  // One table per investor rather than one table with an Investor column.
+  // These are separate relationships, not one ledger — reading down a merged
+  // list, every running total spans people it should not.
+  const investorGroups = useMemo(() => {
+    const map = new Map<string, TransactionRow[]>();
+    for (const r of visibleRows.investors) {
+      const key = r.investorName ?? "Unknown";
+      const list = map.get(key) ?? [];
+      list.push(r);
+      map.set(key, list);
+    }
+    return [...map.entries()]
+      .map(([name, rows]) => ({
+        name,
+        rows,
+        contributed: rows
+          .filter((r) => r.status === "approved" && r.type === "buy")
+          .reduce((sum, r) => sum + parseFloat(r.total), 0),
+      }))
+      .sort((a, b) => b.contributed - a.contributed);
+  }, [visibleRows.investors]);
+
   const ownerKpis = useMemo(() => {
     const h = data.marginHistory;
     const last = h[h.length - 1];
@@ -563,18 +585,40 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                     included.
                   </Text>
                 </div>
-                <Card className="bg-card">
-                  <CardContent className="p-0 sm:p-6">
-                    <TransactionsTable
-                      rows={visibleRows.investors}
-                      showInvestor
-                      showStatus={detailedTransactions}
-                      hideValues={hideValues}
-                      emptyTitle="No outside investors yet"
-                      emptyDescription="Transactions other people make in your methods appear here."
-                    />
-                  </CardContent>
-                </Card>
+                {investorGroups.length === 0 ? (
+                  <Card className="bg-card">
+                    <CardContent className="p-0 sm:p-6">
+                      <TransactionsTable
+                        rows={[]}
+                        emptyTitle="No outside investors yet"
+                        emptyDescription="Transactions other people make in your methods appear here."
+                      />
+                    </CardContent>
+                  </Card>
+                ) : (
+                  investorGroups.map((group) => (
+                    <Card key={group.name} className="bg-card">
+                      <CardContent className="space-y-3 p-0 sm:p-6">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-4 sm:px-0 sm:pt-0">
+                          <Text className="text-sm font-medium">{group.name}</Text>
+                          <Text className="text-xs text-muted-foreground">
+                            {group.rows.length}{" "}
+                            {group.rows.length === 1 ? "movement" : "movements"} ·{" "}
+                            {hideValues
+                              ? maskValue(formatCurrency(group.contributed))
+                              : formatCurrency(group.contributed)}{" "}
+                            contributed
+                          </Text>
+                        </div>
+                        <TransactionsTable
+                          rows={group.rows}
+                          showStatus={detailedTransactions}
+                          hideValues={hideValues}
+                        />
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
               </div>
             )}
           </TabsContent>

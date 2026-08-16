@@ -31,6 +31,10 @@ const nextConfig: NextConfig = {
       ...(supabaseHostname
         ? ([{ protocol: "https", hostname: supabaseHostname }] as const)
         : ([{ protocol: "https", hostname: "*.supabase.co" }] as const)),
+      // Unsplash CDN. Trip covers and photos accept any external URL, and
+      // without the host listed here next/image refuses to render it — the
+      // image is fine, the optimizer just will not touch an undeclared host.
+      { protocol: "https", hostname: "images.unsplash.com" },
     ],
   },
   experimental: {

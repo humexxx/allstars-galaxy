@@ -5,7 +5,7 @@ import { desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { priceAssets, priceQuotes } from "@/db/schema";
 import { fetchCoinGeckoPrices } from "./price-providers/coingecko";
-import { fetchMassivePrices } from "./price-providers/massive";
+import { fetchDailyCloses, fetchMassivePrices } from "./price-providers/massive";
 import type { PriceableAsset } from "./price-providers/types";
 
 export type PriceFetchResult = {
@@ -127,4 +127,88 @@ export async function getPriceAssetBySymbol(symbol: string) {
     .where(eq(priceAssets.symbol, symbol))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * Write month-end closes for an asset going back to `from`.
+ *
+ * The margin chart needs prices at each past month, and the cron only ever
+ * records today. Persisting them means the chart is a plain DB read rather
+ * than a provider call on every page load — which matters when the free tier
+ * allows 5 requests a minute.
+ *
+ * Idempotent by construction: a month already carrying a quote is skipped, so
+ * running this repeatedly costs one API call and writes nothing.
+ */
+export async function backfillHistoricalQuotes(
+  from: string,
+  to: string
+): Promise<{ written: number; errors: string[] }> {
+  const assets = await db
+    .select()
+    .from(priceAssets)
+    .where(eq(priceAssets.source, "massive"));
+
+  const errors: string[] = [];
+  const rows: { assetId: string; price: string; fetchedAt: Date }[] = [];
+
+  for (const asset of assets) {
+    if (!asset.externalId) continue;
+
+    const existing = await db
+      .select({ fetchedAt: priceQuotes.fetchedAt })
+      .from(priceQuotes)
+      .where(eq(priceQuotes.assetId, asset.id));
+    const haveMonth = new Set(
+      existing.map((e) => e.fetchedAt.toISOString().slice(0, 7))
+    );
+
+    const { bars, error } = await fetchDailyCloses(asset.externalId, from, to);
+    if (error) {
+      errors.push(`${asset.symbol}: ${error}`);
+      continue;
+    }
+
+    // Last bar of each month wins — a month-end close is the convention the
+    // rest of the app already uses for monthly figures.
+    const lastOfMonth = new Map<string, { day: string; close: number }>();
+    for (const bar of bars) {
+      const month = bar.day.slice(0, 7);
+      const cur = lastOfMonth.get(month);
+      if (!cur || bar.day > cur.day) lastOfMonth.set(month, bar);
+    }
+
+    for (const [month, bar] of lastOfMonth) {
+      if (haveMonth.has(month)) continue;
+      rows.push({
+        assetId: asset.id,
+        price: bar.close.toFixed(8),
+        fetchedAt: new Date(`${bar.day}T23:59:00.000Z`),
+      });
+    }
+  }
+
+  if (rows.length > 0) await db.insert(priceQuotes).values(rows);
+  return { written: rows.length, errors };
+}
+
+/** Month-end price per asset, keyed `assetId|YYYY-MM`. */
+export async function getMonthlyPrices(
+  assetIds: string[]
+): Promise<Map<string, number>> {
+  if (assetIds.length === 0) return new Map();
+
+  const quotes = await db
+    .select()
+    .from(priceQuotes)
+    .where(inArray(priceQuotes.assetId, assetIds))
+    .orderBy(priceQuotes.fetchedAt);
+
+  const out = new Map<string, number>();
+  // Ascending, so the last quote in a month overwrites earlier ones and the
+  // month ends up carrying its closing price.
+  for (const q of quotes) {
+    out.set(`${q.assetId}|${q.fetchedAt.toISOString().slice(0, 7)}`, parseFloat(q.price));
+  }
+  return out;
 }

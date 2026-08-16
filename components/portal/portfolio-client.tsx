@@ -13,6 +13,8 @@ import { InvestmentMethodsView } from "@/components/portfolio/investment-methods
 import { MarginView } from "@/components/portal/margin-view";
 import type { AssetOption } from "@/components/portal/allocation-dialog";
 import type { MethodAllocationSummary } from "@/components/portal/margin-view";
+import type { MarginChartPoint } from "@/components/portal/margin-chart";
+import type { InvestorBreakdownRow } from "@/components/portal/investor-breakdown";
 import type { MarginOverview } from "@/lib/services/margin-service";
 import { MethodInvestorsView } from "@/components/portfolio/method-investors";
 import { InvestorTransactionsTable } from "@/components/portfolio/investor-transactions-table";
@@ -100,6 +102,10 @@ type PortfolioData = {
   /** What other people did in the methods this user runs. Empty for everyone
    *  who runs none. */
   investorTransactions: InvestorTransactionRow[];
+  /** Margin month by month, for the area chart. */
+  marginHistory: MarginChartPoint[];
+  /** Per-investor drill-down behind the margin. */
+  investorBreakdown: InvestorBreakdownRow[];
   currentUserId: string;
 };
 
@@ -299,6 +305,8 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                   unconfigured={data.margin.unconfigured}
                   assets={data.priceAssets}
                   allocations={data.methodAllocations}
+                  history={data.marginHistory}
+                  investors={data.investorBreakdown}
                   hideValues={hideValues}
                 />
               )}
@@ -520,6 +528,8 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                   unconfigured={data.margin.unconfigured}
                   assets={data.priceAssets}
                   allocations={data.methodAllocations}
+                  history={data.marginHistory}
+                  investors={data.investorBreakdown}
                   hideValues={hideValues}
                 />
               )}

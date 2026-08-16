@@ -59,6 +59,8 @@ function renderView(over: Partial<Parameters<typeof MarginView>[0]> = {}) {
       unconfigured={false}
       assets={ASSETS}
       allocations={[]}
+      history={[]}
+      investors={[]}
       {...over}
     />
   );

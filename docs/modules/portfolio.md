@@ -74,6 +74,28 @@ metadata. Interest math is shared with [Finance](./finance.md).
   filters to enabled itself and has a dev toggle for the rest; the transaction
   form gets the enabled subset. The tabs render **even without a portfolio**,
   so the catalogue stays browsable before you own anything.
+- **The Managed tab answers four questions in order**: how did this month go
+  (`This month` — the month-over-month move in the margin, the only figure that
+  shows direction, since the cumulative margin barely shifts), where does it
+  stand today (the three headline cards), how did it get here (`MarginChart`,
+  an area chart toggling between *Margin* and *Allocations vs owed*), and who
+  is behind it (`InvestorBreakdown`, per person).
+- **Margin history discounts BACKWARDS from stored `currentValue`**, it does
+  not recompute forwards from `initialValue`. The real data compounds 14
+  periods across ~11.5 calendar months, so a forward formula disagrees with
+  what the interest cron actually applied. Discounting guarantees the series
+  lands exactly on the headline — verified: the last point reproduces
+  deployed 2,637 / owed 7,278 / margin −4,641 to the dollar.
+- **Historical month-end prices are persisted** (`backfillHistoricalQuotes`)
+  rather than fetched per render. One provider call covers a whole date range;
+  rendering the chart then costs zero API calls, which matters against a 5
+  req/min ceiling.
+- **A month with no quote carries the last known price forward.** Valuing it at
+  zero would draw a cliff that never happened.
+- **`InvestorBreakdown` is not a pro-rata slice.** Each investor's positions
+  come from their own contributions priced on their own dates, so it is what
+  their money actually bought. Its `profitLoss` is the OWNER's number: the
+  investor's return is fixed and never varies.
 - **Four tabs, not five.** Investors and Margin were both owner-only views of
   the same methods, so they are two sections of one **Managed** tab (margin
   first — the answer — then who is invested). Non-owners see three.

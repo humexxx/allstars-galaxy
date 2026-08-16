@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Camera, Download, Eye, EyeOff, ListFilter, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Camera, ChevronDown, Download, Eye, EyeOff, ListFilter, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -144,6 +144,9 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   // Pending and rejected rows matter, but they are the exception you go
   // looking for, not the default reading of a history.
   const [detailedTransactions, setDetailedTransactions] = useState(false);
+  // Collapsed to the latest movement per person. The list answers "what is
+  // going on with them" at a glance; the full history is a second question.
+  const [expandedInvestors, setExpandedInvestors] = useState<Set<string>>(new Set());
 
   const visibleRows = useMemo(() => {
     const approved = <T extends { status: string }>(list: T[]) =>
@@ -596,28 +599,65 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                     </CardContent>
                   </Card>
                 ) : (
-                  investorGroups.map((group) => (
-                    <Card key={group.name} className="bg-card">
-                      <CardContent className="space-y-3 p-0 sm:p-6">
-                        <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-4 sm:px-0 sm:pt-0">
-                          <Text className="text-sm font-medium">{group.name}</Text>
-                          <Text className="text-xs text-muted-foreground">
-                            {group.rows.length}{" "}
-                            {group.rows.length === 1 ? "movement" : "movements"} ·{" "}
-                            {hideValues
-                              ? maskValue(formatCurrency(group.contributed))
-                              : formatCurrency(group.contributed)}{" "}
-                            contributed
-                          </Text>
-                        </div>
-                        <TransactionsTable
-                          rows={group.rows}
-                          showStatus={detailedTransactions}
-                          hideValues={hideValues}
-                        />
-                      </CardContent>
-                    </Card>
-                  ))
+                  investorGroups.map((group) => {
+                    const expanded = expandedInvestors.has(group.name);
+                    const shown = expanded ? group.rows : group.rows.slice(0, 1);
+                    const hidden = group.rows.length - shown.length;
+
+                    return (
+                      <Card key={group.name} className="bg-card">
+                        <CardContent className="space-y-3 p-0 sm:p-6">
+                          <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-4 sm:px-0 sm:pt-0">
+                            <Text className="text-sm font-medium">{group.name}</Text>
+                            <Text className="text-xs text-muted-foreground">
+                              {group.rows.length}{" "}
+                              {group.rows.length === 1 ? "movement" : "movements"} ·{" "}
+                              {hideValues
+                                ? maskValue(formatCurrency(group.contributed))
+                                : formatCurrency(group.contributed)}{" "}
+                              contributed
+                            </Text>
+                          </div>
+
+                          <TransactionsTable
+                            rows={shown}
+                            showStatus={detailedTransactions}
+                            hideValues={hideValues}
+                          />
+
+                          {group.rows.length > 1 && (
+                            <div className="px-4 pb-4 sm:px-0 sm:pb-0">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full text-xs text-muted-foreground"
+                                onClick={() =>
+                                  setExpandedInvestors((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(group.name)) next.delete(group.name);
+                                    else next.add(group.name);
+                                    return next;
+                                  })
+                                }
+                              >
+                                <ChevronDown
+                                  className={cn(
+                                    "size-4 transition-transform",
+                                    expanded && "rotate-180"
+                                  )}
+                                />
+                                {expanded
+                                  ? "Show less"
+                                  : `Show ${hidden} more ${
+                                      hidden === 1 ? "movement" : "movements"
+                                    }`}
+                              </Button>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })
                 )}
               </div>
             )}

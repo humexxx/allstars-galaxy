@@ -253,6 +253,13 @@
       "when": 1786860570021,
       "tag": "0035_low_clea",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1786863062838,
+      "tag": "0036_lean_talisman",
+      "breakpoints": true
     }
   ]
 }

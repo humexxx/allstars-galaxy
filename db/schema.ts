@@ -919,6 +919,11 @@ export const trips = pgTable(
     endDate: date("end_date"),
     // Primary cover image. URL may point to Supabase Storage or any external URL.
     coverPhotoUrl: text("cover_photo_url"),
+    // Optional YouTube link — a walkthrough of the place, a vlog, a trailer.
+    // Stored as the URL the user pasted, NOT a pre-built embed URL: the video
+    // id is derived at render time so a link saved in any of YouTube's several
+    // shapes (watch?v=, youtu.be, /shorts/, /embed/) keeps working.
+    youtubeUrl: text("youtube_url"),
     // Currency code (ISO 4217) used to aggregate item prices into estimates.
     currency: text("currency").notNull().default("USD"),
     color: text("color").notNull().default("var(--chart-1)"),

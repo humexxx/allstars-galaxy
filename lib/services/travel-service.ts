@@ -123,6 +123,7 @@ export async function createTrip(
       startDate: data.startDate,
       endDate: data.endDate ?? null,
       coverPhotoUrl: data.coverPhotoUrl ?? null,
+      youtubeUrl: data.youtubeUrl ?? null,
       currency: data.currency,
       color: data.color,
     })
@@ -144,6 +145,7 @@ export async function updateTrip(
       startDate: data.startDate,
       endDate: data.endDate ?? null,
       coverPhotoUrl: data.coverPhotoUrl ?? null,
+      youtubeUrl: data.youtubeUrl ?? null,
       currency: data.currency,
       color: data.color,
       updatedAt: new Date(),

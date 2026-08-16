@@ -64,6 +64,15 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **Trips carry an optional YouTube link** (`trips.youtube_url`). Stored as the
+  URL the user pasted, never a pre-built embed URL: the video id is derived at
+  render time by `lib/travel/youtube.ts`, so a link saved in any of YouTube's
+  shapes (`watch?v=`, `youtu.be`, `/shorts/`, `/embed/`, `/live/`) keeps
+  working. Validated as a YouTube link specifically — any-URL validation would
+  save happily and then render nothing.
+- **The embed uses `youtube-nocookie.com`** and renders nothing at all for a
+  missing or unrecognised link. The trip page is also served publicly through a
+  share token, where the visitor has agreed to nothing.
 - Conventional Commits scopes: `travel`, `sports`, `entertainment`
 - `/app/trips/[token]` is **public** — verify no PII leaks through the shared route. The share token model in `trip_shares` is the only authz check.
 - **Travel formatting helpers live in [`lib/travel/format.ts`](../../lib/travel/format.ts)** (`parseTripDate`, `formatDateRange`, `tripDays`, `tripDurationLabel`, `formatTripMoney`) — a server-safe module with no `"use client"`. They were previously duplicated per component and exported from the client `trip-detail.tsx`; importing that from the server-rendered `public-trip-view.tsx` turned them into client references and **500'd every public share link**. Never re-export shared helpers from a client module.

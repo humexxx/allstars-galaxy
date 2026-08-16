@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import type { PublicTripView } from "@/types/travel";
 
+import { TripVideo } from "@/components/travel/trip-video";
 import {
   formatDateRange,
   formatTripMoney,
@@ -115,6 +116,8 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
           </CardContent>
         </Card>
       )}
+
+      <TripVideo url={trip.youtubeUrl} title={trip.title} />
 
       {photos.length > 0 && (
         <section className="space-y-3">

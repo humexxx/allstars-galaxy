@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { youtubeVideoId } from "@/lib/travel/youtube";
 
 // Non-negative monetary value (no leading minus). Mirrors the CHECK constraint
 // on trip_items.price.
@@ -37,6 +38,18 @@ export const createTripSchema = z
     startDate: isoDate,
     endDate: isoDate.nullable().optional(),
     coverPhotoUrl: z.string().url().max(2000).nullable().optional(),
+    // Validated as a YouTube link specifically, not just any URL: the field
+    // renders an embed, and a non-YouTube address would save fine and then
+    // silently show nothing.
+    youtubeUrl: z
+      .string()
+      .trim()
+      .max(2000)
+      .nullable()
+      .optional()
+      .refine((v) => !v || youtubeVideoId(v) !== null, {
+        message: "Paste a YouTube link (watch, youtu.be, shorts or embed)",
+      }),
     currency: currency.default("USD"),
     color: z.string().min(1).max(60).default("var(--chart-1)"),
   })
@@ -59,6 +72,18 @@ export const updateTripSchema = z
     startDate: isoDate,
     endDate: isoDate.nullable().optional(),
     coverPhotoUrl: z.string().url().max(2000).nullable().optional(),
+    // Validated as a YouTube link specifically, not just any URL: the field
+    // renders an embed, and a non-YouTube address would save fine and then
+    // silently show nothing.
+    youtubeUrl: z
+      .string()
+      .trim()
+      .max(2000)
+      .nullable()
+      .optional()
+      .refine((v) => !v || youtubeVideoId(v) !== null, {
+        message: "Paste a YouTube link (watch, youtu.be, shorts or embed)",
+      }),
     currency: currency.default("USD"),
     color: z.string().min(1).max(60).default("var(--chart-1)"),
   })

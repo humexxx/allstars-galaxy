@@ -55,6 +55,7 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
       startDate: seedStartDate,
       endDate: trip?.endDate ?? null,
       coverPhotoUrl: trip?.coverPhotoUrl ?? null,
+      youtubeUrl: trip?.youtubeUrl ?? null,
       currency: trip?.currency ?? "USD",
       color: trip?.color ?? COLORS[0],
     },
@@ -200,6 +201,32 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
                   />
                 )}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="trip-youtube">Video (optional)</Label>
+              <Input
+                id="trip-youtube"
+                type="url"
+                inputMode="url"
+                placeholder="https://youtube.com/watch?v=…"
+                aria-invalid={!!errors.youtubeUrl}
+                {...register("youtubeUrl", {
+                  // Empty means "no video", not an empty string — the column is
+                  // nullable and a blank would fail URL validation on save.
+                  setValueAs: (v: string | null) => v?.trim() || null,
+                })}
+              />
+              {errors.youtubeUrl ? (
+                <p className="text-sm text-destructive">
+                  {errors.youtubeUrl.message}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  A walkthrough or vlog of the place. Any YouTube link works —
+                  watch, youtu.be, shorts or embed.
+                </p>
+              )}
             </div>
       </div>
 

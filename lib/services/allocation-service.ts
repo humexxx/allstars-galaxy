@@ -224,6 +224,7 @@ export async function getDerivedHoldings(methodIds: string[]) {
 
   return db
     .select({
+      transactionId: transactionAllocations.transactionId,
       methodId: transactions.investmentMethodId,
       assetId: transactionAllocations.assetId,
       quantity: transactionAllocations.quantity,

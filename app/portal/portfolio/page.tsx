@@ -11,12 +11,7 @@ import {
   getInvestorTransactions,
 } from "@/lib/services/portfolio-service";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
-import {
-  getInvestorBreakdown,
-  getMarginHistory,
-  getMarginOverview,
-} from "@/lib/services/margin-service";
-import { getMethodAllocations } from "@/lib/services/allocation-service";
+import { getManagedOverview } from "@/lib/services/margin-service";
 import { listPriceAssets } from "@/lib/services/price-service";
 import { getAllUsers } from "@/lib/services/user-service";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
@@ -42,12 +37,12 @@ export default async function PortfolioPage() {
   const investorsPromise = getMethodInvestors(userId);
   const managedPromise = getManagedContributions(userId);
   const managedSeriesPromise = getManagedPerformanceSeries(userId);
-  // Margin is the owner's private view of the same methods; it resolves to an
-  // empty overview for anyone who runs none, so it costs nothing to ask for.
-  const marginPromise = getMarginOverview(userId);
+  // Everything the Managed tab needs in one call. It used to be three
+  // independent loaders that each re-queried the same methods, allocations and
+  // quotes — eleven round trips against a pooler where a connection costs
+  // ~850ms and a query ~86ms, which is what made this page take seconds.
+  const managedOverviewPromise = getManagedOverview(userId);
   const investorTxPromise = getInvestorTransactions(userId);
-  const marginHistoryPromise = getMarginHistory(userId);
-  const investorBreakdownPromise = getInvestorBreakdown(userId);
   const priceAssetsPromise = listPriceAssets();
   const [
     portfolio,
@@ -56,11 +51,9 @@ export default async function PortfolioPage() {
     methodInvestors,
     managedContributions,
     managedSeries,
-    margin,
+    managedOverview,
     priceAssets,
     investorTransactions,
-    marginHistory,
-    investorBreakdown,
   ] = await Promise.all([
     getUserPortfolio(userId),
     // ALL methods, enabled or not: the Methods tab renders
@@ -72,25 +65,10 @@ export default async function PortfolioPage() {
     investorsPromise,
     managedPromise,
     managedSeriesPromise,
-    marginPromise,
+    managedOverviewPromise,
     priceAssetsPromise,
     investorTxPromise,
-    marginHistoryPromise,
-    investorBreakdownPromise,
   ]);
-
-  // Allocation policy per owned method. Cheap (one small table) and only
-  // meaningful to the owner, who is the only one who sees the Margin tab.
-  const methodAllocations = await Promise.all(
-    methodInvestors.map(async (m) => ({
-      methodId: m.methodId,
-      allocations: (await getMethodAllocations(m.methodId)).map((a) => ({
-        assetId: a.assetId,
-        symbol: a.symbol,
-        percent: a.percent,
-      })),
-    }))
-  );
 
   let stats = null;
   let transactions: PortfolioTransaction[] = [];
@@ -127,10 +105,10 @@ export default async function PortfolioPage() {
     methodInvestors,
     managedContributions,
     managedSeries,
-    margin: methodInvestors.length > 0 ? margin : null,
-    methodAllocations,
-    marginHistory,
-    investorBreakdown,
+    margin: methodInvestors.length > 0 ? managedOverview.overview : null,
+    methodAllocations: managedOverview.allocations,
+    marginHistory: managedOverview.history,
+    investorBreakdown: managedOverview.investors,
     investorTransactions: investorTransactions.map((t) => ({
       id: t.id,
       date: t.date.toISOString(),

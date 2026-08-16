@@ -92,6 +92,77 @@ export const investmentMethods = pgTable("investment_methods", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+/**
+ * Where an admin actually deploys the capital raised by a method, and what it
+ * is worth right now.
+ *
+ * The business model: investors are promised the method's fixed `monthlyRoi`
+ * (that is what `transactions.currentValue` compounds at, and it is a
+ * LIABILITY). The admin invests the pooled capital elsewhere; whatever the
+ * real holdings earn above the promised return is the admin's margin.
+ */
+export const priceAssets = pgTable("price_assets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Ticker shown in the UI, e.g. ADA. */
+  symbol: text("symbol").notNull().unique(),
+  name: text("name").notNull(),
+  /** Provider's identifier — for CoinGecko this is its coin id ("cardano"),
+   *  which is NOT the symbol. Nullable for assets priced by hand. */
+  externalId: text("external_id"),
+  /** Which source refreshes this. "manual" means only a human writes prices,
+   *  which is the escape hatch for anything the provider doesn't cover. */
+  source: text("source").notNull().default("coingecko"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Price history. Append-only: the cron inserts, nothing updates, so a bad
+ * fetch can be traced instead of silently overwriting a good price.
+ */
+export const priceQuotes = pgTable(
+  "price_quotes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => priceAssets.id, { onDelete: "cascade" }),
+    price: numeric("price", { precision: 24, scale: 8 }).notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("price_quotes_asset_id_idx").on(t.assetId),
+    index("price_quotes_fetched_at_idx").on(t.fetchedAt),
+  ]
+);
+
+/**
+ * How much of an asset a method's pooled capital actually holds. Quantity, not
+ * percentage: a percentage would silently re-price itself as the asset moves,
+ * which is exactly the drift the margin is meant to expose.
+ */
+export const methodHoldings = pgTable(
+  "method_holdings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    methodId: uuid("method_id")
+      .notNull()
+      .references(() => investmentMethods.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => priceAssets.id, { onDelete: "restrict" }),
+    quantity: numeric("quantity", { precision: 24, scale: 8 }).notNull(),
+    /** What the admin paid for this position, for a cost-basis comparison. */
+    costBasis: numeric("cost_basis", { precision: 20, scale: 2 }).notNull().default("0"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("method_holdings_method_id_idx").on(t.methodId),
+    uniqueIndex("method_holdings_method_asset_uq").on(t.methodId, t.assetId),
+  ]
+);
+
 export const portfolios = pgTable("portfolios", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id")

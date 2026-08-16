@@ -218,6 +218,13 @@
       "when": 1786816267935,
       "tag": "0030_lying_karma",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1786840695250,
+      "tag": "0031_eager_shatterstar",
+      "breakpoints": true
     }
   ]
 }

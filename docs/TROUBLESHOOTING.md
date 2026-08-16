@@ -132,16 +132,21 @@ resolver #1
   nameserver[0] : 192.168.40.1     # the router — that's the whole list
 ```
 
-With one resolver, every hiccup is a total outage *and* gets cached as one.
-Adding a second means the lookup falls through to a server that works, so
-nothing negative is ever cached:
+**Applied 2026-08-16** — the Wi-Fi service now lists three resolvers:
 
-```bash
-networksetup -setdnsservers Wi-Fi 192.168.40.1 1.1.1.1 8.8.8.8
+```
+nameserver[0] : 192.168.40.1     # the router
+nameserver[1] : 1.1.1.1
+nameserver[2] : 8.8.8.8
 ```
 
-(Needs admin rights. `networksetup -getdnsservers Wi-Fi` shows the current
-list; passing `Empty` restores the DHCP defaults.)
+That covers the *router* half: a hiccup now falls through to a resolver that
+answers instead of being cached as "does not exist". It does **not** address
+Private Relay, which intercepts the `getaddrinfo` path before any of these are
+consulted. Expect fewer failures, not none.
+
+To inspect or undo: `networksetup -getdnsservers Wi-Fi`, and
+`networksetup -setdnsservers Wi-Fi Empty` restores the DHCP defaults.
 
 There are also eight `utun` interfaces active (VPN tunnels). VPN clients
 rewrite resolver configuration as they connect and drop, which is a plausible

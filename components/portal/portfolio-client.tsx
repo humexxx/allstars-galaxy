@@ -41,6 +41,7 @@ import { AddTransactionDialog } from "@/components/portfolio/add-transaction-dia
 import { EmptyPortfolio } from "@/components/portfolio/empty-portfolio";
 import { ManualSnapshotDialog } from "@/components/portfolio/manual-snapshot-dialog";
 import { TransactionsTable } from "@/components/portfolio/transactions-table";
+import { InvestorSummaryTable } from "@/components/portfolio/investor-summary-table";
 import type { TransactionRow } from "@/components/portfolio/transactions-table";
 import {
   AlertDialog,
@@ -144,9 +145,9 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   // Pending and rejected rows matter, but they are the exception you go
   // looking for, not the default reading of a history.
   const [detailedTransactions, setDetailedTransactions] = useState(false);
-  // Collapsed to the latest movement per person. The list answers "what is
-  // going on with them" at a glance; the full history is a second question.
-  const [expandedInvestors, setExpandedInvestors] = useState<Set<string>>(new Set());
+  // One aggregated row per investor by default. The full transaction history
+  // is a second question and lives behind a button.
+  const [investorDetail, setInvestorDetail] = useState(false);
 
   const visibleRows = useMemo(() => {
     const approved = <T extends { status: string }>(list: T[]) =>
@@ -176,9 +177,24 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
     [data.methodInvestors]
   );
 
-  // One table per investor rather than one table with an Investor column.
-  // These are separate relationships, not one ledger — reading down a merged
-  // list, every running total spans people it should not.
+  // The default view: one row per person, summarising the relationship rather
+  // than listing it. The per-transaction detail already exists a click away.
+  const investorSummary = useMemo(
+    () =>
+      data.investorBreakdown
+        .filter((b) => !b.isOwn)
+        .map((b) => ({
+          ...b,
+          movements: data.investorTransactions.filter(
+            (t) => t.investorName === b.name
+          ).length,
+        })),
+    [data.investorBreakdown, data.investorTransactions]
+  );
+
+  // Used only by the detail view: one table per person rather than one merged
+  // list, because these are separate relationships and a running total down a
+  // merged list spans people it should not.
   const investorGroups = useMemo(() => {
     const map = new Map<string, TransactionRow[]>();
     for (const r of visibleRows.investors) {
@@ -588,76 +604,57 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                     included.
                   </Text>
                 </div>
-                {investorGroups.length === 0 ? (
+                {investorDetail ? (
+                  investorGroups.map((group) => (
+                    <Card key={group.name} className="bg-card">
+                      <CardContent className="space-y-3 p-0 sm:p-6">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-4 sm:px-0 sm:pt-0">
+                          <Text className="text-sm font-medium">{group.name}</Text>
+                          <Text className="text-xs text-muted-foreground">
+                            {group.rows.length}{" "}
+                            {group.rows.length === 1 ? "movement" : "movements"} ·{" "}
+                            {hideValues
+                              ? maskValue(formatCurrency(group.contributed))
+                              : formatCurrency(group.contributed)}{" "}
+                            contributed
+                          </Text>
+                        </div>
+                        <TransactionsTable
+                          rows={group.rows}
+                          showStatus={detailedTransactions}
+                          hideValues={hideValues}
+                        />
+                      </CardContent>
+                    </Card>
+                  ))
+                ) : (
                   <Card className="bg-card">
                     <CardContent className="p-0 sm:p-6">
-                      <TransactionsTable
-                        rows={[]}
-                        emptyTitle="No outside investors yet"
-                        emptyDescription="Transactions other people make in your methods appear here."
+                      <InvestorSummaryTable
+                        rows={investorSummary}
+                        hideValues={hideValues}
                       />
                     </CardContent>
                   </Card>
-                ) : (
-                  investorGroups.map((group) => {
-                    const expanded = expandedInvestors.has(group.name);
-                    const shown = expanded ? group.rows : group.rows.slice(0, 1);
-                    const hidden = group.rows.length - shown.length;
+                )}
 
-                    return (
-                      <Card key={group.name} className="bg-card">
-                        <CardContent className="space-y-3 p-0 sm:p-6">
-                          <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-4 sm:px-0 sm:pt-0">
-                            <Text className="text-sm font-medium">{group.name}</Text>
-                            <Text className="text-xs text-muted-foreground">
-                              {group.rows.length}{" "}
-                              {group.rows.length === 1 ? "movement" : "movements"} ·{" "}
-                              {hideValues
-                                ? maskValue(formatCurrency(group.contributed))
-                                : formatCurrency(group.contributed)}{" "}
-                              contributed
-                            </Text>
-                          </div>
-
-                          <TransactionsTable
-                            rows={shown}
-                            showStatus={detailedTransactions}
-                            hideValues={hideValues}
-                          />
-
-                          {group.rows.length > 1 && (
-                            <div className="px-4 pb-4 sm:px-0 sm:pb-0">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="w-full text-xs text-muted-foreground"
-                                onClick={() =>
-                                  setExpandedInvestors((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(group.name)) next.delete(group.name);
-                                    else next.add(group.name);
-                                    return next;
-                                  })
-                                }
-                              >
-                                <ChevronDown
-                                  className={cn(
-                                    "size-4 transition-transform",
-                                    expanded && "rotate-180"
-                                  )}
-                                />
-                                {expanded
-                                  ? "Show less"
-                                  : `Show ${hidden} more ${
-                                      hidden === 1 ? "movement" : "movements"
-                                    }`}
-                              </Button>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })
+                {investorSummary.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-xs text-muted-foreground"
+                    onClick={() => setInvestorDetail((v) => !v)}
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "size-4 transition-transform",
+                        investorDetail && "rotate-180"
+                      )}
+                    />
+                    {investorDetail
+                      ? "Back to the summary"
+                      : "See every movement, per investor"}
+                  </Button>
                 )}
               </div>
             )}

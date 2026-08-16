@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active (page redesigned to mirror plan-editor layout)
-> **Last reviewed:** 2026-07-02
+> **Last reviewed:** 2026-08-15
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -16,6 +16,7 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `transactions.ts` — `createTransactionAction` (replaces the legacy `/api/transactions` route)
 - `portfolio-snapshots.ts` — create manual snapshots of portfolio value
 - `admin-transactions.ts` — admin-only approve/reject of transactions (see [Admin](./admin.md))
+- `holdings.ts` — `upsertHoldingAction`, `deleteHoldingAction`, `createPriceAssetAction`, `setManualPriceAction`; gated on **owning the method**, not merely on being an admin
 
 ## Services — `/lib/services/`
 - `portfolio-service.ts` — portfolio state and composition
@@ -23,10 +24,14 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `snapshot-service.ts` — snapshot persistence/queries
 - `interest-service.ts` — ROI math (shared with [Finance](./finance.md))
 - `chart-service.ts` — chart data shaping (shared utility)
+- `price-service.ts` — quote storage + provider dispatch (`refreshPrices`, `getLatestPrices`, `listPriceAssets`)
+- `price-providers/` — one module per source: `massive.ts`, `coingecko.ts`, shared `types.ts`
+- `margin-service.ts` — `getMarginOverview(ownerUserId)`, `getMethodHoldings(methodId)`
 
 ## Schemas — `/schemas/`
 - `transaction.ts`
 - `snapshot.ts`
+- `holdings.ts` — holding upsert/delete, price-asset creation, manual quotes
 
 ## Types — `/types/`
 - `portfolio.ts`
@@ -42,6 +47,9 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `transactions` — buy/withdrawal transactions with approval workflow
 - `portfolio_snapshots` — historical portfolio value
 - `investment_methods` — investment vehicles with risk/ROI metadata
+- `price_assets` — catalogue of quotable assets (`symbol`, `external_id`, `source`)
+- `price_quotes` — append-only price history, one row per fetch
+- `method_holdings` — what each method's pooled capital is deployed in (quantity + cost basis)
 - `app_state` — global key-value (cron state, etc.) — also touched by other modules
 
 ## Notes
@@ -68,6 +76,30 @@ metadata. Interest math is shared with [Finance](./finance.md).
   gated by `requireEffectiveContext` so an impersonating admin exports what
   they see. Cells starting with `=`, `+`, `-` or `@` are prefixed with a quote
   — Excel and Sheets execute those as formulas.
+- **Margin is the owner's private view.** Investors are sold a *fixed* return;
+  the owner deploys the pooled capital elsewhere and keeps the difference.
+  `margin = assets - liability`, where liability is the investors' compounded
+  `currentValue` and assets is `quantity x latest price`. A **negative** margin
+  matters most — the promise is outrunning the real return and the owner is
+  covering it — so it is never clamped or hidden. Surfaced as a **Margin** tab
+  that only exists for method owners.
+- **The owner's own stake is capital, not liability** (`splitLiability` in
+  [`lib/finance/margin.ts`](../../lib/finance/margin.ts)). You cannot owe
+  yourself a fixed return; counting it as debt would understate the margin by
+  exactly that stake. It is carried separately as `ownPosition`.
+- **Holdings are quantities, never percentages.** A percentage drifts the
+  moment a price moves and would need recomputing on every quote.
+- **Prices refresh daily** at 00:30 via `/api/cron/prices` — 30 minutes after
+  `/api/cron/daily` so the two don't contend for pooled connections. Providers:
+  **Massive** (ex-Polygon.io, rebranded early 2026 — crypto, indices, stocks,
+  ETFs, forex; needs `MASSIVE_API_KEY`; free Basic tier is end-of-day at 5
+  req/min) and keyless **CoinGecko** (crypto only). `source = "manual"` is the
+  escape hatch for anything neither covers — the cron never touches those.
+- **The 5 req/min free tier shapes the fetch strategy.** All crypto comes back
+  in ONE grouped daily-bar call; everything else is quoted per ticker via
+  `/prev` (which resolves the last *trading* day itself, so weekends aren't a
+  hole). Assets are ordered stalest-first, and anything past the per-run budget
+  is reported in `skipped` rather than dropped silently.
 - Conventional Commits scope: `portfolio` *(not in commitlint allowlist — add it to [`commitlint.config.mjs`](../../commitlint.config.mjs) if you start committing here often, or use `finance` if the change is on shared math)*
 - Daily cron at `/api/cron/daily` writes snapshots and applies monthly compound interest on the 1st.
 - `createDailySnapshots` must use `inArray(...)` for the "latest snapshot per portfolio" lookup — a raw ``sql`... = ANY(${ids})` `` makes Drizzle emit `ANY(($1, $2))` (a row tuple), which Postgres rejects once there's more than one portfolio. That bug silently broke every daily portfolio snapshot from 2026-05-26 until the `inArray` fix.

@@ -1,20 +1,12 @@
 import "server-only";
 
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, ne } from "drizzle-orm";
 
 import { db } from "@/db";
 import { priceAssets, priceQuotes } from "@/db/schema";
-
-/**
- * CoinGecko's keyless Demo tier: no API key, ~10k calls/month at 100/min.
- *
- * That budget is why the cron runs HOURLY and not per-minute: one hourly call
- * is ~720/month and fits comfortably, while per-minute would be ~43k and blow
- * through the free tier four times over. The endpoint takes every id in one
- * request, so adding assets costs no extra calls.
- */
-const BASE_URL = "https://api.coingecko.com/api/v3";
-const TIMEOUT_MS = 15_000;
+import { fetchCoinGeckoPrices } from "./price-providers/coingecko";
+import { fetchMassivePrices } from "./price-providers/massive";
+import type { PriceableAsset } from "./price-providers/types";
 
 export type PriceFetchResult = {
   fetched: number;
@@ -23,67 +15,65 @@ export type PriceFetchResult = {
 };
 
 /**
- * Pull the current price for every non-manual asset and append a quote row.
+ * `manual` is not a provider — it is the escape hatch for anything no API
+ * quotes (a private position, an illiquid instrument). A human prices those by
+ * hand and the cron must never overwrite them.
+ */
+const MANUAL = "manual";
+
+/**
+ * Pull the current price for every automatically-priced asset and append a
+ * quote row.
  *
  * Append-only on purpose: a bad fetch leaves a traceable row instead of
- * overwriting the last good price. Assets marked `manual` are never touched
- * here — they exist for anything the provider doesn't cover (indices, private
- * positions), which a human prices by hand.
+ * overwriting the last good price, and the margin can be replayed for any past
+ * date because no history is ever destroyed.
  */
 export async function refreshPrices(): Promise<PriceFetchResult> {
-  const assets = await db
-    .select()
-    .from(priceAssets)
-    .where(eq(priceAssets.source, "coingecko"));
+  const assets = await db.select().from(priceAssets).where(ne(priceAssets.source, MANUAL));
 
   const priceable = assets.filter((a) => a.externalId);
-  const skipped = assets.length - priceable.length;
+  let skipped = assets.length - priceable.length;
 
   if (priceable.length === 0) {
     return { fetched: 0, skipped, errors: [] };
   }
 
-  const ids = priceable.map((a) => a.externalId!).join(",");
-  const url = `${BASE_URL}/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=usd`;
+  // Stalest first. It only changes the outcome when a provider has to defer
+  // work under a rate limit, but then it is what stops the same assets being
+  // starved every single run.
+  const lastSeen = await latestQuoteTimes(priceable.map((a) => a.id));
+  const ordered = [...priceable].sort(
+    (a, b) => (lastSeen.get(a.id) ?? 0) - (lastSeen.get(b.id) ?? 0)
+  );
 
-  let payload: Record<string, { usd?: number }>;
-  try {
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { accept: "application/json" },
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      return {
-        fetched: 0,
-        skipped,
-        errors: [`coingecko ${res.status}`],
-      };
-    }
-    payload = (await res.json()) as Record<string, { usd?: number }>;
-  } catch (e) {
-    // A provider outage must not take the cron down — the last known price
-    // stays valid and the next run retries.
-    return {
-      fetched: 0,
-      skipped,
-      errors: [e instanceof Error ? e.message : "fetch failed"],
-    };
+  const bySource = new Map<string, PriceableAsset[]>();
+  for (const a of ordered) {
+    const list = bySource.get(a.source) ?? [];
+    list.push({ id: a.id, symbol: a.symbol, externalId: a.externalId! });
+    bySource.set(a.source, list);
   }
 
-  const rows: { assetId: string; price: string }[] = [];
   const errors: string[] = [];
+  const prices = new Map<string, number>();
 
-  for (const asset of priceable) {
-    const usd = payload[asset.externalId!]?.usd;
-    // A missing or non-positive price is a bad response, not a real quote:
-    // writing 0 would silently value the position at nothing.
-    if (typeof usd !== "number" || !Number.isFinite(usd) || usd <= 0) {
-      errors.push(`no price for ${asset.symbol}`);
-      continue;
-    }
-    rows.push({ assetId: asset.id, price: usd.toFixed(8) });
+  for (const [source, list] of bySource) {
+    const result =
+      source === "massive"
+        ? await fetchMassivePrices(list)
+        : source === "coingecko"
+          ? await fetchCoinGeckoPrices(list)
+          : { prices: new Map<string, number>(), skipped: list.length, errors: [`unknown source "${source}"`] };
+
+    for (const [id, price] of result.prices) prices.set(id, price);
+    skipped += result.skipped;
+    errors.push(...result.errors);
   }
+
+  const rows = [...prices].map(([assetId, price]) => ({
+    assetId,
+    price: price.toFixed(8),
+  }));
 
   if (rows.length > 0) {
     await db.insert(priceQuotes).values(rows);
@@ -92,10 +82,23 @@ export async function refreshPrices(): Promise<PriceFetchResult> {
   return { fetched: rows.length, skipped, errors };
 }
 
-/** Latest quote per asset, as a symbol-keyed map. */
-export async function getLatestPrices(
-  assetIds: string[]
-): Promise<Map<string, number>> {
+/** Epoch millis of the most recent quote per asset; absent when never quoted. */
+async function latestQuoteTimes(assetIds: string[]): Promise<Map<string, number>> {
+  const rows = await db
+    .select({ assetId: priceQuotes.assetId, fetchedAt: priceQuotes.fetchedAt })
+    .from(priceQuotes)
+    .where(inArray(priceQuotes.assetId, assetIds))
+    .orderBy(desc(priceQuotes.fetchedAt));
+
+  const latest = new Map<string, number>();
+  for (const r of rows) {
+    if (!latest.has(r.assetId)) latest.set(r.assetId, r.fetchedAt.getTime());
+  }
+  return latest;
+}
+
+/** Latest quote per asset, keyed by asset id. */
+export async function getLatestPrices(assetIds: string[]): Promise<Map<string, number>> {
   if (assetIds.length === 0) return new Map();
 
   const quotes = await db
@@ -110,4 +113,18 @@ export async function getLatestPrices(
     if (!latest.has(q.assetId)) latest.set(q.assetId, parseFloat(q.price));
   }
   return latest;
+}
+
+/** Every asset that can back a holding, newest listing last. */
+export async function listPriceAssets() {
+  return db.select().from(priceAssets).orderBy(priceAssets.symbol);
+}
+
+export async function getPriceAssetBySymbol(symbol: string) {
+  const [row] = await db
+    .select()
+    .from(priceAssets)
+    .where(eq(priceAssets.symbol, symbol))
+    .limit(1);
+  return row ?? null;
 }

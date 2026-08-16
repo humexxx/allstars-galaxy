@@ -10,6 +10,8 @@ import {
   getManagedPerformanceSeries,
 } from "@/lib/services/portfolio-service";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
+import { getMarginOverview } from "@/lib/services/margin-service";
+import { listPriceAssets } from "@/lib/services/price-service";
 import { getAllUsers } from "@/lib/services/user-service";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import type { PortfolioTransaction } from "@/types/portfolio";
@@ -34,8 +36,20 @@ export default async function PortfolioPage() {
   const investorsPromise = getMethodInvestors(userId);
   const managedPromise = getManagedContributions(userId);
   const managedSeriesPromise = getManagedPerformanceSeries(userId);
-  const [portfolio, methods, users, methodInvestors, managedContributions, managedSeries] =
-    await Promise.all([
+  // Margin is the owner's private view of the same methods; it resolves to an
+  // empty overview for anyone who runs none, so it costs nothing to ask for.
+  const marginPromise = getMarginOverview(userId);
+  const priceAssetsPromise = listPriceAssets();
+  const [
+    portfolio,
+    methods,
+    users,
+    methodInvestors,
+    managedContributions,
+    managedSeries,
+    margin,
+    priceAssets,
+  ] = await Promise.all([
     getUserPortfolio(userId),
     // ALL methods, enabled or not: the Methods tab renders
     // InvestmentMethodsView, which filters to enabled itself and exposes a dev
@@ -43,10 +57,12 @@ export default async function PortfolioPage() {
     // (the transaction form) filter below.
     db.select().from(investmentMethods),
     usersPromise,
-      investorsPromise,
-      managedPromise,
-      managedSeriesPromise,
-    ]);
+    investorsPromise,
+    managedPromise,
+    managedSeriesPromise,
+    marginPromise,
+    priceAssetsPromise,
+  ]);
 
   let stats = null;
   let transactions: PortfolioTransaction[] = [];
@@ -83,6 +99,13 @@ export default async function PortfolioPage() {
     methodInvestors,
     managedContributions,
     managedSeries,
+    margin: methodInvestors.length > 0 ? margin : null,
+    priceAssets: priceAssets.map((a) => ({
+      id: a.id,
+      symbol: a.symbol,
+      name: a.name,
+      source: a.source,
+    })),
     currentUserId: userId,
   };
 

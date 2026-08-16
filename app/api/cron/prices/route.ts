@@ -4,13 +4,21 @@ import { timingSafeEqual } from "node:crypto";
 import { refreshPrices } from "@/lib/services/price-service";
 
 /**
- * Hourly price refresh for the assets backing investment methods.
+ * Daily price refresh for the assets backing investment methods.
  *
- * Hourly, not per-minute: CoinGecko's keyless tier allows ~10k calls/month and
- * one hourly call is ~720. Per-minute would be ~43k and break it. It is also
- * what Vercel's cron scheduling supports on a paid plan; Hobby only runs
- * crons daily, so on Hobby this endpoint simply fires once a day.
+ * Daily is what Vercel's Hobby plan schedules, and it matches what the free
+ * data tiers actually sell: Massive's Basic plans are end-of-day, so a run
+ * asks for yesterday's close and there is nothing finer to fetch. The endpoint
+ * is frequency-agnostic — going hourly is a one-line change in vercel.json
+ * once both the Vercel plan and the data plan justify it.
+ *
+ * Runs 30 minutes after the main daily job rather than alongside it, so the
+ * two don't contend for the same pooled connections.
  */
+
+// Providers are rate-limited (Massive: 5 req/min on the free tier), so a run
+// with many individually-quoted tickers is slow rather than heavy.
+export const maxDuration = 60;
 
 const CRON_SECRET = process.env.CRON_SECRET;
 if (!CRON_SECRET) {

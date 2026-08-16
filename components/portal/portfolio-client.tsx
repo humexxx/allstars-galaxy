@@ -10,6 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InvestmentMethodsView } from "@/components/portfolio/investment-methods-view";
+import { MarginView } from "@/components/portal/margin-view";
+import type { AssetOption } from "@/components/portal/holding-dialog";
+import type { MarginOverview } from "@/lib/services/margin-service";
 import { MethodInvestorsView } from "@/components/portfolio/method-investors";
 import { ManagedCapitalCard } from "@/components/portfolio/managed-capital";
 import { aggregateManagedCapital } from "@/lib/finance/managed-capital";
@@ -83,6 +86,12 @@ type PortfolioData = {
   managedContributions: ManagedContribution[];
   /** Value over time across every portfolio holding this user's methods. */
   managedSeries: { date: string; value: number }[];
+  /** The owner's side of the deal: real value of the deployed capital against
+   *  the fixed return promised to investors. Null for anyone who runs no
+   *  methods, and never visible to the investors themselves. */
+  margin: MarginOverview | null;
+  /** Catalogue of priceable assets, for configuring holdings. */
+  priceAssets: AssetOption[];
   currentUserId: string;
 };
 
@@ -267,6 +276,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             {ownsMethods && (
               <TabsTrigger value="investors">Investors</TabsTrigger>
             )}
+            {ownsMethods && <TabsTrigger value="margin">Margin</TabsTrigger>}
           </TabsList>
           <TabsContent value="overview">
             <EmptyPortfolio onAddTransaction={() => setIsDialogOpen(true)} />
@@ -278,6 +288,18 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           {ownsMethods && (
             <TabsContent value="investors">
               <MethodInvestorsView methods={data.methodInvestors} />
+            </TabsContent>
+          )}
+
+          {ownsMethods && data.margin && (
+            <TabsContent value="margin">
+              <MarginView
+                methods={data.margin.methods}
+                totals={data.margin.totals}
+                unconfigured={data.margin.unconfigured}
+                assets={data.priceAssets}
+                hideValues={hideValues}
+              />
             </TabsContent>
           )}
         </Tabs>
@@ -380,6 +402,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             {ownsMethods && (
               <TabsTrigger value="investors">Investors</TabsTrigger>
             )}
+            {ownsMethods && <TabsTrigger value="margin">Margin</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -456,6 +479,18 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           {ownsMethods && (
             <TabsContent value="investors">
               <MethodInvestorsView methods={data.methodInvestors} />
+            </TabsContent>
+          )}
+
+          {ownsMethods && data.margin && (
+            <TabsContent value="margin">
+              <MarginView
+                methods={data.margin.methods}
+                totals={data.margin.totals}
+                unconfigured={data.margin.unconfigured}
+                assets={data.priceAssets}
+                hideValues={hideValues}
+              />
             </TabsContent>
           )}
         </Tabs>

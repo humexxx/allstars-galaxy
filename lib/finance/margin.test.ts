@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { computeMethodMargin, totalMargin, type MarginHolding } from "./margin";
+import {
+  computeMethodMargin,
+  splitLiability,
+  totalMargin,
+  type MarginHolding,
+} from "./margin";
 
 const hold = (over: Partial<MarginHolding> = {}): MarginHolding => ({
+  id: "h1",
+  assetId: "asset-ada",
   symbol: "ADA",
   name: "Cardano",
   quantity: 1000,
@@ -84,5 +91,58 @@ describe("totalMargin", () => {
     expect(t.assets).toBeCloseTo(150, 2);
     expect(t.margin).toBeCloseTo(-150, 2);
     expect(t.incomplete).toBe(true);
+  });
+});
+
+describe("splitLiability", () => {
+  const OWNER = "jason";
+
+  it("treats the owner's own stake as capital, never as debt", () => {
+    const { liability, ownPosition } = splitLiability(
+      [
+        { userId: "yalena", holding: 7277.87 },
+        { userId: OWNER, holding: 1050.05 },
+      ],
+      OWNER
+    );
+
+    expect(liability).toBeCloseTo(7277.87, 2);
+    expect(ownPosition).toBeCloseTo(1050.05, 2);
+  });
+
+  it("owes nothing when the owner is the only investor", () => {
+    const { liability, ownPosition } = splitLiability(
+      [{ userId: OWNER, holding: 5000 }],
+      OWNER
+    );
+
+    expect(liability).toBe(0);
+    expect(ownPosition).toBe(5000);
+  });
+
+  it("sums several outside investors", () => {
+    const { liability } = splitLiability(
+      [
+        { userId: "a", holding: 100 },
+        { userId: "b", holding: 250 },
+        { userId: OWNER, holding: 999 },
+      ],
+      OWNER
+    );
+
+    expect(liability).toBe(350);
+  });
+
+  it("counts the owner's stake once even when it arrives as several rows", () => {
+    const { ownPosition, liability } = splitLiability(
+      [
+        { userId: OWNER, holding: 600 },
+        { userId: OWNER, holding: 400 },
+      ],
+      OWNER
+    );
+
+    expect(ownPosition).toBe(1000);
+    expect(liability).toBe(0);
   });
 });

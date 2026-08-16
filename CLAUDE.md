@@ -260,6 +260,15 @@ FOOTBALL_DATA_API_KEY   # EPL, La Liga, Bundesliga, Serie A, Ligue 1, UCL,
 BALLDONTLIE_API_KEY     # NBA only (free tier = single sport). 5 req/min.
                         # https://app.balldontlie.io
 
+# market data — prices the assets backing investment methods (margin maths)
+MASSIVE_API_KEY         # Massive, formerly Polygon.io (rebranded early 2026).
+                        # Crypto, indices, stocks, ETFs, forex from one key.
+                        # Free "Basic" tier per asset class: end-of-day data,
+                        # 5 req/min, no card. Sent as Authorization: Bearer.
+                        # Host is still api.polygon.io-compatible; override with
+                        # MASSIVE_API_BASE_URL. https://massive.com
+                        # Unset = only keyless CoinGecko (crypto) still quotes.
+
 # padel
 PADEL_API_KEY           # Premier Padel + FIP tournaments, last 6 months of
                         # matches free. 50K req/mo. https://padelapi.org

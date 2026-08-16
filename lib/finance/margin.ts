@@ -15,6 +15,10 @@
  */
 
 export type MarginHolding = {
+  /** Row identity. The maths never reads these — the UI needs them to edit or
+   *  remove a position, and a symbol is not a stable key across methods. */
+  id: string;
+  assetId: string;
   symbol: string;
   name: string;
   quantity: number;
@@ -42,6 +46,26 @@ export type MethodMargin = {
    *  and the UI must say so rather than present it as complete. */
   incomplete: boolean;
 };
+
+/**
+ * Split a method's investors into what is owed and what is the owner's own.
+ *
+ * You cannot owe yourself a fixed return, so the owner's stake is capital, not
+ * liability. Counting it as debt would understate the margin by exactly that
+ * stake and make a healthy method look like it was losing money.
+ */
+export function splitLiability(
+  investors: { userId: string; holding: number }[],
+  ownerUserId: string
+): { liability: number; ownPosition: number } {
+  let liability = 0;
+  let ownPosition = 0;
+  for (const investor of investors) {
+    if (investor.userId === ownerUserId) ownPosition += investor.holding;
+    else liability += investor.holding;
+  }
+  return { liability, ownPosition };
+}
 
 export function computeMethodMargin(input: {
   methodId: string;

@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { EyeOff, Pencil, Sparkles, TrendingUp, Users } from "lucide-react";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -78,10 +77,13 @@ export function InvestmentMethodsView({
     () => methods.filter((m) => m.enabled),
     [methods]
   );
-  const visibleMethods = showDisabled ? methods : enabledMethods;
+  // Owners see every method they run, disabled included — those are theirs and
+  // hiding half of them behind a dev toggle makes the tab lie about what
+  // exists. Clients browsing the catalogue still only see what they can pick.
+  const isOwnerView = ownedMethodIds.length > 0;
+  const visibleMethods = isOwnerView || showDisabled ? methods : enabledMethods;
 
   const totals = useMemo(() => {
-    const authors = new Set(enabledMethods.map((m) => m.author));
     const rois = enabledMethods.map((m) => parseFloat(m.monthlyRoi));
     const avgRoi =
       rois.length === 0
@@ -106,7 +108,6 @@ export function InvestmentMethodsView({
     const disabledCount = methods.length - enabledMethods.length;
     return {
       total: enabledMethods.length,
-      authors: authors.size,
       avgRoi,
       best,
       byRisk,
@@ -114,17 +115,14 @@ export function InvestmentMethodsView({
     };
   }, [enabledMethods, methods.length]);
 
-  const groupedMethods = useMemo(() => {
-    const map = new Map<string, InvestmentMethod[]>();
-    for (const m of visibleMethods) {
-      const arr = map.get(m.author);
-      if (arr) arr.push(m);
-      else map.set(m.author, [m]);
-    }
-    return Array.from(map.entries())
-      .map(([author, items]) => ({ author, items }))
-      .sort((a, b) => a.author.localeCompare(b.author));
-  }, [visibleMethods]);
+  const sortedMethods = useMemo(
+    () =>
+      [...visibleMethods].sort(
+        (a, b) =>
+          Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name)
+      ),
+    [visibleMethods]
+  );
 
   return (
     <section className="space-y-6">
@@ -151,15 +149,17 @@ export function InvestmentMethodsView({
               label="Methods"
               value={String(totals.total)}
               sublabel={
-                totals.disabledCount > 0
-                  ? `${totals.disabledCount} disabled (hidden by default)`
-                  : "All enabled in the catalog"
+                isOwnerView ? "Everything you run" : "In the catalogue"
               }
             />
             <KpiCard
-              label="Authors"
-              value={String(totals.authors)}
-              sublabel={`${totals.authors === 1 ? "1 strategist" : `${totals.authors} strategists`} contributing`}
+              label="Open to new money"
+              value={String(totals.total - totals.disabledCount)}
+              sublabel={
+                totals.disabledCount > 0
+                  ? `${totals.disabledCount} closed`
+                  : "All of them"
+              }
               icon={Users}
             />
             <KpiCard
@@ -202,44 +202,20 @@ export function InvestmentMethodsView({
             </div>
           )}
 
-          <div className="space-y-8">
-            {groupedMethods.map(({ author, items }) => (
-              <section key={author} className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-9 w-9">
-                      <AvatarFallback className="bg-primary/10 text-primary font-medium">
-                        {author.substring(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <Heading level="h6" as="h2">{author}</Heading>
-                      <Text variant="small">
-                        {items.length}{" "}
-                        {items.length === 1 ? "method" : "methods"}
-                      </Text>
-                    </div>
-                  </div>
-                  <Eyebrow>{`${items.length} of ${visibleMethods.length}`}</Eyebrow>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {items.map((method) => (
-                    <MethodCard
-                      key={method.id}
-                      method={method}
-                      allocation={
-                        allocations.find((a) => a.methodId === method.id)?.allocations ?? []
-                      }
-                      onEdit={
-                        owned.has(method.id) && onEditMethod
-                          ? () => onEditMethod(method)
-                          : undefined
-                      }
-                    />
-                  ))}
-                </div>
-              </section>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {sortedMethods.map((method) => (
+              <MethodCard
+                key={method.id}
+                method={method}
+                allocation={
+                  allocations.find((a) => a.methodId === method.id)?.allocations ?? []
+                }
+                onEdit={
+                  owned.has(method.id) && onEditMethod
+                    ? () => onEditMethod(method)
+                    : undefined
+                }
+              />
             ))}
           </div>
         </>

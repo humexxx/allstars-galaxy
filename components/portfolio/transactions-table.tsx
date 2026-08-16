@@ -38,7 +38,6 @@ export type TransactionRow = {
   id: string;
   date: string;
   methodName: string;
-  methodAuthor?: string | null;
   /** Only set on rows belonging to somebody else. */
   investorName?: string | null;
   type: TransactionType;
@@ -133,11 +132,6 @@ export function TransactionsTable({
                   <Text as="span" className="block max-w-40 truncate text-xs font-medium">
                     {r.methodName}
                   </Text>
-                  {r.methodAuthor && (
-                    <Text className="max-w-40 truncate text-2xs text-muted-foreground">
-                      {r.methodAuthor}
-                    </Text>
-                  )}
                 </TableCell>
 
                 <TableCell>

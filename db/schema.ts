@@ -80,15 +80,11 @@ export const investmentMethods = pgTable("investment_methods", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   description: text("description"),
-  // Display credit, and what the catalogue groups by on screen. Derived from
-  // `ownerUserId` on every update rather than typed in: credit follows
-  // ownership, and letting the two drift apart made the catalogue attribute a
-  // method to someone who does not run it. Still free text at the column level
-  // because methods predating ownership have a name here and no owner.
-  author: text("author").notNull(),
-  // The admin who runs this method. Other users invest through them, so this
-  // is what "who is invested in MY methods" is keyed on. Nullable: a method
-  // without an owner is the old global-catalogue behaviour and still works.
+  // Who runs this method. Other users invest through them, so this is what
+  // "who is invested in MY methods" is keyed on, and it is ALSO the display
+  // credit — there used to be a free-text `author` column beside it, which
+  // could name someone who did not run the method. One relation, one answer.
+  // Nullable: a method without an owner is the old global-catalogue behaviour.
   // SET NULL rather than cascade — deleting an admin must never delete a
   // method other people hold money in.
   ownerUserId: uuid("owner_user_id").references(() => users.id, {

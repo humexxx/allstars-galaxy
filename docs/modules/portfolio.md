@@ -57,9 +57,8 @@ metadata. Interest math is shared with [Finance](./finance.md).
 ## Notes
 - **Methods have an owner.** `investment_methods.owner_user_id` (nullable, FK
   SET NULL) is the admin who runs the method; other users invest through them.
-  NULL keeps the old global-catalogue behaviour. `author` is now derived from
-  the owner on update — it started as unrelated free text predating ownership,
-  and the column stays text because methods with no owner still carry a name.
+  NULL keeps the old global-catalogue behaviour, and is now also the only case
+  with no display credit — the `author` column is gone.
 - **`getMethodInvestors(ownerUserId)`** aggregates who holds money in an admin's
   methods, mirroring `getPortfolioAssets` maths exactly so the owner sees the
   same figure the investor sees. Surfaced as an **Investors** tab that only
@@ -160,11 +159,15 @@ metadata. Interest math is shared with [Finance](./finance.md).
   condition — locked by
   `components/portfolio/investment-methods-view.test.tsx`, which asserts a
   non-owner sees neither even when the data is present in props.
-- **`author` is derived, not entered.** Credit follows ownership: the update
-  action sets it from the owner's account and the schema does not accept it
-  from the client. Letting the two drift apart made the catalogue attribute a
-  method to someone who does not run it. The dialog shows who it is credited
-  to and why it is not editable there.
+- **`author` is gone; credit comes from `owner_user_id` alone.** The free-text
+  column sat beside the owner relation and could name someone who did not run
+  the method — two answers to one question. Dropped in `0035`, along with the
+  author grouping and the "Authors" KPI in the catalogue (with one owner it
+  always read "1"). The methods grid is now flat, enabled first.
+- **An owner sees every method they run, disabled included.** Hiding half of
+  somebody's own catalogue behind the dev toggle made the tab lie about what
+  exists. Clients browsing still see only what they can pick — covered by
+  `investment-methods-view.test.tsx`.
 - **`monthlyRoi` is not a cosmetic field.** It is what
   `transactions.currentValue` compounds at, so changing it moves what the owner
   owes. The dialog says this next to the input.

@@ -3,6 +3,18 @@ import type { portfolios, investmentMethods } from "@/db/schema";
 export type Portfolio = typeof portfolios.$inferSelect;
 export type InvestmentMethod = typeof investmentMethods.$inferSelect;
 
+/**
+ * A method plus the display name of whoever runs it.
+ *
+ * The name is joined from `users` rather than stored on the method: there used
+ * to be a free-text `author` column that could disagree with the owner, and
+ * the catalogue then credited a method to someone who did not run it.
+ * Null when the method predates ownership and has nobody attached.
+ */
+export type InvestmentMethodWithOwner = InvestmentMethod & {
+  ownerName: string | null;
+};
+
 export type TransactionStatus = "pending" | "approved" | "rejected" | "closed";
 export type TransactionType = "buy" | "withdrawal";
 

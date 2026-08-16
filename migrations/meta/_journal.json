@@ -246,6 +246,13 @@
       "when": 1786860038979,
       "tag": "0034_long_tiger_shark",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1786860570021,
+      "tag": "0035_low_clea",
+      "breakpoints": true
     }
   ]
 }

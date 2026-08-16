@@ -128,8 +128,8 @@ export function MethodEditorDialog({
               </SelectContent>
             </Select>
             <Text className="text-2xs text-muted-foreground">
-              Credited to {method.author} — the person who runs it. Set from your
-              account, not editable here.
+              Credited to you — a method is attributed to whoever runs it, so
+              there is nothing to set here.
             </Text>
           </div>
 

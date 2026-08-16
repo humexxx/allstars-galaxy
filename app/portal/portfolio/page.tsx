@@ -128,7 +128,6 @@ export default async function PortfolioPage() {
       id: t.id,
       date: new Date(t.date).toISOString(),
       methodName: t.investmentMethod.name,
-      methodAuthor: t.investmentMethod.author,
       type: t.type,
       status: t.status,
       total: t.total,

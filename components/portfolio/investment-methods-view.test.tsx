@@ -13,7 +13,8 @@ const MINE: InvestmentMethod = {
   id: "m1",
   name: "Safe Investment",
   description: "Steady monthly return",
-  author: "Jason",
+  ownerUserId: "owner-1",
+  createdAt: null,
   riskLevel: "Low",
   monthlyRoi: "0.7000",
   enabled: true,
@@ -70,6 +71,31 @@ describe("InvestmentMethodsView", () => {
     // The catalogue itself still reads normally. (The name appears more than
     // once — card title and the grouped-by-author listing.)
     expect(screen.getAllByText("Safe Investment").length).toBeGreaterThan(0);
+  });
+
+  it("shows an owner their disabled methods too", () => {
+    // They are yours whether or not they take new money. Hiding half of them
+    // behind a dev toggle makes the tab lie about what exists.
+    const closed = { ...MINE, id: "m3", name: "Closed Fund", enabled: false } as InvestmentMethod;
+
+    render(
+      <InvestmentMethodsView
+        methods={[MINE, closed]}
+        ownedMethodIds={["m1", "m3"]}
+        allocations={[]}
+        onEditMethod={vi.fn()}
+      />
+    );
+
+    expect(screen.getAllByText("Closed Fund").length).toBeGreaterThan(0);
+  });
+
+  it("hides disabled methods from a client browsing the catalogue", () => {
+    const closed = { ...MINE, id: "m3", name: "Closed Fund", enabled: false } as InvestmentMethod;
+
+    render(<InvestmentMethodsView methods={[MINE, closed]} />);
+
+    expect(screen.queryByText("Closed Fund")).not.toBeInTheDocument();
   });
 
   it("says so when an owned method has no allocation yet", () => {

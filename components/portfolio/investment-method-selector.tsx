@@ -67,7 +67,6 @@ export function InvestmentMethodSelector({
                     </div>
                     <div className="flex flex-col items-start">
                       <span className="font-medium">{method.name}</span>
-                      <span className="text-xs text-muted-foreground">{method.author}</span>
                     </div>
                   </div>
                   <svg

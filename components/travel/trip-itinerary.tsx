@@ -41,6 +41,7 @@ import {
 import type { TripItem, TripItemCategory, TripWithRelations } from "@/types/travel";
 
 import { formatTripMoney } from "@/lib/travel/format";
+import { ActivityVideo } from "@/components/travel/activity-video";
 
 const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "lodging", label: "Lodging", Icon: Bed },
@@ -215,6 +216,11 @@ function ItemRow({
         {item.notes && (
           <Text variant="small" className="line-clamp-2">{item.notes}</Text>
         )}
+        {item.videoUrl && (
+          <div className="pt-2">
+            <ActivityVideo url={item.videoUrl} title={item.title} />
+          </div>
+        )}
       </div>
       {/* Always visible on touch (no hover); hover/focus-revealed on desktop. */}
       <div className="flex shrink-0 gap-0.5 transition-opacity sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover:opacity-100">
@@ -260,6 +266,7 @@ function ItemForm({
   const [link, setLink] = useState(item?.link ?? "");
   const [price, setPrice] = useState(item?.price ?? "");
   const [scheduledOn, setScheduledOn] = useState(item?.scheduledOn ?? defaultDate ?? "");
+  const [videoUrl, setVideoUrl] = useState(item?.videoUrl ?? "");
   const [notes, setNotes] = useState(item?.notes ?? "");
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -280,6 +287,7 @@ function ItemForm({
         link: link.trim() || null,
         price: price.trim() || null,
         scheduledOn: scheduledOn || null,
+        videoUrl: videoUrl.trim() || null,
         notes: notes.trim() || null,
       };
       const res = item
@@ -362,6 +370,18 @@ function ItemForm({
             value={link ?? ""}
             onChange={(e) => setLink(e.target.value)}
             placeholder="https://booking.com/…"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`video-${item?.id ?? "new"}`} className="text-xs">
+            Video
+          </Label>
+          <Input
+            id={`video-${item?.id ?? "new"}`}
+            type="url"
+            value={videoUrl ?? ""}
+            onChange={(e) => setVideoUrl(e.target.value)}
+            placeholder="YouTube or Instagram link"
           />
         </div>
       </div>

@@ -1,0 +1,1 @@
+ALTER TABLE "trip_items" ADD COLUMN "video_url" text;

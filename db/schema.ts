@@ -945,11 +945,12 @@ export const tripItems = pgTable(
     title: text("title").notNull(),
     category: tripItemCategoryEnum("category").notNull().default("activity"),
     link: text("link"),
-    // Optional YouTube link for THIS activity — a walkthrough of the hotel, a
-    // tour of the ship. Stored as the URL the user pasted, NOT a pre-built
-    // embed: the video id is derived at render time so a link saved in any of
-    // YouTube's several shapes keeps working. See lib/travel/youtube.ts.
-    youtubeUrl: text("youtube_url"),
+    // Optional video for THIS activity — a walkthrough of the hotel, a tour of
+    // the ship. YouTube or Instagram. Stored as the URL the user pasted, NOT a
+    // pre-built embed: the provider and id are derived at render time, so a
+    // link saved in any of the shapes those sites hand out keeps working.
+    // See lib/travel/video.ts.
+    videoUrl: text("video_url"),
     // Optional price. Null = "not estimated yet". Currency lives on the parent
     // trip — multi-currency itineraries are out of scope for v1.
     price: numeric("price", { precision: 20, scale: 2 }),

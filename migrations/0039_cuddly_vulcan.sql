@@ -1,0 +1,1 @@
+ALTER TABLE "trip_items" DROP COLUMN "youtube_url";

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { youtubeVideoId } from "@/lib/travel/youtube";
+import { embeddedVideo } from "@/lib/travel/video";
 
 // Non-negative monetary value (no leading minus). Mirrors the CHECK constraint
 // on trip_items.price.
@@ -82,17 +82,17 @@ export const tripItemSchema = z.object({
   title: z.string().min(1).max(200),
   category: tripItemCategorySchema.default("activity"),
   link: z.string().url().max(2000).nullable().optional(),
-  // Validated as a YouTube link specifically, not just any URL: the field
-  // renders an embed, so a non-YouTube address would save fine and then
+  // Validated as a link we can actually embed, not just any URL: the field
+  // renders a player, so an unsupported address would save fine and then
   // silently show nothing.
-  youtubeUrl: z
+  videoUrl: z
     .string()
     .trim()
     .max(2000)
     .nullable()
     .optional()
-    .refine((v) => !v || youtubeVideoId(v) !== null, {
-      message: "Paste a YouTube link (watch, youtu.be, shorts or embed)",
+    .refine((v) => !v || embeddedVideo(v) !== null, {
+      message: "Paste a YouTube or Instagram link",
     }),
   price: price.nullable().optional(),
   scheduledOn: isoDate.nullable().optional(),

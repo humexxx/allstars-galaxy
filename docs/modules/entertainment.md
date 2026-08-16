@@ -64,7 +64,8 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
-- **Trip ITEMS carry an optional YouTube link** (`trip_items.youtube_url`) —
+- **Trip ITEMS carry an optional video** (`trip_items.video_url`) — **YouTube
+  or Instagram** —
   a walkthrough of the hotel, a tour of the ship. It briefly lived on `trips`,
   which was the wrong level: a trip is a container, and it is the individual
   activity that has a video worth watching. Moved in `0037` before any row

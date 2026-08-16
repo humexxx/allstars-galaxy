@@ -1,8 +1,5 @@
 "use client";
 
-import { Eye, EyeOff } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
 import { StatCard, maskValue } from "@/components/ui/stat-card";
 import { formatCurrency } from "@/lib/utils/format";
 
@@ -33,11 +30,9 @@ export type OwnerKpis = {
 export function OwnerKpiGrid({
   kpis,
   hideValues,
-  onToggleHideValues,
 }: {
   kpis: OwnerKpis;
   hideValues: boolean;
-  onToggleHideValues: () => void;
 }) {
   const money = (v: number) => {
     const formatted = formatCurrency(v);
@@ -63,18 +58,6 @@ export function OwnerKpiGrid({
         value={money(kpis.contributed)}
         percent="100%"
         sublabel="Cash in, yours and theirs"
-        action={
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            aria-label={hideValues ? "Show values" : "Hide values"}
-            aria-pressed={hideValues}
-            onClick={onToggleHideValues}
-          >
-            {hideValues ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-          </Button>
-        }
       />
 
       <StatCard

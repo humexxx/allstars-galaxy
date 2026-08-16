@@ -65,6 +65,10 @@ export function MarginChart({
 }) {
   const [investorId, setInvestorId] = useState<string | null>(null);
   const [methodId, setMethodId] = useState<string | null>(null);
+  // Months back from today, or null for everything. Trimming the range is a
+  // different question from filtering who is in it, so it gets its own control
+  // rather than hiding inside the popover.
+  const [months, setMonths] = useState<number | null>(null);
 
   const data = useMemo(() => {
     const keep = <T extends { investorId: string; methodId: string }>(rows: T[]) =>
@@ -74,13 +78,18 @@ export function MarginChart({
           (methodId === null || r.methodId === methodId)
       );
 
-    return buildMarginHistory({
+    const series = buildMarginHistory({
       contributions: keep(input.contributions),
       liabilities: keep(input.liabilities),
       prices: new Map(input.prices),
       today: input.today,
     });
-  }, [input, investorId, methodId]);
+
+    // Trim AFTER building: the series has to be derived from every
+    // contribution, or a window that starts mid-history would forget the units
+    // bought before it and draw a position that never existed.
+    return months === null ? series : series.slice(-months);
+  }, [input, investorId, methodId, months]);
 
   const filtered = investorId !== null || methodId !== null;
 
@@ -119,6 +128,29 @@ export function MarginChart({
             {money(latest.deployed)} deployed against {money(latest.liability)} owed
           </Text>
         </div>
+
+        <div className="flex items-center gap-2">
+          <div role="group" aria-label="Date range" className="flex items-center gap-1">
+            {(
+              [
+                [3, "3M"],
+                [6, "6M"],
+                [12, "1Y"],
+                [null, "All"],
+              ] as const
+            ).map(([value, label]) => (
+              <Button
+                key={label}
+                variant="ghost"
+                size="sm"
+                data-active={months === value}
+                className="h-8 rounded-full px-2.5 font-mono text-xs tabular-nums text-muted-foreground data-[active=true]:bg-foreground/5 data-[active=true]:text-foreground"
+                onClick={() => setMonths(value)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
 
         <Popover>
           <PopoverTrigger asChild>
@@ -159,6 +191,7 @@ export function MarginChart({
             )}
           </PopoverContent>
         </Popover>
+        </div>
       </div>
 
       <ChartContainer config={CONFIG} className="h-64 w-full sm:h-80">

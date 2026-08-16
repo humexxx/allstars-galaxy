@@ -411,6 +411,17 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             </Text>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={hideValues ? "Show values" : "Hide values"}
+              aria-pressed={hideValues}
+              title={hideValues ? "Show values" : "Hide values"}
+              onClick={() => setHideValues((v) => !v)}
+            >
+              {hideValues ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </Button>
+
             {/* A plain link, not a fetch + blob: the browser handles the
                 download natively and the route's Content-Disposition names the
                 file. Disabled with no rows so it can't hand back a header-only
@@ -454,11 +465,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                 is the sum of what they OWE, so showing it as the headline made
                 a badly underwater book read as growth. */}
             {ownsMethods ? (
-              <OwnerKpiGrid
-                kpis={ownerKpis}
-                hideValues={hideValues}
-                onToggleHideValues={() => setHideValues((v) => !v)}
-              />
+              <OwnerKpiGrid kpis={ownerKpis} hideValues={hideValues} />
             ) : (
               stats && (
                 <PortfolioKpiGrid

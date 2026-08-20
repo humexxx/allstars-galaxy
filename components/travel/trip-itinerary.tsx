@@ -51,6 +51,7 @@ import { ActivityVideo } from "@/components/travel/activity-video";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
 import { Checkbox } from "@/components/ui/checkbox";
 import { endDayLabel, itemFields, showsEndDay } from "@/lib/travel/item-fields";
+import { AirportPicker } from "@/components/travel/airport-picker";
 
 const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "lodging", label: "Hotel", Icon: Bed },
@@ -437,20 +438,20 @@ function ItemForm({
           <>
             <div className="space-y-1.5">
               <Label htmlFor={`from-${item?.id ?? "new"}`} className="text-xs">From</Label>
-              <Input
+              <AirportPicker
                 id={`from-${item?.id ?? "new"}`}
                 value={fromCode ?? ""}
-                onChange={(e) => setFromCode(e.target.value)}
-                placeholder="SJO"
+                onChange={setFromCode}
+                placeholder="SJO or San José"
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor={`to-${item?.id ?? "new"}`} className="text-xs">To</Label>
-              <Input
+              <AirportPicker
                 id={`to-${item?.id ?? "new"}`}
                 value={toCode ?? ""}
-                onChange={(e) => setToCode(e.target.value)}
-                placeholder="MCO"
+                onChange={setToCode}
+                placeholder="MCO or Orlando"
               />
             </div>
           </>

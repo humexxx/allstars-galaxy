@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { endDayLabel, itemFields, showsEndDay } from "./item-fields";
+import { deriveTitle, endDayLabel, itemFields, showsEndDay } from "./item-fields";
 
 describe("itemFields", () => {
   it("gives a hotel check-in and check-out, not 'Day'", () => {
@@ -66,5 +66,34 @@ describe("endDayLabel", () => {
   it("uses the category's own wording otherwise", () => {
     expect(endDayLabel(itemFields("lodging"), false)).toBe("Check out");
     expect(endDayLabel(itemFields("cruise"), false)).toBe("Disembarks");
+  });
+});
+
+describe("deriveTitle", () => {
+  it("names a one-way flight by its route", () => {
+    expect(
+      deriveTitle("flight", { fromCode: "SJO", toCode: "MCO" }, "Flight")
+    ).toBe("SJO → MCO");
+  });
+
+  it("uses a double arrow for a return", () => {
+    expect(
+      deriveTitle("flight", { fromCode: "SJO", toCode: "MCO", roundTrip: true }, "Flight")
+    ).toBe("SJO ⇄ MCO");
+  });
+
+  it("says what it knows when only one end is filled in", () => {
+    expect(deriveTitle("flight", { toCode: "MCO" }, "Flight")).toBe("Flight to MCO");
+    expect(deriveTitle("flight", { fromCode: "SJO" }, "Flight")).toBe("Flight from SJO");
+  });
+
+  it("never derives an empty title from an empty form", () => {
+    // The column is NOT NULL; a half-filled form must still save.
+    expect(deriveTitle("flight", {}, "Flight")).toBe("Flight");
+  });
+
+  it("asks for a title everywhere a route would not describe the thing", () => {
+    expect(itemFields("lodging").title).toBe(true);
+    expect(itemFields("flight").title).toBe(false);
   });
 });

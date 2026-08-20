@@ -13,6 +13,8 @@ import type { TripItemCategory, TripPriceUnit } from "@/types/travel";
  * dates are called only by a database.
  */
 export type ItemFieldSpec = {
+  /** Whether to ask for a title, or derive one from the fields that matter. */
+  title: boolean;
   /** What a price of this kind is usually per, so the common case is preset. */
   defaultPriceUnit: TripPriceUnit;
   /** Airports, ports, stations. A hotel does not go anywhere. */
@@ -29,6 +31,7 @@ export type ItemFieldSpec = {
 };
 
 const DEFAULTS: ItemFieldSpec = {
+  title: true,
   defaultPriceUnit: "total",
   route: false,
   roundTrip: false,
@@ -54,6 +57,10 @@ const BY_CATEGORY: Record<TripItemCategory, Partial<ItemFieldSpec>> = {
     startLabel: "Departs",
     // A fare is quoted per traveller everywhere in the world.
     defaultPriceUnit: "per_person",
+    // A flight already says what it is: two airports and a direction. Asking
+    // for a title on top invites "Flight to Orlando" next to "SJO → MCO",
+    // which is the same sentence twice and can fall out of step with the route.
+    title: false,
   },
   cruise: {
     route: true,
@@ -83,4 +90,23 @@ export function showsEndDay(spec: ItemFieldSpec, roundTrip: boolean): boolean {
 
 export function endDayLabel(spec: ItemFieldSpec, roundTrip: boolean): string {
   return spec.roundTrip && roundTrip ? "Returns" : spec.endLabel;
+}
+
+
+/**
+ * A title for the kinds of item that do not need one asked for.
+ *
+ * Falls back to the category's own word when the fields it derives from are
+ * still empty, so a half-filled form never saves an empty title.
+ */
+export function deriveTitle(
+  category: TripItemCategory,
+  fields: { fromCode?: string | null; toCode?: string | null; roundTrip?: boolean },
+  fallback: string
+): string {
+  const from = fields.fromCode?.trim();
+  const to = fields.toCode?.trim();
+  if (from && to) return `${from} ${fields.roundTrip ? "⇄" : "→"} ${to}`;
+  if (from || to) return `${fallback} ${from ? `from ${from}` : `to ${to}`}`;
+  return fallback;
 }

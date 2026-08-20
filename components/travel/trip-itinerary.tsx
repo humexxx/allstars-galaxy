@@ -51,9 +51,10 @@ import { formatTripMoney } from "@/lib/travel/format";
 import { ActivityVideo } from "@/components/travel/activity-video";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
 import { Checkbox } from "@/components/ui/checkbox";
-import { endDayLabel, itemFields, showsEndDay } from "@/lib/travel/item-fields";
+import { deriveTitle, endDayLabel, itemFields, showsEndDay } from "@/lib/travel/item-fields";
 import { AirportPicker } from "@/components/travel/airport-picker";
 import { itemCost, tripCost, unitSuffix } from "@/lib/travel/pricing";
+import { MoneyInput } from "@/components/ui/money-input";
 
 const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "lodging", label: "Hotel", Icon: Bed },
@@ -130,6 +131,7 @@ export function TripItinerary({ trip, partySize = 1 }: TripItineraryProps) {
           <ItemForm
             tripId={trip.id}
             defaultDate={trip.startDate}
+            currency={trip.currency}
             onDone={() => setAdding(false)}
           />
         )}
@@ -209,6 +211,7 @@ function ItemRow({
           tripId={tripId}
           item={item}
           defaultDate={item.scheduledOn}
+          currency={currency}
           onDone={() => setEditing(false)}
         />
       </li>
@@ -319,11 +322,14 @@ function ItemForm({
   tripId,
   item,
   defaultDate,
+  currency,
   onDone,
 }: {
   tripId: string;
   item?: TripItemWithStops;
   defaultDate?: string | null;
+  /** Drives the symbol shown inside the amount fields. */
+  currency: string;
   onDone: () => void;
 }) {
   const router = useRouter();
@@ -349,7 +355,10 @@ function ItemForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) {
+    const effectiveTitle = fields.title
+      ? title.trim()
+      : deriveTitle(category, { fromCode, toCode, roundTrip }, categoryMeta(category).label);
+    if (!effectiveTitle) {
       toast.error("Item needs a title");
       return;
     }
@@ -375,7 +384,7 @@ function ItemForm({
 
     startTransition(async () => {
       const payload = {
-        title: title.trim(),
+        title: effectiveTitle,
         category,
         link: link.trim() || null,
         price: price.trim() || null,
@@ -410,18 +419,25 @@ function ItemForm({
         !item && "border-primary/30"
       )}
     >
-      <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
-        <div className="space-y-1.5">
-          <Label htmlFor={`title-${item?.id ?? "new"}`} className="text-xs">Title</Label>
-          <Input
-            id={`title-${item?.id ?? "new"}`}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Check-in at Hotel Bairro Alto"
-            required
-            autoFocus
-          />
-        </div>
+      <div
+        className={cn(
+          "grid gap-3",
+          fields.title ? "sm:grid-cols-[2fr_1fr]" : "sm:grid-cols-1"
+        )}
+      >
+        {fields.title && (
+          <div className="space-y-1.5">
+            <Label htmlFor={`title-${item?.id ?? "new"}`} className="text-xs">Title</Label>
+            <Input
+              id={`title-${item?.id ?? "new"}`}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Check-in at Hotel Bairro Alto"
+              required
+              autoFocus
+            />
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label className="text-xs">Category</Label>
           <Select
@@ -435,7 +451,7 @@ function ItemForm({
               if (!item) setPriceUnit(itemFields(next).defaultPriceUnit);
             }}
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -448,6 +464,19 @@ function ItemForm({
               ))}
             </SelectContent>
           </Select>
+          {!fields.title && (
+            <Text variant="small" className="text-muted-foreground">
+              Saved as{" "}
+              <span className="font-medium text-foreground">
+                {deriveTitle(
+                  category,
+                  { fromCode, toCode, roundTrip },
+                  categoryMeta(category).label
+                )}
+              </span>{" "}
+              — taken from the route.
+            </Text>
+          )}
         </div>
       </div>
 
@@ -524,11 +553,11 @@ function ItemForm({
           <Label htmlFor={`price-${item?.id ?? "new"}`} className="text-xs">
             Price <span className="text-muted-foreground">(or low estimate)</span>
           </Label>
-          <Input
+          <MoneyInput
             id={`price-${item?.id ?? "new"}`}
-            inputMode="decimal"
             value={price ?? ""}
-            onChange={(e) => setPrice(e.target.value)}
+            onChange={setPrice}
+            currency={currency}
             placeholder="0.00"
           />
         </div>
@@ -536,12 +565,12 @@ function ItemForm({
           <Label htmlFor={`pricemax-${item?.id ?? "new"}`} className="text-xs">
             Up to <span className="text-muted-foreground">(optional)</span>
           </Label>
-          <Input
+          <MoneyInput
             id={`pricemax-${item?.id ?? "new"}`}
-            inputMode="decimal"
             value={priceMax ?? ""}
-            onChange={(e) => setPriceMax(e.target.value)}
-            placeholder="600.00"
+            onChange={setPriceMax}
+            currency={currency}
+            placeholder="0.00"
           />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
@@ -550,7 +579,7 @@ function ItemForm({
             value={priceUnit}
             onValueChange={(v) => setPriceUnit(v as TripPriceUnit)}
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -560,7 +589,7 @@ function ItemForm({
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor={`link-${item?.id ?? "new"}`} className="text-xs">Link</Label>
           <Input
             id={`link-${item?.id ?? "new"}`}
@@ -571,7 +600,7 @@ function ItemForm({
           />
         </div>
         {fields.video && (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor={`video-${item?.id ?? "new"}`} className="text-xs">
             Video
           </Label>

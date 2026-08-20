@@ -302,6 +302,13 @@
       "when": 1787266727586,
       "tag": "0042_deep_surge",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1787267869210,
+      "tag": "0043_boring_arachne",
+      "breakpoints": true
     }
   ]
 }

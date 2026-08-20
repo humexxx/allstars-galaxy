@@ -61,15 +61,33 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isDeleting, startDelete] = useTransition();
 
-  const totalEstimate = useMemo(
-    () =>
-      trip.items.reduce((sum, item) => {
-        if (!item.price) return sum;
-        const n = parseFloat(item.price);
-        return Number.isFinite(n) ? sum + n : sum;
-      }, 0),
-    [trip.items]
-  );
+  /**
+   * The trip's cost as a range.
+   *
+   * `low` sums each item's price; `high` sums its upper estimate where it has
+   * one and its price otherwise. Collapsing an unbooked flight's "$400-600"
+   * into one number would make the total look more certain than it is, which
+   * is the opposite of useful when you are still deciding.
+   */
+  const estimate = useMemo(() => {
+    let low = 0;
+    let high = 0;
+    let ranged = false;
+    for (const item of trip.items) {
+      if (!item.price) continue;
+      const n = parseFloat(item.price);
+      if (!Number.isFinite(n)) continue;
+      low += n;
+      const max = item.priceMax ? parseFloat(item.priceMax) : null;
+      if (max !== null && Number.isFinite(max) && max > n) {
+        high += max;
+        ranged = true;
+      } else {
+        high += n;
+      }
+    }
+    return { low, high, ranged };
+  }, [trip.items]);
 
   const handleDelete = () => {
     startDelete(async () => {
@@ -157,7 +175,14 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
         <StatCard
           icon={DollarSign}
           label="Est. total"
-          value={formatTripMoney(totalEstimate, trip.currency)}
+          value={
+            estimate.ranged
+              ? `${formatTripMoney(estimate.low, trip.currency)} – ${formatTripMoney(
+                  estimate.high,
+                  trip.currency
+                )}`
+              : formatTripMoney(estimate.low, trip.currency)
+          }
         />
       </div>
 

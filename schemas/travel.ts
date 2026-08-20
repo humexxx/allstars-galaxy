@@ -90,10 +90,24 @@ export const tripItemSchema = z.object({
     .refine((v) => !v || embeddedVideo(v) !== null, {
       message: "Paste a YouTube or Instagram link",
     }),
+  fromCode: z.string().trim().max(60).nullable().optional(),
+  toCode: z.string().trim().max(60).nullable().optional(),
   price: price.nullable().optional(),
+  priceMax: price.nullable().optional(),
   scheduledOn: isoDate.nullable().optional(),
+  endsOn: isoDate.nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
   sortOrder: z.number().optional(),
+});
+
+export const tripItemSchemaChecked = tripItemSchema.superRefine((val, ctx) => {
+  if (val.endsOn && val.scheduledOn && val.endsOn < val.scheduledOn) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endsOn"],
+      message: "End day must be on or after the start day",
+    });
+  }
 });
 
 export const updateTripItemSchema = tripItemSchema.extend({

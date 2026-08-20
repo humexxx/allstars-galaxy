@@ -61,6 +61,9 @@ const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.Componen
   { value: "other", label: "Other", Icon: Tag },
 ];
 
+/** Categories where a route means something. A hotel does not go anywhere. */
+const ROUTED = new Set<TripItemCategory>(["flight", "cruise", "transport"]);
+
 function categoryMeta(c: TripItemCategory) {
   return CATEGORIES.find((x) => x.value === c) ?? CATEGORIES[CATEGORIES.length - 1];
 }
@@ -206,13 +209,29 @@ function ItemRow({
         <div className="flex items-baseline justify-between gap-2">
           <Text weight="medium" className="truncate">{item.title}</Text>
           {item.price && (
-            <Mono className="text-xs font-medium">
+            <Mono className="shrink-0 text-xs font-medium">
               {formatTripMoney(parseFloat(item.price), currency)}
+              {item.priceMax && (
+                <>
+                  {" – "}
+                  {formatTripMoney(parseFloat(item.priceMax), currency)}
+                </>
+              )}
             </Mono>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
           <span className="capitalize">{meta.label}</span>
+          {(item.fromCode || item.toCode) && (
+            <Mono className="text-2xs">
+              {item.fromCode ?? "?"} → {item.toCode ?? "?"}
+            </Mono>
+          )}
+          {item.endsOn && item.scheduledOn && item.endsOn !== item.scheduledOn && (
+            <span>
+              through {format(new Date(`${item.endsOn}T00:00:00`), "d MMM")}
+            </span>
+          )}
           {item.link && (
             <a
               href={item.link}
@@ -279,7 +298,11 @@ function ItemForm({
   const [category, setCategory] = useState<TripItemCategory>(item?.category ?? "activity");
   const [link, setLink] = useState(item?.link ?? "");
   const [price, setPrice] = useState(item?.price ?? "");
+  const [priceMax, setPriceMax] = useState(item?.priceMax ?? "");
+  const [fromCode, setFromCode] = useState(item?.fromCode ?? "");
+  const [toCode, setToCode] = useState(item?.toCode ?? "");
   const [scheduledOn, setScheduledOn] = useState(item?.scheduledOn ?? defaultDate ?? "");
+  const [endsOn, setEndsOn] = useState(item?.endsOn ?? "");
   const [videoUrl, setVideoUrl] = useState(item?.videoUrl ?? "");
   const [notes, setNotes] = useState(item?.notes ?? "");
 
@@ -289,8 +312,23 @@ function ItemForm({
       toast.error("Item needs a title");
       return;
     }
-    if (price && !/^\d+(\.\d{1,2})?$/.test(price)) {
+    const money = /^\d+(\.\d{1,2})?$/;
+    if (price && !money.test(price)) {
       toast.error("Price must be a non-negative number with up to 2 decimals");
+      return;
+    }
+    if (priceMax && !money.test(priceMax)) {
+      toast.error("Max price must be a non-negative number with up to 2 decimals");
+      return;
+    }
+    // A range that runs backwards is a typo, and silently storing it would
+    // make the trip total nonsense.
+    if (price && priceMax && parseFloat(priceMax) < parseFloat(price)) {
+      toast.error("Max price cannot be below the price");
+      return;
+    }
+    if (endsOn && scheduledOn && endsOn < scheduledOn) {
+      toast.error("End day cannot be before the start day");
       return;
     }
 
@@ -300,7 +338,11 @@ function ItemForm({
         category,
         link: link.trim() || null,
         price: price.trim() || null,
+        priceMax: priceMax.trim() || null,
+        fromCode: fromCode.trim() || null,
+        toCode: toCode.trim() || null,
         scheduledOn: scheduledOn || null,
+        endsOn: endsOn || null,
         videoUrl: videoUrl.trim() || null,
         notes: notes.trim() || null,
       };
@@ -367,13 +409,62 @@ function ItemForm({
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor={`price-${item?.id ?? "new"}`} className="text-xs">Price</Label>
+          <Label htmlFor={`ends-${item?.id ?? "new"}`} className="text-xs">
+            End day <span className="text-muted-foreground">(optional)</span>
+          </Label>
+          <Input
+            id={`ends-${item?.id ?? "new"}`}
+            type="date"
+            value={endsOn ?? ""}
+            min={scheduledOn || undefined}
+            onChange={(e) => setEndsOn(e.target.value)}
+          />
+        </div>
+        {ROUTED.has(category) && (
+          <>
+            <div className="space-y-1.5">
+              <Label htmlFor={`from-${item?.id ?? "new"}`} className="text-xs">From</Label>
+              <Input
+                id={`from-${item?.id ?? "new"}`}
+                value={fromCode ?? ""}
+                onChange={(e) => setFromCode(e.target.value)}
+                placeholder="SJO"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`to-${item?.id ?? "new"}`} className="text-xs">To</Label>
+              <Input
+                id={`to-${item?.id ?? "new"}`}
+                value={toCode ?? ""}
+                onChange={(e) => setToCode(e.target.value)}
+                placeholder="MCO"
+              />
+            </div>
+          </>
+        )}
+
+        <div className="space-y-1.5">
+          <Label htmlFor={`price-${item?.id ?? "new"}`} className="text-xs">
+            Price <span className="text-muted-foreground">(or low estimate)</span>
+          </Label>
           <Input
             id={`price-${item?.id ?? "new"}`}
             inputMode="decimal"
             value={price ?? ""}
             onChange={(e) => setPrice(e.target.value)}
             placeholder="0.00"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`pricemax-${item?.id ?? "new"}`} className="text-xs">
+            Up to <span className="text-muted-foreground">(optional)</span>
+          </Label>
+          <Input
+            id={`pricemax-${item?.id ?? "new"}`}
+            inputMode="decimal"
+            value={priceMax ?? ""}
+            onChange={(e) => setPriceMax(e.target.value)}
+            placeholder="600.00"
           />
         </div>
         <div className="space-y-1.5">

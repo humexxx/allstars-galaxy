@@ -1075,6 +1075,15 @@ export const tripItems = pgTable(
     // link saved in any of the shapes those sites hand out keeps working.
     // See lib/travel/video.ts.
     videoUrl: text("video_url"),
+    // Where a flight or a transfer goes. Free text rather than a validated
+    // IATA code: "MCO" and "Orlando Intl" are both useful to a human planning
+    // a trip, and rejecting the second buys nothing.
+    fromCode: text("from_code"),
+    toCode: text("to_code"),
+    // Upper end of an estimate. `price` is the low/expected figure and this is
+    // optional — an unbooked flight is honestly "$400-600", and forcing a
+    // single number would make the trip total look more certain than it is.
+    priceMax: numeric("price_max", { precision: 20, scale: 2 }),
     // Optional price. Null = "not estimated yet". Currency lives on the parent
     // trip — multi-currency itineraries are out of scope for v1.
     price: numeric("price", { precision: 20, scale: 2 }),

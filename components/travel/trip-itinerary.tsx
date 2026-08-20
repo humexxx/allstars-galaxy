@@ -4,7 +4,9 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import {
+  Anchor,
   Bed,
+  Bus,
   ExternalLink,
   Pencil,
   Plane,
@@ -38,14 +40,21 @@ import {
   deleteTripItemAction,
   updateTripItemAction,
 } from "@/app/actions/travel";
-import type { TripItem, TripItemCategory, TripWithRelations } from "@/types/travel";
+import type {
+  TripItemCategory,
+  TripItemWithStops,
+  TripWithRelations,
+} from "@/types/travel";
 
 import { formatTripMoney } from "@/lib/travel/format";
 import { ActivityVideo } from "@/components/travel/activity-video";
+import { ItemItinerary } from "@/components/travel/item-itinerary";
 
 const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
-  { value: "lodging", label: "Lodging", Icon: Bed },
-  { value: "transport", label: "Transport", Icon: Plane },
+  { value: "lodging", label: "Hotel", Icon: Bed },
+  { value: "flight", label: "Flight", Icon: Plane },
+  { value: "cruise", label: "Cruise", Icon: Anchor },
+  { value: "transport", label: "Transport", Icon: Bus },
   { value: "food", label: "Food", Icon: Utensils },
   { value: "activity", label: "Activity", Icon: Sparkles },
   { value: "shopping", label: "Shopping", Icon: ShoppingBag },
@@ -58,8 +67,10 @@ function categoryMeta(c: TripItemCategory) {
 
 const NO_DATE_KEY = "__no_date__";
 
-function groupByDay(items: TripItem[]): Array<{ key: string; label: string; items: TripItem[]; total: number }> {
-  const groups = new Map<string, TripItem[]>();
+function groupByDay(
+  items: TripItemWithStops[]
+): Array<{ key: string; label: string; items: TripItemWithStops[]; total: number }> {
+  const groups = new Map<string, TripItemWithStops[]>();
   for (const item of items) {
     const key = item.scheduledOn ?? NO_DATE_KEY;
     const arr = groups.get(key);
@@ -152,7 +163,7 @@ function ItemRow({
   currency,
 }: {
   tripId: string;
-  item: TripItem;
+  item: TripItemWithStops;
   currency: string;
 }) {
   const router = useRouter();
@@ -216,6 +227,9 @@ function ItemRow({
         {item.notes && (
           <Text variant="small" className="line-clamp-2">{item.notes}</Text>
         )}
+        {item.stops && item.stops.length > 0 && (
+          <ItemItinerary stops={item.stops} />
+        )}
         {item.videoUrl && (
           <div className="pt-2">
             <ActivityVideo url={item.videoUrl} title={item.title} />
@@ -255,7 +269,7 @@ function ItemForm({
   onDone,
 }: {
   tripId: string;
-  item?: TripItem;
+  item?: TripItemWithStops;
   defaultDate?: string | null;
   onDone: () => void;
 }) {

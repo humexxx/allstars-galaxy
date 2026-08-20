@@ -6,7 +6,7 @@ import { cache } from "react";
 import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
-import { trips, tripItems, tripPhotos, tripShares } from "@/db/schema";
+import { trips, tripItems, tripItemStops, tripPhotos, tripShares } from "@/db/schema";
 import type {
   DashboardTravelFeaturedTrip,
   DashboardTravelSummary,
@@ -88,7 +88,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     .where(and(eq(trips.id, tripId), eq(trips.userId, userId)));
   if (!trip) return null;
 
-  const [items, photos, shares] = await Promise.all([
+  const [items, photos, shares, stops] = await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -104,9 +104,37 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       .from(tripShares)
       .where(eq(tripShares.tripId, tripId))
       .orderBy(asc(tripShares.createdAt)),
+    // Every stop for this trip in one query, attached to its item below. A
+    // query per item would be N+1 for something that is at most a couple of
+    // dozen rows.
+    db
+      .select({
+        id: tripItemStops.id,
+        itemId: tripItemStops.itemId,
+        dayNumber: tripItemStops.dayNumber,
+        stopOn: tripItemStops.stopOn,
+        place: tripItemStops.place,
+        note: tripItemStops.note,
+      })
+      .from(tripItemStops)
+      .innerJoin(tripItems, eq(tripItemStops.itemId, tripItems.id))
+      .where(eq(tripItems.tripId, tripId))
+      .orderBy(asc(tripItemStops.dayNumber)),
   ]);
 
-  return { ...trip, items, photos, shares };
+  const stopsByItem = new Map<string, typeof stops>();
+  for (const stop of stops) {
+    const list = stopsByItem.get(stop.itemId) ?? [];
+    list.push(stop);
+    stopsByItem.set(stop.itemId, list);
+  }
+
+  return {
+    ...trip,
+    items: items.map((i) => ({ ...i, stops: stopsByItem.get(i.id) ?? [] })),
+    photos,
+    shares,
+  };
 });
 
 export async function createTrip(

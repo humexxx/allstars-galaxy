@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { embeddedVideo } from "@/lib/travel/video";
+import { tripItemCategoryEnum } from "@/db/schema";
 
 // Non-negative monetary value (no leading minus). Mirrors the CHECK constraint
 // on trip_items.price.
@@ -17,14 +18,9 @@ const currency = z
   .string()
   .regex(/^[A-Z]{3}$/, "Must be a 3-letter currency code (e.g. USD)");
 
-export const tripItemCategorySchema = z.enum([
-  "lodging",
-  "transport",
-  "food",
-  "activity",
-  "shopping",
-  "other",
-]);
+// Derived from the pg enum rather than restated: the two lists were separate
+// and adding a category to one silently rejected it in the other.
+export const tripItemCategorySchema = z.enum(tripItemCategoryEnum.enumValues);
 
 export const tripPhotoSourceSchema = z.enum(["upload", "url"]);
 

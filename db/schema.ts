@@ -48,8 +48,13 @@ export const financePlanOverrideActionEnum = pgEnum(
   "finance_plan_override_action",
   ["skip", "reschedule", "amount"]
 );
+// `flight` and `cruise` are split out of the generic `transport` because they
+// are what people actually plan a trip around, and because a cruise carries a
+// port-by-port itinerary that no other category has.
 export const tripItemCategoryEnum = pgEnum("trip_item_category", [
   "lodging",
+  "flight",
+  "cruise",
   "transport",
   "food",
   "activity",
@@ -217,6 +222,39 @@ export const transactionAllocations = pgTable(
  * in, and requiring an account to appear on a trip would make the common case
  * impossible.
  */
+/**
+ * A stop on a multi-day activity's itinerary — a cruise's ports, day by day.
+ *
+ * Its own table rather than a JSON blob on the item: these are rows people
+ * read, sort and compare against dates, and a blob would make "what are we
+ * doing on the 20th" unanswerable without parsing every item.
+ *
+ * `note` holds the human phrasing the operator publishes ("Docked 10:00 AM –
+ * 6:00 PM", "Departs 4:30 PM") rather than parsed times: itineraries state
+ * arrival and departure inconsistently, and inventing a schema for that would
+ * lose information the traveller actually wants to read.
+ */
+export const tripItemStops = pgTable(
+  "trip_item_stops",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => tripItems.id, { onDelete: "cascade" }),
+    /** Day 1, 2, 3… as the operator numbers them. */
+    dayNumber: integer("day_number").notNull(),
+    stopOn: date("stop_on"),
+    /** "Cozumel, Mexico", or "At sea". */
+    place: text("place").notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("trip_item_stops_item_id_idx").on(t.itemId),
+    uniqueIndex("trip_item_stops_item_day_uq").on(t.itemId, t.dayNumber),
+  ]
+);
+
 export const tripMembers = pgTable(
   "trip_members",
   {

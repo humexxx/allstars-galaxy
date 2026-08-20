@@ -1,3 +1,4 @@
+import { tripItemCategoryEnum } from "@/db/schema";
 import type {
   trips,
   tripItems,
@@ -10,18 +11,26 @@ export type TripItem = typeof tripItems.$inferSelect;
 export type TripPhoto = typeof tripPhotos.$inferSelect;
 export type TripShare = typeof tripShares.$inferSelect;
 
-export type TripItemCategory =
-  | "lodging"
-  | "transport"
-  | "food"
-  | "activity"
-  | "shopping"
-  | "other";
+/** Derived from the `trip_item_category` enum so a new category cannot be
+ *  half-added — the union used to be spelled out by hand right beside it. */
+export type TripItemCategory = (typeof tripItemCategoryEnum.enumValues)[number];
 
 export type TripPhotoSource = "upload" | "url";
 
+/** A stop on a multi-day activity — one port of a cruise's itinerary. */
+export type TripItemStop = {
+  id: string;
+  itemId: string;
+  dayNumber: number;
+  stopOn: string | null;
+  place: string;
+  note: string | null;
+};
+
+export type TripItemWithStops = TripItem & { stops: TripItemStop[] };
+
 export type TripWithRelations = Trip & {
-  items: TripItem[];
+  items: TripItemWithStops[];
   photos: TripPhoto[];
   shares: TripShare[];
 };

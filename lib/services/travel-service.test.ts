@@ -29,6 +29,9 @@ function makeSelectThenable(rows: SelectRows) {
   const thenable: Record<string, unknown> = {};
   const resolve = (cb: (rows: SelectRows) => unknown) => Promise.resolve(rows).then(cb);
   thenable.from = vi.fn(() => thenable);
+  // The stops query joins trip_items to scope by trip, so the chain has to
+  // survive an innerJoin too.
+  thenable.innerJoin = vi.fn(() => thenable);
   thenable.where = vi.fn(() => thenable);
   thenable.orderBy = vi.fn(() => Promise.resolve(rows));
   // Awaiting at the .where() boundary works via a thenable
@@ -189,21 +192,25 @@ describe("getTripWithRelations", () => {
     const items = [{ id: "i-1", tripId, title: "Hotel", category: "lodging" }];
     const photos = [{ id: "p-1", tripId, url: "https://x/y.jpg" }];
     const shares = [{ id: "s-1", tripId, token: "abc" }];
+    const stops = [{ id: "st-1", itemId: "i-1", dayNumber: 1, place: "At sea" }];
 
     queueSelect([trip]);
     queueSelect(items);
     queueSelect(photos);
     queueSelect(shares);
+    queueSelect(stops);
 
     const out = await getTripWithRelations(tripId, USER_ID);
 
     expect(out).not.toBeNull();
     expect(out?.id).toBe(tripId);
-    expect(out?.items).toEqual(items);
     expect(out?.photos).toEqual(photos);
     expect(out?.shares).toEqual(shares);
-    // 1 for the trip + 3 parallel queries for relations
-    expect(dbMock.select).toHaveBeenCalledTimes(4);
+    // Each item carries its own stops, attached from the single stops query
+    // rather than one query per item.
+    expect(out?.items).toEqual([{ ...items[0], stops }]);
+    // 1 for the trip + 4 parallel queries for relations
+    expect(dbMock.select).toHaveBeenCalledTimes(5);
   });
 });
 

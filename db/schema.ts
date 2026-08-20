@@ -1080,6 +1080,10 @@ export const tripItems = pgTable(
     // a trip, and rejecting the second buys nothing.
     fromCode: text("from_code"),
     toCode: text("to_code"),
+    // A return flight is one purchase, not two. Modelling it as one item means
+    // the price is unambiguous — with two rows somebody has to decide which
+    // one carries the fare and the other reads as free.
+    roundTrip: boolean("round_trip").notNull().default(false),
     // Upper end of an estimate. `price` is the low/expected figure and this is
     // optional — an unbooked flight is honestly "$400-600", and forcing a
     // single number would make the trip total look more certain than it is.

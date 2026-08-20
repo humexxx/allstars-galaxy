@@ -92,6 +92,7 @@ export const tripItemSchema = z.object({
     }),
   fromCode: z.string().trim().max(60).nullable().optional(),
   toCode: z.string().trim().max(60).nullable().optional(),
+  roundTrip: z.boolean().optional(),
   price: price.nullable().optional(),
   priceMax: price.nullable().optional(),
   scheduledOn: isoDate.nullable().optional(),

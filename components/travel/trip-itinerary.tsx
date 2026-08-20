@@ -49,6 +49,8 @@ import type {
 import { formatTripMoney } from "@/lib/travel/format";
 import { ActivityVideo } from "@/components/travel/activity-video";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
+import { Checkbox } from "@/components/ui/checkbox";
+import { endDayLabel, itemFields, showsEndDay } from "@/lib/travel/item-fields";
 
 const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "lodging", label: "Hotel", Icon: Bed },
@@ -60,9 +62,6 @@ const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.Componen
   { value: "shopping", label: "Shopping", Icon: ShoppingBag },
   { value: "other", label: "Other", Icon: Tag },
 ];
-
-/** Categories where a route means something. A hotel does not go anywhere. */
-const ROUTED = new Set<TripItemCategory>(["flight", "cruise", "transport"]);
 
 function categoryMeta(c: TripItemCategory) {
   return CATEGORIES.find((x) => x.value === c) ?? CATEGORIES[CATEGORIES.length - 1];
@@ -223,13 +222,17 @@ function ItemRow({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
           <span className="capitalize">{meta.label}</span>
           {(item.fromCode || item.toCode) && (
-            <Mono className="text-2xs">
-              {item.fromCode ?? "?"} → {item.toCode ?? "?"}
+            <Mono className="text-2xs font-medium">
+              {item.fromCode ?? "?"}
+              {/* A double arrow says "and back" faster than the words do. */}
+              <span className="mx-1">{item.roundTrip ? "⇄" : "→"}</span>
+              {item.toCode ?? "?"}
             </Mono>
           )}
           {item.endsOn && item.scheduledOn && item.endsOn !== item.scheduledOn && (
             <span>
-              through {format(new Date(`${item.endsOn}T00:00:00`), "d MMM")}
+              {item.roundTrip ? "back " : "through "}
+              {format(new Date(`${item.endsOn}T00:00:00`), "d MMM")}
             </span>
           )}
           {item.link && (
@@ -303,6 +306,10 @@ function ItemForm({
   const [toCode, setToCode] = useState(item?.toCode ?? "");
   const [scheduledOn, setScheduledOn] = useState(item?.scheduledOn ?? defaultDate ?? "");
   const [endsOn, setEndsOn] = useState(item?.endsOn ?? "");
+  const [roundTrip, setRoundTrip] = useState(item?.roundTrip ?? false);
+
+  const fields = itemFields(category);
+  const showEnd = showsEndDay(fields, roundTrip);
   const [videoUrl, setVideoUrl] = useState(item?.videoUrl ?? "");
   const [notes, setNotes] = useState(item?.notes ?? "");
 
@@ -341,6 +348,7 @@ function ItemForm({
         priceMax: priceMax.trim() || null,
         fromCode: fromCode.trim() || null,
         toCode: toCode.trim() || null,
+        roundTrip,
         scheduledOn: scheduledOn || null,
         endsOn: endsOn || null,
         videoUrl: videoUrl.trim() || null,
@@ -400,7 +408,9 @@ function ItemForm({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor={`date-${item?.id ?? "new"}`} className="text-xs">Day</Label>
+          <Label htmlFor={`date-${item?.id ?? "new"}`} className="text-xs">
+            {fields.startLabel}
+          </Label>
           <Input
             id={`date-${item?.id ?? "new"}`}
             type="date"
@@ -408,19 +418,22 @@ function ItemForm({
             onChange={(e) => setScheduledOn(e.target.value)}
           />
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`ends-${item?.id ?? "new"}`} className="text-xs">
-            End day <span className="text-muted-foreground">(optional)</span>
-          </Label>
-          <Input
-            id={`ends-${item?.id ?? "new"}`}
-            type="date"
-            value={endsOn ?? ""}
-            min={scheduledOn || undefined}
-            onChange={(e) => setEndsOn(e.target.value)}
-          />
-        </div>
-        {ROUTED.has(category) && (
+        {showEnd && (
+          <div className="space-y-1.5">
+            <Label htmlFor={`ends-${item?.id ?? "new"}`} className="text-xs">
+              {endDayLabel(fields, roundTrip)}{" "}
+              <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              id={`ends-${item?.id ?? "new"}`}
+              type="date"
+              value={endsOn ?? ""}
+              min={scheduledOn || undefined}
+              onChange={(e) => setEndsOn(e.target.value)}
+            />
+          </div>
+        )}
+        {fields.route && (
           <>
             <div className="space-y-1.5">
               <Label htmlFor={`from-${item?.id ?? "new"}`} className="text-xs">From</Label>
@@ -441,6 +454,25 @@ function ItemForm({
               />
             </div>
           </>
+        )}
+
+        {fields.roundTrip && (
+          <label
+            htmlFor={`rt-${item?.id ?? "new"}`}
+            className="flex cursor-pointer items-center gap-2 self-end rounded-md border px-3 py-2 sm:col-span-2"
+          >
+            <Checkbox
+              id={`rt-${item?.id ?? "new"}`}
+              checked={roundTrip}
+              onCheckedChange={(v) => setRoundTrip(v === true)}
+            />
+            <span className="text-xs">
+              Round trip
+              <span className="ml-1.5 text-muted-foreground">
+                — one booking, both ways. The price covers the whole thing.
+              </span>
+            </span>
+          </label>
         )}
 
         <div className="space-y-1.5">
@@ -477,6 +509,7 @@ function ItemForm({
             placeholder="https://booking.com/…"
           />
         </div>
+        {fields.video && (
         <div className="space-y-1.5">
           <Label htmlFor={`video-${item?.id ?? "new"}`} className="text-xs">
             Video
@@ -489,6 +522,7 @@ function ItemForm({
             placeholder="YouTube or Instagram link"
           />
         </div>
+        )}
       </div>
 
       <div className="space-y-1.5">

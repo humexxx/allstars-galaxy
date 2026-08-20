@@ -1,0 +1,1 @@
+ALTER TABLE "trip_items" ADD COLUMN "round_trip" boolean DEFAULT false NOT NULL;

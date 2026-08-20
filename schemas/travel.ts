@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { embeddedVideo } from "@/lib/travel/video";
-import { tripItemCategoryEnum } from "@/db/schema";
+import { tripItemCategoryEnum, tripPriceUnitEnum } from "@/db/schema";
 
 // Non-negative monetary value (no leading minus). Mirrors the CHECK constraint
 // on trip_items.price.
@@ -95,6 +95,7 @@ export const tripItemSchema = z.object({
   roundTrip: z.boolean().optional(),
   price: price.nullable().optional(),
   priceMax: price.nullable().optional(),
+  priceUnit: z.enum(tripPriceUnitEnum.enumValues).optional(),
   scheduledOn: isoDate.nullable().optional(),
   endsOn: isoDate.nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),

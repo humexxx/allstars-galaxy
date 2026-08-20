@@ -64,6 +64,22 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **A price has a unit** (`trip_items.price_unit`: `total` / `per_night` /
+  `per_person`). Without it every figure was summed as a total, so a hotel at
+  "$100–200" silently meant one night and a cruise at "$1,900 per person"
+  silently meant the whole party — both wrong, and both in the direction that
+  makes a trip look cheaper than it is.
+- **Nights, not days.** The 15th to the 17th is two nights; counting three
+  overstates every stay. A missing or backwards range falls back to one night,
+  because an undated stay still costs something.
+- **The arithmetic is shown, not hidden.** A row reading $400 when you typed
+  $200 looks like a bug until the `$100–200 / night × 2` under it explains it.
+- `partySize` is 1 until trip members have a UI; the moment they do, every
+  per-person figure scales from the real count with no further change.
+- Defaults come from the category (`itemFields().defaultPriceUnit`): a hotel is
+  nightly, a fare is per person. Changing category adopts the new default only
+  while **creating** — rewriting a saved choice behind the user's back is worse
+  than making them set it once.
 - **Airport fields autocomplete against ~7,900 IATA airports**, searched
   **server-side** (`searchAirportsAction`). The dataset is 115 KB gzipped —
   too much to ship for one form field — and a DB table would add an ~86 ms

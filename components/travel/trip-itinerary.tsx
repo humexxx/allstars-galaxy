@@ -42,6 +42,7 @@ import {
 } from "@/app/actions/travel";
 import type {
   TripItemCategory,
+  TripPriceUnit,
   TripItemWithStops,
   TripWithRelations,
 } from "@/types/travel";
@@ -52,6 +53,7 @@ import { ItemItinerary } from "@/components/travel/item-itinerary";
 import { Checkbox } from "@/components/ui/checkbox";
 import { endDayLabel, itemFields, showsEndDay } from "@/lib/travel/item-fields";
 import { AirportPicker } from "@/components/travel/airport-picker";
+import { itemCost, tripCost, unitSuffix } from "@/lib/travel/pricing";
 
 const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "lodging", label: "Hotel", Icon: Bed },
@@ -71,7 +73,8 @@ function categoryMeta(c: TripItemCategory) {
 const NO_DATE_KEY = "__no_date__";
 
 function groupByDay(
-  items: TripItemWithStops[]
+  items: TripItemWithStops[],
+  partySize: number
 ): Array<{ key: string; label: string; items: TripItemWithStops[]; total: number }> {
   const groups = new Map<string, TripItemWithStops[]>();
   for (const item of items) {
@@ -85,11 +88,7 @@ function groupByDay(
   if (groups.has(NO_DATE_KEY)) dateKeys.push(NO_DATE_KEY);
   return dateKeys.map((key) => {
     const arr = groups.get(key)!;
-    const total = arr.reduce((sum, it) => {
-      if (!it.price) return sum;
-      const n = parseFloat(it.price);
-      return Number.isFinite(n) ? sum + n : sum;
-    }, 0);
+    const total = tripCost(arr, partySize).low;
     const label =
       key === NO_DATE_KEY
         ? "Unscheduled"
@@ -105,11 +104,17 @@ function parseDate(value: string): Date {
 
 type TripItineraryProps = {
   trip: TripWithRelations;
+  /** Travellers the per-person prices apply to. Defaults to one until the
+   *  trip has members — a plan for nobody is not a thing. */
+  partySize?: number;
 };
 
-export function TripItinerary({ trip }: TripItineraryProps) {
+export function TripItinerary({ trip, partySize = 1 }: TripItineraryProps) {
   const [adding, setAdding] = useState(false);
-  const groups = useMemo(() => groupByDay(trip.items), [trip.items]);
+  const groups = useMemo(
+    () => groupByDay(trip.items, partySize),
+    [trip.items, partySize]
+  );
 
   return (
     <Card>
@@ -150,7 +155,13 @@ export function TripItinerary({ trip }: TripItineraryProps) {
             </div>
             <ul className="divide-y">
               {group.items.map((item) => (
-                <ItemRow key={item.id} tripId={trip.id} item={item} currency={trip.currency} />
+                <ItemRow
+                  key={item.id}
+                  tripId={trip.id}
+                  item={item}
+                  currency={trip.currency}
+                  partySize={partySize}
+                />
               ))}
             </ul>
           </section>
@@ -164,15 +175,19 @@ function ItemRow({
   tripId,
   item,
   currency,
+  partySize,
 }: {
   tripId: string;
   item: TripItemWithStops;
   currency: string;
+  /** How many people the per-person prices apply to. */
+  partySize: number;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [isPending, startTransition] = useTransition();
   const meta = categoryMeta(item.category);
+  const cost = itemCost(item, partySize);
   const Icon = meta.Icon;
 
   const handleDelete = () => {
@@ -209,15 +224,30 @@ function ItemRow({
         <div className="flex items-baseline justify-between gap-2">
           <Text weight="medium" className="truncate">{item.title}</Text>
           {item.price && (
-            <Mono className="shrink-0 text-xs font-medium">
-              {formatTripMoney(parseFloat(item.price), currency)}
-              {item.priceMax && (
-                <>
-                  {" – "}
-                  {formatTripMoney(parseFloat(item.priceMax), currency)}
-                </>
+            <span className="shrink-0 text-right">
+              <Mono className="block text-xs font-medium">
+                {formatTripMoney(cost.low, currency)}
+                {cost.ranged && (
+                  <> – {formatTripMoney(cost.high, currency)}</>
+                )}
+              </Mono>
+              {/* Show the arithmetic. A hotel that reads $400 when you typed
+                  $200 looks wrong until you can see the x2 that made it. */}
+              {cost.times > 1 && (
+                <Mono className="block text-2xs text-muted-foreground">
+                  {formatTripMoney(cost.unitLow ?? 0, currency)}
+                  {cost.unitHigh !== null && cost.unitHigh > (cost.unitLow ?? 0) && (
+                    <>–{formatTripMoney(cost.unitHigh, currency)}</>
+                  )}{" "}
+                  {unitSuffix(item.priceUnit)} × {cost.times}
+                </Mono>
               )}
-            </Mono>
+              {cost.times === 1 && item.priceUnit !== "total" && (
+                <Mono className="block text-2xs text-muted-foreground">
+                  {unitSuffix(item.priceUnit)}
+                </Mono>
+              )}
+            </span>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
@@ -308,6 +338,9 @@ function ItemForm({
   const [scheduledOn, setScheduledOn] = useState(item?.scheduledOn ?? defaultDate ?? "");
   const [endsOn, setEndsOn] = useState(item?.endsOn ?? "");
   const [roundTrip, setRoundTrip] = useState(item?.roundTrip ?? false);
+  const [priceUnit, setPriceUnit] = useState<TripPriceUnit>(
+    item?.priceUnit ?? itemFields(item?.category ?? "activity").defaultPriceUnit
+  );
 
   const fields = itemFields(category);
   const showEnd = showsEndDay(fields, roundTrip);
@@ -347,6 +380,7 @@ function ItemForm({
         link: link.trim() || null,
         price: price.trim() || null,
         priceMax: priceMax.trim() || null,
+        priceUnit,
         fromCode: fromCode.trim() || null,
         toCode: toCode.trim() || null,
         roundTrip,
@@ -390,7 +424,17 @@ function ItemForm({
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Category</Label>
-          <Select value={category} onValueChange={(v) => setCategory(v as TripItemCategory)}>
+          <Select
+            value={category}
+            onValueChange={(v) => {
+              const next = v as TripItemCategory;
+              setCategory(next);
+              // Adopt the new category's usual unit only while creating —
+              // rewriting a saved choice behind the user's back is worse than
+              // making them set it once.
+              if (!item) setPriceUnit(itemFields(next).defaultPriceUnit);
+            }}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -499,6 +543,22 @@ function ItemForm({
             onChange={(e) => setPriceMax(e.target.value)}
             placeholder="600.00"
           />
+        </div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label className="text-xs">That price is</Label>
+          <Select
+            value={priceUnit}
+            onValueChange={(v) => setPriceUnit(v as TripPriceUnit)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="total">a total</SelectItem>
+              <SelectItem value="per_night">per night</SelectItem>
+              <SelectItem value="per_person">per person</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`link-${item?.id ?? "new"}`} className="text-xs">Link</Label>

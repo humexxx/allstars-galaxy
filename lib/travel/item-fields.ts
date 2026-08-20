@@ -1,4 +1,4 @@
-import type { TripItemCategory } from "@/types/travel";
+import type { TripItemCategory, TripPriceUnit } from "@/types/travel";
 
 /**
  * Which fields each kind of item actually needs, and what to call them.
@@ -13,6 +13,8 @@ import type { TripItemCategory } from "@/types/travel";
  * dates are called only by a database.
  */
 export type ItemFieldSpec = {
+  /** What a price of this kind is usually per, so the common case is preset. */
+  defaultPriceUnit: TripPriceUnit;
   /** Airports, ports, stations. A hotel does not go anywhere. */
   route: boolean;
   /** Only meaningful where the same booking covers both directions. */
@@ -27,6 +29,7 @@ export type ItemFieldSpec = {
 };
 
 const DEFAULTS: ItemFieldSpec = {
+  defaultPriceUnit: "total",
   route: false,
   roundTrip: false,
   endDay: true,
@@ -37,7 +40,11 @@ const DEFAULTS: ItemFieldSpec = {
 };
 
 const BY_CATEGORY: Record<TripItemCategory, Partial<ItemFieldSpec>> = {
-  lodging: { startLabel: "Check in", endLabel: "Check out" },
+  lodging: {
+    startLabel: "Check in",
+    endLabel: "Check out",
+    defaultPriceUnit: "per_night",
+  },
   flight: {
     route: true,
     roundTrip: true,
@@ -45,12 +52,15 @@ const BY_CATEGORY: Record<TripItemCategory, Partial<ItemFieldSpec>> = {
     endDay: false,
     video: false,
     startLabel: "Departs",
+    // A fare is quoted per traveller everywhere in the world.
+    defaultPriceUnit: "per_person",
   },
   cruise: {
     route: true,
     itinerary: true,
     startLabel: "Boards",
     endLabel: "Disembarks",
+    defaultPriceUnit: "per_person",
   },
   transport: { route: true, endDay: false, video: false, startLabel: "Day" },
   food: { endDay: false },

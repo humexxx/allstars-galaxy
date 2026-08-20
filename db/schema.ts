@@ -62,6 +62,14 @@ export const tripItemCategoryEnum = pgEnum("trip_item_category", [
   "other",
 ]);
 export const tripPhotoSourceEnum = pgEnum("trip_photo_source", ["upload", "url"]);
+// What a price is per. Without this every figure is summed as a total, so a
+// hotel at "$100–200" quietly means one night and a cruise at "$1,900 per
+// person" quietly means the whole party — both wrong, and wrong silently.
+export const tripPriceUnitEnum = pgEnum("trip_price_unit", [
+  "total",
+  "per_night",
+  "per_person",
+]);
 
 // Define auth schema to reference auth.users
 const authSchema = pgSchema("auth");
@@ -1088,6 +1096,7 @@ export const tripItems = pgTable(
     // optional — an unbooked flight is honestly "$400-600", and forcing a
     // single number would make the trip total look more certain than it is.
     priceMax: numeric("price_max", { precision: 20, scale: 2 }),
+    priceUnit: tripPriceUnitEnum("price_unit").notNull().default("total"),
     // Optional price. Null = "not estimated yet". Currency lives on the parent
     // trip — multi-currency itineraries are out of scope for v1.
     price: numeric("price", { precision: 20, scale: 2 }),

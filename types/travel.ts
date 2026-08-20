@@ -1,4 +1,4 @@
-import { tripItemCategoryEnum } from "@/db/schema";
+import { tripItemCategoryEnum, tripPriceUnitEnum } from "@/db/schema";
 import type {
   trips,
   tripItems,
@@ -14,6 +14,8 @@ export type TripShare = typeof tripShares.$inferSelect;
 /** Derived from the `trip_item_category` enum so a new category cannot be
  *  half-added — the union used to be spelled out by hand right beside it. */
 export type TripItemCategory = (typeof tripItemCategoryEnum.enumValues)[number];
+
+export type TripPriceUnit = (typeof tripPriceUnitEnum.enumValues)[number];
 
 export type TripPhotoSource = "upload" | "url";
 

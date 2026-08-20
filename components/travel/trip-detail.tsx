@@ -49,6 +49,7 @@ import { TripForm } from "./trip-form";
 import { TripItinerary } from "./trip-itinerary";
 import { TripGallery } from "./trip-gallery";
 import { TripSharePanel } from "./trip-share-panel";
+import { tripCost } from "@/lib/travel/pricing";
 
 type TripDetailProps = {
   trip: TripWithRelations;
@@ -57,37 +58,25 @@ type TripDetailProps = {
 
 export function TripDetail({ trip, baseUrl }: TripDetailProps) {
   const router = useRouter();
+  // Until members have a UI, a trip is planned for one. The moment they exist
+  // this reads the real count and every per-person figure scales with it.
+  const partySize = 1;
+
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isDeleting, startDelete] = useTransition();
 
   /**
-   * The trip's cost as a range.
+   * The trip's cost as a range, with each item's unit applied.
    *
-   * `low` sums each item's price; `high` sums its upper estimate where it has
-   * one and its price otherwise. Collapsing an unbooked flight's "$400-600"
-   * into one number would make the total look more certain than it is, which
-   * is the opposite of useful when you are still deciding.
+   * A nightly rate times its nights, a per-person fare times the party. Summing
+   * the raw figures would quietly report a two-night hotel at one night's price
+   * — wrong, and wrong in the direction that makes a trip look affordable.
    */
-  const estimate = useMemo(() => {
-    let low = 0;
-    let high = 0;
-    let ranged = false;
-    for (const item of trip.items) {
-      if (!item.price) continue;
-      const n = parseFloat(item.price);
-      if (!Number.isFinite(n)) continue;
-      low += n;
-      const max = item.priceMax ? parseFloat(item.priceMax) : null;
-      if (max !== null && Number.isFinite(max) && max > n) {
-        high += max;
-        ranged = true;
-      } else {
-        high += n;
-      }
-    }
-    return { low, high, ranged };
-  }, [trip.items]);
+  const estimate = useMemo(
+    () => tripCost(trip.items, partySize),
+    [trip.items, partySize]
+  );
 
   const handleDelete = () => {
     startDelete(async () => {
@@ -183,6 +172,13 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
                 )}`
               : formatTripMoney(estimate.low, trip.currency)
           }
+          hint={
+            // Say what the figure assumes rather than letting the reader guess
+            // whether it already counts everyone.
+            estimate.perPerson
+              ? `for ${partySize} ${partySize === 1 ? "traveller" : "travellers"}`
+              : undefined
+          }
         />
       </div>
 
@@ -248,10 +244,13 @@ function StatCard({
   icon: Icon,
   label,
   value,
+  hint,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
+  /** What the figure assumes, when it assumes something. */
+  hint?: string;
 }) {
   return (
     <Card>
@@ -262,6 +261,11 @@ function StatCard({
         <div className="min-w-0">
           <Text variant="small" className="uppercase tracking-wider">{label}</Text>
           <Text weight="semibold" className="truncate tabular-nums">{value}</Text>
+          {hint && (
+            <Text variant="small" className="truncate text-muted-foreground">
+              {hint}
+            </Text>
+          )}
         </div>
       </CardContent>
     </Card>

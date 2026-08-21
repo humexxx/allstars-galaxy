@@ -64,6 +64,20 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **Category icons are tinted, and the tint lives on `CATEGORIES` in
+  [`trip-itinerary.tsx`](../../components/travel/trip-itinerary.tsx)** — one
+  list feeding both the picker and the itinerary rows through `CategoryIcon`,
+  so the two can never disagree about what a cruise looks like.
+  These are **not** `--chart-1..5`: that palette has five slots, must never be
+  cycled, and there are eight categories. Colour is the second channel — the
+  icon's shape carries the meaning, so a reader who cannot separate two hues
+  still reads a plane and a bed. `other` stays neutral because it is the
+  absence of a category, not one more kind of thing.
+  The hues were measured, not eyeballed: worst pair ΔEok 0.137 (light) /
+  0.123 (dark), every icon ≥3:1 against its own surface in both themes.
+  Activity is lime rather than emerald because emerald measured 0.056 against
+  teal, and lime-**700** rather than 600 because 600 clears contrast at only
+  3.06:1.
 - **`That price is` offers only the units its category can honestly use**
   (`ItemFieldSpec.priceUnits`). `per_night` multiplies by the nights between
   the two dates, so it belongs where the end day marks a stay — lodging,

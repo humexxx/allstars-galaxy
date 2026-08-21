@@ -2,7 +2,8 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { TripItinerary, type ItineraryViewer } from "./trip-itinerary";
+import { CATEGORIES, TripItinerary, type ItineraryViewer } from "./trip-itinerary";
+import { tripItemCategoryEnum } from "@/db/schema";
 import type { TripItemWithStops, TripWithRelations } from "@/types/travel";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -111,5 +112,31 @@ describe("TripItinerary day subtotals", () => {
     expect(screen.getAllByText("$300 – $400")).toHaveLength(2);
     expect(screen.getByText("of $600 – $800")).toBeInTheDocument();
     expect(screen.getByText("your share")).toBeInTheDocument();
+  });
+});
+
+describe("category identity", () => {
+  it("covers every category the database allows", () => {
+    // A category with no entry falls back to "Other", so it would render as
+    // the wrong icon rather than as an obvious gap.
+    expect(CATEGORIES.map((c) => c.value).sort()).toEqual(
+      [...tripItemCategoryEnum.enumValues].sort()
+    );
+  });
+
+  it("gives each category its own tint", () => {
+    // Two categories sharing a colour is worse than none having one: it
+    // asserts a relationship between them that does not exist.
+    const tints = CATEGORIES.map((c) => c.tint);
+    expect(new Set(tints).size).toBe(tints.length);
+  });
+
+  it("keeps a readable foreground in both themes", () => {
+    // The wash is 10% so it stays a hint; the text has to carry the contrast,
+    // and a dark surface needs a lighter step than a light one.
+    for (const c of CATEGORIES) {
+      expect(c.tint).toMatch(/\btext-/);
+      expect(c.tint === "bg-muted text-muted-foreground" || /dark:text-/.test(c.tint)).toBe(true);
+    }
   });
 });

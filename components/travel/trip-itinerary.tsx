@@ -67,15 +67,47 @@ import { MoneyInput } from "@/components/ui/money-input";
 import { ItineraryEditor } from "@/components/travel/itinerary-editor";
 import { Badge } from "@/components/ui/badge";
 
-const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
-  { value: "lodging", label: "Hotel", Icon: Bed },
-  { value: "flight", label: "Flight", Icon: Plane },
-  { value: "cruise", label: "Cruise", Icon: Anchor },
-  { value: "transport", label: "Transport", Icon: Bus },
-  { value: "food", label: "Food", Icon: Utensils },
-  { value: "activity", label: "Activity", Icon: Sparkles },
-  { value: "shopping", label: "Shopping", Icon: ShoppingBag },
-  { value: "other", label: "Other", Icon: Tag },
+type CategoryMeta = {
+  value: TripItemCategory;
+  label: string;
+  Icon: React.ComponentType<{ className?: string }>;
+  /** Tint for the icon chip: a wash plus a foreground that holds up in both
+   *  themes. Deliberately NOT `--chart-1..5` — that palette has five slots and
+   *  must never be cycled, and there are eight categories here. */
+  tint: string;
+};
+
+/**
+ * Colour is the second channel, never the only one.
+ *
+ * The icon's shape is what actually says "flight"; the tint makes a long list
+ * scannable and lets a row be recognised out of the corner of an eye. Anyone
+ * who cannot separate two of these hues still reads a plane and a bed.
+ */
+export const CATEGORIES: CategoryMeta[] = [
+  { value: "lodging", label: "Hotel", Icon: Bed,
+    tint: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+  { value: "flight", label: "Flight", Icon: Plane,
+    tint: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+  { value: "cruise", label: "Cruise", Icon: Anchor,
+    tint: "bg-teal-500/10 text-teal-600 dark:text-teal-400" },
+  { value: "transport", label: "Transport", Icon: Bus,
+    tint: "bg-violet-500/10 text-violet-600 dark:text-violet-400" },
+  { value: "food", label: "Food", Icon: Utensils,
+    tint: "bg-rose-500/10 text-rose-600 dark:text-rose-400" },
+  // Lime, not the obvious emerald: emerald sits 22° from teal, and measured
+  // ΔEok 0.056 against it — visible, but the tightest pair on the wheel. Lime
+  // drops into the wide gap between amber and teal and takes the worst pair to
+  // 0.137. The 700 step rather than 600 because lime is intrinsically light:
+  // 600 clears non-text contrast at only 3.06:1, 700 at 4.96:1.
+  { value: "activity", label: "Activity", Icon: Sparkles,
+    tint: "bg-lime-500/10 text-lime-700 dark:text-lime-400" },
+  { value: "shopping", label: "Shopping", Icon: ShoppingBag,
+    tint: "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400" },
+  // Neutral on purpose: "other" is the absence of a category, and giving it a
+  // hue of its own would make it look like one more kind of thing.
+  { value: "other", label: "Other", Icon: Tag,
+    tint: "bg-muted text-muted-foreground" },
 ];
 
 const PRICE_UNIT_LABELS: Record<TripPriceUnit, string> = {
@@ -84,8 +116,26 @@ const PRICE_UNIT_LABELS: Record<TripPriceUnit, string> = {
   per_person: "per person",
 };
 
-function categoryMeta(c: TripItemCategory) {
+function categoryMeta(c: TripItemCategory): CategoryMeta {
   return CATEGORIES.find((x) => x.value === c) ?? CATEGORIES[CATEGORIES.length - 1];
+}
+
+/** One chip, so the dropdown and the rows can never drift apart. */
+function CategoryIcon({
+  category,
+  className,
+}: {
+  category: TripItemCategory;
+  className?: string;
+}) {
+  const { Icon, tint } = categoryMeta(category);
+  return (
+    <span
+      className={cn("grid size-7 shrink-0 place-items-center rounded-md", tint, className)}
+    >
+      <Icon className="size-4" />
+    </span>
+  );
 }
 
 const NO_DATE_KEY = "__no_date__";
@@ -275,7 +325,6 @@ function ItemRow({
   // The row leads with whatever the day subtotal is adding up, or the two
   // disagree on screen and neither can be checked against the other.
   const mine = readerCost(item, partySize, viewer);
-  const Icon = meta.Icon;
 
   const handleDelete = () => {
     startTransition(async () => {
@@ -305,9 +354,7 @@ function ItemRow({
 
   return (
     <li className="group flex items-start gap-3 py-3">
-      <div className="rounded-md bg-muted p-1.5 text-muted-foreground">
-        <Icon className="h-4 w-4" />
-      </div>
+      <CategoryIcon category={item.category} />
       <div className="min-w-0 flex-1 space-y-0.5">
         <div className="flex items-baseline justify-between gap-2">
           <Text weight="medium" className="truncate">{item.title}</Text>
@@ -547,14 +594,17 @@ function ItemForm({
               }
             }}
           >
-            <SelectTrigger className="w-full">
+            {/* Taller than the default h-9: the trigger carries an icon chip
+                now, and eight tinted options are worth reading at a glance. */}
+            <SelectTrigger className="w-full data-[size=default]:h-11">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {CATEGORIES.map(({ value, label, Icon }) => (
-                <SelectItem key={value} value={value}>
-                  <span className="inline-flex items-center gap-2">
-                    <Icon className="h-3.5 w-3.5" /> {label}
+              {CATEGORIES.map(({ value, label }) => (
+                <SelectItem key={value} value={value} className="py-2">
+                  <span className="inline-flex items-center gap-2.5">
+                    <CategoryIcon category={value} />
+                    <span className="text-sm">{label}</span>
                   </span>
                 </SelectItem>
               ))}

@@ -70,10 +70,17 @@ NBA and NFL still use mocks.
   **Trip** button back to the trip's own month.
 - **The bar grid carries no padding of its own.** It is `absolute inset-x-0`
   over the day grid with the same columns and the same gap; a `px-1` on it
-  shifted every column four pixels in and left each badge starting just
-  outside the day it belongs to. The badge is inset by `ml-0.5`/`mr-0.5` only
-  where the run really starts or ends — flush where it carries into the next
-  week.
+  took 8px off the width and made every track **1.1px** narrower than the day
+  it sits over, so a badge drifted further left the later in the week it fell.
+  A test asserts the overlay has no padding class, because the symptom is a
+  couple of pixels and reads as sloppiness rather than as a bug.
+- **Every badge is inset the same at both ends** (`mx-0.5`). Insetting only
+  where a run began left two badges on one day disagreeing about where that
+  day starts. Weeks are separate rows, so nothing is continuous across the
+  boundary anyway — the square corner is the cue that a run carries on.
+- **Bars use shadcn's `Tooltip`, not the browser's `title`.** It opens at once
+  rather than after a second, and it holds the three things worth knowing:
+  what it is, what it costs, and when it runs.
 - **A bar's label is one string — `title · price`, not two boxes.** Pinned to
   the right, the price ate the title on any bar a single day wide: a flight
   read *"$600 – $"* and never said where it went. As one label the wide bars

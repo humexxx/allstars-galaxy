@@ -56,7 +56,7 @@ describe("TripCalendar", () => {
     // The whole reason a cruise or a hotel is worth seeing on a calendar: the
     // length of the bar IS the information.
     const { container } = render(<TripCalendar trip={trip([CRUISE])} />);
-    const bars = [...container.querySelectorAll("[title]")];
+    const bars = [...container.querySelectorAll("[data-slot=calendar-bar]")];
     // Sun 17 to Sun 24 crosses a week boundary, so it is two segments: six
     // days to Saturday the 23rd, then one more.
     expect(bars).toHaveLength(2);
@@ -70,7 +70,7 @@ describe("TripCalendar", () => {
       scheduledOn: "2027-01-15", endsOn: "2027-01-24",
     });
     const { container } = render(<TripCalendar trip={trip([flight])} />);
-    const bars = [...container.querySelectorAll("[title]")];
+    const bars = [...container.querySelectorAll("[data-slot=calendar-bar]")];
 
     expect(bars).toHaveLength(2);
     expect(bars.every((b) => b.className.includes("col-span-1"))).toBe(true);
@@ -81,7 +81,7 @@ describe("TripCalendar", () => {
     // the days that have something new on them. The run crosses a week
     // boundary, so there are two bars and only the first carries the label.
     const { container } = render(<TripCalendar trip={trip([CRUISE])} />);
-    const labelled = [...container.querySelectorAll("[title]")].filter((b) =>
+    const labelled = [...container.querySelectorAll("[data-slot=calendar-bar]")].filter((b) =>
       b.textContent?.includes("Star of the Seas")
     );
 
@@ -93,7 +93,7 @@ describe("TripCalendar", () => {
     // neither. On the bar it is unambiguous.
     const { container } = render(<TripCalendar trip={trip([CRUISE])} partySize={2} />);
 
-    const bar = container.querySelector('[title*="Star of the Seas"]')!;
+    const bar = [...container.querySelectorAll("[data-slot=calendar-bar]")].find((b) => b.textContent?.includes("Star of the Seas"))!;
     expect(bar.textContent).toContain("Star of the Seas · $3,800");
   });
 
@@ -110,7 +110,7 @@ describe("TripCalendar", () => {
       />
     );
 
-    const bar = document.querySelector('[title*="Star of the Seas"]')!;
+    const bar = [...document.querySelectorAll("[data-slot=calendar-bar]")].find((b) => b.textContent?.includes("Star of the Seas"))!;
     expect(bar.textContent).toContain("$1,900");
     expect(screen.getByText("Bruno Fabián's share")).toBeInTheDocument();
   });
@@ -123,5 +123,45 @@ describe("TripCalendar", () => {
     expect(outside.className).toContain("bg-muted/30");
     expect(inside.className).not.toContain("bg-muted/30");
     expect(container).toBeTruthy();
+  });
+});
+
+describe("bar geometry", () => {
+  it("insets every badge the same at both ends", () => {
+    // Two badges on the same day disagreeing about where that day begins is
+    // the thing that looked wrong: one ran to the cell's border, the other
+    // did not.
+    const { container } = render(
+      <TripCalendar trip={trip([CRUISE, item({ id: "h", title: "Hotel", category: "lodging", scheduledOn: "2027-01-15", endsOn: "2027-01-17" })])} />
+    );
+    const bars = [...container.querySelectorAll("[data-slot=calendar-bar]")];
+
+    expect(bars.length).toBeGreaterThan(1);
+    expect(bars.every((b) => b.className.includes("mx-0.5"))).toBe(true);
+  });
+
+  it("squares off the corner where a run carries into the next week", () => {
+    const { container } = render(<TripCalendar trip={trip([CRUISE])} />);
+    const [first, second] = [...container.querySelectorAll("[data-slot=calendar-bar]")];
+
+    // Sun 17 to Sat 23, then Sun 24: the first is open at its right, the
+    // second at its left.
+    expect(first.className).toContain("rounded-r-none");
+    expect(second.className).toContain("rounded-l-none");
+    expect(first.className).toContain("rounded-l-sm");
+    expect(second.className).toContain("rounded-r-sm");
+  });
+
+  it("lays the bars over a grid with the day grid's exact geometry", () => {
+    // A `px-1` here once took 8px off the width, which made every track
+    // 1.1px narrower than the day it sits over — so a badge drifted further
+    // left the later in the week it fell.
+    const { container } = render(<TripCalendar trip={trip([CRUISE])} />);
+    const overlay = container.querySelector("div.absolute.grid")!;
+
+    expect(overlay.className).toContain("inset-x-0");
+    expect(overlay.className).toContain("grid-cols-7");
+    expect(overlay.className).toContain("gap-x-1");
+    expect(overlay.className).not.toMatch(/\bp[xl]?-\d/);
   });
 });

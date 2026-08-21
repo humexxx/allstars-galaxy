@@ -13,6 +13,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { moneyRange } from "@/lib/travel/format";
@@ -34,6 +39,10 @@ import {
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+function dayLabel(day: string | null | undefined): string {
+  return day ? format(parseDay(day), "EEE d MMM") : "—";
+}
+
 /**
  * Where the first bar sits, clear of the date, and how tall each lane is.
  *
@@ -44,6 +53,8 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
  */
 const LANE_TOP = 22;
 const LANE_HEIGHT = 22;
+/** Breathing room between two runs stacked on the same day. */
+const LANE_GAP = 4;
 const MIN_CELL = 64;
 
 /** Static so Tailwind can see them; arbitrary values would not be generated. */
@@ -217,51 +228,76 @@ export function TripCalendar({
               {/* The bars ride over the day grid on a matching seven-column
                   track, which is the only way a run can cross a cell boundary
                   and read as one thing. */}
+              {/* Exactly the day grid's geometry — same columns, same gap, and
+                  no padding of its own. A `px-1` here took 8px off the width,
+                  which made every track 1.1px narrower than the day it sits
+                  over, so each badge drifted further left the later in the
+                  week it fell. */}
               <div
-                className="pointer-events-none absolute inset-x-0 grid grid-cols-7 gap-x-1 gap-y-0.5 px-1"
-                style={{ top: LANE_TOP }}
+                className="pointer-events-none absolute inset-x-0 grid grid-cols-7 gap-x-1"
+                style={{ top: LANE_TOP, rowGap: LANE_GAP }}
               >
                 {segments.map((seg) => {
                   const meta = categoryMeta(seg.item.category);
                   const full = byId.get(seg.item.id);
                   const runs = occupiedRuns(seg.item);
                   const price = costByItem.get(seg.item.id);
+                  const label = price
+                    ? `${seg.item.title} · ${price}`
+                    : seg.item.title;
                   return (
-                    <div
-                      key={`${seg.item.id}-${seg.start}-${seg.lane}`}
-                      style={{ gridRow: seg.lane + 1, height: LANE_HEIGHT - 4 }}
-                      className={cn(
-                        "group/bar pointer-events-auto flex min-w-0 items-center gap-1 overflow-hidden px-1",
-                        meta.bar,
-                        COL_START[seg.start],
-                        COL_SPAN[seg.span - 1],
-                        // Flat and flush where the run carries on into the
-                        // next week, so the eye reads one journey rather than
-                        // two bookings; inset by a hair where it really
-                        // starts or ends, so the badge sits inside its day
-                        // rather than hard against the cell's border.
-                        seg.opensRun ? "ml-0.5 rounded-l-sm" : "rounded-l-none",
-                        seg.closesRun ? "mr-0.5 rounded-r-sm" : "rounded-r-none"
-                      )}
-                      title={`${seg.item.title}${runs.length > 1 ? " — out and back" : ""}${
-                        full?.endsOn && full.endsOn !== full.scheduledOn
-                          ? ` · ${full.scheduledOn} → ${full.endsOn}`
-                          : ""
-                      }`}
-                    >
-                      <meta.Icon className="hidden size-3 shrink-0 sm:block" />
-                      {seg.opensRun && (
-                        // Title and price are one label, not two boxes
-                        // competing for a bar that can be a single day wide.
-                        // Pinned to the right, the price ate the title
-                        // whole — a flight read "$600 – $" and never said
-                        // where it went. As one string the wide bars show
-                        // everything and the narrow ones reveal it on hover.
-                        <MarqueeText className="hidden text-2xs font-medium leading-none sm:block">
-                          {price ? `${seg.item.title} · ${price}` : seg.item.title}
-                        </MarqueeText>
-                      )}
-                    </div>
+                    <Tooltip key={`${seg.item.id}-${seg.start}-${seg.lane}`}>
+                      <TooltipTrigger asChild>
+                        <div
+                          data-slot="calendar-bar"
+                          style={{
+                            gridRow: seg.lane + 1,
+                            height: LANE_HEIGHT - LANE_GAP,
+                          }}
+                          className={cn(
+                            "group/bar pointer-events-auto flex min-w-0 items-center gap-1 overflow-hidden px-1",
+                            meta.bar,
+                            COL_START[seg.start],
+                            COL_SPAN[seg.span - 1],
+                            // Always inset by the same hair at both ends, so a
+                            // badge never sits hard against a cell's border and
+                            // two of them never disagree about where a day
+                            // begins. Weeks are separate rows, so there is no
+                            // continuity to preserve across the boundary — the
+                            // square corner is the cue that a run carries on.
+                            "mx-0.5",
+                            seg.opensRun ? "rounded-l-sm" : "rounded-l-none",
+                            seg.closesRun ? "rounded-r-sm" : "rounded-r-none"
+                          )}
+                        >
+                          <meta.Icon className="hidden size-3 shrink-0 sm:block" />
+                          {seg.opensRun && (
+                            // Title and price are one label, not two boxes
+                            // competing for a bar that can be a single day
+                            // wide. Pinned to the right, the price ate the
+                            // title whole — a flight read "$600 – $" and never
+                            // said where it went.
+                            <MarqueeText className="hidden text-2xs font-medium leading-none sm:block">
+                              {label}
+                            </MarqueeText>
+                          )}
+                        </div>
+                      </TooltipTrigger>
+                      {/* The design system's tooltip, not the browser's
+                          `title`: it appears at once instead of after a
+                          second, and it can hold more than one line. */}
+                      <TooltipContent side="top" className="max-w-64">
+                        <span className="block font-medium">{seg.item.title}</span>
+                        {price && <span className="block tabular-nums">{price}</span>}
+                        <span className="block opacity-80">
+                          {runs.length > 1
+                            ? `Out ${dayLabel(full?.scheduledOn)}, back ${dayLabel(full?.endsOn)}`
+                            : full?.endsOn && full.endsOn !== full.scheduledOn
+                              ? `${dayLabel(full.scheduledOn)} – ${dayLabel(full.endsOn)}`
+                              : dayLabel(full?.scheduledOn)}
+                        </span>
+                      </TooltipContent>
+                    </Tooltip>
                   );
                 })}
               </div>

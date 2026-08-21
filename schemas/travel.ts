@@ -140,3 +140,30 @@ export type TripItemInput = z.infer<typeof tripItemSchema>;
 export type UpdateTripItemInput = z.infer<typeof updateTripItemSchema>;
 export type TripPhotoInput = z.infer<typeof tripPhotoSchema>;
 export type CreateTripShareInput = z.infer<typeof createTripShareSchema>;
+
+/**
+ * A cruise's stops, saved as a whole list rather than row by row.
+ *
+ * An itinerary is edited as one thing — you paste the operator's schedule and
+ * fix a line — so a per-row API would mean a request per port and a half-saved
+ * itinerary whenever one failed.
+ */
+export const setItemStopsSchema = z.object({
+  itemId: z.string().uuid(),
+  stops: z
+    .array(
+      z.object({
+        dayNumber: z.coerce.number().int().min(1).max(365),
+        stopOn: isoDate.nullable().optional(),
+        place: z.string().trim().min(1, "A stop needs a place").max(200),
+        note: z.string().trim().max(200).nullable().optional(),
+      })
+    )
+    .max(365)
+    .refine(
+      (rows) => new Set(rows.map((r) => r.dayNumber)).size === rows.length,
+      { message: "Two stops cannot share a day number" }
+    ),
+});
+
+export type SetItemStopsData = z.infer<typeof setItemStopsSchema>;

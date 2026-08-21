@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 
 import { Mono, Text } from "@/components/ui/typography";
@@ -15,10 +19,28 @@ import type { TripItemStop } from "@/types/travel";
  * and normalising that would lose what the traveller actually needs to read.
  */
 export function ItemItinerary({ stops }: { stops: TripItemStop[] }) {
+  // Collapsed by default: eight ports is a wall of text under an activity you
+  // were only glancing at, and the ports are a detail of the cruise rather
+  // than of the day it starts.
+  const [open, setOpen] = useState(false);
   if (stops.length === 0) return null;
 
   return (
-    <ol className="mt-3 space-y-0 border-l pl-4">
+    <div className="mt-2">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ChevronDown
+          className={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+        {open ? "Hide itinerary" : `Itinerary · ${stops.length} days`}
+      </button>
+
+      {open && (
+    <ol className="mt-2 space-y-0 border-l pl-4">
       {stops.map((stop) => (
         <li key={stop.id} className="relative py-2">
           <span
@@ -42,5 +64,7 @@ export function ItemItinerary({ stops }: { stops: TripItemStop[] }) {
         </li>
       ))}
     </ol>
+      )}
+    </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   Anchor,
   Bed,
   Bus,
+  ListOrdered,
   ExternalLink,
   Pencil,
   Plane,
@@ -55,6 +56,7 @@ import { deriveTitle, endDayLabel, itemFields, showsEndDay } from "@/lib/travel/
 import { AirportPicker } from "@/components/travel/airport-picker";
 import { itemCost, tripCost, unitSuffix } from "@/lib/travel/pricing";
 import { MoneyInput } from "@/components/ui/money-input";
+import { ItineraryEditor } from "@/components/travel/itinerary-editor";
 
 const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "lodging", label: "Hotel", Icon: Bed },
@@ -344,6 +346,7 @@ function ItemForm({
   const [scheduledOn, setScheduledOn] = useState(item?.scheduledOn ?? defaultDate ?? "");
   const [endsOn, setEndsOn] = useState(item?.endsOn ?? "");
   const [roundTrip, setRoundTrip] = useState(item?.roundTrip ?? false);
+  const [editingStops, setEditingStops] = useState(false);
   const [priceUnit, setPriceUnit] = useState<TripPriceUnit>(
     item?.priceUnit ?? itemFields(item?.category ?? "activity").defaultPriceUnit
   );
@@ -614,6 +617,31 @@ function ItemForm({
         </div>
         )}
       </div>
+
+      {fields.itinerary && item && (
+        <div className="space-y-1.5">
+          {editingStops ? (
+            <ItineraryEditor
+              tripId={tripId}
+              itemId={item.id}
+              stops={item.stops}
+              onDone={() => setEditingStops(false)}
+            />
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setEditingStops(true)}
+            >
+              <ListOrdered className="size-4" />
+              {item.stops.length > 0
+                ? `Edit itinerary (${item.stops.length} days)`
+                : "Add itinerary"}
+            </Button>
+          )}
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <Label htmlFor={`notes-${item?.id ?? "new"}`} className="text-xs">Notes</Label>

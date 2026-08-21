@@ -7,8 +7,6 @@ import { Suspense, useMemo, useState, useTransition } from "react";
 import {
   ArrowLeft,
   CalendarDays,
-  DollarSign,
-  ListChecks,
   MapPin,
   Pencil,
   Trash2,
@@ -35,7 +33,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
-import { cn } from "@/lib/utils";
 
 import { deleteTripAction } from "@/app/actions/travel";
 import {
@@ -136,6 +133,33 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
                 <Mono>{formatDateRange(trip.startDate, trip.endDate)}</Mono>
               </span>
             </div>
+
+            {/* The figures, on one line under the dates they belong to. */}
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm text-white/80">
+              <span>{tripDurationLabel(trip.startDate, trip.endDate)}</span>
+              <span aria-hidden className="text-white/40">·</span>
+              <span>
+                {trip.items.length} {trip.items.length === 1 ? "item" : "items"}
+              </span>
+              {estimate.low > 0 && (
+                <>
+                  <span aria-hidden className="text-white/40">·</span>
+                  <Mono className="font-medium text-white">
+                    {estimate.ranged
+                      ? `${formatTripMoney(estimate.low, trip.currency)} – ${formatTripMoney(
+                          estimate.high,
+                          trip.currency
+                        )}`
+                      : formatTripMoney(estimate.low, trip.currency)}
+                  </Mono>
+                  {estimate.perPerson && (
+                    <span className="text-white/70">
+                      for {partySize} {partySize === 1 ? "traveller" : "travellers"}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           <div className="absolute right-4 top-4 flex gap-2">
             <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}>
@@ -154,33 +178,6 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
         </div>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard
-          icon={CalendarDays}
-          label="Duration"
-          value={tripDurationLabel(trip.startDate, trip.endDate)}
-        />
-        <StatCard icon={ListChecks} label="Items" value={String(trip.items.length)} />
-        <StatCard
-          icon={DollarSign}
-          label="Est. total"
-          value={
-            estimate.ranged
-              ? `${formatTripMoney(estimate.low, trip.currency)} – ${formatTripMoney(
-                  estimate.high,
-                  trip.currency
-                )}`
-              : formatTripMoney(estimate.low, trip.currency)
-          }
-          hint={
-            // Say what the figure assumes rather than letting the reader guess
-            // whether it already counts everyone.
-            estimate.perPerson
-              ? `for ${partySize} ${partySize === 1 ? "traveller" : "travellers"}`
-              : undefined
-          }
-        />
-      </div>
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
@@ -237,37 +234,5 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
         </AlertDialogContent>
       </AlertDialog>
     </section>
-  );
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  hint,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  /** What the figure assumes, when it assumes something. */
-  hint?: string;
-}) {
-  return (
-    <Card>
-      <CardContent className={cn("flex items-center gap-3 p-4")}>
-        <div className="rounded-md bg-primary/10 p-2 text-primary">
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0">
-          <Text variant="small" className="uppercase tracking-wider">{label}</Text>
-          <Text weight="semibold" className="truncate tabular-nums">{value}</Text>
-          {hint && (
-            <Text variant="small" className="truncate text-muted-foreground">
-              {hint}
-            </Text>
-          )}
-        </div>
-      </CardContent>
-    </Card>
   );
 }

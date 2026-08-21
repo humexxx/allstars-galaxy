@@ -131,7 +131,7 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
                 <div className="space-y-2">
                   <Label htmlFor="trip-currency">Currency</Label>
                   <Input
@@ -148,42 +148,8 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
                     <p className="text-sm text-destructive">{errors.currency.message}</p>
                   )}
                 </div>
-                <div className="space-y-2">
-                  <Label>Color</Label>
-                  <Controller
-                    control={control}
-                    name="color"
-                    render={({ field }) => (
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        {COLORS.map((c) => (
-                          <button
-                            key={c}
-                            type="button"
-                            aria-label={`Use color ${c}`}
-                            onClick={() => field.onChange(c)}
-                            className={`h-7 w-7 rounded-full border-2 ${
-                              field.value === c ? "border-foreground" : "border-transparent"
-                            }`}
-                            style={{ backgroundColor: c }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  />
-                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="trip-description">Notes</Label>
-                <Textarea
-                  id="trip-description"
-                  placeholder="What is this trip about?"
-                  rows={3}
-                  {...register("description", {
-                    setValueAs: (v: string | null) => v?.trim() || null,
-                  })}
-                />
-              </div>
             </div>
 
             <div className="space-y-2">
@@ -202,6 +168,46 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
               />
             </div>
 
+      </div>
+
+      {/* Full width, below the two columns: five swatches wrapped into a ragged
+          3-2 block inside a half column, and a textarea is the one field that
+          genuinely wants the whole dialog. Both being in the left column is
+          also what made it tower over the cover photo beside it. */}
+      <div className="space-y-2">
+        <Label>Color</Label>
+        <Controller
+          control={control}
+          name="color"
+          render={({ field }) => (
+            <div className="flex flex-wrap items-center gap-2">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-label={`Use color ${c}`}
+                  onClick={() => field.onChange(c)}
+                  className={`h-7 w-7 rounded-full border-2 ${
+                    field.value === c ? "border-foreground" : "border-transparent"
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          )}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="trip-description">Notes</Label>
+        <Textarea
+          id="trip-description"
+          placeholder="What is this trip about?"
+          rows={3}
+          {...register("description", {
+            setValueAs: (v: string | null) => v?.trim() || null,
+          })}
+        />
       </div>
 
       <div className="flex justify-end gap-2">

@@ -437,3 +437,52 @@ export async function getDashboardTravelSummary(
     featured,
   };
 }
+
+/**
+ * Replace an item's itinerary wholesale.
+ *
+ * Delete-then-insert inside one transaction rather than diffing: the list is a
+ * couple of dozen rows, it is edited as a block, and a diff would have to
+ * reason about renumbered days for no benefit the user can see.
+ *
+ * Ownership is checked through the item's trip, so a stop can never be written
+ * onto somebody else's cruise.
+ */
+export async function setTripItemStops(
+  userId: string,
+  tripId: string,
+  itemId: string,
+  stops: {
+    dayNumber: number;
+    stopOn?: string | null;
+    place: string;
+    note?: string | null;
+  }[]
+): Promise<void> {
+  const [owned] = await db
+    .select({ id: tripItems.id })
+    .from(tripItems)
+    .innerJoin(trips, eq(tripItems.tripId, trips.id))
+    .where(
+      and(
+        eq(tripItems.id, itemId),
+        eq(tripItems.tripId, tripId),
+        eq(trips.userId, userId)
+      )
+    );
+  if (!owned) throw new Error("Item not found");
+
+  await db.transaction(async (tx) => {
+    await tx.delete(tripItemStops).where(eq(tripItemStops.itemId, itemId));
+    if (stops.length === 0) return;
+    await tx.insert(tripItemStops).values(
+      stops.map((s) => ({
+        itemId,
+        dayNumber: s.dayNumber,
+        stopOn: s.stopOn ?? null,
+        place: s.place,
+        note: s.note ?? null,
+      }))
+    );
+  });
+}

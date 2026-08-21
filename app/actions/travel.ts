@@ -20,6 +20,7 @@ import {
   revokeTripShare,
   updateTrip,
   updateTripItem,
+  setTripItemStops,
 } from "@/lib/services/travel-service";
 import {
   createTripSchema,
@@ -34,6 +35,8 @@ import {
   type TripPhotoInput,
   type UpdateTripInput,
   type UpdateTripItemInput,
+  setItemStopsSchema,
+  type SetItemStopsData,
 } from "@/schemas/travel";
 
 const TRIP_LIST_PATH = "/portal/entertainment/travel-planner";
@@ -278,6 +281,44 @@ export async function deleteTripShareAction(tripId: string, shareId: string) {
       entityId: shareIdParsed.data,
     });
     revalidatePath(pathForTrip(tripIdParsed.data));
+    return { success: true as const };
+  });
+}
+
+/**
+ * Replace a cruise's day-by-day itinerary.
+ *
+ * The whole list at once: an itinerary is pasted and corrected as a block, and
+ * a per-row action would leave it half-saved the moment one row failed.
+ */
+export async function setTripItemStopsAction(
+  tripId: string,
+  input: SetItemStopsData
+) {
+  return safe("travel", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = z.string().uuid().safeParse(tripId);
+    const parsed = setItemStopsSchema.safeParse(input);
+    if (!idParsed.success || !parsed.success) {
+      return {
+        success: false as const,
+        error: parsed.success ? "Invalid trip" : parsed.error.issues[0].message,
+      };
+    }
+
+    await setTripItemStops(
+      ctx.effectiveUserId,
+      idParsed.data,
+      parsed.data.itemId,
+      parsed.data.stops
+    );
+    await logImpersonatedMutation({
+      action: "tripItemStops.set",
+      entityTable: "trip_item_stops",
+      entityId: parsed.data.itemId,
+      after: { count: parsed.data.stops.length },
+    });
+    revalidatePath(pathForTrip(idParsed.data));
     return { success: true as const };
   });
 }

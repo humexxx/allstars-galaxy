@@ -64,6 +64,22 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **The trip page has two views**, switched by `Tabs` next to *All trips*: the
+  list answers *what is the plan*, the calendar answers *what does the week
+  look like*. `TripCalendar` draws whole **weeks** around the trip, never whole
+  months, and an item occupies every day it spans — which is the only reason a
+  hotel or a sailing is worth seeing there. It is named on its first day and a
+  bare thread after that.
+- **Both grid columns carry `min-w-0`.** An `fr` track still takes an automatic
+  minimum from its content, so the gallery's photo rail widened its own column
+  and crushed the itinerary to one word per line. The rail scrolls; the column
+  has to be allowed to be narrower than it.
+- **The banner is `min-h-72` below `sm`.** At 21/9 a 390px phone gives 167px,
+  and the traveller pill, the buttons and the title all landed on top of each
+  other. Its three overlays are now one `justify-between` column.
+- **`components/travel/category.tsx` and `lib/travel/viewer.ts`** hold what the
+  list and the calendar share. They used to live in `trip-itinerary.tsx`, which
+  meant a view that only draws squares imported the whole server-action layer.
 - **Travel forms use `Field` / `FieldLabel`**, not `div` + `Label`. The gap is
   overridden (`gap-1.5`, `gap-2`) to keep the density these forms were tuned
   to; `Field`'s own `gap-3` would double the label-to-control distance. What

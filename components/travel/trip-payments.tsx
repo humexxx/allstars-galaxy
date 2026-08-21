@@ -347,7 +347,7 @@ function PaymentForm({
             id="payment-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Cruise deposit"
+            placeholder="Bank transfer"
           />
         </Field>
       </div>

@@ -7,6 +7,7 @@ import { Suspense, useMemo, useState, useTransition } from "react";
 import {
   ArrowLeft,
   CalendarDays,
+  List as ListIcon,
   MapPin,
   Pencil,
   Trash2,
@@ -40,7 +41,13 @@ import {
 import type { TripWithRelations } from "@/types/travel";
 
 import { TripForm } from "./trip-form";
-import { TripItinerary, type ItineraryViewer } from "./trip-itinerary";
+import { TripItinerary } from "./trip-itinerary";
+import type { ItineraryViewer } from "@/lib/travel/viewer";
+import { TripCalendar } from "./trip-calendar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+/** Which reading of the plan is on screen. */
+type TripView = "list" | "calendar";
 import { TripGallery } from "./trip-gallery";
 import { TripPayments } from "./trip-payments";
 import { TripSharePanel } from "./trip-share-panel";
@@ -70,6 +77,7 @@ export function TripDetail({
   /** Whose money the page is showing. Null is the trip itself. Lives here
    *  rather than in the banner because it re-costs the itinerary too. */
   const [selected, setSelected] = useState<string | null>(null);
+  const [view, setView] = useState<TripView>("list");
 
   /** The traveller who is the signed-in owner, matched by name or email. */
   const youId = useMemo(() => {
@@ -155,17 +163,36 @@ export function TripDetail({
 
   return (
     <section className="space-y-6">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2">
         <Button variant="ghost" size="sm" asChild>
           <Link href="/portal/entertainment/travel-planner">
             <ArrowLeft className="mr-1 size-4" /> All trips
           </Link>
         </Button>
+
+        {/* Two readings of the same plan. The list answers "what is the
+            plan"; the calendar answers "what does the week look like" —
+            where the free days are, how long the cruise really runs. */}
+        <Tabs value={view} onValueChange={(v) => setView(v as TripView)}>
+          <TabsList>
+            <TabsTrigger value="list" className="gap-1.5">
+              <ListIcon className="size-3.5" />
+              <span className="hidden sm:inline">List</span>
+            </TabsTrigger>
+            <TabsTrigger value="calendar" className="gap-1.5">
+              <CalendarDays className="size-3.5" />
+              <span className="hidden sm:inline">Calendar</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       <header className="overflow-hidden rounded-xl border">
         <div
-          className="relative aspect-[21/9] w-full bg-muted"
+          // 21/9 leaves 167px on a 390px phone, and the pill, the buttons and
+          // the title all landed on top of each other. The floor wins on a
+          // phone, the ratio wins from tablet up.
+          className="relative min-h-72 w-full bg-muted sm:aspect-[21/9] sm:min-h-0"
           style={trip.coverPhotoUrl ? undefined : { backgroundColor: trip.color }}
         >
           {trip.coverPhotoUrl && (
@@ -185,22 +212,11 @@ export function TripDetail({
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-          <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 p-6 text-white">
-            <Heading level="h1" className="text-white">{trip.title}</Heading>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
-              {trip.destination && (
-                <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="size-4" /> {trip.destination}
-                </span>
-              )}
-              <span className="inline-flex items-center gap-1.5">
-                <CalendarDays className="size-4" />
-                <Mono>{formatDateRange(trip.startDate, trip.endDate)}</Mono>
-              </span>
-            </div>
-
-          </div>
-          <div className="absolute left-4 top-4">
+          {/* One flow rather than three overlays pinned to three corners:
+              justify-between keeps the controls and the title apart at any
+              height, instead of letting them meet in the middle. */}
+          <div className="absolute inset-0 flex flex-col justify-between gap-4 p-4 text-white sm:p-6">
+            <div className="flex items-start justify-between gap-2">
             <TravellerBar
               travellers={shares.map((s) => ({
                 id: s.memberId,
@@ -216,30 +232,55 @@ export function TripDetail({
               onSelect={setSelected}
               onManage={() => setMembersOpen(true)}
             />
-          </div>
-          <div className="absolute right-4 top-4 flex gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}>
-              <Pencil className="mr-1 size-3.5" /> Edit
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="bg-destructive/90 text-destructive-foreground hover:bg-destructive"
-              onClick={() => setConfirmDelete(true)}
-              aria-label="Delete trip"
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
+              <div className="flex shrink-0 gap-2">
+                <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}>
+                  <Pencil className="mr-1 size-3.5" /> Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="bg-destructive/90 text-destructive-foreground hover:bg-destructive"
+                  onClick={() => setConfirmDelete(true)}
+                  aria-label="Delete trip"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Heading level="h1" className="text-white">{trip.title}</Heading>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
+                {trip.destination && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <MapPin className="size-4" /> {trip.destination}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarDays className="size-4" />
+                  <Mono>{formatDateRange(trip.startDate, trip.endDate)}</Mono>
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </header>
 
 
+      {/* min-w-0 on both columns: a grid track sized in `fr` still takes an
+          automatic minimum from its content, so the gallery's photo rail was
+          widening its own column and crushing the itinerary to a word per
+          line. The rail scrolls; the column must be allowed to be narrower
+          than it. */}
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <div className="space-y-6">
-          <TripItinerary trip={trip} partySize={partySize} viewer={viewer} />
+        <div className="min-w-0 space-y-6">
+          {view === "list" ? (
+            <TripItinerary trip={trip} partySize={partySize} viewer={viewer} />
+          ) : (
+            <TripCalendar trip={trip} partySize={partySize} viewer={viewer} />
+          )}
         </div>
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <TripPayments
             tripId={trip.id}
             currency={trip.currency}

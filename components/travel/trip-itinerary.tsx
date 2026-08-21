@@ -4,24 +4,24 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import {
-  Anchor,
-  Bed,
-  Bus,
   ListOrdered,
   ExternalLink,
   Pencil,
-  Plane,
+  MoreHorizontal,
   Plus,
-  ShoppingBag,
-  Sparkles,
-  Tag,
   Trash2,
-  Utensils,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -63,53 +63,13 @@ import {
 } from "@/lib/travel/item-fields";
 import { AirportPicker } from "@/components/travel/airport-picker";
 import { itemCost, unitSuffix } from "@/lib/travel/pricing";
+import { CATEGORIES, CategoryIcon, categoryMeta } from "@/components/travel/category";
+import { readerCost, type ItineraryViewer } from "@/lib/travel/viewer";
+export type { ItineraryViewer };
 import { moneyRange } from "@/components/travel/traveller-bar";
 import { MoneyInput } from "@/components/ui/money-input";
 import { ItineraryEditor } from "@/components/travel/itinerary-editor";
 import { Badge } from "@/components/ui/badge";
-
-type CategoryMeta = {
-  value: TripItemCategory;
-  label: string;
-  Icon: React.ComponentType<{ className?: string }>;
-  /** Tint for the icon chip: a wash plus a foreground that holds up in both
-   *  themes. Deliberately NOT `--chart-1..5` — that palette has five slots and
-   *  must never be cycled, and there are eight categories here. */
-  tint: string;
-};
-
-/**
- * Colour is the second channel, never the only one.
- *
- * The icon's shape is what actually says "flight"; the tint makes a long list
- * scannable and lets a row be recognised out of the corner of an eye. Anyone
- * who cannot separate two of these hues still reads a plane and a bed.
- */
-export const CATEGORIES: CategoryMeta[] = [
-  { value: "lodging", label: "Hotel", Icon: Bed,
-    tint: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
-  { value: "flight", label: "Flight", Icon: Plane,
-    tint: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
-  { value: "cruise", label: "Cruise", Icon: Anchor,
-    tint: "bg-teal-500/10 text-teal-600 dark:text-teal-400" },
-  { value: "transport", label: "Transport", Icon: Bus,
-    tint: "bg-violet-500/10 text-violet-600 dark:text-violet-400" },
-  { value: "food", label: "Food", Icon: Utensils,
-    tint: "bg-rose-500/10 text-rose-600 dark:text-rose-400" },
-  // Lime, not the obvious emerald: emerald sits 22° from teal, and measured
-  // ΔEok 0.056 against it — visible, but the tightest pair on the wheel. Lime
-  // drops into the wide gap between amber and teal and takes the worst pair to
-  // 0.137. The 700 step rather than 600 because lime is intrinsically light:
-  // 600 clears non-text contrast at only 3.06:1, 700 at 4.96:1.
-  { value: "activity", label: "Activity", Icon: Sparkles,
-    tint: "bg-lime-500/10 text-lime-700 dark:text-lime-400" },
-  { value: "shopping", label: "Shopping", Icon: ShoppingBag,
-    tint: "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400" },
-  // Neutral on purpose: "other" is the absence of a category, and giving it a
-  // hue of its own would make it look like one more kind of thing.
-  { value: "other", label: "Other", Icon: Tag,
-    tint: "bg-muted text-muted-foreground" },
-];
 
 const PRICE_UNIT_LABELS: Record<TripPriceUnit, string> = {
   total: "a total",
@@ -117,64 +77,22 @@ const PRICE_UNIT_LABELS: Record<TripPriceUnit, string> = {
   per_person: "per person",
 };
 
-function categoryMeta(c: TripItemCategory): CategoryMeta {
-  return CATEGORIES.find((x) => x.value === c) ?? CATEGORIES[CATEGORIES.length - 1];
-}
-
-/** One chip, so the dropdown and the rows can never drift apart. */
-function CategoryIcon({
-  category,
-  className,
-}: {
-  category: TripItemCategory;
-  className?: string;
-}) {
-  const { Icon, tint } = categoryMeta(category);
-  return (
-    <span
-      className={cn("grid size-7 shrink-0 place-items-center rounded-md", tint, className)}
-    >
-      <Icon className="size-4" />
-    </span>
-  );
-}
-
 /**
- * Width of a row's trailing controls, and of the spacer that stands in for
- * them in the day header.
+ * Width of a row's trailing control, and of the spacer that stands in for it
+ * in the day header.
  *
- * The two must agree or the money does not line up: the buttons hold their
+ * The two must agree or the money does not line up: the control holds its
  * space even while invisible, so the item prices sat inset while the day
- * subtotal ran to the card's edge. Declaring the width once is what keeps the
- * header honest — w-20 clears two h-9 touch targets, sm:w-16 two h-7 ones.
+ * subtotal ran to the card's edge.
+ *
+ * One menu rather than two buttons. Two cost 80px of gutter and pushed every
+ * price that far off the right edge; they were also 36px each on a phone,
+ * under the 44px a thumb wants. A single 44px target costs half the width and
+ * is easier to hit.
  */
-const ACTIONS_WIDTH = "w-20 sm:w-16";
+const ACTIONS_WIDTH = "w-11 sm:w-8";
 
 const NO_DATE_KEY = "__no_date__";
-
-/**
- * The traveller the itinerary is costed for, or null for the whole trip.
- *
- * `lines` is what `splitTrip` worked out this person owes per item, keyed by
- * item id. Passing the already-split figures down rather than re-deriving them
- * here is what keeps the day subtotals and the banner's pill agreeing.
- */
-export type ItineraryViewer = {
-  name: string;
-  isYou: boolean;
-  lines: Map<string, { low: number; high: number }>;
-};
-
-/** What one item costs the current reader: their share, or the whole thing. */
-function readerCost(
-  item: TripItemWithStops,
-  partySize: number,
-  viewer: ItineraryViewer | null
-): { low: number; high: number } {
-  if (viewer) return viewer.lines.get(item.id) ?? { low: 0, high: 0 };
-  const cost = itemCost(item, partySize);
-  return { low: cost.low, high: cost.high };
-}
 
 function groupByDay(
   items: TripItemWithStops[],
@@ -452,30 +370,37 @@ function ItemRow({
           Fixed width even when invisible — see ACTIONS_WIDTH. */}
       <div
         className={cn(
-          "flex shrink-0 justify-end gap-0.5 transition-opacity",
+          "flex shrink-0 justify-end transition-opacity",
           "sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover:opacity-100",
           ACTIONS_WIDTH
         )}
       >
-        <Button
-          size="icon"
-          variant="ghost"
-          className="size-9 sm:size-7"
-          onClick={() => setEditing(true)}
-          aria-label="Edit item"
-        >
-          <Pencil className="size-3.5" />
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="size-9 text-destructive hover:text-destructive sm:size-7"
-          disabled={isPending}
-          onClick={handleDelete}
-          aria-label="Delete item"
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-11 sm:size-8"
+              aria-label={`Actions for ${item.title}`}
+            >
+              <MoreHorizontal className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuGroup>
+              <DropdownMenuItem onSelect={() => setEditing(true)}>
+                <Pencil /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={isPending}
+                onSelect={handleDelete}
+              >
+                <Trash2 /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </li>
   );

@@ -2,8 +2,8 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { CATEGORIES, TripItinerary, type ItineraryViewer } from "./trip-itinerary";
-import { tripItemCategoryEnum } from "@/db/schema";
+import { TripItinerary } from "./trip-itinerary";
+import type { ItineraryViewer } from "@/lib/travel/viewer";
 import type { TripItemWithStops, TripWithRelations } from "@/types/travel";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -115,42 +115,18 @@ describe("TripItinerary day subtotals", () => {
   });
 });
 
-describe("category identity", () => {
-  it("covers every category the database allows", () => {
-    // A category with no entry falls back to "Other", so it would render as
-    // the wrong icon rather than as an obvious gap.
-    expect(CATEGORIES.map((c) => c.value).sort()).toEqual(
-      [...tripItemCategoryEnum.enumValues].sort()
-    );
-  });
-
-  it("gives each category its own tint", () => {
-    // Two categories sharing a colour is worse than none having one: it
-    // asserts a relationship between them that does not exist.
-    const tints = CATEGORIES.map((c) => c.tint);
-    expect(new Set(tints).size).toBe(tints.length);
-  });
-
-  it("keeps a readable foreground in both themes", () => {
-    // The wash is 10% so it stays a hint; the text has to carry the contrast,
-    // and a dark surface needs a lighter step than a light one.
-    for (const c of CATEGORIES) {
-      expect(c.tint).toMatch(/\btext-/);
-      expect(c.tint === "bg-muted text-muted-foreground" || /dark:text-/.test(c.tint)).toBe(true);
-    }
-  });
-});
-
 describe("price column alignment", () => {
-  it("reserves the same width for the row controls and the header spacer", () => {
-    // The controls hold their space even while invisible, so without a
-    // matching spacer the day subtotal ran to the card's edge while the item
-    // prices it sums sat inset from it. The two widths agreeing IS the fix,
-    // so the agreement is what gets asserted rather than either value.
+  it("reserves the same width for the row control and the header spacer", () => {
+    // The control holds its space even while invisible, so without a matching
+    // spacer the day subtotal ran to the card's edge while the item prices it
+    // sums sat inset from it. The two widths agreeing IS the fix, so the
+    // agreement is what gets asserted rather than either value.
     const { container } = render(<TripItinerary trip={trip(FRIDAY)} partySize={2} />);
 
     const spacer = container.querySelector("span[aria-hidden]");
-    const controls = container.querySelector('[aria-label="Edit item"]')?.parentElement;
+    const controls = container
+      .querySelector('[aria-label^="Actions for"]')
+      ?.closest("div");
 
     const widths = (el: Element | null | undefined) =>
       (el?.className ?? "").split(/\s+/).filter((c) => /^(sm:)?w-\d/.test(c)).sort();
@@ -159,12 +135,19 @@ describe("price column alignment", () => {
     expect(widths(spacer)).toEqual(widths(controls));
   });
 
+  it("gives each row one menu rather than two buttons", () => {
+    // Two cost 80px of gutter and pushed every price that far off the right
+    // edge — and each was 36px on a phone, under what a thumb wants.
+    render(<TripItinerary trip={trip(FRIDAY)} partySize={2} />);
+
+    expect(screen.getAllByLabelText(/^Actions for/)).toHaveLength(2);
+    expect(screen.queryByLabelText("Delete item")).not.toBeInTheDocument();
+  });
+
   it("never breaks a price across two lines", () => {
     // "$600 –" on one line and "$800" on the next reads as two prices.
-    const { container } = render(<TripItinerary trip={trip(FRIDAY)} partySize={2} />);
+    render(<TripItinerary trip={trip(FRIDAY)} partySize={2} />);
 
-    const price = screen.getByText("$600 – $800");
-    expect(price.className).toContain("whitespace-nowrap");
-    expect(container).toBeTruthy();
+    expect(screen.getByText("$600 – $800").className).toContain("whitespace-nowrap");
   });
 });

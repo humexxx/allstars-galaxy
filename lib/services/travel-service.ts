@@ -32,6 +32,7 @@ import type {
   CreateTripInput,
   CreateTripShareInput,
   TripContributionInput,
+  UpdateTripContributionInput,
   TripItemInput,
   TripPhotoInput,
   UpdateTripInput,
@@ -424,6 +425,29 @@ export async function addTripContribution(
       paidOn: data.paidOn ?? todayIso(),
     })
     .returning();
+  return row;
+}
+
+export async function updateTripContribution(
+  userId: string,
+  tripId: string,
+  data: UpdateTripContributionInput
+): Promise<TripContribution> {
+  await ensureTripOwnership(tripId, userId);
+  const [row] = await db
+    .update(tripContributions)
+    .set({
+      amount: data.amount,
+      note: data.note ?? null,
+      paidOn: data.paidOn ?? todayIso(),
+    })
+    // Scoped to the trip as well as the row: the id alone would let a caller
+    // edit a payment recorded against somebody else's trip.
+    .where(
+      and(eq(tripContributions.id, data.id), eq(tripContributions.tripId, tripId))
+    )
+    .returning();
+  if (!row) throw new Error("Payment not found on this trip");
   return row;
 }
 

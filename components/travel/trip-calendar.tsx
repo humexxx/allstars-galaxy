@@ -30,6 +30,7 @@ import { readerCost, type ItineraryViewer } from "@/lib/travel/viewer";
 import {
   addMonths,
   isoDay,
+  capLanes,
   layOutWeek,
   monthWeeks,
   occupiedRuns,
@@ -56,6 +57,15 @@ const LANE_HEIGHT = 22;
 /** Breathing room between two runs stacked on the same day. */
 const LANE_GAP = 4;
 const MIN_CELL = 64;
+/**
+ * How tall a day is allowed to get before its tail becomes a count.
+ *
+ * A cell grows a lane at a time, which is right for the second and third
+ * thing on a day and wrong for the eighth — one packed day stretches every
+ * other cell in its week to match, and a month of those stops reading as a
+ * month.
+ */
+const MAX_LANES = 4;
 
 /** Static so Tailwind can see them; arbitrary values would not be generated. */
 const COL_START = [
@@ -187,8 +197,12 @@ export function TripCalendar({
         </div>
 
         {weeks.map((week) => {
-          const segments = layOutWeek(week, items);
-          const lanes = segments.reduce((n, seg) => Math.max(n, seg.lane + 1), 0);
+          const all = layOutWeek(week, items);
+          const { visible: segments, hidden, hiddenByDay } = capLanes(all, MAX_LANES);
+          const lanes = Math.min(
+            MAX_LANES,
+            all.reduce((n, seg) => Math.max(n, seg.lane + 1), 0)
+          );
           const cellHeight = Math.max(
             MIN_CELL,
             LANE_TOP + lanes * LANE_HEIGHT + 6
@@ -300,6 +314,42 @@ export function TripCalendar({
                     </Tooltip>
                   );
                 })}
+
+                {hiddenByDay.map((count, day) =>
+                  count === 0 ? null : (
+                    <Tooltip key={`more-${day}`}>
+                      <TooltipTrigger asChild>
+                        {/* Not a control: there is nowhere to go that the
+                            list view does not already do better. It carries
+                            the names so the day is still answerable without
+                            leaving the month. */}
+                        <span
+                          data-slot="calendar-more"
+                          style={{ gridRow: MAX_LANES, height: LANE_HEIGHT - LANE_GAP }}
+                          className={cn(
+                            "pointer-events-auto col-span-1 mx-0.5 truncate rounded-sm px-1",
+                            "text-2xs font-medium text-muted-foreground hover:bg-muted",
+                            COL_START[day]
+                          )}
+                        >
+                          +{count}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-64">
+                        <span className="block font-medium">
+                          {count} more on {dayLabel(week[day])}
+                        </span>
+                        {hidden
+                          .filter((h) => day >= h.start && day < h.start + h.span)
+                          .map((h) => (
+                            <span key={h.item.id} className="block opacity-80">
+                              {h.item.title}
+                            </span>
+                          ))}
+                      </TooltipContent>
+                    </Tooltip>
+                  )
+                )}
               </div>
             </div>
           );

@@ -41,6 +41,7 @@ import {
 import {
   addTripContributionAction,
   deleteTripContributionAction,
+  updateTripContributionAction,
 } from "@/app/actions/travel";
 import type { TripContribution } from "@/types/travel";
 import { formatTripMoney, moneyRange } from "@/lib/travel/format";
@@ -275,7 +276,7 @@ function PaymentRow({
   );
 }
 
-/** What tapping a record opens: the detail, and the way to remove it. */
+/** What tapping a record opens: the payment itself, editable. */
 function PaymentDialog({
   tripId,
   contribution,
@@ -290,7 +291,36 @@ function PaymentDialog({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [busy, startTransition] = useTransition();
+  const [saving, startSave] = useTransition();
+  const [deleting, startDelete] = useTransition();
+  const [amount, setAmount] = useState(contribution.amount);
+  const [note, setNote] = useState(contribution.note ?? "");
+  const [paidOn, setPaidOn] = useState(contribution.paidOn ?? "");
+
+  const busy = saving || deleting;
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^\d+(\.\d{1,2})?$/.test(amount) || parseFloat(amount) <= 0) {
+      toast.error("Enter an amount above zero");
+      return;
+    }
+    startSave(async () => {
+      const res = await updateTripContributionAction(tripId, {
+        id: contribution.id,
+        amount,
+        note: note.trim() || null,
+        paidOn: paidOn || null,
+      });
+      if (res.success) {
+        toast.success("Payment updated");
+        router.refresh();
+        onClose();
+      } else {
+        toast.error(res.error);
+      }
+    });
+  };
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -298,43 +328,80 @@ function PaymentDialog({
         <DialogHeader>
           <DialogTitle>Payment from {who}</DialogTitle>
           <DialogDescription>
-            {contribution.paidOn
-              ? format(new Date(`${contribution.paidOn}T00:00:00`), "d MMMM yyyy")
-              : "No date recorded"}
+            {/* Who paid is deliberately not editable: moving a payment to
+                another person would rewrite two balances at once, and only
+                one of them would be on screen. Delete it and log it again. */}
+            Change what it was for, how much, or when. To move it to somebody
+            else, remove it and log it again.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-2">
-          <Mono className="text-3xl font-semibold tabular-nums">
-            {formatTripMoney(parseFloat(contribution.amount), currency)}
-          </Mono>
-          {contribution.note && <Text variant="small">{contribution.note}</Text>}
-        </div>
+        <form onSubmit={handleSave} className="flex flex-col gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field className="gap-1.5">
+              <FieldLabel htmlFor="edit-amount" className="text-xs">Amount</FieldLabel>
+              <MoneyInput
+                id="edit-amount"
+                value={amount}
+                onChange={setAmount}
+                currency={currency}
+                placeholder="0.00"
+              />
+            </Field>
+            <Field className="gap-1.5">
+              <FieldLabel htmlFor="edit-date" className="text-xs">Paid on</FieldLabel>
+              <Input
+                id="edit-date"
+                type="date"
+                value={paidOn}
+                onChange={(e) => setPaidOn(e.target.value)}
+              />
+            </Field>
+          </div>
+          <Field className="gap-1.5">
+            <FieldLabel htmlFor="edit-note" className="text-xs">
+              Note <span className="text-muted-foreground">(optional)</span>
+            </FieldLabel>
+            <Input
+              id="edit-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Bank transfer"
+            />
+          </Field>
 
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>
-            Close
-          </Button>
-          <Button
-            variant="destructive"
-            disabled={busy}
-            onClick={() =>
-              startTransition(async () => {
-                const res = await deleteTripContributionAction(tripId, contribution.id);
-                if (res.success) {
-                  toast.success("Payment removed");
-                  router.refresh();
-                  onClose();
-                } else {
-                  toast.error(res.error);
-                }
-              })
-            }
-          >
-            <Trash2 className="mr-1 size-3.5" />
-            {busy ? "Removing…" : "Delete"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter className="sm:justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              disabled={busy}
+              onClick={() =>
+                startDelete(async () => {
+                  const res = await deleteTripContributionAction(tripId, contribution.id);
+                  if (res.success) {
+                    toast.success("Payment removed");
+                    router.refresh();
+                    onClose();
+                  } else {
+                    toast.error(res.error);
+                  }
+                })
+              }
+            >
+              <Trash2 className="mr-1 size-3.5" />
+              {deleting ? "Removing…" : "Delete"}
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={busy}>
+                {saving ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

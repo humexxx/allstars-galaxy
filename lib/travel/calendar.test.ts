@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addMonths, layOutWeek, monthWeeks, occupiedRuns } from "./calendar";
+import { addMonths, capLanes, layOutWeek, monthWeeks, occupiedRuns } from "./calendar";
 import type { CalendarItem } from "./calendar";
 
 const item = (over: Partial<CalendarItem>): CalendarItem => ({
@@ -82,5 +82,44 @@ describe("layOutWeek", () => {
 
   it("ignores anything that misses the week entirely", () => {
     expect(layOutWeek(week, [item({ scheduledOn: "2027-02-02" })])).toEqual([]);
+  });
+});
+
+describe("capLanes", () => {
+  const seg = (lane: number, start = 0, span = 1) =>
+    ({ lane, start, span, opensRun: true, closesRun: true,
+       item: { id: `i${lane}`, title: "x", category: "activity" as const,
+               scheduledOn: "2027-01-10", endsOn: null } });
+
+  it("leaves a day alone until the cap actually buys something", () => {
+    // Collapsing four lanes to show "+1 more" in place of the one thing it
+    // hides helps nobody.
+    const segs = [seg(0), seg(1), seg(2), seg(3)];
+    const { visible, hiddenByDay } = capLanes(segs, 4);
+
+    expect(visible).toHaveLength(4);
+    expect(hiddenByDay.every((n) => n === 0)).toBe(true);
+  });
+
+  it("keeps room for the count once a day overflows", () => {
+    const segs = [seg(0), seg(1), seg(2), seg(3), seg(4)];
+    const { visible, hiddenByDay } = capLanes(segs, 4);
+
+    // Three shown, and the fourth lane is given over to "+2".
+    expect(visible.map((s) => s.lane)).toEqual([0, 1, 2]);
+    expect(hiddenByDay[0]).toBe(2);
+  });
+
+  it("counts a hidden run only on the days it actually covers", () => {
+    // A run hidden on Tuesday is not hidden on Friday just because it passes
+    // through both.
+    const segs = [seg(0), seg(1), seg(2), seg(3), seg(4, 1, 2)];
+    const { hiddenByDay } = capLanes(segs, 4);
+
+    // Lane 3 sits on Sunday alone; lane 4 runs Monday to Tuesday.
+    expect(hiddenByDay[0]).toBe(1);
+    expect(hiddenByDay[1]).toBe(1);
+    expect(hiddenByDay[2]).toBe(1);
+    expect(hiddenByDay[3]).toBe(0);
   });
 });

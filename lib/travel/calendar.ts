@@ -112,3 +112,38 @@ export function layOutWeek(week: string[], items: CalendarItem[]): WeekSegment[]
     return { ...run, lane };
   });
 }
+
+/**
+ * Keeps a busy day from swallowing the month.
+ *
+ * The cell grows a lane at a time, which is right for the second and third
+ * thing on a day and wrong for the eighth: one packed day would stretch every
+ * cell in its week to match, and a month of them stops being a month at a
+ * glance. Past the cap the tail collapses into a count on the last lane.
+ *
+ * The count is per DAY, not per week — a run hidden on Tuesday is not hidden
+ * on Friday just because it passes through both.
+ */
+export function capLanes(
+  segments: WeekSegment[],
+  max: number
+): { visible: WeekSegment[]; hidden: WeekSegment[]; hiddenByDay: number[] } {
+  const lanes = segments.reduce((n, s) => Math.max(n, s.lane + 1), 0);
+  // Collapsing to show "+1 more" in place of the one thing it hides helps
+  // nobody, so the cap only bites once something is actually gained.
+  if (lanes <= max) {
+    return { visible: segments, hidden: [], hiddenByDay: new Array(7).fill(0) };
+  }
+
+  const cutoff = max - 1;
+  const hiddenByDay = new Array(7).fill(0);
+  for (const seg of segments) {
+    if (seg.lane < cutoff) continue;
+    for (let i = seg.start; i < seg.start + seg.span; i++) hiddenByDay[i] += 1;
+  }
+  return {
+    visible: segments.filter((s) => s.lane < cutoff),
+    hidden: segments.filter((s) => s.lane >= cutoff),
+    hiddenByDay,
+  };
+}

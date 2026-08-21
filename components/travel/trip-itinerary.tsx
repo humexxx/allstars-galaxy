@@ -8,7 +8,6 @@ import {
   ExternalLink,
   Plus,
   Trash2,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -68,6 +67,13 @@ export type { ItineraryViewer };
 import { MoneyInput } from "@/components/ui/money-input";
 import { ItineraryEditor } from "@/components/travel/itinerary-editor";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const PRICE_UNIT_LABELS: Record<TripPriceUnit, string> = {
   total: "a total",
@@ -164,9 +170,8 @@ export function TripItinerary({
           )}
         </CardTitle>
         <CardAction>
-          <Button size="sm" variant="outline" onClick={() => setAdding((v) => !v)}>
-            {adding ? <X className="mr-1 size-3.5" /> : <Plus className="mr-1 size-3.5" />}
-            {adding ? "Cancel" : "Add item"}
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+            <Plus className="mr-1 size-3.5" /> Add item
           </Button>
         </CardAction>
       </CardHeader>
@@ -180,7 +185,7 @@ export function TripItinerary({
           />
         )}
 
-        {groups.length === 0 && !adding && (
+        {groups.length === 0 && (
           <EmptyState
             icon={ListOrdered}
             title="Nothing planned yet"
@@ -217,6 +222,26 @@ export function TripItinerary({
           </section>
         ))}
       </CardContent>
+
+      {/* One form, one place it appears — adding and editing are the same
+          work, and having one expand the card while the other opened a
+          dialog made them look like different things. */}
+      <Dialog open={adding} onOpenChange={setAdding}>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add to the itinerary</DialogTitle>
+            <DialogDescription>
+              A flight, a hotel, a cruise — anything with a date, a link or a price.
+            </DialogDescription>
+          </DialogHeader>
+          <ItemForm
+            tripId={trip.id}
+            defaultDate={trip.startDate}
+            currency={trip.currency}
+            onDone={() => setAdding(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -242,20 +267,6 @@ function ItemRow({
   // disagree on screen and neither can be checked against the other.
   const mine = readerCost(item, partySize, viewer);
 
-  if (editing) {
-    return (
-      <li className="py-3">
-        <ItemForm
-          tripId={tripId}
-          item={item}
-          defaultDate={item.scheduledOn}
-          currency={currency}
-          onDone={() => setEditing(false)}
-        />
-      </li>
-    );
-  }
-
   /**
    * The row is the target, the way the payments list is.
    *
@@ -273,6 +284,7 @@ function ItemRow({
   };
 
   return (
+    <>
     <li
       // Padded, not just spaced: the row is a target now, and a hover
       // tint that stops at the text reads as a highlight rather than a row.
@@ -286,7 +298,9 @@ function ItemRow({
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="min-w-0 cursor-pointer truncate text-left font-medium outline-none hover:underline focus-visible:underline"
+            // No hover state of its own: the row already lights up, and a
+            // second one on the title reads as a link to somewhere else.
+            className="min-w-0 cursor-pointer truncate text-left font-medium outline-none focus-visible:underline"
           >
             {item.title}
           </button>
@@ -364,6 +378,28 @@ function ItemRow({
         )}
       </div>
     </li>
+
+    {/* In a dialog, not expanded in place. The form is long enough that
+        opening it inline pushed every item below it off the screen, and the
+        row you were editing left the viewport with them. */}
+    <Dialog open={editing} onOpenChange={setEditing}>
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{item.title}</DialogTitle>
+          <DialogDescription>
+            Change the details, the dates or the price.
+          </DialogDescription>
+        </DialogHeader>
+        <ItemForm
+          tripId={tripId}
+          item={item}
+          defaultDate={item.scheduledOn}
+          currency={currency}
+          onDone={() => setEditing(false)}
+        />
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
@@ -479,10 +515,9 @@ function ItemForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className={cn(
-        "flex flex-col gap-3 rounded-md border bg-muted/30 p-3",
-        !item && "border-primary/30"
-      )}
+      // No panel of its own any more: it lives in a dialog, and a bordered
+      // box inside a bordered box is one frame too many.
+      className="flex flex-col gap-4"
     >
       <div
         className={cn(

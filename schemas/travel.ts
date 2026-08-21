@@ -160,12 +160,24 @@ export const tripContributionSchema = z.object({
     .optional(),
 });
 
+/**
+ * Editing a payment cannot move it to a different person.
+ *
+ * Reassigning would silently rewrite two balances at once — the one it left
+ * and the one it landed on. Delete it and log it again, where both changes are
+ * visible as what they are.
+ */
+export const updateTripContributionSchema = tripContributionSchema
+  .omit({ memberId: true })
+  .extend({ id: z.string().uuid() });
+
 export type CreateTripInput = z.infer<typeof createTripSchema>;
 export type UpdateTripInput = z.infer<typeof updateTripSchema>;
 export type TripItemInput = z.infer<typeof tripItemSchema>;
 export type UpdateTripItemInput = z.infer<typeof updateTripItemSchema>;
 export type TripPhotoInput = z.infer<typeof tripPhotoSchema>;
 export type CreateTripShareInput = z.infer<typeof createTripShareSchema>;
+export type UpdateTripContributionInput = z.infer<typeof updateTripContributionSchema>;
 export type TripContributionInput = z.infer<typeof tripContributionSchema>;
 
 /**

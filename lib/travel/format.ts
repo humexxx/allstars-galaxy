@@ -53,3 +53,17 @@ export function formatTripMoney(value: number, currency: string): string {
     return `${currency} ${value.toFixed(2)}`;
   }
 }
+
+/**
+ * "$600" alone, or "$600 – $800" when the two ends differ.
+ *
+ * Lives here, not beside the component that first needed it: it is pure
+ * formatting, and its old home was a `"use client"` module — which meant the
+ * public trip page, a server component, crashed the moment it tried to show a
+ * price. A shared helper has no business carrying a runtime boundary.
+ */
+export function moneyRange(low: number, high: number, currency: string): string {
+  return high > low
+    ? `${formatTripMoney(low, currency)} – ${formatTripMoney(high, currency)}`
+    : formatTripMoney(low, currency);
+}

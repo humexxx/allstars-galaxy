@@ -3,7 +3,7 @@ import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { TravellerBar, moneyRange, type TravellerView } from "./traveller-bar";
+import { TravellerBar, type TravellerView } from "./traveller-bar";
 
 const TRAVELLERS: TravellerView[] = [
   { id: "j", name: "Jason Hume", owedLow: 2300, owedHigh: 2500, isYou: true },
@@ -26,16 +26,6 @@ function Harness({ travellers = TRAVELLERS }: { travellers?: TravellerView[] }) 
     />
   );
 }
-
-describe("moneyRange", () => {
-  it("collapses to one figure when the ends agree", () => {
-    expect(moneyRange(3800, 3800, "USD")).toBe("$3,800");
-  });
-
-  it("shows both ends when they do not", () => {
-    expect(moneyRange(600, 800, "USD")).toBe("$600 – $800");
-  });
-});
 
 describe("TravellerBar", () => {
   it("shows the trip total by default", () => {

@@ -4,7 +4,7 @@ import { Plus, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Mono, Text } from "@/components/ui/typography";
-import { formatTripMoney } from "@/lib/travel/format";
+import { moneyRange } from "@/lib/travel/format";
 import { cn } from "@/lib/utils";
 
 export type TravellerView = {
@@ -26,13 +26,6 @@ function initials(name: string): string {
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? "")
     .join("");
-}
-
-/** "$600" alone, or "$600 – $800" when the two ends differ. */
-export function moneyRange(low: number, high: number, currency: string): string {
-  return high > low
-    ? `${formatTripMoney(low, currency)} – ${formatTripMoney(high, currency)}`
-    : formatTripMoney(low, currency);
 }
 
 /**

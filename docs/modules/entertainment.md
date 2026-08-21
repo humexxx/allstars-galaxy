@@ -65,11 +65,23 @@ NBA and NFL still use mocks.
 
 ## Notes
 - **The trip page has two views**, switched by `Tabs` next to *All trips*: the
-  list answers *what is the plan*, the calendar answers *what does the week
-  look like*. `TripCalendar` draws whole **weeks** around the trip, never whole
-  months, and an item occupies every day it spans — which is the only reason a
-  hotel or a sailing is worth seeing there. It is named on its first day and a
-  bare thread after that.
+  list answers *what is the plan*, the calendar answers *what does the month
+  look like*. `TripCalendar` draws a whole month with arrows either side and a
+  **Trip** button back to the trip's own month.
+- **Runs are bars, not repeated chips.** `layOutWeek` clips each run to the
+  week and stacks overlaps into lanes; the bars ride over the day grid on a
+  matching seven-column track, because the length of the bar IS the
+  information. `spansDays` decides who gets a run at all: a hotel booked the
+  15th to the 17th occupies three days, a return flight occupies the day out
+  and the day back and **nothing in between** — drawn as one run it painted a
+  plane across the whole holiday.
+- **`moneyRange` lives in `lib/travel/format.ts`, not beside a component.** It
+  was exported from `traveller-bar.tsx`, a client module, and the public trip
+  page is a server component: the first shared link allowed to show prices
+  crashed with *Attempted to call moneyRange() from the server*. Unit tests
+  cannot see that — jsdom has no such boundary — which is why
+  [`e2e/trip-share-links.spec.ts`](../../e2e/trip-share-links.spec.ts) opens
+  both kinds of link in a browser with no session.
 - **Both grid columns carry `min-w-0`.** An `fr` track still takes an automatic
   minimum from its content, so the gallery's photo rail widened its own column
   and crushed the itinerary to one word per line. The rail scrolls; the column
@@ -85,6 +97,15 @@ NBA and NFL still use mocks.
   to; `Field`'s own `gap-3` would double the label-to-control distance. What
   the primitive buys is the `role="group"` and the invalid-state wiring, which
   a bare div does not have.
+- **Nothing is reserved at the right of an itinerary row on a pointer.** The
+  control is absolutely positioned and revealed on hover, so every price,
+  subtotal and video runs to the card's edge; below `sm` it stays in the flow
+  at a 44px target, because a touch screen has no hover. The day-header spacer
+  is `sm:hidden` for the same reason — left in at zero width it still drew the
+  parent's `gap`, putting the subtotal 12px left of the prices it sums.
+- **A payment is a record, not a row of controls.** Tapping it opens a dialog;
+  the delete button used to hold space at the right of every row, which is what
+  pushed each amount off the card's edge.
 - **Icon buttons are `size-9 sm:size-7`** — 36px on touch, 28px on a pointer.
   Several were 20–24px, and the gallery's delete was both the smallest and the
   only destructive one visible without hovering.

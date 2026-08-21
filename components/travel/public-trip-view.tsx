@@ -23,11 +23,12 @@ import type { PublicTripView } from "@/types/travel";
 import {
   formatDateRange,
   formatTripMoney,
+  moneyRange,
   parseTripDate,
   tripDurationLabel,
 } from "@/lib/travel/format";
 import { itemCost, tripCost } from "@/lib/travel/pricing";
-import { moneyRange } from "@/components/travel/traveller-bar";
+
 
 const CATEGORY_META: Record<
   string,

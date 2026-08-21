@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TripPayments, type PaymentsTraveller } from "./trip-payments";
@@ -111,5 +111,24 @@ describe("TripPayments", () => {
 
     expect(screen.getByText("No travellers yet")).toBeInTheDocument();
     expect(screen.queryByText("Log payment")).not.toBeInTheDocument();
+  });
+});
+
+describe("TripPayments records", () => {
+  it("makes the whole record the target rather than a hover button", () => {
+    // The delete button used to hold space at the right of every row, which
+    // is what pushed each amount off the card's edge.
+    renderCard(null);
+
+    expect(screen.queryByLabelText("Delete payment")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Bruno Fabián/ }).length).toBeGreaterThan(0);
+  });
+
+  it("opens the record when it is tapped", () => {
+    renderCard("b");
+
+    fireEvent.click(screen.getByRole("button", { name: /\$300/ }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
   });
 });

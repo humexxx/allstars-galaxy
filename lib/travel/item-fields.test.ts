@@ -7,6 +7,7 @@ import {
   itemFields,
   priceUnitOptions,
   showsEndDay,
+  spansDays,
 } from "./item-fields";
 import { tripItemCategoryEnum } from "@/db/schema";
 
@@ -159,5 +160,23 @@ describe("deriveTitle", () => {
   it("asks for a title everywhere a route would not describe the thing", () => {
     expect(itemFields("lodging").title).toBe(true);
     expect(itemFields("flight").title).toBe(false);
+  });
+});
+
+describe("spansDays", () => {
+  it("runs a stay across every day it covers", () => {
+    expect(spansDays("lodging")).toBe(true);
+    expect(spansDays("cruise")).toBe(true);
+  });
+
+  it("does not run a return flight across the days between", () => {
+    // The flight's second date is the day it comes back, not a day it
+    // occupies. Drawn as a span it painted itself across the whole trip.
+    expect(spansDays("flight")).toBe(false);
+  });
+
+  it("treats a one-day thing as one day", () => {
+    expect(spansDays("food")).toBe(false);
+    expect(spansDays("transport")).toBe(false);
   });
 });

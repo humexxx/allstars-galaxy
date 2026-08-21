@@ -29,14 +29,22 @@ import {
 import { Mono, Text } from "@/components/ui/typography";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Progress } from "@/components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import {
   addTripContributionAction,
   deleteTripContributionAction,
 } from "@/app/actions/travel";
 import type { TripContribution } from "@/types/travel";
-import { formatTripMoney } from "@/lib/travel/format";
-import { moneyRange } from "@/components/travel/traveller-bar";
+import { formatTripMoney, moneyRange } from "@/lib/travel/format";
+
 
 export type PaymentsTraveller = {
   id: string;
@@ -72,6 +80,7 @@ export function TripPayments({
   selected: string | null;
 }) {
   const [adding, setAdding] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const byMember = useMemo(() => {
     const paid = new Map<string, number>();
@@ -102,6 +111,8 @@ export function TripPayments({
   // reading as short.
   const pct = owedLow > 0 ? Math.min(100, (paid / owedLow) * 100) : 0;
   const left = Math.max(0, owedLow - paid);
+
+  const open = contributions.find((c) => c.id === openId) ?? null;
 
   const nameOf = (memberId: string) =>
     travellers.find((t) => t.id === memberId)?.name ?? "Someone";
@@ -189,12 +200,12 @@ export function TripPayments({
                 {shown.map((c) => (
                   <PaymentRow
                     key={c.id}
-                    tripId={tripId}
                     contribution={c}
                     currency={currency}
                     // Hidden when the list is already one person's: repeating
                     // the name on every line says nothing.
                     who={focus ? null : nameOf(c.memberId)}
+                    onOpen={() => setOpenId(c.id)}
                   />
                 ))}
               </ul>
@@ -202,65 +213,130 @@ export function TripPayments({
           </>
         )}
       </CardContent>
+
+      {open && (
+        <PaymentDialog
+          tripId={tripId}
+          contribution={open}
+          currency={currency}
+          who={nameOf(open.memberId)}
+          onClose={() => setOpenId(null)}
+        />
+      )}
     </Card>
   );
 }
 
+/**
+ * A payment is a record, not a row of controls.
+ *
+ * The delete button used to sit at the right on hover, which meant every
+ * amount was pushed a button's width off the edge to hold space for something
+ * usually invisible. Tapping the record opens a dialog instead: the whole row
+ * is the target, and the amount runs to the card's edge where the other
+ * figures on this card are.
+ */
 function PaymentRow({
-  tripId,
   contribution,
   currency,
   who,
+  onOpen,
 }: {
-  tripId: string;
   contribution: TripContribution;
   currency: string;
   who: string | null;
+  onOpen: () => void;
 }) {
-  const router = useRouter();
-  const [busy, startTransition] = useTransition();
-
   return (
-    <li className="group flex items-start gap-3 py-2">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
+    <li>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex w-full flex-col gap-0.5 rounded-md px-1 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="flex w-full items-baseline justify-between gap-2">
           <Text weight="medium" className="truncate text-sm">
             {who ?? contribution.note ?? "Payment"}
           </Text>
           <Mono className="shrink-0 whitespace-nowrap text-sm font-medium tabular-nums">
             {formatTripMoney(parseFloat(contribution.amount), currency)}
           </Mono>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+        </span>
+        <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
           {contribution.paidOn && (
             <Mono className="text-2xs">
               {format(new Date(`${contribution.paidOn}T00:00:00`), "d MMM yyyy")}
             </Mono>
           )}
           {who && contribution.note && <span className="truncate">{contribution.note}</span>}
-        </div>
-      </div>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="size-9 shrink-0 text-destructive transition-opacity hover:text-destructive sm:size-7 sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover:opacity-100"
-        disabled={busy}
-        aria-label="Delete payment"
-        onClick={() =>
-          startTransition(async () => {
-            const res = await deleteTripContributionAction(tripId, contribution.id);
-            if (res.success) {
-              toast.success("Payment removed");
-              router.refresh();
-            } else {
-              toast.error(res.error);
-            }
-          })
-        }
-      >
-        <Trash2 className="size-3.5" />
-      </Button>
+        </span>
+      </button>
     </li>
+  );
+}
+
+/** What tapping a record opens: the detail, and the way to remove it. */
+function PaymentDialog({
+  tripId,
+  contribution,
+  currency,
+  who,
+  onClose,
+}: {
+  tripId: string;
+  contribution: TripContribution;
+  currency: string;
+  who: string;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [busy, startTransition] = useTransition();
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Payment from {who}</DialogTitle>
+          <DialogDescription>
+            {contribution.paidOn
+              ? format(new Date(`${contribution.paidOn}T00:00:00`), "d MMMM yyyy")
+              : "No date recorded"}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-2">
+          <Mono className="text-3xl font-semibold tabular-nums">
+            {formatTripMoney(parseFloat(contribution.amount), currency)}
+          </Mono>
+          {contribution.note && <Text variant="small">{contribution.note}</Text>}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            Close
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={busy}
+            onClick={() =>
+              startTransition(async () => {
+                const res = await deleteTripContributionAction(tripId, contribution.id);
+                if (res.success) {
+                  toast.success("Payment removed");
+                  router.refresh();
+                  onClose();
+                } else {
+                  toast.error(res.error);
+                }
+              })
+            }
+          >
+            <Trash2 className="mr-1 size-3.5" />
+            {busy ? "Removing…" : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

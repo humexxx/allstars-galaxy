@@ -56,7 +56,7 @@ import type {
   TripWithRelations,
 } from "@/types/travel";
 
-import { formatTripMoney } from "@/lib/travel/format";
+import { formatTripMoney, moneyRange } from "@/lib/travel/format";
 import { ActivityVideo } from "@/components/travel/activity-video";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -73,7 +73,7 @@ import { itemCost, unitSuffix } from "@/lib/travel/pricing";
 import { CATEGORIES, CategoryIcon, categoryMeta } from "@/components/travel/category";
 import { readerCost, type ItineraryViewer } from "@/lib/travel/viewer";
 export type { ItineraryViewer };
-import { moneyRange } from "@/components/travel/traveller-bar";
+
 import { MoneyInput } from "@/components/ui/money-input";
 import { ItineraryEditor } from "@/components/travel/itinerary-editor";
 import { Badge } from "@/components/ui/badge";
@@ -85,19 +85,15 @@ const PRICE_UNIT_LABELS: Record<TripPriceUnit, string> = {
 };
 
 /**
- * Width of a row's trailing control, and of the spacer that stands in for it
- * in the day header.
+ * Space held for a row's control, and by the spacer standing in for it in the
+ * day header. The two must agree or the money does not line up.
  *
- * The two must agree or the money does not line up: the control holds its
- * space even while invisible, so the item prices sat inset while the day
- * subtotal ran to the card's edge.
- *
- * One menu rather than two buttons. Two cost 80px of gutter and pushed every
- * price that far off the right edge; they were also 36px each on a phone,
- * under the 44px a thumb wants. A single 44px target costs half the width and
- * is easier to hit.
+ * Zero from `sm` up: with a pointer the control is revealed on hover and
+ * drawn over the row's right edge, so nothing is reserved and every price,
+ * subtotal and video runs to the card's edge. A touch screen has no hover, so
+ * below `sm` the control stays in the flow at a 44px target.
  */
-const ACTIONS_WIDTH = "w-11 sm:w-8";
+const ACTIONS_WIDTH = "w-11 sm:w-0";
 
 const NO_DATE_KEY = "__no_date__";
 
@@ -224,9 +220,12 @@ export function TripItinerary({
                   </Mono>
                 )}
               </div>
-              {/* Stands where each row's buttons stand, so this subtotal lands
-                  in the same column as the prices it adds up. */}
-              <span className={cn("shrink-0", ACTIONS_WIDTH)} aria-hidden />
+              {/* Stands where a row's control stands on a touch screen, so
+                  the subtotal lands in the same column as the prices it adds
+                  up. Gone entirely from `sm` up — left in at zero width it
+                  still drew the parent's gap, which put the subtotal 12px
+                  further left than every price below it. */}
+              <span className={cn("shrink-0 sm:hidden", ACTIONS_WIDTH)} aria-hidden />
             </div>
             <ul className="divide-y">
               {group.items.map((item) => (
@@ -297,7 +296,7 @@ function ItemRow({
   }
 
   return (
-    <li className="group flex items-start gap-3 py-3">
+    <li className="group relative flex items-start gap-3 py-3">
       <CategoryIcon category={item.category} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-baseline justify-between gap-2">
@@ -380,7 +379,9 @@ function ItemRow({
       <div
         className={cn(
           "flex shrink-0 justify-end transition-opacity",
-          "sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover:opacity-100",
+          // Out of the flow with a pointer, so the row keeps its full width.
+          "sm:absolute sm:right-0 sm:top-2 sm:opacity-0",
+          "sm:focus-within:opacity-100 sm:group-hover:opacity-100",
           ACTIONS_WIDTH
         )}
       >
@@ -389,7 +390,10 @@ function ItemRow({
             <Button
               size="icon"
               variant="ghost"
-              className="size-11 sm:size-8"
+              // A background of its own: floating over the price, a
+              // transparent button would leave two things legible at once
+              // and neither readable.
+              className="size-11 bg-card shadow-sm sm:size-8"
               aria-label={`Actions for ${item.title}`}
             >
               <MoreHorizontal className="size-4" />

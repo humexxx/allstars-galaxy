@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { TripCalendar } from "./trip-calendar";
@@ -25,25 +25,55 @@ const CRUISE = item({
 });
 
 describe("TripCalendar", () => {
-  it("draws whole weeks around the trip, not whole months", () => {
-    // A ten-day trip mid-January was drawing two empty weeks above it and the
-    // whole of February below — pages of nothing, to place ten days.
-    render(<TripCalendar trip={trip([CRUISE])} />);
+  it("opens on the trip's month and draws all of it", () => {
+    const { container } = render(<TripCalendar trip={trip([CRUISE])} />);
 
-    // Jan 15 falls on a Friday, so the grid opens on Sunday the 10th and
-    // closes on Saturday the 30th. Nothing from December, nothing from Feb.
-    expect(screen.getByText("10")).toBeInTheDocument();
-    expect(screen.getByText("30")).toBeInTheDocument();
-    expect(screen.queryByText("3")).not.toBeInTheDocument();
-    expect(screen.queryByText("February 2027")).not.toBeInTheDocument();
+    expect(screen.getByText("January 2027")).toBeInTheDocument();
+    // January 2027 opens on a Friday and closes on a Sunday, so padding it
+    // out to whole weeks gives six rows of seven. Both the 31st of December
+    // and the 31st of January are on screen, which is why the count is what
+    // gets asserted rather than any one day.
+    const days = container.querySelectorAll("div.grid.grid-cols-7 > div.flex-col");
+    expect(days).toHaveLength(6 * 7);
   });
 
-  it("occupies every day an item spans, not only the day it starts", () => {
-    // The whole reason a cruise or a hotel is worth seeing on a calendar.
+  it("moves between months and offers the way back", () => {
+    render(<TripCalendar trip={trip([CRUISE])} />);
+
+    fireEvent.click(screen.getByLabelText("Next month"));
+    expect(screen.getByText("February 2027")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Trip" }));
+    expect(screen.getByText("January 2027")).toBeInTheDocument();
+  });
+
+  it("does not offer a way back to a month already showing", () => {
+    render(<TripCalendar trip={trip([CRUISE])} />);
+    expect(screen.getByRole("button", { name: "Trip" })).toBeDisabled();
+  });
+
+  it("draws a stay as one bar across the days it covers", () => {
+    // The whole reason a cruise or a hotel is worth seeing on a calendar: the
+    // length of the bar IS the information.
     const { container } = render(<TripCalendar trip={trip([CRUISE])} />);
-    const cells = container.querySelectorAll("div.grid.grid-cols-7 > div");
-    const withItems = [...cells].filter((c) => c.querySelector("li"));
-    expect(withItems).toHaveLength(8); // 17th through 24th
+    const bars = [...container.querySelectorAll("[title]")];
+    // Sun 17 to Sun 24 crosses a week boundary, so it is two segments: six
+    // days to Saturday the 23rd, then one more.
+    expect(bars).toHaveLength(2);
+    expect(bars[0].className).toContain("col-span-7");
+    expect(bars[1].className).toContain("col-span-1");
+  });
+
+  it("draws a return flight as the day out and the day back, nothing between", () => {
+    const flight = item({
+      id: "f", title: "SJO ⇄ MCO", category: "flight",
+      scheduledOn: "2027-01-15", endsOn: "2027-01-24",
+    });
+    const { container } = render(<TripCalendar trip={trip([flight])} />);
+    const bars = [...container.querySelectorAll("[title]")];
+
+    expect(bars).toHaveLength(2);
+    expect(bars.every((b) => b.className.includes("col-span-1"))).toBe(true);
   });
 
   it("names an item on the day it begins and only threads it after", () => {

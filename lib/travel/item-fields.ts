@@ -124,6 +124,18 @@ export function allowsPriceUnit(
 }
 
 /**
+ * Whether the end day means "through" or "and back again".
+ *
+ * A hotel booked the 15th to the 17th occupies all three days; a return flight
+ * on the 24th occupies the 15th and the 24th and nothing in between. Only the
+ * first kind may be drawn as a continuous run on a calendar — the flight was
+ * being painted across all ten days of the trip.
+ */
+export function spansDays(category: TripItemCategory): boolean {
+  return itemFields(category).endDay;
+}
+
+/**
  * A round trip borrows the end-day field for its return date, so the field
  * appears only when the flight actually returns.
  */

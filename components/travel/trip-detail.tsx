@@ -14,7 +14,6 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
+import { Heading, Mono } from "@/components/ui/typography";
 
 import { deleteTripAction } from "@/app/actions/travel";
 import {
@@ -217,16 +216,6 @@ export function TripDetail({
           <TripItinerary trip={trip} partySize={partySize} />
         </div>
         <div className="space-y-6">
-          {trip.description && (
-            <Card>
-              <CardContent>
-                <Eyebrow className="mb-2 block">About this trip</Eyebrow>
-                <Text className="whitespace-pre-wrap text-foreground/90">
-                  {trip.description}
-                </Text>
-              </CardContent>
-            </Card>
-          )}
           <TripGallery trip={trip} />
           <TripSharePanel trip={trip} baseUrl={baseUrl} />
         </div>

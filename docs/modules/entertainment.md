@@ -64,6 +64,11 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **The trip detail page does not render `description`.** The field is still
+  stored and still editable (as *Notes* in the trip form), and the public share
+  view still shows it — a visitor arriving on a shared link has no other
+  context. On the detail page the owner already knows what the trip is, so the
+  card was only taking room from the itinerary.
 - **Disclosures use shadcn's `Collapsible`**, not a hand-rolled button with
   state. The itinerary accordion started as the latter and was replaced: the
   primitive brings the aria wiring and keyboard behaviour a disclosure needs,

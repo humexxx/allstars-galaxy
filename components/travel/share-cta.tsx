@@ -29,7 +29,7 @@ export function ShareCta({ inviteeEmail, currentUserEmail, shareToken }: ShareCt
           </Text>
           <Button asChild size="sm" variant="outline">
             <Link href="/portal/entertainment/travel-planner">
-              Open my trips <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              Open my trips <ArrowRight className="ml-1 size-3.5" />
             </Link>
           </Button>
         </CardContent>
@@ -47,7 +47,7 @@ export function ShareCta({ inviteeEmail, currentUserEmail, shareToken }: ShareCt
       <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <span className="rounded-md bg-primary/10 p-2 text-primary">
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="size-4" />
           </span>
           <div>
             <Text variant="body" weight="semibold">Plan your own trip with Allstars Galaxy</Text>
@@ -72,7 +72,7 @@ export function ShareCta({ inviteeEmail, currentUserEmail, shareToken }: ShareCt
           </Button>
           <Button asChild size="sm">
             <Link href={signupHref}>
-              {inviteeEmail ? "Continue" : "Sign up"} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              {inviteeEmail ? "Continue" : "Sign up"} <ArrowRight className="ml-1 size-3.5" />
             </Link>
           </Button>
         </div>

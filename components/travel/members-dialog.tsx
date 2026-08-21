@@ -15,7 +15,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Text } from "@/components/ui/typography";
 import { setTripMembersAction } from "@/app/actions/travel";
 
@@ -90,9 +89,11 @@ export function MembersDialog({
 
         <div className="space-y-3">
           <div className="hidden gap-2 sm:grid sm:grid-cols-[1fr_1fr_5rem_2rem]">
-            <Label className="text-xs">Name</Label>
-            <Label className="text-xs">Email (optional)</Label>
-            <Label className="text-xs">Share %</Label>
+            {/* Column headings, not field labels: a Label with no control
+                to point at announces as a label for nothing. */}
+            <Text variant="small" weight="medium">Name</Text>
+            <Text variant="small" weight="medium">Email (optional)</Text>
+            <Text variant="small" weight="medium">Share %</Text>
             <span />
           </div>
 

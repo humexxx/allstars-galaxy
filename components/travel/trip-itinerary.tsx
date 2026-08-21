@@ -24,11 +24,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -262,7 +263,7 @@ export function TripItinerary({
           )}
         </CardTitle>
         <Button size="sm" variant="outline" onClick={() => setAdding((v) => !v)}>
-          {adding ? <X className="mr-1 h-3.5 w-3.5" /> : <Plus className="mr-1 h-3.5 w-3.5" />}
+          {adding ? <X className="mr-1 size-3.5" /> : <Plus className="mr-1 size-3.5" />}
           {adding ? "Cancel" : "Add item"}
         </Button>
       </CardHeader>
@@ -431,7 +432,7 @@ function ItemRow({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-primary hover:underline"
             >
-              <ExternalLink className="h-3 w-3" /> Link
+              <ExternalLink className="size-3" /> Link
             </a>
           )}
         </div>
@@ -459,21 +460,21 @@ function ItemRow({
         <Button
           size="icon"
           variant="ghost"
-          className="h-9 w-9 sm:h-7 sm:w-7"
+          className="size-9 sm:size-7"
           onClick={() => setEditing(true)}
           aria-label="Edit item"
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <Pencil className="size-3.5" />
         </Button>
         <Button
           size="icon"
           variant="ghost"
-          className="h-9 w-9 text-destructive hover:text-destructive sm:h-7 sm:w-7"
+          className="size-9 text-destructive hover:text-destructive sm:size-7"
           disabled={isPending}
           onClick={handleDelete}
           aria-label="Delete item"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 className="size-3.5" />
         </Button>
       </div>
     </li>
@@ -589,8 +590,8 @@ function ItemForm({
         )}
       >
         {fields.title && (
-          <div className="space-y-1.5">
-            <Label htmlFor={`title-${item?.id ?? "new"}`} className="text-xs">Title</Label>
+          <Field className="gap-1.5">
+            <FieldLabel htmlFor={`title-${item?.id ?? "new"}`} className="text-xs">Title</FieldLabel>
             <Input
               id={`title-${item?.id ?? "new"}`}
               value={title}
@@ -599,10 +600,10 @@ function ItemForm({
               required
               autoFocus
             />
-          </div>
+          </Field>
         )}
-        <div className="space-y-1.5">
-          <Label className="text-xs">Category</Label>
+        <Field className="gap-1.5">
+          <FieldLabel className="text-xs">Category</FieldLabel>
           <Select
             value={category}
             onValueChange={(v) => {
@@ -623,14 +624,16 @@ function ItemForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {CATEGORIES.map(({ value, label }) => (
-                <SelectItem key={value} value={value} className="py-2">
-                  <span className="inline-flex items-center gap-2.5">
-                    <CategoryIcon category={value} />
-                    <span className="text-sm">{label}</span>
-                  </span>
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {CATEGORIES.map(({ value, label }) => (
+                  <SelectItem key={value} value={value} className="py-2">
+                    <span className="inline-flex items-center gap-2.5">
+                      <CategoryIcon category={value} />
+                      <span className="text-sm">{label}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
           {!fields.title && (
@@ -646,27 +649,27 @@ function ItemForm({
               — taken from the route.
             </Text>
           )}
-        </div>
+        </Field>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor={`date-${item?.id ?? "new"}`} className="text-xs">
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor={`date-${item?.id ?? "new"}`} className="text-xs">
             {fields.startLabel}
-          </Label>
+          </FieldLabel>
           <Input
             id={`date-${item?.id ?? "new"}`}
             type="date"
             value={scheduledOn ?? ""}
             onChange={(e) => setScheduledOn(e.target.value)}
           />
-        </div>
+        </Field>
         {showEnd && (
-          <div className="space-y-1.5">
-            <Label htmlFor={`ends-${item?.id ?? "new"}`} className="text-xs">
+          <Field className="gap-1.5">
+            <FieldLabel htmlFor={`ends-${item?.id ?? "new"}`} className="text-xs">
               {endDayLabel(fields, roundTrip)}{" "}
               <span className="text-muted-foreground">(optional)</span>
-            </Label>
+            </FieldLabel>
             <Input
               id={`ends-${item?.id ?? "new"}`}
               type="date"
@@ -674,28 +677,28 @@ function ItemForm({
               min={scheduledOn || undefined}
               onChange={(e) => setEndsOn(e.target.value)}
             />
-          </div>
+          </Field>
         )}
         {fields.route && (
           <>
-            <div className="space-y-1.5">
-              <Label htmlFor={`from-${item?.id ?? "new"}`} className="text-xs">From</Label>
+            <Field className="gap-1.5">
+              <FieldLabel htmlFor={`from-${item?.id ?? "new"}`} className="text-xs">From</FieldLabel>
               <AirportPicker
                 id={`from-${item?.id ?? "new"}`}
                 value={fromCode ?? ""}
                 onChange={setFromCode}
                 placeholder="SJO or San José"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={`to-${item?.id ?? "new"}`} className="text-xs">To</Label>
+            </Field>
+            <Field className="gap-1.5">
+              <FieldLabel htmlFor={`to-${item?.id ?? "new"}`} className="text-xs">To</FieldLabel>
               <AirportPicker
                 id={`to-${item?.id ?? "new"}`}
                 value={toCode ?? ""}
                 onChange={setToCode}
                 placeholder="MCO or Orlando"
               />
-            </div>
+            </Field>
           </>
         )}
 
@@ -718,10 +721,10 @@ function ItemForm({
           </label>
         )}
 
-        <div className="space-y-1.5">
-          <Label htmlFor={`price-${item?.id ?? "new"}`} className="text-xs">
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor={`price-${item?.id ?? "new"}`} className="text-xs">
             Price <span className="text-muted-foreground">(or low estimate)</span>
-          </Label>
+          </FieldLabel>
           <MoneyInput
             id={`price-${item?.id ?? "new"}`}
             value={price ?? ""}
@@ -729,11 +732,11 @@ function ItemForm({
             currency={currency}
             placeholder="0.00"
           />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`pricemax-${item?.id ?? "new"}`} className="text-xs">
+        </Field>
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor={`pricemax-${item?.id ?? "new"}`} className="text-xs">
             Up to <span className="text-muted-foreground">(optional)</span>
-          </Label>
+          </FieldLabel>
           <MoneyInput
             id={`pricemax-${item?.id ?? "new"}`}
             value={priceMax ?? ""}
@@ -741,9 +744,9 @@ function ItemForm({
             currency={currency}
             placeholder="0.00"
           />
-        </div>
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label className="text-xs">That price is</Label>
+        </Field>
+        <Field className="gap-1.5 sm:col-span-2">
+          <FieldLabel className="text-xs">That price is</FieldLabel>
           <Select
             value={priceUnit}
             onValueChange={(v) => setPriceUnit(v as TripPriceUnit)}
@@ -752,16 +755,18 @@ function ItemForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {priceUnitOptions(category, item?.priceUnit).map((unit) => (
-                <SelectItem key={unit} value={unit}>
-                  {PRICE_UNIT_LABELS[unit]}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {priceUnitOptions(category, item?.priceUnit).map((unit) => (
+                  <SelectItem key={unit} value={unit}>
+                    {PRICE_UNIT_LABELS[unit]}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
-        </div>
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor={`link-${item?.id ?? "new"}`} className="text-xs">Link</Label>
+        </Field>
+        <Field className="gap-1.5 sm:col-span-2">
+          <FieldLabel htmlFor={`link-${item?.id ?? "new"}`} className="text-xs">Link</FieldLabel>
           <Input
             id={`link-${item?.id ?? "new"}`}
             type="url"
@@ -769,12 +774,12 @@ function ItemForm({
             onChange={(e) => setLink(e.target.value)}
             placeholder="https://booking.com/…"
           />
-        </div>
+        </Field>
         {fields.video && (
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor={`video-${item?.id ?? "new"}`} className="text-xs">
+        <Field className="gap-1.5 sm:col-span-2">
+          <FieldLabel htmlFor={`video-${item?.id ?? "new"}`} className="text-xs">
             Video
-          </Label>
+          </FieldLabel>
           <Input
             id={`video-${item?.id ?? "new"}`}
             type="url"
@@ -782,7 +787,7 @@ function ItemForm({
             onChange={(e) => setVideoUrl(e.target.value)}
             placeholder="YouTube or Instagram link"
           />
-        </div>
+        </Field>
         )}
       </div>
 
@@ -811,8 +816,8 @@ function ItemForm({
         </div>
       )}
 
-      <div className="space-y-1.5">
-        <Label htmlFor={`notes-${item?.id ?? "new"}`} className="text-xs">Notes</Label>
+      <Field className="gap-1.5">
+        <FieldLabel htmlFor={`notes-${item?.id ?? "new"}`} className="text-xs">Notes</FieldLabel>
         <Textarea
           id={`notes-${item?.id ?? "new"}`}
           value={notes ?? ""}
@@ -820,7 +825,7 @@ function ItemForm({
           placeholder="Reservation reference, confirmation code, who's coming…"
           rows={2}
         />
-      </div>
+      </Field>
 
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onDone}>

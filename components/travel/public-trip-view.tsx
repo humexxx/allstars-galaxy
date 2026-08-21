@@ -112,11 +112,11 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
               {trip.destination && (
                 <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4" /> {trip.destination}
+                  <MapPin className="size-4" /> {trip.destination}
                 </span>
               )}
               <span className="inline-flex items-center gap-1.5">
-                <CalendarDays className="h-4 w-4" />
+                <CalendarDays className="size-4" />
                 <Mono>{formatDateRange(trip.startDate, trip.endDate)}</Mono>
               </span>
             </div>
@@ -229,7 +229,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                         return (
                           <li key={item.id} className="flex items-start gap-3 py-3">
                             <div className="rounded-md bg-muted p-1.5 text-muted-foreground">
-                              <Icon className="h-4 w-4" />
+                              <Icon className="size-4" />
                             </div>
                             <div className="min-w-0 flex-1 space-y-0.5">
                               <div className="flex items-baseline justify-between gap-2">
@@ -253,7 +253,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1 text-primary hover:underline"
                                   >
-                                    <ExternalLink className="h-3 w-3" /> Open link
+                                    <ExternalLink className="size-3" /> Open link
                                   </a>
                                 )}
                               </div>
@@ -289,7 +289,7 @@ function Stat({
     <Card>
       <CardContent className="flex items-center gap-3 p-4">
         <div className="rounded-md bg-primary/10 p-2 text-primary">
-          <Icon className="h-4 w-4" />
+          <Icon className="size-4" />
         </div>
         <div className="min-w-0">
           <Text variant="small" className="uppercase tracking-wider">{label}</Text>

@@ -560,14 +560,14 @@ describe("getPublicTripByToken", () => {
 
     queueSelect([share]);
     queueSelect([tripFixture()]);
+    // One round: items, photos, members, payments. The scope reuses the items
+    // already fetched rather than querying them a second time.
     queueSelect(items);
     queueSelect([]); // photos
-    // buildScope: members, items, contributions
     queueSelect([
       { id: "jason", name: "Jason Hume", sharePercent: null },
       { id: "bruno", name: "Bruno Fabián", sharePercent: null },
     ]);
-    queueSelect(items);
     queueSelect([{ amount: "300.00" }]);
 
     const out = await getPublicTripByToken("tok");
@@ -581,6 +581,10 @@ describe("getPublicTripByToken", () => {
     });
     // Jason is nowhere in what crosses the boundary.
     expect(JSON.stringify(out)).not.toContain("Jason");
+    // Four relation queries, not five: the scope reuses the items already in
+    // hand. Counting them is what keeps a second round trip from creeping
+    // back in behind the first.
+    expect(dbMock.select).toHaveBeenCalledTimes(6);
   });
 
   it("leaves an unscoped link with no traveller attached", async () => {
@@ -605,11 +609,10 @@ describe("getPublicTripByToken", () => {
         inviteeEmail: null, memberId: "ghost", showPrices: true, createdAt: new Date() },
     ]);
     queueSelect([tripFixture()]);
-    queueSelect([]);
-    queueSelect([]);
+    queueSelect([]); // items
+    queueSelect([]); // photos
     queueSelect([{ id: "jason", name: "Jason Hume", sharePercent: null }]);
-    queueSelect([]);
-    queueSelect([]);
+    queueSelect([]); // payments
 
     const out = await getPublicTripByToken("tok");
     expect(out?.scope).toBeNull();

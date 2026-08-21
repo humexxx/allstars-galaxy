@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mono, Text } from "@/components/ui/typography";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 
 import {
   createTripShareAction,
@@ -113,9 +112,9 @@ export function TripSharePanel({
             />
             <Button type="submit" disabled={creating}>
               {creating ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-1 size-4 animate-spin" />
               ) : (
-                <Link2 className="mr-1 h-4 w-4" />
+                <Link2 className="mr-1 size-4" />
               )}
               {scopeName ? `Link for ${scopeName.split(" ")[0]}` : "Create link"}
             </Button>
@@ -243,12 +242,12 @@ function ShareRow({
           type="button"
           size="icon"
           variant="ghost"
-          className={cn("h-6 w-6 text-destructive hover:text-destructive")}
+          className="size-9 text-destructive hover:text-destructive sm:size-7"
           onClick={handleRevoke}
           disabled={busy}
           aria-label="Revoke link"
         >
-          <Trash2 className="h-3 w-3" />
+          <Trash2 className="size-3.5" />
         </Button>
       </div>
       <div className="flex items-center gap-1">
@@ -259,11 +258,11 @@ function ShareRow({
           type="button"
           size="icon"
           variant="outline"
-          className="h-9 w-9 sm:h-7 sm:w-7"
+          className="size-9 sm:size-7"
           onClick={onCopy}
           aria-label="Copy link"
         >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
         </Button>
       </div>
     </li>
@@ -278,7 +277,7 @@ function DeleteRevokedButton({ tripId, shareId }: { tripId: string; shareId: str
       type="button"
       size="icon"
       variant="ghost"
-      className="h-5 w-5"
+      className="size-8 sm:size-6"
       onClick={() =>
         startTransition(async () => {
           const res = await deleteTripShareAction(tripId, shareId);
@@ -292,7 +291,7 @@ function DeleteRevokedButton({ tripId, shareId }: { tripId: string; shareId: str
       disabled={busy}
       aria-label="Delete record"
     >
-      <Trash2 className="h-3 w-3" />
+      <Trash2 className="size-3.5" />
     </Button>
   );
 }

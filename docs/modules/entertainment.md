@@ -64,6 +64,18 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **Travel forms use `Field` / `FieldLabel`**, not `div` + `Label`. The gap is
+  overridden (`gap-1.5`, `gap-2`) to keep the density these forms were tuned
+  to; `Field`'s own `gap-3` would double the label-to-control distance. What
+  the primitive buys is the `role="group"` and the invalid-state wiring, which
+  a bare div does not have.
+- **Icon buttons are `size-9 sm:size-7`** — 36px on touch, 28px on a pointer.
+  Several were 20–24px, and the gallery's delete was both the smallest and the
+  only destructive one visible without hovering.
+- **`space-y-*` stays.** The shadcn skill prefers `gap-*`, but
+  [`docs/SPACING.md`](../SPACING.md) mandates `space-y-4`/`space-y-6` for
+  stacked blocks, and a blanket swap would silently do nothing wherever the
+  parent is not flex or grid.
 - **`trip_contributions` records money that actually moved.** What somebody
   owes is a range (the trip is mostly quotes); what they paid is exact. The
   Payments card follows the same selected traveller the itinerary does, and

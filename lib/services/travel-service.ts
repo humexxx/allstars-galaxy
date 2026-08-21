@@ -471,7 +471,11 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
   const [trip] = await db.select().from(trips).where(eq(trips.id, share.tripId));
   if (!trip) return null;
 
-  const [items, photos] = await Promise.all([
+  // Everything the page needs in one round of queries. The scope's members
+  // and payments do not depend on the items or the photos, so awaiting them
+  // afterwards would have cost a second round trip for no ordering reason —
+  // and at ~86ms each that is the whole budget of a small page.
+  const [items, photos, scopeRows] = await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -482,6 +486,7 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
       .from(tripPhotos)
       .where(eq(tripPhotos.tripId, trip.id))
       .orderBy(asc(tripPhotos.sortOrder), asc(tripPhotos.createdAt)),
+    share.memberId ? loadScopeRows(trip.id, share.memberId) : null,
   ]);
 
   return {
@@ -489,9 +494,40 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
     items,
     photos,
     share,
-    scope: share.memberId ? await buildScope(trip.id, share.memberId) : null,
+    // Built from the items already in hand rather than fetched again.
+    scope: scopeRows ? buildScope(scopeRows, items, share.memberId!) : null,
   };
 });
+
+/**
+ * The rows a scoped link needs, fetched alongside everything else.
+ *
+ * Split from the arithmetic so the queries can join the page's one round of
+ * IO instead of forming a second one behind it.
+ */
+async function loadScopeRows(tripId: string, memberId: string) {
+  const [members, paidRows] = await Promise.all([
+    db
+      .select({
+        id: tripMembers.id,
+        name: tripMembers.name,
+        sharePercent: tripMembers.sharePercent,
+      })
+      .from(tripMembers)
+      .where(eq(tripMembers.tripId, tripId))
+      .orderBy(asc(tripMembers.sortOrder), asc(tripMembers.createdAt)),
+    db
+      .select({ amount: tripContributions.amount })
+      .from(tripContributions)
+      .where(
+        and(
+          eq(tripContributions.tripId, tripId),
+          eq(tripContributions.memberId, memberId)
+        )
+      ),
+  ]);
+  return { members, paidRows };
+}
 
 /**
  * One traveller's own view of the trip, worked out here rather than in the
@@ -503,31 +539,12 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
  * would put the other travellers' names and balances in the payload of a link
  * created specifically to hide them.
  */
-async function buildScope(
-  tripId: string,
+function buildScope(
+  rows: Awaited<ReturnType<typeof loadScopeRows>>,
+  items: TripItem[],
   memberId: string
-): Promise<PublicTripScope | null> {
-  const [members, items, paidRows] = await Promise.all([
-    db
-      .select({
-        id: tripMembers.id,
-        name: tripMembers.name,
-        sharePercent: tripMembers.sharePercent,
-      })
-      .from(tripMembers)
-      .where(eq(tripMembers.tripId, tripId))
-      .orderBy(asc(tripMembers.sortOrder), asc(tripMembers.createdAt)),
-    db.select().from(tripItems).where(eq(tripItems.tripId, tripId)),
-    db
-      .select({ amount: tripContributions.amount })
-      .from(tripContributions)
-      .where(
-        and(
-          eq(tripContributions.tripId, tripId),
-          eq(tripContributions.memberId, memberId)
-        )
-      ),
-  ]);
+): PublicTripScope | null {
+  const { members, paidRows } = rows;
 
   const me = members.find((m) => m.id === memberId);
   // The traveller was removed from the trip after the link went out. The

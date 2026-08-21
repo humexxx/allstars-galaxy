@@ -88,10 +88,15 @@ export default async function PublicTripPage({
   params: Promise<Params>;
 }) {
   const { token } = await params;
-  const view = await getPublicTripByToken(token);
+  // Independent: who is reading does not depend on what the token resolves to.
+  // Awaiting them in turn made the session lookup wait out the trip query for
+  // no reason. A bad token now costs one wasted session read, which is the
+  // rare case and the cheap one.
+  const [view, currentUser] = await Promise.all([
+    getPublicTripByToken(token),
+    getCurrentUser(),
+  ]);
   if (!view) notFound();
-
-  const currentUser = await getCurrentUser();
 
   return (
     <div className="space-y-6">

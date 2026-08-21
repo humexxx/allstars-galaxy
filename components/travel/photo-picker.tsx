@@ -145,7 +145,7 @@ export function PhotoPicker({
           disabled={disabled || busy}
           onClick={() => fileRef.current?.click()}
         >
-          {busy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />}
+          {busy ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : <Upload className="mr-1 size-3.5" />}
           Upload
         </Button>
         <Input
@@ -191,11 +191,11 @@ export function PhotoPicker({
               type="button"
               size="icon"
               variant="secondary"
-              className={cn("absolute right-2 top-2 h-7 w-7")}
+              className={cn("absolute right-2 top-2 size-7")}
               onClick={onClear}
               aria-label="Remove photo"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="size-3.5" />
             </Button>
           )}
         </div>
@@ -227,11 +227,11 @@ export function PhotoPicker({
           >
             {busy ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Uploading…
+                <Loader2 className="mr-2 size-4 animate-spin" /> Uploading…
               </>
             ) : (
               <>
-                <Upload className="mr-2 h-4 w-4" /> Choose image
+                <Upload className="mr-2 size-4" /> Choose image
               </>
             )}
           </Button>

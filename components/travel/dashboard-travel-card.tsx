@@ -24,7 +24,7 @@ export async function DashboardTravelCard({ userId }: DashboardTravelCardProps) 
       <Card className="col-span-full">
         <CardHeader>
           <Heading level="h5" as="h2" className="flex items-center gap-2">
-            <Plane className="h-5 w-5" />
+            <Plane className="size-5" />
             Travel Planner
           </Heading>
         </CardHeader>
@@ -35,7 +35,7 @@ export async function DashboardTravelCard({ userId }: DashboardTravelCardProps) 
           </Text>
           <Button asChild>
             <Link href={NEW_TRAVEL_PATH}>
-              <Plus className="mr-1 h-4 w-4" /> New trip
+              <Plus className="mr-1 size-4" /> New trip
             </Link>
           </Button>
         </CardContent>
@@ -52,7 +52,7 @@ export async function DashboardTravelCard({ userId }: DashboardTravelCardProps) 
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <Heading level="h5" as="h2" className="flex items-center gap-2">
-              <Plane className="h-5 w-5" />
+              <Plane className="size-5" />
               Travel Planner
             </Heading>
             <Text variant="muted" className="mt-1 text-sm">
@@ -61,7 +61,7 @@ export async function DashboardTravelCard({ userId }: DashboardTravelCardProps) 
           </div>
           <Button variant="outline" size="sm" asChild>
             <Link href={TRAVEL_PATH}>
-              Open <ArrowRight className="ml-1 h-3 w-3" />
+              Open <ArrowRight className="ml-1 size-3" />
             </Link>
           </Button>
         </div>
@@ -95,7 +95,7 @@ function FeaturedTripCard({ trip }: { trip: DashboardTravelFeaturedTrip }) {
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-white/70">
-              <Plane className="h-10 w-10" />
+              <Plane className="size-10" />
             </div>
           )}
         </div>
@@ -108,20 +108,20 @@ function FeaturedTripCard({ trip }: { trip: DashboardTravelFeaturedTrip }) {
             <Heading level="h6" as="h3" className="line-clamp-1">
               {trip.title}
             </Heading>
-            <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            <ArrowRight className="mt-1 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             {trip.destination && (
               <span className="inline-flex items-center gap-1.5">
-                <MapPin className="h-3.5 w-3.5" /> {trip.destination}
+                <MapPin className="size-3.5" /> {trip.destination}
               </span>
             )}
             <span className="inline-flex items-center gap-1.5">
-              <CalendarDays className="h-3.5 w-3.5" />
+              <CalendarDays className="size-3.5" />
               <Mono className="text-xs">{formatDateRange(trip.startDate, trip.endDate)}</Mono>
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <ListChecks className="h-3.5 w-3.5" />
+              <ListChecks className="size-3.5" />
               <Mono className="text-xs">
                 {trip.itemCount} {trip.itemCount === 1 ? "item" : "items"}
               </Mono>

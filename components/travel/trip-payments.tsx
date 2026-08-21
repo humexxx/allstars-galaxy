@@ -9,19 +9,19 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { MoneyInput } from "@/components/ui/money-input";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { Mono, Text } from "@/components/ui/typography";
 import { Progress } from "@/components/ui/progress";
-import { cn } from "@/lib/utils";
 
 import {
   addTripContributionAction,
@@ -113,9 +113,9 @@ export function TripPayments({
         {travellers.length > 0 && (
           <Button size="sm" variant="outline" onClick={() => setAdding((v) => !v)}>
             {adding ? (
-              <X className="mr-1 h-3.5 w-3.5" />
+              <X className="mr-1 size-3.5" />
             ) : (
-              <Plus className="mr-1 h-3.5 w-3.5" />
+              <Plus className="mr-1 size-3.5" />
             )}
             {adding ? "Cancel" : "Log payment"}
           </Button>
@@ -229,7 +229,7 @@ function PaymentRow({
       <Button
         size="icon"
         variant="ghost"
-        className="h-8 w-8 shrink-0 text-destructive transition-opacity hover:text-destructive sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover:opacity-100"
+        className="size-9 shrink-0 text-destructive transition-opacity hover:text-destructive sm:size-7 sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover:opacity-100"
         disabled={busy}
         aria-label="Delete payment"
         onClick={() =>
@@ -244,7 +244,7 @@ function PaymentRow({
           })
         }
       >
-        <Trash2 className="h-3.5 w-3.5" />
+        <Trash2 className="size-3.5" />
       </Button>
     </li>
   );
@@ -300,26 +300,28 @@ function PaymentForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className={cn("space-y-3 rounded-md border border-primary/30 bg-muted/30 p-3")}
+      className="space-y-3 rounded-md border border-primary/30 bg-muted/30 p-3"
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label className="text-xs">Who paid</Label>
+        <Field className="gap-1.5">
+          <FieldLabel className="text-xs">Who paid</FieldLabel>
           <Select value={memberId} onValueChange={setMemberId}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Pick a traveller" />
             </SelectTrigger>
             <SelectContent>
-              {travellers.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.isYou ? `${t.name} (you)` : t.name}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {travellers.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.isYou ? `${t.name} (you)` : t.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="payment-amount" className="text-xs">Amount</Label>
+        </Field>
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor="payment-amount" className="text-xs">Amount</FieldLabel>
           <MoneyInput
             id="payment-amount"
             value={amount}
@@ -327,27 +329,27 @@ function PaymentForm({
             currency={currency}
             placeholder="0.00"
           />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="payment-date" className="text-xs">Paid on</Label>
+        </Field>
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor="payment-date" className="text-xs">Paid on</FieldLabel>
           <Input
             id="payment-date"
             type="date"
             value={paidOn}
             onChange={(e) => setPaidOn(e.target.value)}
           />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="payment-note" className="text-xs">
+        </Field>
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor="payment-note" className="text-xs">
             Note <span className="text-muted-foreground">(optional)</span>
-          </Label>
+          </FieldLabel>
           <Input
             id="payment-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Cruise deposit"
           />
-        </div>
+        </Field>
       </div>
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onDone}>

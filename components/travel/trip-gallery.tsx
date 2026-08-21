@@ -99,12 +99,15 @@ export function TripGallery({ trip }: TripGalleryProps) {
                   type="button"
                   size="icon"
                   variant="secondary"
-                  className="absolute right-1 top-1 h-6 w-6 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                  // 24px was below any comfortable touch target, and this one is
+                  // destructive AND always visible on a phone. 36/28 is the
+                  // size the itinerary rows already use.
+                  className="absolute right-1 top-1 size-9 transition-opacity focus-visible:opacity-100 sm:size-7 sm:opacity-0 sm:group-hover:opacity-100"
                   onClick={() => handleDelete(photo.id)}
                   disabled={isPending}
                   aria-label="Delete photo"
                 >
-                  <Trash2 className="h-3 w-3" />
+                  <Trash2 className="size-3.5" />
                 </Button>
               </div>
             ))}

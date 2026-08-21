@@ -158,7 +158,7 @@ export function TripDetail({
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
           <Link href="/portal/entertainment/travel-planner">
-            <ArrowLeft className="mr-1 h-4 w-4" /> All trips
+            <ArrowLeft className="mr-1 size-4" /> All trips
           </Link>
         </Button>
       </div>
@@ -190,11 +190,11 @@ export function TripDetail({
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
               {trip.destination && (
                 <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4" /> {trip.destination}
+                  <MapPin className="size-4" /> {trip.destination}
                 </span>
               )}
               <span className="inline-flex items-center gap-1.5">
-                <CalendarDays className="h-4 w-4" />
+                <CalendarDays className="size-4" />
                 <Mono>{formatDateRange(trip.startDate, trip.endDate)}</Mono>
               </span>
             </div>
@@ -219,7 +219,7 @@ export function TripDetail({
           </div>
           <div className="absolute right-4 top-4 flex gap-2">
             <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}>
-              <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+              <Pencil className="mr-1 size-3.5" /> Edit
             </Button>
             <Button
               size="sm"
@@ -228,7 +228,7 @@ export function TripDetail({
               onClick={() => setConfirmDelete(true)}
               aria-label="Delete trip"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="size-3.5" />
             </Button>
           </div>
         </div>

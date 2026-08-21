@@ -237,3 +237,28 @@ body {
     font-variant-numeric: tabular-nums;
   }
 }
+/**
+ * A calendar bar's label slides into view while the pointer is on it.
+ *
+ * The component measures the overflow and sets the two custom properties;
+ * this only owns the motion. Nothing moves for a label that already fits —
+ * `[data-marquee]` is absent in that case — and nothing moves at all for a
+ * reader who has asked for less of it.
+ */
+@keyframes trip-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--marquee-shift, 0));
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .group\/bar:hover [data-marquee="true"] > span,
+  .group\/bar:focus-visible [data-marquee="true"] > span,
+  [data-marquee="true"]:hover > span {
+    animation: trip-marquee var(--marquee-duration, 3s) ease-in-out infinite
+      alternate;
+  }
+}

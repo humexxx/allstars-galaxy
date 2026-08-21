@@ -40,3 +40,14 @@ if (typeof global.fetch === "function") {
     vi.fn(() => Promise.reject(new Error("fetch is disabled in unit tests"))),
   );
 }
+
+// jsdom ships no ResizeObserver, and components that measure their own text
+// (MarqueeText) observe one. A no-op keeps them mountable; the tests that care
+// about the measurement stage the widths themselves.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}

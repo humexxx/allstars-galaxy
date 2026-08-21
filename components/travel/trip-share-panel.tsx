@@ -8,7 +8,12 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import { Mono, Text } from "@/components/ui/typography";
 import { Badge } from "@/components/ui/badge";
@@ -101,24 +106,22 @@ export function TripSharePanel({
           <Label htmlFor="share-email" className="text-xs">
             Generate a private link
           </Label>
-          <div className="flex gap-2">
-            <Input
+          <InputGroup>
+            <InputGroupInput
               id="share-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="friend@example.com (optional)"
+              placeholder="friend@example.com"
               disabled={creating}
             />
-            <Button type="submit" disabled={creating}>
-              {creating ? (
-                <Loader2 className="mr-1 size-4 animate-spin" />
-              ) : (
-                <Link2 className="mr-1 size-4" />
-              )}
-              {scopeName ? `Link for ${scopeName.split(" ")[0]}` : "Create link"}
-            </Button>
-          </div>
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton type="submit" variant="default" disabled={creating}>
+                {creating ? <Loader2 className="animate-spin" /> : <Link2 />}
+                {scopeName ? `For ${scopeName.split(" ")[0]}` : "Create"}
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
           {/* Said before the click, not after: which traveller a link exposes
               is not something to discover from the result. */}
           <Text variant="small">
@@ -250,21 +253,22 @@ function ShareRow({
           <Trash2 className="size-3.5" />
         </Button>
       </div>
-      <div className="flex items-center gap-1">
-        <Mono className="flex-1 truncate rounded border bg-background px-2 py-1 text-2xs">
-          {url}
-        </Mono>
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          className="size-9 sm:size-7"
-          onClick={onCopy}
-          aria-label="Copy link"
-        >
-          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-        </Button>
-      </div>
+      {/* One control instead of a box that looks like a field sitting next to
+          a button that is not part of it. The link stays selectable, and the
+          thing you actually want — copy — is inside it. */}
+      <InputGroup className="h-8">
+        <InputGroupInput readOnly value={url} className="font-mono text-2xs" />
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton
+            type="button"
+            size="icon-xs"
+            onClick={onCopy}
+            aria-label={copied ? "Copied" : "Copy link"}
+          >
+            {copied ? <Check /> : <Copy />}
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
     </li>
   );
 }

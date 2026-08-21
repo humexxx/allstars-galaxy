@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { moneyRange } from "@/lib/travel/format";
+import { MarqueeText } from "./marquee-text";
 
 import type { TripWithRelations } from "@/types/travel";
 import { categoryMeta } from "./category";
@@ -43,7 +44,6 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
  */
 const LANE_TOP = 22;
 const LANE_HEIGHT = 22;
-const COST_LINE = 16;
 const MIN_CELL = 64;
 
 /** Static so Tailwind can see them; arbitrary values would not be generated. */
@@ -97,17 +97,22 @@ export function TripCalendar({
   const weeks = useMemo(() => monthWeeks(month), [month]);
   const byId = useMemo(() => new Map(trip.items.map((i) => [i.id, i])), [trip.items]);
 
-  /** Cost lands on the day an item starts, not smeared across its run. */
-  const costByDay = useMemo(() => {
-    const map = new Map<string, { low: number; high: number }>();
+  /**
+   * What each item costs, on the item rather than on the day.
+   *
+   * The figure used to sit in the day cell, which meant a day with two
+   * bookings showed one number belonging to neither. On the bar it is
+   * unambiguous, and the day keeps the room the number was taking.
+   */
+  const costByItem = useMemo(() => {
+    const map = new Map<string, string>();
     for (const item of trip.items) {
-      if (!item.scheduledOn || item.price === null) continue;
+      if (item.price === null) continue;
       const c = readerCost(item, partySize, viewer);
-      const at = map.get(item.scheduledOn) ?? { low: 0, high: 0 };
-      map.set(item.scheduledOn, { low: at.low + c.low, high: at.high + c.high });
+      if (c.high > 0) map.set(item.id, moneyRange(c.low, c.high, trip.currency));
     }
     return map;
-  }, [trip.items, partySize, viewer]);
+  }, [trip.items, partySize, viewer, trip.currency]);
 
   const today = isoDay(new Date());
   const tripEnd = trip.endDate ?? trip.startDate;
@@ -173,16 +178,14 @@ export function TripCalendar({
         {weeks.map((week) => {
           const segments = layOutWeek(week, items);
           const lanes = segments.reduce((n, seg) => Math.max(n, seg.lane + 1), 0);
-          const showsCost = week.some((d) => (costByDay.get(d)?.high ?? 0) > 0);
           const cellHeight = Math.max(
             MIN_CELL,
-            LANE_TOP + lanes * LANE_HEIGHT + (showsCost ? COST_LINE : 4) + 4
+            LANE_TOP + lanes * LANE_HEIGHT + 6
           );
           return (
             <div key={week[0]} className="relative">
               <div className="grid grid-cols-7 gap-1">
                 {week.map((day) => {
-                  const cost = costByDay.get(day);
                   const thisMonth = day.slice(0, 7) === month;
                   return (
                     <div
@@ -206,11 +209,6 @@ export function TripCalendar({
                       >
                         {Number(day.slice(-2))}
                       </Mono>
-                      {cost && cost.high > 0 && (
-                        <Mono className="mt-auto hidden truncate text-2xs text-muted-foreground sm:block">
-                          {moneyRange(cost.low, cost.high, trip.currency)}
-                        </Mono>
-                      )}
                     </div>
                   );
                 })}
@@ -227,12 +225,13 @@ export function TripCalendar({
                   const meta = categoryMeta(seg.item.category);
                   const full = byId.get(seg.item.id);
                   const runs = occupiedRuns(seg.item);
+                  const price = costByItem.get(seg.item.id);
                   return (
                     <div
                       key={`${seg.item.id}-${seg.start}-${seg.lane}`}
                       style={{ gridRow: seg.lane + 1, height: LANE_HEIGHT - 4 }}
                       className={cn(
-                        "pointer-events-auto flex min-w-0 items-center gap-1 overflow-hidden px-1",
+                        "group/bar pointer-events-auto flex min-w-0 items-center gap-1 overflow-hidden px-1",
                         meta.bar,
                         COL_START[seg.start],
                         COL_SPAN[seg.span - 1],
@@ -251,9 +250,15 @@ export function TripCalendar({
                     >
                       <meta.Icon className="hidden size-3 shrink-0 sm:block" />
                       {seg.opensRun && (
-                        <Text className="hidden truncate text-2xs font-medium leading-none sm:block">
-                          {seg.item.title}
-                        </Text>
+                        // Title and price are one label, not two boxes
+                        // competing for a bar that can be a single day wide.
+                        // Pinned to the right, the price ate the title
+                        // whole — a flight read "$600 – $" and never said
+                        // where it went. As one string the wide bars show
+                        // everything and the narrow ones reveal it on hover.
+                        <MarqueeText className="hidden text-2xs font-medium leading-none sm:block">
+                          {price ? `${seg.item.title} · ${price}` : seg.item.title}
+                        </MarqueeText>
                       )}
                     </div>
                   );

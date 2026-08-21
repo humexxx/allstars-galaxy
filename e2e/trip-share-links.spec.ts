@@ -53,17 +53,18 @@ test.describe("Travel planner — share links", () => {
     await page.goto(url);
     await page.waitForSelector("main header");
 
-    const rows = page.locator("main .font-mono").filter({ hasText: "/trips/" });
-    await page.getByRole("button", { name: /Create link/i }).click();
+    const rows = page.locator("main input[readonly]");
+    await page.getByRole("button", { name: /^Create$/i }).click();
     await expect(rows).toHaveCount(1, { timeout: 15_000 });
-    const anyoneLink = (await rows.first().innerText()).trim();
+    const anyoneLink = (await rows.first().inputValue()).trim();
 
     await page.getByTitle(/Bruno Fabián/).click();
-    await page.getByRole("button", { name: /Link for/i }).click();
+    await page.getByRole("button", { name: /^For /i }).click();
     await expect(rows).toHaveCount(2, { timeout: 15_000 });
-    const brunoLink = (await rows.allInnerTexts())
-      .map((t) => t.trim())
-      .find((t) => t !== anyoneLink)!;
+    const values = await rows.evaluateAll((els) =>
+      els.map((e) => (e as HTMLInputElement).value.trim())
+    );
+    const brunoLink = values.find((v) => v !== anyoneLink)!;
 
     // Both links are labelled with what they expose, so two links to one trip
     // are told apart without opening them.

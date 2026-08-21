@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { TripCalendar } from "./trip-calendar";
@@ -78,17 +78,23 @@ describe("TripCalendar", () => {
 
   it("names an item on the day it begins and only threads it after", () => {
     // Repeating "Star of the Seas" for eight days says nothing and crowds out
-    // the days that have something new on them.
-    render(<TripCalendar trip={trip([CRUISE])} />);
+    // the days that have something new on them. The run crosses a week
+    // boundary, so there are two bars and only the first carries the label.
+    const { container } = render(<TripCalendar trip={trip([CRUISE])} />);
+    const labelled = [...container.querySelectorAll("[title]")].filter((b) =>
+      b.textContent?.includes("Star of the Seas")
+    );
 
-    expect(screen.getAllByText("Star of the Seas")).toHaveLength(1);
+    expect(labelled).toHaveLength(1);
   });
 
-  it("charges a day's cost to the day the item starts", () => {
-    render(<TripCalendar trip={trip([CRUISE])} partySize={2} />);
+  it("puts the price on the bar it belongs to, not on the day", () => {
+    // A day with two bookings showed one number in the cell belonging to
+    // neither. On the bar it is unambiguous.
+    const { container } = render(<TripCalendar trip={trip([CRUISE])} partySize={2} />);
 
-    const cell = screen.getByText("17").closest("div")!;
-    expect(within(cell).getByText("$3,800")).toBeInTheDocument();
+    const bar = container.querySelector('[title*="Star of the Seas"]')!;
+    expect(bar.textContent).toContain("Star of the Seas · $3,800");
   });
 
   it("re-costs the calendar for the selected traveller", () => {
@@ -104,8 +110,8 @@ describe("TripCalendar", () => {
       />
     );
 
-    const cell = screen.getByText("17").closest("div")!;
-    expect(within(cell).getByText("$1,900")).toBeInTheDocument();
+    const bar = document.querySelector('[title*="Star of the Seas"]')!;
+    expect(bar.textContent).toContain("$1,900");
     expect(screen.getByText("Bruno Fabián's share")).toBeInTheDocument();
   });
 

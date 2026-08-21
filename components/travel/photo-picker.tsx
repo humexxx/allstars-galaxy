@@ -6,6 +6,12 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Text } from "@/components/ui/typography";
@@ -127,7 +133,7 @@ export function PhotoPicker({
 
   if (variant === "compact") {
     return (
-      <div className="flex flex-wrap items-center gap-2">
+      <>
         <input
           ref={fileRef}
           type="file"
@@ -138,39 +144,45 @@ export function PhotoPicker({
             if (f) handleFile(f);
           }}
         />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled || busy}
-          onClick={() => fileRef.current?.click()}
-        >
-          {busy ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : <Upload className="mr-1 size-3.5" />}
-          Upload
-        </Button>
-        <Input
-          placeholder="…or paste image URL"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              handleUrlAdd();
-            }
-          }}
-          disabled={disabled || busy}
-          className="h-8 max-w-xs"
-        />
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={disabled || busy || !url.trim()}
-          onClick={handleUrlAdd}
-        >
-          Add
-        </Button>
-      </div>
+        {/* One control, not three stacked ones. Upload, paste and add are
+            three ways to do the same thing, and a narrow side column wrapped
+            them onto three lines as though they were three steps. */}
+        <InputGroup>
+          <InputGroupAddon>
+            <InputGroupButton
+              type="button"
+              size="icon-xs"
+              disabled={disabled || busy}
+              onClick={() => fileRef.current?.click()}
+              aria-label="Upload an image"
+              title="Upload an image"
+            >
+              {busy ? <Loader2 className="animate-spin" /> : <Upload />}
+            </InputGroupButton>
+          </InputGroupAddon>
+          <InputGroupInput
+            placeholder="Paste an image URL"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleUrlAdd();
+              }
+            }}
+            disabled={disabled || busy}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              type="button"
+              disabled={disabled || busy || !url.trim()}
+              onClick={handleUrlAdd}
+            >
+              Add
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      </>
     );
   }
 

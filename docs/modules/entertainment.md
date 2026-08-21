@@ -68,6 +68,13 @@ NBA and NFL still use mocks.
   list answers *what is the plan*, the calendar answers *what does the month
   look like*. `TripCalendar` draws a whole month with arrows either side and a
   **Trip** button back to the trip's own month.
+- **A bar's label is one string — `title · price`, not two boxes.** Pinned to
+  the right, the price ate the title on any bar a single day wide: a flight
+  read *"$600 – $"* and never said where it went. As one label the wide bars
+  show everything and the narrow ones reveal it on hover, via
+  [`MarqueeText`](../../components/travel/marquee-text.tsx), which measures the
+  overflow and leaves a label that already fits completely alone. It respects
+  `prefers-reduced-motion`.
 - **A calendar run is a badge, not a hairline.** Soft wash + full-strength
   label + a ring, because the two things that would give it more weight both
   cost legibility: a solid fill needs white text, and amber (3.19:1), sky

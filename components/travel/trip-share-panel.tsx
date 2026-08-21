@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mono, Text } from "@/components/ui/typography";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 import {
@@ -23,13 +24,21 @@ import type { TripShare, TripWithRelations } from "@/types/travel";
 type TripSharePanelProps = {
   trip: TripWithRelations;
   baseUrl: string;
+  /** Traveller in focus upstairs. A link created now carries their view. */
+  scopeToMemberId?: string | null;
+  scopeName?: string | null;
 };
 
 function shareUrl(baseUrl: string, token: string): string {
   return `${baseUrl.replace(/\/$/, "")}/trips/${token}`;
 }
 
-export function TripSharePanel({ trip, baseUrl }: TripSharePanelProps) {
+export function TripSharePanel({
+  trip,
+  baseUrl,
+  scopeToMemberId = null,
+  scopeName = null,
+}: TripSharePanelProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [creating, startCreate] = useTransition();
@@ -45,6 +54,7 @@ export function TripSharePanel({ trip, baseUrl }: TripSharePanelProps) {
     startCreate(async () => {
       const res = await createTripShareAction(trip.id, {
         inviteeEmail: trimmed || null,
+        memberId: scopeToMemberId,
       });
       if (res.success && res.data) {
         const url = shareUrl(baseUrl, res.data.token);
@@ -107,9 +117,27 @@ export function TripSharePanel({ trip, baseUrl }: TripSharePanelProps) {
               ) : (
                 <Link2 className="mr-1 h-4 w-4" />
               )}
-              Create link
+              {scopeName ? `Link for ${scopeName.split(" ")[0]}` : "Create link"}
             </Button>
           </div>
+          {/* Said before the click, not after: which traveller a link exposes
+              is not something to discover from the result. */}
+          <Text variant="small">
+            {scopeToMemberId && scopeName ? (
+              <>
+                This link will show{" "}
+                <span className="font-medium text-foreground">{scopeName}&apos;s</span>{" "}
+                share of each cost — not the trip totals, and not the other
+                travellers. Pick <span className="font-medium text-foreground">All</span>{" "}
+                above the cover photo for a link to the whole trip.
+              </>
+            ) : (
+              <>
+                This link will show the plan without any prices. Pick a traveller above
+                the cover photo first to send somebody their own share instead.
+              </>
+            )}
+          </Text>
           <Text variant="small">
             The email is just a label — we don&apos;t send a message. Copy the link and share it
             on WhatsApp, X, Slack or Instagram and the preview card will appear automatically.
@@ -127,6 +155,9 @@ export function TripSharePanel({ trip, baseUrl }: TripSharePanelProps) {
                   share={share}
                   baseUrl={baseUrl}
                   copied={copiedToken === share.token}
+                  memberName={
+                    trip.members.find((m) => m.id === share.memberId)?.name ?? null
+                  }
                   onCopy={() => handleCopy(share.token)}
                 />
               ))}
@@ -168,12 +199,15 @@ function ShareRow({
   share,
   baseUrl,
   copied,
+  memberName,
   onCopy,
 }: {
   tripId: string;
   share: TripShare;
   baseUrl: string;
   copied: boolean;
+  /** Traveller this link is scoped to, or null for the whole trip. */
+  memberName: string | null;
   onCopy: () => void;
 }) {
   const router = useRouter();
@@ -195,8 +229,15 @@ function ShareRow({
   return (
     <li className="space-y-1 rounded-md border bg-muted/30 p-2">
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="truncate font-medium">
-          {share.inviteeEmail ?? "Anyone with the link"}
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-medium">
+            {share.inviteeEmail ?? "Anyone with the link"}
+          </span>
+          {/* Two links to the same trip can show completely different money.
+              Which is which cannot live only in the owner's memory. */}
+          <Badge variant="outline" className="shrink-0 text-2xs font-normal">
+            {memberName ?? "Whole trip"}
+          </Badge>
         </span>
         <Button
           type="button"

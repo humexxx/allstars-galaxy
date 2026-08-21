@@ -138,6 +138,17 @@ function CategoryIcon({
   );
 }
 
+/**
+ * Width of a row's trailing controls, and of the spacer that stands in for
+ * them in the day header.
+ *
+ * The two must agree or the money does not line up: the buttons hold their
+ * space even while invisible, so the item prices sat inset while the day
+ * subtotal ran to the card's edge. Declaring the width once is what keeps the
+ * header honest — w-20 clears two h-9 touch targets, sm:w-16 two h-7 ones.
+ */
+const ACTIONS_WIDTH = "w-20 sm:w-16";
+
 const NO_DATE_KEY = "__no_date__";
 
 /**
@@ -276,13 +287,18 @@ export function TripItinerary({
 
         {groups.map((group) => (
           <section key={group.key} className="space-y-2">
-            <div className="flex items-end justify-between border-b pb-1">
-              <Heading level="h6" as="h3">{group.label}</Heading>
-              {group.high > 0 && (
-                <Mono className="text-xs text-muted-foreground">
-                  {moneyRange(group.low, group.high, trip.currency)}
-                </Mono>
-              )}
+            <div className="flex items-end gap-3 border-b pb-1">
+              <div className="flex min-w-0 flex-1 items-end justify-between gap-2">
+                <Heading level="h6" as="h3">{group.label}</Heading>
+                {group.high > 0 && (
+                  <Mono className="shrink-0 text-xs text-muted-foreground">
+                    {moneyRange(group.low, group.high, trip.currency)}
+                  </Mono>
+                )}
+              </div>
+              {/* Stands where each row's buttons stand, so this subtotal lands
+                  in the same column as the prices it adds up. */}
+              <span className={cn("shrink-0", ACTIONS_WIDTH)} aria-hidden />
             </div>
             <ul className="divide-y">
               {group.items.map((item) => (
@@ -360,7 +376,7 @@ function ItemRow({
           <Text weight="medium" className="truncate">{item.title}</Text>
           {item.price && (
             <span className="shrink-0 text-right">
-              <Mono className="block text-xs font-medium">
+              <Mono className="block whitespace-nowrap text-xs font-medium">
                 {moneyRange(mine.low, mine.high, currency)}
               </Mono>
               {viewer ? (
@@ -374,7 +390,7 @@ function ItemRow({
                   {/* Show the arithmetic. A hotel that reads $400 when you
                       typed $200 looks wrong until you can see the x2. */}
                   {cost.times > 1 && (
-                    <Mono className="block text-2xs text-muted-foreground">
+                    <Mono className="block whitespace-nowrap text-2xs text-muted-foreground">
                       {formatTripMoney(cost.unitLow ?? 0, currency)}
                       {cost.unitHigh !== null && cost.unitHigh > (cost.unitLow ?? 0) && (
                         <>–{formatTripMoney(cost.unitHigh, currency)}</>
@@ -431,8 +447,15 @@ function ItemRow({
           </div>
         )}
       </div>
-      {/* Always visible on touch (no hover); hover/focus-revealed on desktop. */}
-      <div className="flex shrink-0 gap-0.5 transition-opacity sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover:opacity-100">
+      {/* Always visible on touch (no hover); hover/focus-revealed on desktop.
+          Fixed width even when invisible — see ACTIONS_WIDTH. */}
+      <div
+        className={cn(
+          "flex shrink-0 justify-end gap-0.5 transition-opacity",
+          "sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover:opacity-100",
+          ACTIONS_WIDTH
+        )}
+      >
         <Button
           size="icon"
           variant="ghost"

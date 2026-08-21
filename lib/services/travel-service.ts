@@ -3,11 +3,12 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { cache } from "react";
 
-import { and, asc, eq, isNull, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, notInArray } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
   trips,
+  tripContributions,
   tripItems,
   tripItemStops,
   tripMembers,
@@ -18,8 +19,10 @@ import type {
   DashboardTravelFeaturedTrip,
   DashboardTravelSummary,
   DashboardTravelTripState,
+  PublicTripScope,
   PublicTripView,
   Trip,
+  TripContribution,
   TripItem,
   TripPhoto,
   TripShare,
@@ -28,11 +31,14 @@ import type {
 import type {
   CreateTripInput,
   CreateTripShareInput,
+  TripContributionInput,
   TripItemInput,
   TripPhotoInput,
   UpdateTripInput,
   UpdateTripItemInput,
 } from "@/schemas/travel";
+
+import { splitTrip } from "@/lib/travel/split";
 
 import { ensureOwnedRow } from "./ownership";
 
@@ -46,6 +52,24 @@ async function ensureTripOwnership(tripId: string, userId: string): Promise<void
     userId,
     entity: "Trip",
   });
+}
+
+/**
+ * A member id is only meaningful inside its own trip.
+ *
+ * The foreign key proves the row exists; it says nothing about *which* trip it
+ * belongs to. Scoping a share or a payment to a member borrowed from another
+ * trip would otherwise be accepted.
+ */
+async function ensureMemberBelongsToTrip(
+  memberId: string,
+  tripId: string
+): Promise<void> {
+  const [row] = await db
+    .select({ id: tripMembers.id })
+    .from(tripMembers)
+    .where(and(eq(tripMembers.id, memberId), eq(tripMembers.tripId, tripId)));
+  if (!row) throw new Error("Traveller not found on this trip");
 }
 
 // URL-safe random token. 24 bytes → 32 chars base64url, ~192 bits of entropy.
@@ -95,7 +119,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     .where(and(eq(trips.id, tripId), eq(trips.userId, userId)));
   if (!trip) return null;
 
-  const [items, photos, shares, stops, members] = await Promise.all([
+  const [items, photos, shares, stops, members, contributions] = await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -137,6 +161,13 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       .from(tripMembers)
       .where(eq(tripMembers.tripId, tripId))
       .orderBy(asc(tripMembers.sortOrder), asc(tripMembers.createdAt)),
+    db
+      .select()
+      .from(tripContributions)
+      .where(eq(tripContributions.tripId, tripId))
+      // Newest first: a payment log is read from the top, and the question it
+      // answers is "did the last one land", not "what happened first".
+      .orderBy(desc(tripContributions.paidOn), desc(tripContributions.createdAt)),
   ]);
 
   const stopsByItem = new Map<string, typeof stops>();
@@ -151,6 +182,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     items: items.map((i) => ({ ...i, stops: stopsByItem.get(i.id) ?? [] })),
     photos,
     shares,
+    contributions,
     members: members.map((m) => ({
       ...m,
       sharePercent: m.sharePercent === null ? null : Number(m.sharePercent),
@@ -322,12 +354,19 @@ export async function createTripShare(
   data: CreateTripShareInput
 ): Promise<TripShare> {
   await ensureTripOwnership(tripId, userId);
+  if (data.memberId) await ensureMemberBelongsToTrip(data.memberId, tripId);
+
   const [row] = await db
     .insert(tripShares)
     .values({
       tripId,
       token: generateShareToken(),
       inviteeEmail: data.inviteeEmail ?? null,
+      memberId: data.memberId ?? null,
+      // A link scoped to one traveller exists to show that traveller their
+      // own bill, so it carries prices unless the caller says otherwise. An
+      // unscoped link keeps the cautious default.
+      showPrices: data.showPrices ?? Boolean(data.memberId),
       expiresAt: data.expiresAt ?? null,
     })
     .returning();
@@ -355,6 +394,53 @@ export async function deleteTripShare(
   await db
     .delete(tripShares)
     .where(and(eq(tripShares.id, shareId), eq(tripShares.tripId, tripId)));
+}
+
+// ---------- contributions ----------
+
+/**
+ * Records money a traveller has actually handed over.
+ *
+ * The member is re-checked against this trip rather than trusted from the
+ * request. The foreign key only proves the id names *a* member somewhere —
+ * without this check a caller could credit a payment against a stranger's
+ * trip and read the balance back through their own.
+ */
+export async function addTripContribution(
+  userId: string,
+  tripId: string,
+  data: TripContributionInput
+): Promise<TripContribution> {
+  await ensureTripOwnership(tripId, userId);
+  await ensureMemberBelongsToTrip(data.memberId, tripId);
+
+  const [row] = await db
+    .insert(tripContributions)
+    .values({
+      tripId,
+      memberId: data.memberId,
+      amount: data.amount,
+      note: data.note ?? null,
+      paidOn: data.paidOn ?? todayIso(),
+    })
+    .returning();
+  return row;
+}
+
+export async function deleteTripContribution(
+  userId: string,
+  tripId: string,
+  contributionId: string
+): Promise<void> {
+  await ensureTripOwnership(tripId, userId);
+  await db
+    .delete(tripContributions)
+    .where(
+      and(
+        eq(tripContributions.id, contributionId),
+        eq(tripContributions.tripId, tripId)
+      )
+    );
 }
 
 /**
@@ -398,8 +484,87 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
       .orderBy(asc(tripPhotos.sortOrder), asc(tripPhotos.createdAt)),
   ]);
 
-  return { trip, items, photos, share };
+  return {
+    trip,
+    items,
+    photos,
+    share,
+    scope: share.memberId ? await buildScope(trip.id, share.memberId) : null,
+  };
 });
+
+/**
+ * One traveller's own view of the trip, worked out here rather than in the
+ * browser.
+ *
+ * Splitting the cost needs every member — their count sets the party size and
+ * their percentages set the shares — but only the named traveller's figures
+ * are returned. Sending the full member list to the page and filtering there
+ * would put the other travellers' names and balances in the payload of a link
+ * created specifically to hide them.
+ */
+async function buildScope(
+  tripId: string,
+  memberId: string
+): Promise<PublicTripScope | null> {
+  const [members, items, paidRows] = await Promise.all([
+    db
+      .select({
+        id: tripMembers.id,
+        name: tripMembers.name,
+        sharePercent: tripMembers.sharePercent,
+      })
+      .from(tripMembers)
+      .where(eq(tripMembers.tripId, tripId))
+      .orderBy(asc(tripMembers.sortOrder), asc(tripMembers.createdAt)),
+    db.select().from(tripItems).where(eq(tripItems.tripId, tripId)),
+    db
+      .select({ amount: tripContributions.amount })
+      .from(tripContributions)
+      .where(
+        and(
+          eq(tripContributions.tripId, tripId),
+          eq(tripContributions.memberId, memberId)
+        )
+      ),
+  ]);
+
+  const me = members.find((m) => m.id === memberId);
+  // The traveller was removed from the trip after the link went out. The
+  // column is ON DELETE SET NULL so this is nearly unreachable, but a link
+  // that silently reports somebody else's bill would be far worse than one
+  // that falls back to the trip.
+  if (!me) return null;
+
+  const shares = splitTrip(
+    items.map((i) => ({
+      id: i.id,
+      title: i.title,
+      price: i.price,
+      priceMax: i.priceMax,
+      priceUnit: i.priceUnit,
+      scheduledOn: i.scheduledOn,
+      endsOn: i.endsOn,
+      payerIds: [],
+    })),
+    members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      sharePercent: m.sharePercent === null ? null : Number(m.sharePercent),
+    }))
+  );
+
+  const mine = shares.find((sh) => sh.memberId === memberId);
+  if (!mine) return null;
+
+  return {
+    memberName: me.name,
+    lines: mine.lines.map((l) => ({ itemId: l.itemId, low: l.low, high: l.high })),
+    owedLow: mine.owedLow,
+    owedHigh: mine.owedHigh,
+    paid: paidRows.reduce((sum, r) => sum + parseFloat(r.amount ?? "0"), 0),
+  };
+}
 
 // ---------- Dashboard summary ----------
 

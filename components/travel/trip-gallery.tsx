@@ -75,17 +75,20 @@ export function TripGallery({ trip }: TripGalleryProps) {
             No photos yet — pick a few to show in the shared view.
           </Text>
         ) : (
-          <div className="grid grid-cols-3 gap-2">
+          // One row that scrolls sideways. A grid grew a new row for every
+          // three photos and pushed everything below it down the page; a rail
+          // costs the same height whether the trip has four photos or forty.
+          <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1">
             {trip.photos.map((photo) => (
               <div
                 key={photo.id}
-                className="group relative aspect-square overflow-hidden rounded-md border bg-muted"
+                className="group relative aspect-square w-28 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
               >
                 <Image
                   src={photo.url}
                   alt={photo.caption ?? "Trip photo"}
                   fill
-                  sizes="(max-width: 768px) 33vw, 200px"
+                  sizes="112px"
                   className="object-cover"
                   // Gallery photos may be external URLs (see schema:
                   // `tripPhotoSourceEnum`). `unoptimized` sidesteps

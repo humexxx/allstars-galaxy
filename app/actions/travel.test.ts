@@ -362,7 +362,7 @@ describe("deleteTripPhotoAction", () => {
 
 describe("createTripShareAction", () => {
   it("creates the share and logs with inviteeEmail metadata", async () => {
-    const row = { id: SHARE_ID } as unknown as Awaited<
+    const row = { id: SHARE_ID, showPrices: false } as unknown as Awaited<
       ReturnType<typeof createTripShare>
     >;
     vi.mocked(createTripShare).mockResolvedValueOnce(row);
@@ -383,7 +383,13 @@ describe("createTripShareAction", () => {
         action: "tripShare.create",
         entityTable: "trip_shares",
         entityId: SHARE_ID,
-        metadata: { inviteeEmail: "guest@example.com" },
+        // Which traveller a link exposes, and whether it carries money, are
+        // the two things an audit entry about a share needs to record.
+        metadata: {
+          inviteeEmail: "guest@example.com",
+          memberId: null,
+          showPrices: false,
+        },
       })
     );
     expect(revalidatePath).toHaveBeenCalledWith(tripPath(TRIP_ID));

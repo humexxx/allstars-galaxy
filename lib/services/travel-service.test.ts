@@ -212,8 +212,10 @@ describe("getTripWithRelations", () => {
     // rather than one query per item.
     expect(out?.items).toEqual([{ ...items[0], stops }]);
     expect(out?.members).toEqual(members);
-    // 1 for the trip + 5 parallel queries for relations
-    expect(dbMock.select).toHaveBeenCalledTimes(6);
+    // 1 for the trip + 6 parallel queries for relations. The count is the
+    // point: every relation is one query for the whole trip, so adding a
+    // relation must not add a query per row.
+    expect(dbMock.select).toHaveBeenCalledTimes(7);
   });
 });
 
@@ -425,6 +427,64 @@ describe("createTripShare", () => {
   });
 });
 
+describe("createTripShare — scoped to one traveller", () => {
+  it("refuses a traveller who belongs to somebody else's trip", async () => {
+    // The foreign key proves the member row exists; it says nothing about
+    // which trip it is on. Without this check a member id lifted from another
+    // trip would be accepted and the link would resolve against it.
+    queueSelect([{ userId: USER_ID }]); // ownership
+    queueSelect([]); // membership lookup finds nothing on THIS trip
+
+    await expect(
+      createTripShare(USER_ID, TRIP_ID, {
+        memberId: "11111111-1111-1111-1111-111111111111",
+      } as unknown as Parameters<typeof createTripShare>[2])
+    ).rejects.toThrow(/not found on this trip/i);
+
+    expect(dbMock.insert).not.toHaveBeenCalled();
+  });
+
+  it("carries prices when it is scoped, and hides them when it is not", async () => {
+    // A link that names one traveller exists to show that traveller their own
+    // bill. Inheriting the cautious default would hide the only thing the
+    // scoping was for.
+    queueSelect([{ userId: USER_ID }]);
+    queueSelect([{ id: "m1" }]);
+    queueInsert([{ id: "s1" }]);
+
+    await createTripShare(USER_ID, TRIP_ID, {
+      memberId: "m1",
+    } as unknown as Parameters<typeof createTripShare>[2]);
+
+    const call = dbMock.insert.mock.results[0]?.value as unknown as {
+      values: { mock: { calls: unknown[][] } };
+    };
+    const payload = call.values.mock.calls[0][0] as {
+      memberId: string | null;
+      showPrices: boolean;
+    };
+    expect(payload).toMatchObject({ memberId: "m1", showPrices: true });
+  });
+
+  it("leaves an unscoped link with prices hidden", async () => {
+    queueSelect([{ userId: USER_ID }]);
+    queueInsert([{ id: "s2" }]);
+
+    await createTripShare(USER_ID, TRIP_ID, {
+      inviteeEmail: null,
+    } as unknown as Parameters<typeof createTripShare>[2]);
+
+    const call = dbMock.insert.mock.results[0]?.value as unknown as {
+      values: { mock: { calls: unknown[][] } };
+    };
+    const payload = call.values.mock.calls[0][0] as {
+      memberId: string | null;
+      showPrices: boolean;
+    };
+    expect(payload).toMatchObject({ memberId: null, showPrices: false });
+  });
+});
+
 describe("revokeTripShare", () => {
   it("sets revokedAt on the share after ownership check", async () => {
     queueSelect([{ userId: USER_ID }]);
@@ -482,6 +542,77 @@ describe("getPublicTripByToken", () => {
     expect(out?.trip).toEqual(trip);
     expect(out?.items).toEqual(items);
     expect(out?.photos).toEqual(photos);
+  });
+
+  it("hands a scoped link one traveller's figures and nobody else's", async () => {
+    // The whole point of scoping. Every member is needed to work out the
+    // split — their count sets the party size — but only the named
+    // traveller's numbers may leave the server. Filtering in the browser
+    // would put the others in the payload of a link created to hide them.
+    const share = {
+      id: "s-1", tripId: TRIP_ID, token: "tok", revokedAt: null, expiresAt: null,
+      inviteeEmail: null, memberId: "bruno", showPrices: true, createdAt: new Date(),
+    };
+    const items = [
+      { id: "i-1", tripId: TRIP_ID, title: "Flight", price: "600.00",
+        priceMax: "800.00", priceUnit: "total", scheduledOn: null, endsOn: null },
+    ];
+
+    queueSelect([share]);
+    queueSelect([tripFixture()]);
+    queueSelect(items);
+    queueSelect([]); // photos
+    // buildScope: members, items, contributions
+    queueSelect([
+      { id: "jason", name: "Jason Hume", sharePercent: null },
+      { id: "bruno", name: "Bruno Fabián", sharePercent: null },
+    ]);
+    queueSelect(items);
+    queueSelect([{ amount: "300.00" }]);
+
+    const out = await getPublicTripByToken("tok");
+
+    expect(out?.scope).toEqual({
+      memberName: "Bruno Fabián",
+      lines: [{ itemId: "i-1", low: 300, high: 400 }],
+      owedLow: 300,
+      owedHigh: 400,
+      paid: 300,
+    });
+    // Jason is nowhere in what crosses the boundary.
+    expect(JSON.stringify(out)).not.toContain("Jason");
+  });
+
+  it("leaves an unscoped link with no traveller attached", async () => {
+    queueSelect([
+      { id: "s-1", tripId: TRIP_ID, token: "tok", revokedAt: null, expiresAt: null,
+        inviteeEmail: null, memberId: null, showPrices: false, createdAt: new Date() },
+    ]);
+    queueSelect([tripFixture()]);
+    queueSelect([]);
+    queueSelect([]);
+
+    const out = await getPublicTripByToken("tok");
+    expect(out?.scope).toBeNull();
+  });
+
+  it("falls back to the whole trip when the scoped traveller is gone", async () => {
+    // The column is ON DELETE SET NULL so this is nearly unreachable, but a
+    // link that quietly reports somebody else's bill would be far worse than
+    // one that widens.
+    queueSelect([
+      { id: "s-1", tripId: TRIP_ID, token: "tok", revokedAt: null, expiresAt: null,
+        inviteeEmail: null, memberId: "ghost", showPrices: true, createdAt: new Date() },
+    ]);
+    queueSelect([tripFixture()]);
+    queueSelect([]);
+    queueSelect([]);
+    queueSelect([{ id: "jason", name: "Jason Hume", sharePercent: null }]);
+    queueSelect([]);
+    queueSelect([]);
+
+    const out = await getPublicTripByToken("tok");
+    expect(out?.scope).toBeNull();
   });
 
   it("returns null when the token does not resolve to a share (or it's revoked)", async () => {

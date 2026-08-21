@@ -140,3 +140,31 @@ describe("category identity", () => {
     }
   });
 });
+
+describe("price column alignment", () => {
+  it("reserves the same width for the row controls and the header spacer", () => {
+    // The controls hold their space even while invisible, so without a
+    // matching spacer the day subtotal ran to the card's edge while the item
+    // prices it sums sat inset from it. The two widths agreeing IS the fix,
+    // so the agreement is what gets asserted rather than either value.
+    const { container } = render(<TripItinerary trip={trip(FRIDAY)} partySize={2} />);
+
+    const spacer = container.querySelector("span[aria-hidden]");
+    const controls = container.querySelector('[aria-label="Edit item"]')?.parentElement;
+
+    const widths = (el: Element | null | undefined) =>
+      (el?.className ?? "").split(/\s+/).filter((c) => /^(sm:)?w-\d/.test(c)).sort();
+
+    expect(widths(spacer)).not.toEqual([]);
+    expect(widths(spacer)).toEqual(widths(controls));
+  });
+
+  it("never breaks a price across two lines", () => {
+    // "$600 –" on one line and "$800" on the next reads as two prices.
+    const { container } = render(<TripItinerary trip={trip(FRIDAY)} partySize={2} />);
+
+    const price = screen.getByText("$600 – $800");
+    expect(price.className).toContain("whitespace-nowrap");
+    expect(container).toBeTruthy();
+  });
+});

@@ -1161,6 +1161,13 @@ export const tripShares = pgTable(
     // segment in the public URL.
     token: text("token").notNull(),
     inviteeEmail: text("invitee_email"),
+    // Scopes the link to one traveller: the public page then shows what THEY
+    // owe rather than what the trip costs. Null is the whole trip. Set null on
+    // delete rather than cascade — removing somebody from the trip should
+    // widen their old link, not silently break it.
+    memberId: uuid("member_id").references(() => tripMembers.id, {
+      onDelete: "set null",
+    }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     // Revoked shares stay around as audit history but stop resolving on the
     // public page. Hard delete is also offered in the UI for cleanup.

@@ -42,6 +42,7 @@ import type { TripWithRelations } from "@/types/travel";
 import { TripForm } from "./trip-form";
 import { TripItinerary, type ItineraryViewer } from "./trip-itinerary";
 import { TripGallery } from "./trip-gallery";
+import { TripPayments } from "./trip-payments";
 import { TripSharePanel } from "./trip-share-panel";
 import { tripCost } from "@/lib/travel/pricing";
 import { TravellerBar } from "@/components/travel/traveller-bar";
@@ -239,8 +240,28 @@ export function TripDetail({
           <TripItinerary trip={trip} partySize={partySize} viewer={viewer} />
         </div>
         <div className="space-y-6">
+          <TripPayments
+            tripId={trip.id}
+            currency={trip.currency}
+            travellers={shares.map((s) => ({
+              id: s.memberId,
+              name: s.name,
+              isYou: s.memberId === youId,
+              owedLow: s.owedLow,
+              owedHigh: s.owedHigh,
+            }))}
+            contributions={trip.contributions}
+            selected={selected}
+          />
           <TripGallery trip={trip} />
-          <TripSharePanel trip={trip} baseUrl={baseUrl} />
+          <TripSharePanel
+            trip={trip}
+            baseUrl={baseUrl}
+            // A link inherits whoever is in focus, so "share this with Bruno"
+            // is the same gesture as "show me Bruno's numbers".
+            scopeToMemberId={selected}
+            scopeName={viewer?.name ?? null}
+          />
         </div>
       </div>
 

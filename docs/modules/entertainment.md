@@ -64,6 +64,23 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **`trip_contributions` records money that actually moved.** What somebody
+  owes is a range (the trip is mostly quotes); what they paid is exact. The
+  Payments card follows the same selected traveller the itinerary does, and
+  progress is measured against the **low** estimate — the high one would leave
+  a fully-settled trip reading as short.
+- **A share link can be scoped to one traveller** (`trip_shares.member_id`,
+  `ON DELETE SET NULL`). The split is computed server-side in `buildScope` and
+  only that traveller's figures cross the boundary: every member is needed to
+  work out the split, but sending the member list to the page and filtering
+  there would put the other travellers in the payload of a link created to hide
+  them. A scoped link defaults `showPrices` to true — hiding the money would
+  remove the only thing the scoping was for.
+- **`ensureMemberBelongsToTrip` is not redundant with the foreign key.** The FK
+  proves the member row exists; it says nothing about *which* trip it is on.
+  Both the scoped share and the contribution go through it.
+- **The public renderer now reads `showPrices`.** It never did — the column has
+  always defaulted to false and the page published the costs regardless.
 - **Category icons are tinted, and the tint lives on `CATEGORIES` in
   [`trip-itinerary.tsx`](../../components/travel/trip-itinerary.tsx)** — one
   list feeding both the picker and the itinerary rows through `CategoryIcon`,

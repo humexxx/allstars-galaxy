@@ -132,6 +132,32 @@ export const createTripShareSchema = z.object({
   inviteeEmail: z.string().email().max(200).nullable().optional(),
   // Optional expiration. When null, the link is valid until revoked.
   expiresAt: z.coerce.date().nullable().optional(),
+  // Scopes the link to one traveller. The service still checks the member
+  // belongs to this trip — a foreign key alone would happily accept a member
+  // id borrowed from somebody else's trip.
+  memberId: z.string().uuid().nullable().optional(),
+  // A scoped link is pointless with the money hidden, so the caller says
+  // outright what the recipient may see rather than inheriting a default that
+  // contradicts the reason for the link.
+  showPrices: z.boolean().optional(),
+});
+
+// ---------- contributions ----------
+
+export const tripContributionSchema = z.object({
+  memberId: z.string().uuid(),
+  amount: z
+    .string()
+    .regex(/^\d+(\.\d{1,2})?$/, "Amount must be a non-negative number")
+    .refine((v) => parseFloat(v) > 0, "A payment of nothing is not a payment"),
+  note: z.string().max(500).nullable().optional(),
+  // Day, not timestamp: nobody remembers the hour they sent a transfer, and
+  // storing one invites a timezone bug for no gain.
+  paidOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
+    .nullable()
+    .optional(),
 });
 
 export type CreateTripInput = z.infer<typeof createTripSchema>;
@@ -140,6 +166,7 @@ export type TripItemInput = z.infer<typeof tripItemSchema>;
 export type UpdateTripItemInput = z.infer<typeof updateTripItemSchema>;
 export type TripPhotoInput = z.infer<typeof tripPhotoSchema>;
 export type CreateTripShareInput = z.infer<typeof createTripShareSchema>;
+export type TripContributionInput = z.infer<typeof tripContributionSchema>;
 
 /**
  * A cruise's stops, saved as a whole list rather than row by row.

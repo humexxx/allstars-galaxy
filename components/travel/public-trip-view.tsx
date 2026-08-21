@@ -1,7 +1,9 @@
 import Image from "next/image";
 import { format } from "date-fns";
 import {
+  Anchor,
   Bed,
+  Bus,
   CalendarDays,
   DollarSign,
   ExternalLink,
@@ -24,13 +26,19 @@ import {
   parseTripDate,
   tripDurationLabel,
 } from "@/lib/travel/format";
+import { itemCost, tripCost } from "@/lib/travel/pricing";
+import { moneyRange } from "@/components/travel/traveller-bar";
 
 const CATEGORY_META: Record<
   string,
   { label: string; Icon: React.ComponentType<{ className?: string }> }
 > = {
   lodging: { label: "Lodging", Icon: Bed },
-  transport: { label: "Transport", Icon: Plane },
+  // Flights and cruises used to fall through to "Other", so the public page
+  // labelled the two biggest lines of a trip as nothing in particular.
+  flight: { label: "Flight", Icon: Plane },
+  cruise: { label: "Cruise", Icon: Anchor },
+  transport: { label: "Transport", Icon: Bus },
   food: { label: "Food", Icon: Utensils },
   activity: { label: "Activity", Icon: Sparkles },
   shopping: { label: "Shopping", Icon: ShoppingBag },
@@ -40,13 +48,34 @@ const CATEGORY_META: Record<
 const NO_DATE_KEY = "__no_date__";
 
 export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
-  const { trip, items, photos } = view;
+  const { trip, items, photos, share, scope } = view;
 
-  const totalEstimate = items.reduce((sum, it) => {
-    if (!it.price) return sum;
-    const n = parseFloat(it.price);
-    return Number.isFinite(n) ? sum + n : sum;
-  }, 0);
+  /**
+   * Whether this link may show money at all.
+   *
+   * The column has always existed and defaulted to false; the renderer simply
+   * never read it, so every "share my trip" link published the costs anyway.
+   */
+  const showPrices = share.showPrices;
+
+  /** What each item costs whoever holds this link. */
+  const scopedLines = scope
+    ? new Map(scope.lines.map((l) => [l.itemId, l]))
+    : null;
+  const lineCost = (item: (typeof items)[number]) => {
+    if (scopedLines) return scopedLines.get(item.id) ?? { low: 0, high: 0 };
+    // Units applied, so a nightly rate is not reported as one night and a
+    // per-person fare not as one traveller.
+    const c = itemCost(item, 1);
+    return { low: c.low, high: c.high };
+  };
+
+  const estimate = scope
+    ? { low: scope.owedLow, high: scope.owedHigh }
+    : (() => {
+        const t = tripCost(items, 1);
+        return { low: t.low, high: t.high };
+      })();
 
   const groups = new Map<string, typeof items>();
   for (const item of items) {
@@ -102,8 +131,33 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
           value={tripDurationLabel(trip.startDate, trip.endDate)}
         />
         <Stat icon={ListChecks} label="Items" value={String(items.length)} />
-        <Stat icon={DollarSign} label="Est. total" value={formatTripMoney(totalEstimate, trip.currency)} />
+        {showPrices && (
+          <Stat
+            icon={DollarSign}
+            label={scope ? `${scope.memberName.split(" ")[0]}'s share` : "Est. total"}
+            value={moneyRange(estimate.low, estimate.high, trip.currency)}
+          />
+        )}
       </div>
+
+      {showPrices && scope && (
+        <Card>
+          <CardContent className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 p-6">
+            <div>
+              <Eyebrow className="mb-1 block">Paid so far</Eyebrow>
+              <Mono className="text-2xl font-semibold tabular-nums">
+                {formatTripMoney(scope.paid, trip.currency)}
+              </Mono>
+            </div>
+            <div className="text-right">
+              <Eyebrow className="mb-1 block">Still to go</Eyebrow>
+              <Mono className="text-2xl font-semibold tabular-nums">
+                {formatTripMoney(Math.max(0, scope.owedLow - scope.paid), trip.currency)}
+              </Mono>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {trip.description && (
         <Card>
@@ -147,11 +201,14 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
           <div className="space-y-6">
             {groupKeys.map((key) => {
               const groupItems = groups.get(key)!;
-              const groupTotal = groupItems.reduce((sum, it) => {
-                if (!it.price) return sum;
-                const n = parseFloat(it.price);
-                return Number.isFinite(n) ? sum + n : sum;
-              }, 0);
+              const groupTotal = groupItems.reduce(
+                (acc, it) => {
+                  if (!it.price) return acc;
+                  const c = lineCost(it);
+                  return { low: acc.low + c.low, high: acc.high + c.high };
+                },
+                { low: 0, high: 0 }
+              );
               const label =
                 key === NO_DATE_KEY ? "Unscheduled" : format(parseTripDate(key), "EEEE, MMM d");
               return (
@@ -159,9 +216,9 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                   <CardContent className="p-4">
                     <div className="mb-2 flex items-end justify-between border-b pb-1">
                       <Heading level="h6" as="h3">{label}</Heading>
-                      {groupTotal > 0 && (
+                      {showPrices && groupTotal.high > 0 && (
                         <Mono className="text-xs text-muted-foreground">
-                          {formatTripMoney(groupTotal, trip.currency)}
+                          {moneyRange(groupTotal.low, groupTotal.high, trip.currency)}
                         </Mono>
                       )}
                     </div>
@@ -177,9 +234,13 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                             <div className="min-w-0 flex-1 space-y-0.5">
                               <div className="flex items-baseline justify-between gap-2">
                                 <Text weight="medium" className="truncate">{item.title}</Text>
-                                {item.price && (
-                                  <Mono className="text-xs font-medium">
-                                    {formatTripMoney(parseFloat(item.price), trip.currency)}
+                                {showPrices && item.price && (
+                                  <Mono className="shrink-0 whitespace-nowrap text-xs font-medium">
+                                    {moneyRange(
+                                      lineCost(item).low,
+                                      lineCost(item).high,
+                                      trip.currency
+                                    )}
                                   </Mono>
                                 )}
                               </div>

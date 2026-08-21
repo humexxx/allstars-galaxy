@@ -22,6 +22,8 @@ import {
   updateTripItem,
   setTripItemStops,
   setTripMembers,
+  addTripContribution,
+  deleteTripContribution,
 } from "@/lib/services/travel-service";
 import {
   createTripSchema,
@@ -40,6 +42,8 @@ import {
   type SetItemStopsData,
   setTripMembersSchema,
   type SetTripMembersData,
+  tripContributionSchema,
+  type TripContributionInput,
 } from "@/schemas/travel";
 
 const TRIP_LIST_PATH = "/portal/entertainment/travel-planner";
@@ -243,7 +247,13 @@ export async function createTripShareAction(
       action: "tripShare.create",
       entityTable: "trip_shares",
       entityId: row.id,
-      metadata: { inviteeEmail: parsed.data.inviteeEmail ?? null },
+      metadata: {
+        inviteeEmail: parsed.data.inviteeEmail ?? null,
+        // Which traveller a link exposes is the interesting half of an audit
+        // entry about creating one.
+        memberId: parsed.data.memberId ?? null,
+        showPrices: row.showPrices,
+      },
     });
     revalidatePath(pathForTrip(idParsed.data));
     return { success: true as const, data: row };
@@ -351,5 +361,61 @@ export async function setTripMembersAction(
     });
     revalidatePath(pathForTrip(idParsed.data));
     return { success: true as const };
+  });
+}
+
+// ---------- contributions ----------
+
+export async function addTripContributionAction(
+  tripId: string,
+  input: TripContributionInput
+) {
+  return safe("travel", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = z.string().uuid().safeParse(tripId);
+    const parsed = tripContributionSchema.safeParse(input);
+    if (!idParsed.success || !parsed.success) {
+      return { success: false as const, error: "Invalid input" };
+    }
+    const row = await addTripContribution(
+      ctx.effectiveUserId,
+      idParsed.data,
+      parsed.data
+    );
+    await logImpersonatedMutation({
+      action: "tripContribution.create",
+      entityTable: "trip_contributions",
+      entityId: row.id,
+      metadata: { memberId: parsed.data.memberId, amount: parsed.data.amount },
+    });
+    revalidatePath(pathForTrip(idParsed.data));
+    return { success: true as const, data: row };
+  });
+}
+
+export async function deleteTripContributionAction(
+  tripId: string,
+  contributionId: string
+) {
+  return safe("travel", async () => {
+    const ctx = await requireEffectiveContext();
+    const ids = z
+      .object({ tripId: z.string().uuid(), contributionId: z.string().uuid() })
+      .safeParse({ tripId, contributionId });
+    if (!ids.success) {
+      return { success: false as const, error: "Invalid input" };
+    }
+    await deleteTripContribution(
+      ctx.effectiveUserId,
+      ids.data.tripId,
+      ids.data.contributionId
+    );
+    await logImpersonatedMutation({
+      action: "tripContribution.delete",
+      entityTable: "trip_contributions",
+      entityId: ids.data.contributionId,
+    });
+    revalidatePath(pathForTrip(ids.data.tripId));
+    return { success: true as const, data: null };
   });
 }

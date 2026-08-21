@@ -31,7 +31,16 @@ export type TripItemStop = {
 
 export type TripItemWithStops = TripItem & { stops: TripItemStop[] };
 
+export type TripMemberView = {
+  id: string;
+  name: string;
+  email: string | null;
+  /** Null means "an equal cut of what the fixed shares leave over". */
+  sharePercent: number | null;
+};
+
 export type TripWithRelations = Trip & {
+  members: TripMemberView[];
   items: TripItemWithStops[];
   photos: TripPhoto[];
   shares: TripShare[];

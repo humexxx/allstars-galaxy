@@ -193,12 +193,14 @@ describe("getTripWithRelations", () => {
     const photos = [{ id: "p-1", tripId, url: "https://x/y.jpg" }];
     const shares = [{ id: "s-1", tripId, token: "abc" }];
     const stops = [{ id: "st-1", itemId: "i-1", dayNumber: 1, place: "At sea" }];
+    const members = [{ id: "m-1", name: "Ana", email: null, sharePercent: null }];
 
     queueSelect([trip]);
     queueSelect(items);
     queueSelect(photos);
     queueSelect(shares);
     queueSelect(stops);
+    queueSelect(members);
 
     const out = await getTripWithRelations(tripId, USER_ID);
 
@@ -209,8 +211,9 @@ describe("getTripWithRelations", () => {
     // Each item carries its own stops, attached from the single stops query
     // rather than one query per item.
     expect(out?.items).toEqual([{ ...items[0], stops }]);
-    // 1 for the trip + 4 parallel queries for relations
-    expect(dbMock.select).toHaveBeenCalledTimes(5);
+    expect(out?.members).toEqual(members);
+    // 1 for the trip + 5 parallel queries for relations
+    expect(dbMock.select).toHaveBeenCalledTimes(6);
   });
 });
 

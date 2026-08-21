@@ -21,6 +21,7 @@ import {
   updateTrip,
   updateTripItem,
   setTripItemStops,
+  setTripMembers,
 } from "@/lib/services/travel-service";
 import {
   createTripSchema,
@@ -37,6 +38,8 @@ import {
   type UpdateTripItemInput,
   setItemStopsSchema,
   type SetItemStopsData,
+  setTripMembersSchema,
+  type SetTripMembersData,
 } from "@/schemas/travel";
 
 const TRIP_LIST_PATH = "/portal/entertainment/travel-planner";
@@ -317,6 +320,34 @@ export async function setTripItemStopsAction(
       entityTable: "trip_item_stops",
       entityId: parsed.data.itemId,
       after: { count: parsed.data.stops.length },
+    });
+    revalidatePath(pathForTrip(idParsed.data));
+    return { success: true as const };
+  });
+}
+
+/** Replace a trip's traveller list. */
+export async function setTripMembersAction(
+  tripId: string,
+  input: SetTripMembersData
+) {
+  return safe("travel", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = z.string().uuid().safeParse(tripId);
+    const parsed = setTripMembersSchema.safeParse(input);
+    if (!idParsed.success || !parsed.success) {
+      return {
+        success: false as const,
+        error: parsed.success ? "Invalid trip" : parsed.error.issues[0].message,
+      };
+    }
+
+    await setTripMembers(ctx.effectiveUserId, idParsed.data, parsed.data.members);
+    await logImpersonatedMutation({
+      action: "tripMembers.set",
+      entityTable: "trip_members",
+      entityId: idParsed.data,
+      after: { count: parsed.data.members.length },
     });
     revalidatePath(pathForTrip(idParsed.data));
     return { success: true as const };

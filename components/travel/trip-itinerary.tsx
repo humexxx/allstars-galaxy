@@ -57,6 +57,7 @@ import { AirportPicker } from "@/components/travel/airport-picker";
 import { itemCost, tripCost, unitSuffix } from "@/lib/travel/pricing";
 import { MoneyInput } from "@/components/ui/money-input";
 import { ItineraryEditor } from "@/components/travel/itinerary-editor";
+import { Badge } from "@/components/ui/badge";
 
 const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "lodging", label: "Hotel", Icon: Bed },
@@ -122,7 +123,15 @@ export function TripItinerary({ trip, partySize = 1 }: TripItineraryProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle>Itinerary</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          Itinerary
+          {/* The count belongs with the thing it counts, not in the banner. */}
+          {trip.items.length > 0 && (
+            <Badge variant="secondary" className="text-2xs font-normal">
+              {trip.items.length}
+            </Badge>
+          )}
+        </CardTitle>
         <Button size="sm" variant="outline" onClick={() => setAdding((v) => !v)}>
           {adding ? <X className="mr-1 h-3.5 w-3.5" /> : <Plus className="mr-1 h-3.5 w-3.5" />}
           {adding ? "Cancel" : "Add item"}

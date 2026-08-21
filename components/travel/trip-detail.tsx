@@ -37,8 +37,6 @@ import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { deleteTripAction } from "@/app/actions/travel";
 import {
   formatDateRange,
-  formatTripMoney,
-  tripDurationLabel,
 } from "@/lib/travel/format";
 import type { TripWithRelations } from "@/types/travel";
 
@@ -47,6 +45,9 @@ import { TripItinerary } from "./trip-itinerary";
 import { TripGallery } from "./trip-gallery";
 import { TripSharePanel } from "./trip-share-panel";
 import { tripCost } from "@/lib/travel/pricing";
+import { TravellerBar } from "@/components/travel/traveller-bar";
+import { MembersDialog } from "@/components/travel/members-dialog";
+import { splitTrip } from "@/lib/travel/split";
 
 type TripDetailProps = {
   trip: TripWithRelations;
@@ -55,9 +56,34 @@ type TripDetailProps = {
 
 export function TripDetail({ trip, baseUrl }: TripDetailProps) {
   const router = useRouter();
-  // Until members have a UI, a trip is planned for one. The moment they exist
-  // this reads the real count and every per-person figure scales with it.
-  const partySize = 1;
+  // A trip with nobody on it is still planned for one.
+  const partySize = Math.max(1, trip.members.length);
+  const [membersOpen, setMembersOpen] = useState(false);
+
+  /** What each traveller owes, from who actually pays each item. */
+  const shares = useMemo(
+    () =>
+      splitTrip(
+        trip.items.map((i) => ({
+          id: i.id,
+          title: i.title,
+          price: i.price,
+          priceMax: i.priceMax,
+          priceUnit: i.priceUnit,
+          scheduledOn: i.scheduledOn,
+          endsOn: i.endsOn,
+          // Per-item payers have no UI yet; until they do every item follows
+          // the trip's own split, which is what an empty list means.
+          payerIds: [],
+        })),
+        trip.members.map((m) => ({
+          id: m.id,
+          name: m.name,
+          sharePercent: m.sharePercent,
+        }))
+      ),
+    [trip.items, trip.members]
+  );
 
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -134,32 +160,17 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
               </span>
             </div>
 
-            {/* The figures, on one line under the dates they belong to. */}
-            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm text-white/80">
-              <span>{tripDurationLabel(trip.startDate, trip.endDate)}</span>
-              <span aria-hidden className="text-white/40">·</span>
-              <span>
-                {trip.items.length} {trip.items.length === 1 ? "item" : "items"}
-              </span>
-              {estimate.low > 0 && (
-                <>
-                  <span aria-hidden className="text-white/40">·</span>
-                  <Mono className="font-medium text-white">
-                    {estimate.ranged
-                      ? `${formatTripMoney(estimate.low, trip.currency)} – ${formatTripMoney(
-                          estimate.high,
-                          trip.currency
-                        )}`
-                      : formatTripMoney(estimate.low, trip.currency)}
-                  </Mono>
-                  {estimate.perPerson && (
-                    <span className="text-white/70">
-                      for {partySize} {partySize === 1 ? "traveller" : "travellers"}
-                    </span>
-                  )}
-                </>
-              )}
-            </div>
+            <TravellerBar
+              travellers={shares.map((s) => ({
+                id: s.memberId,
+                name: s.name,
+                owed: s.owed,
+              }))}
+              total={estimate.low}
+              totalHigh={estimate.high}
+              currency={trip.currency}
+              onManage={() => setMembersOpen(true)}
+            />
           </div>
           <div className="absolute right-4 top-4 flex gap-2">
             <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}>
@@ -181,7 +192,7 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
-          <TripItinerary trip={trip} />
+          <TripItinerary trip={trip} partySize={partySize} />
         </div>
         <div className="space-y-6">
           <TripGallery trip={trip} />
@@ -196,6 +207,19 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
             <Text className="whitespace-pre-wrap text-foreground/90">{trip.description}</Text>
           </CardContent>
         </Card>
+      )}
+
+      {membersOpen && (
+        <MembersDialog
+          tripId={trip.id}
+          members={trip.members.map((m) => ({
+            id: m.id,
+            name: m.name,
+            email: m.email ?? "",
+            sharePercent: m.sharePercent === null ? "" : String(m.sharePercent),
+          }))}
+          onClose={() => setMembersOpen(false)}
+        />
       )}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

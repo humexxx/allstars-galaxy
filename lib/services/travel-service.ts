@@ -3,10 +3,17 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { cache } from "react";
 
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, notInArray } from "drizzle-orm";
 
 import { db } from "@/db";
-import { trips, tripItems, tripItemStops, tripPhotos, tripShares } from "@/db/schema";
+import {
+  trips,
+  tripItems,
+  tripItemStops,
+  tripMembers,
+  tripPhotos,
+  tripShares,
+} from "@/db/schema";
 import type {
   DashboardTravelFeaturedTrip,
   DashboardTravelSummary,
@@ -88,7 +95,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     .where(and(eq(trips.id, tripId), eq(trips.userId, userId)));
   if (!trip) return null;
 
-  const [items, photos, shares, stops] = await Promise.all([
+  const [items, photos, shares, stops, members] = await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -120,6 +127,16 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       .innerJoin(tripItems, eq(tripItemStops.itemId, tripItems.id))
       .where(eq(tripItems.tripId, tripId))
       .orderBy(asc(tripItemStops.dayNumber)),
+    db
+      .select({
+        id: tripMembers.id,
+        name: tripMembers.name,
+        email: tripMembers.email,
+        sharePercent: tripMembers.sharePercent,
+      })
+      .from(tripMembers)
+      .where(eq(tripMembers.tripId, tripId))
+      .orderBy(asc(tripMembers.sortOrder), asc(tripMembers.createdAt)),
   ]);
 
   const stopsByItem = new Map<string, typeof stops>();
@@ -134,6 +151,10 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     items: items.map((i) => ({ ...i, stops: stopsByItem.get(i.id) ?? [] })),
     photos,
     shares,
+    members: members.map((m) => ({
+      ...m,
+      sharePercent: m.sharePercent === null ? null : Number(m.sharePercent),
+    })),
   };
 });
 
@@ -484,5 +505,68 @@ export async function setTripItemStops(
         note: s.note ?? null,
       }))
     );
+  });
+}
+
+/** Everyone on a trip, in the order they were added. */
+export async function listTripMembers(userId: string, tripId: string) {
+  return db
+    .select({
+      id: tripMembers.id,
+      name: tripMembers.name,
+      email: tripMembers.email,
+      sharePercent: tripMembers.sharePercent,
+    })
+    .from(tripMembers)
+    .innerJoin(trips, eq(tripMembers.tripId, trips.id))
+    .where(and(eq(tripMembers.tripId, tripId), eq(trips.userId, userId)))
+    .orderBy(asc(tripMembers.sortOrder), asc(tripMembers.createdAt));
+}
+
+/**
+ * Replace the traveller list wholesale.
+ *
+ * Same reasoning as the itinerary: it is edited as one list, and a per-row API
+ * would leave a trip half-populated whenever one row failed. Removing somebody
+ * cascades their per-item payer rows, which is what should happen — a person
+ * who is not on the trip cannot be paying for part of it.
+ */
+export async function setTripMembers(
+  userId: string,
+  tripId: string,
+  members: { id?: string; name: string; email?: string | null; sharePercent?: number | null }[]
+): Promise<void> {
+  const [owned] = await db
+    .select({ id: trips.id })
+    .from(trips)
+    .where(and(eq(trips.id, tripId), eq(trips.userId, userId)));
+  if (!owned) throw new Error("Trip not found");
+
+  await db.transaction(async (tx) => {
+    const keep = members.map((m) => m.id).filter((id): id is string => !!id);
+    await tx
+      .delete(tripMembers)
+      .where(
+        keep.length > 0
+          ? and(eq(tripMembers.tripId, tripId), notInArray(tripMembers.id, keep))
+          : eq(tripMembers.tripId, tripId)
+      );
+
+    for (const [i, m] of members.entries()) {
+      const values = {
+        tripId,
+        name: m.name,
+        email: m.email ?? null,
+        sharePercent: m.sharePercent === null || m.sharePercent === undefined
+          ? null
+          : String(m.sharePercent),
+        sortOrder: i,
+      };
+      if (m.id) {
+        await tx.update(tripMembers).set(values).where(eq(tripMembers.id, m.id));
+      } else {
+        await tx.insert(tripMembers).values(values);
+      }
+    }
   });
 }

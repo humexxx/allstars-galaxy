@@ -167,3 +167,35 @@ export const setItemStopsSchema = z.object({
 });
 
 export type SetItemStopsData = z.infer<typeof setItemStopsSchema>;
+
+/**
+ * The traveller list, saved whole.
+ *
+ * `email` is optional and, for now, informational — nothing is sent. A member
+ * is not a user account: most travelling companions never sign in, and
+ * requiring one would make the common case impossible.
+ */
+export const setTripMembersSchema = z.object({
+  members: z
+    .array(
+      z.object({
+        id: z.string().uuid().optional(),
+        name: z.string().trim().min(1, "A traveller needs a name").max(120),
+        email: z.string().trim().email("That is not an email").max(200).nullable().optional(),
+        sharePercent: z.coerce.number().min(0).max(100).nullable().optional(),
+      })
+    )
+    .max(50)
+    .refine(
+      (rows) => {
+        const fixed = rows.filter((r) => r.sharePercent !== null && r.sharePercent !== undefined);
+        const total = fixed.reduce((sum, r) => sum + (r.sharePercent ?? 0), 0);
+        // Fixed shares may total less than 100 — the rest is split equally —
+        // but more than 100 has no meaning and would silently zero everyone else.
+        return total <= 100.001;
+      },
+      { message: "Fixed shares cannot add up to more than 100%" }
+    ),
+});
+
+export type SetTripMembersData = z.infer<typeof setTripMembersSchema>;

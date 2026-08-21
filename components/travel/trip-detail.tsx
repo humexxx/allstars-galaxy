@@ -40,7 +40,7 @@ import {
 import type { TripWithRelations } from "@/types/travel";
 
 import { TripForm } from "./trip-form";
-import { TripItinerary } from "./trip-itinerary";
+import { TripItinerary, type ItineraryViewer } from "./trip-itinerary";
 import { TripGallery } from "./trip-gallery";
 import { TripSharePanel } from "./trip-share-panel";
 import { tripCost } from "@/lib/travel/pricing";
@@ -66,6 +66,9 @@ export function TripDetail({
   // A trip with nobody on it is still planned for one.
   const partySize = Math.max(1, trip.members.length);
   const [membersOpen, setMembersOpen] = useState(false);
+  /** Whose money the page is showing. Null is the trip itself. Lives here
+   *  rather than in the banner because it re-costs the itinerary too. */
+  const [selected, setSelected] = useState<string | null>(null);
 
   /** The traveller who is the signed-in owner, matched by name or email. */
   const youId = useMemo(() => {
@@ -118,6 +121,23 @@ export function TripDetail({
     () => tripCost(trip.items, partySize),
     [trip.items, partySize]
   );
+
+  /**
+   * The selected traveller's own view of the plan, item by item.
+   *
+   * Built from `shares` rather than re-split here: the banner's pill and every
+   * day subtotal have to be the same arithmetic, or one of them is lying.
+   */
+  const viewer = useMemo((): ItineraryViewer | null => {
+    if (selected === null) return null;
+    const share = shares.find((s) => s.memberId === selected);
+    if (!share) return null;
+    return {
+      name: share.name,
+      isYou: share.memberId === youId,
+      lines: new Map(share.lines.map((l) => [l.itemId, { low: l.low, high: l.high }])),
+    };
+  }, [selected, shares, youId]);
 
   const handleDelete = () => {
     startDelete(async () => {
@@ -184,12 +204,15 @@ export function TripDetail({
               travellers={shares.map((s) => ({
                 id: s.memberId,
                 name: s.name,
-                owed: s.owed,
+                owedLow: s.owedLow,
+                owedHigh: s.owedHigh,
                 isYou: s.memberId === youId,
               }))}
               total={estimate.low}
               totalHigh={estimate.high}
               currency={trip.currency}
+              selected={selected}
+              onSelect={setSelected}
               onManage={() => setMembersOpen(true)}
             />
           </div>
@@ -213,7 +236,7 @@ export function TripDetail({
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
-          <TripItinerary trip={trip} partySize={partySize} />
+          <TripItinerary trip={trip} partySize={partySize} viewer={viewer} />
         </div>
         <div className="space-y-6">
           <TripGallery trip={trip} />

@@ -15,13 +15,28 @@ export type SplitItem = PricedItem & {
   payerIds: string[];
 };
 
+/**
+ * One item's contribution to one person's bill, as a range.
+ *
+ * Both ends travel together on purpose. They were once a single `amount` that
+ * carried the low end alone, and every reader downstream presented it as if it
+ * were the answer — a $600–$800 flight showed up as a flat $600.
+ */
+export type ShareLine = {
+  itemId: string;
+  title: string;
+  low: number;
+  high: number;
+};
+
 export type MemberShare = {
   memberId: string;
   name: string;
-  /** What this person owes across the whole trip. */
-  owed: number;
+  /** What this person owes across the whole trip, low and high. */
+  owedLow: number;
+  owedHigh: number;
   /** Per item, so the figure can be explained rather than asserted. */
-  lines: { itemId: string; title: string; amount: number }[];
+  lines: ShareLine[];
 };
 
 /**
@@ -54,7 +69,7 @@ export function defaultShares(members: SplitMember[]): Map<string, number> {
 }
 
 /**
- * What each member owes, item by item.
+ * What each member owes, item by item, as a range.
  *
  * An item's own payers win over the trip's split — that is the whole point of
  * naming them. Dividing the total by the number of travellers instead would be
@@ -67,50 +82,52 @@ export function defaultShares(members: SplitMember[]): Map<string, number> {
 export function splitTrip(items: SplitItem[], members: SplitMember[]): MemberShare[] {
   const shares = defaultShares(members);
   const byMember = new Map<string, MemberShare>(
-    members.map((m) => [m.id, { memberId: m.id, name: m.name, owed: 0, lines: [] }])
+    members.map((m) => [
+      m.id,
+      { memberId: m.id, name: m.name, owedLow: 0, owedHigh: 0, lines: [] },
+    ])
   );
 
   const partySize = Math.max(1, members.length);
 
+  const charge = (id: string, item: SplitItem, low: number, high: number) => {
+    const share = byMember.get(id);
+    if (!share) return;
+    share.owedLow += low;
+    share.owedHigh += high;
+    share.lines.push({ itemId: item.id, title: item.title, low, high });
+  };
+
   for (const item of items) {
     if (item.price === null) continue;
     const cost = itemCost(item, partySize);
-    if (cost.low === 0) continue;
+    if (cost.high === 0) continue;
 
     const payers = item.payerIds.filter((id) => byMember.has(id));
 
     if (item.priceUnit === "per_person") {
       // A per-person price is already one person's cost. Whoever it applies to
       // owes the whole unit price, not a slice of the multiplied total.
-      const each = cost.unitLow ?? 0;
+      const low = cost.unitLow ?? 0;
+      const high = cost.unitHigh !== null && cost.unitHigh > low ? cost.unitHigh : low;
       const targets = payers.length > 0 ? payers : members.map((m) => m.id);
-      for (const id of targets) {
-        const share = byMember.get(id);
-        if (!share) continue;
-        share.owed += each;
-        share.lines.push({ itemId: item.id, title: item.title, amount: each });
-      }
+      for (const id of targets) charge(id, item, low, high);
       continue;
     }
 
     if (payers.length > 0) {
       // Named payers divide it equally between themselves — a per-payer
       // percentage is a refinement nobody has asked for yet.
-      const each = cost.low / payers.length;
       for (const id of payers) {
-        const share = byMember.get(id)!;
-        share.owed += each;
-        share.lines.push({ itemId: item.id, title: item.title, amount: each });
+        charge(id, item, cost.low / payers.length, cost.high / payers.length);
       }
       continue;
     }
 
     for (const m of members) {
-      const amount = cost.low * (shares.get(m.id) ?? 0);
-      if (amount === 0) continue;
-      const share = byMember.get(m.id)!;
-      share.owed += amount;
-      share.lines.push({ itemId: item.id, title: item.title, amount });
+      const fraction = shares.get(m.id) ?? 0;
+      if (fraction === 0) continue;
+      charge(m.id, item, cost.low * fraction, cost.high * fraction);
     }
   }
 

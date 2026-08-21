@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Plus, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -11,7 +10,10 @@ import { cn } from "@/lib/utils";
 export type TravellerView = {
   id: string;
   name: string;
-  owed: number;
+  /** What they owe, low and high — a trip full of estimates gives every
+   *  person an estimate too. */
+  owedLow: number;
+  owedHigh: number;
   /** The signed-in owner. Marked rather than left for the reader to work out
    *  which pair of initials is theirs. */
   isYou?: boolean;
@@ -26,8 +28,18 @@ function initials(name: string): string {
     .join("");
 }
 
+/** "$600" alone, or "$600 – $800" when the two ends differ. */
+export function moneyRange(low: number, high: number, currency: string): string {
+  return high > low
+    ? `${formatTripMoney(low, currency)} – ${formatTripMoney(high, currency)}`
+    : formatTripMoney(low, currency);
+}
+
 /**
  * Who is going, and what the selected person pays.
+ *
+ * The selection lives in the parent because it drives the itinerary too:
+ * picking a face has to re-cost every day, not just relabel this pill.
  *
  * Sits on a photograph, so the surface is a solid dark pill rather than a
  * translucent one: a light-wash cover (a beach, a snowfield) leaves white text
@@ -43,6 +55,8 @@ export function TravellerBar({
   total,
   totalHigh,
   currency,
+  selected,
+  onSelect,
   onManage,
 }: {
   travellers: TravellerView[];
@@ -50,17 +64,16 @@ export function TravellerBar({
   /** Upper end when the trip's estimate is a range. */
   totalHigh: number;
   currency: string;
+  /** Traveller whose share is showing, or null for the whole trip. */
+  selected: string | null;
+  onSelect: (id: string | null) => void;
   onManage: () => void;
 }) {
-  const [selected, setSelected] = useState<string | null>(null);
   const active = travellers.find((t) => t.id === selected) ?? null;
-  const ranged = totalHigh > total;
 
   const amount = active
-    ? formatTripMoney(active.owed, currency)
-    : ranged
-      ? `${formatTripMoney(total, currency)} – ${formatTripMoney(totalHigh, currency)}`
-      : formatTripMoney(total, currency);
+    ? moneyRange(active.owedLow, active.owedHigh, currency)
+    : moneyRange(total, totalHigh, currency);
 
   const caption = active
     ? active.isYou
@@ -92,7 +105,7 @@ export function TravellerBar({
             type="button"
             aria-pressed={selected === null}
             title="Whole trip"
-            onClick={() => setSelected(null)}
+            onClick={() => onSelect(null)}
             className={cn(
               "grid h-8 place-items-center rounded-full px-2.5 text-2xs font-semibold transition",
               selected === null
@@ -108,8 +121,8 @@ export function TravellerBar({
               key={t.id}
               type="button"
               aria-pressed={selected === t.id}
-              title={`${t.name}${t.isYou ? " (you)" : ""} — ${formatTripMoney(t.owed, currency)}`}
-              onClick={() => setSelected((cur) => (cur === t.id ? null : t.id))}
+              title={`${t.name}${t.isYou ? " (you)" : ""} — ${moneyRange(t.owedLow, t.owedHigh, currency)}`}
+              onClick={() => onSelect(selected === t.id ? null : t.id)}
               className={cn(
                 "grid size-8 place-items-center rounded-full text-2xs font-semibold transition",
                 selected === t.id

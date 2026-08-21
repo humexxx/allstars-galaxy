@@ -64,6 +64,18 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **Every money figure in Travel is a range**, because most of a plan is
+  estimates. `itemCost`, `tripCost` and `splitTrip` all carry `low` and `high`
+  together — `splitTrip` returns `owedLow`/`owedHigh`, never a single `owed`.
+  The one field was the bug: each reader downstream presented it as the answer,
+  and a $600–$800 flight showed up as a settled $600.
+- **The day subtotal is the sum of the rows above it**, and it is derived from
+  the same figures those rows print. When a traveller is selected the rows
+  switch to that person's share so the arithmetic still checks out on screen;
+  the full booking price stays underneath, because that is what the hotel's own
+  site will quote.
+- **The selected traveller lives in `TripDetail`**, not in `TravellerBar`.
+  Picking a face re-costs the whole itinerary, so the banner cannot own it.
 - **The trip detail page does not render `description`.** The field is still
   stored and still editable (as *Notes* in the trip form), and the public share
   view still shows it — a visitor arriving on a shared link has no other

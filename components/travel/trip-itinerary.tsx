@@ -54,7 +54,8 @@ import { ItemItinerary } from "@/components/travel/item-itinerary";
 import { Checkbox } from "@/components/ui/checkbox";
 import { deriveTitle, endDayLabel, itemFields, showsEndDay } from "@/lib/travel/item-fields";
 import { AirportPicker } from "@/components/travel/airport-picker";
-import { itemCost, tripCost, unitSuffix } from "@/lib/travel/pricing";
+import { itemCost, unitSuffix } from "@/lib/travel/pricing";
+import { moneyRange } from "@/components/travel/traveller-bar";
 import { MoneyInput } from "@/components/ui/money-input";
 import { ItineraryEditor } from "@/components/travel/itinerary-editor";
 import { Badge } from "@/components/ui/badge";
@@ -76,10 +77,41 @@ function categoryMeta(c: TripItemCategory) {
 
 const NO_DATE_KEY = "__no_date__";
 
+/**
+ * The traveller the itinerary is costed for, or null for the whole trip.
+ *
+ * `lines` is what `splitTrip` worked out this person owes per item, keyed by
+ * item id. Passing the already-split figures down rather than re-deriving them
+ * here is what keeps the day subtotals and the banner's pill agreeing.
+ */
+export type ItineraryViewer = {
+  name: string;
+  isYou: boolean;
+  lines: Map<string, { low: number; high: number }>;
+};
+
+/** What one item costs the current reader: their share, or the whole thing. */
+function readerCost(
+  item: TripItemWithStops,
+  partySize: number,
+  viewer: ItineraryViewer | null
+): { low: number; high: number } {
+  if (viewer) return viewer.lines.get(item.id) ?? { low: 0, high: 0 };
+  const cost = itemCost(item, partySize);
+  return { low: cost.low, high: cost.high };
+}
+
 function groupByDay(
   items: TripItemWithStops[],
-  partySize: number
-): Array<{ key: string; label: string; items: TripItemWithStops[]; total: number }> {
+  partySize: number,
+  viewer: ItineraryViewer | null
+): Array<{
+  key: string;
+  label: string;
+  items: TripItemWithStops[];
+  low: number;
+  high: number;
+}> {
   const groups = new Map<string, TripItemWithStops[]>();
   for (const item of items) {
     const key = item.scheduledOn ?? NO_DATE_KEY;
@@ -92,12 +124,22 @@ function groupByDay(
   if (groups.has(NO_DATE_KEY)) dateKeys.push(NO_DATE_KEY);
   return dateKeys.map((key) => {
     const arr = groups.get(key)!;
-    const total = tripCost(arr, partySize).low;
+    // Both ends, summed from the same figures the rows show, so the subtotal
+    // is always the visible arithmetic. It used to take `tripCost(...).low`
+    // and report a $600–$800 flight plus a $200–$400 hotel as a flat $800.
+    let low = 0;
+    let high = 0;
+    for (const item of arr) {
+      if (item.price === null) continue;
+      const cost = readerCost(item, partySize, viewer);
+      low += cost.low;
+      high += cost.high;
+    }
     const label =
       key === NO_DATE_KEY
         ? "Unscheduled"
         : format(parseDate(key), "EEEE, MMM d");
-    return { key, label, items: arr, total };
+    return { key, label, items: arr, low, high };
   });
 }
 
@@ -111,13 +153,19 @@ type TripItineraryProps = {
   /** Travellers the per-person prices apply to. Defaults to one until the
    *  trip has members — a plan for nobody is not a thing. */
   partySize?: number;
+  /** Whose money the figures are in. Null shows what the trip costs. */
+  viewer?: ItineraryViewer | null;
 };
 
-export function TripItinerary({ trip, partySize = 1 }: TripItineraryProps) {
+export function TripItinerary({
+  trip,
+  partySize = 1,
+  viewer = null,
+}: TripItineraryProps) {
   const [adding, setAdding] = useState(false);
   const groups = useMemo(
-    () => groupByDay(trip.items, partySize),
-    [trip.items, partySize]
+    () => groupByDay(trip.items, partySize, viewer),
+    [trip.items, partySize, viewer]
   );
 
   return (
@@ -129,6 +177,13 @@ export function TripItinerary({ trip, partySize = 1 }: TripItineraryProps) {
           {trip.items.length > 0 && (
             <Badge variant="secondary" className="text-2xs font-normal">
               {trip.items.length}
+            </Badge>
+          )}
+          {/* Every price below is one person's, and a reader who missed the
+              click upstairs would otherwise read them as the trip's. */}
+          {viewer && (
+            <Badge variant="outline" className="text-2xs font-normal">
+              {viewer.isYou ? "your share" : `${viewer.name}'s share`}
             </Badge>
           )}
         </CardTitle>
@@ -160,9 +215,9 @@ export function TripItinerary({ trip, partySize = 1 }: TripItineraryProps) {
           <section key={group.key} className="space-y-2">
             <div className="flex items-end justify-between border-b pb-1">
               <Heading level="h6" as="h3">{group.label}</Heading>
-              {group.total > 0 && (
+              {group.high > 0 && (
                 <Mono className="text-xs text-muted-foreground">
-                  {formatTripMoney(group.total, trip.currency)}
+                  {moneyRange(group.low, group.high, trip.currency)}
                 </Mono>
               )}
             </div>
@@ -174,6 +229,7 @@ export function TripItinerary({ trip, partySize = 1 }: TripItineraryProps) {
                   item={item}
                   currency={trip.currency}
                   partySize={partySize}
+                  viewer={viewer}
                 />
               ))}
             </ul>
@@ -189,18 +245,23 @@ function ItemRow({
   item,
   currency,
   partySize,
+  viewer,
 }: {
   tripId: string;
   item: TripItemWithStops;
   currency: string;
   /** How many people the per-person prices apply to. */
   partySize: number;
+  viewer: ItineraryViewer | null;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [isPending, startTransition] = useTransition();
   const meta = categoryMeta(item.category);
   const cost = itemCost(item, partySize);
+  // The row leads with whatever the day subtotal is adding up, or the two
+  // disagree on screen and neither can be checked against the other.
+  const mine = readerCost(item, partySize, viewer);
   const Icon = meta.Icon;
 
   const handleDelete = () => {
@@ -240,26 +301,33 @@ function ItemRow({
           {item.price && (
             <span className="shrink-0 text-right">
               <Mono className="block text-xs font-medium">
-                {formatTripMoney(cost.low, currency)}
-                {cost.ranged && (
-                  <> – {formatTripMoney(cost.high, currency)}</>
-                )}
+                {moneyRange(mine.low, mine.high, currency)}
               </Mono>
-              {/* Show the arithmetic. A hotel that reads $400 when you typed
-                  $200 looks wrong until you can see the x2 that made it. */}
-              {cost.times > 1 && (
+              {viewer ? (
+                // Their share leads, but the booking price is what you would
+                // actually see on the hotel's site, so it stays in view.
                 <Mono className="block text-2xs text-muted-foreground">
-                  {formatTripMoney(cost.unitLow ?? 0, currency)}
-                  {cost.unitHigh !== null && cost.unitHigh > (cost.unitLow ?? 0) && (
-                    <>–{formatTripMoney(cost.unitHigh, currency)}</>
-                  )}{" "}
-                  {unitSuffix(item.priceUnit)} × {cost.times}
+                  of {moneyRange(cost.low, cost.high, currency)}
                 </Mono>
-              )}
-              {cost.times === 1 && item.priceUnit !== "total" && (
-                <Mono className="block text-2xs text-muted-foreground">
-                  {unitSuffix(item.priceUnit)}
-                </Mono>
+              ) : (
+                <>
+                  {/* Show the arithmetic. A hotel that reads $400 when you
+                      typed $200 looks wrong until you can see the x2. */}
+                  {cost.times > 1 && (
+                    <Mono className="block text-2xs text-muted-foreground">
+                      {formatTripMoney(cost.unitLow ?? 0, currency)}
+                      {cost.unitHigh !== null && cost.unitHigh > (cost.unitLow ?? 0) && (
+                        <>–{formatTripMoney(cost.unitHigh, currency)}</>
+                      )}{" "}
+                      {unitSuffix(item.priceUnit)} × {cost.times}
+                    </Mono>
+                  )}
+                  {cost.times === 1 && item.priceUnit !== "total" && (
+                    <Mono className="block text-2xs text-muted-foreground">
+                      {unitSuffix(item.priceUnit)}
+                    </Mono>
+                  )}
+                </>
               )}
             </span>
           )}

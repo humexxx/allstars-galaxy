@@ -48,8 +48,8 @@ describe("defaultShares", () => {
 describe("splitTrip", () => {
   it("divides an unassigned cost by the trip's split", () => {
     const [a, b] = splitTrip([item({ price: "300.00" })], [ana, bea]);
-    expect(a.owed).toBe(150);
-    expect(b.owed).toBe(150);
+    expect(a.owedLow).toBe(150);
+    expect(b.owedLow).toBe(150);
   });
 
   it("charges a named payer the whole thing", () => {
@@ -58,8 +58,8 @@ describe("splitTrip", () => {
       [item({ price: "300.00", payerIds: ["ana"] })],
       [ana, bea]
     );
-    expect(a.owed).toBe(300);
-    expect(b.owed).toBe(0);
+    expect(a.owedLow).toBe(300);
+    expect(b.owedLow).toBe(0);
   });
 
   it("splits between the named payers only", () => {
@@ -67,9 +67,9 @@ describe("splitTrip", () => {
       [item({ price: "300.00", payerIds: ["ana", "bea"] })],
       [ana, bea, cid]
     );
-    expect(a.owed).toBe(150);
-    expect(b.owed).toBe(150);
-    expect(c.owed).toBe(0);
+    expect(a.owedLow).toBe(150);
+    expect(b.owedLow).toBe(150);
+    expect(c.owedLow).toBe(0);
   });
 
   it("charges a per-person price in full to each person", () => {
@@ -78,8 +78,8 @@ describe("splitTrip", () => {
       [item({ price: "1900.00", priceUnit: "per_person" })],
       [ana, bea]
     );
-    expect(a.owed).toBe(1900);
-    expect(b.owed).toBe(1900);
+    expect(a.owedLow).toBe(1900);
+    expect(b.owedLow).toBe(1900);
   });
 
   it("charges a per-person price only to the payers named on it", () => {
@@ -87,8 +87,8 @@ describe("splitTrip", () => {
       [item({ price: "1900.00", priceUnit: "per_person", payerIds: ["ana"] })],
       [ana, bea]
     );
-    expect(a.owed).toBe(1900);
-    expect(b.owed).toBe(0);
+    expect(a.owedLow).toBe(1900);
+    expect(b.owedLow).toBe(0);
   });
 
   it("multiplies a nightly rate before splitting it", () => {
@@ -102,8 +102,8 @@ describe("splitTrip", () => {
       [ana, bea]
     );
     // 100 x 2 nights = 200, halved.
-    expect(a.owed).toBe(100);
-    expect(b.owed).toBe(100);
+    expect(a.owedLow).toBe(100);
+    expect(b.owedLow).toBe(100);
   });
 
   it("explains each figure line by line", () => {
@@ -111,13 +111,48 @@ describe("splitTrip", () => {
       [item({ id: "flight", title: "SJO ⇄ MCO", price: "600.00", payerIds: ["ana"] })],
       [ana, bea]
     );
-    expect(a.lines).toEqual([{ itemId: "flight", title: "SJO ⇄ MCO", amount: 600 }]);
+    expect(a.lines).toEqual([
+      { itemId: "flight", title: "SJO ⇄ MCO", low: 600, high: 600 },
+    ]);
   });
 
   it("skips unpriced items rather than counting them as free", () => {
     const [a] = splitTrip([item({ price: null })], [ana]);
-    expect(a.owed).toBe(0);
+    expect(a.owedLow).toBe(0);
     expect(a.lines).toEqual([]);
+  });
+
+  it("carries both ends of a ranged price through the split", () => {
+    // The whole point of the range: a $600–$800 flight makes each person's
+    // bill a range too. Reporting only the low end is how a trip ends up
+    // looking cheaper than anything you could actually book.
+    const [a] = splitTrip(
+      [item({ price: "600.00", priceMax: "800.00" })],
+      [ana, bea]
+    );
+    expect(a.owedLow).toBe(300);
+    expect(a.owedHigh).toBe(400);
+    expect(a.lines[0]).toMatchObject({ low: 300, high: 400 });
+  });
+
+  it("ranges a per-person price without dividing either end", () => {
+    const [a, b] = splitTrip(
+      [item({ price: "1900.00", priceMax: "2100.00", priceUnit: "per_person" })],
+      [ana, bea]
+    );
+    expect(a.owedLow).toBe(1900);
+    expect(a.owedHigh).toBe(2100);
+    expect(b.owedLow).toBe(1900);
+  });
+
+  it("still charges an item priced only at its upper bound", () => {
+    // A zero low with a real high is a free item to anyone reading `low`
+    // alone. It has to survive into the split.
+    const [a] = splitTrip(
+      [item({ price: "0", priceMax: "500.00" })],
+      [ana, bea]
+    );
+    expect(a.owedHigh).toBe(250);
   });
 
   it("handles the real Orlando trip for two people", () => {
@@ -131,7 +166,7 @@ describe("splitTrip", () => {
     ];
     const [a, b] = splitTrip(orlando, [ana, bea]);
     // Each: 600 flight + 100 hotel (200 halved) + 1900 cruise.
-    expect(a.owed).toBe(2600);
-    expect(b.owed).toBe(2600);
+    expect(a.owedLow).toBe(2600);
+    expect(b.owedLow).toBe(2600);
   });
 });

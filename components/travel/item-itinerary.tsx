@@ -4,6 +4,12 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+
 import { Mono, Text } from "@/components/ui/typography";
 import type { TripItemStop } from "@/types/travel";
 
@@ -26,20 +32,18 @@ export function ItemItinerary({ stops }: { stops: TripItemStop[] }) {
   if (stops.length === 0) return null;
 
   return (
-    <div className="mt-2">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-      >
+    // shadcn's Collapsible (Radix) rather than a hand-rolled button: it brings
+    // the aria wiring and keyboard behaviour a disclosure needs, and this
+    // project uses shadcn primitives rather than one-off equivalents.
+    <Collapsible open={open} onOpenChange={setOpen} className="mt-2">
+      <CollapsibleTrigger className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground">
         <ChevronDown
           className={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`}
         />
         {open ? "Hide itinerary" : `Itinerary · ${stops.length} days`}
-      </button>
+      </CollapsibleTrigger>
 
-      {open && (
+      <CollapsibleContent>
     <ol className="mt-2 space-y-0 border-l pl-4">
       {stops.map((stop) => (
         <li key={stop.id} className="relative py-2">
@@ -64,7 +68,7 @@ export function ItemItinerary({ stops }: { stops: TripItemStop[] }) {
         </li>
       ))}
     </ol>
-      )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

@@ -64,6 +64,17 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **Disclosures use shadcn's `Collapsible`**, not a hand-rolled button with
+  state. The itinerary accordion started as the latter and was replaced: the
+  primitive brings the aria wiring and keyboard behaviour a disclosure needs,
+  and this project uses shadcn components rather than one-off equivalents.
+- **The traveller chip sits on a photograph**, so its surface is a solid dark
+  pill rather than a translucent one. A light-wash cover — a beach, a snowfield
+  — leaves white text on white through any amount of transparency, and a scrim
+  that only sometimes works is worse than one that always does.
+- **The chip is a fixed size.** "you pay" and "Bruno Fabián pays" are different
+  lengths, and letting the box track the caption made the banner twitch on
+  every click.
 - **A price has a unit** (`trip_items.price_unit`: `total` / `per_night` /
   `per_person`). Without it every figure was summed as a total, so a hotel at
   "$100–200" silently meant one night and a cruise at "$1,900 per person"

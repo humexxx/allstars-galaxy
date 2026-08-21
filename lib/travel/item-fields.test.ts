@@ -1,6 +1,70 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveTitle, endDayLabel, itemFields, showsEndDay } from "./item-fields";
+import {
+  allowsPriceUnit,
+  deriveTitle,
+  endDayLabel,
+  itemFields,
+  priceUnitOptions,
+  showsEndDay,
+} from "./item-fields";
+import { tripItemCategoryEnum } from "@/db/schema";
+
+describe("priceUnitOptions", () => {
+  it("never offers a nightly rate for a flight", () => {
+    // per_night multiplies by the nights between the two dates, and a
+    // flight's second date is its return. Offering it would turn one fare
+    // into nine nights of fares.
+    expect(priceUnitOptions("flight")).not.toContain("per_night");
+    expect(priceUnitOptions("flight")).toEqual(["total", "per_person"]);
+  });
+
+  it("offers a nightly rate where the end day is a stay", () => {
+    expect(priceUnitOptions("lodging")).toContain("per_night");
+    expect(priceUnitOptions("cruise")).toContain("per_night");
+  });
+
+  it("leads with the unit the category is usually quoted in", () => {
+    // The list is also the order they appear in, so the common case is first
+    // rather than buried under one nobody picks.
+    for (const c of tripItemCategoryEnum.enumValues) {
+      expect(priceUnitOptions(c)[0]).toBe(itemFields(c).defaultPriceUnit);
+    }
+  });
+
+  it("every category can accept the unit it defaults to", () => {
+    // The invariant that keeps the two lists from drifting: a default the
+    // dropdown does not offer would render as a blank control.
+    for (const c of tripItemCategoryEnum.enumValues) {
+      expect(allowsPriceUnit(c, itemFields(c).defaultPriceUnit)).toBe(true);
+    }
+  });
+
+  it("keeps showing a stored unit its category no longer offers", () => {
+    // An item moved into a narrower category still costs what it costs.
+    // Dropping the unit would blank the control while the database kept it,
+    // and the price on screen would stop explaining itself.
+    expect(priceUnitOptions("flight", "per_night")).toContain("per_night");
+  });
+
+  it("does not duplicate a stored unit the category already offers", () => {
+    const opts = priceUnitOptions("lodging", "per_night");
+    expect(opts.filter((u) => u === "per_night")).toHaveLength(1);
+  });
+});
+
+describe("allowsPriceUnit", () => {
+  it("rejects a unit the category cannot honestly use", () => {
+    expect(allowsPriceUnit("flight", "per_night")).toBe(false);
+    expect(allowsPriceUnit("food", "per_night")).toBe(false);
+  });
+
+  it("accepts per-person everywhere, since anything can be split by head", () => {
+    for (const c of tripItemCategoryEnum.enumValues) {
+      expect(allowsPriceUnit(c, "per_person")).toBe(true);
+    }
+  });
+});
 
 describe("itemFields", () => {
   it("gives a hotel check-in and check-out, not 'Day'", () => {

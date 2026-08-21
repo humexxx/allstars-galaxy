@@ -17,6 +17,15 @@ export type ItemFieldSpec = {
   title: boolean;
   /** What a price of this kind is usually per, so the common case is preset. */
   defaultPriceUnit: TripPriceUnit;
+  /**
+   * The units this kind of price can honestly be quoted in.
+   *
+   * `per_night` multiplies by the nights between the start and end day, so it
+   * only belongs where the end day marks a stay you sleep through. A flight's
+   * end day is its return date — offering "per night" there would multiply one
+   * fare by every night of the trip.
+   */
+  priceUnits: TripPriceUnit[];
   /** Airports, ports, stations. A hotel does not go anywhere. */
   route: boolean;
   /** Only meaningful where the same booking covers both directions. */
@@ -33,6 +42,7 @@ export type ItemFieldSpec = {
 const DEFAULTS: ItemFieldSpec = {
   title: true,
   defaultPriceUnit: "total",
+  priceUnits: ["total", "per_person"],
   route: false,
   roundTrip: false,
   endDay: true,
@@ -47,6 +57,7 @@ const BY_CATEGORY: Record<TripItemCategory, Partial<ItemFieldSpec>> = {
     startLabel: "Check in",
     endLabel: "Check out",
     defaultPriceUnit: "per_night",
+    priceUnits: ["per_night", "total", "per_person"],
   },
   flight: {
     route: true,
@@ -55,8 +66,11 @@ const BY_CATEGORY: Record<TripItemCategory, Partial<ItemFieldSpec>> = {
     endDay: false,
     video: false,
     startLabel: "Departs",
-    // A fare is quoted per traveller everywhere in the world.
-    defaultPriceUnit: "per_person",
+    // Airlines quote per traveller, but what lands in this field is the
+    // number off the checkout page — one booking for everybody flying. The
+    // per-person default silently doubled a two-person trip's flights, which
+    // is the wrong direction to be wrong in.
+    defaultPriceUnit: "total",
     // A flight already says what it is: two airports and a direction. Asking
     // for a title on top invites "Flight to Orlando" next to "SJO → MCO",
     // which is the same sentence twice and can fall out of step with the route.
@@ -68,16 +82,45 @@ const BY_CATEGORY: Record<TripItemCategory, Partial<ItemFieldSpec>> = {
     startLabel: "Boards",
     endLabel: "Disembarks",
     defaultPriceUnit: "per_person",
+    // Boards → disembarks is a stay, so a nightly rate is a real way to
+    // compare two sailings.
+    priceUnits: ["per_person", "total", "per_night"],
   },
   transport: { route: true, endDay: false, video: false, startLabel: "Day" },
   food: { endDay: false },
   activity: {},
   shopping: { endDay: false, video: false },
-  other: {},
+  // The escape hatch: whatever does not fit a category keeps every unit,
+  // including nightly for a campsite or a car held for the week.
+  other: { priceUnits: ["total", "per_person", "per_night"] },
 };
 
 export function itemFields(category: TripItemCategory): ItemFieldSpec {
   return { ...DEFAULTS, ...BY_CATEGORY[category] };
+}
+
+/**
+ * The units to offer for a category, keeping whatever is already stored.
+ *
+ * An item saved before its category narrowed — or moved from one category to
+ * another — must still show the unit it is actually priced in. Dropping it
+ * from the list would blank the control while the old value stayed in the
+ * database, and the price on screen would no longer explain itself.
+ */
+export function priceUnitOptions(
+  category: TripItemCategory,
+  current?: TripPriceUnit | null
+): TripPriceUnit[] {
+  const allowed = itemFields(category).priceUnits;
+  return current && !allowed.includes(current) ? [...allowed, current] : allowed;
+}
+
+/** Whether a saved unit still makes sense for the category it now sits in. */
+export function allowsPriceUnit(
+  category: TripItemCategory,
+  unit: TripPriceUnit
+): boolean {
+  return itemFields(category).priceUnits.includes(unit);
 }
 
 /**

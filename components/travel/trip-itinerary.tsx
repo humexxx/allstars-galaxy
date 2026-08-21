@@ -52,7 +52,14 @@ import { formatTripMoney } from "@/lib/travel/format";
 import { ActivityVideo } from "@/components/travel/activity-video";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
 import { Checkbox } from "@/components/ui/checkbox";
-import { deriveTitle, endDayLabel, itemFields, showsEndDay } from "@/lib/travel/item-fields";
+import {
+  allowsPriceUnit,
+  deriveTitle,
+  endDayLabel,
+  itemFields,
+  priceUnitOptions,
+  showsEndDay,
+} from "@/lib/travel/item-fields";
 import { AirportPicker } from "@/components/travel/airport-picker";
 import { itemCost, unitSuffix } from "@/lib/travel/pricing";
 import { moneyRange } from "@/components/travel/traveller-bar";
@@ -70,6 +77,12 @@ const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.Componen
   { value: "shopping", label: "Shopping", Icon: ShoppingBag },
   { value: "other", label: "Other", Icon: Tag },
 ];
+
+const PRICE_UNIT_LABELS: Record<TripPriceUnit, string> = {
+  total: "a total",
+  per_night: "per night",
+  per_person: "per person",
+};
 
 function categoryMeta(c: TripItemCategory) {
   return CATEGORIES.find((x) => x.value === c) ?? CATEGORIES[CATEGORIES.length - 1];
@@ -525,10 +538,13 @@ function ItemForm({
             onValueChange={(v) => {
               const next = v as TripItemCategory;
               setCategory(next);
-              // Adopt the new category's usual unit only while creating —
-              // rewriting a saved choice behind the user's back is worse than
-              // making them set it once.
-              if (!item) setPriceUnit(itemFields(next).defaultPriceUnit);
+              // While creating, adopt the new category's usual unit. While
+              // editing, keep whatever was chosen — unless the new category
+              // cannot be priced that way at all, which is the one case where
+              // leaving it alone would save nonsense (a fare per night).
+              if (!item || !allowsPriceUnit(next, priceUnit)) {
+                setPriceUnit(itemFields(next).defaultPriceUnit);
+              }
             }}
           >
             <SelectTrigger className="w-full">
@@ -663,9 +679,11 @@ function ItemForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="total">a total</SelectItem>
-              <SelectItem value="per_night">per night</SelectItem>
-              <SelectItem value="per_person">per person</SelectItem>
+              {priceUnitOptions(category, item?.priceUnit).map((unit) => (
+                <SelectItem key={unit} value={unit}>
+                  {PRICE_UNIT_LABELS[unit]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

@@ -64,6 +64,18 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **`That price is` offers only the units its category can honestly use**
+  (`ItemFieldSpec.priceUnits`). `per_night` multiplies by the nights between
+  the two dates, so it belongs where the end day marks a stay — lodging,
+  cruise, other. A flight's end day is its *return*, so offering it there would
+  turn one fare into nine nights of fares. The list is also the display order,
+  and `priceUnits[0]` must equal `defaultPriceUnit` — a test asserts it, since
+  a default the dropdown does not offer renders as a blank control.
+- **A stored unit always stays selectable** even after its category narrows
+  (`priceUnitOptions(category, current)`). Dropping it would blank the control
+  while the database kept the value, and the price would stop explaining
+  itself. Changing category snaps the unit only when the new category cannot
+  use the old one at all.
 - **Every money figure in Travel is a range**, because most of a plan is
   estimates. `itemCost`, `tripCost` and `splitTrip` all carry `low` and `high`
   together — `splitTrip` returns `owedLow`/`owedHigh`, never a single `owed`.

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TripItinerary } from "./trip-itinerary";
@@ -116,32 +116,41 @@ describe("TripItinerary day subtotals", () => {
 });
 
 describe("price column alignment", () => {
-  it("reserves the same width for the row control and the header spacer", () => {
-    // The control holds its space even while invisible, so without a matching
-    // spacer the day subtotal ran to the card's edge while the item prices it
-    // sums sat inset from it. The two widths agreeing IS the fix, so the
-    // agreement is what gets asserted rather than either value.
+  it("reserves nothing at the right of a row", () => {
+    // The row is the control now. Anything held there — a menu, or the
+    // spacer that stood in for it — pushed every price and subtotal off the
+    // card's edge, which is the whole complaint this answers.
     const { container } = render(<TripItinerary trip={trip(FRIDAY)} partySize={2} />);
 
-    const spacer = container.querySelector("span[aria-hidden]");
-    const controls = container
-      .querySelector('[aria-label^="Actions for"]')
-      ?.closest("div");
-
-    const widths = (el: Element | null | undefined) =>
-      (el?.className ?? "").split(/\s+/).filter((c) => /^(sm:)?w-\d/.test(c)).sort();
-
-    expect(widths(spacer)).not.toEqual([]);
-    expect(widths(spacer)).toEqual(widths(controls));
+    expect(container.querySelector("span[aria-hidden]")).toBeNull();
+    expect(screen.queryByLabelText(/^Actions for/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Delete item")).not.toBeInTheDocument();
   });
 
-  it("gives each row one menu rather than two buttons", () => {
-    // Two cost 80px of gutter and pushed every price that far off the right
-    // edge — and each was 36px on a phone, under what a thumb wants.
+  it("treats the row as something you can click", () => {
+    const { container } = render(<TripItinerary trip={trip(FRIDAY)} partySize={2} />);
+
+    const row = container.querySelector("li")!;
+    expect(row.className).toContain("cursor-pointer");
+  });
+
+  it("opens the item when its row is clicked", () => {
     render(<TripItinerary trip={trip(FRIDAY)} partySize={2} />);
 
-    expect(screen.getAllByLabelText(/^Actions for/)).toHaveLength(2);
-    expect(screen.queryByLabelText("Delete item")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Hotel in Orlando"));
+    // The editor is open: its own controls are on screen, delete among them.
+    expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
+  });
+
+  it("does not open the item when a link inside it is clicked", () => {
+    // A row that swallows its own links is worse than one you cannot click.
+    const withLink = [
+      item({ id: "l", title: "Booking", link: "https://example.com", price: "10.00" }),
+    ];
+    render(<TripItinerary trip={trip(withLink)} partySize={2} />);
+
+    fireEvent.click(screen.getByRole("link", { name: /link/i }));
+    expect(screen.queryByRole("button", { name: /delete/i })).not.toBeInTheDocument();
   });
 
   it("never breaks a price across two lines", () => {

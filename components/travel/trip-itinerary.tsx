@@ -6,8 +6,6 @@ import { format } from "date-fns";
 import {
   ListOrdered,
   ExternalLink,
-  Pencil,
-  MoreHorizontal,
   Plus,
   Trash2,
   X,
@@ -15,13 +13,6 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Card,
   CardAction,
@@ -83,17 +74,6 @@ const PRICE_UNIT_LABELS: Record<TripPriceUnit, string> = {
   per_night: "per night",
   per_person: "per person",
 };
-
-/**
- * Space held for a row's control, and by the spacer standing in for it in the
- * day header. The two must agree or the money does not line up.
- *
- * Zero from `sm` up: with a pointer the control is revealed on hover and
- * drawn over the row's right edge, so nothing is reserved and every price,
- * subtotal and video runs to the card's edge. A touch screen has no hover, so
- * below `sm` the control stays in the flow at a 44px target.
- */
-const ACTIONS_WIDTH = "w-11 sm:w-0";
 
 const NO_DATE_KEY = "__no_date__";
 
@@ -211,23 +191,18 @@ export function TripItinerary({
 
         {groups.map((group) => (
           <section key={group.key} className="flex flex-col gap-2 ">
-            <div className="flex items-end gap-3 border-b pb-1">
-              <div className="flex min-w-0 flex-1 items-end justify-between gap-2">
-                <Heading level="h6" as="h3">{group.label}</Heading>
-                {group.high > 0 && (
-                  <Mono className="shrink-0 text-xs text-muted-foreground">
-                    {moneyRange(group.low, group.high, trip.currency)}
-                  </Mono>
-                )}
-              </div>
-              {/* Stands where a row's control stands on a touch screen, so
-                  the subtotal lands in the same column as the prices it adds
-                  up. Gone entirely from `sm` up — left in at zero width it
-                  still drew the parent's gap, which put the subtotal 12px
-                  further left than every price below it. */}
-              <span className={cn("shrink-0 sm:hidden", ACTIONS_WIDTH)} aria-hidden />
+            {/* Nothing is reserved at the right of a row any more — the row
+                itself is the control — so the subtotal and the prices it adds
+                up share one edge with no spacer to keep in step. */}
+            <div className="flex items-end justify-between gap-2 border-b pb-1">
+              <Heading level="h6" as="h3">{group.label}</Heading>
+              {group.high > 0 && (
+                <Mono className="shrink-0 text-xs text-muted-foreground">
+                  {moneyRange(group.low, group.high, trip.currency)}
+                </Mono>
+              )}
             </div>
-            <ul className="divide-y">
+            <ul className="-mx-2 divide-y">
               {group.items.map((item) => (
                 <ItemRow
                   key={item.id}
@@ -260,26 +235,12 @@ function ItemRow({
   partySize: number;
   viewer: ItineraryViewer | null;
 }) {
-  const router = useRouter();
   const [editing, setEditing] = useState(false);
-  const [isPending, startTransition] = useTransition();
   const meta = categoryMeta(item.category);
   const cost = itemCost(item, partySize);
   // The row leads with whatever the day subtotal is adding up, or the two
   // disagree on screen and neither can be checked against the other.
   const mine = readerCost(item, partySize, viewer);
-
-  const handleDelete = () => {
-    startTransition(async () => {
-      const res = await deleteTripItemAction(tripId, item.id);
-      if (res.success) {
-        toast.success("Item removed");
-        router.refresh();
-      } else {
-        toast.error(res.error);
-      }
-    });
-  };
 
   if (editing) {
     return (
@@ -295,12 +256,40 @@ function ItemRow({
     );
   }
 
+  /**
+   * The row is the target, the way the payments list is.
+   *
+   * Not a `<button>`: the row holds a link, a disclosure and sometimes a video
+   * embed, and nesting those inside a button is invalid and unusable with a
+   * screen reader. So the container listens, and steps aside for anything
+   * that handles its own clicks — and for a click that ends a text selection,
+   * which is a read, not a press.
+   */
+  const openEditor = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('a, button, input, textarea, [role="button"], iframe')) return;
+    if (!window.getSelection()?.isCollapsed) return;
+    setEditing(true);
+  };
+
   return (
-    <li className="group relative flex items-start gap-3 py-3">
+    <li
+      // Padded, not just spaced: the row is a target now, and a hover
+      // tint that stops at the text reads as a highlight rather than a row.
+      className="group relative flex cursor-pointer items-start gap-3 rounded-md px-2 py-3 transition-colors hover:bg-muted/40"
+      onClick={openEditor}
+    >
       <CategoryIcon category={item.category} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-baseline justify-between gap-2">
-          <Text weight="medium" className="truncate">{item.title}</Text>
+          {/* The keyboard's way in, since a container cannot be the button. */}
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="min-w-0 cursor-pointer truncate text-left font-medium outline-none hover:underline focus-visible:underline"
+          >
+            {item.title}
+          </button>
           {item.price && (
             <span className="shrink-0 text-right">
               <Mono className="block whitespace-nowrap text-xs font-medium">
@@ -374,47 +363,6 @@ function ItemRow({
           </div>
         )}
       </div>
-      {/* Always visible on touch (no hover); hover/focus-revealed on desktop.
-          Fixed width even when invisible — see ACTIONS_WIDTH. */}
-      <div
-        className={cn(
-          "flex shrink-0 justify-end transition-opacity",
-          // Out of the flow with a pointer, so the row keeps its full width.
-          "sm:absolute sm:right-0 sm:top-2 sm:opacity-0",
-          "sm:focus-within:opacity-100 sm:group-hover:opacity-100",
-          ACTIONS_WIDTH
-        )}
-      >
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="icon"
-              variant="ghost"
-              // A background of its own: floating over the price, a
-              // transparent button would leave two things legible at once
-              // and neither readable.
-              className="size-11 bg-card shadow-sm sm:size-8"
-              aria-label={`Actions for ${item.title}`}
-            >
-              <MoreHorizontal className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuGroup>
-              <DropdownMenuItem onSelect={() => setEditing(true)}>
-                <Pencil /> Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                disabled={isPending}
-                onSelect={handleDelete}
-              >
-                <Trash2 /> Delete
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
     </li>
   );
 }
@@ -435,6 +383,7 @@ function ItemForm({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [deleting, startDelete] = useTransition();
   const [title, setTitle] = useState(item?.title ?? "");
   const [category, setCategory] = useState<TripItemCategory>(item?.category ?? "activity");
   const [link, setLink] = useState(item?.link ?? "");
@@ -454,6 +403,20 @@ function ItemForm({
   const showEnd = showsEndDay(fields, roundTrip);
   const [videoUrl, setVideoUrl] = useState(item?.videoUrl ?? "");
   const [notes, setNotes] = useState(item?.notes ?? "");
+
+  const handleDelete = () => {
+    if (!item) return;
+    startDelete(async () => {
+      const res = await deleteTripItemAction(tripId, item.id);
+      if (res.success) {
+        toast.success("Item removed");
+        router.refresh();
+        onDone();
+      } else {
+        toast.error(res.error);
+      }
+    });
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -765,13 +728,34 @@ function ItemForm({
         />
       </Field>
 
-      <div className="flex items-center justify-end gap-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onDone}>
-          Cancel
-        </Button>
-        <Button type="submit" size="sm" disabled={isPending}>
-          {isPending ? "Saving…" : item ? "Save" : "Add item"}
-        </Button>
+      <div className="flex items-center justify-between gap-2">
+        {/* Removing an item is something you decide once you are looking at
+            it, which is exactly here. It used to live in a menu that only
+            appeared on hover, and holding space for that menu is what kept
+            every price off the card's edge. */}
+        {item ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            disabled={isPending || deleting}
+            onClick={handleDelete}
+          >
+            <Trash2 className="mr-1 size-3.5" />
+            {deleting ? "Removing…" : "Delete"}
+          </Button>
+        ) : (
+          <span />
+        )}
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={onDone}>
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" disabled={isPending}>
+            {isPending ? "Saving…" : item ? "Save" : "Add item"}
+          </Button>
+        </div>
       </div>
     </form>
   );

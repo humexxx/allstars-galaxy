@@ -235,12 +235,13 @@ export function TripCalendar({
                         meta.bar,
                         COL_START[seg.start],
                         COL_SPAN[seg.span - 1],
-                        // Flat where the run carries on into the next week, so
-                        // the eye reads one journey rather than two bookings.
-                        // The solid rail marks the day it actually begins —
-                        // a segment continued from last week has none.
-                        seg.opensRun ? "rounded-l-sm" : "rounded-l-none",
-                        seg.closesRun ? "rounded-r-sm" : "rounded-r-none"
+                        // Flat and flush where the run carries on into the
+                        // next week, so the eye reads one journey rather than
+                        // two bookings; inset by a hair where it really
+                        // starts or ends, so the badge sits inside its day
+                        // rather than hard against the cell's border.
+                        seg.opensRun ? "ml-0.5 rounded-l-sm" : "rounded-l-none",
+                        seg.closesRun ? "mr-0.5 rounded-r-sm" : "rounded-r-none"
                       )}
                       title={`${seg.item.title}${runs.length > 1 ? " — out and back" : ""}${
                         full?.endsOn && full.endsOn !== full.scheduledOn

@@ -196,7 +196,7 @@ export function TripPayments({
                   : "No payments logged yet."}
               </Text>
             ) : (
-              <ul className="divide-y">
+              <ul className="-mx-2 divide-y">
                 {shown.map((c) => (
                   <PaymentRow
                     key={c.id}
@@ -252,7 +252,7 @@ function PaymentRow({
       <button
         type="button"
         onClick={onOpen}
-        className="flex w-full flex-col gap-0.5 rounded-md px-1 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex w-full cursor-pointer flex-col gap-0.5 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className="flex w-full items-baseline justify-between gap-2">
           <Text weight="medium" className="truncate text-sm">

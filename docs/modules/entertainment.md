@@ -68,6 +68,12 @@ NBA and NFL still use mocks.
   list answers *what is the plan*, the calendar answers *what does the month
   look like*. `TripCalendar` draws a whole month with arrows either side and a
   **Trip** button back to the trip's own month.
+- **The bar grid carries no padding of its own.** It is `absolute inset-x-0`
+  over the day grid with the same columns and the same gap; a `px-1` on it
+  shifted every column four pixels in and left each badge starting just
+  outside the day it belongs to. The badge is inset by `ml-0.5`/`mr-0.5` only
+  where the run really starts or ends — flush where it carries into the next
+  week.
 - **A bar's label is one string — `title · price`, not two boxes.** Pinned to
   the right, the price ate the title on any bar a single day wide: a flight
   read *"$600 – $"* and never said where it went. As one label the wide bars
@@ -111,12 +117,16 @@ NBA and NFL still use mocks.
   to; `Field`'s own `gap-3` would double the label-to-control distance. What
   the primitive buys is the `role="group"` and the invalid-state wiring, which
   a bare div does not have.
-- **Nothing is reserved at the right of an itinerary row on a pointer.** The
-  control is absolutely positioned and revealed on hover, so every price,
-  subtotal and video runs to the card's edge; below `sm` it stays in the flow
-  at a 44px target, because a touch screen has no hover. The day-header spacer
-  is `sm:hidden` for the same reason — left in at zero width it still drew the
-  parent's `gap`, putting the subtotal 12px left of the prices it sums.
+- **Both lists are clickable rows.** An itinerary row cannot be a `<button>` —
+  it holds a link, a disclosure and sometimes a video, and nesting those in a
+  button is invalid — so the container listens and steps aside for anything
+  that handles its own clicks, and for a click that ends a text selection.
+  The title is a real button so the keyboard has a way in. Delete moved into
+  the form the row opens.
+- **Nothing is reserved at the right of an itinerary row.** The
+  The row *is* the control, so every price, subtotal and video runs to the
+  card's edge on every screen, and the day header needs no spacer to stay in
+  step with them.
 - **A payment is a record, not a row of controls.** Tapping it opens a dialog;
   the delete button used to hold space at the right of every row, which is what
   pushed each amount off the card's edge.

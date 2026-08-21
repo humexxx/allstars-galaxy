@@ -96,8 +96,8 @@ export function TripSharePanel({
       <CardHeader>
         <CardTitle>Share</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <form onSubmit={handleCreate} className="space-y-2">
+      <CardContent className="flex flex-col gap-4 ">
+        <form onSubmit={handleCreate} className="flex flex-col gap-2 ">
           <Label htmlFor="share-email" className="text-xs">
             Generate a private link
           </Label>
@@ -144,9 +144,9 @@ export function TripSharePanel({
         </form>
 
         {active.length > 0 && (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2 ">
             <Text variant="small" weight="medium">Active links</Text>
-            <ul className="space-y-2">
+            <ul className="flex flex-col gap-2 ">
               {active.map((share) => (
                 <ShareRow
                   key={share.id}
@@ -169,7 +169,7 @@ export function TripSharePanel({
             <summary className="cursor-pointer">
               Revoked or expired ({revoked.length})
             </summary>
-            <ul className="mt-2 space-y-1">
+            <ul className="flex flex-col gap-1 mt-2">
               {revoked.map((share) => (
                 <li key={share.id} className="flex items-center justify-between rounded border bg-muted/30 px-2 py-1">
                   <Text as="span" variant="small">
@@ -226,7 +226,7 @@ function ShareRow({
   };
 
   return (
-    <li className="space-y-1 rounded-md border bg-muted/30 p-2">
+    <li className="flex flex-col gap-1 rounded-md border bg-muted/30 p-2">
       <div className="flex items-center justify-between gap-2 text-xs">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate font-medium">

@@ -101,19 +101,19 @@ export function TripsOverview({ trips }: TripsOverviewProps) {
   const { upcoming, past } = useMemo(() => partition(trips), [trips]);
 
   return (
-    <Tabs defaultValue="upcoming" className="space-y-6">
+    <Tabs defaultValue="upcoming" className="flex flex-col gap-6 ">
       <TabsList>
         <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
         <TabsTrigger value="calendar">Calendar</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="upcoming" className="space-y-8">
+      <TabsContent value="upcoming" className="flex flex-col gap-8 ">
         <TripGrid
           trips={upcoming}
           empty={{ title: "No upcoming trips", description: "Create one to start planning." }}
         />
         {past.length > 0 && (
-          <section className="space-y-3">
+          <section className="flex flex-col gap-3 ">
             <Eyebrow>Past</Eyebrow>
             <TripGrid trips={past} dimmed />
           </section>
@@ -182,7 +182,7 @@ function TripCard({ trip, dimmed = false }: { trip: Trip; dimmed?: boolean }) {
             {relativeDays(trip.startDate)}
           </div>
         </div>
-        <CardContent className="space-y-2 p-4">
+        <CardContent className="flex flex-col gap-2 p-4">
           <div className="flex items-start justify-between gap-2">
             <Heading level="h6" as="h3" className="line-clamp-1">
               {trip.title}
@@ -338,7 +338,7 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
                   )}
                 </div>
 
-                <div className="mt-1 space-y-0.5">
+                <div className="flex flex-col gap-0.5 mt-1">
                   {dayBars.slice(0, 3).map(({ trip }) => {
                     // Label only on the first day of each trip; subsequent days
                     // get a thin marker bar so the cell stays uncluttered.

@@ -44,7 +44,7 @@ export function ItemItinerary({ stops }: { stops: TripItemStop[] }) {
       </CollapsibleTrigger>
 
       <CollapsibleContent>
-    <ol className="mt-2 space-y-0 border-l pl-4">
+    <ol className="mt-2 border-l pl-4">
       {stops.map((stop) => (
         <li key={stop.id} className="relative py-2">
           <span

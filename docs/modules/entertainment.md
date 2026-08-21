@@ -110,9 +110,12 @@ NBA and NFL still use mocks.
 - **The public renderer now reads `showPrices`.** It never did — the column has
   always defaulted to false and the page published the costs regardless.
 - **Category icons are tinted, and the tint lives on `CATEGORIES` in
-  [`trip-itinerary.tsx`](../../components/travel/trip-itinerary.tsx)** — one
-  list feeding both the picker and the itinerary rows through `CategoryIcon`,
-  so the two can never disagree about what a cruise looks like.
+  [`category.tsx`](../../components/travel/category.tsx)** — one list feeding
+  the picker, the itinerary rows and the calendar through `CategoryIcon`, so
+  they can never disagree about what a cruise looks like. Each hue is a theme
+  token (`--trip-*` in [`globals.css`](../../app/globals.css)), so the dark step
+  is chosen for the dark surface rather than bolted on with a `dark:` override,
+  and a hue can be retuned in one place.
   These are **not** `--chart-1..5`: that palette has five slots, must never be
   cycled, and there are eight categories. Colour is the second channel — the
   icon's shape carries the meaning, so a reader who cannot separate two hues

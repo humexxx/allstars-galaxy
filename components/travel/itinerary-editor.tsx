@@ -85,15 +85,15 @@ export function ItineraryEditor({
   };
 
   return (
-    <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-      <div className="space-y-1">
+    <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3">
+      <div className="flex flex-col gap-1 ">
         <Label className="text-xs">Itinerary</Label>
         <Text className="text-2xs text-muted-foreground">
           One row per day. Leave a place blank to drop that row.
         </Text>
       </div>
 
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2 ">
         {rows.map((row, i) => (
           <div key={i} className="grid gap-2 sm:grid-cols-[3rem_9rem_1fr_1fr_2rem]">
             <Input

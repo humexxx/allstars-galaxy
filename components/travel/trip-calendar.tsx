@@ -114,7 +114,7 @@ export function TripCalendar({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <CardHeader>
         <CardTitle className="flex items-center gap-2">
           Calendar
           {viewer && (
@@ -124,7 +124,7 @@ export function TripCalendar({
           )}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col gap-4 ">
         {weeks.map((week, wi) => {
           // The month name goes on the week that first enters it, rather than
           // splitting the grid into a heading per month — a trip that runs
@@ -133,7 +133,7 @@ export function TripCalendar({
             wi === 0 || week.some((d) => d.endsWith("-01"));
           const label = week.find((d) => d.endsWith("-01")) ?? week[0];
           return (
-            <section key={week[0]} className="space-y-1">
+            <section key={week[0]} className="flex flex-col gap-1 ">
               {opensMonth && (
                 <Text className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                   {format(parseDay(label), "MMMM yyyy")}

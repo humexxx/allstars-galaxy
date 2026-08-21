@@ -175,7 +175,7 @@ export function PhotoPicker({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2 ">
       {previewUrl && (
         <div className="relative w-full overflow-hidden rounded-md border">
           <div
@@ -201,13 +201,13 @@ export function PhotoPicker({
         </div>
       )}
 
-      <Tabs defaultValue="upload" className="space-y-3">
+      <Tabs defaultValue="upload" className="flex flex-col gap-3 ">
         <TabsList className="h-8">
           <TabsTrigger value="upload" className="text-xs">Upload</TabsTrigger>
           <TabsTrigger value="url" className="text-xs">Paste URL</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="upload" className="space-y-2">
+        <TabsContent value="upload" className="flex flex-col gap-2 ">
           <input
             ref={fileRef}
             type="file"
@@ -238,7 +238,7 @@ export function PhotoPicker({
           <Text variant="small">JPG, PNG, WebP up to 10 MB.</Text>
         </TabsContent>
 
-        <TabsContent value="url" className="space-y-2">
+        <TabsContent value="url" className="flex flex-col gap-2 ">
           <Label htmlFor="photo-url" className="sr-only">Image URL</Label>
           <div className="flex gap-2">
             <Input

@@ -88,7 +88,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
   if (groups.has(NO_DATE_KEY)) groupKeys.push(NO_DATE_KEY);
 
   return (
-    <article className="space-y-8">
+    <article className="flex flex-col gap-8 ">
       <header className="overflow-hidden rounded-xl border">
         <div
           className="relative aspect-[21/9] w-full bg-muted"
@@ -171,7 +171,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
       )}
 
       {photos.length > 0 && (
-        <section className="space-y-3">
+        <section className="flex flex-col gap-3 ">
           <Heading level="h4" as="h2">Photos</Heading>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {photos.map((photo) => (
@@ -196,9 +196,9 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
       )}
 
       {groupKeys.length > 0 && (
-        <section className="space-y-4">
+        <section className="flex flex-col gap-4 ">
           <Heading level="h4" as="h2">Itinerary</Heading>
-          <div className="space-y-6">
+          <div className="flex flex-col gap-6 ">
             {groupKeys.map((key) => {
               const groupItems = groups.get(key)!;
               const groupTotal = groupItems.reduce(
@@ -231,7 +231,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                             <div className="rounded-md bg-muted p-1.5 text-muted-foreground">
                               <Icon className="size-4" />
                             </div>
-                            <div className="min-w-0 flex-1 space-y-0.5">
+                            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                               <div className="flex items-baseline justify-between gap-2">
                                 <Text weight="medium" className="truncate">{item.title}</Text>
                                 {showPrices && item.price && (

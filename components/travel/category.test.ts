@@ -19,12 +19,22 @@ describe("category identity", () => {
     expect(new Set(tints).size).toBe(tints.length);
   });
 
-  it("keeps a readable foreground in both themes", () => {
-    // The wash is 10% so it stays a hint; the text has to carry the contrast,
-    // and a dark surface needs a lighter step than a light one.
+  it("carries its colour as a theme token, not a raw hue", () => {
+    // One token per category resolves to a light or a dark value in the
+    // stylesheet, so no component carries a `dark:` override and a hue can be
+    // retuned in one place.
     for (const c of CATEGORIES) {
-      expect(c.tint).toMatch(/\btext-/);
-      expect(c.tint === "bg-muted text-muted-foreground" || /dark:text-/.test(c.tint)).toBe(true);
+      expect(c.tint).not.toMatch(/dark:/);
+      expect(c.tint).toMatch(/^bg-(trip-[a-z]+\/10|muted) text-(trip-[a-z]+|muted-foreground)$/);
+      expect(c.dot).toMatch(/^bg-(trip-[a-z]+|muted-foreground)$/);
+    }
+  });
+
+  it("names the same token in the chip and the dot", () => {
+    // They are the same category seen at two sizes; drifting apart would make
+    // a phone and a desktop disagree about what colour a cruise is.
+    for (const c of CATEGORIES) {
+      expect(c.tint).toContain(c.dot.replace("bg-", "text-"));
     }
   });
 });

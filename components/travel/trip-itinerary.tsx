@@ -22,7 +22,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,6 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Heading, Mono, Text } from "@/components/ui/typography";
+import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 
 import {
@@ -163,7 +170,7 @@ export function TripItinerary({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <CardHeader>
         <CardTitle className="flex items-center gap-2">
           Itinerary
           {/* The count belongs with the thing it counts, not in the banner. */}
@@ -180,12 +187,14 @@ export function TripItinerary({
             </Badge>
           )}
         </CardTitle>
-        <Button size="sm" variant="outline" onClick={() => setAdding((v) => !v)}>
-          {adding ? <X className="mr-1 size-3.5" /> : <Plus className="mr-1 size-3.5" />}
-          {adding ? "Cancel" : "Add item"}
-        </Button>
+        <CardAction>
+          <Button size="sm" variant="outline" onClick={() => setAdding((v) => !v)}>
+            {adding ? <X className="mr-1 size-3.5" /> : <Plus className="mr-1 size-3.5" />}
+            {adding ? "Cancel" : "Add item"}
+          </Button>
+        </CardAction>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="flex flex-col gap-6 ">
         {adding && (
           <ItemForm
             tripId={trip.id}
@@ -196,16 +205,16 @@ export function TripItinerary({
         )}
 
         {groups.length === 0 && !adding && (
-          <Text
-            variant="muted"
-            className="rounded-md border border-dashed p-6 text-center"
-          >
-            No items yet. Add lodging, transport, activities or anything with a link or price.
-          </Text>
+          <EmptyState
+            icon={ListOrdered}
+            title="Nothing planned yet"
+            description="Add lodging, transport, activities — anything with a link or a price."
+            className="border-dashed"
+          />
         )}
 
         {groups.map((group) => (
-          <section key={group.key} className="space-y-2">
+          <section key={group.key} className="flex flex-col gap-2 ">
             <div className="flex items-end gap-3 border-b pb-1">
               <div className="flex min-w-0 flex-1 items-end justify-between gap-2">
                 <Heading level="h6" as="h3">{group.label}</Heading>
@@ -290,7 +299,7 @@ function ItemRow({
   return (
     <li className="group flex items-start gap-3 py-3">
       <CategoryIcon category={item.category} />
-      <div className="min-w-0 flex-1 space-y-0.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-baseline justify-between gap-2">
           <Text weight="medium" className="truncate">{item.title}</Text>
           {item.price && (
@@ -504,7 +513,7 @@ function ItemForm({
     <form
       onSubmit={handleSubmit}
       className={cn(
-        "space-y-3 rounded-md border bg-muted/30 p-3",
+        "flex flex-col gap-3 rounded-md border bg-muted/30 p-3",
         !item && "border-primary/30"
       )}
     >
@@ -717,7 +726,7 @@ function ItemForm({
       </div>
 
       {fields.itinerary && item && (
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-1.5 ">
           {editingStops ? (
             <ItineraryEditor
               tripId={tripId}

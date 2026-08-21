@@ -2,11 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, CalendarDays, ListChecks, MapPin, Plane, Plus } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { getDashboardTravelSummary } from "@/lib/services/travel-service";
-import { cn } from "@/lib/utils";
 import type { DashboardTravelFeaturedTrip, DashboardTravelTripState } from "@/types/travel";
 
 const TRAVEL_PATH = "/portal/entertainment/travel-planner";
@@ -138,25 +138,30 @@ function FeaturedTripCard({ trip }: { trip: DashboardTravelFeaturedTrip }) {
   );
 }
 
+/**
+ * Three hand-rolled pills became three Badge variants.
+ *
+ * They were raw emerald and sky, which is a colour asserting a meaning the
+ * theme has no say in — a state indicator has to move with the palette, and
+ * these carried their own `dark:` overrides to prove it. The variants say the
+ * same thing in the theme's own terms: the trip you are on now is the one
+ * worth pointing at, the next one is secondary, a finished one is an outline.
+ */
+const STATE_BADGE: Record<
+  DashboardTravelTripState,
+  { label: string; variant: "default" | "secondary" | "outline" }
+> = {
+  in_progress: { label: "In progress", variant: "default" },
+  upcoming: { label: "Upcoming", variant: "secondary" },
+  past: { label: "Past", variant: "outline" },
+};
+
 function StateBadge({ state }: { state: DashboardTravelTripState }) {
-  if (state === "in_progress") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-2xs font-medium text-emerald-600 dark:text-emerald-400">
-        In progress
-      </span>
-    );
-  }
-  if (state === "upcoming") {
-    return (
-      <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-2xs font-medium text-sky-600 dark:text-sky-400">
-        Upcoming
-      </span>
-    );
-  }
+  const { label, variant } = STATE_BADGE[state];
   return (
-    <span className={cn("rounded-full bg-muted px-2 py-0.5 text-2xs font-medium text-muted-foreground")}>
-      Past
-    </span>
+    <Badge variant={variant} className="text-2xs font-medium">
+      {label}
+    </Badge>
   );
 }
 

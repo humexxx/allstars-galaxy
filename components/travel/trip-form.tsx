@@ -79,9 +79,9 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6 ">
       <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4 ">
               <Field className="gap-2">
                 <FieldLabel htmlFor="trip-title">Title</FieldLabel>
                 <Input

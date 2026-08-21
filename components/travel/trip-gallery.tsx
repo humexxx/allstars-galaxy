@@ -3,12 +3,12 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { Trash2 } from "lucide-react";
+import { Images, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Text } from "@/components/ui/typography";
+import { EmptyState } from "@/components/ui/empty-state";
 
 import {
   addTripPhotoAction,
@@ -66,14 +66,14 @@ export function TripGallery({ trip }: TripGalleryProps) {
       <CardHeader>
         <CardTitle>Gallery</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col gap-4 ">
         {trip.photos.length === 0 ? (
-          <Text
-            variant="small"
-            className="rounded-md border border-dashed p-4 text-center"
-          >
-            No photos yet — pick a few to show in the shared view.
-          </Text>
+          <EmptyState
+            icon={Images}
+            title="No photos yet"
+            description="Pick a few to show in the shared view."
+            className="border-dashed p-6"
+          />
         ) : (
           // One row that scrolls sideways. A grid grew a new row for every
           // three photos and pushed everything below it down the page; a rail

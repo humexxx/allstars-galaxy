@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -33,6 +34,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Heading, Mono } from "@/components/ui/typography";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { deleteTripAction } from "@/app/actions/travel";
 import {
@@ -40,7 +42,17 @@ import {
 } from "@/lib/travel/format";
 import type { TripWithRelations } from "@/types/travel";
 
-import { TripForm } from "./trip-form";
+/**
+ * The edit form ships only when the dialog opens.
+ *
+ * It is the heaviest thing on the page — react-hook-form, the resolver, the
+ * photo picker — and it sits behind a button most visits never press. Loading
+ * it eagerly put all of that in the bundle of a page whose job is to be read.
+ */
+const TripForm = dynamic(
+  () => import("./trip-form").then((m) => ({ default: m.TripForm })),
+  { loading: () => <Skeleton className="h-96 w-full" /> }
+);
 import { TripItinerary } from "./trip-itinerary";
 import type { ItineraryViewer } from "@/lib/travel/viewer";
 import { TripCalendar } from "./trip-calendar";
@@ -53,7 +65,11 @@ import { TripPayments } from "./trip-payments";
 import { TripSharePanel } from "./trip-share-panel";
 import { tripCost } from "@/lib/travel/pricing";
 import { TravellerBar } from "@/components/travel/traveller-bar";
-import { MembersDialog } from "@/components/travel/members-dialog";
+const MembersDialog = dynamic(
+  () => import("@/components/travel/members-dialog").then((m) => ({
+    default: m.MembersDialog,
+  }))
+);
 import { splitTrip } from "@/lib/travel/split";
 
 type TripDetailProps = {
@@ -162,7 +178,7 @@ export function TripDetail({
   };
 
   return (
-    <section className="space-y-6">
+    <section className="flex flex-col gap-6 ">
       <div className="flex items-center justify-between gap-2">
         <Button variant="ghost" size="sm" asChild>
           <Link href="/portal/entertainment/travel-planner">
@@ -273,14 +289,14 @@ export function TripDetail({
           line. The rail scrolls; the column must be allowed to be narrower
           than it. */}
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <div className="min-w-0 space-y-6">
+        <div className="flex flex-col gap-6 min-w-0">
           {view === "list" ? (
             <TripItinerary trip={trip} partySize={partySize} viewer={viewer} />
           ) : (
             <TripCalendar trip={trip} partySize={partySize} viewer={viewer} />
           )}
         </div>
-        <div className="min-w-0 space-y-6">
+        <div className="flex flex-col gap-6 min-w-0">
           <TripPayments
             tripId={trip.id}
             currency={trip.currency}

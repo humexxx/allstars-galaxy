@@ -97,8 +97,23 @@ computed height, not a spacing step.
   is establishing padding rather than stacking on top of it — five components
   in this repo had it. A card with no `CardHeader` needs no top padding at all:
   `<Card><CardContent>` is already correct.
-- Stack related blocks with `space-y-4`/`space-y-6`; lay rows out with
-  `gap-2`/`gap-3`/`gap-4`.
+- Stack related blocks with `flex flex-col gap-4`/`gap-6`; lay rows out with
+  `gap-2`/`gap-3`/`gap-4`. **One property for both axes**, which is what the
+  shadcn skill asks for and what the shadcn components themselves use.
+  `space-y-*` is the older form: it works by giving every child but the first a
+  top margin, so it fights `:first-child` rules, does nothing for a wrapping
+  row, and collapses against a child's own margin.
+
+  Converting is **not** a rename. `gap` does nothing outside a flex or grid
+  container, so `space-y-4` becomes `flex flex-col gap-4` — dropping the
+  `flex flex-col` silently removes the spacing. And a block that becomes a
+  flex container gives its children `min-width: auto`, which is how a
+  scrolling rail ends up widening its own column: pair the change with
+  `min-w-0` on anything that must be allowed to shrink.
+
+  `components/travel/**` is converted. The rest of the app still uses
+  `space-y-*` and is fine to leave until it is touched — a half-converted
+  file is worse than a consistent old one.
 
 ## Adding a new step
 

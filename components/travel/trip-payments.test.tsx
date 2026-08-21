@@ -109,7 +109,7 @@ describe("TripPayments", () => {
       />
     );
 
-    expect(screen.getByText(/Add travellers first/)).toBeInTheDocument();
+    expect(screen.getByText("No travellers yet")).toBeInTheDocument();
     expect(screen.queryByText("Log payment")).not.toBeInTheDocument();
   });
 });

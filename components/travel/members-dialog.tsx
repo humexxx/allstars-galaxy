@@ -87,7 +87,7 @@ export function MembersDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3 ">
           <div className="hidden gap-2 sm:grid sm:grid-cols-[1fr_1fr_5rem_2rem]">
             {/* Column headings, not field labels: a Label with no control
                 to point at announces as a label for nothing. */}

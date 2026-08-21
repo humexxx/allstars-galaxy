@@ -3,11 +3,17 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { MoneyInput } from "@/components/ui/money-input";
@@ -21,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Mono, Text } from "@/components/ui/typography";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Progress } from "@/components/ui/progress";
 
 import {
@@ -101,7 +108,7 @@ export function TripPayments({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <CardHeader>
         <CardTitle className="flex items-center gap-2">
           Payments
           {focus && (
@@ -110,26 +117,33 @@ export function TripPayments({
             </Badge>
           )}
         </CardTitle>
+        {/* CardAction, not a flex override on the header: CardHeader is a
+            grid that grows a second column when it finds one. */}
         {travellers.length > 0 && (
-          <Button size="sm" variant="outline" onClick={() => setAdding((v) => !v)}>
-            {adding ? (
-              <X className="mr-1 size-3.5" />
-            ) : (
-              <Plus className="mr-1 size-3.5" />
-            )}
-            {adding ? "Cancel" : "Log payment"}
-          </Button>
+          <CardAction>
+            <Button size="sm" variant="outline" onClick={() => setAdding((v) => !v)}>
+              {adding ? (
+                <X className="mr-1 size-3.5" />
+              ) : (
+                <Plus className="mr-1 size-3.5" />
+              )}
+              {adding ? "Cancel" : "Log payment"}
+            </Button>
+          </CardAction>
         )}
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col gap-4 ">
         {travellers.length === 0 ? (
-          <Text variant="small" className="rounded-md border border-dashed p-4 text-center">
-            Add travellers first — a payment has to come from somebody.
-          </Text>
+          <EmptyState
+            icon={Users}
+            title="No travellers yet"
+            description="A payment has to come from somebody — add the people going first."
+            className="border-dashed p-6"
+          />
         ) : (
           <>
-            <div className="space-y-1.5">
+            <div className="flex flex-col gap-1.5 ">
               <div className="flex items-baseline justify-between gap-2">
                 <Mono className="text-lg font-semibold tabular-nums">
                   {formatTripMoney(paid, currency)}
@@ -300,7 +314,7 @@ function PaymentForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-3 rounded-md border border-primary/30 bg-muted/30 p-3"
+      className="flex flex-col gap-3 rounded-md border border-primary/30 bg-muted/30 p-3"
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <Field className="gap-1.5">

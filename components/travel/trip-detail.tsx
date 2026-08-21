@@ -288,7 +288,7 @@ export function TripDetail({
           widening its own column and crushing the itinerary to a word per
           line. The rail scrolls; the column must be allowed to be narrower
           than it. */}
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid gap-6 lg:grid-cols-[5fr_3fr]">
         <div className="flex flex-col gap-6 min-w-0">
           {view === "list" ? (
             <TripItinerary trip={trip} partySize={partySize} viewer={viewer} />

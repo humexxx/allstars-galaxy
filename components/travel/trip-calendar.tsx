@@ -42,7 +42,7 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
  * month of thin bands does not read as a calendar.
  */
 const LANE_TOP = 22;
-const LANE_HEIGHT = 16;
+const LANE_HEIGHT = 22;
 const COST_LINE = 16;
 const MIN_CELL = 64;
 
@@ -230,14 +230,16 @@ export function TripCalendar({
                   return (
                     <div
                       key={`${seg.item.id}-${seg.start}-${seg.lane}`}
-                      style={{ gridRow: seg.lane + 1, height: LANE_HEIGHT - 2 }}
+                      style={{ gridRow: seg.lane + 1, height: LANE_HEIGHT - 4 }}
                       className={cn(
                         "pointer-events-auto flex min-w-0 items-center gap-1 overflow-hidden px-1",
-                        meta.tint,
+                        meta.bar,
                         COL_START[seg.start],
                         COL_SPAN[seg.span - 1],
                         // Flat where the run carries on into the next week, so
                         // the eye reads one journey rather than two bookings.
+                        // The solid rail marks the day it actually begins —
+                        // a segment continued from last week has none.
                         seg.opensRun ? "rounded-l-sm" : "rounded-l-none",
                         seg.closesRun ? "rounded-r-sm" : "rounded-r-none"
                       )}

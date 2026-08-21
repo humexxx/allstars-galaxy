@@ -30,11 +30,22 @@ describe("category identity", () => {
     }
   });
 
-  it("names the same token in the chip and the dot", () => {
-    // They are the same category seen at two sizes; drifting apart would make
-    // a phone and a desktop disagree about what colour a cruise is.
+  it("names the same token in the chip, the dot and the bar", () => {
+    // Three sizes of the same category. Drifting apart would make a phone and
+    // a desktop disagree about what colour a cruise is.
     for (const c of CATEGORIES) {
-      expect(c.tint).toContain(c.dot.replace("bg-", "text-"));
+      const token = c.dot.replace("bg-", "");
+      expect(c.tint).toContain(`text-${token}`);
+      expect(c.bar).toContain(`text-${token}`);
+    }
+  });
+
+  it("keeps the calendar bar solid on a phone and soft on a pointer", () => {
+    // A bar a few pixels tall with no room for a label has only its colour to
+    // carry the meaning; one that does carry a label needs to sit behind it,
+    // with the edge doing the work a darker fill would cost in contrast.
+    for (const c of CATEGORIES) {
+      expect(c.bar).toMatch(/^bg-\S+ text-\S+ sm:bg-\S+ sm:ring-1 sm:ring-\S+$/);
     }
   });
 });

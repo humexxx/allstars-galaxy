@@ -68,6 +68,13 @@ NBA and NFL still use mocks.
   list answers *what is the plan*, the calendar answers *what does the month
   look like*. `TripCalendar` draws a whole month with arrows either side and a
   **Trip** button back to the trip's own month.
+- **A calendar run is a badge, not a hairline.** Soft wash + full-strength
+  label + a ring, because the two things that would give it more weight both
+  cost legibility: a solid fill needs white text, and amber (3.19:1), sky
+  (4.02) and teal (3.66) do not clear AA against white; deepening the wash
+  costs the label instead — 15% leaves it at 3.3:1, 25% drops it to 2.9. So
+  the edge does the work. Below `sm` the bar is a few pixels tall with no room
+  for a label, so it goes **solid**: there, the colour is the whole signal.
 - **Runs are bars, not repeated chips.** `layOutWeek` clips each run to the
   week and stacks overlaps into lanes; the bars ride over the day grid on a
   matching seven-column track, because the length of the bar IS the

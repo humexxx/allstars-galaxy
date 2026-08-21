@@ -52,13 +52,32 @@ import { splitTrip } from "@/lib/travel/split";
 type TripDetailProps = {
   trip: TripWithRelations;
   baseUrl: string;
+  /** Who is looking, so their own face can be marked on the traveller list. */
+  currentUserEmail?: string | null;
+  currentUserName?: string | null;
 };
 
-export function TripDetail({ trip, baseUrl }: TripDetailProps) {
+export function TripDetail({
+  trip,
+  baseUrl,
+  currentUserEmail,
+  currentUserName,
+}: TripDetailProps) {
   const router = useRouter();
   // A trip with nobody on it is still planned for one.
   const partySize = Math.max(1, trip.members.length);
   const [membersOpen, setMembersOpen] = useState(false);
+
+  /** The traveller who is the signed-in owner, matched by name or email. */
+  const youId = useMemo(() => {
+    const email = currentUserEmail?.toLowerCase();
+    const name = currentUserName?.toLowerCase();
+    return (
+      trip.members.find((m) => email && m.email?.toLowerCase() === email)?.id ??
+      trip.members.find((m) => name && m.name.toLowerCase() === name)?.id ??
+      null
+    );
+  }, [trip.members, currentUserEmail, currentUserName]);
 
   /** What each traveller owes, from who actually pays each item. */
   const shares = useMemo(
@@ -160,11 +179,14 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
               </span>
             </div>
 
+          </div>
+          <div className="absolute left-4 top-4">
             <TravellerBar
               travellers={shares.map((s) => ({
                 id: s.memberId,
                 name: s.name,
                 owed: s.owed,
+                isYou: s.memberId === youId,
               }))}
               total={estimate.low}
               totalHigh={estimate.high}
@@ -195,19 +217,20 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
           <TripItinerary trip={trip} partySize={partySize} />
         </div>
         <div className="space-y-6">
+          {trip.description && (
+            <Card>
+              <CardContent>
+                <Eyebrow className="mb-2 block">About this trip</Eyebrow>
+                <Text className="whitespace-pre-wrap text-foreground/90">
+                  {trip.description}
+                </Text>
+              </CardContent>
+            </Card>
+          )}
           <TripGallery trip={trip} />
           <TripSharePanel trip={trip} baseUrl={baseUrl} />
         </div>
       </div>
-
-      {trip.description && (
-        <Card>
-          <CardContent className="p-6">
-            <Eyebrow className="mb-2 block">About this trip</Eyebrow>
-            <Text className="whitespace-pre-wrap text-foreground/90">{trip.description}</Text>
-          </CardContent>
-        </Card>
-      )}
 
       {membersOpen && (
         <MembersDialog

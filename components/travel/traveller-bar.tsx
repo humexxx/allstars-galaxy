@@ -12,6 +12,9 @@ export type TravellerView = {
   id: string;
   name: string;
   owed: number;
+  /** The signed-in owner. Marked rather than left for the reader to work out
+   *  which of the initials is theirs. */
+  isYou?: boolean;
 };
 
 function initials(name: string): string {
@@ -65,7 +68,7 @@ export function TravellerBar({
               : formatTripMoney(total, currency)}
         </Mono>
         <span className="text-xs text-white/70">
-          {active ? `${active.name} pays` : "total"}
+          {active ? `${active.isYou ? "you pay" : `${active.name} pays`}` : "total"}
         </span>
       </span>
 
@@ -76,13 +79,16 @@ export function TravellerBar({
               key={t.id}
               type="button"
               aria-pressed={selected === t.id}
-              title={`${t.name} — ${formatTripMoney(t.owed, currency)}`}
+              title={`${t.name}${t.isYou ? " (you)" : ""} — ${formatTripMoney(t.owed, currency)}`}
               onClick={() => setSelected((cur) => (cur === t.id ? null : t.id))}
               className={cn(
                 "grid size-8 place-items-center rounded-full text-2xs font-semibold transition",
                 selected === t.id
                   ? "bg-white text-black"
-                  : "bg-white/20 text-white hover:bg-white/30"
+                  : "bg-white/20 text-white hover:bg-white/30",
+                // A ring, not a different colour: it must read as "this one is
+                // you" without implying a different kind of traveller.
+                t.isYou && "ring-2 ring-white/70 ring-offset-1 ring-offset-transparent"
               )}
             >
               {initials(t.name)}

@@ -27,6 +27,7 @@ import { itemCost, tripCost, unitSuffix } from "@/lib/travel/pricing";
 import { CategoryIcon, categoryMeta } from "@/components/travel/category";
 import { PublicTripViews } from "@/components/travel/public-trip-views";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
+import { ActivityVideo } from "@/components/travel/activity-video";
 
 const NO_DATE_KEY = "__no_date__";
 
@@ -307,6 +308,19 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                                       />
                                     </div>
                                   ))}
+                                </div>
+                              )}
+                              {/* The same embed the planner shows. It routes
+                                  YouTube through youtube-nocookie, which is
+                                  the whole reason that choice exists: a
+                                  visitor holding a share token has agreed to
+                                  nothing. */}
+                              {item.videoUrl && (
+                                <div className="pt-2">
+                                  <ActivityVideo
+                                    url={item.videoUrl}
+                                    title={item.title}
+                                  />
                                 </div>
                               )}
                             </div>

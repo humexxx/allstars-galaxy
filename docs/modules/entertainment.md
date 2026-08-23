@@ -136,6 +136,10 @@ NBA and NFL still use mocks.
   starts, not a lock — choosing a different recipient used to mean closing the
   dialog, clicking a face behind it, and opening it again.
   `TripSharePanel` is the dialog's body; it renders no `Card` of its own.
+- **A shared link carries the videos too.** `ActivityVideo` already routed
+  YouTube through `youtube-nocookie.com` and said why in its own comment — a
+  visitor holding a share token has agreed to nothing — but the public page
+  never rendered it.
 - **A shared link carries the stops.** `getPublicTripByToken` loads
   `trip_item_stops` alongside the items, so a cruise arrives as a journey
   rather than a booking. Still one round of queries — the stops join

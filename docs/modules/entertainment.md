@@ -131,6 +131,23 @@ NBA and NFL still use mocks.
   [`MarqueeText`](../../components/travel/marquee-text.tsx), which measures the
   overflow and leaves a label that already fits completely alone. It respects
   `prefers-reduced-motion`.
+- **A calendar bar is a control: tap it to edit, drag its glyph to move it.**
+  Only the glyph is draggable — a bar that is both clickable and draggable
+  needs one of them to have its own handle, or every attempt to open an item
+  becomes a half-started drag. It follows
+  [`plan-calendar.tsx`](../../components/finance/plan-calendar.tsx): native
+  HTML5 drag with a private MIME type, and a payload carrying the day the drag
+  began so a stay keeps its grip — grabbed on its second night, it lands on
+  its second night and keeps its length. The drop day is read from the week's
+  geometry rather than per-cell handlers, because the bars sit on top of the
+  cells and would otherwise swallow the drop. The glyph is `hidden sm:block`,
+  so there is no dragging on a phone — HTML5 drag has no touch story, and the
+  list view is the editing surface there.
+- **`moveTripItemAction` sends only the dates.** The calendar renders from a
+  snapshot; echoing every field back would overwrite a title or a price edited
+  elsewhere since that snapshot with whatever the browser still believed.
+- **`ItemForm` lives in its own module.** Both views open it, and reaching
+  into the itinerary for it would drag the whole list along.
 - **A calendar run is a badge, not a hairline.** Soft wash + full-strength
   label + a ring, because the two things that would give it more weight both
   cost legibility: a solid fill needs white text, and amber (3.19:1), sky

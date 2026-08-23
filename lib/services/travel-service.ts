@@ -37,6 +37,7 @@ import type {
   TripPhotoInput,
   UpdateTripInput,
   UpdateTripItemInput,
+  MoveTripItemInput,
 } from "@/schemas/travel";
 
 import { splitTrip } from "@/lib/travel/split";
@@ -298,6 +299,22 @@ export async function updateTripItem(
     })
     .where(and(eq(tripItems.id, data.id), eq(tripItems.tripId, tripId)))
     .returning();
+  return row;
+}
+
+/** Just the dates. See `moveTripItemSchema` for why nothing else travels. */
+export async function moveTripItem(
+  userId: string,
+  tripId: string,
+  data: MoveTripItemInput
+): Promise<TripItem> {
+  await ensureTripOwnership(tripId, userId);
+  const [row] = await db
+    .update(tripItems)
+    .set({ scheduledOn: data.scheduledOn, endsOn: data.endsOn ?? null })
+    .where(and(eq(tripItems.id, data.id), eq(tripItems.tripId, tripId)))
+    .returning();
+  if (!row) throw new Error("Item not found on this trip");
   return row;
 }
 

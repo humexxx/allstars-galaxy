@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { format } from "date-fns";
 import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 
@@ -23,7 +25,16 @@ import { cn } from "@/lib/utils";
 import { moneyRange } from "@/lib/travel/format";
 import { MarqueeText } from "./marquee-text";
 
-import type { TripWithRelations } from "@/types/travel";
+import type { TripItemWithStops, TripWithRelations } from "@/types/travel";
+import { moveTripItemAction } from "@/app/actions/travel";
+import { ItemForm } from "./item-form";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { categoryMeta } from "./category";
 
 import { readerCost, type ItineraryViewer } from "@/lib/travel/viewer";
@@ -31,13 +42,25 @@ import {
   addMonths,
   isoDay,
   capLanes,
+  daysBetween,
   layOutWeek,
   monthWeeks,
   parseDay,
+  shiftDay,
   type CalendarItem,
 } from "@/lib/travel/calendar";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/**
+ * Native drag and drop, the way `components/finance/plan-calendar.tsx`
+ * already does it in this repo: a private MIME type so a stray drag from
+ * anywhere else is ignored, and the day the drag began so the item keeps its
+ * grip — pick a cruise up on its fourth night and it lands on its fourth
+ * night, not its first.
+ */
+const DND_MIME = "application/x-allstars-trip-item";
+type DragPayload = { id: string; grabbedOn: string };
 
 function dayLabel(day: string | null | undefined): string {
   return day ? format(parseDay(day), "EEE d MMM") : "—";
@@ -157,6 +180,43 @@ export function TripCalendar({
   // the server too, and a server in UTC against a reader six hours behind
   // would ring a different cell in each pass and hydrate mismatched.
   const [today] = useState(() => isoDay(new Date()));
+  const [editing, setEditing] = useState<TripItemWithStops | null>(null);
+  const [overDay, setOverDay] = useState<string | null>(null);
+  const [isMoving, startMove] = useTransition();
+  const router = useRouter();
+
+  const handleDrop = (payload: DragPayload, targetDay: string) => {
+    const item = byId.get(payload.id);
+    if (!item?.scheduledOn) return;
+    const delta = daysBetween(payload.grabbedOn, targetDay);
+    if (delta === 0) return;
+    startMove(async () => {
+      const res = await moveTripItemAction(trip.id, {
+        id: item.id,
+        scheduledOn: shiftDay(item.scheduledOn!, delta),
+        endsOn: item.endsOn ? shiftDay(item.endsOn, delta) : null,
+      });
+      if (res.success) {
+        toast.success(`Moved to ${dayLabel(shiftDay(item.scheduledOn!, delta))}`);
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    });
+  };
+
+  /**
+   * The day under the pointer, from the week's own width.
+   *
+   * Read from geometry rather than from a per-cell handler because the bars
+   * sit on top of the cells: a drop over an existing bar would otherwise
+   * never reach the day beneath it.
+   */
+  const dayUnder = (el: HTMLElement, clientX: number, week: string[]) => {
+    const rect = el.getBoundingClientRect();
+    const index = Math.floor(((clientX - rect.left) / rect.width) * 7);
+    return week[Math.min(6, Math.max(0, index))];
+  };
   const tripEnd = trip.endDate ?? trip.startDate;
   const inTrip = (day: string) => day >= trip.startDate && day <= tripEnd;
 
@@ -223,7 +283,29 @@ export function TripCalendar({
             LANE_TOP + lanes * LANE_HEIGHT + 6
           );
           return (
-            <div key={week[0]} className="relative">
+            <div
+              key={week[0]}
+              className="relative"
+              onDragOver={(e) => {
+                if (!e.dataTransfer.types.includes(DND_MIME)) return;
+                // Without preventDefault the drop never fires at all.
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                setOverDay(dayUnder(e.currentTarget, e.clientX, week));
+              }}
+              onDragLeave={() => setOverDay(null)}
+              onDrop={(e) => {
+                const raw = e.dataTransfer.getData(DND_MIME);
+                if (!raw) return;
+                e.preventDefault();
+                setOverDay(null);
+                try {
+                  handleDrop(JSON.parse(raw) as DragPayload, dayUnder(e.currentTarget, e.clientX, week));
+                } catch {
+                  // A payload we cannot read is a drag from somewhere else.
+                }
+              }}
+            >
               <div className="grid grid-cols-7 gap-1">
                 {week.map((day) => {
                   const thisMonth = day.slice(0, 7) === month;
@@ -236,7 +318,8 @@ export function TripCalendar({
                       className={cn(
                         "flex flex-col rounded-md border p-1",
                         inTrip(day) ? "bg-card" : "bg-muted/30",
-                        day === today && "ring-2 ring-primary/40"
+                        day === today && "ring-2 ring-primary/40",
+                        day === overDay && "bg-primary/10 ring-2 ring-primary"
                       )}
                     >
                       <Mono
@@ -289,13 +372,25 @@ export function TripCalendar({
                           // in globals.css could never match.
                           tabIndex={0}
                           role="button"
+                          aria-label={`Edit ${seg.item.title}`}
+                          onClick={() => {
+                            const full = byId.get(seg.item.id);
+                            if (full) setEditing(full);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key !== "Enter" && e.key !== " ") return;
+                            e.preventDefault();
+                            const full = byId.get(seg.item.id);
+                            if (full) setEditing(full);
+                          }}
                           style={{
                             gridRow: seg.lane + 1,
                             height: LANE_HEIGHT - LANE_GAP,
                           }}
                           className={cn(
                             "group/bar pointer-events-auto flex min-w-0 items-center gap-1 overflow-hidden px-1",
-                            "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            "cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            isMoving && "opacity-60",
                             meta.bar,
                             COL_START[seg.start],
                             COL_SPAN[seg.span - 1],
@@ -310,7 +405,31 @@ export function TripCalendar({
                             seg.closesRun ? "rounded-r-sm" : "rounded-r-none"
                           )}
                         >
-                          <meta.Icon className="hidden size-3 shrink-0 sm:block" />
+                          {/* Only the icon drags — the rest of the bar is the
+                              click target. Same disambiguation the finance
+                              calendar uses: grab the glyph, tap anywhere else
+                              to edit. */}
+                          <span
+                            draggable
+                            aria-label="Drag to move"
+                            onClick={(e) => e.stopPropagation()}
+                            onDragStart={(e) => {
+                              const payload: DragPayload = {
+                                id: seg.item.id,
+                                grabbedOn: dayUnder(
+                                  e.currentTarget.closest("div.relative") as HTMLElement,
+                                  e.clientX,
+                                  week
+                                ),
+                              };
+                              e.dataTransfer.setData(DND_MIME, JSON.stringify(payload));
+                              e.dataTransfer.effectAllowed = "move";
+                              e.stopPropagation();
+                            }}
+                            className="hidden shrink-0 cursor-grab active:cursor-grabbing sm:block"
+                          >
+                            <meta.Icon className="size-3" />
+                          </span>
                           {seg.opensRun && (
                             // Title and price are one label, not two boxes
                             // competing for a bar that can be a single day
@@ -353,6 +472,7 @@ export function TripCalendar({
                           data-slot="calendar-more"
                           tabIndex={0}
                           role="button"
+                          aria-label={`${count} more on ${dayLabel(week[day])}`}
                           style={{ gridRow: MAX_LANES, height: LANE_HEIGHT - LANE_GAP }}
                           className={cn(
                             "pointer-events-auto col-span-1 mx-0.5 truncate rounded-sm px-1",
@@ -384,6 +504,26 @@ export function TripCalendar({
           );
         })}
       </CardContent>
+
+      <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent className="max-h-[90vh] sm:max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editing?.title}</DialogTitle>
+            <DialogDescription>
+              Change the details, the dates or the price.
+            </DialogDescription>
+          </DialogHeader>
+          {editing && (
+            <ItemForm
+              tripId={trip.id}
+              item={editing}
+              defaultDate={editing.scheduledOn}
+              currency={trip.currency}
+              onDone={() => setEditing(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

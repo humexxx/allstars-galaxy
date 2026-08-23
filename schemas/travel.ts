@@ -131,6 +131,25 @@ export const updateTripItemSchema = tripItemSchema
   .extend({ id: z.string().uuid() })
   .superRefine(endsAfterStart);
 
+/**
+ * Moving an item on the calendar sends only what moved.
+ *
+ * Not the whole item: the calendar renders from a snapshot, and echoing every
+ * field back would overwrite a title or a price edited elsewhere since that
+ * snapshot was taken with whatever the browser still believed.
+ */
+export const moveTripItemSchema = z
+  .object({
+    id: z.string().uuid(),
+    scheduledOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    endsOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable()
+      .optional(),
+  })
+  .superRefine(endsAfterStart);
+
 // ---------- photos ----------
 
 export const tripPhotoSchema = z.object({
@@ -190,6 +209,7 @@ export type CreateTripInput = z.infer<typeof createTripSchema>;
 export type UpdateTripInput = z.infer<typeof updateTripSchema>;
 export type TripItemInput = z.infer<typeof tripItemSchema>;
 export type UpdateTripItemInput = z.infer<typeof updateTripItemSchema>;
+export type MoveTripItemInput = z.infer<typeof moveTripItemSchema>;
 export type TripPhotoInput = z.infer<typeof tripPhotoSchema>;
 export type CreateTripShareInput = z.infer<typeof createTripShareSchema>;
 export type UpdateTripContributionInput = z.infer<typeof updateTripContributionSchema>;

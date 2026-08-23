@@ -45,7 +45,7 @@ describe("category identity", () => {
     // carry the meaning; one that does carry a label needs to sit behind it,
     // with the edge doing the work a darker fill would cost in contrast.
     for (const c of CATEGORIES) {
-      expect(c.bar).toMatch(/^bg-\S+ text-\S+ sm:bg-\S+ sm:ring-1 sm:ring-\S+$/);
+      expect(c.bar).toMatch(/^bg-\S+ text-\S+ sm:bg-\S+ sm:ring-1 sm:ring-\S+ sm:hover:bg-\S+$/);
     }
   });
 });

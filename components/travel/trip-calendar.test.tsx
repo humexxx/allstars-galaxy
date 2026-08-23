@@ -1,9 +1,18 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { TripCalendar } from "./trip-calendar";
 import type { TripItemWithStops, TripWithRelations } from "@/types/travel";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("@/app/actions/travel", () => ({
+  addTripItemAction: vi.fn(),
+  deleteTripItemAction: vi.fn(),
+  updateTripItemAction: vi.fn(),
+  moveTripItemAction: vi.fn(),
+  setTripItemStopsAction: vi.fn(),
+}));
 
 const item = (over: Partial<TripItemWithStops>): TripItemWithStops =>
   ({
@@ -163,5 +172,35 @@ describe("bar geometry", () => {
     expect(overlay.className).toContain("grid-cols-7");
     expect(overlay.className).toContain("gap-x-1");
     expect(overlay.className).not.toMatch(/\bp[xl]?-\d/);
+  });
+});
+
+describe("moving an item", () => {
+  it("makes a bar a target you can open", () => {
+    const { container } = render(<TripCalendar trip={trip([CRUISE])} />);
+    const bar = container.querySelector("[data-slot=calendar-bar]")!;
+
+    expect(bar.className).toContain("cursor-pointer");
+    expect(bar.getAttribute("aria-label")).toMatch(/^Edit /);
+  });
+
+  it("opens the item when its bar is clicked", () => {
+    render(<TripCalendar trip={trip([CRUISE])} />);
+
+    fireEvent.click(screen.getAllByLabelText(/^Edit Star of the Seas/)[0]);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("drags from the glyph, not from the whole bar", () => {
+    // The same disambiguation the finance calendar uses: a bar you can both
+    // drag and click needs one of them to have its own handle, or every
+    // attempt to open an item becomes a half-started drag.
+    const { container } = render(<TripCalendar trip={trip([CRUISE])} />);
+    const bar = container.querySelector("[data-slot=calendar-bar]")!;
+    const grip = bar.querySelector("[draggable]")!;
+
+    expect(bar.getAttribute("draggable")).toBeNull();
+    expect(grip.getAttribute("aria-label")).toBe("Drag to move");
+    expect(grip.className).toContain("cursor-grab");
   });
 });

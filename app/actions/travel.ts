@@ -20,6 +20,7 @@ import {
   revokeTripShare,
   updateTrip,
   updateTripItem,
+  moveTripItem,
   setTripItemStops,
   setTripMembers,
   addTripContribution,
@@ -32,6 +33,7 @@ import {
   tripItemSchemaChecked,
   tripPhotoSchema,
   updateTripItemSchema,
+  moveTripItemSchema,
   updateTripSchema,
   type CreateTripInput,
   type CreateTripShareInput,
@@ -39,6 +41,7 @@ import {
   type TripPhotoInput,
   type UpdateTripInput,
   type UpdateTripItemInput,
+  type MoveTripItemInput,
   setItemStopsSchema,
   type SetItemStopsData,
   setTripMembersSchema,
@@ -149,6 +152,26 @@ export async function updateTripItemAction(
       action: "tripItem.update",
       entityTable: "trip_items",
       entityId: row.id,
+    });
+    revalidatePath(pathForTrip(idParsed.data));
+    return { success: true as const, data: row };
+  });
+}
+
+export async function moveTripItemAction(tripId: string, input: MoveTripItemInput) {
+  return safe("travel", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = z.string().uuid().safeParse(tripId);
+    const parsed = moveTripItemSchema.safeParse(input);
+    if (!idParsed.success || !parsed.success) {
+      return { success: false as const, error: "Invalid input" };
+    }
+    const row = await moveTripItem(ctx.effectiveUserId, idParsed.data, parsed.data);
+    await logImpersonatedMutation({
+      action: "tripItem.move",
+      entityTable: "trip_items",
+      entityId: row.id,
+      metadata: { scheduledOn: parsed.data.scheduledOn, endsOn: parsed.data.endsOn ?? null },
     });
     revalidatePath(pathForTrip(idParsed.data));
     return { success: true as const, data: row };

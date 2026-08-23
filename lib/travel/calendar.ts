@@ -13,6 +13,20 @@ export function parseDay(value: string): Date {
   return new Date(y, m - 1, d);
 }
 
+/** Whole days from one ISO day to another; negative when it goes backwards. */
+export function daysBetween(from: string, to: string): number {
+  return Math.round(
+    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000
+  );
+}
+
+/** The same day shifted by whole days, still as a local ISO day string. */
+export function shiftDay(day: string, delta: number): string {
+  const d = parseDay(day);
+  d.setDate(d.getDate() + delta);
+  return isoDay(d);
+}
+
 export function addMonths(month: string, delta: number): string {
   const [y, m] = month.split("-").map(Number);
   const d = new Date(y, m - 1 + delta, 1);

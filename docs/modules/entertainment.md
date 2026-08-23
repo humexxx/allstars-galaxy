@@ -136,6 +136,13 @@ NBA and NFL still use mocks.
   starts, not a lock — choosing a different recipient used to mean closing the
   dialog, clicking a face behind it, and opening it again.
   `TripSharePanel` is the dialog's body; it renders no `Card` of its own.
+- **A shared link carries the stops.** `getPublicTripByToken` loads
+  `trip_item_stops` alongside the items, so a cruise arrives as a journey
+  rather than a booking. Still one round of queries — the stops join
+  `trip_items` in a single call rather than one per item.
+- **`Still to go` is a range** on the shared page, like everything else that
+  is still an estimate. Only what has been paid is one figure: that money
+  either moved or it did not.
 - **The public page is the planner, minus every control.** Same banner, same
   day groups, same money in the same column — the owner describes a link by
   what they are looking at, and a recipient seeing a different layout has to

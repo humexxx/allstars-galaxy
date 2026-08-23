@@ -519,7 +519,7 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
   // and payments do not depend on the items or the photos, so awaiting them
   // afterwards would have cost a second round trip for no ordering reason —
   // and at ~86ms each that is the whole budget of a small page.
-  const [items, photos, scopeRows] = await Promise.all([
+  const [items, photos, stops, scopeRows] = await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -530,12 +530,35 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
       .from(tripPhotos)
       .where(eq(tripPhotos.tripId, trip.id))
       .orderBy(asc(tripPhotos.sortOrder), asc(tripPhotos.createdAt)),
+    // A cruise's ports are half of what its row says, so a link that hides
+    // them shows a booking rather than a journey. One query for the trip,
+    // attached below — a query per item would be N+1.
+    db
+      .select({
+        id: tripItemStops.id,
+        itemId: tripItemStops.itemId,
+        dayNumber: tripItemStops.dayNumber,
+        stopOn: tripItemStops.stopOn,
+        place: tripItemStops.place,
+        note: tripItemStops.note,
+      })
+      .from(tripItemStops)
+      .innerJoin(tripItems, eq(tripItemStops.itemId, tripItems.id))
+      .where(eq(tripItems.tripId, trip.id))
+      .orderBy(asc(tripItemStops.dayNumber)),
     share.memberId ? loadScopeRows(trip.id, share.memberId) : null,
   ]);
 
+  const stopsByItem = new Map<string, typeof stops>();
+  for (const stop of stops) {
+    const list = stopsByItem.get(stop.itemId) ?? [];
+    list.push(stop);
+    stopsByItem.set(stop.itemId, list);
+  }
+
   return {
     trip,
-    items,
+    items: items.map((i) => ({ ...i, stops: stopsByItem.get(i.id) ?? [] })),
     photos,
     share,
     // Built from the items already in hand rather than fetched again.

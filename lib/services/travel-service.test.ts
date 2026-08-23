@@ -534,13 +534,16 @@ describe("getPublicTripByToken", () => {
     queueSelect([trip]); // trip lookup
     queueSelect(items); // items
     queueSelect(photos); // photos
+    queueSelect([]); // stops
 
     const out = await getPublicTripByToken("tok");
 
     expect(out).not.toBeNull();
     expect(out?.share).toEqual(share);
     expect(out?.trip).toEqual(trip);
-    expect(out?.items).toEqual(items);
+    // Items carry their stops: a cruise's ports are half of what its row
+    // says, and a link that hides them shows a booking, not a journey.
+    expect(out?.items).toEqual(items.map((i) => ({ ...i, stops: [] })));
     expect(out?.photos).toEqual(photos);
   });
 
@@ -564,6 +567,7 @@ describe("getPublicTripByToken", () => {
     // already fetched rather than querying them a second time.
     queueSelect(items);
     queueSelect([]); // photos
+    queueSelect([]); // stops
     queueSelect([
       { id: "jason", name: "Jason Hume", sharePercent: null },
       { id: "bruno", name: "Bruno Fabián", sharePercent: null },
@@ -581,10 +585,10 @@ describe("getPublicTripByToken", () => {
     });
     // Jason is nowhere in what crosses the boundary.
     expect(JSON.stringify(out)).not.toContain("Jason");
-    // Four relation queries, not five: the scope reuses the items already in
+    // Five relation queries, not six: the scope reuses the items already in
     // hand. Counting them is what keeps a second round trip from creeping
     // back in behind the first.
-    expect(dbMock.select).toHaveBeenCalledTimes(6);
+    expect(dbMock.select).toHaveBeenCalledTimes(7);
   });
 
   it("leaves an unscoped link with no traveller attached", async () => {
@@ -593,8 +597,9 @@ describe("getPublicTripByToken", () => {
         inviteeEmail: null, memberId: null, showPrices: false, createdAt: new Date() },
     ]);
     queueSelect([tripFixture()]);
-    queueSelect([]);
-    queueSelect([]);
+    queueSelect([]); // items
+    queueSelect([]); // photos
+    queueSelect([]); // stops
 
     const out = await getPublicTripByToken("tok");
     expect(out?.scope).toBeNull();
@@ -611,6 +616,7 @@ describe("getPublicTripByToken", () => {
     queueSelect([tripFixture()]);
     queueSelect([]); // items
     queueSelect([]); // photos
+    queueSelect([]); // stops
     queueSelect([{ id: "jason", name: "Jason Hume", sharePercent: null }]);
     queueSelect([]); // payments
 

@@ -71,7 +71,8 @@ export type PublicTripScope = {
 
 export type PublicTripView = {
   trip: Trip;
-  items: TripItem[];
+  /** With stops: a cruise's ports are half of what its row says. */
+  items: TripItemWithStops[];
   photos: TripPhoto[];
   share: TripShare;
   /** Null when the link covers the whole trip. */

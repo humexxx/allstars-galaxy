@@ -23,6 +23,7 @@ import { itemCost, tripCost, unitSuffix } from "@/lib/travel/pricing";
 // One category table, not a second copy that drifts: this page once labelled
 // flights and cruises "Other" because they were missing from its own list.
 import { CategoryIcon, categoryMeta } from "@/components/travel/category";
+import { ItemItinerary } from "@/components/travel/item-itinerary";
 
 const NO_DATE_KEY = "__no_date__";
 
@@ -74,7 +75,14 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
   const groupKeys = [...groups.keys()].filter((k) => k !== NO_DATE_KEY).sort();
   if (groups.has(NO_DATE_KEY)) groupKeys.push(NO_DATE_KEY);
 
-  const left = scope ? Math.max(0, scope.owedLow - scope.paid) : 0;
+  // A range, like everything else that is still an estimate. Only what has
+  // been paid is one figure — that money either moved or it did not.
+  const left = scope
+    ? {
+        low: Math.max(0, scope.owedLow - scope.paid),
+        high: Math.max(0, scope.owedHigh - scope.paid),
+      }
+    : { low: 0, high: 0 };
 
   return (
     <article className="flex flex-col gap-6">
@@ -246,6 +254,9 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                               {item.notes && (
                                 <Text variant="small">{item.notes}</Text>
                               )}
+                              {item.stops.length > 0 && (
+                                <ItemItinerary stops={item.stops} />
+                              )}
                             </div>
                           </li>
                         );
@@ -264,17 +275,20 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
               <CardHeader>
                 <CardTitle>Your share</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-                <div>
-                  <Eyebrow className="mb-1 block">Paid so far</Eyebrow>
-                  <Mono className="text-2xl font-semibold tabular-nums">
+              {/* Label left, figure right, one per line. Side by side they
+                  wrapped the moment the remainder became a range, and left a
+                  centred figure next to a left-aligned one. */}
+              <CardContent className="flex flex-col gap-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <Eyebrow>Paid so far</Eyebrow>
+                  <Mono className="text-xl font-semibold tabular-nums">
                     {formatTripMoney(scope.paid, trip.currency)}
                   </Mono>
                 </div>
-                <div className="text-right">
-                  <Eyebrow className="mb-1 block">Still to go</Eyebrow>
-                  <Mono className="text-2xl font-semibold tabular-nums">
-                    {formatTripMoney(left, trip.currency)}
+                <div className="flex items-baseline justify-between gap-3">
+                  <Eyebrow>Still to go</Eyebrow>
+                  <Mono className="text-xl font-semibold tabular-nums">
+                    {moneyRange(left.low, left.high, trip.currency)}
                   </Mono>
                 </div>
               </CardContent>

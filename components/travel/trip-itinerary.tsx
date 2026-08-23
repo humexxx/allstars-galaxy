@@ -42,7 +42,7 @@ import {
 import { itemCost, unitSuffix } from "@/lib/travel/pricing";
 import { CategoryIcon, categoryMeta } from "@/components/travel/category";
 import { ItemForm } from "@/components/travel/item-form";
-import { readerCost, type ItineraryViewer } from "@/lib/travel/viewer";
+import { readerCost, viewerItems, type ItineraryViewer } from "@/lib/travel/viewer";
 export type { ItineraryViewer };
 
 import { Badge } from "@/components/ui/badge";
@@ -111,9 +111,11 @@ export function TripItinerary({
   viewer = null,
 }: TripItineraryProps) {
   const [adding, setAdding] = useState(false);
+  /** Only what the selected traveller is part of; the whole plan otherwise. */
+  const items = useMemo(() => viewerItems(trip.items, viewer), [trip.items, viewer]);
   const groups = useMemo(
-    () => groupByDay(trip.items, partySize, viewer),
-    [trip.items, partySize, viewer]
+    () => groupByDay(items, partySize, viewer),
+    [items, partySize, viewer]
   );
 
   return (
@@ -122,9 +124,9 @@ export function TripItinerary({
         <CardTitle className="flex items-center gap-2">
           Itinerary
           {/* The count belongs with the thing it counts, not in the banner. */}
-          {trip.items.length > 0 && (
+          {items.length > 0 && (
             <Badge variant="secondary" className="text-2xs font-normal">
-              {trip.items.length}
+              {items.length}
             </Badge>
           )}
           {/* Every price below is one person's, and a reader who missed the

@@ -1,7 +1,7 @@
 # Entertainment
 
 > **Status:** In progress (travel shipped + dashboard card; sports UI shipped, favourites end-to-end on DB; LoL, F1, football, World Cup, padel and tennis wired to free live providers)
-> **Last reviewed:** 2026-08-22
+> **Last reviewed:** 2026-08-23
 
 ## Overview
 Two sub-modules: Travel Planner (trips, items, photos, public sharing) and
@@ -352,6 +352,18 @@ NBA and NFL still use mocks.
   switch to that person's share so the arithmetic still checks out on screen;
   the full booking price stays underneath, because that is what the hotel's own
   site will quote.
+- **Picking a traveller narrows the plan, not just its prices.** `viewerItems`
+  ([`lib/travel/viewer.ts`](../../lib/travel/viewer.ts)) drops what that person
+  has no part in, from `itemConcerns` in
+  [`lib/travel/split.ts`](../../lib/travel/split.ts): named payers own the item,
+  an empty list is everybody's. Re-costing alone left Ana's flight from Mexico
+  sitting on Jafet's day worth $0 — a row that says nothing except that it is
+  not his. A scoped share link is narrowed **server-side** in `getPublicTrip`
+  instead, so the trip's member ids never reach the browser; the split still
+  runs over every item, so the totals are unaffected.
+- **The calendar draws every run on a day.** There used to be a four-lane cap
+  with a "+N" chip on the overflow; a day with six things on it now shows six
+  and the week's row grows to fit. `capLanes` went with it.
 - **The selected traveller lives in `TripDetail`**, not in `TravellerBar`.
   Picking a face re-costs the whole itinerary, so the banner cannot own it.
 - **The trip detail page does not render `description`.** The field is still

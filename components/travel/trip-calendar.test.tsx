@@ -113,8 +113,9 @@ describe("TripCalendar", () => {
         trip={trip([CRUISE])}
         partySize={2}
         viewer={{
+          memberId: null,
           name: "Bruno Fabián",
-          isYou: false,
+      isYou: false,
           lines: new Map([["c", { low: 1900, high: 1900 }]]),
         }}
       />

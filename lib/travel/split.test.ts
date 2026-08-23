@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultShares, splitTrip } from "./split";
+import { defaultShares, itemConcerns, splitTrip } from "./split";
 import type { SplitItem, SplitMember } from "./split";
 
 const ana: SplitMember = { id: "ana", name: "Ana", sharePercent: null };
@@ -201,5 +201,16 @@ describe("an item somebody else is not paying for", () => {
     // Ana: 600 of the ticket + 100 of the room. X: only the room.
     expect(shares.find((s) => s.memberId === "ana")!.owedLow).toBe(700);
     expect(shares.find((s) => s.memberId === "x")!.owedLow).toBe(100);
+  });
+});
+
+describe("whose trip an item belongs to", () => {
+  it("belongs to everybody when it names nobody", () => {
+    expect(itemConcerns([], "ana")).toBe(true);
+  });
+
+  it("belongs only to the payers it names", () => {
+    expect(itemConcerns(["jason", "jafet"], "jafet")).toBe(true);
+    expect(itemConcerns(["jason", "jafet"], "ana")).toBe(false);
   });
 });

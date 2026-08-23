@@ -106,6 +106,9 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
 
   const publicViewer = scope
     ? {
+        // The service has already narrowed `items` to this traveller's, and
+        // the trip's member ids stay on the server.
+        memberId: null,
         name: scope.memberName,
         isYou: false,
         lines: new Map(scope.lines.map((l) => [l.itemId, { low: l.low, high: l.high }])),

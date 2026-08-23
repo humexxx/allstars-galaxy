@@ -93,6 +93,7 @@ describe("TripItinerary day subtotals", () => {
   it("re-costs the day for the selected traveller", () => {
     // Half the flight and half the hotel: $300–$400 plus $100–$200.
     const viewer: ItineraryViewer = {
+      memberId: null,
       name: "Bruno Fabián",
       isYou: false,
       lines: new Map([
@@ -110,6 +111,7 @@ describe("TripItinerary day subtotals", () => {
     // Their half is what they owe; the full price is what the hotel's site
     // will actually quote, and losing it makes the row uncheckable.
     const viewer: ItineraryViewer = {
+      memberId: null,
       name: "Jason",
       isYou: true,
       lines: new Map([["flight", { low: 300, high: 400 }]]),

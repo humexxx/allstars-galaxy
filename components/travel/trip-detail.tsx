@@ -158,6 +158,7 @@ export function TripDetail({
     const share = shares.find((s) => s.memberId === selected);
     if (!share) return null;
     return {
+      memberId: share.memberId,
       name: share.name,
       isYou: share.memberId === youId,
       lines: new Map(share.lines.map((l) => [l.itemId, { low: l.low, high: l.high }])),

@@ -40,6 +40,18 @@ export type MemberShare = {
 };
 
 /**
+ * Is this item part of one traveller's trip at all?
+ *
+ * Naming payers says who pays; it also says whose plan the thing belongs to.
+ * Ana's flight from Mexico is not a line worth nothing on Jafet's itinerary —
+ * it is not on his itinerary. An item with no payers named is everybody's,
+ * which is what an empty list has always meant.
+ */
+export function itemConcerns(payerIds: string[], memberId: string): boolean {
+  return payerIds.length === 0 || payerIds.includes(memberId);
+}
+
+/**
  * How the trip splits when an item names no payers.
  *
  * Members with an explicit percentage take it; the rest divide what is left

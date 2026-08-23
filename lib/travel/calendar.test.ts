@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addMonths, capLanes, layOutWeek, monthWeeks, occupiedRuns } from "./calendar";
+import { addMonths, layOutWeek, monthWeeks, occupiedRuns } from "./calendar";
 import type { CalendarItem } from "./calendar";
 
 const item = (over: Partial<CalendarItem>): CalendarItem => ({
@@ -83,67 +83,5 @@ describe("layOutWeek", () => {
 
   it("ignores anything that misses the week entirely", () => {
     expect(layOutWeek(week, [item({ scheduledOn: "2027-02-02" })])).toEqual([]);
-  });
-});
-
-describe("capLanes", () => {
-  const seg = (lane: number, start = 0, span = 1) =>
-    ({ lane, start, span, opensRun: true, closesRun: true, leg: "only" as const,
-       item: { id: `i${lane}-${start}`, title: "x", category: "activity" as const,
-               scheduledOn: "2027-01-10", endsOn: null } });
-
-  it("leaves a day alone until the cap actually buys something", () => {
-    // Collapsing four lanes to show "+1 more" in place of the one thing it
-    // hides helps nobody.
-    const segs = [seg(0), seg(1), seg(2), seg(3)];
-    const { visible, hiddenByDay } = capLanes(segs, 4);
-
-    expect(visible).toHaveLength(4);
-    expect(hiddenByDay.every((n) => n === 0)).toBe(true);
-  });
-
-  it("keeps room for the count once a day overflows", () => {
-    const segs = [seg(0), seg(1), seg(2), seg(3), seg(4)];
-    const { visible, hiddenByDay } = capLanes(segs, 4);
-
-    // Three shown, and the fourth lane is given over to "+2".
-    expect(visible.map((s) => s.lane)).toEqual([0, 1, 2]);
-    expect(hiddenByDay[0]).toBe(2);
-  });
-
-  it("counts a hidden run only on the days it actually covers", () => {
-    // A run hidden on Tuesday is not hidden on Friday just because it passes
-    // through both.
-    const segs = [seg(0), seg(1), seg(2), seg(3), seg(4)];
-    const { hiddenByDay } = capLanes(segs, 4);
-
-    expect(hiddenByDay[0]).toBe(2);
-    expect(hiddenByDay.slice(1).every((n) => n === 0)).toBe(true);
-  });
-
-  it("caps the day that overflows and leaves its neighbours alone", () => {
-    // Deciding week-wide meant one packed Sunday collapsed every other day in
-    // its row: a Monday holding exactly the cap lost its last run to a "+1"
-    // standing in the very slot that run wanted.
-    const sunday = [seg(0), seg(1), seg(2), seg(3), seg(4)];
-    const monday = [seg(0, 1), seg(1, 1), seg(2, 1), seg(3, 1)];
-    const { hiddenByDay, visible } = capLanes([...sunday, ...monday], 4);
-
-    expect(hiddenByDay[0]).toBe(2);
-    expect(hiddenByDay[1]).toBe(0);
-    // Monday keeps all four of its runs.
-    expect(visible.filter((s) => s.start === 1)).toHaveLength(4);
-  });
-
-  it("cuts a spanning run on every day it crosses, not just the busy one", () => {
-    // Lanes are shared across the week on purpose — a run that changed rows
-    // mid-week would stop reading as one journey. So the lane it was given
-    // is what makes each cell tall, and a run parked on lane 4 is over the
-    // cap on a quiet Monday exactly as it is on a packed Sunday.
-    const segs = [seg(0), seg(1), seg(2), seg(3), seg(4, 0, 3)];
-    const { hiddenByDay } = capLanes(segs, 4);
-
-    expect(hiddenByDay.slice(0, 3)).toEqual([2, 1, 1]);
-    expect(hiddenByDay[3]).toBe(0);
   });
 });

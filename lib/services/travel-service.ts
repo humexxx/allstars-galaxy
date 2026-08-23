@@ -42,7 +42,7 @@ import type {
   MoveTripItemInput,
 } from "@/schemas/travel";
 
-import { splitTrip } from "@/lib/travel/split";
+import { itemConcerns, splitTrip } from "@/lib/travel/split";
 
 import { ensureOwnedRow } from "./ownership";
 
@@ -652,15 +652,24 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
     payerIds: payersByItem.get(i.id) ?? [],
   }));
 
+  // A link made for one traveller shows that traveller's trip. Ana's flight
+  // from Mexico is not a $0 line on Jafet's page — it is not on his page. The
+  // narrowing happens here so the member ids never leave the server, and the
+  // split above still runs over every item so the totals stay right.
+  const scope = scopeRows ? buildScope(scopeRows, enriched, share.memberId!) : null;
+  const visible = share.memberId
+    ? enriched.filter((i) => itemConcerns(i.payerIds, share.memberId!))
+    : enriched;
+
   return {
     trip,
-    items: enriched,
+    items: visible,
     photos: photos.filter((p) => !p.itemId),
     share,
     // Built from the items already in hand rather than fetched again — and
     // from the enriched ones, or a scoped link would split a festival ticket
     // among people who are not going to it.
-    scope: scopeRows ? buildScope(scopeRows, enriched, share.memberId!) : null,
+    scope,
   };
 });
 

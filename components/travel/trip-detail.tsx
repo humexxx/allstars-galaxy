@@ -120,9 +120,7 @@ export function TripDetail({
           priceUnit: i.priceUnit,
           scheduledOn: i.scheduledOn,
           endsOn: i.endsOn,
-          // Per-item payers have no UI yet; until they do every item follows
-          // the trip's own split, which is what an empty list means.
-          payerIds: [],
+          payerIds: i.payerIds,
         })),
         trip.members.map((m) => ({
           id: m.id,

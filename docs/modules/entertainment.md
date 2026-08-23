@@ -1,7 +1,7 @@
 # Entertainment
 
 > **Status:** In progress (travel shipped + dashboard card; sports UI shipped, favourites end-to-end on DB; LoL, F1, football, World Cup, padel and tennis wired to free live providers)
-> **Last reviewed:** 2026-08-21
+> **Last reviewed:** 2026-08-22
 
 ## Overview
 Two sub-modules: Travel Planner (trips, items, photos, public sharing) and
@@ -84,7 +84,7 @@ NBA and NFL still use mocks.
 - `trip_members` — who is going, with an optional fixed `share_percent`
 - `trip_contributions` — money a traveller has actually handed over
 - `trip_item_stops` — a cruise's day-by-day ports
-- `trip_item_payers` — per-item payers (schema only; no UI yet)
+- `trip_item_payers` — who covers one item, when it is not the whole party
 - `user_sports_preferences` — favourited sports per user; UNIQUE(user_id, sport_id) backs the toggle semantics
 
 ## Tests
@@ -339,6 +339,14 @@ NBA and NFL still use mocks.
   together — `splitTrip` returns `owedLow`/`owedHigh`, never a single `owed`.
   The one field was the bug: each reader downstream presented it as the answer,
   and a $600–$800 flight showed up as a settled $600.
+- **An item may name its own payers** (`trip_item_payers`, edited from the
+  *Who pays for this* row in the item form). An empty list is the common case
+  and means "however the trip divides" — naming nobody is not the same as
+  naming everybody, because the trip's own `sharePercent` still applies. Named
+  payers split the item equally between themselves, except for a `per_person`
+  price, which is already one person's cost and so is charged to each payer in
+  full. `setItemPayers` replaces the whole set and rejects a member who is not
+  on the trip.
 - **The day subtotal is the sum of the rows above it**, and it is derived from
   the same figures those rows print. When a traveller is selected the rows
   switch to that person's share so the arithmetic still checks out on screen;

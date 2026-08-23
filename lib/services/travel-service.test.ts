@@ -210,12 +210,12 @@ describe("getTripWithRelations", () => {
     expect(out?.shares).toEqual(shares);
     // Each item carries its own stops, attached from the single stops query
     // rather than one query per item.
-    expect(out?.items).toEqual([{ ...items[0], stops, photos: [] }]);
+    expect(out?.items).toEqual([{ ...items[0], stops, photos: [], payerIds: [] }]);
     expect(out?.members).toEqual(members);
-    // 1 for the trip + 6 parallel queries for relations. The count is the
+    // 1 for the trip + 7 parallel queries for relations. The count is the
     // point: every relation is one query for the whole trip, so adding a
     // relation must not add a query per row.
-    expect(dbMock.select).toHaveBeenCalledTimes(7);
+    expect(dbMock.select).toHaveBeenCalledTimes(8);
   });
 });
 
@@ -535,6 +535,7 @@ describe("getPublicTripByToken", () => {
     queueSelect(items); // items
     queueSelect(photos); // photos
     queueSelect([]); // stops
+    queueSelect([]); // payers
 
     const out = await getPublicTripByToken("tok");
 
@@ -543,7 +544,7 @@ describe("getPublicTripByToken", () => {
     expect(out?.trip).toEqual(trip);
     // Items carry their stops: a cruise's ports are half of what its row
     // says, and a link that hides them shows a booking, not a journey.
-    expect(out?.items).toEqual(items.map((i) => ({ ...i, stops: [], photos: [] })));
+    expect(out?.items).toEqual(items.map((i) => ({ ...i, stops: [], photos: [], payerIds: [] })));
     expect(out?.photos).toEqual(photos);
   });
 
@@ -568,6 +569,7 @@ describe("getPublicTripByToken", () => {
     queueSelect(items);
     queueSelect([]); // photos
     queueSelect([]); // stops
+    queueSelect([]); // payers
     queueSelect([
       { id: "jason", name: "Jason Hume", sharePercent: null },
       { id: "bruno", name: "Bruno Fabián", sharePercent: null },
@@ -585,10 +587,10 @@ describe("getPublicTripByToken", () => {
     });
     // Jason is nowhere in what crosses the boundary.
     expect(JSON.stringify(out)).not.toContain("Jason");
-    // Five relation queries, not six: the scope reuses the items already in
+    // Six relation queries, not seven: the scope reuses the items already in
     // hand. Counting them is what keeps a second round trip from creeping
     // back in behind the first.
-    expect(dbMock.select).toHaveBeenCalledTimes(7);
+    expect(dbMock.select).toHaveBeenCalledTimes(8);
   });
 
   it("leaves an unscoped link with no traveller attached", async () => {
@@ -600,6 +602,7 @@ describe("getPublicTripByToken", () => {
     queueSelect([]); // items
     queueSelect([]); // photos
     queueSelect([]); // stops
+    queueSelect([]); // payers
 
     const out = await getPublicTripByToken("tok");
     expect(out?.scope).toBeNull();
@@ -617,6 +620,7 @@ describe("getPublicTripByToken", () => {
     queueSelect([]); // items
     queueSelect([]); // photos
     queueSelect([]); // stops
+    queueSelect([]); // payers
     queueSelect([{ id: "jason", name: "Jason Hume", sharePercent: null }]);
     queueSelect([]); // payments
 

@@ -560,6 +560,7 @@ export function TripCalendar({
               item={editing}
               defaultDate={editing.scheduledOn}
               currency={trip.currency}
+              travellers={trip.members.map((m) => ({ id: m.id, name: m.name }))}
               onDone={() => setEditing(null)}
             />
           )}

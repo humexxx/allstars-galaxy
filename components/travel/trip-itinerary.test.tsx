@@ -31,6 +31,7 @@ const item = (over: Partial<TripItemWithStops>): TripItemWithStops =>
     notes: null,
     stops: [],
     photos: [],
+    payerIds: [],
     ...over,
   }) as TripItemWithStops;
 
@@ -56,7 +57,13 @@ const FRIDAY: TripItemWithStops[] = [
 ];
 
 const trip = (items: TripItemWithStops[]): TripWithRelations =>
-  ({ id: "t1", currency: "USD", startDate: "2027-01-15", items }) as TripWithRelations;
+  ({
+    id: "t1",
+    currency: "USD",
+    startDate: "2027-01-15",
+    items,
+    members: [] as TripWithRelations["members"],
+  }) as TripWithRelations;
 
 describe("TripItinerary day subtotals", () => {
   it("adds up both ends of the day, not just the low one", () => {

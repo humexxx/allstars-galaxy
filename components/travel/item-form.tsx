@@ -66,6 +66,7 @@ export function ItemForm({
   item,
   defaultDate,
   currency,
+  travellers = [],
   onDone,
 }: {
   tripId: string;
@@ -73,6 +74,8 @@ export function ItemForm({
   defaultDate?: string | null;
   /** Drives the symbol shown inside the amount fields. */
   currency: string;
+  /** Who is on the trip, so this item can name who is covering it. */
+  travellers?: { id: string; name: string }[];
   onDone: () => void;
 }) {
   const router = useRouter();
@@ -107,6 +110,8 @@ export function ItemForm({
     { url: string; storagePath: string | null; source: "upload" | "url" }[]
   >([]);
   const [notes, setNotes] = useState(item?.notes ?? "");
+  /** Empty means the trip's own split — the common case, so it is the default. */
+  const [payerIds, setPayerIds] = useState<string[]>(item?.payerIds ?? []);
 
   /** Saved photos and picked-but-unsaved ones, shown as one strip. */
   const shownPhotos = [
@@ -184,6 +189,7 @@ export function ItemForm({
         endsOn: endsOn || null,
         videoUrl: videoUrl.trim() || null,
         notes: notes.trim() || null,
+        payerIds,
       };
       const res = item
         ? await updateTripItemAction(tripId, { id: item.id, ...payload })
@@ -430,6 +436,54 @@ export function ItemForm({
         </Field>
         )}
       </div>
+
+      {travellers.length > 1 && (
+        <Field className="gap-1.5">
+          <FieldLabel className="text-xs">Who pays for this</FieldLabel>
+          <div className="flex flex-wrap gap-1.5">
+            {/* "Everyone" is the absence of a choice, not a choice of its
+                own — an empty list is what the split already means by
+                "however the trip divides". */}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-active={payerIds.length === 0}
+              className="h-8 rounded-full px-3 text-xs data-[active=true]:border-foreground/30 data-[active=true]:bg-foreground/5"
+              onClick={() => setPayerIds([])}
+            >
+              Everyone
+            </Button>
+            {travellers.map((t) => {
+              const on = payerIds.includes(t.id);
+              return (
+                <Button
+                  key={t.id}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  data-active={on}
+                  className="h-8 rounded-full px-3 text-xs data-[active=true]:border-foreground/30 data-[active=true]:bg-foreground/5"
+                  onClick={() =>
+                    setPayerIds((cur) =>
+                      on ? cur.filter((id) => id !== t.id) : [...cur, t.id]
+                    )
+                  }
+                >
+                  {t.name}
+                </Button>
+              );
+            })}
+          </div>
+          <Text variant="small" className="text-muted-foreground">
+            {payerIds.length === 0
+              ? "Divided the way the trip divides."
+              : `Only ${payerIds
+                  .map((id) => travellers.find((t) => t.id === id)?.name ?? "?")
+                  .join(" and ")} — split equally between them.`}
+          </Text>
+        </Field>
+      )}
 
       <Field className="gap-1.5">
         <FieldLabel className="text-xs">Photos</FieldLabel>

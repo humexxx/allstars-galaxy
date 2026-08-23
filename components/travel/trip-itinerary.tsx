@@ -173,6 +173,7 @@ export function TripItinerary({
                   currency={trip.currency}
                   partySize={partySize}
                   viewer={viewer}
+                  travellers={trip.members.map((m) => ({ id: m.id, name: m.name }))}
                 />
               ))}
             </ul>
@@ -195,6 +196,7 @@ export function TripItinerary({
             tripId={trip.id}
             defaultDate={trip.startDate}
             currency={trip.currency}
+            travellers={trip.members.map((m) => ({ id: m.id, name: m.name }))}
             onDone={() => setAdding(false)}
           />
         </DialogContent>
@@ -209,6 +211,7 @@ function ItemRow({
   currency,
   partySize,
   viewer,
+  travellers,
 }: {
   tripId: string;
   item: TripItemWithStops;
@@ -216,6 +219,7 @@ function ItemRow({
   /** How many people the per-person prices apply to. */
   partySize: number;
   viewer: ItineraryViewer | null;
+  travellers: { id: string; name: string }[];
 }) {
   const [editing, setEditing] = useState(false);
   const meta = categoryMeta(item.category);
@@ -373,6 +377,7 @@ function ItemRow({
           item={item}
           defaultDate={item.scheduledOn}
           currency={currency}
+          travellers={travellers}
           onDone={() => setEditing(false)}
         />
       </DialogContent>

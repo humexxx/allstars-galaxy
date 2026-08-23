@@ -3,13 +3,14 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { cache } from "react";
 
-import { and, asc, desc, eq, isNull, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, notInArray } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
   trips,
   tripContributions,
   tripItems,
+  tripItemPayers,
   tripItemStops,
   tripMembers,
   tripPhotos,
@@ -24,6 +25,7 @@ import type {
   Trip,
   TripContribution,
   TripItem,
+  TripItemWithStops,
   TripPhoto,
   TripShare,
   TripWithRelations,
@@ -121,7 +123,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     .where(and(eq(trips.id, tripId), eq(trips.userId, userId)));
   if (!trip) return null;
 
-  const [items, photos, shares, stops, members, contributions] = await Promise.all([
+  const [items, photos, shares, stops, members, contributions, payers] = await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -170,6 +172,14 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       // Newest first: a payment log is read from the top, and the question it
       // answers is "did the last one land", not "what happened first".
       .orderBy(desc(tripContributions.paidOn), desc(tripContributions.createdAt)),
+    // Who covers what, in one query for the trip. `splitTrip` has honoured
+    // this since it was written; nothing ever loaded it, so every item was
+    // divided among everybody.
+    db
+      .select({ itemId: tripItemPayers.itemId, memberId: tripItemPayers.memberId })
+      .from(tripItemPayers)
+      .innerJoin(tripItems, eq(tripItemPayers.itemId, tripItems.id))
+      .where(eq(tripItems.tripId, tripId)),
   ]);
 
   const stopsByItem = new Map<string, typeof stops>();
@@ -181,6 +191,13 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
 
   // A photo belongs to one place or the other: the gallery is the trip's own
   // photos, and an item's photos travel with the item.
+  const payersByItem = new Map<string, string[]>();
+  for (const row of payers) {
+    const list = payersByItem.get(row.itemId) ?? [];
+    list.push(row.memberId);
+    payersByItem.set(row.itemId, list);
+  }
+
   const photosByItem = new Map<string, typeof photos>();
   for (const photo of photos) {
     if (!photo.itemId) continue;
@@ -195,6 +212,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       ...i,
       stops: stopsByItem.get(i.id) ?? [],
       photos: photosByItem.get(i.id) ?? [],
+      payerIds: payersByItem.get(i.id) ?? [],
     })),
     photos: photos.filter((p) => !p.itemId),
     shares,
@@ -257,6 +275,35 @@ export async function deleteTrip(userId: string, tripId: string): Promise<void> 
 
 // ---------- items ----------
 
+/**
+ * Replaces an item's payers wholesale.
+ *
+ * Delete-then-insert rather than a diff: the set is at most a handful of rows
+ * and reconciling it would be more code than it saves. Members are checked
+ * against the trip for the same reason everything else here is — the foreign
+ * key proves the row exists, not which trip it belongs to.
+ */
+async function setItemPayers(
+  tripId: string,
+  itemId: string,
+  memberIds: string[]
+): Promise<void> {
+  await db.delete(tripItemPayers).where(eq(tripItemPayers.itemId, itemId));
+  if (memberIds.length === 0) return;
+
+  const valid = await db
+    .select({ id: tripMembers.id })
+    .from(tripMembers)
+    .where(and(eq(tripMembers.tripId, tripId), inArray(tripMembers.id, memberIds)));
+  if (valid.length !== memberIds.length) {
+    throw new Error("Traveller not found on this trip");
+  }
+
+  await db
+    .insert(tripItemPayers)
+    .values(memberIds.map((memberId) => ({ itemId, memberId })));
+}
+
 export async function addTripItem(
   userId: string,
   tripId: string,
@@ -283,6 +330,7 @@ export async function addTripItem(
       sortOrder: data.sortOrder ?? 0,
     })
     .returning();
+  if (data.payerIds?.length) await setItemPayers(tripId, row.id, data.payerIds);
   return row;
 }
 
@@ -313,6 +361,9 @@ export async function updateTripItem(
     })
     .where(and(eq(tripItems.id, data.id), eq(tripItems.tripId, tripId)))
     .returning();
+  // Always, not only when non-empty: clearing the list is how an item goes
+  // back to the trip's own split.
+  await setItemPayers(tripId, row.id, data.payerIds ?? []);
   return row;
 }
 
@@ -534,7 +585,7 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
   // and payments do not depend on the items or the photos, so awaiting them
   // afterwards would have cost a second round trip for no ordering reason —
   // and at ~86ms each that is the whole budget of a small page.
-  const [items, photos, stops, scopeRows] = await Promise.all([
+  const [items, photos, stops, payers, scopeRows] = await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -561,6 +612,14 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
       .innerJoin(tripItems, eq(tripItemStops.itemId, tripItems.id))
       .where(eq(tripItems.tripId, trip.id))
       .orderBy(asc(tripItemStops.dayNumber)),
+    // Who covers what, in one query for the trip. `splitTrip` has honoured
+    // this since it was written; nothing ever loaded it, so every item was
+    // divided among everybody.
+    db
+      .select({ itemId: tripItemPayers.itemId, memberId: tripItemPayers.memberId })
+      .from(tripItemPayers)
+      .innerJoin(tripItems, eq(tripItemPayers.itemId, tripItems.id))
+      .where(eq(tripItems.tripId, trip.id)),
     share.memberId ? loadScopeRows(trip.id, share.memberId) : null,
   ]);
 
@@ -571,6 +630,13 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
     stopsByItem.set(stop.itemId, list);
   }
 
+  const payersByItem = new Map<string, string[]>();
+  for (const row of payers) {
+    const list = payersByItem.get(row.itemId) ?? [];
+    list.push(row.memberId);
+    payersByItem.set(row.itemId, list);
+  }
+
   const photosByItem = new Map<string, typeof photos>();
   for (const photo of photos) {
     if (!photo.itemId) continue;
@@ -579,17 +645,22 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
     photosByItem.set(photo.itemId, list);
   }
 
+  const enriched = items.map((i) => ({
+    ...i,
+    stops: stopsByItem.get(i.id) ?? [],
+    photos: photosByItem.get(i.id) ?? [],
+    payerIds: payersByItem.get(i.id) ?? [],
+  }));
+
   return {
     trip,
-    items: items.map((i) => ({
-      ...i,
-      stops: stopsByItem.get(i.id) ?? [],
-      photos: photosByItem.get(i.id) ?? [],
-    })),
+    items: enriched,
     photos: photos.filter((p) => !p.itemId),
     share,
-    // Built from the items already in hand rather than fetched again.
-    scope: scopeRows ? buildScope(scopeRows, items, share.memberId!) : null,
+    // Built from the items already in hand rather than fetched again — and
+    // from the enriched ones, or a scoped link would split a festival ticket
+    // among people who are not going to it.
+    scope: scopeRows ? buildScope(scopeRows, enriched, share.memberId!) : null,
   };
 });
 
@@ -643,7 +714,7 @@ async function loadScopeRows(
  */
 function buildScope(
   rows: ScopeRows,
-  items: TripItem[],
+  items: TripItemWithStops[],
   memberId: string
 ): PublicTripScope | null {
   const { members, paidRows } = rows;
@@ -664,7 +735,7 @@ function buildScope(
       priceUnit: i.priceUnit,
       scheduledOn: i.scheduledOn,
       endsOn: i.endsOn,
-      payerIds: [],
+      payerIds: i.payerIds,
     })),
     members.map((m) => ({
       id: m.id,

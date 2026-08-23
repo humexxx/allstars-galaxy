@@ -25,6 +25,7 @@ const item = (over: Partial<TripItemWithStops>): TripItemWithStops =>
 const trip = (items: TripItemWithStops[]): TripWithRelations =>
   ({
     id: "t1", currency: "USD", startDate: "2027-01-15", endDate: "2027-01-24", items,
+    members: [] as TripWithRelations["members"],
   }) as TripWithRelations;
 
 const CRUISE = item({

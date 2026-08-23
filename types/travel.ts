@@ -33,6 +33,14 @@ export type TripItemStop = {
 
 export type TripItemWithStops = TripItem & {
   stops: TripItemStop[];
+  /**
+   * Members covering this item. Empty means "however the trip splits".
+   *
+   * The table has existed since the schema did and nothing ever read it, so
+   * every item was divided among everybody — which is wrong the moment two
+   * people share a festival ticket the other two are not going to.
+   */
+  payerIds: string[];
   /** Photos attached to this item rather than to the trip's gallery. */
   photos: TripPhoto[];
 };

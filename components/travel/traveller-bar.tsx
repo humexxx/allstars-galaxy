@@ -78,7 +78,11 @@ export function TravellerBar({
     <div className="flex flex-wrap items-center gap-2">
       <div
         className={cn(
-          "flex min-w-56 flex-col justify-center rounded-xl px-3 py-2",
+          // 224px of a 326px phone banner left the delete button 15px past
+          // the edge. The floor exists so the box does not jump between
+          // captions; below `sm` a smaller one still covers a plain figure,
+          // and a slight jump beats a control nobody can reach.
+          "flex min-w-44 flex-col justify-center rounded-xl px-3 py-2 sm:min-w-56",
           // Solid, not translucent: the photograph underneath is unknown.
           "bg-black/70 backdrop-blur-sm ring-1 ring-white/15"
         )}

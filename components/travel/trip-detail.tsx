@@ -193,11 +193,14 @@ export function TripDetail({
             where the free days are, how long the cruise really runs. */}
         <Tabs value={view} onValueChange={(v) => setView(v as TripView)}>
           <TabsList>
-            <TabsTrigger value="list" className="gap-1.5">
+            {/* Named even where the word is hidden: below `sm` the label is
+                `hidden`, which left the tab with no accessible name at all —
+                invisible to a screen reader and unfindable by role. */}
+            <TabsTrigger value="list" aria-label="List" className="gap-1.5">
               <ListIcon className="size-3.5" />
               <span className="hidden sm:inline">List</span>
             </TabsTrigger>
-            <TabsTrigger value="calendar" className="gap-1.5">
+            <TabsTrigger value="calendar" aria-label="Calendar" className="gap-1.5">
               <CalendarDays className="size-3.5" />
               <span className="hidden sm:inline">Calendar</span>
             </TabsTrigger>
@@ -254,11 +257,27 @@ export function TripDetail({
                 {/* Sharing sits with the trip, not in a card down the page:
                     it is something you do to the whole thing, and which
                     traveller is selected changes what the link will show. */}
-                <Button size="sm" variant="secondary" onClick={() => setShareOpen(true)}>
-                  <Share2 className="mr-1 size-3.5" /> Share
+                {/* The label is the first thing to go on a phone: three
+                    labelled buttons crowd a banner that also carries the
+                    total, the faces and the title. The icon is unambiguous
+                    and the name comes back from `sm` up. */}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setShareOpen(true)}
+                  aria-label="Share this trip"
+                >
+                  <Share2 className="size-3.5 sm:mr-1" />
+                  <span className="hidden sm:inline">Share</span>
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}>
-                  <Pencil className="mr-1 size-3.5" /> Edit
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setEditOpen(true)}
+                  aria-label="Edit this trip"
+                >
+                  <Pencil className="size-3.5 sm:mr-1" />
+                  <span className="hidden sm:inline">Edit</span>
                 </Button>
                 <Button
                   size="sm"

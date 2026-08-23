@@ -58,9 +58,25 @@ function loadEnv(): Env {
 
 export const env: Env = loadEnv()
 
+/**
+ * The origin a link handed to somebody else must point at.
+ *
+ * `VERCEL_URL` is the *deployment's* own hostname — a new one on every push,
+ * and on a team project it sits behind Deployment Protection, so a share link
+ * built from it lands the recipient on a Vercel login page. It is the last
+ * resort here, not the first.
+ *
+ * `VERCEL_PROJECT_PRODUCTION_URL` is the stable production hostname (or the
+ * custom domain once one is attached), which is what a shared link wants.
+ * `NEXT_PUBLIC_BASE_URL` still wins over both: it is the only one that can
+ * name a domain Vercel does not know about.
+ */
 export function getBaseUrl(): string {
   if (env.NEXT_PUBLIC_BASE_URL) {
     return env.NEXT_PUBLIC_BASE_URL
+  }
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
   }
   if (process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL}`

@@ -1,4 +1,3 @@
-import { GalleryVerticalEnd } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import type { Metadata } from "next"
@@ -9,6 +8,7 @@ import { FormSkeleton } from "@/components/skeletons/form-skeleton"
 import { Button } from "@/components/ui/button"
 import { Heading, Text } from "@/components/ui/typography"
 import { signupsAllowed } from "@/lib/auth/signups"
+import { Logo } from "@/components/logo";
 
 export const metadata: Metadata = {
   title: "Sign up",
@@ -21,9 +21,7 @@ export default function SignupPage() {
       <section className="flex flex-col gap-4 p-6 md:p-12">
         <header className="flex justify-center gap-2 md:justify-start">
           <Link href="/" className="flex items-center gap-2 font-medium">
-            <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
-              <GalleryVerticalEnd className="size-4" />
-            </div>
+            <Logo className="size-6" />
             Allstars Galaxy
           </Link>
         </header>

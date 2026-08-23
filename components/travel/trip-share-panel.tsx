@@ -312,13 +312,23 @@ function ShareRow({
 
       {showQr && (
         <div className="flex flex-col items-center gap-2 rounded-md border bg-background p-3">
-          {/* White behind the code whatever the theme: a dark surface inverts
-              the quiet zone and most scanners give up. */}
-          <div className="rounded bg-white p-2">
+          {/* The code is a link, not a picture of one. A phone cannot scan
+              its own screen, so on the device holding this the useful gesture
+              is a long press — which only offers "open" and "copy" when the
+              thing pressed is an anchor. */}
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Open this link"
+            // White behind the code whatever the theme: a dark surface
+            // inverts the quiet zone and most scanners give up.
+            className="rounded bg-white p-2 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <QRCodeSVG value={url} size={132} level="M" marginSize={0} />
-          </div>
-          <Text className="text-2xs text-muted-foreground">
-            Point a camera at this to open the link
+          </a>
+          <Text className="text-center text-2xs text-muted-foreground">
+            Point a camera at this — or hold it down to open it here
           </Text>
         </div>
       )}

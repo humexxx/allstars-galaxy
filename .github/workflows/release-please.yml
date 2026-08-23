@@ -41,9 +41,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release.outputs.tag_name }}
         run: |
-          gh pr create \
+          # A warning, not a swallowed echo. The first run of this step failed
+          # and printed a cheerful "nothing to sync", so the job went green
+          # while develop stayed a version behind — which is the exact thing
+          # the step exists to prevent.
+          if ! gh pr create \
             --base develop \
             --head main \
             --title "chore(release): sync ${TAG} back to develop" \
             --body "Automated: carries the version bump and CHANGELOG from the ${TAG} release back to develop so the next release is computed from the truth." \
-            || echo "Nothing to sync, or a sync PR is already open."
+            2> sync-error.txt; then
+            echo "::warning title=Sync PR not opened::${TAG} released, but the branch-back PR failed: $(tr '\n' ' ' < sync-error.txt). Merge main into develop by hand, or the next release is computed from a stale version."
+          fi

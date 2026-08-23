@@ -154,6 +154,11 @@ NBA and NFL still use mocks.
   unused since the table did). A photo picked before the item exists waits in
   the form and is attached once the insert returns an id. The gallery holds
   only the trip's own photos; the rest travel with their item.
+- **The shared page's view switcher sits on the banner**, opposite the total,
+  dark and ringed for the same reason the pill is: the photograph underneath
+  is unknown. `PublicTripViews` owns the page layout rather than a slot inside
+  it, because that one piece of state spans the banner and the column below
+  the grid — so the banner, the list and the aside arrive as slots.
 - **The shared page offers the calendar too**, mounted `readOnly`: the month
   arrows stay, because reading a plan means looking at the days around it, but
   the bars stop being handles and `ItemForm` is a dynamic import that a
@@ -176,6 +181,15 @@ NBA and NFL still use mocks.
   what they are looking at, and a recipient seeing a different layout has to
   be told how to map one onto the other. There is no add, edit, menu or drag
   anywhere in it: a share link grants a view.
+- **A share link's origin comes from `getBaseUrl`**, which prefers
+  `NEXT_PUBLIC_BASE_URL`, then Vercel's `VERCEL_PROJECT_PRODUCTION_URL`.
+  `VERCEL_URL` is the *deployment's* hostname — new on every push, and on this
+  project it 302s to `vercel.com/sso-api`, so a link built from it lands the
+  recipient on a login page. The production alias is **not** protected and
+  serves `/trips/<token>` to anybody; Deployment Protection covers the
+  per-deployment hosts only, which is what they are for. Nothing needs
+  disabling — the app just has to write the right host into the link.
+  [`lib/env.test.ts`](../../lib/env.test.ts) pins the order.
 - **Each active link can show its QR** (`qrcode.react`). A phone cannot be
   handed a URL, and the code is how a link crosses to a device that is not
   this one. The code is drawn on white whatever the theme — a dark surface

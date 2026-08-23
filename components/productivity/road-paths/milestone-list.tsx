@@ -14,7 +14,7 @@ import {
   deleteRoadPathMilestoneAction,
 } from "@/app/actions/road-path";
 import { createRoadPathMilestoneSchema, type CreateRoadPathMilestoneData } from "@/schemas/road-path";
-import { toast } from "sonner";
+import { runAction } from "@/lib/actions/run";
 import type { RoadPathMilestone } from "@/types";
 
 type MilestoneListProps = {
@@ -34,41 +34,40 @@ export function MilestoneList({ roadPathId, milestones, onRefresh }: MilestoneLi
     resolver: zodResolver(createRoadPathMilestoneSchema),
     defaultValues: {
       roadPathId,
+      // Required by the schema. Nothing filled it, so every milestone failed
+      // validation and the form sat there saying nothing.
+      order: milestones.length,
     },
   });
 
   const onSubmit = async (data: CreateRoadPathMilestoneData) => {
-    try {
-      await createRoadPathMilestoneAction(data);
-      toast.success("Milestone created");
-      reset();
-      setShowForm(false);
-      onRefresh();
-    } catch {
-      toast.error("Failed to create milestone");
-    }
+    const { ok } = await runAction(createRoadPathMilestoneAction(data), {
+      success: "Milestone created",
+      failure: "Failed to create milestone",
+    });
+    if (!ok) return;
+    reset({ roadPathId, order: milestones.length });
+    setShowForm(false);
+    onRefresh();
   };
 
   const handleToggle = async (milestone: RoadPathMilestone): Promise<void> => {
-    try {
-      await updateRoadPathMilestoneAction({
+    const { ok } = await runAction(
+      updateRoadPathMilestoneAction({
         id: milestone.id,
         completedAt: milestone.completedAt ? null : new Date(),
-      });
-      onRefresh();
-    } catch {
-      toast.error("Failed to update milestone");
-    }
+      }),
+      { failure: "Failed to update milestone" }
+    );
+    if (ok) onRefresh();
   };
 
   const handleDelete = async (id: string) => {
-    try {
-      await deleteRoadPathMilestoneAction(id);
-      toast.success("Milestone deleted");
-      onRefresh();
-    } catch {
-      toast.error("Failed to delete milestone");
-    }
+    const { ok } = await runAction(deleteRoadPathMilestoneAction(id), {
+      success: "Milestone deleted",
+      failure: "Failed to delete milestone",
+    });
+    if (ok) onRefresh();
   };
 
   return (

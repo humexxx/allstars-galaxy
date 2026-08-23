@@ -12,6 +12,7 @@ const config = {
         "travel",
         "sports",
         "entertainment",
+        "productivity",
         "landing",
         "portal",
         "ui",

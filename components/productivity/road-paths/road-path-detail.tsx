@@ -16,9 +16,12 @@ import { format } from "date-fns";
 type RoadPathDetailProps = {
   roadPath: RoadPath;
   onBack: () => void;
+  /** Keeps the list behind this view in step with what changes in here. */
+  onRefresh?: () => void;
 };
 
-export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
+export function RoadPathDetail({ roadPath, onBack, onRefresh }: RoadPathDetailProps) {
+  const [detail, setDetail] = useState<RoadPath>(roadPath);
   const [milestones, setMilestones] = useState<RoadPathMilestone[]>([]);
   const [progress, setProgress] = useState<RoadPathProgress[]>([]);
   const [stats, setStats] = useState<RoadPathStats | null>(null);
@@ -30,9 +33,15 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
       try {
         const result = await getRoadPathDetailAction(roadPath.id);
         if (result.success) {
+          // The freshly-read path, not the snapshot this view was opened with:
+          // the percentage and the figure under it have to come from the same
+          // read or they disagree on screen the moment progress is logged.
+          setDetail(result.data.roadPath);
           setMilestones(result.data.milestones);
           setProgress(result.data.progress);
           setStats(result.data.stats);
+        } else {
+          toast.error(result.error ?? "Failed to load road path details");
         }
       } catch {
         toast.error("Failed to load road path details");
@@ -46,6 +55,17 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
     loadData();
   }, [loadData]);
 
+  /**
+   * A child changed something: re-read this view AND the list behind it.
+   *
+   * `loadData` deliberately does not do this itself — it runs on mount, and
+   * refreshing the server page from there would put the two in a loop.
+   */
+  const handleChildRefresh = useCallback(() => {
+    loadData();
+    onRefresh?.();
+  }, [loadData, onRefresh]);
+
   if (!hasLoaded && isPending) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -55,7 +75,7 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
   }
 
   const progressPercentage = Math.round(stats?.totalProgress ?? 0);
-  const currentValue = roadPath.currentValue ? parseFloat(roadPath.currentValue) : 0;
+  const currentValue = detail.currentValue ? parseFloat(detail.currentValue) : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -64,9 +84,9 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
-          <Heading level="h2">{roadPath.title}</Heading>
-          {roadPath.description && (
-            <Text variant="muted">{roadPath.description}</Text>
+          <Heading level="h2">{detail.title}</Heading>
+          {detail.description && (
+            <Text variant="muted">{detail.description}</Text>
           )}
         </div>
       </div>
@@ -80,9 +100,10 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
             <div className="space-y-2">
               <Progress value={progressPercentage} />
               <Mono as="p" className="text-2xl font-bold">{progressPercentage}%</Mono>
-              {stats && roadPath.targetValue && (
+              {stats && detail.targetValue && (
                 <Text variant="muted">
-                  <Mono>{currentValue}</Mono> / <Mono>{roadPath.targetValue}</Mono> {roadPath.unit}
+                  <Mono>{currentValue}</Mono> / <Mono>{parseFloat(detail.targetValue)}</Mono>{" "}
+                  {detail.unit}
                 </Text>
               )}
             </div>
@@ -103,7 +124,7 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
           </CardContent>
         </Card>
 
-        {roadPath.targetDate && stats && (
+        {detail.targetDate && stats && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">Time Remaining</CardTitle>
@@ -112,7 +133,7 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
               <div className="space-y-1">
                 <Mono as="p" className="text-2xl font-bold">{stats.daysRemaining}</Mono>
                 <Text variant="muted">
-                  days until <Mono>{format(new Date(roadPath.targetDate), "MMM d, yyyy")}</Mono>
+                  days until <Mono>{format(new Date(detail.targetDate), "MMM d, yyyy")}</Mono>
                 </Text>
               </div>
             </CardContent>
@@ -130,7 +151,7 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
             <MilestoneList
               roadPathId={roadPath.id}
               milestones={milestones}
-              onRefresh={loadData}
+              onRefresh={handleChildRefresh}
             />
           </CardContent>
         </Card>
@@ -144,8 +165,8 @@ export function RoadPathDetail({ roadPath, onBack }: RoadPathDetailProps) {
             <ProgressTracker
               roadPathId={roadPath.id}
               progress={progress}
-              unit={roadPath.unit || ""}
-              onRefresh={loadData}
+              unit={detail.unit || ""}
+              onRefresh={handleChildRefresh}
             />
           </CardContent>
         </Card>

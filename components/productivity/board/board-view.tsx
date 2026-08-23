@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSidebar } from "@/components/ui/sidebar";
 import {
+  closestCorners,
   DndContext,
   DragEndEvent,
   DragOverlay,
@@ -15,7 +16,7 @@ import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortabl
 import { BoardColumn } from "./board-column";
 import { BoardTaskCard } from "./board-task-card";
 import { CreateColumnDialog } from "./create-column-dialog";
-import { CreateTaskDialog } from "./create-task-dialog";
+import { TaskDialog } from "./task-dialog";
 import { Maximize2, Minimize2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Heading, Text } from "@/components/ui/typography";
@@ -26,6 +27,8 @@ import {
   deleteBoardColumnAction,
   deleteBoardTaskAction,
   reorderBoardTaskAction,
+  updateBoardColumnAction,
+  updateBoardTaskAction,
 } from "@/app/actions/board";
 import type { BoardColumn as BoardColumnType, BoardTask } from "@/types";
 import type { CreateBoardColumnData, CreateBoardTaskData } from "@/schemas/board";
@@ -106,6 +109,12 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
       }
       byColumnId[task.columnId].push(task);
     }
+    // The server hands these back ordered; an optimistic move does not, and a
+    // column that renders in insertion order shows the drop landing in the
+    // wrong place until the next load.
+    for (const list of Object.values(byColumnId)) {
+      list.sort((a, b) => a.order - b.order);
+    }
     return { byId, byColumnId };
   }, [tasks]);
 
@@ -124,28 +133,57 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     const task = taskIndex.byId.get(taskId);
     if (!task) return;
 
-    const destinationColumnId = over.id as string;
-    if (task.columnId === destinationColumnId) return;
+    // A drop lands either on a column's empty space or on another task. Only
+    // the first was handled, so reordering inside a column was impossible and
+    // every move across columns went to position 0 regardless of where it was
+    // released — the service has always taken an index, nothing ever sent one.
+    const overId = over.id as string;
+    const overTask = taskIndex.byId.get(overId);
+    const destinationColumnId = overTask ? overTask.columnId : overId;
+    if (!columns.some((c) => c.id === destinationColumnId)) return;
 
     const sourceColumnId = task.columnId;
+    const destination = (taskIndex.byColumnId[destinationColumnId] ?? []).filter(
+      (t) => t.id !== taskId
+    );
+    const at = overTask ? destination.findIndex((t) => t.id === overTask.id) : -1;
+    // Released on the column itself rather than on a card: the end of the list.
+    const newOrder = at === -1 ? destination.length : at;
+
+    if (sourceColumnId === destinationColumnId && task.order === newOrder) return;
+
     const previousTasks = tasks;
 
-    // Optimistic UI update — server call is enqueued below.
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, columnId: destinationColumnId } : t))
-    );
+    // Optimistic UI update — server call is enqueued below. The whole
+    // destination column is renumbered so the card sits where it was dropped
+    // instead of jumping to the top and back.
+    setTasks((prev) => {
+      const moved = { ...task, columnId: destinationColumnId, order: newOrder };
+      const reordered = [...destination];
+      reordered.splice(newOrder, 0, moved);
+      const orders = new Map(reordered.map((t, i) => [t.id, i]));
+      return prev.map((t) => {
+        const order = orders.get(t.id);
+        if (order === undefined) return t;
+        return t.id === taskId ? { ...moved, order } : { ...t, order };
+      });
+    });
 
     setPendingMutations((n) => n + 1);
     reorderQueue.current = reorderQueue.current
       .catch(() => undefined)
       .then(async () => {
         try {
-          await reorderBoardTaskAction({
+          const result = await reorderBoardTaskAction({
             taskId,
             sourceColumnId,
             destinationColumnId,
-            order: 0,
+            order: newOrder,
           });
+          if (!result.success) {
+            setTasks(previousTasks);
+            toast.error(result.error || "Failed to move task");
+          }
         } catch {
           setTasks(previousTasks);
           toast.error("Failed to move task");
@@ -168,6 +206,13 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
       const result = await createBoardTaskAction(data);
       if (result.success) {
         setTasks((prev) => prev.map((t) => (t.id === tempId ? result.data : t)));
+      } else {
+        // The action reports failure in its return value. Without this branch
+        // the placeholder row stayed on the board looking saved, and only a
+        // reload revealed that nothing had been.
+        setTasks((prev) => prev.filter((t) => t.id !== tempId));
+        toast.error(result.error || "Failed to create task");
+        throw new Error(result.error || "Failed to create task");
       }
     } catch (error) {
       setTasks((prev) => prev.filter((t) => t.id !== tempId));
@@ -189,10 +234,70 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
       const result = await createBoardColumnAction(data);
       if (result.success) {
         setColumns((prev) => prev.map((c) => (c.id === tempId ? result.data : c)));
+      } else {
+        setColumns((prev) => prev.filter((c) => c.id !== tempId));
+        toast.error(result.error || "Failed to create column");
+        throw new Error(result.error || "Failed to create column");
       }
     } catch (error) {
       setColumns((prev) => prev.filter((c) => c.id !== tempId));
       toast.error("Failed to create column");
+      throw error;
+    } finally {
+      setPendingMutations((n) => n - 1);
+    }
+  };
+
+  const handleUpdateTask = async (
+    taskId: string,
+    data: CreateBoardTaskData
+  ): Promise<void> => {
+    const previous = tasks;
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              columnId: data.columnId,
+              title: data.title,
+              description: data.description ?? null,
+              priority: data.priority ?? null,
+              dueDate: data.dueDate ?? null,
+            }
+          : t
+      )
+    );
+
+    try {
+      setPendingMutations((n) => n + 1);
+      const result = await updateBoardTaskAction({ id: taskId, ...data });
+      if (!result.success) {
+        setTasks(previous);
+        toast.error(result.error || "Failed to update task");
+        throw new Error(result.error || "Failed to update task");
+      }
+    } catch (error) {
+      setTasks(previous);
+      throw error;
+    } finally {
+      setPendingMutations((n) => n - 1);
+    }
+  };
+
+  const handleRenameColumn = async (columnId: string, name: string): Promise<void> => {
+    const previous = columns;
+    setColumns((prev) => prev.map((c) => (c.id === columnId ? { ...c, name } : c)));
+
+    try {
+      setPendingMutations((n) => n + 1);
+      const result = await updateBoardColumnAction({ id: columnId, name });
+      if (!result.success) {
+        setColumns(previous);
+        toast.error(result.error || "Failed to rename column");
+        throw new Error(result.error || "Failed to rename column");
+      }
+    } catch (error) {
+      setColumns(previous);
       throw error;
     } finally {
       setPendingMutations((n) => n - 1);
@@ -216,13 +321,18 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
 
   const handleDeleteColumn = async (columnId: string): Promise<void> => {
     const previous = columns;
+    const previousTasks = tasks;
     setColumns((prev) => prev.filter((c) => c.id !== columnId));
+    // board_tasks.column_id cascades, so the tasks are gone too. Leaving them
+    // in state kept them counted and rendered by nothing.
+    setTasks((prev) => prev.filter((t) => t.columnId !== columnId));
 
     try {
       setPendingMutations((n) => n + 1);
       await deleteBoardColumnAction(columnId);
     } catch {
       setColumns(previous);
+      setTasks(previousTasks);
       toast.error("Failed to delete column");
     } finally {
       setPendingMutations((n) => n - 1);
@@ -271,7 +381,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
             {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </Button>
           {columns.length > 0 ? (
-            <CreateTaskDialog columns={columns} onCreate={handleCreateTask} />
+            <TaskDialog columns={columns} onSubmit={handleCreateTask} />
           ) : null}
           <CreateColumnDialog onCreate={handleCreateColumn} nextOrder={nextColumnOrder} />
         </div>
@@ -282,7 +392,21 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
           <Text variant="muted">No columns yet. Create your first column to start.</Text>
         </div>
       ) : (
-        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DndContext
+          // Without a fixed id dnd-kit numbers `aria-describedby` from a
+          // module counter, and the server and the client land on different
+          // numbers — a hydration mismatch on every load of this page.
+          id="task-board"
+          // Default rect-intersection resolves a drop to whichever droppable
+          // overlaps most — and a column's rect contains every card in it, so
+          // the column always won and a drop never named a card. Closest-corner
+          // picks the nearest thing instead, which is how a card becomes a
+          // drop target at all.
+          collisionDetection={closestCorners}
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
           <div
             className={cn(
               // `relative` is load-bearing: it makes the rail the containing
@@ -300,10 +424,13 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
                 <BoardColumn
                   key={column.id}
                   column={column}
+                  columns={columns}
                   tasks={taskIndex.byColumnId[column.id] ?? []}
                   onCreateTask={handleCreateTask}
+                  onRenameColumn={handleRenameColumn}
                   onDeleteColumn={handleDeleteColumn}
                   onDeleteTask={handleDeleteTask}
+                  onUpdateTask={handleUpdateTask}
                   isDimmed={isDraggingTask && activeTask?.columnId !== column.id}
                 />
               ))}

@@ -3,12 +3,13 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { Loader2, Plus, Trash2, Users } from "lucide-react";
+import { Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
@@ -23,18 +24,11 @@ import {
   SelectGroup,
   SelectItem,
   SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Mono, Text } from "@/components/ui/typography";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Progress } from "@/components/ui/progress";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-  InputGroupText,
-} from "@/components/ui/input-group";
-import { currencySymbol } from "@/components/ui/money-input";
 import {
   Dialog,
   DialogContent,
@@ -51,17 +45,8 @@ import {
 } from "@/app/actions/travel";
 import type { TripContribution } from "@/types/travel";
 import { formatTripMoney, moneyRange } from "@/lib/travel/format";
+import { isoDay } from "@/lib/travel/calendar";
 
-
-/** "Bruno Fabián" → "BF". A name does not fit in a field this narrow. */
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
-}
 
 export type PaymentsTraveller = {
   id: string;
@@ -97,6 +82,7 @@ export function TripPayments({
   selected: string | null;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const byMember = useMemo(() => {
     const paid = new Map<string, number>();
@@ -144,7 +130,15 @@ export function TripPayments({
             </Badge>
           )}
         </CardTitle>
-
+        {/* CardAction, not a flex override on the header: CardHeader is a grid
+            that grows a second column when it finds one. */}
+        {travellers.length > 0 && (
+          <CardAction>
+            <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+              <Plus className="mr-1 size-3.5" /> Log payment
+            </Button>
+          </CardAction>
+        )}
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4 ">
@@ -182,13 +176,6 @@ export function TripPayments({
               </Text>
             </div>
 
-            <PaymentEntry
-              tripId={tripId}
-              currency={currency}
-              travellers={travellers}
-              focused={focus}
-            />
-
             {shown.length === 0 ? (
               <Text variant="small" className="text-muted-foreground">
                 {focus
@@ -214,13 +201,25 @@ export function TripPayments({
         )}
       </CardContent>
 
+      {/* One dialog, two jobs. Logging a payment and correcting one ask for
+          the same four things, and giving them separate forms made them look
+          like different work. */}
       {open && (
         <PaymentDialog
           tripId={tripId}
           contribution={open}
           currency={currency}
-          who={nameOf(open.memberId)}
+          travellers={travellers}
           onClose={() => setOpenId(null)}
+        />
+      )}
+      {adding && (
+        <PaymentDialog
+          tripId={tripId}
+          currency={currency}
+          travellers={travellers}
+          payerId={focus?.id}
+          onClose={() => setAdding(false)}
         />
       )}
     </Card>
@@ -275,28 +274,58 @@ function PaymentRow({
   );
 }
 
-/** What tapping a record opens: the payment itself, editable. */
+/**
+ * One payment, whether it exists yet or not.
+ *
+ * Logging and correcting ask for the same four things, so they are the same
+ * form — separate ones made the two look like different work, and the second
+ * had to be kept in step with the first by hand.
+ *
+ * Who paid is fixed once a payment exists: moving it to another person
+ * rewrites two balances at once and only one of them is on screen. Delete it
+ * and log it again, where both changes are visible as what they are.
+ */
 function PaymentDialog({
   tripId,
   contribution,
   currency,
-  who,
+  travellers,
+  payerId,
   onClose,
 }: {
   tripId: string;
-  contribution: TripContribution;
+  /** Absent when logging a new one. */
+  contribution?: TripContribution;
   currency: string;
-  who: string;
+  travellers: PaymentsTraveller[];
+  /**
+   * Fixed payer for a new payment — set when the card is already filtered to
+   * one traveller. Its presence IS the decision, so the form does not ask.
+   */
+  payerId?: string;
   onClose: () => void;
 }) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
   const [deleting, startDelete] = useTransition();
-  const [amount, setAmount] = useState(contribution.amount);
-  const [note, setNote] = useState(contribution.note ?? "");
-  const [paidOn, setPaidOn] = useState(contribution.paidOn ?? "");
+  const [amount, setAmount] = useState(contribution?.amount ?? "");
+  const [note, setNote] = useState(contribution?.note ?? "");
+  const [paidOn, setPaidOn] = useState(
+    // The local day, not the UTC one: `toISOString()` west of Greenwich in
+    // the evening already reads as tomorrow, so a payment logged tonight was
+    // dated for a day that has not happened.
+    contribution?.paidOn ?? isoDay(new Date())
+  );
+  const [memberId, setMemberId] = useState(
+    contribution?.memberId ??
+      payerId ??
+      travellers.find((t) => t.isYou)?.id ??
+      travellers[0]?.id ??
+      ""
+  );
 
   const busy = saving || deleting;
+  const payer = travellers.find((t) => t.id === (contribution?.memberId ?? memberId));
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -304,15 +333,26 @@ function PaymentDialog({
       toast.error("Enter an amount above zero");
       return;
     }
+    if (!contribution && !memberId) {
+      toast.error("Pick who paid");
+      return;
+    }
     startSave(async () => {
-      const res = await updateTripContributionAction(tripId, {
-        id: contribution.id,
-        amount,
-        note: note.trim() || null,
-        paidOn: paidOn || null,
-      });
+      const res = contribution
+        ? await updateTripContributionAction(tripId, {
+            id: contribution.id,
+            amount,
+            note: note.trim() || null,
+            paidOn: paidOn || null,
+          })
+        : await addTripContributionAction(tripId, {
+            memberId,
+            amount,
+            note: note.trim() || null,
+            paidOn: paidOn || null,
+          });
       if (res.success) {
-        toast.success("Payment updated");
+        toast.success(contribution ? "Payment updated" : "Payment logged");
         router.refresh();
         onClose();
       } else {
@@ -325,17 +365,39 @@ function PaymentDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Payment from {who}</DialogTitle>
+          <DialogTitle>
+            {contribution ? `Payment from ${payer?.name ?? "somebody"}` : "Log a payment"}
+          </DialogTitle>
           <DialogDescription>
-            {/* Who paid is deliberately not editable: moving a payment to
-                another person would rewrite two balances at once, and only
-                one of them would be on screen. Delete it and log it again. */}
-            Change what it was for, how much, or when. To move it to somebody
-            else, remove it and log it again.
+            {contribution
+              ? "Change what it was for, how much, or when. To move it to somebody else, remove it and log it again."
+              : "Money that has actually changed hands — not what is still owed."}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSave} className="flex flex-col gap-4">
+          {!contribution && !payerId && travellers.length > 1 && (
+            <Field className="gap-1.5">
+              <FieldLabel htmlFor="payment-payer" className="text-xs">
+                Who paid
+              </FieldLabel>
+              <Select value={memberId} onValueChange={setMemberId}>
+                <SelectTrigger id="payment-payer" className="w-full">
+                  <SelectValue placeholder="Pick a traveller" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {travellers.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.isYou ? `${t.name} (you)` : t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-2">
             <Field className="gap-1.5">
               <FieldLabel htmlFor="edit-amount" className="text-xs">Amount</FieldLabel>
@@ -370,6 +432,7 @@ function PaymentDialog({
           </Field>
 
           <DialogFooter className="sm:justify-between">
+            {contribution ? (
             <Button
               type="button"
               variant="ghost"
@@ -391,140 +454,20 @@ function PaymentDialog({
               <Trash2 className="mr-1 size-3.5" />
               {deleting ? "Removing…" : "Delete"}
             </Button>
+            ) : (
+              <span />
+            )}
             <div className="flex items-center gap-2">
               <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
                 Cancel
               </Button>
               <Button type="submit" disabled={busy}>
-                {saving ? "Saving…" : "Save"}
+                {saving ? "Saving…" : contribution ? "Save" : "Log payment"}
               </Button>
             </div>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/**
- * Logging a payment is one line, not a form.
- *
- * The amount is the only thing that cannot be guessed: the date is today, the
- * note is usually nothing, and who paid is whoever the card is already
- * showing. Anything else is a correction, and corrections belong in the
- * record you tap afterwards — which already edits all three.
- *
- * The old version was a labelled button in the card header that opened a
- * four-field panel to capture a number. This is the same control the gallery
- * uses to take a photo URL, for the same reason.
- */
-function PaymentEntry({
-  tripId,
-  currency,
-  travellers,
-  focused,
-}: {
-  tripId: string;
-  currency: string;
-  travellers: PaymentsTraveller[];
-  /** Traveller the card is filtered to, if any. */
-  focused: PaymentsTraveller | null;
-}) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [amount, setAmount] = useState("");
-  const you = travellers.find((t) => t.isYou) ?? travellers[0];
-  const [memberId, setMemberId] = useState(you?.id ?? "");
-
-  // When the card is showing one person, the payment is theirs — asking again
-  // would be asking a question the page has already answered.
-  const payer = focused ?? travellers.find((t) => t.id === memberId) ?? you;
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!payer) return;
-    if (!/^\d+(\.\d{1,2})?$/.test(amount) || parseFloat(amount) <= 0) {
-      toast.error("Enter an amount above zero");
-      return;
-    }
-    startTransition(async () => {
-      const res = await addTripContributionAction(tripId, {
-        memberId: payer.id,
-        amount,
-        note: null,
-        paidOn: null,
-      });
-      if (res.success) {
-        toast.success(`Logged ${formatTripMoney(parseFloat(amount), currency)}`);
-        setAmount("");
-        router.refresh();
-      } else {
-        toast.error(res.error);
-      }
-    });
-  };
-
-  return (
-    <form onSubmit={submit}>
-      <InputGroup>
-        <InputGroupAddon>
-          {/* Initials, not a name: the full one ate a third of the field and
-              the card already says whose money this is. */}
-          {focused ? (
-            <InputGroupText
-              className="text-2xs font-medium"
-              title={focused.isYou ? `${focused.name} (you)` : focused.name}
-            >
-              {initials(focused.name)}
-            </InputGroupText>
-          ) : (
-            <Select value={memberId} onValueChange={setMemberId}>
-              <SelectTrigger
-                size="sm"
-                className="h-6 gap-1 border-0 bg-transparent px-1 text-2xs font-medium shadow-none"
-                aria-label="Who paid"
-              >
-                {initials(payer?.name ?? "")}
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {travellers.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.isYou ? `${t.name} (you)` : t.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          )}
-          <InputGroupText className="text-muted-foreground">
-            {currencySymbol(currency)}
-          </InputGroupText>
-        </InputGroupAddon>
-        <InputGroupInput
-          inputMode="decimal"
-          placeholder="Amount"
-          aria-label="Amount"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
-          disabled={isPending}
-          // Mono for the digits, not for the word: the placeholder in a
-          // monospace face read like a code sample rather than a prompt.
-          className="font-mono tabular-nums placeholder:font-sans"
-        />
-        <InputGroupAddon align="inline-end">
-          {/* An icon, not a filled "Add" chip glued to the end. The field is
-              the control; this only says which way it goes. */}
-          <InputGroupButton
-            type="submit"
-            size="icon-xs"
-            disabled={isPending || !amount.trim()}
-            aria-label="Log this payment"
-          >
-            {isPending ? <Loader2 className="animate-spin" /> : <Plus />}
-          </InputGroupButton>
-        </InputGroupAddon>
-      </InputGroup>
-    </form>
   );
 }

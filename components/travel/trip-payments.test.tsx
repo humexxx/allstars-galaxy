@@ -88,21 +88,31 @@ describe("TripPayments", () => {
     ).toBeNull();
   });
 
-  it("logs a payment from one line instead of a form", () => {
-    // The amount is the only thing that cannot be guessed — the date is
-    // today, the note is usually nothing, and who paid is whoever the card
-    // is already showing.
+  it("logs a payment through the same dialog that corrects one", () => {
+    // Both ask for the same four things. Separate forms made them look like
+    // different work and had to be kept in step by hand.
     renderCard("b");
 
-    expect(screen.getByLabelText("Amount")).toBeInTheDocument();
-    expect(screen.getByLabelText("Log this payment")).toBeInTheDocument();
-    // No "who paid" question when the card has already answered it.
-    expect(screen.queryByLabelText("Who paid")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Log payment/i }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText("Amount")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Paid on")).toBeInTheDocument();
+    // Nothing to remove yet.
+    expect(within(dialog).queryByRole("button", { name: /delete/i })).toBeNull();
   });
 
-  it("asks who paid only when the list is everybody's", () => {
+  it("does not ask who paid when the card has already answered it", () => {
+    renderCard("b");
+
+    fireEvent.click(screen.getByRole("button", { name: /Log payment/i }));
+    expect(within(screen.getByRole("dialog")).queryByText("Who paid")).toBeNull();
+  });
+
+  it("asks who paid when the list is everybody's", () => {
     renderCard(null);
-    expect(screen.getByLabelText("Who paid")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Log payment/i }));
+    expect(within(screen.getByRole("dialog")).getByText("Who paid")).toBeInTheDocument();
   });
 
   it("says so plainly when a traveller has paid nothing", () => {
@@ -151,5 +161,34 @@ describe("TripPayments records", () => {
     fireEvent.click(screen.getByRole("button", { name: /\$300/ }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
+  });
+});
+
+describe("the payment dialog's date", () => {
+  it("offers today in the reader's own timezone", () => {
+    // `toISOString()` west of Greenwich in the evening already reads as
+    // tomorrow, so a payment logged tonight was dated for a day that has not
+    // happened yet.
+    renderCard("b");
+    fireEvent.click(screen.getByRole("button", { name: /Log payment/i }));
+
+    const now = new Date();
+    const local = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+      now.getDate()
+    ).padStart(2, "0")}`;
+    expect(
+      (within(screen.getByRole("dialog")).getByLabelText("Paid on") as HTMLInputElement).value
+    ).toBe(local);
+  });
+
+  it("associates every label with its control", () => {
+    // getByLabel finding nothing is a screen reader finding nothing.
+    renderCard(null);
+    fireEvent.click(screen.getByRole("button", { name: /Log payment/i }));
+    const dialog = within(screen.getByRole("dialog"));
+
+    expect(dialog.getByLabelText("Who paid")).toBeInTheDocument();
+    expect(dialog.getByLabelText("Amount")).toBeInTheDocument();
+    expect(dialog.getByLabelText("Paid on")).toBeInTheDocument();
   });
 });

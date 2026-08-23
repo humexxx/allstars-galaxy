@@ -84,6 +84,7 @@ NBA and NFL still use mocks.
 - `trip_members` — who is going, with an optional fixed `share_percent`
 - `trip_contributions` — money a traveller has actually handed over
 - `trip_item_stops` — a cruise's day-by-day ports
+- `trip_item_attendees` — who an item is FOR, when it is not the whole party
 - `trip_item_payers` — who covers one item, when it is not the whole party
 - `user_sports_preferences` — favourited sports per user; UNIQUE(user_id, sport_id) backs the toggle semantics
 
@@ -359,15 +360,26 @@ NBA and NFL still use mocks.
   switch to that person's share so the arithmetic still checks out on screen;
   the full booking price stays underneath, because that is what the hotel's own
   site will quote.
+- **Who is on an item and who pays for it are two lists, not one.**
+  `trip_item_attendees` answers the first, `trip_item_payers` the second, and
+  both mean "everybody" when empty. Filtering on payers was wrong in both
+  directions: the festival all four travellers are going to vanished off the
+  two who are not paying for it, and a flight one person takes stayed on
+  everybody else's day. The form asks both questions side by side (*Who's
+  coming* / *Who pays for this*).
 - **Picking a traveller narrows the plan, not just its prices.** `viewerItems`
-  ([`lib/travel/viewer.ts`](../../lib/travel/viewer.ts)) drops what that person
-  has no part in, from `itemConcerns` in
-  [`lib/travel/split.ts`](../../lib/travel/split.ts): named payers own the item,
-  an empty list is everybody's. Re-costing alone left Ana's flight from Mexico
-  sitting on Jafet's day worth $0 — a row that says nothing except that it is
-  not his. A scoped share link is narrowed **server-side** in `getPublicTrip`
-  instead, so the trip's member ids never reach the browser; the split still
-  runs over every item, so the totals are unaffected.
+  ([`lib/travel/viewer.ts`](../../lib/travel/viewer.ts)) filters on
+  `attendeeIds` via `itemConcerns` in
+  [`lib/travel/split.ts`](../../lib/travel/split.ts) — never on payers.
+  Re-costing alone left Ana's flight from Mexico sitting on Jafet's day worth
+  $0, a row that says nothing except that it is not his. A scoped share link is
+  narrowed **server-side** in `getPublicTrip` instead, so the trip's member ids
+  never reach the browser; the split still runs over every item, so the totals
+  are unaffected.
+- **A flight offers neither a video nor a photo** (`video` and `photos` in
+  [`lib/travel/item-fields.ts`](../../lib/travel/item-fields.ts)). The row is
+  two airport codes and a fare — the pickers were inviting a picture of
+  nothing.
 - **The calendar draws every run on a day.** There used to be a four-lane cap
   with a "+N" chip on the overflow; a day with six things on it now shows six
   and the week's row grows to fit. `capLanes` went with it.

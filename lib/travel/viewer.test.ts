@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { viewerItems, type ItineraryViewer } from "./viewer";
 
-const item = (id: string, payerIds: string[] = []) => ({ id, payerIds });
+const item = (id: string, attendeeIds: string[] = []) => ({ id, attendeeIds });
 
 const viewer = (memberId: string | null): ItineraryViewer => ({
   memberId,
-  name: "Jafet",
+  name: "Whoever",
   isYou: false,
   lines: new Map(),
 });
@@ -17,30 +17,33 @@ describe("viewerItems", () => {
     item("mex-kef", ["ana"]),
     item("mia-kef", ["ale"]),
     item("hotel"),
+    // Everybody goes; only Jason and Jafet pay. Attendees is what decides
+    // whose itinerary it is on, so it is on all four.
+    item("tomorrowland"),
   ];
 
   it("hands back the whole plan when nobody is selected", () => {
-    expect(viewerItems(plan, null)).toHaveLength(4);
+    expect(viewerItems(plan, null)).toHaveLength(5);
   });
 
-  it("drops the items a traveller has no part in", () => {
-    // Ana's flight from Mexico was showing on Jafet's itinerary worth $0,
-    // which says nothing except that it is not his.
+  it("drops the items a traveller is not on", () => {
     const mine = viewerItems(plan, viewer("jafet"));
-    expect(mine.map((i) => i.id)).toEqual(["sjo-kef", "hotel"]);
+    expect(mine.map((i) => i.id)).toEqual(["sjo-kef", "hotel", "tomorrowland"]);
   });
 
-  it("keeps what nobody in particular pays for", () => {
-    // An item with no payers named is the trip's, so it is everybody's.
+  it("keeps what everybody is on, whoever pays for it", () => {
+    // The case that broke when this filtered on payers: Ana is invited to the
+    // festival and it vanished off her itinerary.
     expect(viewerItems(plan, viewer("ana")).map((i) => i.id)).toEqual([
       "mex-kef",
       "hotel",
+      "tomorrowland",
     ]);
   });
 
   it("does not narrow a viewer with no member behind it", () => {
     // A public scoped link: the service already filtered, and the member ids
     // never reach the browser.
-    expect(viewerItems(plan, viewer(null))).toHaveLength(4);
+    expect(viewerItems(plan, viewer(null))).toHaveLength(5);
   });
 });

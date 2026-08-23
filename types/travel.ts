@@ -41,6 +41,16 @@ export type TripItemWithStops = TripItem & {
    * people share a festival ticket the other two are not going to.
    */
   payerIds: string[];
+  /**
+   * Members this item is FOR. Empty means everybody on the trip.
+   *
+   * Separate from `payerIds` because the two answer different questions: all
+   * four travellers go to the festival and two of them cover the package, and
+   * a flight from one city is one traveller's whether or not somebody else
+   * paid for it. Filtering read `payerIds` for a while and got both cases
+   * wrong.
+   */
+  attendeeIds: string[];
   /** Photos attached to this item rather than to the trip's gallery. */
   photos: TripPhoto[];
 };

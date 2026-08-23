@@ -294,6 +294,37 @@ export const tripMembers = pgTable(
  * different — one person covering dinner, two sharing a room. Modelled as an
  * override rather than a full split table so the common case stores nothing.
  */
+/**
+ * Who an item is FOR — not who pays for it.
+ *
+ * The two are different questions and conflating them was wrong in both
+ * directions. All four travellers go to the festival and two of them cover the
+ * package: filtering on payers dropped it off the other two's itinerary, which
+ * is not where they are. A flight from one city is the opposite — one person
+ * takes it and one person pays for it, and it has no business on anybody
+ * else's day.
+ *
+ * Empty means everybody, which is the common case and the reason this stays a
+ * side table rather than a column.
+ */
+export const tripItemAttendees = pgTable(
+  "trip_item_attendees",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => tripItems.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => tripMembers.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    index("trip_item_attendees_item_id_idx").on(t.itemId),
+    uniqueIndex("trip_item_attendees_item_member_uq").on(t.itemId, t.memberId),
+  ]
+);
+
+/** Who splits the cost. See `tripItemAttendees` for who is actually going. */
 export const tripItemPayers = pgTable(
   "trip_item_payers",
   {

@@ -10,6 +10,7 @@ import {
   trips,
   tripContributions,
   tripItems,
+  tripItemAttendees,
   tripItemPayers,
   tripItemStops,
   tripMembers,
@@ -123,7 +124,8 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     .where(and(eq(trips.id, tripId), eq(trips.userId, userId)));
   if (!trip) return null;
 
-  const [items, photos, shares, stops, members, contributions, payers] = await Promise.all([
+  const [items, photos, shares, stops, members, contributions, payers, attendees] =
+    await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -180,6 +182,12 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       .from(tripItemPayers)
       .innerJoin(tripItems, eq(tripItemPayers.itemId, tripItems.id))
       .where(eq(tripItems.tripId, tripId)),
+    // And who is actually ON each item, which is a different question.
+    db
+      .select({ itemId: tripItemAttendees.itemId, memberId: tripItemAttendees.memberId })
+      .from(tripItemAttendees)
+      .innerJoin(tripItems, eq(tripItemAttendees.itemId, tripItems.id))
+      .where(eq(tripItems.tripId, tripId)),
   ]);
 
   const stopsByItem = new Map<string, typeof stops>();
@@ -191,12 +199,17 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
 
   // A photo belongs to one place or the other: the gallery is the trip's own
   // photos, and an item's photos travel with the item.
-  const payersByItem = new Map<string, string[]>();
-  for (const row of payers) {
-    const list = payersByItem.get(row.itemId) ?? [];
-    list.push(row.memberId);
-    payersByItem.set(row.itemId, list);
-  }
+  const byItem = (rows: { itemId: string; memberId: string }[]) => {
+    const map = new Map<string, string[]>();
+    for (const row of rows) {
+      const list = map.get(row.itemId) ?? [];
+      list.push(row.memberId);
+      map.set(row.itemId, list);
+    }
+    return map;
+  };
+  const payersByItem = byItem(payers);
+  const attendeesByItem = byItem(attendees);
 
   const photosByItem = new Map<string, typeof photos>();
   for (const photo of photos) {
@@ -213,6 +226,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       stops: stopsByItem.get(i.id) ?? [],
       photos: photosByItem.get(i.id) ?? [],
       payerIds: payersByItem.get(i.id) ?? [],
+      attendeeIds: attendeesByItem.get(i.id) ?? [],
     })),
     photos: photos.filter((p) => !p.itemId),
     shares,
@@ -304,6 +318,33 @@ async function setItemPayers(
     .values(memberIds.map((memberId) => ({ itemId, memberId })));
 }
 
+/**
+ * Replace who an item is for. Empty means everybody, so no rows.
+ *
+ * Same trip-membership check as `setItemPayers`: a foreign key proves the
+ * member exists, not that they are on this trip.
+ */
+async function setItemAttendees(
+  tripId: string,
+  itemId: string,
+  memberIds: string[]
+): Promise<void> {
+  await db.delete(tripItemAttendees).where(eq(tripItemAttendees.itemId, itemId));
+  if (memberIds.length === 0) return;
+
+  const valid = await db
+    .select({ id: tripMembers.id })
+    .from(tripMembers)
+    .where(and(eq(tripMembers.tripId, tripId), inArray(tripMembers.id, memberIds)));
+  if (valid.length !== memberIds.length) {
+    throw new Error("Traveller not found on this trip");
+  }
+
+  await db
+    .insert(tripItemAttendees)
+    .values(memberIds.map((memberId) => ({ itemId, memberId })));
+}
+
 export async function addTripItem(
   userId: string,
   tripId: string,
@@ -331,6 +372,7 @@ export async function addTripItem(
     })
     .returning();
   if (data.payerIds?.length) await setItemPayers(tripId, row.id, data.payerIds);
+  if (data.attendeeIds?.length) await setItemAttendees(tripId, row.id, data.attendeeIds);
   return row;
 }
 
@@ -364,6 +406,7 @@ export async function updateTripItem(
   // Always, not only when non-empty: clearing the list is how an item goes
   // back to the trip's own split.
   await setItemPayers(tripId, row.id, data.payerIds ?? []);
+  await setItemAttendees(tripId, row.id, data.attendeeIds ?? []);
   return row;
 }
 
@@ -585,7 +628,7 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
   // and payments do not depend on the items or the photos, so awaiting them
   // afterwards would have cost a second round trip for no ordering reason —
   // and at ~86ms each that is the whole budget of a small page.
-  const [items, photos, stops, payers, scopeRows] = await Promise.all([
+  const [items, photos, stops, payers, attendees, scopeRows] = await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -620,6 +663,12 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
       .from(tripItemPayers)
       .innerJoin(tripItems, eq(tripItemPayers.itemId, tripItems.id))
       .where(eq(tripItems.tripId, trip.id)),
+    // And who is on each item — what a scoped link narrows to.
+    db
+      .select({ itemId: tripItemAttendees.itemId, memberId: tripItemAttendees.memberId })
+      .from(tripItemAttendees)
+      .innerJoin(tripItems, eq(tripItemAttendees.itemId, tripItems.id))
+      .where(eq(tripItems.tripId, trip.id)),
     share.memberId ? loadScopeRows(trip.id, share.memberId) : null,
   ]);
 
@@ -630,12 +679,17 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
     stopsByItem.set(stop.itemId, list);
   }
 
-  const payersByItem = new Map<string, string[]>();
-  for (const row of payers) {
-    const list = payersByItem.get(row.itemId) ?? [];
-    list.push(row.memberId);
-    payersByItem.set(row.itemId, list);
-  }
+  const groupBy = (rows: { itemId: string; memberId: string }[]) => {
+    const map = new Map<string, string[]>();
+    for (const row of rows) {
+      const list = map.get(row.itemId) ?? [];
+      list.push(row.memberId);
+      map.set(row.itemId, list);
+    }
+    return map;
+  };
+  const payersByItem = groupBy(payers);
+  const attendeesByItem = groupBy(attendees);
 
   const photosByItem = new Map<string, typeof photos>();
   for (const photo of photos) {
@@ -650,15 +704,17 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
     stops: stopsByItem.get(i.id) ?? [],
     photos: photosByItem.get(i.id) ?? [],
     payerIds: payersByItem.get(i.id) ?? [],
+    attendeeIds: attendeesByItem.get(i.id) ?? [],
   }));
 
-  // A link made for one traveller shows that traveller's trip. Ana's flight
-  // from Mexico is not a $0 line on Jafet's page — it is not on his page. The
-  // narrowing happens here so the member ids never leave the server, and the
-  // split above still runs over every item so the totals stay right.
+  // A link made for one traveller shows that traveller's trip: Ana's flight
+  // from Mexico is not a $0 line on Jafet's page, it is not on his page at
+  // all. Narrowed on who is ON the item, not who pays for it — the festival
+  // is all four travellers' even though two of them cover it. The split above
+  // still runs over every item, so the totals are unaffected.
   const scope = scopeRows ? buildScope(scopeRows, enriched, share.memberId!) : null;
   const visible = share.memberId
-    ? enriched.filter((i) => itemConcerns(i.payerIds, share.memberId!))
+    ? enriched.filter((i) => itemConcerns(i.attendeeIds, share.memberId!))
     : enriched;
 
   return {

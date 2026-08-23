@@ -19,17 +19,18 @@ export type ItineraryViewer = {
 /**
  * The plan as one traveller's, or the whole thing.
  *
- * Picking a face narrows the itinerary to what that person is actually part
- * of. It used to only re-cost it, so Ana's flight from Mexico sat on Jafet's
- * day worth $0 — a row that says nothing except that it is not his.
+ * Narrowed on who is ON the item, never on who pays for it. Ana's flight from
+ * Mexico is not Jafet's day and should not sit there worth $0; the festival
+ * IS Ana's day even though Jason and Jafet cover the package, and filtering on
+ * payers took it off her itinerary — which is not where she is.
  */
-export function viewerItems<T extends { payerIds: string[] }>(
+export function viewerItems<T extends { attendeeIds: string[] }>(
   items: T[],
   viewer: ItineraryViewer | null
 ): T[] {
   if (!viewer?.memberId) return items;
   const memberId = viewer.memberId;
-  return items.filter((item) => itemConcerns(item.payerIds, memberId));
+  return items.filter((item) => itemConcerns(item.attendeeIds, memberId));
 }
 
 /** What one item costs the current reader: their share, or the whole thing. */

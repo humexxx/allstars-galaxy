@@ -62,6 +62,78 @@ const PRICE_UNIT_LABELS: Record<TripPriceUnit, string> = {
  * calendar from a bar — and reaching into the itinerary for it would drag the
  * whole list along with it.
  */
+type Traveller = { id: string; name: string };
+
+/** "Ana and Alejandra", or "Jason, Ana and Alejandra". */
+function names(ids: string[], travellers: Traveller[]): string {
+  const picked = ids.map((id) => travellers.find((t) => t.id === id)?.name ?? "?");
+  if (picked.length <= 1) return picked.join("");
+  return `${picked.slice(0, -1).join(", ")} and ${picked[picked.length - 1]}`;
+}
+
+/**
+ * A row of traveller chips where an empty selection means everybody.
+ *
+ * "Everyone" is the absence of a choice, not a choice of its own — an empty
+ * list is already what both of these fields mean by "all of them".
+ */
+function TravellerChips({
+  label,
+  travellers,
+  selected,
+  onChange,
+  allLabel,
+  hint,
+}: {
+  label: string;
+  travellers: Traveller[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  allLabel: string;
+  hint: string;
+}) {
+  const chip =
+    "h-8 rounded-full px-3 text-xs data-[active=true]:border-foreground/30 data-[active=true]:bg-foreground/5";
+  return (
+    <Field className="gap-1">
+      <FieldLabel className="text-xs">{label}</FieldLabel>
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          data-active={selected.length === 0}
+          className={chip}
+          onClick={() => onChange([])}
+        >
+          {allLabel}
+        </Button>
+        {travellers.map((t) => {
+          const on = selected.includes(t.id);
+          return (
+            <Button
+              key={t.id}
+              type="button"
+              size="sm"
+              variant="outline"
+              data-active={on}
+              className={chip}
+              onClick={() =>
+                onChange(on ? selected.filter((id) => id !== t.id) : [...selected, t.id])
+              }
+            >
+              {t.name}
+            </Button>
+          );
+        })}
+      </div>
+      <Text variant="small" className="text-muted-foreground">
+        {hint}
+      </Text>
+    </Field>
+  );
+}
+
 export function ItemForm({
   tripId,
   item,
@@ -113,6 +185,8 @@ export function ItemForm({
   const [notes, setNotes] = useState(item?.notes ?? "");
   /** Empty means the trip's own split — the common case, so it is the default. */
   const [payerIds, setPayerIds] = useState<string[]>(item?.payerIds ?? []);
+  /** Empty means everybody is on it, which is also the common case. */
+  const [attendeeIds, setAttendeeIds] = useState<string[]>(item?.attendeeIds ?? []);
 
   /** Saved photos and picked-but-unsaved ones, shown as one strip. */
   const shownPhotos = [
@@ -191,6 +265,7 @@ export function ItemForm({
         videoUrl: videoUrl.trim() || null,
         notes: notes.trim() || null,
         payerIds,
+        attendeeIds,
       };
       const res = item
         ? await updateTripItemAction(tripId, { id: item.id, ...payload })
@@ -443,53 +518,39 @@ export function ItemForm({
       </div>
 
       {travellers.length > 1 && (
-        <Field className="gap-1">
-          <FieldLabel className="text-xs">Who pays for this</FieldLabel>
-          <div className="flex flex-wrap gap-1.5">
-            {/* "Everyone" is the absence of a choice, not a choice of its
-                own — an empty list is what the split already means by
-                "however the trip divides". */}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              data-active={payerIds.length === 0}
-              className="h-8 rounded-full px-3 text-xs data-[active=true]:border-foreground/30 data-[active=true]:bg-foreground/5"
-              onClick={() => setPayerIds([])}
-            >
-              Everyone
-            </Button>
-            {travellers.map((t) => {
-              const on = payerIds.includes(t.id);
-              return (
-                <Button
-                  key={t.id}
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  data-active={on}
-                  className="h-8 rounded-full px-3 text-xs data-[active=true]:border-foreground/30 data-[active=true]:bg-foreground/5"
-                  onClick={() =>
-                    setPayerIds((cur) =>
-                      on ? cur.filter((id) => id !== t.id) : [...cur, t.id]
-                    )
-                  }
-                >
-                  {t.name}
-                </Button>
-              );
-            })}
-          </div>
-          <Text variant="small" className="text-muted-foreground">
-            {payerIds.length === 0
-              ? "Divided the way the trip divides."
-              : `Only ${payerIds
-                  .map((id) => travellers.find((t) => t.id === id)?.name ?? "?")
-                  .join(" and ")} — split equally between them.`}
-          </Text>
-        </Field>
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          {/* Who is on it and who pays for it are different questions, and
+              answering only the second got both cases wrong: the festival all
+              four are going to vanished off the two who are not paying for
+              it, and a flight one person takes stayed on everybody's day. */}
+          <TravellerChips
+            label="Who's coming"
+            travellers={travellers}
+            selected={attendeeIds}
+            onChange={setAttendeeIds}
+            allLabel="Everyone"
+            hint={
+              attendeeIds.length === 0
+                ? "On everybody's itinerary."
+                : `Only on ${names(attendeeIds, travellers)}'s itinerary.`
+            }
+          />
+          <TravellerChips
+            label="Who pays for this"
+            travellers={travellers}
+            selected={payerIds}
+            onChange={setPayerIds}
+            allLabel="Everyone"
+            hint={
+              payerIds.length === 0
+                ? "Divided the way the trip divides."
+                : `Only ${names(payerIds, travellers)} — split equally between them.`
+            }
+          />
+        </div>
       )}
 
+      {fields.photos && (
       <Field className="gap-1">
         <FieldLabel className="text-xs">Photos</FieldLabel>
         {shownPhotos.length > 0 && (
@@ -541,6 +602,7 @@ export function ItemForm({
           }}
         />
       </Field>
+      )}
 
       {fields.itinerary && item && (
         <div className="flex flex-col gap-1.5 ">
@@ -573,7 +635,7 @@ export function ItemForm({
           id={`notes-${item?.id ?? "new"}`}
           value={notes ?? ""}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Reservation reference, confirmation code, who's coming…"
+          placeholder="Reservation reference, confirmation code, what to pack…"
           rows={2}
         />
       </Field>

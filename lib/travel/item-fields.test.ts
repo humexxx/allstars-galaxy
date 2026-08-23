@@ -202,3 +202,14 @@ describe("titlePlaceholder", () => {
     expect(seen.size).toBeGreaterThan(4);
   });
 });
+
+describe("photos", () => {
+  it("are offered everywhere except on a flight", () => {
+    // A flight row is two airport codes and a fare; the picker was inviting a
+    // photograph of nothing.
+    expect(itemFields("flight").photos).toBe(false);
+    for (const c of ["lodging", "cruise", "activity", "food", "transport", "shopping", "other"] as const) {
+      expect(itemFields(c).photos, c).toBe(true);
+    }
+  });
+});

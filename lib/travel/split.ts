@@ -40,15 +40,15 @@ export type MemberShare = {
 };
 
 /**
- * Is this item part of one traveller's trip at all?
+ * Is this traveller named in a per-item list?
  *
- * Naming payers says who pays; it also says whose plan the thing belongs to.
- * Ana's flight from Mexico is not a line worth nothing on Jafet's itinerary —
- * it is not on his itinerary. An item with no payers named is everybody's,
- * which is what an empty list has always meant.
+ * Empty means everybody, which is what an empty list has always meant here.
+ * Used for attendees — who an item is FOR — and deliberately not for payers:
+ * the festival is all four travellers' even though two of them cover it, so
+ * filtering an itinerary on who pays hides it from the two being invited.
  */
-export function itemConcerns(payerIds: string[], memberId: string): boolean {
-  return payerIds.length === 0 || payerIds.includes(memberId);
+export function itemConcerns(memberIds: string[], memberId: string): boolean {
+  return memberIds.length === 0 || memberIds.includes(memberId);
 }
 
 /**

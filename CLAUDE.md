@@ -252,14 +252,23 @@ Examples:
 - `refactor(portal): extract plan editor into hook`
 - `feat(db)!: rename plans.user_id to plans.owner_id`
 
-**Versioning is automated.** `release-please` watches `develop` and opens a
-Release PR that bumps `package.json` + the manifest and updates `CHANGELOG.md`
-based on commits since the last tag. Merging that PR creates the GitHub
-release and the tag — see [.github/workflows/release-please.yml](.github/workflows/release-please.yml).
+**Versioning is automated, and it happens on `main`.** `develop` is where work
+lands and where nothing is versioned — a feature merged there is not a release.
+Merging `develop` → `main` is the release gesture: `release-please` opens a
+Release PR that bumps `package.json` + the manifest and writes `CHANGELOG.md`
+from the Conventional Commits since the last tag. Merging **that** PR tags the
+commit and cuts the GitHub release, so a tag always points at a commit that is
+on `main`. A follow-up PR carries the bump back to `develop`, or the next
+release would be computed from a version that is no longer true. See
+[.github/workflows/release-please.yml](.github/workflows/release-please.yml).
 
-The UI version label (sidebar) reads `NEXT_PUBLIC_APP_VERSION`, injected from
-`package.json` at build time via [next.config.ts](next.config.ts), so every
-release rebuild surfaces the new version automatically.
+The bump comes from the commit types — `feat` minor, `fix`/`perf` patch, `!` or
+a `BREAKING CHANGE:` footer major. Nobody edits `package.json` by hand.
+
+The sidebar footer shows the running version. It reads
+`NEXT_PUBLIC_APP_VERSION`, injected from `package.json` at build time via
+[next.config.ts](next.config.ts), so every release rebuild surfaces the new
+number without anyone editing a string.
 
 ## Environment Variables
 

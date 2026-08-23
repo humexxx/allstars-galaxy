@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useTransition } from "react";
 import { UserCog, X } from "lucide-react";
 import { User } from "@supabase/supabase-js";
@@ -14,11 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NavUser } from "./nav-user";
 import { stopImpersonationAction } from "@/app/actions/impersonation";
-import {
-  headerNav,
-  isHeaderItemActive,
-  type Role,
-} from "@/components/portal/nav-config";
+import { type Role } from "@/components/portal/nav-config";
 import { cn } from "@/lib/utils";
 
 type ImpersonatedUser = {
@@ -36,6 +31,11 @@ type AppHeaderProps = {
   isImpersonating?: boolean;
 };
 
+// The section links that used to sit here were the sidebar's own groups
+// repeated a second time, three inches away and always visible. One list of
+// places to go is enough; the header keeps the things the sidebar has no room
+// for — search, theme, account, and the impersonation banner.
+//
 // Header height is 56px (`h-14`). The sidebar offsets itself by the same
 // amount via `top-14 h-[calc(100svh-3.5rem)]` in app-sidebar.tsx — keep them
 // in sync if you adjust this.
@@ -47,7 +47,6 @@ export function AppHeader({
 }: AppHeaderProps) {
   const [isStopping, startStop] = useTransition();
   const isImpersonating = isImpersonatingProp ?? impersonatedUser !== null;
-  const pathname = usePathname();
 
   const userData = {
     name:
@@ -66,8 +65,6 @@ export function AppHeader({
       await stopImpersonationAction();
     });
   };
-
-  const navItems = headerNav(role, isImpersonating);
 
   return (
     <header
@@ -102,27 +99,6 @@ export function AppHeader({
           Allstars Galaxy
         </span>
       </Link>
-
-      {/* Top-level section nav — flat text links (no pills), mirroring the
-          sidebar groups for quick jumps. Hidden below md so small screens
-          rely on the sidebar (opened via the trigger). */}
-      <nav className="hidden items-center gap-4 text-sm md:flex lg:gap-6">
-        {navItems.map((item) => {
-          const active = isHeaderItemActive(pathname, item);
-          return (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={cn(
-                "font-medium transition-colors hover:text-foreground",
-                active ? "text-foreground" : "text-foreground/70"
-              )}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
 
       {/* Flexible spacer pushes utilities to the far right; the impersonation
           banner sits centred when active. */}

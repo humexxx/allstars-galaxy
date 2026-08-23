@@ -1,9 +1,21 @@
+# Versioning happens on `main`, which is the branch that means "released".
+#
+# `develop` is where work lands and where nothing is versioned: a feature
+# merged there is not a release, and bumping on every merge produced versions
+# nobody had ever run. Merging develop → main is the release gesture, and it
+# opens a Release PR carrying the bump and the changelog for everything that
+# has accumulated. Merging THAT PR tags the commit and cuts the GitHub
+# release, so the tag always points at a commit that exists on main.
+#
+# The bump itself comes from the Conventional Commits between tags — feat
+# minor, fix/perf patch, `!` or BREAKING CHANGE major (see commitlint.config.mjs
+# and CLAUDE.md). Nobody edits package.json by hand.
 name: release-please
 
 on:
   push:
     branches:
-      - develop
+      - main
 
 permissions:
   contents: write
@@ -14,7 +26,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
-          target-branch: develop
+          target-branch: main
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # The release commit lands on main only. Without this, develop's
+      # package.json drifts behind every release and the next Release PR is
+      # computed from a version that is no longer true.
+      - name: Carry the release back to develop
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          gh pr create \
+            --base develop \
+            --head main \
+            --title "chore(release): sync ${TAG} back to develop" \
+            --body "Automated: carries the version bump and CHANGELOG from the ${TAG} release back to develop so the next release is computed from the truth." \
+            || echo "Nothing to sync, or a sync PR is already open."

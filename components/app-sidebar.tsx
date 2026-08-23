@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation"
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -20,6 +21,7 @@ import {
   isNavLeafActive,
   type Role,
 } from "@/components/portal/nav-config"
+import { Mono } from "@/components/ui/typography"
 
 export function AppSidebar({
   role,
@@ -104,6 +106,16 @@ export function AppSidebar({
           </SidebarGroup>
         ))}
       </SidebarContent>
+
+      {/* The running version, where you look when something behaves oddly and
+          you need to know what you are actually looking at. Injected from
+          package.json at build time (see next.config.ts), so every release
+          rebuild surfaces the new number without anyone editing a string. */}
+      <SidebarFooter>
+        <Mono className="px-2 text-2xs text-muted-foreground">
+          v{process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"}
+        </Mono>
+      </SidebarFooter>
     </Sidebar>
   )
 }

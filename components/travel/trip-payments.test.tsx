@@ -95,7 +95,7 @@ describe("TripPayments", () => {
     renderCard("b");
 
     expect(screen.getByLabelText("Amount")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Log this payment")).toBeInTheDocument();
     // No "who paid" question when the card has already answered it.
     expect(screen.queryByLabelText("Who paid")).not.toBeInTheDocument();
   });

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { Trash2, Users } from "lucide-react";
+import { Loader2, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,6 @@ import {
   SelectGroup,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Mono, Text } from "@/components/ui/typography";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -54,9 +53,14 @@ import type { TripContribution } from "@/types/travel";
 import { formatTripMoney, moneyRange } from "@/lib/travel/format";
 
 
-/** "Bruno Fabián" → "Bruno". Enough to name a payer in a narrow column. */
-function firstName(name: string): string {
-  return name.split(/\s+/)[0] ?? name;
+/** "Bruno Fabián" → "BF". A name does not fit in a field this narrow. */
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("");
 }
 
 export type PaymentsTraveller = {
@@ -464,18 +468,23 @@ function PaymentEntry({
     <form onSubmit={submit}>
       <InputGroup>
         <InputGroupAddon>
+          {/* Initials, not a name: the full one ate a third of the field and
+              the card already says whose money this is. */}
           {focused ? (
-            <InputGroupText className="text-xs">
-              {focused.isYou ? "You" : firstName(focused.name)}
+            <InputGroupText
+              className="text-2xs font-medium"
+              title={focused.isYou ? `${focused.name} (you)` : focused.name}
+            >
+              {initials(focused.name)}
             </InputGroupText>
           ) : (
             <Select value={memberId} onValueChange={setMemberId}>
               <SelectTrigger
                 size="sm"
-                className="h-7 border-0 bg-transparent px-1 text-xs shadow-none"
+                className="h-6 gap-1 border-0 bg-transparent px-1 text-2xs font-medium shadow-none"
                 aria-label="Who paid"
               >
-                <SelectValue />
+                {initials(payer?.name ?? "")}
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
@@ -488,24 +497,31 @@ function PaymentEntry({
               </SelectContent>
             </Select>
           )}
-          <InputGroupText>{currencySymbol(currency)}</InputGroupText>
+          <InputGroupText className="text-muted-foreground">
+            {currencySymbol(currency)}
+          </InputGroupText>
         </InputGroupAddon>
         <InputGroupInput
           inputMode="decimal"
-          placeholder="Log a payment"
+          placeholder="Amount"
           aria-label="Amount"
           value={amount}
           onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
           disabled={isPending}
-          className="text-right font-mono tabular-nums"
+          // Mono for the digits, not for the word: the placeholder in a
+          // monospace face read like a code sample rather than a prompt.
+          className="font-mono tabular-nums placeholder:font-sans"
         />
         <InputGroupAddon align="inline-end">
+          {/* An icon, not a filled "Add" chip glued to the end. The field is
+              the control; this only says which way it goes. */}
           <InputGroupButton
             type="submit"
-            variant="default"
+            size="icon-xs"
             disabled={isPending || !amount.trim()}
+            aria-label="Log this payment"
           >
-            {isPending ? "…" : "Add"}
+            {isPending ? <Loader2 className="animate-spin" /> : <Plus />}
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>

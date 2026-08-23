@@ -231,8 +231,11 @@ export function TripCalendar({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          {format(parseDay(`${month}-01`), "MMMM yyyy")}
+        {/* Same as the itinerary's: the badge sits under the month on a
+            phone, where the month arrows already own the other end of the
+            row. */}
+        <CardTitle className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
+          <span>{format(parseDay(`${month}-01`), "MMMM yyyy")}</span>
           {viewer && (
             <Badge variant="outline" className="text-2xs font-normal">
               {viewer.isYou ? "your share" : `${viewer.name}'s share`}

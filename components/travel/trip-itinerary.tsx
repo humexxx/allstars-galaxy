@@ -121,14 +121,19 @@ export function TripItinerary({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          Itinerary
-          {/* The count belongs with the thing it counts, not in the banner. */}
-          {items.length > 0 && (
-            <Badge variant="secondary" className="text-2xs font-normal">
-              {items.length}
-            </Badge>
-          )}
+        {/* On a phone the whose-share badge goes under the heading rather
+            than beside it: inline, a name like "Alejandra's share" pushed the
+            row against Add item with nowhere left to go. */}
+        <CardTitle className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
+          <span className="flex items-center gap-2">
+            Itinerary
+            {/* The count belongs with the thing it counts, not in the banner. */}
+            {items.length > 0 && (
+              <Badge variant="secondary" className="text-2xs font-normal">
+                {items.length}
+              </Badge>
+            )}
+          </span>
           {/* Every price below is one person's, and a reader who missed the
               click upstairs would otherwise read them as the trip's. */}
           {viewer && (

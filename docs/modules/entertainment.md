@@ -154,6 +154,11 @@ NBA and NFL still use mocks.
   unused since the table did). A photo picked before the item exists waits in
   the form and is attached once the insert returns an id. The gallery holds
   only the trip's own photos; the rest travel with their item.
+- **The shared page's view switcher sits on the banner**, opposite the total,
+  dark and ringed for the same reason the pill is: the photograph underneath
+  is unknown. `PublicTripViews` owns the page layout rather than a slot inside
+  it, because that one piece of state spans the banner and the column below
+  the grid — so the banner, the list and the aside arrive as slots.
 - **The shared page offers the calendar too**, mounted `readOnly`: the month
   arrows stay, because reading a plan means looking at the days around it, but
   the bars stop being handles and `ItemForm` is a dynamic import that a

@@ -118,8 +118,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
       }
     : { low: 0, high: 0 };
 
-  return (
-    <article className="flex flex-col gap-6">
+  const banner = (
       <header className="overflow-hidden rounded-xl border">
         <div
           // Same floor as the planner's banner: at 21/9 a 390px phone leaves
@@ -177,13 +176,9 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
           </div>
         </div>
       </header>
+  );
 
-      <div className="grid gap-6 lg:grid-cols-[5fr_3fr]">
-        <div className="flex min-w-0 flex-col gap-6">
-          <PublicTripViews
-            trip={asTrip}
-            viewer={publicViewer}
-            list={
+  const list = (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -324,11 +319,10 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
               })}
             </CardContent>
           </Card>
-            }
-          />
-        </div>
+  );
 
-        <div className="flex min-w-0 flex-col gap-6">
+  const aside = (
+        <>
           {showPrices && scope && (
             <Card>
               <CardHeader>
@@ -395,9 +389,16 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
               </CardContent>
             </Card>
           )}
+    </>
+  );
 
-        </div>
-      </div>
-    </article>
+  return (
+    <PublicTripViews
+      banner={banner}
+      list={list}
+      aside={aside}
+      trip={asTrip}
+      viewer={publicViewer}
+    />
   );
 }

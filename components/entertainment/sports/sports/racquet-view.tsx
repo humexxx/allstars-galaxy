@@ -81,6 +81,21 @@ export function RacquetView({ emoji, title, subtitle, tours }: RacquetViewProps)
 }
 
 function RankingsTable({ data }: { data: RacquetData }) {
+  // Padel's provider reports no week-on-week movement, so the column was a
+  // stack of "— 0" down the whole table. A column that never says anything is
+  // better left out than filled with a placeholder.
+  const showsMovement = data.rankings.some((p) => p.movement !== 0);
+
+  if (data.rankings.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center">
+          <Text variant="muted">No rankings published for this tour yet.</Text>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardContent className="p-0">
@@ -96,9 +111,11 @@ function RankingsTable({ data }: { data: RacquetData }) {
               <SportsTh className="text-right">
                 Points
               </SportsTh>
-              <SportsTh className="text-center">
-                Move
-              </SportsTh>
+              {showsMovement ? (
+                <SportsTh className="text-center">
+                  Move
+                </SportsTh>
+              ) : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -116,9 +133,11 @@ function RankingsTable({ data }: { data: RacquetData }) {
                 <TableCell className="text-right">
                   <Mono className="text-sm font-semibold">{p.points.toLocaleString()}</Mono>
                 </TableCell>
-                <TableCell className="text-center">
-                  <Movement movement={p.movement} />
-                </TableCell>
+                {showsMovement ? (
+                  <TableCell className="text-center">
+                    <Movement movement={p.movement} />
+                  </TableCell>
+                ) : null}
               </TableRow>
             ))}
           </TableBody>
@@ -151,6 +170,16 @@ function Movement({ movement }: { movement: number }) {
 }
 
 function TournamentsList({ data }: { data: RacquetData }) {
+  if (data.tournaments.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center">
+          <Text variant="muted">No tournaments on the calendar for this tour.</Text>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {data.tournaments.map((t) => (

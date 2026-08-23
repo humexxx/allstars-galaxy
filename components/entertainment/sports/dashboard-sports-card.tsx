@@ -73,7 +73,16 @@ export async function DashboardSportsCard({ userId }: DashboardSportsCardProps) 
           )}
         >
           {highlights.map((h) => (
-            <HighlightCard key={h.sportId} highlight={h} />
+            // Now that the hub keeps its sport in the URL, a highlight can
+            // point straight at the one it is about instead of dropping the
+            // reader on whatever the hub opens with.
+            <Link
+              key={h.sportId}
+              href={`${SPORTS_PATH}?sport=${h.sportId}`}
+              className="rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <HighlightCard highlight={h} />
+            </Link>
           ))}
         </div>
       </CardContent>
@@ -83,7 +92,7 @@ export async function DashboardSportsCard({ userId }: DashboardSportsCardProps) 
 
 function HighlightCard({ highlight }: { highlight: DashboardSportHighlight }) {
   return (
-    <div className="flex h-full flex-col gap-2 rounded-lg border bg-card p-3">
+    <div className="flex h-full flex-col gap-2 rounded-lg border bg-card p-3 transition-colors hover:border-primary/60">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <span

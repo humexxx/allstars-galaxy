@@ -420,13 +420,37 @@ NBA and NFL still use mocks.
 - `getTripWithRelations` is wrapped in `React.cache()` so `generateMetadata` and the page body share one DB hit per request.
 - `app/portal/entertainment/loading.tsx`, `app/portal/entertainment/travel-planner/[id]/not-found.tsx`, and `app/portal/entertainment/error.tsx` give the module its skeleton / 404 / error boundaries.
 - **Sports data — mixed sources (as of 2026-06-04):**
-  - **Live**: LoL (Lolesports), F1 (Jolpica-F1), football (football-data.org — UCL/La Liga/EPL/Serie A), World Cup (football-data.org — its own `worldcup` sport tab, NOT in the football league selector), padel (Padel API — men + women rankings + tournaments), tennis (TheSportsDB — ATP/WTA active tournament only, mock rankings retained since TheSportsDB has none). All share the same shape: live fetch → map into the existing typed data shape → fall back to the mock fixture on any error → cached **5 min** via `unstable_cache` (was 30 min; shortened so scores are near-current whenever the user lands — rate budgets checked per provider) → lifted into `app/portal/entertainment/sports/page.tsx` and passed down through `SportsHub` as a prop.
+  - **Live**: LoL (Lolesports), F1 (Jolpica-F1), football (football-data.org — UCL/La Liga/EPL/Serie A), World Cup (football-data.org — its own `worldcup` sport tab, NOT in the football league selector), padel (Padel API — men + women rankings + tournaments), tennis (TheSportsDB — ATP/WTA active tournament only, mock rankings retained since TheSportsDB has none). All share the same shape: live fetch → map into the existing typed data shape → fall back to the mock fixture on any error → cached **5 min** via `unstable_cache` (was 30 min; shortened so scores are near-current whenever the user lands — rate budgets checked per provider) → fetched by [`lib/sports/load.ts`](../../lib/sports/load.ts) for **the active sport only** and passed to `SportsHub` as one `SportPayload`.
   - **Mock only**: NBA (BALLDONTLIE free tier blocks `/standings`, only teams/games — needs $9.99/mo ALL-STAR plan or computed standings from 1230 games of game data which costs 13 paginated calls at 5 req/min = 2.5 min cold start, not viable for SSR), NFL (no decent free provider with current-season data).
   - **Rejected providers**: API-SPORTS (free tier hard-locked to seasons 2022–2024, useless for current data; paid plan ~$100/mo); Riot Games official API (no esports/tournament data, only personal player stats).
   - **Env vars**: `FOOTBALL_DATA_API_KEY` and `PADEL_API_KEY` (both optional — service falls back to mock when unset). Lolesports, Jolpica and TheSportsDB need no key.
 - **Vitest setup** in [`vitest.setup.ts`](../../vitest.setup.ts) stubs `next/cache` (so `unstable_cache` becomes a passthrough) and rejects `global.fetch` by default (so live-API services exercise their mock-fallback path). Tests that need real responses can re-stub `fetch` per-file.
 - The new sport selector pins favourites to the front of the strip and stars them; non-favourites stay visible so the hub still works with zero favourites picked.
 - **Match display order** is centralized in [`lib/sports/match-order.ts`](../../lib/sports/match-order.ts) (`orderMatchesForDisplay`: live → upcoming nearest-first → results most-recent-first). Football and LoL both use it; the previous plain-descending sort put fixtures 60 days away at the top and made the dashboard's `find(scheduled)` pick the furthest-away match as "Upcoming".
+- **The active sport is a `?sport=` search param.** It was component state,
+  which meant no deep link, no Back between sports, a refresh landing you back
+  on football — and, because the page could not know which sport it was about,
+  a `Promise.all` over **all six providers on every load** to render one view.
+  football-data.org allows ten requests a minute on the free tier and this page
+  spent two of them per visit before anything was chosen.
+  [`lib/sports/payload.ts`](../../lib/sports/payload.ts) is the client-safe half
+  (the `SportPayload` union, `isSportId`, `SAMPLE_DATA_SPORTS`);
+  [`lib/sports/load.ts`](../../lib/sports/load.ts) is `server-only` and does the
+  fetching.
+- **NBA and NFL say they are sample data**, via `SAMPLE_DATA_SPORTS`. They have
+  no free provider with current data, so they render a hand-written season — and
+  a five-game May schedule under "Season 2025–26" with nothing admitting it is a
+  fixture reads as a broken live view.
+- **A bracket with nobody in it is not rendered as a bracket.** Providers hand
+  back the shape of a playoff before the draw is made — LoL returned eight
+  TBD-vs-TBD slots — so `isBracketDrawn`
+  ([`lib/sports/bracket.ts`](../../lib/sports/bracket.ts)) gates both the
+  bracket's empty state and whether the LoL view is allowed to *open* on the
+  Playoffs tab.
+- **Padel and tennis no longer share 🎾.** Two tabs with the same glyph were
+  told apart only by reading them; padel is 🏓 (a paddle). Padel's provider also
+  reports no week-on-week movement, so the rankings table drops the *Move*
+  column entirely rather than printing "— 0" down every row.
 - **Sports table/style primitives**: [`shared/table-primitives.tsx`](../../components/entertainment/sports/shared/table-primitives.tsx) (`SportsTh` standard uppercase header cell + `TableCellNum` numeric cell — replaces ~50 copy-pasted `text-xs uppercase tracking-wide text-muted-foreground` chains and 3 duplicate `TableCellNum`s) and [`shared/status-pill.tsx`](../../components/entertainment/sports/shared/status-pill.tsx) (`StatusPill` completed/upcoming/live — was duplicated in f1-view + racquet-view). New sport views should use these instead of hand-rolling.
 - **Sport views key their `<Tabs>` by the active league/region** (football, lol): an uncontrolled Tabs keeps its old value when the active trigger unmounts, so switching to a league without that tab stranded the view on a blank body. `KnockoutBracket` opens focused on the current round (first with an undecided tie; fully decided → final) and re-focuses when `rounds` changes.
 - `manage-favorites-sheet` tracks in-flight toggles as a `Set<SportId>` (a single pending slot let one toggle's completion clear another's spinner).

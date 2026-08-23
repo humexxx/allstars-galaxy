@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { isBracketDrawn } from "@/lib/sports/bracket";
 import { cn } from "@/lib/utils";
 import type { BracketMatch, BracketRound, Team } from "@/types/sports";
 
@@ -30,6 +31,19 @@ function initialWindowStart(rounds: BracketRound[]): number {
 }
 
 export function KnockoutBracket({ rounds, teams, className }: KnockoutBracketProps) {
+  if (rounds.length === 0 || !isBracketDrawn(rounds)) {
+    return (
+      <div
+        className={cn(
+          "rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground",
+          className,
+        )}
+      >
+        The bracket is not drawn yet — nobody has qualified into it.
+      </div>
+    );
+  }
+
   return (
     <div className={className}>
       <MobileBracket rounds={rounds} teams={teams} className="sm:hidden" />
@@ -202,15 +216,17 @@ function DesktopBracket({ rounds, teams, className }: KnockoutBracketProps) {
   return (
     <div className={cn("space-y-3", className)}>
       <div className="flex items-center justify-between gap-2">
-        <Button
-          size="icon"
-          variant="ghost"
-          disabled={start === 0}
-          onClick={() => setWindowStart((s) => Math.max(0, s - 1))}
-          aria-label="Previous round"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
+        {maxStart > 0 ? (
+          <Button
+            size="icon"
+            variant="ghost"
+            disabled={start === 0}
+            onClick={() => setWindowStart((s) => Math.max(0, s - 1))}
+            aria-label="Previous round"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        ) : null}
         <div
           className={cn(
             "grid flex-1 gap-2 text-center text-sm font-medium",
@@ -225,15 +241,17 @@ function DesktopBracket({ rounds, teams, className }: KnockoutBracketProps) {
             </span>
           ))}
         </div>
-        <Button
-          size="icon"
-          variant="ghost"
-          disabled={start >= maxStart}
-          onClick={() => setWindowStart((s) => Math.min(maxStart, s + 1))}
-          aria-label="Next round"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+        {maxStart > 0 ? (
+          <Button
+            size="icon"
+            variant="ghost"
+            disabled={start >= maxStart}
+            onClick={() => setWindowStart((s) => Math.min(maxStart, s + 1))}
+            aria-label="Next round"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        ) : null}
       </div>
 
       <div

@@ -20,6 +20,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
+import { isBracketDrawn } from "@/lib/sports/bracket";
 import type {
   LolData,
   LolMatch,
@@ -50,6 +51,10 @@ export function LolView({ data }: LolViewProps) {
   );
 
   const hasPlayoffs = !!split.playoffs && split.playoffs.length > 0;
+  // A bracket that exists but names nobody is not somewhere to land: opening
+  // on it showed "not drawn yet" as the first thing on the page while the
+  // split's actual matches sat one tab away.
+  const playoffsDrawn = hasPlayoffs && isBracketDrawn(split.playoffs!);
 
   return (
     // Keyed by region: switching to a region without playoffs while on the
@@ -57,7 +62,7 @@ export function LolView({ data }: LolViewProps) {
     // whose trigger/content no longer exist (blank body).
     <Tabs
       key={region}
-      defaultValue={hasPlayoffs ? "playoffs" : "matches"}
+      defaultValue={playoffsDrawn ? "playoffs" : "matches"}
       className="space-y-6"
     >
       <SportShell

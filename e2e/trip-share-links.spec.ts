@@ -63,11 +63,9 @@ test.describe("Travel planner — share links", () => {
     await expect(rows).toHaveCount(1, { timeout: 15_000 });
     const anyoneLink = (await rows.first().inputValue()).trim();
 
-    // Picking a traveller re-scopes the link, so the dialog closes and
-    // reopens around that choice.
-    await page.keyboard.press("Escape");
-    await page.getByTitle(/Bruno Fabián/).click();
-    await page.getByRole("button", { name: "Share" }).click();
+    // The recipient is chosen inside the dialog now.
+    await dialog.getByLabel("Who is this link for?").click();
+    await page.getByRole("option", { name: "Bruno Fabián" }).click();
     await dialog.getByRole("button", { name: /^For /i }).click();
     await expect(rows).toHaveCount(2, { timeout: 15_000 });
     const values = await rows.evaluateAll((els) =>

@@ -14,9 +14,17 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import { Label } from "@/components/ui/label";
 import { Mono, Text } from "@/components/ui/typography";
 import { Badge } from "@/components/ui/badge";
+import { Field, FieldLabel } from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import {
   createTripShareAction,
@@ -28,10 +36,12 @@ import type { TripShare, TripWithRelations } from "@/types/travel";
 type TripSharePanelProps = {
   trip: TripWithRelations;
   baseUrl: string;
-  /** Traveller in focus upstairs. A link created now carries their view. */
+  /** Traveller in focus upstairs — the picker's starting point, not a lock. */
   scopeToMemberId?: string | null;
-  scopeName?: string | null;
 };
+
+/** Sentinel for "not scoped to anybody" — Select has no value for null. */
+const EVERYONE = "__everyone__";
 
 function shareUrl(baseUrl: string, token: string): string {
   return `${baseUrl.replace(/\/$/, "")}/trips/${token}`;
@@ -41,12 +51,16 @@ export function TripSharePanel({
   trip,
   baseUrl,
   scopeToMemberId = null,
-  scopeName = null,
 }: TripSharePanelProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [creating, startCreate] = useTransition();
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  // Who the link is for is asked here, not inherited from a click behind the
+  // dialog. It starts on whoever is in focus, so the common case is still one
+  // button — but changing your mind no longer means closing this first.
+  const [scopeId, setScopeId] = useState<string>(scopeToMemberId ?? EVERYONE);
+  const scopeName = trip.members.find((m) => m.id === scopeId)?.name ?? null;
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,7 +72,7 @@ export function TripSharePanel({
     startCreate(async () => {
       const res = await createTripShareAction(trip.id, {
         inviteeEmail: trimmed || null,
-        memberId: scopeToMemberId,
+        memberId: scopeId === EVERYONE ? null : scopeId,
       });
       if (res.success && res.data) {
         const url = shareUrl(baseUrl, res.data.token);
@@ -99,45 +113,66 @@ export function TripSharePanel({
   return (
     <div className="flex flex-col gap-4">
       <form onSubmit={handleCreate} className="flex flex-col gap-2 ">
-        <Label htmlFor="share-email" className="text-xs">
-          Generate a private link
-        </Label>
-        <InputGroup>
-          <InputGroupInput
-            id="share-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="friend@example.com"
-            disabled={creating}
-          />
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton type="submit" variant="default" disabled={creating}>
-              {creating ? <Loader2 className="animate-spin" /> : <Link2 />}
-              {scopeName ? `For ${scopeName.split(" ")[0]}` : "Create"}
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
-      {/* Said before the click, not after: which traveller a link exposes is
-          not something to discover from the result. */}
-      <Text variant="small">
-        {scopeToMemberId && scopeName ? (
-          <>
-            This link shows{" "}
-            <span className="font-medium text-foreground">{scopeName}&apos;s</span>{" "}
-            share of each cost — not the trip totals, and not the other
-            travellers. Close this and pick{" "}
-            <span className="font-medium text-foreground">All</span> above the
-            cover photo for a link to the whole trip.
-          </>
-        ) : (
-          <>
-            This link shows the plan without any prices. Close this and pick a
-            traveller above the cover photo to send somebody their own share
-            instead. The email is only a label — nothing is sent.
-          </>
-        )}
-      </Text>
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor="share-scope" className="text-xs">
+            Who is this link for?
+          </FieldLabel>
+          <Select value={scopeId} onValueChange={setScopeId}>
+            <SelectTrigger id="share-scope" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value={EVERYONE}>Everyone — the whole trip</SelectItem>
+                {trip.members.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor="share-email" className="text-xs">
+            Label <span className="text-muted-foreground">(optional)</span>
+          </FieldLabel>
+          <InputGroup>
+            <InputGroupInput
+              id="share-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="friend@example.com"
+              disabled={creating}
+            />
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton type="submit" variant="default" disabled={creating}>
+                {creating ? <Loader2 className="animate-spin" /> : <Link2 />}
+                {scopeName ? `For ${scopeName.split(" ")[0]}` : "Create"}
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
+        </Field>
+
+        {/* Said before the click, not after: which traveller a link exposes is
+            not something to discover from the result. */}
+        <Text variant="small">
+          {scopeName ? (
+            <>
+              This link shows{" "}
+              <span className="font-medium text-foreground">{scopeName}&apos;s</span>{" "}
+              share of each cost — not the trip totals, and not the other
+              travellers.
+            </>
+          ) : (
+            <>
+              This link shows the plan without any prices. The label is only for
+              you — nothing is sent to it.
+            </>
+          )}
+        </Text>
       </form>
 
       {active.length > 0 && (

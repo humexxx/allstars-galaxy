@@ -347,10 +347,8 @@ export function TripDetail({
           <TripSharePanel
             trip={trip}
             baseUrl={baseUrl}
-            // A link inherits whoever is in focus, so "share this with Bruno"
-            // is the same gesture as "show me Bruno's numbers".
+            // Only where the picker starts: the dialog asks for itself now.
             scopeToMemberId={selected}
-            scopeName={viewer?.name ?? null}
           />
         </DialogContent>
       </Dialog>

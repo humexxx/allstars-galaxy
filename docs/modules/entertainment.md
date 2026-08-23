@@ -131,11 +131,16 @@ NBA and NFL still use mocks.
   [`MarqueeText`](../../components/travel/marquee-text.tsx), which measures the
   overflow and leaves a label that already fits completely alone. It respects
   `prefers-reduced-motion`.
-- **Sharing lives on the banner, not in a card down the page.** It is
-  something you do to the whole trip, and which traveller is selected changes
-  what the link will show — so the button sits beside Edit, where that state
-  is visible. `TripSharePanel` is the dialog's body; it renders no `Card` of
-  its own.
+- **Sharing lives on the banner, not in a card down the page**, and the
+  dialog asks who the link is for. The traveller in focus is where that picker
+  starts, not a lock — choosing a different recipient used to mean closing the
+  dialog, clicking a face behind it, and opening it again.
+  `TripSharePanel` is the dialog's body; it renders no `Card` of its own.
+- **The public page is the planner, minus every control.** Same banner, same
+  day groups, same money in the same column — the owner describes a link by
+  what they are looking at, and a recipient seeing a different layout has to
+  be told how to map one onto the other. There is no add, edit, menu or drag
+  anywhere in it: a share link grants a view.
 - **Each active link can show its QR** (`qrcode.react`). A phone cannot be
   handed a URL, and the code is how a link crosses to a device that is not
   this one. The code is drawn on white whatever the theme — a dark surface

@@ -162,7 +162,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <Heading level="h1" className="text-white">
+              <Heading level="h1" className="text-2xl text-white sm:text-4xl">
                 {trip.title}
               </Heading>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">

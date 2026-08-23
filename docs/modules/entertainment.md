@@ -149,6 +149,13 @@ NBA and NFL still use mocks.
   in, and what a good title looks like (`titlePlaceholder` — a hotel example
   under a form set to Food prompts for the wrong answer). Squeezed beside the
   title it also read as a control of a different weight.
+- **Everything else in that form pairs up.** Price / *Up to* / *That price is*
+  are one question asked three ways and share a row; *Link* and *Video* are two
+  optional URLs and share another; *From* and *To* get their own sub-grid so a
+  one-way flight cannot render "Departs | From" with "To" stranded on the next
+  line. The two money inputs stay paired even on a phone — they are short
+  enough. Category and title are the exception above and stay on their own
+  lines.
 - **Dates use `DateField`** (Popover + Calendar), not `<input type="date">`.
   The native control renders differently in every browser and shows no view of
   the month around the date, which is what somebody arranging a trip is

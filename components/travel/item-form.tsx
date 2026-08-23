@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -220,13 +221,13 @@ export function ItemForm({
       onSubmit={handleSubmit}
       // No panel of its own any more: it lives in a dialog, and a bordered
       // box inside a bordered box is one frame too many.
-      className="flex flex-col gap-4"
+      className="flex flex-col gap-3"
     >
       {/* Category first, and on its own line. It decides which fields appear
           below it, what the price can be quoted in and what a good title
           looks like — so it is the question to answer first, not a control
           squeezed beside the title with a different weight to it. */}
-      <Field className="gap-1.5">
+      <Field className="gap-1">
         <FieldLabel htmlFor={`category-${item?.id ?? "new"}`} className="text-xs">
           Category
         </FieldLabel>
@@ -266,7 +267,7 @@ export function ItemForm({
       </Field>
 
       {fields.title ? (
-        <Field className="gap-1.5">
+        <Field className="gap-1">
           <FieldLabel htmlFor={`title-${item?.id ?? "new"}`} className="text-xs">
             Title
           </FieldLabel>
@@ -293,8 +294,8 @@ export function ItemForm({
         </Text>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field className="gap-1.5">
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        <Field className={cn("gap-1", showEnd ? "" : "sm:col-span-2")}>
           <FieldLabel htmlFor={`date-${item?.id ?? "new"}`} className="text-xs">
             {fields.startLabel}
           </FieldLabel>
@@ -305,7 +306,7 @@ export function ItemForm({
           />
         </Field>
         {showEnd && (
-          <Field className="gap-1.5">
+          <Field className="gap-1">
             <FieldLabel htmlFor={`ends-${item?.id ?? "new"}`} className="text-xs">
               {endDayLabel(fields, roundTrip)}{" "}
               <span className="text-muted-foreground">(optional)</span>
@@ -321,8 +322,8 @@ export function ItemForm({
           </Field>
         )}
         {fields.route && (
-          <>
-            <Field className="gap-1.5">
+          <div className="grid grid-cols-2 gap-2.5 sm:col-span-2">
+            <Field className="gap-1">
               <FieldLabel htmlFor={`from-${item?.id ?? "new"}`} className="text-xs">From</FieldLabel>
               <AirportPicker
                 id={`from-${item?.id ?? "new"}`}
@@ -331,7 +332,7 @@ export function ItemForm({
                 placeholder="SJO or San José"
               />
             </Field>
-            <Field className="gap-1.5">
+            <Field className="gap-1">
               <FieldLabel htmlFor={`to-${item?.id ?? "new"}`} className="text-xs">To</FieldLabel>
               <AirportPicker
                 id={`to-${item?.id ?? "new"}`}
@@ -340,7 +341,7 @@ export function ItemForm({
                 placeholder="MCO or Orlando"
               />
             </Field>
-          </>
+          </div>
         )}
 
         {fields.roundTrip && (
@@ -362,10 +363,11 @@ export function ItemForm({
           </label>
         )}
 
-        {/* A price and its upper bound are one question asked twice; split
-            across rows by the parent grid they read as two. */}
-        <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
-        <Field className="gap-1.5">
+        {/* A price, its ceiling and what it is quoted per are one question
+            asked three ways. On three separate rows they read as three, and
+            they were a third of the dialog's height. */}
+        <div className="grid grid-cols-2 gap-2.5 sm:col-span-2 sm:grid-cols-[1fr_1fr_1.2fr]">
+        <Field className="gap-1">
           <FieldLabel htmlFor={`price-${item?.id ?? "new"}`} className="text-xs">
             Price <span className="text-muted-foreground">(or low estimate)</span>
           </FieldLabel>
@@ -377,7 +379,7 @@ export function ItemForm({
             placeholder="0.00"
           />
         </Field>
-        <Field className="gap-1.5">
+        <Field className="gap-1">
           <FieldLabel htmlFor={`pricemax-${item?.id ?? "new"}`} className="text-xs">
             Up to <span className="text-muted-foreground">(optional)</span>
           </FieldLabel>
@@ -389,9 +391,7 @@ export function ItemForm({
             placeholder="0.00"
           />
         </Field>
-        </div>
-
-        <Field className="gap-1.5 sm:col-span-2">
+        <Field className="col-span-2 gap-1 sm:col-span-1">
           <FieldLabel className="text-xs">That price is</FieldLabel>
           <Select
             value={priceUnit}
@@ -411,7 +411,12 @@ export function ItemForm({
             </SelectContent>
           </Select>
         </Field>
-        <Field className="gap-1.5 sm:col-span-2">
+        </div>
+
+        {/* Two optional URLs, side by side: as full-width rows they took as
+            much of the dialog as the price did. A category with no video
+            field leaves the link the whole row. */}
+        <Field className={cn("gap-1", fields.video ? "" : "sm:col-span-2")}>
           <FieldLabel htmlFor={`link-${item?.id ?? "new"}`} className="text-xs">Link</FieldLabel>
           <Input
             id={`link-${item?.id ?? "new"}`}
@@ -422,7 +427,7 @@ export function ItemForm({
           />
         </Field>
         {fields.video && (
-        <Field className="gap-1.5 sm:col-span-2">
+        <Field className="gap-1">
           <FieldLabel htmlFor={`video-${item?.id ?? "new"}`} className="text-xs">
             Video
           </FieldLabel>
@@ -438,7 +443,7 @@ export function ItemForm({
       </div>
 
       {travellers.length > 1 && (
-        <Field className="gap-1.5">
+        <Field className="gap-1">
           <FieldLabel className="text-xs">Who pays for this</FieldLabel>
           <div className="flex flex-wrap gap-1.5">
             {/* "Everyone" is the absence of a choice, not a choice of its
@@ -485,7 +490,7 @@ export function ItemForm({
         </Field>
       )}
 
-      <Field className="gap-1.5">
+      <Field className="gap-1">
         <FieldLabel className="text-xs">Photos</FieldLabel>
         {shownPhotos.length > 0 && (
           <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
@@ -562,7 +567,7 @@ export function ItemForm({
         </div>
       )}
 
-      <Field className="gap-1.5">
+      <Field className="gap-1">
         <FieldLabel htmlFor={`notes-${item?.id ?? "new"}`} className="text-xs">Notes</FieldLabel>
         <Textarea
           id={`notes-${item?.id ?? "new"}`}

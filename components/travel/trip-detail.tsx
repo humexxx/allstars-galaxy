@@ -291,7 +291,15 @@ export function TripDetail({
             </div>
 
             <div className="flex flex-col gap-2">
-              <Heading level="h1" className="text-white">{trip.title}</Heading>
+              <Heading
+                level="h1"
+                // A trip name is long by nature ("Islandia, Finlandia &
+                // Tomorrowland Winter"), and at the h1's own 30px it ran to
+                // two lines and owned the banner on a phone.
+                className="text-2xl text-white sm:text-4xl"
+              >
+                {trip.title}
+              </Heading>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
                 {trip.destination && (
                   <span className="inline-flex items-center gap-1.5">

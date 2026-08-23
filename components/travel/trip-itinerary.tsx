@@ -28,7 +28,12 @@ import type {
   TripWithRelations,
 } from "@/types/travel";
 
-import { formatTripMoney, moneyRange } from "@/lib/travel/format";
+import {
+  dayGroupLabel,
+  formatTripMoney,
+  moneyRange,
+  runsUntil,
+} from "@/lib/travel/format";
 import { ActivityVideo } from "@/components/travel/activity-video";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
 import {
@@ -85,16 +90,9 @@ function groupByDay(
       high += cost.high;
     }
     const label =
-      key === NO_DATE_KEY
-        ? "Unscheduled"
-        : format(parseDate(key), "EEEE, MMM d");
+      key === NO_DATE_KEY ? "Unscheduled" : dayGroupLabel(key, runsUntil(arr));
     return { key, label, items: arr, low, high };
   });
-}
-
-function parseDate(value: string): Date {
-  const [y, m, d] = value.split("-").map(Number);
-  return new Date(y, m - 1, d);
 }
 
 type TripItineraryProps = {

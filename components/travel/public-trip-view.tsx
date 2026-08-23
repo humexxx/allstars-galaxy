@@ -9,15 +9,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
+import { Progress } from "@/components/ui/progress";
+import { Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { PublicTripView } from "@/types/travel";
 
 import {
+  dayGroupLabel,
   formatDateRange,
   formatTripMoney,
   moneyRange,
-  parseTripDate,
+  runsUntil,
 } from "@/lib/travel/format";
 import { itemCost, tripCost, unitSuffix } from "@/lib/travel/pricing";
 // One category table, not a second copy that drifts: this page once labelled
@@ -77,6 +79,13 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
 
   // A range, like everything else that is still an estimate. Only what has
   // been paid is one figure — that money either moved or it did not.
+  // Against the low estimate: it is the figure that can actually be settled,
+  // and measuring against the high one leaves a fully-paid share reading as
+  // short.
+  const pct =
+    scope && scope.owedLow > 0
+      ? Math.min(100, (scope.paid / scope.owedLow) * 100)
+      : 0;
   const left = scope
     ? {
         low: Math.max(0, scope.owedLow - scope.paid),
@@ -180,7 +189,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                 const label =
                   key === NO_DATE_KEY
                     ? "Unscheduled"
-                    : format(parseTripDate(key), "EEEE, MMM d");
+                    : dayGroupLabel(key, runsUntil(groupItems));
                 return (
                   <section key={key} className="flex flex-col gap-2">
                     <div className="flex items-end justify-between gap-2 border-b pb-1">
@@ -275,22 +284,32 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
               <CardHeader>
                 <CardTitle>Your share</CardTitle>
               </CardHeader>
-              {/* Label left, figure right, one per line. Side by side they
-                  wrapped the moment the remainder became a range, and left a
-                  centred figure next to a left-aligned one. */}
-              <CardContent className="flex flex-col gap-3">
-                <div className="flex items-baseline justify-between gap-3">
-                  <Eyebrow>Paid so far</Eyebrow>
-                  <Mono className="text-xl font-semibold tabular-nums">
+              {/* The same shape the planner's Payments card uses: the figure
+                  paid, what it is against, and a bar — a number on its own
+                  does not say whether it is nearly there or barely started. */}
+              <CardContent className="flex flex-col gap-1.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <Mono className="text-2xl font-semibold tabular-nums">
                     {formatTripMoney(scope.paid, trip.currency)}
                   </Mono>
-                </div>
-                <div className="flex items-baseline justify-between gap-3">
-                  <Eyebrow>Still to go</Eyebrow>
-                  <Mono className="text-xl font-semibold tabular-nums">
-                    {moneyRange(left.low, left.high, trip.currency)}
+                  <Mono className="shrink-0 text-xs text-muted-foreground">
+                    of {moneyRange(scope.owedLow, scope.owedHigh, trip.currency)}
                   </Mono>
                 </div>
+                <Progress value={pct} className="h-1.5" />
+                <Text className="text-2xs text-muted-foreground">
+                  {left.low > 0 ? (
+                    <>
+                      {formatTripMoney(left.low, trip.currency)} still to go
+                      {left.high > left.low && (
+                        <> — up to {formatTripMoney(left.high, trip.currency)} if every
+                          estimate lands high</>
+                      )}
+                    </>
+                  ) : (
+                    "Covered against the low estimate."
+                  )}
+                </Text>
               </CardContent>
             </Card>
           )}
@@ -327,18 +346,6 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
             </Card>
           )}
 
-          {trip.description && (
-            <Card>
-              <CardHeader>
-                <CardTitle>About</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Text className="whitespace-pre-wrap text-foreground/90">
-                  {trip.description}
-                </Text>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </article>

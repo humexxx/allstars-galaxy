@@ -1,5 +1,8 @@
 import { format } from "date-fns";
 
+import { spansDays } from "./item-fields";
+import type { TripItemCategory } from "@/types/travel";
+
 /**
  * Shared, server-safe formatting helpers for the travel planner. These were
  * previously duplicated across travel components — and importing them from the
@@ -66,4 +69,36 @@ export function moneyRange(low: number, high: number, currency: string): string 
   return high > low
     ? `${formatTripMoney(low, currency)} – ${formatTripMoney(high, currency)}`
     : formatTripMoney(low, currency);
+}
+
+/**
+ * A day's heading, carrying the run when something on it lasts longer.
+ *
+ * "Sunday, Jan 17" under a seven-night sailing says less than the trip does:
+ * the day is where the cruise *starts*, and the reader has to open the item
+ * to learn it ends on the 24th. When the day begins something that spans, the
+ * heading says so.
+ */
+export function dayGroupLabel(day: string, runsUntil: string | null): string {
+  const opens = format(parseTripDate(day), "EEEE, MMM d");
+  if (!runsUntil || runsUntil <= day) return opens;
+  return `${opens} – ${format(parseTripDate(runsUntil), "EEE, MMM d")}`;
+}
+
+/**
+ * The furthest day anything starting here runs to, or null when nothing does.
+ *
+ * `spansDays` is what decides: a hotel booked to the 17th occupies the 17th,
+ * a return flight on the 24th does not occupy the days in between, so only
+ * the first should stretch a heading.
+ */
+export function runsUntil(
+  items: { category: TripItemCategory; scheduledOn: string | null; endsOn: string | null }[]
+): string | null {
+  let latest: string | null = null;
+  for (const item of items) {
+    if (!item.endsOn || !spansDays(item.category)) continue;
+    if (item.endsOn > (latest ?? "")) latest = item.endsOn;
+  }
+  return latest;
 }

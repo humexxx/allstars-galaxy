@@ -78,7 +78,11 @@ test.describe("Travel planner — share links", () => {
     await expect(dialog.locator("[data-slot=badge]").getByText("Whole trip")).toBeVisible();
 
     const browser = await chromium.launch();
-    const anon = await browser.newContext();
+    const anon = await browser.newContext({
+      // Explicitly empty: a context inherits the project's storageState
+      // otherwise, and "no session" would be a claim rather than a fact.
+      storageState: { cookies: [], origins: [] },
+    });
     try {
       const guest = await anon.newPage();
       await guest.goto(anyoneLink);

@@ -140,6 +140,16 @@ NBA and NFL still use mocks.
   `trip_item_stops` alongside the items, so a cruise arrives as a journey
   rather than a booking. Still one round of queries — the stops join
   `trip_items` in a single call rather than one per item.
+- **A day's heading carries the run it begins** (`dayGroupLabel` +
+  `runsUntil`): "Sunday, Jan 17 – Sun, Jan 24" rather than a date the reader
+  has to open the item to complete. `spansDays` decides which items count, so
+  a return flight never stretches a heading. Both views use it.
+- **The shared page's sign-in lives on the bar**, in
+  [`app/trips/[token]/layout.tsx`](../../app/trips/[token]/layout.tsx) — that
+  layout exists so the invitation can be token-specific: sign-up prefills the
+  address the link was labelled with and returns the reader to the trip. It
+  was a card above the itinerary, which is a lot of furniture in front of the
+  thing somebody was sent to look at.
 - **`Still to go` is a range** on the shared page, like everything else that
   is still an estimate. Only what has been paid is one figure: that money
   either moved or it did not.

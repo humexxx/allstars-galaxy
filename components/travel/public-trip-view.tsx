@@ -25,6 +25,7 @@ import { itemCost, tripCost, unitSuffix } from "@/lib/travel/pricing";
 // One category table, not a second copy that drifts: this page once labelled
 // flights and cruises "Other" because they were missing from its own list.
 import { CategoryIcon, categoryMeta } from "@/components/travel/category";
+import { PublicTripViews } from "@/components/travel/public-trip-views";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
 
 const NO_DATE_KEY = "__no_date__";
@@ -86,6 +87,30 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
     scope && scope.owedLow > 0
       ? Math.min(100, (scope.paid / scope.owedLow) * 100)
       : 0;
+  /**
+   * What the calendar needs, shaped the way the planner shapes it.
+   *
+   * The public view has no members and no shares to hand it, and it must not
+   * — so it gets a trip with those emptied and the scope's own per-item
+   * figures as the viewer.
+   */
+  const asTrip = {
+    ...trip,
+    items,
+    photos,
+    members: [],
+    shares: [],
+    contributions: [],
+  } as unknown as import("@/types/travel").TripWithRelations;
+
+  const publicViewer = scope
+    ? {
+        name: scope.memberName,
+        isYou: false,
+        lines: new Map(scope.lines.map((l) => [l.itemId, { low: l.low, high: l.high }])),
+      }
+    : null;
+
   const left = scope
     ? {
         low: Math.max(0, scope.owedLow - scope.paid),
@@ -155,6 +180,10 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
 
       <div className="grid gap-6 lg:grid-cols-[5fr_3fr]">
         <div className="flex min-w-0 flex-col gap-6">
+          <PublicTripViews
+            trip={asTrip}
+            viewer={publicViewer}
+            list={
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -266,6 +295,25 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                               {item.stops.length > 0 && (
                                 <ItemItinerary stops={item.stops} />
                               )}
+                              {item.photos.length > 0 && (
+                                <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 pt-1">
+                                  {item.photos.map((photo) => (
+                                    <div
+                                      key={photo.id}
+                                      className="relative aspect-square w-20 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
+                                    >
+                                      <Image
+                                        src={photo.url}
+                                        alt={photo.caption ?? ""}
+                                        fill
+                                        sizes="80px"
+                                        className="object-cover"
+                                        unoptimized
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </li>
                         );
@@ -276,6 +324,8 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
               })}
             </CardContent>
           </Card>
+            }
+          />
         </div>
 
         <div className="flex min-w-0 flex-col gap-6">

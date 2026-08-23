@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -27,7 +28,15 @@ import { MarqueeText } from "./marquee-text";
 
 import type { TripItemWithStops, TripWithRelations } from "@/types/travel";
 import { moveTripItemAction } from "@/app/actions/travel";
-import { ItemForm } from "./item-form";
+/**
+ * Loaded when an item is opened, never before.
+ *
+ * The shared page mounts this calendar read-only, and a visitor who cannot
+ * edit anything has no reason to download the form that edits it.
+ */
+const ItemForm = dynamic(() =>
+  import("./item-form").then((m) => ({ default: m.ItemForm }))
+);
 import {
   Dialog,
   DialogContent,
@@ -115,10 +124,17 @@ export function TripCalendar({
   trip,
   partySize = 1,
   viewer = null,
+  readOnly = false,
 }: {
   trip: TripWithRelations;
   partySize?: number;
   viewer?: ItineraryViewer | null;
+  /**
+   * A shared link shows the month; it does not rearrange it. The month arrows
+   * stay — reading the plan means looking at the days around it — but the
+   * bars stop being handles and the editor never loads.
+   */
+  readOnly?: boolean;
 }) {
   const tripMonth = trip.startDate.slice(0, 7);
   const [month, setMonth] = useState(tripMonth);
@@ -287,7 +303,7 @@ export function TripCalendar({
               key={week[0]}
               className="relative"
               onDragOver={(e) => {
-                if (!e.dataTransfer.types.includes(DND_MIME)) return;
+                if (readOnly || !e.dataTransfer.types.includes(DND_MIME)) return;
                 // Without preventDefault the drop never fires at all.
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
@@ -371,25 +387,35 @@ export function TripCalendar({
                           // pointer-only — and the focus-visible marquee rule
                           // in globals.css could never match.
                           tabIndex={0}
-                          role="button"
-                          aria-label={`Edit ${seg.item.title}`}
-                          onClick={() => {
-                            const full = byId.get(seg.item.id);
-                            if (full) setEditing(full);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key !== "Enter" && e.key !== " ") return;
-                            e.preventDefault();
-                            const full = byId.get(seg.item.id);
-                            if (full) setEditing(full);
-                          }}
+                          role={readOnly ? undefined : "button"}
+                          aria-label={
+                            readOnly ? seg.item.title : `Edit ${seg.item.title}`
+                          }
+                          onClick={
+                            readOnly
+                              ? undefined
+                              : () => {
+                                  const full = byId.get(seg.item.id);
+                                  if (full) setEditing(full);
+                                }
+                          }
+                          onKeyDown={
+                            readOnly
+                              ? undefined
+                              : (e) => {
+                                  if (e.key !== "Enter" && e.key !== " ") return;
+                                  e.preventDefault();
+                                  const full = byId.get(seg.item.id);
+                                  if (full) setEditing(full);
+                                }
+                          }
                           style={{
                             gridRow: seg.lane + 1,
                             height: LANE_HEIGHT - LANE_GAP,
                           }}
                           className={cn(
                             "group/bar pointer-events-auto flex min-w-0 items-center gap-1 overflow-hidden px-1",
-                            "cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            readOnly ? "outline-none" : "cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             isMoving && "opacity-60",
                             meta.bar,
                             COL_START[seg.start],
@@ -410,7 +436,7 @@ export function TripCalendar({
                               calendar uses: grab the glyph, tap anywhere else
                               to edit. */}
                           <span
-                            draggable
+                            draggable={!readOnly}
                             aria-label="Drag to move"
                             onClick={(e) => e.stopPropagation()}
                             onDragStart={(e) => {
@@ -426,7 +452,10 @@ export function TripCalendar({
                               e.dataTransfer.effectAllowed = "move";
                               e.stopPropagation();
                             }}
-                            className="hidden shrink-0 cursor-grab active:cursor-grabbing sm:block"
+                            className={cn(
+                              "hidden shrink-0 sm:block",
+                              !readOnly && "cursor-grab active:cursor-grabbing"
+                            )}
                           >
                             <meta.Icon className="size-3" />
                           </span>

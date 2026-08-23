@@ -37,6 +37,14 @@ export type ItemFieldSpec = {
   itinerary: boolean;
   startLabel: string;
   endLabel: string;
+  /**
+   * An example of the thing, not of the field.
+   *
+   * "Check-in at Hotel Bairro Alto" under a form set to Food is a prompt for
+   * the wrong answer — the placeholder is the only part of the form that says
+   * what a good entry looks like, so it has to follow the category.
+   */
+  titlePlaceholder: string;
 };
 
 const DEFAULTS: ItemFieldSpec = {
@@ -50,12 +58,14 @@ const DEFAULTS: ItemFieldSpec = {
   itinerary: false,
   startLabel: "Day",
   endLabel: "End day",
+  titlePlaceholder: "Sunset kayak tour",
 };
 
 const BY_CATEGORY: Record<TripItemCategory, Partial<ItemFieldSpec>> = {
   lodging: {
     startLabel: "Check in",
     endLabel: "Check out",
+    titlePlaceholder: "Hotel Bairro Alto",
     defaultPriceUnit: "per_night",
     priceUnits: ["per_night", "total", "per_person"],
   },
@@ -81,15 +91,22 @@ const BY_CATEGORY: Record<TripItemCategory, Partial<ItemFieldSpec>> = {
     itinerary: true,
     startLabel: "Boards",
     endLabel: "Disembarks",
+    titlePlaceholder: "Star of the Seas — Western Caribbean",
     defaultPriceUnit: "per_person",
     // Boards → disembarks is a stay, so a nightly rate is a real way to
     // compare two sailings.
     priceUnits: ["per_person", "total", "per_night"],
   },
-  transport: { route: true, endDay: false, video: false, startLabel: "Day" },
-  food: { endDay: false },
-  activity: {},
-  shopping: { endDay: false, video: false },
+  transport: {
+    route: true,
+    endDay: false,
+    video: false,
+    startLabel: "Day",
+    titlePlaceholder: "Airport transfer",
+  },
+  food: { endDay: false, titlePlaceholder: "Dinner at Toothsome" },
+  activity: { titlePlaceholder: "Universal Studios" },
+  shopping: { endDay: false, video: false, titlePlaceholder: "Souvenirs at the port" },
   // The escape hatch: whatever does not fit a category keeps every unit,
   // including nightly for a campsite or a car held for the week.
   other: { priceUnits: ["total", "per_person", "per_night"] },

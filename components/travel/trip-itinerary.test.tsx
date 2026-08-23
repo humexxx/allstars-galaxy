@@ -30,6 +30,7 @@ const item = (over: Partial<TripItemWithStops>): TripItemWithStops =>
     videoUrl: null,
     notes: null,
     stops: [],
+    photos: [],
     ...over,
   }) as TripItemWithStops;
 

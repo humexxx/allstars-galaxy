@@ -140,6 +140,24 @@ NBA and NFL still use mocks.
   `trip_item_stops` alongside the items, so a cruise arrives as a journey
   rather than a booking. Still one round of queries — the stops join
   `trip_items` in a single call rather than one per item.
+- **Category is the item form's first question**, full width and on its own
+  line. It decides which fields appear below it, what the price may be quoted
+  in, and what a good title looks like (`titlePlaceholder` — a hotel example
+  under a form set to Food prompts for the wrong answer). Squeezed beside the
+  title it also read as a control of a different weight.
+- **Dates use `DateField`** (Popover + Calendar), not `<input type="date">`.
+  The native control renders differently in every browser and shows no view of
+  the month around the date, which is what somebody arranging a trip is
+  looking at. Values stay `YYYY-MM-DD` strings throughout — the moment one
+  becomes a `Date`, somebody west of Greenwich gets yesterday.
+- **Photos attach to an item** (`trip_photos.item_id`, which had existed
+  unused since the table did). A photo picked before the item exists waits in
+  the form and is attached once the insert returns an id. The gallery holds
+  only the trip's own photos; the rest travel with their item.
+- **The shared page offers the calendar too**, mounted `readOnly`: the month
+  arrows stay, because reading a plan means looking at the days around it, but
+  the bars stop being handles and `ItemForm` is a dynamic import that a
+  visitor never fetches.
 - **A day's heading carries the run it begins** (`dayGroupLabel` +
   `runsUntil`): "Sunday, Jan 17 – Sun, Jan 24" rather than a date the reader
   has to open the item to complete. `spansDays` decides which items count, so

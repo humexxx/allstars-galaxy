@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import {
@@ -328,6 +329,25 @@ function ItemRow({
         )}
         {item.stops && item.stops.length > 0 && (
           <ItemItinerary stops={item.stops} />
+        )}
+        {item.photos.length > 0 && (
+          <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 pt-1">
+            {item.photos.map((photo) => (
+              <div
+                key={photo.id}
+                className="relative aspect-square w-20 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
+              >
+                <Image
+                  src={photo.url}
+                  alt={photo.caption ?? ""}
+                  fill
+                  sizes="80px"
+                  className="object-cover"
+                  unoptimized
+                />
+              </div>
+            ))}
+          </div>
         )}
         {item.videoUrl && (
           <div className="pt-2">

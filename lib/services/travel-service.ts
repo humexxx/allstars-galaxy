@@ -179,10 +179,24 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     stopsByItem.set(stop.itemId, list);
   }
 
+  // A photo belongs to one place or the other: the gallery is the trip's own
+  // photos, and an item's photos travel with the item.
+  const photosByItem = new Map<string, typeof photos>();
+  for (const photo of photos) {
+    if (!photo.itemId) continue;
+    const list = photosByItem.get(photo.itemId) ?? [];
+    list.push(photo);
+    photosByItem.set(photo.itemId, list);
+  }
+
   return {
     ...trip,
-    items: items.map((i) => ({ ...i, stops: stopsByItem.get(i.id) ?? [] })),
-    photos,
+    items: items.map((i) => ({
+      ...i,
+      stops: stopsByItem.get(i.id) ?? [],
+      photos: photosByItem.get(i.id) ?? [],
+    })),
+    photos: photos.filter((p) => !p.itemId),
     shares,
     contributions,
     members: members.map((m) => ({
@@ -341,6 +355,7 @@ export async function addTripPhoto(
     .insert(tripPhotos)
     .values({
       tripId,
+      itemId: data.itemId ?? null,
       url: data.url,
       storagePath: data.storagePath ?? null,
       source: data.source,
@@ -556,10 +571,22 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
     stopsByItem.set(stop.itemId, list);
   }
 
+  const photosByItem = new Map<string, typeof photos>();
+  for (const photo of photos) {
+    if (!photo.itemId) continue;
+    const list = photosByItem.get(photo.itemId) ?? [];
+    list.push(photo);
+    photosByItem.set(photo.itemId, list);
+  }
+
   return {
     trip,
-    items: items.map((i) => ({ ...i, stops: stopsByItem.get(i.id) ?? [] })),
-    photos,
+    items: items.map((i) => ({
+      ...i,
+      stops: stopsByItem.get(i.id) ?? [],
+      photos: photosByItem.get(i.id) ?? [],
+    })),
+    photos: photos.filter((p) => !p.itemId),
     share,
     // Built from the items already in hand rather than fetched again.
     scope: scopeRows ? buildScope(scopeRows, items, share.memberId!) : null,

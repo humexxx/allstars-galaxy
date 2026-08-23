@@ -2,11 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { ListOrdered, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,11 +22,12 @@ import {
 } from "@/components/ui/select";
 import { Text } from "@/components/ui/typography";
 import { MoneyInput } from "@/components/ui/money-input";
-import { cn } from "@/lib/utils";
 
 import {
   addTripItemAction,
+  addTripPhotoAction,
   deleteTripItemAction,
+  deleteTripPhotoAction,
   updateTripItemAction,
 } from "@/app/actions/travel";
 import type {
@@ -42,6 +45,7 @@ import {
 } from "@/lib/travel/item-fields";
 import { AirportPicker } from "@/components/travel/airport-picker";
 import { ItineraryEditor } from "@/components/travel/itinerary-editor";
+import { PhotoPicker } from "@/components/travel/photo-picker";
 import { CATEGORIES, categoryMeta, CategoryIcon } from "@/components/travel/category";
 
 const PRICE_UNIT_LABELS: Record<TripPriceUnit, string> = {
@@ -92,7 +96,35 @@ export function ItemForm({
   const fields = itemFields(category);
   const showEnd = showsEndDay(fields, roundTrip);
   const [videoUrl, setVideoUrl] = useState(item?.videoUrl ?? "");
+  /**
+   * Photos picked before the item exists.
+   *
+   * A new item has no id to attach them to, so they wait here and are
+   * attached once the insert returns one. Uploading them first and losing
+   * them on cancel would be worse than the wait.
+   */
+  const [pending, setPending] = useState<
+    { url: string; storagePath: string | null; source: "upload" | "url" }[]
+  >([]);
   const [notes, setNotes] = useState(item?.notes ?? "");
+
+  /** Saved photos and picked-but-unsaved ones, shown as one strip. */
+  const shownPhotos = [
+    ...(item?.photos ?? []).map((p) => ({ key: p.id, url: p.url, id: p.id })),
+    ...pending.map((p, i) => ({ key: `pending-${i}`, url: p.url, id: null })),
+  ];
+
+  const removePhoto = (photo: { id: string | null; url: string }) => {
+    if (!photo.id) {
+      setPending((p) => p.filter((x) => x.url !== photo.url));
+      return;
+    }
+    startTransition(async () => {
+      const res = await deleteTripPhotoAction(tripId, photo.id!);
+      if (res.success) router.refresh();
+      else toast.error(res.error);
+    });
+  };
 
   const handleDelete = () => {
     if (!item) return;
@@ -156,6 +188,17 @@ export function ItemForm({
       const res = item
         ? await updateTripItemAction(tripId, { id: item.id, ...payload })
         : await addTripItemAction(tripId, payload);
+      if (res.success && !item && res.data && pending.length > 0) {
+        // Sequential on purpose: sortOrder is the order they were picked in,
+        // and firing them together would race for it.
+        for (let i = 0; i < pending.length; i++) {
+          await addTripPhotoAction(tripId, {
+            ...pending[i],
+            itemId: res.data.id,
+            sortOrder: i,
+          });
+        }
+      }
       if (res.success) {
         toast.success(item ? "Item updated" : "Item added");
         router.refresh();
@@ -173,85 +216,86 @@ export function ItemForm({
       // box inside a bordered box is one frame too many.
       className="flex flex-col gap-4"
     >
-      <div
-        className={cn(
-          "grid gap-3",
-          fields.title ? "sm:grid-cols-[2fr_1fr]" : "sm:grid-cols-1"
-        )}
-      >
-        {fields.title && (
-          <Field className="gap-1.5">
-            <FieldLabel htmlFor={`title-${item?.id ?? "new"}`} className="text-xs">Title</FieldLabel>
-            <Input
-              id={`title-${item?.id ?? "new"}`}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Check-in at Hotel Bairro Alto"
-              required
-              autoFocus
-            />
-          </Field>
-        )}
-        <Field className="gap-1.5">
-          <FieldLabel className="text-xs">Category</FieldLabel>
-          <Select
-            value={category}
-            onValueChange={(v) => {
-              const next = v as TripItemCategory;
-              setCategory(next);
-              // While creating, adopt the new category's usual unit. While
-              // editing, keep whatever was chosen — unless the new category
-              // cannot be priced that way at all, which is the one case where
-              // leaving it alone would save nonsense (a fare per night).
-              if (!item || !allowsPriceUnit(next, priceUnit)) {
-                setPriceUnit(itemFields(next).defaultPriceUnit);
-              }
-            }}
+      {/* Category first, and on its own line. It decides which fields appear
+          below it, what the price can be quoted in and what a good title
+          looks like — so it is the question to answer first, not a control
+          squeezed beside the title with a different weight to it. */}
+      <Field className="gap-1.5">
+        <FieldLabel htmlFor={`category-${item?.id ?? "new"}`} className="text-xs">
+          Category
+        </FieldLabel>
+        <Select
+          value={category}
+          onValueChange={(v) => {
+            const next = v as TripItemCategory;
+            setCategory(next);
+            // While creating, adopt the new category's usual unit. While
+            // editing, keep whatever was chosen — unless the new category
+            // cannot be priced that way at all, which is the one case where
+            // leaving it alone would save nonsense (a fare per night).
+            if (!item || !allowsPriceUnit(next, priceUnit)) {
+              setPriceUnit(itemFields(next).defaultPriceUnit);
+            }
+          }}
+        >
+          <SelectTrigger
+            id={`category-${item?.id ?? "new"}`}
+            className="w-full data-[size=default]:h-11"
           >
-            {/* Taller than the default h-9: the trigger carries an icon chip
-                now, and eight tinted options are worth reading at a glance. */}
-            <SelectTrigger className="w-full data-[size=default]:h-11">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {CATEGORIES.map(({ value, label }) => (
-                  <SelectItem key={value} value={value} className="py-2">
-                    <span className="inline-flex items-center gap-2.5">
-                      <CategoryIcon category={value} />
-                      <span className="text-sm">{label}</span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          {!fields.title && (
-            <Text variant="small" className="text-muted-foreground">
-              Saved as{" "}
-              <span className="font-medium text-foreground">
-                {deriveTitle(
-                  category,
-                  { fromCode, toCode, roundTrip },
-                  categoryMeta(category).label
-                )}
-              </span>{" "}
-              — taken from the route.
-            </Text>
-          )}
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {CATEGORIES.map(({ value, label }) => (
+                <SelectItem key={value} value={value} className="py-2">
+                  <span className="inline-flex items-center gap-2.5">
+                    <CategoryIcon category={value} />
+                    <span className="text-sm">{label}</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
+
+      {fields.title ? (
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor={`title-${item?.id ?? "new"}`} className="text-xs">
+            Title
+          </FieldLabel>
+          <Input
+            id={`title-${item?.id ?? "new"}`}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={fields.titlePlaceholder}
+            required
+            autoFocus
+          />
         </Field>
-      </div>
+      ) : (
+        <Text variant="small" className="text-muted-foreground">
+          Saved as{" "}
+          <span className="font-medium text-foreground">
+            {deriveTitle(
+              category,
+              { fromCode, toCode, roundTrip },
+              categoryMeta(category).label
+            )}
+          </span>{" "}
+          — taken from the route.
+        </Text>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Field className="gap-1.5">
           <FieldLabel htmlFor={`date-${item?.id ?? "new"}`} className="text-xs">
             {fields.startLabel}
           </FieldLabel>
-          <Input
+          <DateField
             id={`date-${item?.id ?? "new"}`}
-            type="date"
             value={scheduledOn ?? ""}
-            onChange={(e) => setScheduledOn(e.target.value)}
+            onChange={setScheduledOn}
           />
         </Field>
         {showEnd && (
@@ -260,12 +304,13 @@ export function ItemForm({
               {endDayLabel(fields, roundTrip)}{" "}
               <span className="text-muted-foreground">(optional)</span>
             </FieldLabel>
-            <Input
+            <DateField
               id={`ends-${item?.id ?? "new"}`}
-              type="date"
               value={endsOn ?? ""}
+              onChange={setEndsOn}
               min={scheduledOn || undefined}
-              onChange={(e) => setEndsOn(e.target.value)}
+              placeholder="Not set"
+              clearable
             />
           </Field>
         )}
@@ -311,6 +356,9 @@ export function ItemForm({
           </label>
         )}
 
+        {/* A price and its upper bound are one question asked twice; split
+            across rows by the parent grid they read as two. */}
+        <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
         <Field className="gap-1.5">
           <FieldLabel htmlFor={`price-${item?.id ?? "new"}`} className="text-xs">
             Price <span className="text-muted-foreground">(or low estimate)</span>
@@ -335,6 +383,8 @@ export function ItemForm({
             placeholder="0.00"
           />
         </Field>
+        </div>
+
         <Field className="gap-1.5 sm:col-span-2">
           <FieldLabel className="text-xs">That price is</FieldLabel>
           <Select
@@ -380,6 +430,58 @@ export function ItemForm({
         </Field>
         )}
       </div>
+
+      <Field className="gap-1.5">
+        <FieldLabel className="text-xs">Photos</FieldLabel>
+        {shownPhotos.length > 0 && (
+          <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
+            {shownPhotos.map((photo) => (
+              <div
+                key={photo.key}
+                className="group relative aspect-square w-20 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
+              >
+                <Image
+                  src={photo.url}
+                  alt=""
+                  fill
+                  sizes="80px"
+                  className="object-cover"
+                  unoptimized
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="secondary"
+                  className="absolute right-1 top-1 size-7 sm:size-6"
+                  onClick={() => removePhoto(photo)}
+                  aria-label="Remove photo"
+                >
+                  <Trash2 className="size-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        <PhotoPicker
+          variant="compact"
+          folder={tripId}
+          onPick={async ({ url, storagePath, source }) => {
+            if (!item) {
+              setPending((p) => [...p, { url, storagePath, source }]);
+              return;
+            }
+            const res = await addTripPhotoAction(tripId, {
+              url,
+              storagePath,
+              source,
+              itemId: item.id,
+              sortOrder: item.photos.length,
+            });
+            if (res.success) router.refresh();
+            else toast.error(res.error);
+          }}
+        />
+      </Field>
 
       {fields.itinerary && item && (
         <div className="flex flex-col gap-1.5 ">

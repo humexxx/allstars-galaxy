@@ -31,7 +31,11 @@ export type TripItemStop = {
   note: string | null;
 };
 
-export type TripItemWithStops = TripItem & { stops: TripItemStop[] };
+export type TripItemWithStops = TripItem & {
+  stops: TripItemStop[];
+  /** Photos attached to this item rather than to the trip's gallery. */
+  photos: TripPhoto[];
+};
 
 export type TripMemberView = {
   id: string;

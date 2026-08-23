@@ -180,3 +180,25 @@ describe("spansDays", () => {
     expect(spansDays("transport")).toBe(false);
   });
 });
+
+describe("titlePlaceholder", () => {
+  it("gives an example of the thing, not of the field", () => {
+    expect(itemFields("lodging").titlePlaceholder).toMatch(/hotel/i);
+    expect(itemFields("food").titlePlaceholder).toMatch(/dinner/i);
+  });
+
+  it("never leaves a category prompting for the wrong answer", () => {
+    // A hotel example under a form set to Food asks for the wrong entry, and
+    // the placeholder is the only part of the form that says what a good one
+    // looks like.
+    const seen = new Set<string>();
+    for (const c of tripItemCategoryEnum.enumValues) {
+      const p = itemFields(c).titlePlaceholder;
+      expect(p.length).toBeGreaterThan(0);
+      seen.add(p);
+    }
+    // Flight and cruise derive their titles, so a shared default is fine for
+    // the rest only if it is not shared by everyone.
+    expect(seen.size).toBeGreaterThan(4);
+  });
+});

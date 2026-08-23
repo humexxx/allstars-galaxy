@@ -210,7 +210,7 @@ describe("getTripWithRelations", () => {
     expect(out?.shares).toEqual(shares);
     // Each item carries its own stops, attached from the single stops query
     // rather than one query per item.
-    expect(out?.items).toEqual([{ ...items[0], stops }]);
+    expect(out?.items).toEqual([{ ...items[0], stops, photos: [] }]);
     expect(out?.members).toEqual(members);
     // 1 for the trip + 6 parallel queries for relations. The count is the
     // point: every relation is one query for the whole trip, so adding a
@@ -543,7 +543,7 @@ describe("getPublicTripByToken", () => {
     expect(out?.trip).toEqual(trip);
     // Items carry their stops: a cruise's ports are half of what its row
     // says, and a link that hides them shows a booking, not a journey.
-    expect(out?.items).toEqual(items.map((i) => ({ ...i, stops: [] })));
+    expect(out?.items).toEqual(items.map((i) => ({ ...i, stops: [], photos: [] })));
     expect(out?.photos).toEqual(photos);
   });
 

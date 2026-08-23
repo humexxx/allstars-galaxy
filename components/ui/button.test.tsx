@@ -13,8 +13,13 @@ describe("Button", () => {
     expect(screen.getByRole("button").className).toContain("cursor-pointer");
   });
 
-  it("says so when it cannot be pressed", () => {
+  it("does not claim a cursor it cannot show", () => {
+    // `disabled:pointer-events-none` means a disabled button is never hit
+    // tested, so the cursor comes from whatever is painted behind it. A
+    // `disabled:cursor-not-allowed` alongside it looks like it does
+    // something and does not.
     render(<Button disabled>Nope</Button>);
-    expect(screen.getByRole("button").className).toContain("disabled:cursor-not-allowed");
+    expect(screen.getByRole("button").className).toContain("disabled:pointer-events-none");
+    expect(screen.getByRole("button").className).not.toContain("cursor-not-allowed");
   });
 });

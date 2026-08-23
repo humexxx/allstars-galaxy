@@ -102,7 +102,20 @@ export const tripItemSchema = z.object({
   sortOrder: z.number().optional(),
 });
 
-export const tripItemSchemaChecked = tripItemSchema.superRefine((val, ctx) => {
+/**
+ * A range stored backwards is not a typo the UI can absorb.
+ *
+ * The calendar derives a bar's width from `endsOn - scheduledOn`, so a
+ * reversed range computes a negative span: the bar loses its column class
+ * entirely and its lane is recorded as ending before it starts, which packs
+ * the next run on top of it. Written once and applied to both the create and
+ * the update schema — it lived only on the create one, which was itself never
+ * imported, so nothing was checking either path.
+ */
+const endsAfterStart = (
+  val: { scheduledOn?: string | null; endsOn?: string | null },
+  ctx: z.RefinementCtx
+) => {
   if (val.endsOn && val.scheduledOn && val.endsOn < val.scheduledOn) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -110,11 +123,13 @@ export const tripItemSchemaChecked = tripItemSchema.superRefine((val, ctx) => {
       message: "End day must be on or after the start day",
     });
   }
-});
+};
 
-export const updateTripItemSchema = tripItemSchema.extend({
-  id: z.string().uuid(),
-});
+export const tripItemSchemaChecked = tripItemSchema.superRefine(endsAfterStart);
+
+export const updateTripItemSchema = tripItemSchema
+  .extend({ id: z.string().uuid() })
+  .superRefine(endsAfterStart);
 
 // ---------- photos ----------
 

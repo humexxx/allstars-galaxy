@@ -1,19 +1,11 @@
 import Image from "next/image";
 import { format } from "date-fns";
 import {
-  Anchor,
-  Bed,
-  Bus,
   CalendarDays,
   DollarSign,
   ExternalLink,
   ListChecks,
   MapPin,
-  Plane,
-  ShoppingBag,
-  Sparkles,
-  Tag,
-  Utensils,
 } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,23 +20,10 @@ import {
   tripDurationLabel,
 } from "@/lib/travel/format";
 import { itemCost, tripCost } from "@/lib/travel/pricing";
+// One category table, not a second copy that drifts: this page once labelled
+// flights and cruises "Other" because they were missing from its own list.
+import { CategoryIcon, categoryMeta } from "@/components/travel/category";
 
-
-const CATEGORY_META: Record<
-  string,
-  { label: string; Icon: React.ComponentType<{ className?: string }> }
-> = {
-  lodging: { label: "Lodging", Icon: Bed },
-  // Flights and cruises used to fall through to "Other", so the public page
-  // labelled the two biggest lines of a trip as nothing in particular.
-  flight: { label: "Flight", Icon: Plane },
-  cruise: { label: "Cruise", Icon: Anchor },
-  transport: { label: "Transport", Icon: Bus },
-  food: { label: "Food", Icon: Utensils },
-  activity: { label: "Activity", Icon: Sparkles },
-  shopping: { label: "Shopping", Icon: ShoppingBag },
-  other: { label: "Other", Icon: Tag },
-};
 
 const NO_DATE_KEY = "__no_date__";
 
@@ -225,13 +204,10 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                     </div>
                     <ul className="divide-y">
                       {groupItems.map((item) => {
-                        const meta = CATEGORY_META[item.category] ?? CATEGORY_META.other;
-                        const Icon = meta.Icon;
+                        const meta = categoryMeta(item.category);
                         return (
                           <li key={item.id} className="flex items-start gap-3 py-3">
-                            <div className="rounded-md bg-muted p-1.5 text-muted-foreground">
-                              <Icon className="size-4" />
-                            </div>
+                            <CategoryIcon category={item.category} />
                             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                               <div className="flex items-baseline justify-between gap-2">
                                 <Text weight="medium" className="truncate">{item.title}</Text>

@@ -29,7 +29,7 @@ import {
 import {
   createTripSchema,
   createTripShareSchema,
-  tripItemSchema,
+  tripItemSchemaChecked,
   tripPhotoSchema,
   updateTripItemSchema,
   updateTripSchema,
@@ -118,7 +118,7 @@ export async function addTripItemAction(tripId: string, input: TripItemInput) {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(tripId);
-    const parsed = tripItemSchema.safeParse(input);
+    const parsed = tripItemSchemaChecked.safeParse(input);
     if (!idParsed.success || !parsed.success) {
       return { success: false as const, error: "Invalid input" };
     }

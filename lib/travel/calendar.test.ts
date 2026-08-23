@@ -30,7 +30,7 @@ describe("occupiedRuns", () => {
   it("runs a hotel across every night of the stay", () => {
     expect(
       occupiedRuns(item({ category: "lodging", scheduledOn: "2027-01-15", endsOn: "2027-01-17" }))
-    ).toEqual([{ from: "2027-01-15", to: "2027-01-17" }]);
+    ).toEqual([{ from: "2027-01-15", to: "2027-01-17", leg: "only" }]);
   });
 
   it("splits a return flight into the day out and the day back", () => {
@@ -39,8 +39,9 @@ describe("occupiedRuns", () => {
     expect(
       occupiedRuns(item({ category: "flight", scheduledOn: "2027-01-15", endsOn: "2027-01-24" }))
     ).toEqual([
-      { from: "2027-01-15", to: "2027-01-15" },
-      { from: "2027-01-24", to: "2027-01-24" },
+      // The leg is what stops the fare being printed on both bars.
+      { from: "2027-01-15", to: "2027-01-15", leg: "out" },
+      { from: "2027-01-24", to: "2027-01-24", leg: "back" },
     ]);
   });
 
@@ -87,8 +88,8 @@ describe("layOutWeek", () => {
 
 describe("capLanes", () => {
   const seg = (lane: number, start = 0, span = 1) =>
-    ({ lane, start, span, opensRun: true, closesRun: true,
-       item: { id: `i${lane}`, title: "x", category: "activity" as const,
+    ({ lane, start, span, opensRun: true, closesRun: true, leg: "only" as const,
+       item: { id: `i${lane}-${start}`, title: "x", category: "activity" as const,
                scheduledOn: "2027-01-10", endsOn: null } });
 
   it("leaves a day alone until the cap actually buys something", () => {
@@ -113,13 +114,36 @@ describe("capLanes", () => {
   it("counts a hidden run only on the days it actually covers", () => {
     // A run hidden on Tuesday is not hidden on Friday just because it passes
     // through both.
-    const segs = [seg(0), seg(1), seg(2), seg(3), seg(4, 1, 2)];
+    const segs = [seg(0), seg(1), seg(2), seg(3), seg(4)];
     const { hiddenByDay } = capLanes(segs, 4);
 
-    // Lane 3 sits on Sunday alone; lane 4 runs Monday to Tuesday.
-    expect(hiddenByDay[0]).toBe(1);
-    expect(hiddenByDay[1]).toBe(1);
-    expect(hiddenByDay[2]).toBe(1);
+    expect(hiddenByDay[0]).toBe(2);
+    expect(hiddenByDay.slice(1).every((n) => n === 0)).toBe(true);
+  });
+
+  it("caps the day that overflows and leaves its neighbours alone", () => {
+    // Deciding week-wide meant one packed Sunday collapsed every other day in
+    // its row: a Monday holding exactly the cap lost its last run to a "+1"
+    // standing in the very slot that run wanted.
+    const sunday = [seg(0), seg(1), seg(2), seg(3), seg(4)];
+    const monday = [seg(0, 1), seg(1, 1), seg(2, 1), seg(3, 1)];
+    const { hiddenByDay, visible } = capLanes([...sunday, ...monday], 4);
+
+    expect(hiddenByDay[0]).toBe(2);
+    expect(hiddenByDay[1]).toBe(0);
+    // Monday keeps all four of its runs.
+    expect(visible.filter((s) => s.start === 1)).toHaveLength(4);
+  });
+
+  it("cuts a spanning run on every day it crosses, not just the busy one", () => {
+    // Lanes are shared across the week on purpose — a run that changed rows
+    // mid-week would stop reading as one journey. So the lane it was given
+    // is what makes each cell tall, and a run parked on lane 4 is over the
+    // cap on a quiet Monday exactly as it is on a packed Sunday.
+    const segs = [seg(0), seg(1), seg(2), seg(3), seg(4, 0, 3)];
+    const { hiddenByDay } = capLanes(segs, 4);
+
+    expect(hiddenByDay.slice(0, 3)).toEqual([2, 1, 1]);
     expect(hiddenByDay[3]).toBe(0);
   });
 });

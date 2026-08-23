@@ -33,7 +33,6 @@ import {
   capLanes,
   layOutWeek,
   monthWeeks,
-  occupiedRuns,
   parseDay,
   type CalendarItem,
 } from "@/lib/travel/calendar";
@@ -116,6 +115,25 @@ export function TripCalendar({
   );
 
   const weeks = useMemo(() => monthWeeks(month), [month]);
+
+  /**
+   * Packing every week is pure work over memoised inputs, so it happens when
+   * the month or the items change and not on every parent render — picking a
+   * traveller used to re-sort and re-pack all six weeks.
+   */
+  const laidOut = useMemo(
+    () =>
+      weeks.map((week) => {
+        const all = layOutWeek(week, items);
+        const { visible, hidden, hiddenByDay } = capLanes(all, MAX_LANES);
+        const lanes = Math.min(
+          MAX_LANES,
+          all.reduce((n, seg) => Math.max(n, seg.lane + 1), 0)
+        );
+        return { week, segments: visible, hidden, hiddenByDay, lanes };
+      }),
+    [weeks, items]
+  );
   const byId = useMemo(() => new Map(trip.items.map((i) => [i.id, i])), [trip.items]);
 
   /**
@@ -135,7 +153,10 @@ export function TripCalendar({
     return map;
   }, [trip.items, partySize, viewer, trip.currency]);
 
-  const today = isoDay(new Date());
+  // Snapshotted once, not read during render: this component is rendered on
+  // the server too, and a server in UTC against a reader six hours behind
+  // would ring a different cell in each pass and hydrate mismatched.
+  const [today] = useState(() => isoDay(new Date()));
   const tripEnd = trip.endDate ?? trip.startDate;
   const inTrip = (day: string) => day >= trip.startDate && day <= tripEnd;
 
@@ -196,13 +217,7 @@ export function TripCalendar({
           ))}
         </div>
 
-        {weeks.map((week) => {
-          const all = layOutWeek(week, items);
-          const { visible: segments, hidden, hiddenByDay } = capLanes(all, MAX_LANES);
-          const lanes = Math.min(
-            MAX_LANES,
-            all.reduce((n, seg) => Math.max(n, seg.lane + 1), 0)
-          );
+        {laidOut.map(({ week, segments, hidden, hiddenByDay, lanes }) => {
           const cellHeight = Math.max(
             MIN_CELL,
             LANE_TOP + lanes * LANE_HEIGHT + 6
@@ -254,22 +269,33 @@ export function TripCalendar({
                 {segments.map((seg) => {
                   const meta = categoryMeta(seg.item.category);
                   const full = byId.get(seg.item.id);
-                  const runs = occupiedRuns(seg.item);
                   const price = costByItem.get(seg.item.id);
-                  const label = price
+                  // One booking, one price. Both halves of a there-and-back
+                  // open a run, so printing it on each made a single
+                  // $600–$800 fare read as $1,200–$1,600 on the month.
+                  const showsPrice = price && seg.leg !== "back";
+                  const label = showsPrice
                     ? `${seg.item.title} · ${price}`
-                    : seg.item.title;
+                    : seg.leg === "back"
+                      ? `${seg.item.title} · back`
+                      : seg.item.title;
                   return (
                     <Tooltip key={`${seg.item.id}-${seg.start}-${seg.lane}`}>
                       <TooltipTrigger asChild>
                         <div
                           data-slot="calendar-bar"
+                          // Focusable, or the dates and the price are
+                          // pointer-only — and the focus-visible marquee rule
+                          // in globals.css could never match.
+                          tabIndex={0}
+                          role="button"
                           style={{
                             gridRow: seg.lane + 1,
                             height: LANE_HEIGHT - LANE_GAP,
                           }}
                           className={cn(
                             "group/bar pointer-events-auto flex min-w-0 items-center gap-1 overflow-hidden px-1",
+                            "outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             meta.bar,
                             COL_START[seg.start],
                             COL_SPAN[seg.span - 1],
@@ -304,7 +330,7 @@ export function TripCalendar({
                         <span className="block font-medium">{seg.item.title}</span>
                         {price && <span className="block tabular-nums">{price}</span>}
                         <span className="block opacity-80">
-                          {runs.length > 1
+                          {seg.leg !== "only"
                             ? `Out ${dayLabel(full?.scheduledOn)}, back ${dayLabel(full?.endsOn)}`
                             : full?.endsOn && full.endsOn !== full.scheduledOn
                               ? `${dayLabel(full.scheduledOn)} – ${dayLabel(full.endsOn)}`
@@ -325,9 +351,12 @@ export function TripCalendar({
                             leaving the month. */}
                         <span
                           data-slot="calendar-more"
+                          tabIndex={0}
+                          role="button"
                           style={{ gridRow: MAX_LANES, height: LANE_HEIGHT - LANE_GAP }}
                           className={cn(
                             "pointer-events-auto col-span-1 mx-0.5 truncate rounded-sm px-1",
+                            "outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             "text-2xs font-medium text-muted-foreground hover:bg-muted",
                             COL_START[day]
                           )}

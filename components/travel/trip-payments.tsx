@@ -324,7 +324,7 @@ function PaymentDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Payment from {who}</DialogTitle>
           <DialogDescription>

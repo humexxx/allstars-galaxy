@@ -176,15 +176,6 @@ export function TripItinerary({
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-6 ">
-        {adding && (
-          <ItemForm
-            tripId={trip.id}
-            defaultDate={trip.startDate}
-            currency={trip.currency}
-            onDone={() => setAdding(false)}
-          />
-        )}
-
         {groups.length === 0 && (
           <EmptyState
             icon={ListOrdered}
@@ -227,7 +218,7 @@ export function TripItinerary({
           work, and having one expand the card while the other opened a
           dialog made them look like different things. */}
       <Dialog open={adding} onOpenChange={setAdding}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] sm:max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add to the itinerary</DialogTitle>
             <DialogDescription>
@@ -279,7 +270,9 @@ function ItemRow({
   const openEditor = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest('a, button, input, textarea, [role="button"], iframe')) return;
-    if (!window.getSelection()?.isCollapsed) return;
+    // `=== false` on purpose: getSelection() is null in some webviews,
+    // and `!undefined` would swallow every click on the row.
+    if (window.getSelection()?.isCollapsed === false) return;
     setEditing(true);
   };
 
@@ -383,7 +376,7 @@ function ItemRow({
         opening it inline pushed every item below it off the screen, and the
         row you were editing left the viewport with them. */}
     <Dialog open={editing} onOpenChange={setEditing}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[90vh] sm:max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{item.title}</DialogTitle>
           <DialogDescription>

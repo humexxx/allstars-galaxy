@@ -439,7 +439,10 @@ export async function updateTripContribution(
     .set({
       amount: data.amount,
       note: data.note ?? null,
-      paidOn: data.paidOn ?? todayIso(),
+      // No `?? todayIso()` here, unlike the insert: on an update, null means
+      // "no date recorded", and defaulting it re-stamped a payment with today
+      // every time somebody edited only its note.
+      paidOn: data.paidOn ?? null,
     })
     // Scoped to the trip as well as the row: the id alone would let a caller
     // edit a payment recorded against somebody else's trip.
@@ -529,7 +532,15 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
  * Split from the arithmetic so the queries can join the page's one round of
  * IO instead of forming a second one behind it.
  */
-async function loadScopeRows(tripId: string, memberId: string) {
+type ScopeRows = {
+  members: { id: string; name: string; sharePercent: string | null }[];
+  paidRows: { amount: string }[];
+};
+
+async function loadScopeRows(
+  tripId: string,
+  memberId: string
+): Promise<ScopeRows> {
   const [members, paidRows] = await Promise.all([
     db
       .select({
@@ -564,7 +575,7 @@ async function loadScopeRows(tripId: string, memberId: string) {
  * created specifically to hide them.
  */
 function buildScope(
-  rows: Awaited<ReturnType<typeof loadScopeRows>>,
+  rows: ScopeRows,
   items: TripItem[],
   memberId: string
 ): PublicTripScope | null {

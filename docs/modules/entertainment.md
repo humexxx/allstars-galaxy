@@ -1,7 +1,7 @@
 # Entertainment
 
 > **Status:** In progress (travel shipped + dashboard card; sports UI shipped, favourites end-to-end on DB; LoL, F1, football, World Cup, padel and tennis wired to free live providers)
-> **Last reviewed:** 2026-07-05
+> **Last reviewed:** 2026-08-21
 
 ## Overview
 Two sub-modules: Travel Planner (trips, items, photos, public sharing) and
@@ -19,11 +19,20 @@ NBA and NFL still use mocks.
 - `/portal/entertainment/sports` — sports hub with tabs per sport + manage-favourites sheet
 
 ## Server actions — `/app/actions/`
-- `travel.ts` — trip / item / photo / share CRUD; expense calculations
+- `travel.ts` — trip / item / photo / member / share CRUD, plus
+  `addTripContributionAction` / `updateTripContributionAction` /
+  `deleteTripContributionAction` for the payment log and
+  `setTripItemStopsAction` for a cruise's ports. `createTripShareAction`
+  takes a `memberId` to scope a link to one traveller
 - `sports.ts` — `setSportFavoriteAction` toggles a sport favourite for the current user
 
 ## Services — `/lib/services/`
-- `travel-service.ts` — trip / item / photo / share CRUD + `getDashboardTravelSummary` (featured trip with state badge + counts for the dashboard card)
+- `travel-service.ts` — trip / item / photo / member / share CRUD,
+  `addTripContribution` / `updateTripContribution` / `deleteTripContribution`,
+  `buildScope` (one traveller's own view of a shared link) and
+  `getDashboardTravelSummary` (featured trip with state badge + counts for the
+  dashboard card). `ensureMemberBelongsToTrip` guards anything that names a
+  member: the foreign key proves the row exists, not which trip it is on
 - `sports-service.ts` — favourites CRUD + `getDashboardSportsSummary` that materialises one highlight per favourited sport (LoL via `getLolData()`, F1 via `getF1Data()`, football via `getFootballData()`, World Cup via `getWorldCupData()` — featured knockout match + latest result, padel via `getPadelData()`, rest from mock fixtures)
 - `lolesports-service.ts` — `getLolData()` fetches LEC/LCS/LCK/LPL from Lolesports' unofficial API (`esports-api.lolesports.com`), maps to `LolData` including playoff `BracketRound[]` (**one round per standings SECTION**, labelled with the section's own name — `buildLolBracket`; the old TBD-count heuristic remains only as fallback for unnamed sections, because TBD counting collapsed rounds into one column as ties resolved), picks the currently-active tournament (never the future split), maps regular-season stages (`regular_season`, `groups`, `group_stage`) into standings. A completed event missing `result` renders "—", never a fake 0–0. Cached 30 min via `unstable_cache`, falls back to `LOL_DATA` mock on any error
 - `jolpica-f1-service.ts` — `getF1Data()` fetches current-season races, driver + constructor standings and results from Jolpica-F1 (`api.jolpi.ca/ergast/f1`, Ergast-compatible drop-in), maps to `F1Data` with derived race status and podium tallies, cached 30 min, falls back to `F1_DATA` mock on any error
@@ -32,15 +41,31 @@ NBA and NFL still use mocks.
 - `thesportsdb-tennis-service.ts` — `getTennisData()` fetches the next + last event per tour for ATP (id 4464) and WTA (id 4517) from TheSportsDB free public API (no key), derives a `RacquetTournament` per tournament (groups events by extracted tournament-name prefix), keeps `TENNIS_DATA` mock rankings since TheSportsDB has none. Cached 30 min, falls back to `TENNIS_DATA` mock on any error
 
 ## Schemas — `/schemas/`
-- `travel.ts`
+- `travel.ts` — `createTripSchema`, `updateTripSchema`, `tripItemSchema` +
+  `tripItemSchemaChecked` / `updateTripItemSchema` (both carry the
+  `endsAfterStart` refinement — a backwards range makes the calendar compute a
+  negative span), `tripPhotoSchema`, `createTripShareSchema`,
+  `tripContributionSchema` / `updateTripContributionSchema`,
+  `setItemStopsSchema`, `setTripMembersSchema`
 - `sports.ts` — `sportIdSchema`, `setSportFavoriteSchema`
 
 ## Types — `/types/`
-- `travel.ts` — `Trip`, `TripItem`, `TripPhoto`, `TripShare`, `TripWithRelations`, `PublicTripView`, plus `DashboardTravelSummary` / `DashboardTravelFeaturedTrip` / `DashboardTravelTripState`
+- `travel.ts` — `Trip`, `TripItem`, `TripPhoto`, `TripShare`,
+  `TripContribution`, `TripMemberView`, `TripItemStop`, `TripItemWithStops`,
+  `TripWithRelations`, `PublicTripView` + `PublicTripScope`, plus
+  `DashboardTravelSummary` / `DashboardTravelFeaturedTrip` /
+  `DashboardTravelTripState`
 - `sports.ts` — full domain shapes for matches, standings, brackets, F1/NBA/NFL/LoL specifics, plus `UserSportsPreference` and `DashboardSportHighlight`. `SportId` includes `worldcup`; `FootballLeagueId` includes `world-cup`; `FootballLeagueData.groups?: FootballGroupStandings[]` carries per-group cup tables
 
 ## Components
-- `components/travel/` — trip list/detail, item editors, photo gallery, share dialog
+- `components/travel/` — trip list/detail, item editors, photo gallery, share panel
+- `components/travel/trip-calendar.tsx` — the month view behind the List /
+  Calendar tabs; bars laid over the day grid by `lib/travel/calendar.ts`
+- `components/travel/trip-payments.tsx` — the payment log, per traveller
+- `components/travel/category.tsx` — the one category table (icon, tint, dot,
+  bar); both the itinerary and the public page read it
+- `components/travel/marquee-text.tsx` — a label that walks left on hover, but
+  only when it does not fit
 - `components/travel/dashboard-travel-card.tsx` — server-component card mounted on `/portal`: featured trip (in-progress wins → next upcoming → most recent past) with cover photo, state badge, items count and estimated total
 - `components/entertainment/sports/sports-hub.tsx` — client tab strip + per-sport view switcher; stars favourites and pins them first
 - `components/entertainment/sports/manage-favorites-sheet.tsx` — sheet with per-sport switches, optimistic updates via `setSportFavoriteAction`
@@ -54,10 +79,28 @@ NBA and NFL still use mocks.
 - `trips` — user-owned trips (date-based, no timezone)
 - `trip_items` — activities, bookings, transport, food (optional scheduled dates)
 - `trip_photos` — gallery (uploaded or external URLs)
-- `trip_shares` — share tokens for read-only public access
+- `trip_shares` — share tokens for read-only public access; `member_id` scopes
+  a link to one traveller, `show_prices` / `show_members` gate what it exposes
+- `trip_members` — who is going, with an optional fixed `share_percent`
+- `trip_contributions` — money a traveller has actually handed over
+- `trip_item_stops` — a cruise's day-by-day ports
+- `trip_item_payers` — per-item payers (schema only; no UI yet)
 - `user_sports_preferences` — favourited sports per user; UNIQUE(user_id, sport_id) backs the toggle semantics
 
 ## Tests
+- `lib/travel/*.test.ts` — Vitest, pure: `calendar` (week packing, lane caps,
+  which items really span days), `pricing`, `split`, `item-fields`, `format`,
+  `airports`, `video`
+- `lib/services/travel-service.test.ts` — Vitest, mocks `@/db`; covers the CRUD,
+  the query count for `getTripWithRelations` and the scoped-share guards
+- `app/actions/travel.test.ts` — Vitest; covers zod rejection, auth failure and
+  the audit metadata a share records
+- `components/travel/*.test.tsx` — Vitest + jsdom; the itinerary, the calendar,
+  the payment log, the traveller bar and the marquee
+- `e2e/trip-lifecycle.spec.ts` — Playwright, real Supabase user
+- `e2e/trip-share-links.spec.ts` — Playwright; opens both kinds of share link in
+  a browser with no session, which is the only place the server/client boundary
+  is real
 - `lib/services/sports-service.test.ts` — Vitest, mocks `@/db`; covers favourites CRUD + dashboard summary shape per sport
 - `app/actions/sports.test.ts` — Vitest, mocks impersonation + service + `next/cache`; covers happy path, zod rejection, auth failure, impersonation routing
 - `e2e/sports-favorites.spec.ts` — Playwright, real Supabase user; covers empty CTA → toggle → persistence → dashboard highlights → un-toggle round trip
@@ -131,7 +174,7 @@ NBA and NFL still use mocks.
   The title is a real button so the keyboard has a way in. Delete moved into
   the form the row opens.
 - **Nothing is reserved at the right of an itinerary row.** The
-  The row *is* the control, so every price, subtotal and video runs to the
+   row *is* the control, so every price, subtotal and video runs to the
   card's edge on every screen, and the day header needs no spacer to stay in
   step with them.
 - **A payment is a record, not a row of controls.** Tapping it opens a dialog;

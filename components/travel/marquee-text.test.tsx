@@ -1,15 +1,26 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { MarqueeText } from "./marquee-text";
 
-/** jsdom reports every width as 0, so the two cases are staged by hand. */
+/**
+ * jsdom reports every width as 0, so the two the component compares are
+ * staged by hand: the label's `scrollWidth` against the box's `clientWidth`.
+ *
+ * Restored afterwards — these are prototype properties, and leaving them
+ * redefined would follow the next test file that measures anything.
+ */
+const original = {
+  scrollWidth: Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth"),
+  clientWidth: Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth"),
+};
+
 function stageWidths({ text, box }: { text: number; box: number }) {
   Object.defineProperty(HTMLElement.prototype, "scrollWidth", {
     configurable: true,
     get() {
-      return this.dataset.marquee === undefined && this.parentElement ? text : text;
+      return text;
     },
   });
   Object.defineProperty(HTMLElement.prototype, "clientWidth", {
@@ -20,14 +31,11 @@ function stageWidths({ text, box }: { text: number; box: number }) {
   });
 }
 
-beforeEach(() => {
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      observe() {}
-      disconnect() {}
-    }
-  );
+afterEach(() => {
+  if (original.scrollWidth)
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", original.scrollWidth);
+  if (original.clientWidth)
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", original.clientWidth);
 });
 
 describe("MarqueeText", () => {

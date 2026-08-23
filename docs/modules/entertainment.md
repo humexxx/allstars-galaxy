@@ -183,9 +183,12 @@ NBA and NFL still use mocks.
   anywhere in it: a share link grants a view.
 - **A share link's origin comes from `getBaseUrl`**, which prefers
   `NEXT_PUBLIC_BASE_URL`, then Vercel's `VERCEL_PROJECT_PRODUCTION_URL`.
-  `VERCEL_URL` is the *deployment's* hostname — new on every push, and behind
-  Deployment Protection on a team project, so a link built from it lands the
-  recipient on a Vercel login page. It is the last resort, and
+  `VERCEL_URL` is the *deployment's* hostname — new on every push, and on this
+  project it 302s to `vercel.com/sso-api`, so a link built from it lands the
+  recipient on a login page. The production alias is **not** protected and
+  serves `/trips/<token>` to anybody; Deployment Protection covers the
+  per-deployment hosts only, which is what they are for. Nothing needs
+  disabling — the app just has to write the right host into the link.
   [`lib/env.test.ts`](../../lib/env.test.ts) pins the order.
 - **Each active link can show its QR** (`qrcode.react`). A phone cannot be
   handed a URL, and the code is how a link crosses to a device that is not

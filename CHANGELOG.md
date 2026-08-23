@@ -1,5 +1,110 @@
 # Changelog
 
+## [0.5.0](https://github.com/humexxx/allstars-galaxy/compare/v0.4.0...v0.5.0) (2026-08-23)
+
+
+### Features
+
+* **auth:** add ALLOW_SIGNUPS to close new account creation ([ef836a5](https://github.com/humexxx/allstars-galaxy/commit/ef836a5b0b00a5bda0834b9d62c25d9e9a886b27))
+* **auth:** add the provider role and collapse the role union to one definition ([99292ca](https://github.com/humexxx/allstars-galaxy/commit/99292ca3b830c20f7f13442747f36c9e37187e7e))
+* **finance:** chart the margin month by month and break it down per investor ([6b4d9a6](https://github.com/humexxx/allstars-galaxy/commit/6b4d9a66830b930f12129fc4b1dba5f8b5750546))
+* **finance:** default portfolio figures to all capital, fix hidden mode ([6fd3f84](https://github.com/humexxx/allstars-galaxy/commit/6fd3f84bfd4eb0d822db4dc219f64361cea1dfd7))
+* **finance:** derive positions from allocations priced on the day money landed ([1ef92b1](https://github.com/humexxx/allstars-galaxy/commit/1ef92b1f3488b05cf7bc24a028ec4341dcd8525a))
+* **finance:** filter managed capital by method and investor ([33ea78f](https://github.com/humexxx/allstars-galaxy/commit/33ea78f4149d83e85ed425d45693f289e3d32b8f))
+* **finance:** fold investment methods into portfolio, export history as CSV ([2e3b7f7](https://github.com/humexxx/allstars-galaxy/commit/2e3b7f7bba122d26e684a57a538785b2f49348cd))
+* **finance:** give investment methods an owner and show who invests in them ([93c7f4f](https://github.com/humexxx/allstars-galaxy/commit/93c7f4f3bf906a0115d3bb977708129655571447))
+* **finance:** give owners a portfolio that reflects what the money is worth ([85fe8e6](https://github.com/humexxx/allstars-galaxy/commit/85fe8e628395108e00b62f4932257ccc16f48798))
+* **finance:** let owners edit their methods, public half apart from private ([4be39aa](https://github.com/humexxx/allstars-galaxy/commit/4be39aa89bf9ec095c9cfabb8050196a5153a242))
+* **finance:** live prices and the margin model behind investment methods ([5e295da](https://github.com/humexxx/allstars-galaxy/commit/5e295dada39e609d3380f81898ba385b712f2f58))
+* **finance:** price holdings via Massive and surface the margin ([c709223](https://github.com/humexxx/allstars-galaxy/commit/c7092237801d80e4636cbbbb09b5fd8b690e63c7))
+* **finance:** rework the plans charts and sidebar ([594cb1e](https://github.com/humexxx/allstars-galaxy/commit/594cb1e08ff0ebac1bc3c820bc3a9aa26d2e368b))
+* **finance:** rework the portfolio overview around the headline figures ([4d37345](https://github.com/humexxx/allstars-galaxy/commit/4d37345689e6c680a628a0d25f29e9440f6b3cf0))
+* **finance:** show capital per method, drop the summary furniture ([4e3880f](https://github.com/humexxx/allstars-galaxy/commit/4e3880fa98e6053bfb7c2203b5dd876143be7389))
+* **finance:** show own vs managed capital on the portfolio overview ([8279dd4](https://github.com/humexxx/allstars-galaxy/commit/8279dd43300de0dbc828099f5be9f64a408de912))
+* **portal:** collapse each investor to their latest movement ([be851f5](https://github.com/humexxx/allstars-galaxy/commit/be851f5cf9305908d87f1235fa6deb61f19649af))
+* **portal:** configurable net-worth milestones, settings grouped by module ([60ceb09](https://github.com/humexxx/allstars-galaxy/commit/60ceb09db82389aa576d68f043f357f89a0ab6c9))
+* **portal:** default transactions to approved, add a detailed view ([55a8bce](https://github.com/humexxx/allstars-galaxy/commit/55a8bce2c47297a35ff07c5ea5714187d713e189))
+* **portal:** export what the app derives, and fix the totals row alignment ([486c18f](https://github.com/humexxx/allstars-galaxy/commit/486c18ffce25b73276ea8b8d0a3f5ce672bc5957))
+* **portal:** group investor transactions one card per person ([ad7f056](https://github.com/humexxx/allstars-galaxy/commit/ad7f056611834572af759ee26e690f10ec64f106))
+* **portal:** pair every maskable figure with a percentage that survives masking ([ef8625a](https://github.com/humexxx/allstars-galaxy/commit/ef8625a2e7763bf064331c75add9fe9fb6a58ddb))
+* **portal:** summarise each investor in one row, detail behind a button ([b384857](https://github.com/humexxx/allstars-galaxy/commit/b384857f13f7b235403e5a3507923232a51320e4))
+* **release:** version on main, and drop the header's second nav ([fa933c2](https://github.com/humexxx/allstars-galaxy/commit/fa933c23dd85f7875605ee6cc20c1a6663ee02b4))
+* **schemas:** add new schemas for admin, auth, finance confirmations, and user preferences ([c830b6f](https://github.com/humexxx/allstars-galaxy/commit/c830b6f7e29fcf2632ee35ae47af5640836fe9c9))
+* **travel:** accept a YouTube or Instagram video on an activity, and render it ([74551ff](https://github.com/humexxx/allstars-galaxy/commit/74551ff1fb48d1294af0f2d4e6ad268e85956711))
+* **travel:** autocomplete airports by code, city or name, with flags ([f2d602b](https://github.com/humexxx/allstars-galaxy/commit/f2d602bdceaa9725fe6d578ec7e2e3e27f957cd9))
+* **travel:** calendar view, and fix the layout bugs the screenshots showed ([81201bc](https://github.com/humexxx/allstars-galaxy/commit/81201bc83c7245ee2c66b94a2762bc8350ac27d6))
+* **travel:** choose the link's recipient in the dialog, and rebuild the shared page ([1100125](https://github.com/humexxx/allstars-galaxy/commit/110012548db40a8e9f233e415266ee1def1d0910))
+* **travel:** day headings carry their run, and the shared page loses its furniture ([f43d6a7](https://github.com/humexxx/allstars-galaxy/commit/f43d6a7296d0276e2568752edab23c3ec4a57e5d))
+* **travel:** drag a calendar item to another day, tap it to edit ([a6c0fab](https://github.com/humexxx/allstars-galaxy/commit/a6c0fab24b3226ab08c54bfa5afd40d7260b6d47))
+* **travel:** edit a cruise's itinerary, collapse it, tidy the trip dialog ([5812f0f](https://github.com/humexxx/allstars-galaxy/commit/5812f0ffaaaf7bd6e7a3853c01a9b48fc98b612b))
+* **travel:** edit a payment, and open the item form in a dialog ([d1e33a4](https://github.com/humexxx/allstars-galaxy/commit/d1e33a40ff3a9830fda8c4070325600ca4aa37a1))
+* **travel:** enter a flight's route and a price range by hand ([2539f4b](https://github.com/humexxx/allstars-galaxy/commit/2539f4bc9050ed9a7f0582c5795dc16542c96750))
+* **travel:** flight and cruise categories, and a cruise's port itinerary ([76ff5ac](https://github.com/humexxx/allstars-galaxy/commit/76ff5acdd68a618ba9ac3d8824ca64a96cfaa84c))
+* **travel:** give each item kind its own fields, and model a return flight ([c7a5005](https://github.com/humexxx/allstars-galaxy/commit/c7a5005dffc21ab63234297d958c1d56da357c96))
+* **travel:** give prices a unit — total, per night, or per person ([9ae267f](https://github.com/humexxx/allstars-galaxy/commit/9ae267f41f40f23fe0bbcc2ac21bcb9602abcb05))
+* **travel:** log a payment from a dialog, sharing the one the record opens ([bb650b2](https://github.com/humexxx/allstars-galaxy/commit/bb650b26cae715dec0ab015fef174e910cfa1ac4))
+* **travel:** model who is going, how a trip splits, and what a link reveals ([c15acd0](https://github.com/humexxx/allstars-galaxy/commit/c15acd01493dc92d7f7d67a3a5f7629f3e01fc78))
+* **travel:** offer only the price units a category can honestly use ([a36f0c9](https://github.com/humexxx/allstars-galaxy/commit/a36f0c94c636cb1c05c564317cfadb848f3dc73c))
+* **travel:** optional YouTube link on a trip ([332dd03](https://github.com/humexxx/allstars-galaxy/commit/332dd03e190ee66a9e9ac1ae3bf96e77cbaf536c))
+* **travel:** payment log, scrollable gallery, links scoped to one traveller ([2532ffd](https://github.com/humexxx/allstars-galaxy/commit/2532ffd9fc8cbfb1d7a3d27f2a559a710c9df445))
+* **travel:** prices on the calendar bars, and one control per card ([3b4c3b2](https://github.com/humexxx/allstars-galaxy/commit/3b4c3b295f3ec90b53da26c149de81338bf19e4e))
+* **travel:** rework the item form, attach photos to items, share the calendar ([0f71a49](https://github.com/humexxx/allstars-galaxy/commit/0f71a4945ebf6d5dd72446cb37950bea7c0bc3a3))
+* **travel:** seed the Orlando trip, allow the Unsplash image host ([0794f12](https://github.com/humexxx/allstars-galaxy/commit/0794f127a5cdb0189e23fb778f55d75627dcb606))
+* **travel:** share from the banner, with a QR for the link ([2e6f367](https://github.com/humexxx/allstars-galaxy/commit/2e6f367d15602e2f32d58a1787deb10c088e50be))
+* **travel:** tint the category icons and grow the category picker ([6ee0886](https://github.com/humexxx/allstars-galaxy/commit/6ee0886e8fe5015edce956780b270e9e84ca44ef))
+* **travel:** travellers in the banner, and what each one actually pays ([642d947](https://github.com/humexxx/allstars-galaxy/commit/642d9473422ffbe7de123396e53fa0e91d6aa8c6))
+
+
+### Bug Fixes
+
+* **auth:** keep sign-out to the current browser ([7780ac5](https://github.com/humexxx/allstars-galaxy/commit/7780ac570d0c007d4a884857eccee55fd2d1b985))
+* **finance:** give portfolio owners one chart card, not two ([bb2d7fa](https://github.com/humexxx/allstars-galaxy/commit/bb2d7fa71ddb7ad5d281e7bb31c9859ace16e3b9))
+* **finance:** line the method figures up across cards ([a1546cb](https://github.com/humexxx/allstars-galaxy/commit/a1546cb624c1335d1d7e9652fe3071a600b8308b))
+* **finance:** make the performance chart follow the figures scope ([320cbf0](https://github.com/humexxx/allstars-galaxy/commit/320cbf0d8e45b80fb496871b01e924424d4c5c0a))
+* **finance:** make the plans skeleton match the workspace it stands in for ([8aa4804](https://github.com/humexxx/allstars-galaxy/commit/8aa4804d9afa3bd072ba457d84b63cf2b8045ee9))
+* **finance:** mask every amount in masked mode, condense the portfolio tabs ([00ef770](https://github.com/humexxx/allstars-galaxy/commit/00ef770ec4e19672f09eac6a01d87d59a12b834f))
+* **finance:** show the investors tab when the owner has a portfolio ([aae0d77](https://github.com/humexxx/allstars-galaxy/commit/aae0d777620dd0b2e4e4fc817f3522e5a29b5a02))
+* **finance:** stop the card clipping the hover-preview chip ([6c3cd68](https://github.com/humexxx/allstars-galaxy/commit/6c3cd685a4ad698841de064f8f4417c8a7d9733e))
+* **portal:** align the first KPI card, give the chart a date range ([e277a3e](https://github.com/humexxx/allstars-galaxy/commit/e277a3e0706e1c2aef9c6b6a24582798d9c9d55e))
+* **portal:** make the new-plan and compare skeletons match their pages ([98da819](https://github.com/humexxx/allstars-galaxy/commit/98da8190fa44eb6ea4b57de8687920520182b6a2))
+* **portal:** restore the page container on orphaned loading skeletons ([3d76c3c](https://github.com/humexxx/allstars-galaxy/commit/3d76c3c5af62cd6c2f43fd9c746f97eb4be7e3a3))
+* **portal:** restore the page container on orphaned loading skeletons ([275f3e5](https://github.com/humexxx/allstars-galaxy/commit/275f3e5ea00e6d4c0e33351667ec39d7baefa92d))
+* **portal:** tell a connection failure apart from a bug in the page ([83b10f2](https://github.com/humexxx/allstars-galaxy/commit/83b10f27beb71cab27b1a0c0536a2d21961e6e72))
+* **travel:** align the calendar overlay to the day grid, and use a real tooltip ([f6fd9fd](https://github.com/humexxx/allstars-galaxy/commit/f6fd9fd48ca61166c009bfa548bad1b2ebe3a4f2))
+* **travel:** clickable rows with a real pointer, and badges inside their day ([2811f5d](https://github.com/humexxx/allstars-galaxy/commit/2811f5d5e128c0757568a38f87faf95cebf70923))
+* **travel:** derive a flight's title, make money look like money, even the widths ([2639425](https://github.com/humexxx/allstars-galaxy/commit/26394258a686eda960661294b6aa6195d7804d06))
+* **travel:** explain the missing storage bucket instead of relaying it ([9681279](https://github.com/humexxx/allstars-galaxy/commit/96812790c8932b4c7338861b5b52f7f145b81754))
+* **travel:** fit the activity form's four fields into its grid ([f77c270](https://github.com/humexxx/allstars-galaxy/commit/f77c270e308b08b3a73aa8fb08abe3b928979f23))
+* **travel:** make every trip figure a range, and follow the selected traveller ([b07a14a](https://github.com/humexxx/allstars-galaxy/commit/b07a14ae09677728c0dd65dd2a04db9e3df65b08))
+* **travel:** move the price chip out of the title stack, mark who you are ([f3c8868](https://github.com/humexxx/allstars-galaxy/commit/f3c88682fa72ee0abd0ef5c383f50314387abdf8))
+* **travel:** range the remainder on a shared link, and show the cruise's ports ([08ec4b2](https://github.com/humexxx/allstars-galaxy/commit/08ec4b283b0be07be9554e3aaa60a58f423c8fa5))
+* **travel:** real month calendar, flush-right money, and a crash on scoped links ([c6e36ef](https://github.com/humexxx/allstars-galaxy/commit/c6e36ef9b1e0e005d2a4501a59c6c67d1dc90e8c))
+* **travel:** resolve the code-review findings ([67689d9](https://github.com/humexxx/allstars-galaxy/commit/67689d9f3c074ee40bfe482b478cc23b857b791f))
+* **travel:** stop the new trip page crashing on load ([39e03e2](https://github.com/humexxx/allstars-galaxy/commit/39e03e24ab6817d3c176d5556d3896c62e9574f8))
+* **travel:** use shadcn Collapsible, steady the chip, survive any cover photo ([1cb060d](https://github.com/humexxx/allstars-galaxy/commit/1cb060dee16e7292f8a8cfb1615e9b28529aca2c))
+* **ui:** make the chart palette categorical instead of a cyan ramp ([a0d31ca](https://github.com/humexxx/allstars-galaxy/commit/a0d31cab33b4e1e41a9a7a39bb495c8652efab4a))
+* **ui:** stop CardContent doubling a card's top padding ([ac684ed](https://github.com/humexxx/allstars-galaxy/commit/ac684ed8bb64e111b7240303df261216ae435388))
+* **ui:** stop scroll rails from stretching the page on mobile ([8f88cf0](https://github.com/humexxx/allstars-galaxy/commit/8f88cf0b31d0c2dc1d2a30d94ecdd24c510c5b79))
+
+
+### Performance
+
+* **finance:** load the managed tab in two round trips instead of eleven ([aeb866b](https://github.com/humexxx/allstars-galaxy/commit/aeb866bc6079165b6fdfdfb180560299359a46e1))
+
+
+### Refactor
+
+* **finance:** derive a method's author from its owner ([3e73dea](https://github.com/humexxx/allstars-galaxy/commit/3e73deaefa07506f7b1272d6b841bb9d629e3c0d))
+* **finance:** drop the author column, credit a method to whoever runs it ([00bbb37](https://github.com/humexxx/allstars-galaxy/commit/00bbb37d0a61b3f00d0230c3ecde7cee4047e3cf))
+* **portal:** fold the Managed tab away, align the headline cards ([eff02c5](https://github.com/humexxx/allstars-galaxy/commit/eff02c56c20315827f46e5ddc62018f003c6d26b))
+* **portal:** let each route declare its own page width ([af69a40](https://github.com/humexxx/allstars-galaxy/commit/af69a404961bea30ac44f8d2e3bfe6967aacef32))
+* **portal:** match the two transaction tables, drop the detail view ([acf32d4](https://github.com/humexxx/allstars-galaxy/commit/acf32d41d6b8975d71907b79940ad43e370c6efc))
+* **portal:** one transaction table, showing what each contribution bought ([3bee591](https://github.com/humexxx/allstars-galaxy/commit/3bee591e02f517c168ef27283a6019d6f87414bf))
+* **travel:** apply the remaining shadcn and vercel-react suggestions ([2fe21da](https://github.com/humexxx/allstars-galaxy/commit/2fe21dadbb5bedccd6b33f601183ec75ab4d2332))
+* **travel:** apply the shadcn and vercel-react skills to the trip planner ([860d706](https://github.com/humexxx/allstars-galaxy/commit/860d7069c1d79f0399cd4c76c0345d69c8f5bd22))
+* **travel:** drop the description card from the trip detail page ([6ecaa53](https://github.com/humexxx/allstars-galaxy/commit/6ecaa53ea6a418d0b98f0c17638415ca698506b8))
+* **travel:** move the YouTube link from the trip to the activity ([ff95c6d](https://github.com/humexxx/allstars-galaxy/commit/ff95c6dd91e64f02f14d3f6b286442b523517934))
+
 ## [0.4.0](https://github.com/humexxx/allstars-galaxy/compare/v0.3.0...v0.4.0) (2026-06-24)
 
 

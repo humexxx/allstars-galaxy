@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.1](https://github.com/humexxx/allstars-galaxy/compare/v0.5.0...v0.5.1) (2026-08-23)
+
+
+### Bug Fixes
+
+* **ci:** surface a failed release sync instead of reporting success ([7eb9ae7](https://github.com/humexxx/allstars-galaxy/commit/7eb9ae7f2acd1e57ef61798bf587930cf982a10d))
+* **travel:** build share links from the production host, and fix the phone banner ([ee75ae9](https://github.com/humexxx/allstars-galaxy/commit/ee75ae994b8112fe144bb6bdb677521a94cd74f2))
+* **ui:** show the real brand mark on every surface, not lucide's placeholder ([c6e5f10](https://github.com/humexxx/allstars-galaxy/commit/c6e5f10429c858898c559b4192bc71747b7bd85e))
+
 ## [0.5.0](https://github.com/humexxx/allstars-galaxy/compare/v0.4.0...v0.5.0) (2026-08-23)
 
 

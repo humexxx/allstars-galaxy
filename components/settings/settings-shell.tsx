@@ -93,7 +93,7 @@ export function SettingsShell({ preferences }: { preferences: UserPreferences })
       </nav>
 
       <Card className="min-w-0">
-        <CardContent className="space-y-5 pt-6">
+        <CardContent className="space-y-5">
           <div className="space-y-1">
             <Heading level="h5" as="h2">
               {active.label}

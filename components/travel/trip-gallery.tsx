@@ -3,12 +3,12 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { Trash2 } from "lucide-react";
+import { Images, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Text } from "@/components/ui/typography";
+import { EmptyState } from "@/components/ui/empty-state";
 
 import {
   addTripPhotoAction,
@@ -66,26 +66,29 @@ export function TripGallery({ trip }: TripGalleryProps) {
       <CardHeader>
         <CardTitle>Gallery</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col gap-4 ">
         {trip.photos.length === 0 ? (
-          <Text
-            variant="small"
-            className="rounded-md border border-dashed p-4 text-center"
-          >
-            No photos yet — pick a few to show in the shared view.
-          </Text>
+          <EmptyState
+            icon={Images}
+            title="No photos yet"
+            description="Pick a few to show in the shared view."
+            className="border-dashed p-6"
+          />
         ) : (
-          <div className="grid grid-cols-3 gap-2">
+          // One row that scrolls sideways. A grid grew a new row for every
+          // three photos and pushed everything below it down the page; a rail
+          // costs the same height whether the trip has four photos or forty.
+          <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1">
             {trip.photos.map((photo) => (
               <div
                 key={photo.id}
-                className="group relative aspect-square overflow-hidden rounded-md border bg-muted"
+                className="group relative aspect-square w-28 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
               >
                 <Image
                   src={photo.url}
                   alt={photo.caption ?? "Trip photo"}
                   fill
-                  sizes="(max-width: 768px) 33vw, 200px"
+                  sizes="112px"
                   className="object-cover"
                   // Gallery photos may be external URLs (see schema:
                   // `tripPhotoSourceEnum`). `unoptimized` sidesteps
@@ -96,12 +99,15 @@ export function TripGallery({ trip }: TripGalleryProps) {
                   type="button"
                   size="icon"
                   variant="secondary"
-                  className="absolute right-1 top-1 h-6 w-6 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                  // 24px was below any comfortable touch target, and this one is
+                  // destructive AND always visible on a phone. 36/28 is the
+                  // size the itinerary rows already use.
+                  className="absolute right-1 top-1 size-9 transition-opacity focus-visible:opacity-100 sm:size-7 sm:opacity-0 sm:group-hover:opacity-100"
                   onClick={() => handleDelete(photo.id)}
                   disabled={isPending}
                   aria-label="Delete photo"
                 >
-                  <Trash2 className="h-3 w-3" />
+                  <Trash2 className="size-3.5" />
                 </Button>
               </div>
             ))}

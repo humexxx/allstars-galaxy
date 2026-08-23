@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import type { User } from "@supabase/supabase-js";
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import type { UserRole } from "@/types/user";
 
 async function fetchCurrentUser(): Promise<User | null> {
   const supabase = await createClient();
@@ -14,7 +15,7 @@ async function fetchCurrentUser(): Promise<User | null> {
   return user;
 }
 
-async function fetchUserRole(userId: string): Promise<"admin" | "user" | null> {
+async function fetchUserRole(userId: string): Promise<UserRole | null> {
   const [dbUser] = await db
     .select({ role: users.role })
     .from(users)
@@ -31,7 +32,7 @@ export async function getCurrentUser(): Promise<User | null> {
   return fetchCurrentUser();
 }
 
-export async function getUserRole(userId: string): Promise<"admin" | "user" | null> {
+export async function getUserRole(userId: string): Promise<UserRole | null> {
   return fetchUserRole(userId);
 }
 
@@ -79,4 +80,31 @@ export async function requireAdminOrRedirect(fallback = "/portal"): Promise<User
   } catch {
     redirect(fallback);
   }
+}
+
+/**
+ * May this account create investment methods?
+ *
+ * This is the ONLY question the `provider` role answers. Which methods someone
+ * already runs comes from `investment_methods.owner_user_id`, and every
+ * ownership check in the app reads that instead — restating it in the role
+ * would give two sources of truth that can disagree.
+ *
+ * Admins pass because an admin can do anything a provider can.
+ */
+export async function requireProvider(): Promise<User> {
+  const user = await requireAuth();
+  const role = await getUserRole(user.id);
+
+  if (role !== "provider" && role !== "admin") {
+    throw new Error("Forbidden: provider access required");
+  }
+
+  return user;
+}
+
+/** Non-throwing form, for deciding whether to render an affordance. */
+export async function isProvider(userId: string): Promise<boolean> {
+  const role = await getUserRole(userId);
+  return role === "provider" || role === "admin";
 }

@@ -1,8 +1,15 @@
+/**
+ * Derived from the `user_role` enum in `db/schema.ts`. Kept in one place
+ * because the roles were spelled out by hand in ten files, which is how a
+ * new role ends up half-added.
+ */
+export type UserRole = "admin" | "provider" | "user";
+
 export interface User {
   id: string
   email: string
   name: string
-  role: "admin" | "user"
+  role: UserRole
   createdAt: Date
   updatedAt: Date
 }
@@ -15,6 +22,6 @@ export type UserListItem = {
   id: string;
   email: string | null;
   fullName: string | null;
-  role: "admin" | "user" | null;
+  role: UserRole | null;
   avatarUrl: string | null;
 };

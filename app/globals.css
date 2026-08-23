@@ -51,6 +51,16 @@
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
+  /* Trip item categories. Eight, so deliberately NOT the chart palette —
+     that one is five slots that must never be cycled. See docs/modules/
+     entertainment.md for the measured separation and contrast. */
+  --color-trip-lodging: var(--trip-lodging);
+  --color-trip-flight: var(--trip-flight);
+  --color-trip-cruise: var(--trip-cruise);
+  --color-trip-transport: var(--trip-transport);
+  --color-trip-food: var(--trip-food);
+  --color-trip-activity: var(--trip-activity);
+  --color-trip-shopping: var(--trip-shopping);
   --color-chart-1: var(--chart-1);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
@@ -101,6 +111,18 @@
      with the dataviz validator (light surface #ffffff):
        CVD ΔE 16.3 (target ≥8) · normal-vision ΔE 19.6 (floor ≥15)
      Re-run the validator before touching any of these. */
+  /* Category hues for Travel. Chosen for separation on a light surface:
+     worst adjacent pair ΔEok 0.137, every one ≥3:1 against white. Activity is
+     lime rather than emerald because emerald measured 0.056 against cruise's
+     teal, and it takes the 700 step because lime at 600 clears contrast at
+     only 3.06:1. */
+  --trip-lodging: oklch(0.666 0.179 58.318);   /* amber  */
+  --trip-flight: oklch(0.588 0.158 241.966);   /* sky    */
+  --trip-cruise: oklch(0.6 0.118 184.704);     /* teal   */
+  --trip-transport: oklch(0.541 0.281 293.009);/* violet */
+  --trip-food: oklch(0.586 0.253 17.585);      /* rose   */
+  --trip-activity: oklch(0.532 0.157 131.589); /* lime   */
+  --trip-shopping: oklch(0.591 0.293 322.896); /* fuchsia*/
   --chart-1: oklch(0.6095 0.11 221.99);   /* #0f91b2 cyan (brand) */
   --chart-2: oklch(0.6708 0.175 40.64);   /* #eb6834 orange */
   --chart-3: oklch(0.4331 0.1671 283.62); /* #4a3aa7 violet */
@@ -150,6 +172,15 @@
   /* Same five hues, re-stepped for the dark card surface (#343434) — a
      selected dark palette, not an automatic flip of the light one. Verified:
      CVD ΔE 13.2 (target ≥8) · normal-vision ΔE 19.3 (floor ≥15). */
+  /* The same hues re-stepped for a dark surface — chosen for it, not flipped
+     from the light set. Every one ≥4:1 against #0a0a0a. */
+  --trip-lodging: oklch(0.828 0.189 84.429);
+  --trip-flight: oklch(0.746 0.16 232.661);
+  --trip-cruise: oklch(0.777 0.152 181.912);
+  --trip-transport: oklch(0.702 0.183 293.541);
+  --trip-food: oklch(0.712 0.194 13.428);
+  --trip-activity: oklch(0.841 0.238 128.85);
+  --trip-shopping: oklch(0.74 0.238 322.16);
   --chart-1: oklch(0.6599 0.1177 220.36); /* #12a2c4 cyan (brand) */
   --chart-2: oklch(0.6221 0.1726 40.11);  /* #d95926 orange */
   --chart-3: oklch(0.6696 0.1452 286.83); /* #9085e9 violet */
@@ -204,5 +235,30 @@ body {
   samp,
   pre {
     font-variant-numeric: tabular-nums;
+  }
+}
+/**
+ * A calendar bar's label slides into view while the pointer is on it.
+ *
+ * The component measures the overflow and sets the two custom properties;
+ * this only owns the motion. Nothing moves for a label that already fits —
+ * `[data-marquee]` is absent in that case — and nothing moves at all for a
+ * reader who has asked for less of it.
+ */
+@keyframes trip-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--marquee-shift, 0));
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .group\/bar:hover [data-marquee="true"] > span,
+  .group\/bar:focus-visible [data-marquee="true"] > span,
+  [data-marquee="true"]:hover > span {
+    animation: trip-marquee var(--marquee-duration, 3s) ease-in-out infinite
+      alternate;
   }
 }

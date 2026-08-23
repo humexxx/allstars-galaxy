@@ -78,8 +78,42 @@ computed height, not a spacing step.
 - Card padding comes from the shadcn `Card`/`CardHeader`/`CardContent`
   primitives — don't override it with custom `p-*` unless a design genuinely
   needs it.
-- Stack related blocks with `space-y-4`/`space-y-6`; lay rows out with
-  `gap-2`/`gap-3`/`gap-4`.
+- **To line figures up across a row of cards, pin them to the bottom**
+  (`mt-auto` on `CardContent`), don't try to equalise the headers. Cards in a
+  grid row already stretch to a common height, so bottom-aligned content lines
+  up whatever the title and description do — and a title that wraps to two
+  lines in one card is enough to break any header-height scheme. Keep variable
+  status (badges, notes) *above* the figures for the same reason: anything
+  below them shifts them up in whichever card happens to have it.
+- **`Card` clips its children (`overflow-hidden`).** Anything meant to straddle
+  its edge — a chip at `-top-2.5`, a notch, a floating label — renders sliced in
+  half if it is a *child*. Make it a sibling instead: wrap the card in a
+  `relative` container and position the badge against that.
+- **Never add `pt-6` to `CardContent`.** `Card` already carries the vertical
+  padding (`py-6`, or `py-4` at `size="sm"`); `CardContent` supplies only the
+  horizontal `px-6`. Adding `pt-6` therefore *doubles* the top gap to 48px
+  instead of setting it, which reads as a stray band of empty space above the
+  first line of content. It is an easy mistake because the class looks like it
+  is establishing padding rather than stacking on top of it — five components
+  in this repo had it. A card with no `CardHeader` needs no top padding at all:
+  `<Card><CardContent>` is already correct.
+- Stack related blocks with `flex flex-col gap-4`/`gap-6`; lay rows out with
+  `gap-2`/`gap-3`/`gap-4`. **One property for both axes**, which is what the
+  shadcn skill asks for and what the shadcn components themselves use.
+  `space-y-*` is the older form: it works by giving every child but the first a
+  top margin, so it fights `:first-child` rules, does nothing for a wrapping
+  row, and collapses against a child's own margin.
+
+  Converting is **not** a rename. `gap` does nothing outside a flex or grid
+  container, so `space-y-4` becomes `flex flex-col gap-4` — dropping the
+  `flex flex-col` silently removes the spacing. And a block that becomes a
+  flex container gives its children `min-width: auto`, which is how a
+  scrolling rail ends up widening its own column: pair the change with
+  `min-w-0` on anything that must be allowed to shrink.
+
+  `components/travel/**` is converted. The rest of the app still uses
+  `space-y-*` and is fine to leave until it is touched — a half-converted
+  file is worse than a consistent old one.
 
 ## Adding a new step
 

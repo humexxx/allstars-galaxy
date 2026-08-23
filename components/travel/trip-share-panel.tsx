@@ -3,15 +3,28 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { format } from "date-fns";
-import { Check, Copy, Link2, Loader2, Trash2 } from "lucide-react";
+import { Check, Copy, Link2, Loader2, QrCode, Trash2 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Mono, Text } from "@/components/ui/typography";
-import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Field, FieldLabel } from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import {
   createTripShareAction,
@@ -23,17 +36,31 @@ import type { TripShare, TripWithRelations } from "@/types/travel";
 type TripSharePanelProps = {
   trip: TripWithRelations;
   baseUrl: string;
+  /** Traveller in focus upstairs — the picker's starting point, not a lock. */
+  scopeToMemberId?: string | null;
 };
+
+/** Sentinel for "not scoped to anybody" — Select has no value for null. */
+const EVERYONE = "__everyone__";
 
 function shareUrl(baseUrl: string, token: string): string {
   return `${baseUrl.replace(/\/$/, "")}/trips/${token}`;
 }
 
-export function TripSharePanel({ trip, baseUrl }: TripSharePanelProps) {
+export function TripSharePanel({
+  trip,
+  baseUrl,
+  scopeToMemberId = null,
+}: TripSharePanelProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [creating, startCreate] = useTransition();
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  // Who the link is for is asked here, not inherited from a click behind the
+  // dialog. It starts on whoever is in focus, so the common case is still one
+  // button — but changing your mind no longer means closing this first.
+  const [scopeId, setScopeId] = useState<string>(scopeToMemberId ?? EVERYONE);
+  const scopeName = trip.members.find((m) => m.id === scopeId)?.name ?? null;
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +72,7 @@ export function TripSharePanel({ trip, baseUrl }: TripSharePanelProps) {
     startCreate(async () => {
       const res = await createTripShareAction(trip.id, {
         inviteeEmail: trimmed || null,
+        memberId: scopeId === EVERYONE ? null : scopeId,
       });
       if (res.success && res.data) {
         const url = shareUrl(baseUrl, res.data.token);
@@ -83,83 +111,116 @@ export function TripSharePanel({ trip, baseUrl }: TripSharePanelProps) {
   const revoked = trip.shares.filter((s) => s.revokedAt !== null || isExpired(s));
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Share</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <form onSubmit={handleCreate} className="space-y-2">
-          <Label htmlFor="share-email" className="text-xs">
-            Generate a private link
-          </Label>
-          <div className="flex gap-2">
-            <Input
+    <div className="flex flex-col gap-4">
+      <form onSubmit={handleCreate} className="flex flex-col gap-2 ">
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor="share-scope" className="text-xs">
+            Who is this link for?
+          </FieldLabel>
+          <Select value={scopeId} onValueChange={setScopeId}>
+            <SelectTrigger id="share-scope" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value={EVERYONE}>Everyone — the whole trip</SelectItem>
+                {trip.members.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor="share-email" className="text-xs">
+            Label <span className="text-muted-foreground">(optional)</span>
+          </FieldLabel>
+          <InputGroup>
+            <InputGroupInput
               id="share-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="friend@example.com (optional)"
+              placeholder="friend@example.com"
               disabled={creating}
             />
-            <Button type="submit" disabled={creating}>
-              {creating ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <Link2 className="mr-1 h-4 w-4" />
-              )}
-              Create link
-            </Button>
-          </div>
-          <Text variant="small">
-            The email is just a label — we don&apos;t send a message. Copy the link and share it
-            on WhatsApp, X, Slack or Instagram and the preview card will appear automatically.
-          </Text>
-        </form>
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton type="submit" variant="default" disabled={creating}>
+                {creating ? <Loader2 className="animate-spin" /> : <Link2 />}
+                {scopeName ? `For ${scopeName.split(" ")[0]}` : "Create"}
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
+        </Field>
 
-        {active.length > 0 && (
-          <div className="space-y-2">
-            <Text variant="small" weight="medium">Active links</Text>
-            <ul className="space-y-2">
-              {active.map((share) => (
-                <ShareRow
-                  key={share.id}
-                  tripId={trip.id}
-                  share={share}
-                  baseUrl={baseUrl}
-                  copied={copiedToken === share.token}
-                  onCopy={() => handleCopy(share.token)}
-                />
-              ))}
-            </ul>
-          </div>
-        )}
+        {/* Said before the click, not after: which traveller a link exposes is
+            not something to discover from the result. */}
+        <Text variant="small">
+          {scopeName ? (
+            <>
+              This link shows{" "}
+              <span className="font-medium text-foreground">{scopeName}&apos;s</span>{" "}
+              share of each cost — not the trip totals, and not the other
+              travellers.
+            </>
+          ) : (
+            <>
+              This link shows the plan without any prices. The label is only for
+              you — nothing is sent to it.
+            </>
+          )}
+        </Text>
+      </form>
 
-        {revoked.length > 0 && (
-          <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer">
-              Revoked or expired ({revoked.length})
-            </summary>
-            <ul className="mt-2 space-y-1">
-              {revoked.map((share) => (
-                <li key={share.id} className="flex items-center justify-between rounded border bg-muted/30 px-2 py-1">
-                  <Text as="span" variant="small">
-                    {share.inviteeEmail ?? "Anonymous"} ·{" "}
-                    {share.revokedAt ? (
-                      <Mono>{format(new Date(share.revokedAt), "MMM d")}</Mono>
-                    ) : share.expiresAt ? (
-                      <Mono>expired {format(new Date(share.expiresAt), "MMM d")}</Mono>
-                    ) : (
-                      ""
-                    )}
-                  </Text>
-                  <DeleteRevokedButton tripId={trip.id} shareId={share.id} />
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </CardContent>
-    </Card>
+      {active.length > 0 && (
+        <div className="flex flex-col gap-2 ">
+          <Text variant="small" weight="medium">Active links</Text>
+          <ul className="flex flex-col gap-2 ">
+            {active.map((share) => (
+              <ShareRow
+                key={share.id}
+                tripId={trip.id}
+                share={share}
+                baseUrl={baseUrl}
+                copied={copiedToken === share.token}
+                memberName={
+                  trip.members.find((m) => m.id === share.memberId)?.name ?? null
+                }
+                onCopy={() => handleCopy(share.token)}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {revoked.length > 0 && (
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer">
+            Revoked or expired ({revoked.length})
+          </summary>
+          <ul className="flex flex-col gap-1 mt-2">
+            {revoked.map((share) => (
+              <li key={share.id} className="flex items-center justify-between rounded border bg-muted/30 px-2 py-1">
+                <Text as="span" variant="small">
+                  {share.inviteeEmail ?? "Anonymous"} ·{" "}
+                  {share.revokedAt ? (
+                    <Mono>{format(new Date(share.revokedAt), "MMM d")}</Mono>
+                  ) : share.expiresAt ? (
+                    <Mono>expired {format(new Date(share.expiresAt), "MMM d")}</Mono>
+                  ) : (
+                    ""
+                  )}
+                </Text>
+                <DeleteRevokedButton tripId={trip.id} shareId={share.id} />
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
   );
 }
 
@@ -168,16 +229,20 @@ function ShareRow({
   share,
   baseUrl,
   copied,
+  memberName,
   onCopy,
 }: {
   tripId: string;
   share: TripShare;
   baseUrl: string;
   copied: boolean;
+  /** Traveller this link is scoped to, or null for the whole trip. */
+  memberName: string | null;
   onCopy: () => void;
 }) {
   const router = useRouter();
   const [busy, startTransition] = useTransition();
+  const [showQr, setShowQr] = useState(false);
   const url = shareUrl(baseUrl, share.token);
 
   const handleRevoke = () => {
@@ -193,38 +258,70 @@ function ShareRow({
   };
 
   return (
-    <li className="space-y-1 rounded-md border bg-muted/30 p-2">
+    <li className="flex flex-col gap-1 rounded-md border bg-muted/30 p-2">
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="truncate font-medium">
-          {share.inviteeEmail ?? "Anyone with the link"}
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-medium">
+            {share.inviteeEmail ?? "Anyone with the link"}
+          </span>
+          {/* Two links to the same trip can show completely different money.
+              Which is which cannot live only in the owner's memory. */}
+          <Badge variant="outline" className="shrink-0 text-2xs font-normal">
+            {memberName ?? "Whole trip"}
+          </Badge>
         </span>
         <Button
           type="button"
           size="icon"
           variant="ghost"
-          className={cn("h-6 w-6 text-destructive hover:text-destructive")}
+          className="size-9 text-destructive hover:text-destructive sm:size-7"
           onClick={handleRevoke}
           disabled={busy}
           aria-label="Revoke link"
         >
-          <Trash2 className="h-3 w-3" />
+          <Trash2 className="size-3.5" />
         </Button>
       </div>
-      <div className="flex items-center gap-1">
-        <Mono className="flex-1 truncate rounded border bg-background px-2 py-1 text-2xs">
-          {url}
-        </Mono>
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          className="h-9 w-9 sm:h-7 sm:w-7"
-          onClick={onCopy}
-          aria-label="Copy link"
-        >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        </Button>
-      </div>
+      {/* One control instead of a box that looks like a field sitting next to
+          a button that is not part of it. The link stays selectable, and the
+          thing you actually want — copy — is inside it. */}
+      <InputGroup className="h-8">
+        <InputGroupInput readOnly value={url} className="font-mono text-2xs" />
+        <InputGroupAddon align="inline-end">
+          {/* A phone cannot be handed a URL. The code is the way this link
+              crosses to a device that is not this one. */}
+          <InputGroupButton
+            type="button"
+            size="icon-xs"
+            onClick={() => setShowQr((v) => !v)}
+            aria-label={showQr ? "Hide QR code" : "Show QR code"}
+            aria-expanded={showQr}
+          >
+            <QrCode />
+          </InputGroupButton>
+          <InputGroupButton
+            type="button"
+            size="icon-xs"
+            onClick={onCopy}
+            aria-label={copied ? "Copied" : "Copy link"}
+          >
+            {copied ? <Check /> : <Copy />}
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
+
+      {showQr && (
+        <div className="flex flex-col items-center gap-2 rounded-md border bg-background p-3">
+          {/* White behind the code whatever the theme: a dark surface inverts
+              the quiet zone and most scanners give up. */}
+          <div className="rounded bg-white p-2">
+            <QRCodeSVG value={url} size={132} level="M" marginSize={0} />
+          </div>
+          <Text className="text-2xs text-muted-foreground">
+            Point a camera at this to open the link
+          </Text>
+        </div>
+      )}
     </li>
   );
 }
@@ -237,7 +334,7 @@ function DeleteRevokedButton({ tripId, shareId }: { tripId: string; shareId: str
       type="button"
       size="icon"
       variant="ghost"
-      className="h-5 w-5"
+      className="size-8 sm:size-6"
       onClick={() =>
         startTransition(async () => {
           const res = await deleteTripShareAction(tripId, shareId);
@@ -251,7 +348,7 @@ function DeleteRevokedButton({ tripId, shareId }: { tripId: string; shareId: str
       disabled={busy}
       aria-label="Delete record"
     >
-      <Trash2 className="h-3 w-3" />
+      <Trash2 className="size-3.5" />
     </Button>
   );
 }

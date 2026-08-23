@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -7,16 +8,15 @@ import { Suspense, useMemo, useState, useTransition } from "react";
 import {
   ArrowLeft,
   CalendarDays,
-  DollarSign,
-  ListChecks,
+  List as ListIcon,
   MapPin,
   Pencil,
+  Share2,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -34,42 +34,137 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
-import { cn } from "@/lib/utils";
+import { Heading, Mono } from "@/components/ui/typography";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { deleteTripAction } from "@/app/actions/travel";
 import {
   formatDateRange,
-  formatTripMoney,
-  tripDurationLabel,
 } from "@/lib/travel/format";
 import type { TripWithRelations } from "@/types/travel";
 
-import { TripForm } from "./trip-form";
+/**
+ * The edit form ships only when the dialog opens.
+ *
+ * It is the heaviest thing on the page — react-hook-form, the resolver, the
+ * photo picker — and it sits behind a button most visits never press. Loading
+ * it eagerly put all of that in the bundle of a page whose job is to be read.
+ */
+const TripForm = dynamic(
+  () => import("./trip-form").then((m) => ({ default: m.TripForm })),
+  { loading: () => <Skeleton className="h-96 w-full" /> }
+);
 import { TripItinerary } from "./trip-itinerary";
+import type { ItineraryViewer } from "@/lib/travel/viewer";
+import { TripCalendar } from "./trip-calendar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+/** Which reading of the plan is on screen. */
+type TripView = "list" | "calendar";
 import { TripGallery } from "./trip-gallery";
+import { TripPayments } from "./trip-payments";
 import { TripSharePanel } from "./trip-share-panel";
+import { tripCost } from "@/lib/travel/pricing";
+import { TravellerBar } from "@/components/travel/traveller-bar";
+const MembersDialog = dynamic(
+  () => import("@/components/travel/members-dialog").then((m) => ({
+    default: m.MembersDialog,
+  }))
+);
+import { splitTrip } from "@/lib/travel/split";
 
 type TripDetailProps = {
   trip: TripWithRelations;
   baseUrl: string;
+  /** Who is looking, so their own face can be marked on the traveller list. */
+  currentUserEmail?: string | null;
+  currentUserName?: string | null;
 };
 
-export function TripDetail({ trip, baseUrl }: TripDetailProps) {
+export function TripDetail({
+  trip,
+  baseUrl,
+  currentUserEmail,
+  currentUserName,
+}: TripDetailProps) {
   const router = useRouter();
+  // A trip with nobody on it is still planned for one.
+  const partySize = Math.max(1, trip.members.length);
+  const [membersOpen, setMembersOpen] = useState(false);
+  /** Whose money the page is showing. Null is the trip itself. Lives here
+   *  rather than in the banner because it re-costs the itinerary too. */
+  const [selected, setSelected] = useState<string | null>(null);
+  const [view, setView] = useState<TripView>("list");
+  const [shareOpen, setShareOpen] = useState(false);
+
+  /** The traveller who is the signed-in owner, matched by name or email. */
+  const youId = useMemo(() => {
+    const email = currentUserEmail?.toLowerCase();
+    const name = currentUserName?.toLowerCase();
+    return (
+      trip.members.find((m) => email && m.email?.toLowerCase() === email)?.id ??
+      trip.members.find((m) => name && m.name.toLowerCase() === name)?.id ??
+      null
+    );
+  }, [trip.members, currentUserEmail, currentUserName]);
+
+  /** What each traveller owes, from who actually pays each item. */
+  const shares = useMemo(
+    () =>
+      splitTrip(
+        trip.items.map((i) => ({
+          id: i.id,
+          title: i.title,
+          price: i.price,
+          priceMax: i.priceMax,
+          priceUnit: i.priceUnit,
+          scheduledOn: i.scheduledOn,
+          endsOn: i.endsOn,
+          // Per-item payers have no UI yet; until they do every item follows
+          // the trip's own split, which is what an empty list means.
+          payerIds: [],
+        })),
+        trip.members.map((m) => ({
+          id: m.id,
+          name: m.name,
+          sharePercent: m.sharePercent,
+        }))
+      ),
+    [trip.items, trip.members]
+  );
+
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isDeleting, startDelete] = useTransition();
 
-  const totalEstimate = useMemo(
-    () =>
-      trip.items.reduce((sum, item) => {
-        if (!item.price) return sum;
-        const n = parseFloat(item.price);
-        return Number.isFinite(n) ? sum + n : sum;
-      }, 0),
-    [trip.items]
+  /**
+   * The trip's cost as a range, with each item's unit applied.
+   *
+   * A nightly rate times its nights, a per-person fare times the party. Summing
+   * the raw figures would quietly report a two-night hotel at one night's price
+   * — wrong, and wrong in the direction that makes a trip look affordable.
+   */
+  const estimate = useMemo(
+    () => tripCost(trip.items, partySize),
+    [trip.items, partySize]
   );
+
+  /**
+   * The selected traveller's own view of the plan, item by item.
+   *
+   * Built from `shares` rather than re-split here: the banner's pill and every
+   * day subtotal have to be the same arithmetic, or one of them is lying.
+   */
+  const viewer = useMemo((): ItineraryViewer | null => {
+    if (selected === null) return null;
+    const share = shares.find((s) => s.memberId === selected);
+    if (!share) return null;
+    return {
+      name: share.name,
+      isYou: share.memberId === youId,
+      lines: new Map(share.lines.map((l) => [l.itemId, { low: l.low, high: l.high }])),
+    };
+  }, [selected, shares, youId]);
 
   const handleDelete = () => {
     startDelete(async () => {
@@ -85,18 +180,37 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
   };
 
   return (
-    <section className="space-y-6">
-      <div className="flex items-center gap-2">
+    <section className="flex flex-col gap-6 ">
+      <div className="flex items-center justify-between gap-2">
         <Button variant="ghost" size="sm" asChild>
           <Link href="/portal/entertainment/travel-planner">
-            <ArrowLeft className="mr-1 h-4 w-4" /> All trips
+            <ArrowLeft className="mr-1 size-4" /> All trips
           </Link>
         </Button>
+
+        {/* Two readings of the same plan. The list answers "what is the
+            plan"; the calendar answers "what does the week look like" —
+            where the free days are, how long the cruise really runs. */}
+        <Tabs value={view} onValueChange={(v) => setView(v as TripView)}>
+          <TabsList>
+            <TabsTrigger value="list" className="gap-1.5">
+              <ListIcon className="size-3.5" />
+              <span className="hidden sm:inline">List</span>
+            </TabsTrigger>
+            <TabsTrigger value="calendar" className="gap-1.5">
+              <CalendarDays className="size-3.5" />
+              <span className="hidden sm:inline">Calendar</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       <header className="overflow-hidden rounded-xl border">
         <div
-          className="relative aspect-[21/9] w-full bg-muted"
+          // 21/9 leaves 167px on a 390px phone, and the pill, the buttons and
+          // the title all landed on top of each other. The floor wins on a
+          // phone, the ratio wins from tablet up.
+          className="relative min-h-72 w-full bg-muted sm:aspect-[21/9] sm:min-h-0"
           style={trip.coverPhotoUrl ? undefined : { backgroundColor: trip.color }}
         >
           {trip.coverPhotoUrl && (
@@ -116,69 +230,128 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-          <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 p-6 text-white">
-            <Heading level="h1" className="text-white">{trip.title}</Heading>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
-              {trip.destination && (
-                <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4" /> {trip.destination}
-                </span>
-              )}
-              <span className="inline-flex items-center gap-1.5">
-                <CalendarDays className="h-4 w-4" />
-                <Mono>{formatDateRange(trip.startDate, trip.endDate)}</Mono>
-              </span>
+          {/* One flow rather than three overlays pinned to three corners:
+              justify-between keeps the controls and the title apart at any
+              height, instead of letting them meet in the middle. */}
+          <div className="absolute inset-0 flex flex-col justify-between gap-4 p-4 text-white sm:p-6">
+            <div className="flex items-start justify-between gap-2">
+            <TravellerBar
+              travellers={shares.map((s) => ({
+                id: s.memberId,
+                name: s.name,
+                owedLow: s.owedLow,
+                owedHigh: s.owedHigh,
+                isYou: s.memberId === youId,
+              }))}
+              total={estimate.low}
+              totalHigh={estimate.high}
+              currency={trip.currency}
+              selected={selected}
+              onSelect={setSelected}
+              onManage={() => setMembersOpen(true)}
+            />
+              <div className="flex shrink-0 gap-2">
+                {/* Sharing sits with the trip, not in a card down the page:
+                    it is something you do to the whole thing, and which
+                    traveller is selected changes what the link will show. */}
+                <Button size="sm" variant="secondary" onClick={() => setShareOpen(true)}>
+                  <Share2 className="mr-1 size-3.5" /> Share
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}>
+                  <Pencil className="mr-1 size-3.5" /> Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="bg-destructive/90 text-destructive-foreground hover:bg-destructive"
+                  onClick={() => setConfirmDelete(true)}
+                  aria-label="Delete trip"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
             </div>
-          </div>
-          <div className="absolute right-4 top-4 flex gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}>
-              <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="bg-destructive/90 text-destructive-foreground hover:bg-destructive"
-              onClick={() => setConfirmDelete(true)}
-              aria-label="Delete trip"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+
+            <div className="flex flex-col gap-2">
+              <Heading level="h1" className="text-white">{trip.title}</Heading>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
+                {trip.destination && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <MapPin className="size-4" /> {trip.destination}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarDays className="size-4" />
+                  <Mono>{formatDateRange(trip.startDate, trip.endDate)}</Mono>
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard
-          icon={CalendarDays}
-          label="Duration"
-          value={tripDurationLabel(trip.startDate, trip.endDate)}
-        />
-        <StatCard icon={ListChecks} label="Items" value={String(trip.items.length)} />
-        <StatCard
-          icon={DollarSign}
-          label="Est. total"
-          value={formatTripMoney(totalEstimate, trip.currency)}
-        />
-      </div>
 
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <div className="space-y-6">
-          <TripItinerary trip={trip} />
+      {/* min-w-0 on both columns: a grid track sized in `fr` still takes an
+          automatic minimum from its content, so the gallery's photo rail was
+          widening its own column and crushing the itinerary to a word per
+          line. The rail scrolls; the column must be allowed to be narrower
+          than it. */}
+      <div className="grid gap-6 lg:grid-cols-[5fr_3fr]">
+        <div className="flex flex-col gap-6 min-w-0">
+          {view === "list" ? (
+            <TripItinerary trip={trip} partySize={partySize} viewer={viewer} />
+          ) : (
+            <TripCalendar trip={trip} partySize={partySize} viewer={viewer} />
+          )}
         </div>
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6 min-w-0">
+          <TripPayments
+            tripId={trip.id}
+            currency={trip.currency}
+            travellers={shares.map((s) => ({
+              id: s.memberId,
+              name: s.name,
+              isYou: s.memberId === youId,
+              owedLow: s.owedLow,
+              owedHigh: s.owedHigh,
+            }))}
+            contributions={trip.contributions}
+            selected={selected}
+          />
           <TripGallery trip={trip} />
-          <TripSharePanel trip={trip} baseUrl={baseUrl} />
         </div>
       </div>
 
-      {trip.description && (
-        <Card>
-          <CardContent className="p-6">
-            <Eyebrow className="mb-2 block">About this trip</Eyebrow>
-            <Text className="whitespace-pre-wrap text-foreground/90">{trip.description}</Text>
-          </CardContent>
-        </Card>
+      {membersOpen && (
+        <MembersDialog
+          tripId={trip.id}
+          members={trip.members.map((m) => ({
+            id: m.id,
+            name: m.name,
+            email: m.email ?? "",
+            sharePercent: m.sharePercent === null ? "" : String(m.sharePercent),
+          }))}
+          onClose={() => setMembersOpen(false)}
+        />
       )}
+
+      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Share this trip</DialogTitle>
+            <DialogDescription>
+              A private link anyone can open — no account needed. Revoke it and
+              it stops working.
+            </DialogDescription>
+          </DialogHeader>
+          <TripSharePanel
+            trip={trip}
+            baseUrl={baseUrl}
+            // Only where the picker starts: the dialog asks for itself now.
+            scopeToMemberId={selected}
+          />
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
@@ -216,29 +389,5 @@ export function TripDetail({ trip, baseUrl }: TripDetailProps) {
         </AlertDialogContent>
       </AlertDialog>
     </section>
-  );
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-}) {
-  return (
-    <Card>
-      <CardContent className={cn("flex items-center gap-3 p-4")}>
-        <div className="rounded-md bg-primary/10 p-2 text-primary">
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0">
-          <Text variant="small" className="uppercase tracking-wider">{label}</Text>
-          <Text weight="semibold" className="truncate tabular-nums">{value}</Text>
-        </div>
-      </CardContent>
-    </Card>
   );
 }

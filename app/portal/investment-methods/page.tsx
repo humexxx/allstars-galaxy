@@ -1,31 +1,10 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { db } from "@/db";
-import { investmentMethods } from "@/db/schema";
-import { asc } from "drizzle-orm";
-
-import { InvestmentMethodsView } from "@/components/portfolio/investment-methods-view";
-import { PortalPageContainer } from "@/components/portal/page-container";
-
-export const metadata: Metadata = {
-  title: "Investment Methods",
-  description: "Explore available investment methods and strategies",
-};
-
-export const dynamic = "force-dynamic";
-
-export default async function InvestmentMethodsPage() {
-  // Fetch enabled + disabled. The view hides disabled methods by default; the
-  // dev drawer exposes a toggle to reveal them. Keeping the filter client-side
-  // avoids a second round-trip when a tester flips it.
-  const methods = await db
-    .select()
-    .from(investmentMethods)
-    .orderBy(asc(investmentMethods.author), asc(investmentMethods.name));
-
-  return (
-    <PortalPageContainer>
-      <InvestmentMethodsView methods={methods} />
-    </PortalPageContainer>
-  );
+/**
+ * The methods catalogue now lives inside Portfolio (Methods tab). This route
+ * stays as a permanent redirect rather than a 404 because the landing page
+ * links here from two places, and the URL may be bookmarked.
+ */
+export default function InvestmentMethodsPage() {
+  redirect("/portal/portfolio");
 }

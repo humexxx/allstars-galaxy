@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import type { UserListItem } from "@/types";
+import type { UserRole } from "@/types/user";
 
 export async function getAllUsers(): Promise<UserListItem[]> {
   return await db
@@ -20,7 +21,7 @@ export async function getAllUsers(): Promise<UserListItem[]> {
 
 export async function updateUserRole(
   userId: string,
-  role: "admin" | "user"
+  role: UserRole
 ): Promise<void> {
   await db.update(users).set({ role, updatedAt: new Date() }).where(eq(users.id, userId));
 }

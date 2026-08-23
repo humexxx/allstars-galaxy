@@ -6,6 +6,12 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Text } from "@/components/ui/typography";
@@ -106,7 +112,15 @@ export function PhotoPicker({
         .from(BUCKET)
         .upload(key, file, { cacheControl: "31536000", upsert: false });
       if (uploadErr) {
-        toast.error(uploadErr.message);
+        // Supabase says "Bucket not found", which reads like a broken app
+        // rather than one-time setup nobody has done. Name the fix.
+        const missingBucket = /bucket not found/i.test(uploadErr.message);
+        toast.error(
+          missingBucket
+            ? `Storage isn't set up yet — create a public bucket named "${BUCKET}" in Supabase. Until then, add photos with the URL tab.`
+            : uploadErr.message,
+          missingBucket ? { duration: 10_000 } : undefined
+        );
         return;
       }
       const { data } = supabase.storage.from(BUCKET).getPublicUrl(key);
@@ -119,7 +133,7 @@ export function PhotoPicker({
 
   if (variant === "compact") {
     return (
-      <div className="flex flex-wrap items-center gap-2">
+      <>
         <input
           ref={fileRef}
           type="file"
@@ -130,44 +144,50 @@ export function PhotoPicker({
             if (f) handleFile(f);
           }}
         />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled || busy}
-          onClick={() => fileRef.current?.click()}
-        >
-          {busy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />}
-          Upload
-        </Button>
-        <Input
-          placeholder="…or paste image URL"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              handleUrlAdd();
-            }
-          }}
-          disabled={disabled || busy}
-          className="h-8 max-w-xs"
-        />
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={disabled || busy || !url.trim()}
-          onClick={handleUrlAdd}
-        >
-          Add
-        </Button>
-      </div>
+        {/* One control, not three stacked ones. Upload, paste and add are
+            three ways to do the same thing, and a narrow side column wrapped
+            them onto three lines as though they were three steps. */}
+        <InputGroup>
+          <InputGroupAddon>
+            <InputGroupButton
+              type="button"
+              size="icon-xs"
+              disabled={disabled || busy}
+              onClick={() => fileRef.current?.click()}
+              aria-label="Upload an image"
+              title="Upload an image"
+            >
+              {busy ? <Loader2 className="animate-spin" /> : <Upload />}
+            </InputGroupButton>
+          </InputGroupAddon>
+          <InputGroupInput
+            placeholder="Paste an image URL"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleUrlAdd();
+              }
+            }}
+            disabled={disabled || busy}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              type="button"
+              disabled={disabled || busy || !url.trim()}
+              onClick={handleUrlAdd}
+            >
+              Add
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      </>
     );
   }
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2 ">
       {previewUrl && (
         <div className="relative w-full overflow-hidden rounded-md border">
           <div
@@ -183,23 +203,23 @@ export function PhotoPicker({
               type="button"
               size="icon"
               variant="secondary"
-              className={cn("absolute right-2 top-2 h-7 w-7")}
+              className={cn("absolute right-2 top-2 size-7")}
               onClick={onClear}
               aria-label="Remove photo"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="size-3.5" />
             </Button>
           )}
         </div>
       )}
 
-      <Tabs defaultValue="upload" className="space-y-3">
+      <Tabs defaultValue="upload" className="flex flex-col gap-3 ">
         <TabsList className="h-8">
           <TabsTrigger value="upload" className="text-xs">Upload</TabsTrigger>
           <TabsTrigger value="url" className="text-xs">Paste URL</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="upload" className="space-y-2">
+        <TabsContent value="upload" className="flex flex-col gap-2 ">
           <input
             ref={fileRef}
             type="file"
@@ -219,18 +239,18 @@ export function PhotoPicker({
           >
             {busy ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Uploading…
+                <Loader2 className="mr-2 size-4 animate-spin" /> Uploading…
               </>
             ) : (
               <>
-                <Upload className="mr-2 h-4 w-4" /> Choose image
+                <Upload className="mr-2 size-4" /> Choose image
               </>
             )}
           </Button>
           <Text variant="small">JPG, PNG, WebP up to 10 MB.</Text>
         </TabsContent>
 
-        <TabsContent value="url" className="space-y-2">
+        <TabsContent value="url" className="flex flex-col gap-2 ">
           <Label htmlFor="photo-url" className="sr-only">Image URL</Label>
           <div className="flex gap-2">
             <Input

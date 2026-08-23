@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Text } from "@/components/ui/typography";
 
 type ShareCtaProps = {
@@ -14,26 +13,24 @@ type ShareCtaProps = {
   shareToken: string;
 };
 
+/**
+ * The way in, on the bar rather than in front of the trip.
+ *
+ * It used to be a card above the itinerary — a paragraph, an icon and two
+ * buttons standing between somebody and the thing they were sent to look at.
+ * Whoever shared the link wanted the trip read, not the product pitched.
+ */
 export function ShareCta({ inviteeEmail, currentUserEmail, shareToken }: ShareCtaProps) {
   const nextPath = `/trips/${shareToken}`;
 
-  // Signed in already → no signup nudge. Quietly point them to their planner.
+  // Signed in already → no signup nudge. Quietly point them at their planner.
   if (currentUserEmail) {
     return (
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="flex flex-col items-start justify-between gap-3 p-4 sm:flex-row sm:items-center">
-          <Text variant="body">
-            You&apos;re signed in as{" "}
-            <Text as="span" weight="medium">{currentUserEmail}</Text>. Plan your own trip in the
-            portal.
-          </Text>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/portal/entertainment/travel-planner">
-              Open my trips <ArrowRight className="ml-1 h-3.5 w-3.5" />
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
+      <Button asChild size="sm" variant="ghost">
+        <Link href="/portal/entertainment/travel-planner">
+          My trips <ArrowRight className="ml-1 size-3.5" />
+        </Link>
+      </Button>
     );
   }
 
@@ -43,40 +40,27 @@ export function ShareCta({ inviteeEmail, currentUserEmail, shareToken }: ShareCt
   const loginHref = `/login?next=${encodeURIComponent(nextPath)}`;
 
   return (
-    <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-      <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <span className="rounded-md bg-primary/10 p-2 text-primary">
-            <Sparkles className="h-4 w-4" />
-          </span>
-          <div>
-            <Text variant="body" weight="semibold">Plan your own trip with Allstars Galaxy</Text>
-            <Text variant="small">
-              {inviteeEmail ? (
-                <>
-                  Create an account as{" "}
-                  <Text as="span" weight="medium" className="text-foreground">
-                    {inviteeEmail}
-                  </Text>{" "}
-                  or continue with a social provider.
-                </>
-              ) : (
-                <>Create an account in seconds — free for personal use.</>
-              )}
-            </Text>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button asChild size="sm" variant="ghost">
-            <Link href={loginHref}>Sign in</Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link href={signupHref}>
-              {inviteeEmail ? "Continue" : "Sign up"} <ArrowRight className="ml-1 h-3.5 w-3.5" />
-            </Link>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-1">
+      {/* The label the link was created with, so signing up does not ask for
+          an address the sender already knew. Hidden on a phone, where the bar
+          has room for the buttons and nothing else. */}
+      {inviteeEmail && (
+        <Text variant="small" className="mr-2 hidden truncate sm:block">
+          Invited as{" "}
+          <Text as="span" weight="medium" className="text-foreground">
+            {inviteeEmail}
+          </Text>
+        </Text>
+      )}
+      <Button asChild size="sm" variant="ghost">
+        <Link href={loginHref}>Sign in</Link>
+      </Button>
+      <Button asChild size="sm">
+        <Link href={signupHref}>
+          {inviteeEmail ? "Continue" : "Sign up"}
+          <ArrowRight className="ml-1 size-3.5" />
+        </Link>
+      </Button>
+    </div>
   );
 }

@@ -3,9 +3,7 @@ import { notFound } from "next/navigation";
 import { format } from "date-fns";
 
 import { PublicTripViewRenderer } from "@/components/travel/public-trip-view";
-import { ShareCta } from "@/components/travel/share-cta";
 import { getBaseUrl } from "@/lib/env";
-import { getCurrentUser } from "@/lib/services/auth-server";
 import { getPublicTripByToken } from "@/lib/services/travel-service";
 
 export const dynamic = "force-dynamic";
@@ -88,19 +86,13 @@ export default async function PublicTripPage({
   params: Promise<Params>;
 }) {
   const { token } = await params;
+  // Independent: who is reading does not depend on what the token resolves to.
+  // Awaiting them in turn made the session lookup wait out the trip query for
+  // no reason. A bad token now costs one wasted session read, which is the
+  // rare case and the cheap one.
+  // `React.cache` means the layout above already paid for this.
   const view = await getPublicTripByToken(token);
   if (!view) notFound();
 
-  const currentUser = await getCurrentUser();
-
-  return (
-    <div className="space-y-6">
-      <ShareCta
-        inviteeEmail={view.share.inviteeEmail}
-        currentUserEmail={currentUser?.email ?? null}
-        shareToken={token}
-      />
-      <PublicTripViewRenderer view={view} />
-    </div>
-  );
+  return <PublicTripViewRenderer view={view} />;
 }

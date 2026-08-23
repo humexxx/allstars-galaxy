@@ -69,7 +69,7 @@ function AssetRow({ asset }: { asset: PortfolioAsset }) {
             )}
           </div>
           <Mono className="text-xs text-muted-foreground tabular-nums">
-            {asset.investmentMethod.author}
+            {asset.investmentMethod.name}
             {asset.investmentMethod.monthlyRoi !== undefined &&
               ` · ${asset.investmentMethod.monthlyRoi}% ROI/mo`}
           </Mono>

@@ -1,3 +1,4 @@
+import type { UserRole } from "@/types/user";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "@supabase/supabase-js";
 
@@ -47,6 +48,7 @@ import {
   requireAdminOrRedirect,
   requireAuth,
   requireAuthCached,
+  requireProvider,
 } from "./auth-server";
 
 const dbMock = vi.mocked(db, true);
@@ -69,7 +71,7 @@ function seedUser(user: User | null) {
   getUserMock.mockResolvedValue({ data: { user }, error: null });
 }
 
-function seedRole(role: "admin" | "user" | null) {
+function seedRole(role: UserRole | null) {
   const rows = role === null ? [] : [{ role }];
   const chain = {
     from: vi.fn().mockReturnThis(),
@@ -261,5 +263,27 @@ describe("requireAdminOrRedirect", () => {
 
     await expect(requireAdminOrRedirect("/login")).rejects.toBeInstanceOf(RedirectSentinel);
     expect(redirectMock).toHaveBeenCalledWith("/login");
+  });
+});
+
+describe("requireProvider", () => {
+  it("lets a provider through", async () => {
+    seedRole("provider");
+    await expect(requireProvider()).resolves.toBeTruthy();
+  });
+
+  it("lets an admin through — an admin can do anything a provider can", async () => {
+    seedRole("admin");
+    await expect(requireProvider()).resolves.toBeTruthy();
+  });
+
+  it("refuses a plain client", async () => {
+    seedRole("user");
+    await expect(requireProvider()).rejects.toThrow(/provider access required/i);
+  });
+
+  it("refuses an account with no role at all", async () => {
+    seedRole(null);
+    await expect(requireProvider()).rejects.toThrow(/provider access required/i);
   });
 });

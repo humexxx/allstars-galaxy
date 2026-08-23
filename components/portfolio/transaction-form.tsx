@@ -134,7 +134,6 @@ export function TransactionForm({
           </div>
           <div className="flex flex-col">
             <span className="font-medium">{selectedMethod.name}</span>
-            <span className="text-xs text-muted-foreground">{selectedMethod.author}</span>
           </div>
         </div>
         <svg

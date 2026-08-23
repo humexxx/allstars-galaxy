@@ -11,7 +11,6 @@ async function seed() {
     await db.insert(investmentMethods).values({
       name: 'Safe Investment',
       description: 'A low-risk method ideal for conservative investors.',
-      author: 'Humexxx',
       riskLevel: 'Low',
       monthlyRoi: "0.7"
     }).onConflictDoNothing();

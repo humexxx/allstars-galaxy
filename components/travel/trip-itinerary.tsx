@@ -1,64 +1,73 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import Image from "next/image";
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import {
-  Bed,
+  ListOrdered,
   ExternalLink,
-  Pencil,
-  Plane,
   Plus,
-  ShoppingBag,
-  Sparkles,
-  Tag,
-  Trash2,
-  Utensils,
-  X,
 } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
 } from "@/components/ui/select";
 import { Heading, Mono, Text } from "@/components/ui/typography";
-import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
 
 import {
-  addTripItemAction,
-  deleteTripItemAction,
-  updateTripItemAction,
 } from "@/app/actions/travel";
-import type { TripItem, TripItemCategory, TripWithRelations } from "@/types/travel";
+import type {
+  TripItemWithStops,
+  TripWithRelations,
+} from "@/types/travel";
 
-import { formatTripMoney } from "@/lib/travel/format";
+import {
+  dayGroupLabel,
+  formatTripMoney,
+  moneyRange,
+  runsUntil,
+} from "@/lib/travel/format";
+import { ActivityVideo } from "@/components/travel/activity-video";
+import { ItemItinerary } from "@/components/travel/item-itinerary";
+import {
+} from "@/lib/travel/item-fields";
+import { itemCost, unitSuffix } from "@/lib/travel/pricing";
+import { CategoryIcon, categoryMeta } from "@/components/travel/category";
+import { ItemForm } from "@/components/travel/item-form";
+import { readerCost, type ItineraryViewer } from "@/lib/travel/viewer";
+export type { ItineraryViewer };
 
-const CATEGORIES: { value: TripItemCategory; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
-  { value: "lodging", label: "Lodging", Icon: Bed },
-  { value: "transport", label: "Transport", Icon: Plane },
-  { value: "food", label: "Food", Icon: Utensils },
-  { value: "activity", label: "Activity", Icon: Sparkles },
-  { value: "shopping", label: "Shopping", Icon: ShoppingBag },
-  { value: "other", label: "Other", Icon: Tag },
-];
-
-function categoryMeta(c: TripItemCategory) {
-  return CATEGORIES.find((x) => x.value === c) ?? CATEGORIES[CATEGORIES.length - 1];
-}
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const NO_DATE_KEY = "__no_date__";
 
-function groupByDay(items: TripItem[]): Array<{ key: string; label: string; items: TripItem[]; total: number }> {
-  const groups = new Map<string, TripItem[]>();
+function groupByDay(
+  items: TripItemWithStops[],
+  partySize: number,
+  viewer: ItineraryViewer | null
+): Array<{
+  key: string;
+  label: string;
+  items: TripItemWithStops[];
+  low: number;
+  high: number;
+}> {
+  const groups = new Map<string, TripItemWithStops[]>();
   for (const item of items) {
     const key = item.scheduledOn ?? NO_DATE_KEY;
     const arr = groups.get(key);
@@ -70,77 +79,126 @@ function groupByDay(items: TripItem[]): Array<{ key: string; label: string; item
   if (groups.has(NO_DATE_KEY)) dateKeys.push(NO_DATE_KEY);
   return dateKeys.map((key) => {
     const arr = groups.get(key)!;
-    const total = arr.reduce((sum, it) => {
-      if (!it.price) return sum;
-      const n = parseFloat(it.price);
-      return Number.isFinite(n) ? sum + n : sum;
-    }, 0);
+    // Both ends, summed from the same figures the rows show, so the subtotal
+    // is always the visible arithmetic. It used to take `tripCost(...).low`
+    // and report a $600–$800 flight plus a $200–$400 hotel as a flat $800.
+    let low = 0;
+    let high = 0;
+    for (const item of arr) {
+      if (item.price === null) continue;
+      const cost = readerCost(item, partySize, viewer);
+      low += cost.low;
+      high += cost.high;
+    }
     const label =
-      key === NO_DATE_KEY
-        ? "Unscheduled"
-        : format(parseDate(key), "EEEE, MMM d");
-    return { key, label, items: arr, total };
+      key === NO_DATE_KEY ? "Unscheduled" : dayGroupLabel(key, runsUntil(arr));
+    return { key, label, items: arr, low, high };
   });
-}
-
-function parseDate(value: string): Date {
-  const [y, m, d] = value.split("-").map(Number);
-  return new Date(y, m - 1, d);
 }
 
 type TripItineraryProps = {
   trip: TripWithRelations;
+  /** Travellers the per-person prices apply to. Defaults to one until the
+   *  trip has members — a plan for nobody is not a thing. */
+  partySize?: number;
+  /** Whose money the figures are in. Null shows what the trip costs. */
+  viewer?: ItineraryViewer | null;
 };
 
-export function TripItinerary({ trip }: TripItineraryProps) {
+export function TripItinerary({
+  trip,
+  partySize = 1,
+  viewer = null,
+}: TripItineraryProps) {
   const [adding, setAdding] = useState(false);
-  const groups = useMemo(() => groupByDay(trip.items), [trip.items]);
+  const groups = useMemo(
+    () => groupByDay(trip.items, partySize, viewer),
+    [trip.items, partySize, viewer]
+  );
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle>Itinerary</CardTitle>
-        <Button size="sm" variant="outline" onClick={() => setAdding((v) => !v)}>
-          {adding ? <X className="mr-1 h-3.5 w-3.5" /> : <Plus className="mr-1 h-3.5 w-3.5" />}
-          {adding ? "Cancel" : "Add item"}
-        </Button>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          Itinerary
+          {/* The count belongs with the thing it counts, not in the banner. */}
+          {trip.items.length > 0 && (
+            <Badge variant="secondary" className="text-2xs font-normal">
+              {trip.items.length}
+            </Badge>
+          )}
+          {/* Every price below is one person's, and a reader who missed the
+              click upstairs would otherwise read them as the trip's. */}
+          {viewer && (
+            <Badge variant="outline" className="text-2xs font-normal">
+              {viewer.isYou ? "your share" : `${viewer.name}'s share`}
+            </Badge>
+          )}
+        </CardTitle>
+        <CardAction>
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+            <Plus className="mr-1 size-3.5" /> Add item
+          </Button>
+        </CardAction>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {adding && (
-          <ItemForm
-            tripId={trip.id}
-            defaultDate={trip.startDate}
-            onDone={() => setAdding(false)}
+      <CardContent className="flex flex-col gap-6 ">
+        {groups.length === 0 && (
+          <EmptyState
+            icon={ListOrdered}
+            title="Nothing planned yet"
+            description="Add lodging, transport, activities — anything with a link or a price."
+            className="border-dashed"
           />
         )}
 
-        {groups.length === 0 && !adding && (
-          <Text
-            variant="muted"
-            className="rounded-md border border-dashed p-6 text-center"
-          >
-            No items yet. Add lodging, transport, activities or anything with a link or price.
-          </Text>
-        )}
-
         {groups.map((group) => (
-          <section key={group.key} className="space-y-2">
-            <div className="flex items-end justify-between border-b pb-1">
+          <section key={group.key} className="flex flex-col gap-2 ">
+            {/* Nothing is reserved at the right of a row any more — the row
+                itself is the control — so the subtotal and the prices it adds
+                up share one edge with no spacer to keep in step. */}
+            <div className="flex items-end justify-between gap-2 border-b pb-1">
               <Heading level="h6" as="h3">{group.label}</Heading>
-              {group.total > 0 && (
-                <Mono className="text-xs text-muted-foreground">
-                  {formatTripMoney(group.total, trip.currency)}
+              {group.high > 0 && (
+                <Mono className="shrink-0 text-xs text-muted-foreground">
+                  {moneyRange(group.low, group.high, trip.currency)}
                 </Mono>
               )}
             </div>
-            <ul className="divide-y">
+            <ul className="-mx-2 divide-y">
               {group.items.map((item) => (
-                <ItemRow key={item.id} tripId={trip.id} item={item} currency={trip.currency} />
+                <ItemRow
+                  key={item.id}
+                  tripId={trip.id}
+                  item={item}
+                  currency={trip.currency}
+                  partySize={partySize}
+                  viewer={viewer}
+                />
               ))}
             </ul>
           </section>
         ))}
       </CardContent>
+
+      {/* One form, one place it appears — adding and editing are the same
+          work, and having one expand the card while the other opened a
+          dialog made them look like different things. */}
+      <Dialog open={adding} onOpenChange={setAdding}>
+        <DialogContent className="max-h-[90vh] sm:max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add to the itinerary</DialogTitle>
+            <DialogDescription>
+              A flight, a hotel, a cruise — anything with a date, a link or a price.
+            </DialogDescription>
+          </DialogHeader>
+          <ItemForm
+            tripId={trip.id}
+            defaultDate={trip.startDate}
+            currency={trip.currency}
+            onDone={() => setAdding(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -149,58 +207,112 @@ function ItemRow({
   tripId,
   item,
   currency,
+  partySize,
+  viewer,
 }: {
   tripId: string;
-  item: TripItem;
+  item: TripItemWithStops;
   currency: string;
+  /** How many people the per-person prices apply to. */
+  partySize: number;
+  viewer: ItineraryViewer | null;
 }) {
-  const router = useRouter();
   const [editing, setEditing] = useState(false);
-  const [isPending, startTransition] = useTransition();
   const meta = categoryMeta(item.category);
-  const Icon = meta.Icon;
+  const cost = itemCost(item, partySize);
+  // The row leads with whatever the day subtotal is adding up, or the two
+  // disagree on screen and neither can be checked against the other.
+  const mine = readerCost(item, partySize, viewer);
 
-  const handleDelete = () => {
-    startTransition(async () => {
-      const res = await deleteTripItemAction(tripId, item.id);
-      if (res.success) {
-        toast.success("Item removed");
-        router.refresh();
-      } else {
-        toast.error(res.error);
-      }
-    });
+  /**
+   * The row is the target, the way the payments list is.
+   *
+   * Not a `<button>`: the row holds a link, a disclosure and sometimes a video
+   * embed, and nesting those inside a button is invalid and unusable with a
+   * screen reader. So the container listens, and steps aside for anything
+   * that handles its own clicks — and for a click that ends a text selection,
+   * which is a read, not a press.
+   */
+  const openEditor = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('a, button, input, textarea, [role="button"], iframe')) return;
+    // `=== false` on purpose: getSelection() is null in some webviews,
+    // and `!undefined` would swallow every click on the row.
+    if (window.getSelection()?.isCollapsed === false) return;
+    setEditing(true);
   };
 
-  if (editing) {
-    return (
-      <li className="py-3">
-        <ItemForm
-          tripId={tripId}
-          item={item}
-          defaultDate={item.scheduledOn}
-          onDone={() => setEditing(false)}
-        />
-      </li>
-    );
-  }
-
   return (
-    <li className="group flex items-start gap-3 py-3">
-      <div className="rounded-md bg-muted p-1.5 text-muted-foreground">
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0 flex-1 space-y-0.5">
+    <>
+    <li
+      // Padded, not just spaced: the row is a target now, and a hover
+      // tint that stops at the text reads as a highlight rather than a row.
+      className="group relative flex cursor-pointer items-start gap-3 rounded-md px-2 py-3 transition-colors hover:bg-muted/40"
+      onClick={openEditor}
+    >
+      <CategoryIcon category={item.category} />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-baseline justify-between gap-2">
-          <Text weight="medium" className="truncate">{item.title}</Text>
+          {/* The keyboard's way in, since a container cannot be the button. */}
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            // No hover state of its own: the row already lights up, and a
+            // second one on the title reads as a link to somewhere else.
+            className="min-w-0 cursor-pointer truncate text-left font-medium outline-none focus-visible:underline"
+          >
+            {item.title}
+          </button>
           {item.price && (
-            <Mono className="text-xs font-medium">
-              {formatTripMoney(parseFloat(item.price), currency)}
-            </Mono>
+            <span className="shrink-0 text-right">
+              <Mono className="block whitespace-nowrap text-xs font-medium">
+                {moneyRange(mine.low, mine.high, currency)}
+              </Mono>
+              {viewer ? (
+                // Their share leads, but the booking price is what you would
+                // actually see on the hotel's site, so it stays in view.
+                <Mono className="block text-2xs text-muted-foreground">
+                  of {moneyRange(cost.low, cost.high, currency)}
+                </Mono>
+              ) : (
+                <>
+                  {/* Show the arithmetic. A hotel that reads $400 when you
+                      typed $200 looks wrong until you can see the x2. */}
+                  {cost.times > 1 && (
+                    <Mono className="block whitespace-nowrap text-2xs text-muted-foreground">
+                      {formatTripMoney(cost.unitLow ?? 0, currency)}
+                      {cost.unitHigh !== null && cost.unitHigh > (cost.unitLow ?? 0) && (
+                        <>–{formatTripMoney(cost.unitHigh, currency)}</>
+                      )}{" "}
+                      {unitSuffix(item.priceUnit)} × {cost.times}
+                    </Mono>
+                  )}
+                  {cost.times === 1 && item.priceUnit !== "total" && (
+                    <Mono className="block text-2xs text-muted-foreground">
+                      {unitSuffix(item.priceUnit)}
+                    </Mono>
+                  )}
+                </>
+              )}
+            </span>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
           <span className="capitalize">{meta.label}</span>
+          {(item.fromCode || item.toCode) && (
+            <Mono className="text-2xs font-medium">
+              {item.fromCode ?? "?"}
+              {/* A double arrow says "and back" faster than the words do. */}
+              <span className="mx-1">{item.roundTrip ? "⇄" : "→"}</span>
+              {item.toCode ?? "?"}
+            </Mono>
+          )}
+          {item.endsOn && item.scheduledOn && item.endsOn !== item.scheduledOn && (
+            <span>
+              {item.roundTrip ? "back " : "through "}
+              {format(new Date(`${item.endsOn}T00:00:00`), "d MMM")}
+            </span>
+          )}
           {item.link && (
             <a
               href={item.link}
@@ -208,183 +320,63 @@ function ItemRow({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-primary hover:underline"
             >
-              <ExternalLink className="h-3 w-3" /> Link
+              <ExternalLink className="size-3" /> Link
             </a>
           )}
         </div>
         {item.notes && (
           <Text variant="small" className="line-clamp-2">{item.notes}</Text>
         )}
-      </div>
-      {/* Always visible on touch (no hover); hover/focus-revealed on desktop. */}
-      <div className="flex shrink-0 gap-0.5 transition-opacity sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover:opacity-100">
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-9 w-9 sm:h-7 sm:w-7"
-          onClick={() => setEditing(true)}
-          aria-label="Edit item"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-9 w-9 text-destructive hover:text-destructive sm:h-7 sm:w-7"
-          disabled={isPending}
-          onClick={handleDelete}
-          aria-label="Delete item"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+        {item.stops && item.stops.length > 0 && (
+          <ItemItinerary stops={item.stops} />
+        )}
+        {item.photos.length > 0 && (
+          <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 pt-1">
+            {item.photos.map((photo) => (
+              <div
+                key={photo.id}
+                className="relative aspect-square w-20 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
+              >
+                <Image
+                  src={photo.url}
+                  alt={photo.caption ?? ""}
+                  fill
+                  sizes="80px"
+                  className="object-cover"
+                  unoptimized
+                />
+              </div>
+            ))}
+          </div>
+        )}
+        {item.videoUrl && (
+          <div className="pt-2">
+            <ActivityVideo url={item.videoUrl} title={item.title} />
+          </div>
+        )}
       </div>
     </li>
-  );
-}
 
-function ItemForm({
-  tripId,
-  item,
-  defaultDate,
-  onDone,
-}: {
-  tripId: string;
-  item?: TripItem;
-  defaultDate?: string | null;
-  onDone: () => void;
-}) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [title, setTitle] = useState(item?.title ?? "");
-  const [category, setCategory] = useState<TripItemCategory>(item?.category ?? "activity");
-  const [link, setLink] = useState(item?.link ?? "");
-  const [price, setPrice] = useState(item?.price ?? "");
-  const [scheduledOn, setScheduledOn] = useState(item?.scheduledOn ?? defaultDate ?? "");
-  const [notes, setNotes] = useState(item?.notes ?? "");
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) {
-      toast.error("Item needs a title");
-      return;
-    }
-    if (price && !/^\d+(\.\d{1,2})?$/.test(price)) {
-      toast.error("Price must be a non-negative number with up to 2 decimals");
-      return;
-    }
-
-    startTransition(async () => {
-      const payload = {
-        title: title.trim(),
-        category,
-        link: link.trim() || null,
-        price: price.trim() || null,
-        scheduledOn: scheduledOn || null,
-        notes: notes.trim() || null,
-      };
-      const res = item
-        ? await updateTripItemAction(tripId, { id: item.id, ...payload })
-        : await addTripItemAction(tripId, payload);
-      if (res.success) {
-        toast.success(item ? "Item updated" : "Item added");
-        router.refresh();
-        onDone();
-      } else {
-        toast.error(res.error);
-      }
-    });
-  };
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className={cn(
-        "space-y-3 rounded-md border bg-muted/30 p-3",
-        !item && "border-primary/30"
-      )}
-    >
-      <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
-        <div className="space-y-1.5">
-          <Label htmlFor={`title-${item?.id ?? "new"}`} className="text-xs">Title</Label>
-          <Input
-            id={`title-${item?.id ?? "new"}`}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Check-in at Hotel Bairro Alto"
-            required
-            autoFocus
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Category</Label>
-          <Select value={category} onValueChange={(v) => setCategory(v as TripItemCategory)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CATEGORIES.map(({ value, label, Icon }) => (
-                <SelectItem key={value} value={value}>
-                  <span className="inline-flex items-center gap-2">
-                    <Icon className="h-3.5 w-3.5" /> {label}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="space-y-1.5">
-          <Label htmlFor={`date-${item?.id ?? "new"}`} className="text-xs">Day</Label>
-          <Input
-            id={`date-${item?.id ?? "new"}`}
-            type="date"
-            value={scheduledOn ?? ""}
-            onChange={(e) => setScheduledOn(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`price-${item?.id ?? "new"}`} className="text-xs">Price</Label>
-          <Input
-            id={`price-${item?.id ?? "new"}`}
-            inputMode="decimal"
-            value={price ?? ""}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="0.00"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`link-${item?.id ?? "new"}`} className="text-xs">Link</Label>
-          <Input
-            id={`link-${item?.id ?? "new"}`}
-            type="url"
-            value={link ?? ""}
-            onChange={(e) => setLink(e.target.value)}
-            placeholder="https://booking.com/…"
-          />
-        </div>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor={`notes-${item?.id ?? "new"}`} className="text-xs">Notes</Label>
-        <Textarea
-          id={`notes-${item?.id ?? "new"}`}
-          value={notes ?? ""}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Reservation reference, confirmation code, who's coming…"
-          rows={2}
+    {/* In a dialog, not expanded in place. The form is long enough that
+        opening it inline pushed every item below it off the screen, and the
+        row you were editing left the viewport with them. */}
+    <Dialog open={editing} onOpenChange={setEditing}>
+      <DialogContent className="max-h-[90vh] sm:max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{item.title}</DialogTitle>
+          <DialogDescription>
+            Change the details, the dates or the price.
+          </DialogDescription>
+        </DialogHeader>
+        <ItemForm
+          tripId={tripId}
+          item={item}
+          defaultDate={item.scheduledOn}
+          currency={currency}
+          onDone={() => setEditing(false)}
         />
-      </div>
-
-      <div className="flex items-center justify-end gap-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onDone}>
-          Cancel
-        </Button>
-        <Button type="submit" size="sm" disabled={isPending}>
-          {isPending ? "Saving…" : item ? "Save" : "Add item"}
-        </Button>
-      </div>
-    </form>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

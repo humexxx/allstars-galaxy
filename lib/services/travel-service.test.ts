@@ -29,6 +29,9 @@ function makeSelectThenable(rows: SelectRows) {
   const thenable: Record<string, unknown> = {};
   const resolve = (cb: (rows: SelectRows) => unknown) => Promise.resolve(rows).then(cb);
   thenable.from = vi.fn(() => thenable);
+  // The stops query joins trip_items to scope by trip, so the chain has to
+  // survive an innerJoin too.
+  thenable.innerJoin = vi.fn(() => thenable);
   thenable.where = vi.fn(() => thenable);
   thenable.orderBy = vi.fn(() => Promise.resolve(rows));
   // Awaiting at the .where() boundary works via a thenable
@@ -189,21 +192,30 @@ describe("getTripWithRelations", () => {
     const items = [{ id: "i-1", tripId, title: "Hotel", category: "lodging" }];
     const photos = [{ id: "p-1", tripId, url: "https://x/y.jpg" }];
     const shares = [{ id: "s-1", tripId, token: "abc" }];
+    const stops = [{ id: "st-1", itemId: "i-1", dayNumber: 1, place: "At sea" }];
+    const members = [{ id: "m-1", name: "Ana", email: null, sharePercent: null }];
 
     queueSelect([trip]);
     queueSelect(items);
     queueSelect(photos);
     queueSelect(shares);
+    queueSelect(stops);
+    queueSelect(members);
 
     const out = await getTripWithRelations(tripId, USER_ID);
 
     expect(out).not.toBeNull();
     expect(out?.id).toBe(tripId);
-    expect(out?.items).toEqual(items);
     expect(out?.photos).toEqual(photos);
     expect(out?.shares).toEqual(shares);
-    // 1 for the trip + 3 parallel queries for relations
-    expect(dbMock.select).toHaveBeenCalledTimes(4);
+    // Each item carries its own stops, attached from the single stops query
+    // rather than one query per item.
+    expect(out?.items).toEqual([{ ...items[0], stops, photos: [] }]);
+    expect(out?.members).toEqual(members);
+    // 1 for the trip + 6 parallel queries for relations. The count is the
+    // point: every relation is one query for the whole trip, so adding a
+    // relation must not add a query per row.
+    expect(dbMock.select).toHaveBeenCalledTimes(7);
   });
 });
 
@@ -415,6 +427,64 @@ describe("createTripShare", () => {
   });
 });
 
+describe("createTripShare — scoped to one traveller", () => {
+  it("refuses a traveller who belongs to somebody else's trip", async () => {
+    // The foreign key proves the member row exists; it says nothing about
+    // which trip it is on. Without this check a member id lifted from another
+    // trip would be accepted and the link would resolve against it.
+    queueSelect([{ userId: USER_ID }]); // ownership
+    queueSelect([]); // membership lookup finds nothing on THIS trip
+
+    await expect(
+      createTripShare(USER_ID, TRIP_ID, {
+        memberId: "11111111-1111-1111-1111-111111111111",
+      } as unknown as Parameters<typeof createTripShare>[2])
+    ).rejects.toThrow(/not found on this trip/i);
+
+    expect(dbMock.insert).not.toHaveBeenCalled();
+  });
+
+  it("carries prices when it is scoped, and hides them when it is not", async () => {
+    // A link that names one traveller exists to show that traveller their own
+    // bill. Inheriting the cautious default would hide the only thing the
+    // scoping was for.
+    queueSelect([{ userId: USER_ID }]);
+    queueSelect([{ id: "m1" }]);
+    queueInsert([{ id: "s1" }]);
+
+    await createTripShare(USER_ID, TRIP_ID, {
+      memberId: "m1",
+    } as unknown as Parameters<typeof createTripShare>[2]);
+
+    const call = dbMock.insert.mock.results[0]?.value as unknown as {
+      values: { mock: { calls: unknown[][] } };
+    };
+    const payload = call.values.mock.calls[0][0] as {
+      memberId: string | null;
+      showPrices: boolean;
+    };
+    expect(payload).toMatchObject({ memberId: "m1", showPrices: true });
+  });
+
+  it("leaves an unscoped link with prices hidden", async () => {
+    queueSelect([{ userId: USER_ID }]);
+    queueInsert([{ id: "s2" }]);
+
+    await createTripShare(USER_ID, TRIP_ID, {
+      inviteeEmail: null,
+    } as unknown as Parameters<typeof createTripShare>[2]);
+
+    const call = dbMock.insert.mock.results[0]?.value as unknown as {
+      values: { mock: { calls: unknown[][] } };
+    };
+    const payload = call.values.mock.calls[0][0] as {
+      memberId: string | null;
+      showPrices: boolean;
+    };
+    expect(payload).toMatchObject({ memberId: null, showPrices: false });
+  });
+});
+
 describe("revokeTripShare", () => {
   it("sets revokedAt on the share after ownership check", async () => {
     queueSelect([{ userId: USER_ID }]);
@@ -464,14 +534,94 @@ describe("getPublicTripByToken", () => {
     queueSelect([trip]); // trip lookup
     queueSelect(items); // items
     queueSelect(photos); // photos
+    queueSelect([]); // stops
 
     const out = await getPublicTripByToken("tok");
 
     expect(out).not.toBeNull();
     expect(out?.share).toEqual(share);
     expect(out?.trip).toEqual(trip);
-    expect(out?.items).toEqual(items);
+    // Items carry their stops: a cruise's ports are half of what its row
+    // says, and a link that hides them shows a booking, not a journey.
+    expect(out?.items).toEqual(items.map((i) => ({ ...i, stops: [], photos: [] })));
     expect(out?.photos).toEqual(photos);
+  });
+
+  it("hands a scoped link one traveller's figures and nobody else's", async () => {
+    // The whole point of scoping. Every member is needed to work out the
+    // split — their count sets the party size — but only the named
+    // traveller's numbers may leave the server. Filtering in the browser
+    // would put the others in the payload of a link created to hide them.
+    const share = {
+      id: "s-1", tripId: TRIP_ID, token: "tok", revokedAt: null, expiresAt: null,
+      inviteeEmail: null, memberId: "bruno", showPrices: true, createdAt: new Date(),
+    };
+    const items = [
+      { id: "i-1", tripId: TRIP_ID, title: "Flight", price: "600.00",
+        priceMax: "800.00", priceUnit: "total", scheduledOn: null, endsOn: null },
+    ];
+
+    queueSelect([share]);
+    queueSelect([tripFixture()]);
+    // One round: items, photos, members, payments. The scope reuses the items
+    // already fetched rather than querying them a second time.
+    queueSelect(items);
+    queueSelect([]); // photos
+    queueSelect([]); // stops
+    queueSelect([
+      { id: "jason", name: "Jason Hume", sharePercent: null },
+      { id: "bruno", name: "Bruno Fabián", sharePercent: null },
+    ]);
+    queueSelect([{ amount: "300.00" }]);
+
+    const out = await getPublicTripByToken("tok");
+
+    expect(out?.scope).toEqual({
+      memberName: "Bruno Fabián",
+      lines: [{ itemId: "i-1", low: 300, high: 400 }],
+      owedLow: 300,
+      owedHigh: 400,
+      paid: 300,
+    });
+    // Jason is nowhere in what crosses the boundary.
+    expect(JSON.stringify(out)).not.toContain("Jason");
+    // Five relation queries, not six: the scope reuses the items already in
+    // hand. Counting them is what keeps a second round trip from creeping
+    // back in behind the first.
+    expect(dbMock.select).toHaveBeenCalledTimes(7);
+  });
+
+  it("leaves an unscoped link with no traveller attached", async () => {
+    queueSelect([
+      { id: "s-1", tripId: TRIP_ID, token: "tok", revokedAt: null, expiresAt: null,
+        inviteeEmail: null, memberId: null, showPrices: false, createdAt: new Date() },
+    ]);
+    queueSelect([tripFixture()]);
+    queueSelect([]); // items
+    queueSelect([]); // photos
+    queueSelect([]); // stops
+
+    const out = await getPublicTripByToken("tok");
+    expect(out?.scope).toBeNull();
+  });
+
+  it("falls back to the whole trip when the scoped traveller is gone", async () => {
+    // The column is ON DELETE SET NULL so this is nearly unreachable, but a
+    // link that quietly reports somebody else's bill would be far worse than
+    // one that widens.
+    queueSelect([
+      { id: "s-1", tripId: TRIP_ID, token: "tok", revokedAt: null, expiresAt: null,
+        inviteeEmail: null, memberId: "ghost", showPrices: true, createdAt: new Date() },
+    ]);
+    queueSelect([tripFixture()]);
+    queueSelect([]); // items
+    queueSelect([]); // photos
+    queueSelect([]); // stops
+    queueSelect([{ id: "jason", name: "Jason Hume", sharePercent: null }]);
+    queueSelect([]); // payments
+
+    const out = await getPublicTripByToken("tok");
+    expect(out?.scope).toBeNull();
   });
 
   it("returns null when the token does not resolve to a share (or it's revoked)", async () => {

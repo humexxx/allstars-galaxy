@@ -10,8 +10,8 @@ import type { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { createTripAction, updateTripAction } from "@/app/actions/travel";
 import { createTripSchema, type CreateTripInput } from "@/schemas/travel";
 import type { Trip } from "@/types/travel";
@@ -79,11 +79,11 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6 ">
       <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="trip-title">Title</Label>
+            <div className="flex flex-col gap-4 ">
+              <Field className="gap-2">
+                <FieldLabel htmlFor="trip-title">Title</FieldLabel>
                 <Input
                   id="trip-title"
                   placeholder="Summer in Lisbon"
@@ -96,10 +96,10 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
                 {errors.title && (
                   <p className="text-sm text-destructive">{errors.title.message}</p>
                 )}
-              </div>
+              </Field>
 
-              <div className="space-y-2">
-                <Label htmlFor="trip-destination">Destination</Label>
+              <Field className="gap-2">
+                <FieldLabel htmlFor="trip-destination">Destination</FieldLabel>
                 <Input
                   id="trip-destination"
                   placeholder="Lisbon, Portugal"
@@ -107,18 +107,18 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
                     setValueAs: (v: string | null) => v?.trim() || null,
                   })}
                 />
-              </div>
+              </Field>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="trip-start">Start</Label>
+                <Field className="gap-2">
+                  <FieldLabel htmlFor="trip-start">Start</FieldLabel>
                   <Input id="trip-start" type="date" required {...register("startDate")} />
                   {errors.startDate && (
                     <p className="text-sm text-destructive">{errors.startDate.message}</p>
                   )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="trip-end">End</Label>
+                </Field>
+                <Field className="gap-2">
+                  <FieldLabel htmlFor="trip-end">End</FieldLabel>
                   <Input
                     id="trip-end"
                     type="date"
@@ -128,12 +128,12 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
                   {errors.endDate && (
                     <p className="text-sm text-destructive">{errors.endDate.message}</p>
                   )}
-                </div>
+                </Field>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="trip-currency">Currency</Label>
+              <Field className="gap-2">
+                <Field className="gap-2">
+                  <FieldLabel htmlFor="trip-currency">Currency</FieldLabel>
                   <Input
                     id="trip-currency"
                     maxLength={3}
@@ -147,47 +147,13 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
                   {errors.currency && (
                     <p className="text-sm text-destructive">{errors.currency.message}</p>
                   )}
-                </div>
-                <div className="space-y-2">
-                  <Label>Color</Label>
-                  <Controller
-                    control={control}
-                    name="color"
-                    render={({ field }) => (
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        {COLORS.map((c) => (
-                          <button
-                            key={c}
-                            type="button"
-                            aria-label={`Use color ${c}`}
-                            onClick={() => field.onChange(c)}
-                            className={`h-7 w-7 rounded-full border-2 ${
-                              field.value === c ? "border-foreground" : "border-transparent"
-                            }`}
-                            style={{ backgroundColor: c }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  />
-                </div>
-              </div>
+                </Field>
+              </Field>
 
-              <div className="space-y-2">
-                <Label htmlFor="trip-description">Notes</Label>
-                <Textarea
-                  id="trip-description"
-                  placeholder="What is this trip about?"
-                  rows={3}
-                  {...register("description", {
-                    setValueAs: (v: string | null) => v?.trim() || null,
-                  })}
-                />
-              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Cover photo</Label>
+            <Field className="gap-2">
+              <FieldLabel>Cover photo</FieldLabel>
               <Controller
                 control={control}
                 name="coverPhotoUrl"
@@ -200,8 +166,49 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
                   />
                 )}
               />
-            </div>
+            </Field>
+
       </div>
+
+      {/* Full width, below the two columns: five swatches wrapped into a ragged
+          3-2 block inside a half column, and a textarea is the one field that
+          genuinely wants the whole dialog. Both being in the left column is
+          also what made it tower over the cover photo beside it. */}
+      <Field className="gap-2">
+        <FieldLabel>Color</FieldLabel>
+        <Controller
+          control={control}
+          name="color"
+          render={({ field }) => (
+            <div className="flex flex-wrap items-center gap-2">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-label={`Use color ${c}`}
+                  onClick={() => field.onChange(c)}
+                  className={`size-7 rounded-full border-2 ${
+                    field.value === c ? "border-foreground" : "border-transparent"
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          )}
+        />
+      </Field>
+
+      <Field className="gap-2">
+        <FieldLabel htmlFor="trip-description">Notes</FieldLabel>
+        <Textarea
+          id="trip-description"
+          placeholder="What is this trip about?"
+          rows={3}
+          {...register("description", {
+            setValueAs: (v: string | null) => v?.trim() || null,
+          })}
+        />
+      </Field>
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={() => router.back()}>

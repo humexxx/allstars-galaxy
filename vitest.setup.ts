@@ -1,5 +1,18 @@
 import "@testing-library/jest-dom/vitest";
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
+
+// Unmount rendered components between tests. Vitest only auto-cleans when
+// `globals: true`, and this project runs with explicit imports — so without
+// this every render in a file stacks up in the same document and `screen`
+// queries match elements from earlier tests. The failure mode is nasty: a
+// passing assertion silently reads the PREVIOUS test's DOM, and negative
+// assertions ("this value is masked") fail against markup that is no longer
+// on screen. Only applies to jsdom files; Node-environment tests skip it.
+afterEach(async () => {
+  if (typeof document === "undefined") return;
+  const { cleanup } = await import("@testing-library/react");
+  cleanup();
+});
 
 // `server-only` is a Next.js marker package that throws at build time when
 // imported from the client bundle. In Vitest we are deliberately running
@@ -26,4 +39,15 @@ if (typeof global.fetch === "function") {
     "fetch",
     vi.fn(() => Promise.reject(new Error("fetch is disabled in unit tests"))),
   );
+}
+
+// jsdom ships no ResizeObserver, and components that measure their own text
+// (MarqueeText) observe one. A no-op keeps them mountable; the tests that care
+// about the measurement stage the widths themselves.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
 }

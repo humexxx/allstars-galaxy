@@ -1,13 +1,12 @@
 "use client";
 
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { Calendar, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { subDays } from "date-fns";
 
 import { Button } from "@/components/ui/button";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { Heading, Mono } from "@/components/ui/typography";
+import { Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { ChartConfig } from "@/types/chart";
 
@@ -18,7 +17,7 @@ const chartConfig = {
   },
 } satisfies ChartConfig;
 
-const RANGES = ["30d", "90d", "120d", "1yr", "All"] as const;
+const RANGES = ["1M", "3M", "YTD", "1Y", "All"] as const;
 type Range = (typeof RANGES)[number];
 
 type PerformanceChartProps = {
@@ -28,20 +27,21 @@ type PerformanceChartProps = {
   }>;
 };
 
-export function PerformanceChart({ data }: PerformanceChartProps) {
+export function PerformanceChart({
+  data,
+  hideValues = false,
+}: PerformanceChartProps & { hideValues?: boolean }) {
   const [timeRange, setTimeRange] = useState<Range>("All");
 
   const filteredData = useMemo(() => {
     if (timeRange === "All" || data.length === 0) return data;
 
     const now = new Date();
-    const days: Record<Exclude<Range, "All">, number> = {
-      "30d": 30,
-      "90d": 90,
-      "120d": 120,
-      "1yr": 365,
-    };
-    const startDate = subDays(now, days[timeRange]);
+    // YTD is a calendar boundary, not a rolling window — Jan 1 of this year.
+    const startDate =
+      timeRange === "YTD"
+        ? new Date(Date.UTC(now.getUTCFullYear(), 0, 1))
+        : subDays(now, { "1M": 30, "3M": 90, "1Y": 365 }[timeRange]);
     return data.filter((point) => new Date(point.date) >= startDate);
   }, [data, timeRange]);
 
@@ -61,7 +61,11 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
           </Heading>
           <div className="flex items-baseline gap-2">
             <Mono className="text-2xl font-semibold tabular-nums sm:text-3xl">
-              ${last.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              {hideValues
+                ? `${positive ? "+" : "−"}${Math.abs(deltaPct).toFixed(1)}%`
+                : `$${last.toLocaleString(undefined, {
+                    maximumFractionDigits: 2,
+                  })}`}
             </Mono>
             {filteredData.length > 1 && (
               <Mono
@@ -72,10 +76,33 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
                     : "text-rose-600 dark:text-rose-400"
                 )}
               >
-                {positive ? "↑" : "↓"} ${Math.abs(delta).toLocaleString(undefined, { maximumFractionDigits: 0 })} ({Math.abs(deltaPct).toFixed(1)}%)
+                {positive ? "↑" : "↓"}{" "}
+                {hideValues
+                  ? "over this range"
+                  : `$${Math.abs(delta).toLocaleString(undefined, {
+                      maximumFractionDigits: 0,
+                    })} (${Math.abs(deltaPct).toFixed(1)}%)`}
               </Mono>
             )}
           </div>
+        </div>
+        <div
+          role="group"
+          aria-label="Time range"
+          className="flex items-center gap-1"
+        >
+          {RANGES.map((r) => (
+            <Button
+              key={r}
+              variant="ghost"
+              size="sm"
+              data-active={timeRange === r}
+              className="h-7 rounded-full px-2.5 font-mono text-xs tabular-nums text-muted-foreground data-[active=true]:bg-foreground/5 data-[active=true]:text-foreground"
+              onClick={() => setTimeRange(r)}
+            >
+              {r}
+            </Button>
+          ))}
         </div>
       </div>
 
@@ -114,7 +141,13 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
             tickMargin={4}
             width={56}
             tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-            tickFormatter={(value) => `$${value.toLocaleString()}`}
+            tickFormatter={(value: number) =>
+              hideValues
+                ? first === 0
+                  ? ""
+                  : `${(((value - first) / first) * 100).toFixed(0)}%`
+                : `$${value.toLocaleString()}`
+            }
             domain={["auto", "auto"]}
           />
           <ChartTooltip
@@ -122,6 +155,16 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
             content={
               <ChartTooltipContent
                 indicator="line"
+                // Hovering must not leak the amount the axis is hiding.
+                formatter={(value) =>
+                  hideValues
+                    ? first === 0
+                      ? "—"
+                      : `${((((value as number) - first) / first) * 100).toFixed(1)}% vs start`
+                    : `$${(value as number).toLocaleString(undefined, {
+                        maximumFractionDigits: 2,
+                      })}`
+                }
                 labelFormatter={(value) => {
                   const date = new Date(value);
                   return date.toLocaleDateString("en-US", {
@@ -145,35 +188,16 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
         </AreaChart>
       </ChartContainer>
 
-      {/* Footer meta strip + time-range pills. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <div className="flex items-center gap-3 font-mono tabular-nums">
-          <span className="inline-flex items-center gap-1">
-            <Wallet className="size-3" />
-            {filteredData.length} pt{filteredData.length === 1 ? "" : "s"}
-          </span>
-          {filteredData[0] && (
-            <span className="inline-flex items-center gap-1">
-              <Calendar className="size-3" />
-              from {new Date(filteredData[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          {RANGES.map((r) => (
-            <Button
-              key={r}
-              variant="ghost"
-              size="sm"
-              data-active={timeRange === r}
-              className="h-7 rounded-full px-2.5 font-mono text-xs tabular-nums text-muted-foreground data-[active=true]:bg-foreground/5 data-[active=true]:text-foreground"
-              onClick={() => setTimeRange(r)}
-            >
-              {r}
-            </Button>
-          ))}
-        </div>
-      </div>
+      {filteredData[0] && (
+        <Text variant="small" className="text-muted-foreground">
+          {new Date(filteredData[0].date).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })}{" "}
+          — today
+        </Text>
+      )}
     </section>
   );
 }

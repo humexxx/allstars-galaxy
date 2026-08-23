@@ -1,7 +1,15 @@
 import { pgTable, jsonb, text, uuid, timestamp, pgSchema, real, pgEnum, numeric, index, boolean, integer, date, check, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
-export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
+// Three kinds of account, and the role answers exactly ONE question: may this
+// person create investment methods?
+//   user     — a client. Invests in methods, creates none.
+//   provider — offers methods that clients choose.
+//   admin    — everything a provider can do, plus impersonation and the admin area.
+// WHICH methods somebody runs is NOT here: that is `investment_methods
+// .owner_user_id`, which the whole app already keys off. Restating it in the
+// role would give two sources of truth that can disagree.
+export const userRoleEnum = pgEnum("user_role", ["admin", "provider", "user"]);
 export const riskLevelEnum = pgEnum("risk_level", ["Low", "Medium", "High"]);
 export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "approved", "rejected", "closed"]);
 export const transactionTypeEnum = pgEnum("transaction_type", ["buy", "withdrawal"]);
@@ -40,8 +48,13 @@ export const financePlanOverrideActionEnum = pgEnum(
   "finance_plan_override_action",
   ["skip", "reschedule", "amount"]
 );
+// `flight` and `cruise` are split out of the generic `transport` because they
+// are what people actually plan a trip around, and because a cruise carries a
+// port-by-port itinerary that no other category has.
 export const tripItemCategoryEnum = pgEnum("trip_item_category", [
   "lodging",
+  "flight",
+  "cruise",
   "transport",
   "food",
   "activity",
@@ -49,6 +62,14 @@ export const tripItemCategoryEnum = pgEnum("trip_item_category", [
   "other",
 ]);
 export const tripPhotoSourceEnum = pgEnum("trip_photo_source", ["upload", "url"]);
+// What a price is per. Without this every figure is summed as a total, so a
+// hotel at "$100–200" quietly means one night and a cruise at "$1,900 per
+// person" quietly means the whole party — both wrong, and wrong silently.
+export const tripPriceUnitEnum = pgEnum("trip_price_unit", [
+  "total",
+  "per_night",
+  "per_person",
+]);
 
 // Define auth schema to reference auth.users
 const authSchema = pgSchema("auth");
@@ -72,7 +93,16 @@ export const investmentMethods = pgTable("investment_methods", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   description: text("description"),
-  author: text("author").notNull(),
+  // Who runs this method. Other users invest through them, so this is what
+  // "who is invested in MY methods" is keyed on, and it is ALSO the display
+  // credit — there used to be a free-text `author` column beside it, which
+  // could name someone who did not run the method. One relation, one answer.
+  // Nullable: a method without an owner is the old global-catalogue behaviour.
+  // SET NULL rather than cascade — deleting an admin must never delete a
+  // method other people hold money in.
+  ownerUserId: uuid("owner_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   riskLevel: riskLevelEnum("risk_level").notNull(),
   monthlyRoi: numeric("monthly_roi", { precision: 7, scale: 4 }).notNull(),
   // Disabled methods are hidden from portfolio transaction selectors but still
@@ -81,6 +111,235 @@ export const investmentMethods = pgTable("investment_methods", {
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
+
+/**
+ * Where an admin actually deploys the capital raised by a method, and what it
+ * is worth right now.
+ *
+ * The business model: investors are promised the method's fixed `monthlyRoi`
+ * (that is what `transactions.currentValue` compounds at, and it is a
+ * LIABILITY). The admin invests the pooled capital elsewhere; whatever the
+ * real holdings earn above the promised return is the admin's margin.
+ */
+export const priceAssets = pgTable("price_assets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Ticker shown in the UI, e.g. ADA. */
+  symbol: text("symbol").notNull().unique(),
+  name: text("name").notNull(),
+  /** Provider's identifier — for CoinGecko this is its coin id ("cardano"),
+   *  which is NOT the symbol. Nullable for assets priced by hand. */
+  externalId: text("external_id"),
+  /** Which source refreshes this. "manual" means only a human writes prices,
+   *  which is the escape hatch for anything the provider doesn't cover. */
+  source: text("source").notNull().default("coingecko"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Price history. Append-only: the cron inserts, nothing updates, so a bad
+ * fetch can be traced instead of silently overwriting a good price.
+ */
+export const priceQuotes = pgTable(
+  "price_quotes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => priceAssets.id, { onDelete: "cascade" }),
+    price: numeric("price", { precision: 24, scale: 8 }).notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("price_quotes_asset_id_idx").on(t.assetId),
+    index("price_quotes_fetched_at_idx").on(t.fetchedAt),
+  ]
+);
+
+/**
+ * A method's investment policy: what share of incoming money goes to which
+ * asset. Percentages of a method should add up to 100.
+ *
+ * This is the RULE, not the position. It is what the owner edits, and it only
+ * governs money arriving from now on — changing it never rewrites what past
+ * contributions already bought.
+ */
+export const methodAllocations = pgTable(
+  "method_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    methodId: uuid("method_id")
+      .notNull()
+      .references(() => investmentMethods.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => priceAssets.id, { onDelete: "restrict" }),
+    /** Share of each contribution, 0–100. */
+    percent: numeric("percent", { precision: 6, scale: 3 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("method_allocations_method_id_idx").on(t.methodId),
+    uniqueIndex("method_allocations_method_asset_uq").on(t.methodId, t.assetId),
+  ]
+);
+
+/**
+ * What a single contribution actually bought, priced at the day it landed.
+ *
+ * This is the HISTORICAL FACT and it is immutable once written. Storing the
+ * price here rather than recomputing it later is the whole point: the asset's
+ * price on 2025-08-31 is a fixed truth, and a position derived from it stays
+ * correct no matter how the allocation policy changes afterwards.
+ *
+ * `quantity` is signed by intent: a buy adds units, a withdrawal removes them.
+ */
+export const transactionAllocations = pgTable(
+  "transaction_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => priceAssets.id, { onDelete: "restrict" }),
+    /** Cash from this contribution routed to this asset. */
+    amount: numeric("amount", { precision: 20, scale: 2 }).notNull(),
+    /** The asset's close on (or most recently before) the contribution date. */
+    priceAtPurchase: numeric("price_at_purchase", { precision: 24, scale: 8 }).notNull(),
+    /** amount / priceAtPurchase, negative for a withdrawal. */
+    quantity: numeric("quantity", { precision: 24, scale: 8 }).notNull(),
+    /** The bar's date, which may precede the contribution date when it fell on
+     *  a weekend or holiday and the asset does not trade every day. */
+    pricedOn: timestamp("priced_on", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("transaction_allocations_transaction_id_idx").on(t.transactionId),
+    index("transaction_allocations_asset_id_idx").on(t.assetId),
+    uniqueIndex("transaction_allocations_tx_asset_uq").on(t.transactionId, t.assetId),
+  ]
+);
+
+/**
+ * Who is going on a trip.
+ *
+ * `email` is optional and, for now, purely informational — nothing is sent.
+ * A member is not a user account: most travelling companions will never sign
+ * in, and requiring an account to appear on a trip would make the common case
+ * impossible.
+ */
+/**
+ * A stop on a multi-day activity's itinerary — a cruise's ports, day by day.
+ *
+ * Its own table rather than a JSON blob on the item: these are rows people
+ * read, sort and compare against dates, and a blob would make "what are we
+ * doing on the 20th" unanswerable without parsing every item.
+ *
+ * `note` holds the human phrasing the operator publishes ("Docked 10:00 AM –
+ * 6:00 PM", "Departs 4:30 PM") rather than parsed times: itineraries state
+ * arrival and departure inconsistently, and inventing a schema for that would
+ * lose information the traveller actually wants to read.
+ */
+export const tripItemStops = pgTable(
+  "trip_item_stops",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => tripItems.id, { onDelete: "cascade" }),
+    /** Day 1, 2, 3… as the operator numbers them. */
+    dayNumber: integer("day_number").notNull(),
+    stopOn: date("stop_on"),
+    /** "Cozumel, Mexico", or "At sea". */
+    place: text("place").notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("trip_item_stops_item_id_idx").on(t.itemId),
+    uniqueIndex("trip_item_stops_item_day_uq").on(t.itemId, t.dayNumber),
+  ]
+);
+
+export const tripMembers = pgTable(
+  "trip_members",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    email: text("email"),
+    /** Share of the trip's cost, 0-100. NULL = split the remainder equally,
+     *  which is what most trips want and what nobody should have to type. */
+    sharePercent: numeric("share_percent", { precision: 6, scale: 3 }),
+    sortOrder: real("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("trip_members_trip_id_idx").on(t.tripId),
+    check(
+      "trip_members_share_chk",
+      sql`${t.sharePercent} IS NULL OR (${t.sharePercent} >= 0 AND ${t.sharePercent} <= 100)`
+    ),
+  ]
+);
+
+/**
+ * Who pays for ONE activity, when it is not the trip's usual split.
+ *
+ * No rows means "split it the way the trip splits". Rows mean this activity is
+ * different — one person covering dinner, two sharing a room. Modelled as an
+ * override rather than a full split table so the common case stores nothing.
+ */
+export const tripItemPayers = pgTable(
+  "trip_item_payers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => tripItems.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => tripMembers.id, { onDelete: "cascade" }),
+    /** NULL = split this activity equally among the listed payers. */
+    sharePercent: numeric("share_percent", { precision: 6, scale: 3 }),
+  },
+  (t) => [
+    index("trip_item_payers_item_id_idx").on(t.itemId),
+    uniqueIndex("trip_item_payers_item_member_uq").on(t.itemId, t.memberId),
+  ]
+);
+
+/**
+ * Money a member has already put in.
+ *
+ * Kept apart from what they OWE: one is a fact about the past, the other is a
+ * consequence of the split. Netting them into a single number would destroy
+ * the ability to say why somebody is square.
+ */
+export const tripContributions = pgTable(
+  "trip_contributions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => tripMembers.id, { onDelete: "cascade" }),
+    amount: numeric("amount", { precision: 20, scale: 2 }).notNull(),
+    note: text("note"),
+    paidOn: date("paid_on"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("trip_contributions_trip_id_idx").on(t.tripId),
+    check("trip_contributions_amount_chk", sql`${t.amount} >= 0`),
+  ]
+);
 
 export const portfolios = pgTable("portfolios", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -818,12 +1077,35 @@ export const tripItems = pgTable(
     title: text("title").notNull(),
     category: tripItemCategoryEnum("category").notNull().default("activity"),
     link: text("link"),
+    // Optional video for THIS activity — a walkthrough of the hotel, a tour of
+    // the ship. YouTube or Instagram. Stored as the URL the user pasted, NOT a
+    // pre-built embed: the provider and id are derived at render time, so a
+    // link saved in any of the shapes those sites hand out keeps working.
+    // See lib/travel/video.ts.
+    videoUrl: text("video_url"),
+    // Where a flight or a transfer goes. Free text rather than a validated
+    // IATA code: "MCO" and "Orlando Intl" are both useful to a human planning
+    // a trip, and rejecting the second buys nothing.
+    fromCode: text("from_code"),
+    toCode: text("to_code"),
+    // A return flight is one purchase, not two. Modelling it as one item means
+    // the price is unambiguous — with two rows somebody has to decide which
+    // one carries the fare and the other reads as free.
+    roundTrip: boolean("round_trip").notNull().default(false),
+    // Upper end of an estimate. `price` is the low/expected figure and this is
+    // optional — an unbooked flight is honestly "$400-600", and forcing a
+    // single number would make the trip total look more certain than it is.
+    priceMax: numeric("price_max", { precision: 20, scale: 2 }),
+    priceUnit: tripPriceUnitEnum("price_unit").notNull().default("total"),
     // Optional price. Null = "not estimated yet". Currency lives on the parent
     // trip — multi-currency itineraries are out of scope for v1.
     price: numeric("price", { precision: 20, scale: 2 }),
     // Calendar day this item happens on (date-only, matches trips date columns).
     // Allows grouping by day in the UI without timezone math.
+    // An activity can span days — a week-long cruise is one activity, not
+    // seven. `scheduledOn` is the start; null `endsOn` means a single day.
     scheduledOn: date("scheduled_on"),
+    endsOn: date("ends_on"),
     notes: text("notes"),
     sortOrder: real("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -847,6 +1129,12 @@ export const tripPhotos = pgTable(
     tripId: uuid("trip_id")
       .notNull()
       .references(() => trips.id, { onDelete: "cascade" }),
+    // When set, the photo belongs to that activity rather than the trip's own
+    // gallery. Nullable rather than a second table: a photo is a photo, and two
+    // tables would mean two uploaders and two delete paths.
+    itemId: uuid("item_id").references((): AnyPgColumn => tripItems.id, {
+      onDelete: "cascade",
+    }),
     url: text("url").notNull(),
     // Storage object key for uploads (e.g. `user-id/trip-id/uuid.jpg`). Null for
     // external URLs. Used at deletion time to remove the underlying file.
@@ -873,10 +1161,21 @@ export const tripShares = pgTable(
     // segment in the public URL.
     token: text("token").notNull(),
     inviteeEmail: text("invitee_email"),
+    // Scopes the link to one traveller: the public page then shows what THEY
+    // owe rather than what the trip costs. Null is the whole trip. Set null on
+    // delete rather than cascade — removing somebody from the trip should
+    // widen their old link, not silently break it.
+    memberId: uuid("member_id").references(() => tripMembers.id, {
+      onDelete: "set null",
+    }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     // Revoked shares stay around as audit history but stop resolving on the
     // public page. Hard delete is also offered in the UI for cleanup.
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    // What the recipient may see. Defaults are the safest reading of "share my
+    // trip": the plan, not the money and not who else is coming.
+    showPrices: boolean("show_prices").notNull().default(false),
+    showMembers: boolean("show_members").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

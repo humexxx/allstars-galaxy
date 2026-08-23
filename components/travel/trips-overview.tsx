@@ -101,19 +101,19 @@ export function TripsOverview({ trips }: TripsOverviewProps) {
   const { upcoming, past } = useMemo(() => partition(trips), [trips]);
 
   return (
-    <Tabs defaultValue="upcoming" className="space-y-6">
+    <Tabs defaultValue="upcoming" className="flex flex-col gap-6 ">
       <TabsList>
         <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
         <TabsTrigger value="calendar">Calendar</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="upcoming" className="space-y-8">
+      <TabsContent value="upcoming" className="flex flex-col gap-8 ">
         <TripGrid
           trips={upcoming}
           empty={{ title: "No upcoming trips", description: "Create one to start planning." }}
         />
         {past.length > 0 && (
-          <section className="space-y-3">
+          <section className="flex flex-col gap-3 ">
             <Eyebrow>Past</Eyebrow>
             <TripGrid trips={past} dimmed />
           </section>
@@ -174,7 +174,7 @@ function TripCard({ trip, dimmed = false }: { trip: Trip; dimmed?: boolean }) {
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-white/70">
-              <ImageIcon className="h-10 w-10" />
+              <ImageIcon className="size-10" />
             </div>
           )}
           <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/60 to-transparent" />
@@ -182,21 +182,21 @@ function TripCard({ trip, dimmed = false }: { trip: Trip; dimmed?: boolean }) {
             {relativeDays(trip.startDate)}
           </div>
         </div>
-        <CardContent className="space-y-2 p-4">
+        <CardContent className="flex flex-col gap-2 p-4">
           <div className="flex items-start justify-between gap-2">
             <Heading level="h6" as="h3" className="line-clamp-1">
               {trip.title}
             </Heading>
-            <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            <ArrowRight className="mt-1 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </div>
           {trip.destination && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <MapPin className="h-3.5 w-3.5" />
+              <MapPin className="size-3.5" />
               <span className="line-clamp-1">{trip.destination}</span>
             </div>
           )}
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <CalendarDays className="h-3.5 w-3.5" />
+            <CalendarDays className="size-3.5" />
             <Mono className="text-xs">{formatDateRange(trip.startDate, trip.endDate)}</Mono>
           </div>
         </CardContent>
@@ -276,7 +276,7 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
               onClick={() => setCursor((c) => addMonths(c, -1))}
               aria-label="Previous month"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="size-4" />
             </Button>
             <Button
               size="sm"
@@ -291,7 +291,7 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
               onClick={() => setCursor((c) => addMonths(c, 1))}
               aria-label="Next month"
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="size-4" />
             </Button>
           </div>
         </div>
@@ -321,7 +321,7 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
                 <div className="flex items-center justify-between">
                   <span
                     className={cn(
-                      "inline-flex h-5 w-5 items-center justify-center rounded-full text-2xs",
+                      "inline-flex size-5 items-center justify-center rounded-full text-2xs",
                       isToday(day) && "bg-primary text-primary-foreground font-semibold"
                     )}
                   >
@@ -333,12 +333,12 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
                       className="rounded p-0.5 text-muted-foreground transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                       aria-label={primary ? `Open ${primary.title}` : `New trip on ${key}`}
                     >
-                      <Plus className="h-3 w-3" />
+                      <Plus className="size-3" />
                     </Link>
                   )}
                 </div>
 
-                <div className="mt-1 space-y-0.5">
+                <div className="flex flex-col gap-0.5 mt-1">
                   {dayBars.slice(0, 3).map(({ trip }) => {
                     // Label only on the first day of each trip; subsequent days
                     // get a thin marker bar so the cell stays uncluttered.
@@ -370,7 +370,7 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
           <span>Click a day to plan a new trip · click a bar to open the trip</span>
           <Button asChild size="sm" variant="outline" className="ml-auto">
             <Link href={NEW_TRIP_PATH}>
-              <Plus className="mr-1 h-3.5 w-3.5" /> New trip
+              <Plus className="mr-1 size-3.5" /> New trip
             </Link>
           </Button>
         </div>

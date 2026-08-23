@@ -211,6 +211,125 @@
       "when": 1786677913070,
       "tag": "0029_rapid_mephistopheles",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1786816267935,
+      "tag": "0030_lying_karma",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1786840695250,
+      "tag": "0031_eager_shatterstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1786847238649,
+      "tag": "0032_flawless_oracle",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1786847244363,
+      "tag": "0033_curly_prism",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1786860038979,
+      "tag": "0034_long_tiger_shark",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1786860570021,
+      "tag": "0035_low_clea",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1786863062838,
+      "tag": "0036_lean_talisman",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1786863843545,
+      "tag": "0037_brief_zzzax",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1786864717070,
+      "tag": "0038_mean_slipstream",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1786864717811,
+      "tag": "0039_cuddly_vulcan",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1786902849084,
+      "tag": "0040_yummy_firestar",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1786902899505,
+      "tag": "0041_amazing_blue_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1787266727586,
+      "tag": "0042_deep_surge",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1787267869210,
+      "tag": "0043_boring_arachne",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1787268505219,
+      "tag": "0044_lazy_garia",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1787269364791,
+      "tag": "0045_steady_energizer",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1787281147706,
+      "tag": "0046_wise_wallflower",
+      "breakpoints": true
     }
   ]
 }

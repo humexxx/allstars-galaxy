@@ -20,13 +20,20 @@ import {
   revokeTripShare,
   updateTrip,
   updateTripItem,
+  moveTripItem,
+  setTripItemStops,
+  setTripMembers,
+  addTripContribution,
+  updateTripContribution,
+  deleteTripContribution,
 } from "@/lib/services/travel-service";
 import {
   createTripSchema,
   createTripShareSchema,
-  tripItemSchema,
+  tripItemSchemaChecked,
   tripPhotoSchema,
   updateTripItemSchema,
+  moveTripItemSchema,
   updateTripSchema,
   type CreateTripInput,
   type CreateTripShareInput,
@@ -34,6 +41,15 @@ import {
   type TripPhotoInput,
   type UpdateTripInput,
   type UpdateTripItemInput,
+  type MoveTripItemInput,
+  setItemStopsSchema,
+  type SetItemStopsData,
+  setTripMembersSchema,
+  type SetTripMembersData,
+  tripContributionSchema,
+  updateTripContributionSchema,
+  type TripContributionInput,
+  type UpdateTripContributionInput,
 } from "@/schemas/travel";
 
 const TRIP_LIST_PATH = "/portal/entertainment/travel-planner";
@@ -105,7 +121,7 @@ export async function addTripItemAction(tripId: string, input: TripItemInput) {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const idParsed = z.string().uuid().safeParse(tripId);
-    const parsed = tripItemSchema.safeParse(input);
+    const parsed = tripItemSchemaChecked.safeParse(input);
     if (!idParsed.success || !parsed.success) {
       return { success: false as const, error: "Invalid input" };
     }
@@ -136,6 +152,26 @@ export async function updateTripItemAction(
       action: "tripItem.update",
       entityTable: "trip_items",
       entityId: row.id,
+    });
+    revalidatePath(pathForTrip(idParsed.data));
+    return { success: true as const, data: row };
+  });
+}
+
+export async function moveTripItemAction(tripId: string, input: MoveTripItemInput) {
+  return safe("travel", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = z.string().uuid().safeParse(tripId);
+    const parsed = moveTripItemSchema.safeParse(input);
+    if (!idParsed.success || !parsed.success) {
+      return { success: false as const, error: "Invalid input" };
+    }
+    const row = await moveTripItem(ctx.effectiveUserId, idParsed.data, parsed.data);
+    await logImpersonatedMutation({
+      action: "tripItem.move",
+      entityTable: "trip_items",
+      entityId: row.id,
+      metadata: { scheduledOn: parsed.data.scheduledOn, endsOn: parsed.data.endsOn ?? null },
     });
     revalidatePath(pathForTrip(idParsed.data));
     return { success: true as const, data: row };
@@ -237,7 +273,13 @@ export async function createTripShareAction(
       action: "tripShare.create",
       entityTable: "trip_shares",
       entityId: row.id,
-      metadata: { inviteeEmail: parsed.data.inviteeEmail ?? null },
+      metadata: {
+        inviteeEmail: parsed.data.inviteeEmail ?? null,
+        // Which traveller a link exposes is the interesting half of an audit
+        // entry about creating one.
+        memberId: parsed.data.memberId ?? null,
+        showPrices: row.showPrices,
+      },
     });
     revalidatePath(pathForTrip(idParsed.data));
     return { success: true as const, data: row };
@@ -279,5 +321,154 @@ export async function deleteTripShareAction(tripId: string, shareId: string) {
     });
     revalidatePath(pathForTrip(tripIdParsed.data));
     return { success: true as const };
+  });
+}
+
+/**
+ * Replace a cruise's day-by-day itinerary.
+ *
+ * The whole list at once: an itinerary is pasted and corrected as a block, and
+ * a per-row action would leave it half-saved the moment one row failed.
+ */
+export async function setTripItemStopsAction(
+  tripId: string,
+  input: SetItemStopsData
+) {
+  return safe("travel", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = z.string().uuid().safeParse(tripId);
+    const parsed = setItemStopsSchema.safeParse(input);
+    if (!idParsed.success || !parsed.success) {
+      return {
+        success: false as const,
+        error: parsed.success ? "Invalid trip" : parsed.error.issues[0].message,
+      };
+    }
+
+    await setTripItemStops(
+      ctx.effectiveUserId,
+      idParsed.data,
+      parsed.data.itemId,
+      parsed.data.stops
+    );
+    await logImpersonatedMutation({
+      action: "tripItemStops.set",
+      entityTable: "trip_item_stops",
+      entityId: parsed.data.itemId,
+      after: { count: parsed.data.stops.length },
+    });
+    revalidatePath(pathForTrip(idParsed.data));
+    return { success: true as const };
+  });
+}
+
+/** Replace a trip's traveller list. */
+export async function setTripMembersAction(
+  tripId: string,
+  input: SetTripMembersData
+) {
+  return safe("travel", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = z.string().uuid().safeParse(tripId);
+    const parsed = setTripMembersSchema.safeParse(input);
+    if (!idParsed.success || !parsed.success) {
+      return {
+        success: false as const,
+        error: parsed.success ? "Invalid trip" : parsed.error.issues[0].message,
+      };
+    }
+
+    await setTripMembers(ctx.effectiveUserId, idParsed.data, parsed.data.members);
+    await logImpersonatedMutation({
+      action: "tripMembers.set",
+      entityTable: "trip_members",
+      entityId: idParsed.data,
+      after: { count: parsed.data.members.length },
+    });
+    revalidatePath(pathForTrip(idParsed.data));
+    return { success: true as const };
+  });
+}
+
+// ---------- contributions ----------
+
+export async function addTripContributionAction(
+  tripId: string,
+  input: TripContributionInput
+) {
+  return safe("travel", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = z.string().uuid().safeParse(tripId);
+    const parsed = tripContributionSchema.safeParse(input);
+    if (!idParsed.success || !parsed.success) {
+      return { success: false as const, error: "Invalid input" };
+    }
+    const row = await addTripContribution(
+      ctx.effectiveUserId,
+      idParsed.data,
+      parsed.data
+    );
+    await logImpersonatedMutation({
+      action: "tripContribution.create",
+      entityTable: "trip_contributions",
+      entityId: row.id,
+      metadata: { memberId: parsed.data.memberId, amount: parsed.data.amount },
+    });
+    revalidatePath(pathForTrip(idParsed.data));
+    return { success: true as const, data: row };
+  });
+}
+
+export async function updateTripContributionAction(
+  tripId: string,
+  input: UpdateTripContributionInput
+) {
+  return safe("travel", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = z.string().uuid().safeParse(tripId);
+    const parsed = updateTripContributionSchema.safeParse(input);
+    if (!idParsed.success || !parsed.success) {
+      return { success: false as const, error: "Invalid input" };
+    }
+    const row = await updateTripContribution(
+      ctx.effectiveUserId,
+      idParsed.data,
+      parsed.data
+    );
+    await logImpersonatedMutation({
+      action: "tripContribution.update",
+      entityTable: "trip_contributions",
+      entityId: row.id,
+      metadata: { amount: parsed.data.amount },
+    });
+    revalidatePath(pathForTrip(idParsed.data));
+    return { success: true as const, data: row };
+  });
+}
+
+export async function deleteTripContributionAction(
+  tripId: string,
+  contributionId: string
+) {
+  return safe("travel", async () => {
+    const ctx = await requireEffectiveContext();
+    const ids = z
+      .object({ tripId: z.string().uuid(), contributionId: z.string().uuid() })
+      .safeParse({ tripId, contributionId });
+    if (!ids.success) {
+      return { success: false as const, error: "Invalid input" };
+    }
+    await deleteTripContribution(
+      ctx.effectiveUserId,
+      ids.data.tripId,
+      ids.data.contributionId
+    );
+    await logImpersonatedMutation({
+      action: "tripContribution.delete",
+      entityTable: "trip_contributions",
+      entityId: ids.data.contributionId,
+    });
+    revalidatePath(pathForTrip(ids.data.tripId));
+    return { success: true as const, data: null };
   });
 }

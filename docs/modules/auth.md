@@ -42,6 +42,20 @@ and SSR-friendly session management. Server-side action wrappers
 - `auth.users` (Supabase managed) — referenced by `users` via FK
 
 ## Notes
+- **Three roles, and the role answers exactly one question**: may this account
+  create investment methods? `user` (client) → no, `provider` → yes, `admin` →
+  yes, plus impersonation and the admin area. **Which** methods somebody runs
+  is NOT in the role — that is `investment_methods.owner_user_id`, and every
+  ownership check reads it. Restating ownership in the role would give two
+  sources of truth that can disagree.
+- `UserRole` in [`types/user.ts`](../../types/user.ts) is the single definition.
+  The union was previously spelled out by hand in ten files, which is how a new
+  role ends up half-added; `nav-config`'s `Role` is now an alias of it.
+- **Impersonation refuses admin targets in both directions.** The action blocks
+  starting one, and `loadEffectiveContext` re-checks on every read — a role can
+  change while a session is live, and without the second check a promotion
+  would leave the cookie granting admin-as-admin access for the rest of its
+  30-minute life.
 - Conventional Commits scope: `auth`
 - **Every** server action across the app must wrap its handler in
   `authenticatedAction` or `adminAction`. If you add a new module, follow this

@@ -33,5 +33,18 @@ export default async function TripDetailPage({
   const trip = await getTripWithRelations(id, ctx.effectiveUserId);
   if (!trip) notFound();
 
-  return <TripDetail trip={trip} baseUrl={getBaseUrl()} />;
+  // Identity comes from the effective context, so an impersonating admin sees
+  // the impersonated user marked rather than themselves.
+  return (
+    <TripDetail
+      trip={trip}
+      baseUrl={getBaseUrl()}
+      currentUserEmail={ctx.impersonatedUser?.email ?? ctx.realUser.email ?? null}
+      currentUserName={
+        ctx.impersonatedUser?.fullName ??
+        (ctx.realUser.user_metadata?.full_name as string | undefined) ??
+        null
+      }
+    />
+  );
 }

@@ -8,7 +8,12 @@
  * product area.
  */
 
-export type Role = "admin" | "user";
+// The navigation's own alias for the account role. Aliased from the single
+// definition rather than spelled out again — the two drifted the moment a
+// third role appeared.
+import type { UserRole } from "@/types/user";
+
+export type Role = UserRole;
 
 export type NavLeaf = {
   title: string;
@@ -35,7 +40,6 @@ export const PORTAL_NAV: NavSection[] = [
     label: "Finance",
     items: [
       { title: "Portfolio", url: "/portal/portfolio" },
-      { title: "Investment Methods", url: "/portal/investment-methods" },
       { title: "Plans", url: "/portal/plans" },
     ],
   },
@@ -85,50 +89,6 @@ export function visibleSections(
 ): NavSection[] {
   return PORTAL_NAV.filter(
     (section) => !section.adminOnly || adminAllowed(role, isImpersonating)
-  );
-}
-
-export type HeaderNavItem = {
-  label: string;
-  href: string;
-  /** Pathname prefixes that mark this top-level entry active. */
-  prefixes: string[];
-  /** Match the pathname exactly instead of by prefix (dashboard root). */
-  exact: boolean;
-};
-
-/**
- * Collapses the sidebar sections into the coarse top-level links shown in the
- * header. Each labelled section becomes one link pointing at its first page;
- * the standalone dashboard keeps an exact-match so it doesn't light up on
- * every sub-route.
- */
-export function headerNav(
-  role: Role | undefined,
-  isImpersonating = false
-): HeaderNavItem[] {
-  return visibleSections(role, isImpersonating)
-    .filter((section) => !section.disabled)
-    .map((section) => {
-      const first = section.items[0];
-      return {
-        label: section.label ?? first.title,
-        href: first.url,
-        prefixes: section.label ? section.items.map((i) => i.url) : [first.url],
-        exact: !section.label,
-      };
-    });
-}
-
-export function isHeaderItemActive(
-  pathname: string,
-  item: Pick<HeaderNavItem, "prefixes" | "exact">
-): boolean {
-  if (item.exact) {
-    return pathname === item.prefixes[0];
-  }
-  return item.prefixes.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
 }
 

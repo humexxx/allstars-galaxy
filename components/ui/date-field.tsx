@@ -6,6 +6,11 @@ import { CalendarIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+} from "@/components/ui/input-group";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -56,47 +61,64 @@ export function DateField({
   const selected = parse(value);
   const floor = min ? parse(min) : undefined;
 
-  return (
-    <div className={cn("flex items-center gap-1", className)}>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            id={id}
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            className={cn(
-              "w-full justify-start text-left font-normal",
-              !selected && "text-muted-foreground"
-            )}
-          >
-            <CalendarIcon className="mr-2 size-4" />
-            {selected ? format(selected, "EEE, d MMM yyyy") : placeholder}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
-            mode="single"
-            selected={selected}
-            defaultMonth={selected ?? floor}
-            onSelect={(d) => d && onChange(toDay(d))}
-            disabled={floor ? (d) => d < floor : undefined}
-            autoFocus
-          />
-        </PopoverContent>
-      </Popover>
-      {clearable && value && (
+  const showClear = clearable && Boolean(value);
+
+  const trigger = (
+    <Popover>
+      <PopoverTrigger asChild>
         <Button
+          id={id}
           type="button"
-          size="icon"
-          variant="ghost"
-          className="size-9 shrink-0 sm:size-8"
+          variant={showClear ? "ghost" : "outline"}
+          disabled={disabled}
+          className={cn(
+            // `min-w-0 flex-1`, never `w-full`: with a clear button beside it,
+            // "100% of the row" is 100% plus a button, and the row overflowed
+            // its dialog by exactly that button's width.
+            "min-w-0 flex-1 justify-start text-left font-normal",
+            showClear && "shadow-none hover:bg-transparent",
+            !selected && "text-muted-foreground"
+          )}
+        >
+          <CalendarIcon className="mr-2 size-4 shrink-0" />
+          <span className="truncate">
+            {selected ? format(selected, "EEE, d MMM yyyy") : placeholder}
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={selected}
+          defaultMonth={selected ?? floor}
+          onSelect={(d) => d && onChange(toDay(d))}
+          disabled={floor ? (d) => d < floor : undefined}
+          autoFocus
+        />
+      </PopoverContent>
+    </Popover>
+  );
+
+  if (!showClear) {
+    return <div className={cn("flex min-w-0 items-center", className)}>{trigger}</div>;
+  }
+
+  // The clear button belongs INSIDE the control, not floating beside it —
+  // `InputGroup` + `InputGroupAddon` is what shadcn provides for exactly this
+  // and it cannot overflow the row the way a sibling button did.
+  return (
+    <InputGroup className={cn("min-w-0", className)} data-disabled={disabled}>
+      {trigger}
+      <InputGroupAddon align="inline-end">
+        <InputGroupButton
+          size="icon-xs"
+          disabled={disabled}
           onClick={() => onChange("")}
           aria-label="Clear the date"
         >
-          <X className="size-3.5" />
-        </Button>
-      )}
-    </div>
+          <X />
+        </InputGroupButton>
+      </InputGroupAddon>
+    </InputGroup>
   );
 }

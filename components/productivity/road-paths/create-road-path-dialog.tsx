@@ -107,7 +107,7 @@ export function CreateRoadPathDialog({ onSuccess, children }: CreateRoadPathDial
       <DialogTrigger asChild>
         {children || <Button>Create Road Path</Button>}
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Create Road Path</DialogTitle>
           <DialogDescription>

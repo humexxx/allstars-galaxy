@@ -21,6 +21,21 @@ UI.**
    which owns the outer padding and max-width. Put page content inside it; don't
    add your own outer `px-*`/`py-*` shell on a page.
 
+## Dialogs on a phone
+
+- **Override `DialogContent`'s width from `sm:` up, never unprefixed.** The
+  component ships `max-w-[calc(100%-2rem)] … sm:max-w-md`; that first class is
+  the 16px gutter a phone needs. A bare `max-w-2xl` replaces it at *every*
+  width through `tailwind-merge`, so the dialog runs edge to edge on a 390px
+  screen. Write `sm:max-w-2xl`.
+- **A control with a button beside it uses `min-w-0 flex-1`, not `w-full`.**
+  In a flex row `w-full` means "100% of the row" and ignores the sibling, so
+  the pair overflows by the button's width — which is where a dialog's
+  horizontal scrollbar comes from. Better still, put the button *inside* the
+  control with `InputGroup` + `InputGroupAddon` (see `components/ui/date-field.tsx`),
+  which is what shadcn provides for it and cannot overflow at all.
+
+
 ## Page content container
 
 [`components/portal/page-container.tsx`](../components/portal/page-container.tsx)

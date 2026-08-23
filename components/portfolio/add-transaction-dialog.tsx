@@ -94,7 +94,7 @@ export function AddTransactionDialog({
         methods={methods}
       />
       <Dialog open={open && !showSelector && selectedMethod !== null} onOpenChange={handleClose}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Transaction</DialogTitle>
           </DialogHeader>

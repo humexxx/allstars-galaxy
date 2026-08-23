@@ -40,7 +40,7 @@ describe("TravellerBar", () => {
   it("swaps to a traveller's share when they are selected", () => {
     render(<Harness />);
 
-    fireEvent.click(screen.getByTitle(/Bruno Fabián/));
+    fireEvent.click(screen.getByRole("button", { name: /Bruno Fabián/ }));
     expect(screen.getByText("$2,300 ~ $2,500")).toBeInTheDocument();
     expect(screen.getByText("Bruno Fabián pays")).toBeInTheDocument();
   });
@@ -50,14 +50,14 @@ describe("TravellerBar", () => {
     // low end alone made a $2,300–$2,500 share read as settled.
     render(<Harness />);
 
-    fireEvent.click(screen.getByTitle(/Bruno Fabián/));
+    fireEvent.click(screen.getByRole("button", { name: /Bruno Fabián/ }));
     expect(screen.queryByText("$2,300")).not.toBeInTheDocument();
   });
 
   it("says 'you pay' rather than naming the signed-in traveller", () => {
     render(<Harness />);
 
-    fireEvent.click(screen.getByTitle(/Jason Hume \(you\)/));
+    fireEvent.click(screen.getByRole("button", { name: /Jason Hume \(you\)/ }));
     expect(screen.getByText("you pay")).toBeInTheDocument();
   });
 
@@ -65,7 +65,7 @@ describe("TravellerBar", () => {
     // Clicking the selected face again also works, but nothing said so.
     render(<Harness />);
 
-    fireEvent.click(screen.getByTitle(/Bruno Fabián/));
+    fireEvent.click(screen.getByRole("button", { name: /Bruno Fabián/ }));
     fireEvent.click(screen.getByText("All"));
     expect(screen.getByText("trip total")).toBeInTheDocument();
   });
@@ -73,10 +73,21 @@ describe("TravellerBar", () => {
   it("deselects when the same traveller is clicked twice", () => {
     render(<Harness />);
 
-    const bruno = screen.getByTitle(/Bruno Fabián/);
+    const bruno = screen.getByRole("button", { name: /Bruno Fabián/ });
     fireEvent.click(bruno);
     fireEvent.click(bruno);
     expect(screen.getByText("trip total")).toBeInTheDocument();
+  });
+
+  it("names each traveller, since two initials cannot", () => {
+    // "Jason Hume" and "Jafet" both render as one chip of initials, and on a
+    // phone a native `title` never appears at all.
+    render(<Harness />);
+
+    expect(
+      screen.getByRole("button", { name: "Jason Hume (you)" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Bruno Fabián" })).toBeInTheDocument();
   });
 
   it("invites adding people when the trip has none", () => {

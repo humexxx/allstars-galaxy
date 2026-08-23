@@ -371,6 +371,11 @@ NBA and NFL still use mocks.
 - **The calendar draws every run on a day.** There used to be a four-lane cap
   with a "+N" chip on the overflow; a day with six things on it now shows six
   and the week's row grows to fit. `capLanes` went with it.
+- **The traveller chips carry a real tooltip**, not a native `title`. Two
+  initials cannot separate Jason from Jafet or Ana from Alejandra, and `title`
+  never appears on a phone — which is exactly where the chips are smallest.
+  The name is also the button's `aria-label`, so the accessible name is the
+  person rather than "JF".
 - **The selected traveller lives in `TripDetail`**, not in `TravellerBar`.
   Picking a face re-costs the whole itinerary, so the banner cannot own it.
 - **The trip detail page does not render `description`.** The field is still

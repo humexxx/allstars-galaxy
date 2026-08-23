@@ -47,6 +47,7 @@ export function PublicTripViews({
             <TabsList className="border-0 bg-black/70 text-white/70 ring-1 ring-white/15 backdrop-blur-sm">
               <TabsTrigger
                 value="list"
+              aria-label="List"
                 className="gap-1.5 data-[state=active]:bg-white data-[state=active]:text-black"
               >
                 <ListIcon className="size-3.5" />
@@ -54,6 +55,7 @@ export function PublicTripViews({
               </TabsTrigger>
               <TabsTrigger
                 value="calendar"
+              aria-label="Calendar"
                 className="gap-1.5 data-[state=active]:bg-white data-[state=active]:text-black"
               >
                 <CalendarDays className="size-3.5" />

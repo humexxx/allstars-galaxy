@@ -181,6 +181,12 @@ NBA and NFL still use mocks.
   what they are looking at, and a recipient seeing a different layout has to
   be told how to map one onto the other. There is no add, edit, menu or drag
   anywhere in it: a share link grants a view.
+- **A share link's origin comes from `getBaseUrl`**, which prefers
+  `NEXT_PUBLIC_BASE_URL`, then Vercel's `VERCEL_PROJECT_PRODUCTION_URL`.
+  `VERCEL_URL` is the *deployment's* hostname — new on every push, and behind
+  Deployment Protection on a team project, so a link built from it lands the
+  recipient on a Vercel login page. It is the last resort, and
+  [`lib/env.test.ts`](../../lib/env.test.ts) pins the order.
 - **Each active link can show its QR** (`qrcode.react`). A phone cannot be
   handed a URL, and the code is how a link crosses to a device that is not
   this one. The code is drawn on white whatever the theme — a dark surface

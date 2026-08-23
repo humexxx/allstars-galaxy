@@ -371,6 +371,15 @@ NBA and NFL still use mocks.
 - **The calendar draws every run on a day.** There used to be a four-lane cap
   with a "+N" chip on the overflow; a day with six things on it now shows six
   and the week's row grows to fit. `capLanes` went with it.
+- **The cover runs edge to edge on a phone** (`-mx-4 sm:mx-0`, square with
+  top/bottom borders below `sm`). The page container's 16px gutters were
+  cropping a photograph for no gain. On the public view the negative margin
+  sits on the `relative` wrapper in `PublicTripViews`, not the header — that
+  wrapper is the view switcher's positioning context, and the two have to share
+  an edge or the switcher floats inside the image.
+- **A card's context badge drops under its heading below `sm`** — whose share
+  on the itinerary and the calendar, whose payments on Payments. Inline, a name
+  like "Alejandra's share" pushed the row against Add item with nowhere to go.
 - **The traveller chips carry a real tooltip**, not a native `title`. Two
   initials cannot separate Jason from Jafet or Ana from Alejandra, and `title`
   never appears on a phone — which is exactly where the chips are smallest.

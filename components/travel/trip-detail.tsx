@@ -207,7 +207,11 @@ export function TripDetail({
         </Tabs>
       </div>
 
-      <header className="overflow-hidden rounded-xl border">
+      {/* Full bleed on a phone. The page container's 16px gutters were
+          cropping the cover on both sides for no gain — a photograph wants the
+          screen. `-mx-4` cancels exactly that padding; from `sm` up the card
+          sits back inside it with its border and corners. */}
+      <header className="-mx-4 overflow-hidden border-y sm:mx-0 sm:rounded-xl sm:border">
         <div
           // 21/9 leaves 167px on a 390px phone, and the pill, the buttons and
           // the title all landed on top of each other. The floor wins on a

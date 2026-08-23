@@ -122,8 +122,10 @@ export function TripPayments({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          Payments
+        {/* Same as the itinerary's badge: under the heading on a phone, where
+            the row has Log payment at the other end and nothing to spare. */}
+        <CardTitle className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
+          <span>Payments</span>
           {focus && (
             <Badge variant="outline" className="text-2xs font-normal">
               {focus.isYou ? "you" : focus.name}

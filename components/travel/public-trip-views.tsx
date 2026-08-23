@@ -37,7 +37,10 @@ export function PublicTripViews({
 
   return (
     <article className="flex flex-col gap-6">
-      <div className="relative">
+      {/* The negative margin is here rather than on the banner itself: this is
+          the positioning context for the view switcher below, and the two have
+          to share an edge or the switcher floats 16px inside the photograph. */}
+      <div className="relative -mx-4 sm:mx-0">
         {banner}
         {/* On the banner, opposite the total. Dark and ringed like the pill,
             for the same reason: the photograph underneath is unknown, and a

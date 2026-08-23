@@ -122,8 +122,11 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
       }
     : { low: 0, high: 0 };
 
+  // Full bleed on a phone, like the planner's — the page gutters were cropping
+  // the cover for no gain. The negative margin lives on the wrapper in
+  // `PublicTripViews`, which is also the view switcher's positioning context.
   const banner = (
-      <header className="overflow-hidden rounded-xl border">
+      <header className="overflow-hidden border-y sm:rounded-xl sm:border">
         <div
           // Same floor as the planner's banner: at 21/9 a 390px phone leaves
           // 167px and the pill lands on top of the title.

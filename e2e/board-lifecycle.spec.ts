@@ -33,7 +33,7 @@ test.describe("Board — task lifecycle", () => {
     await expect(page.getByText("Todo", { exact: true }).first()).toBeVisible();
 
     // Top-level "Add Task" button is the default trigger when no `children`
-    // override is passed (see CreateTaskDialog).
+    // override is passed (see TaskDialog).
     await page.getByRole("button", { name: /Add Task/i }).first().click();
 
     const dialog = page.getByRole("dialog", { name: /Create New Task/i });

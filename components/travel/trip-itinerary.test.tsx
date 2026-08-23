@@ -65,15 +65,15 @@ describe("TripItinerary day subtotals", () => {
     // end of the range and cannot be reached by adding what is on screen.
     render(<TripItinerary trip={trip(FRIDAY)} partySize={2} />);
 
-    expect(screen.getByText("$800 – $1,200")).toBeInTheDocument();
+    expect(screen.getByText("$800 ~ $1,200")).toBeInTheDocument();
     expect(screen.queryByText("$800")).not.toBeInTheDocument();
   });
 
   it("is the sum of the rows above it", () => {
     render(<TripItinerary trip={trip(FRIDAY)} partySize={2} />);
 
-    expect(screen.getByText("$600 – $800")).toBeInTheDocument();
-    expect(screen.getByText("$200 – $400")).toBeInTheDocument();
+    expect(screen.getByText("$600 ~ $800")).toBeInTheDocument();
+    expect(screen.getByText("$200 ~ $400")).toBeInTheDocument();
   });
 
   it("collapses to one figure when the day holds no estimates", () => {
@@ -95,7 +95,7 @@ describe("TripItinerary day subtotals", () => {
     };
     render(<TripItinerary trip={trip(FRIDAY)} partySize={2} viewer={viewer} />);
 
-    expect(screen.getByText("$400 – $600")).toBeInTheDocument();
+    expect(screen.getByText("$400 ~ $600")).toBeInTheDocument();
     expect(screen.getByText("Bruno Fabián's share")).toBeInTheDocument();
   });
 
@@ -110,8 +110,8 @@ describe("TripItinerary day subtotals", () => {
     render(<TripItinerary trip={trip([FRIDAY[0]])} partySize={2} viewer={viewer} />);
 
     // Twice: the row itself, and the one-item day's subtotal agreeing with it.
-    expect(screen.getAllByText("$300 – $400")).toHaveLength(2);
-    expect(screen.getByText("of $600 – $800")).toBeInTheDocument();
+    expect(screen.getAllByText("$300 ~ $400")).toHaveLength(2);
+    expect(screen.getByText("of $600 ~ $800")).toBeInTheDocument();
     expect(screen.getByText("your share")).toBeInTheDocument();
   });
 });
@@ -158,6 +158,6 @@ describe("price column alignment", () => {
     // "$600 –" on one line and "$800" on the next reads as two prices.
     render(<TripItinerary trip={trip(FRIDAY)} partySize={2} />);
 
-    expect(screen.getByText("$600 – $800").className).toContain("whitespace-nowrap");
+    expect(screen.getByText("$600 ~ $800").className).toContain("whitespace-nowrap");
   });
 });

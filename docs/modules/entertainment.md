@@ -211,6 +211,17 @@ NBA and NFL still use mocks.
   elsewhere since that snapshot with whatever the browser still believed.
 - **`ItemForm` lives in its own module.** Both views open it, and reaching
   into the itinerary for it would drag the whole list along.
+- **A price range is written with `~`, not a dash** (`moneyRange`). Money set
+  as "$600 – $800" reads as a subtraction or a negative figure at a glance,
+  and the itinerary is full of both real arithmetic and real date ranges using
+  dashes. Date ranges keep the dash.
+- **A calendar bar carries its label at every size.** It used to go solid
+  below `sm` on the grounds that a bar with no room for a label had only its
+  colour to say anything; the label shows there now, so the soft wash is right
+  everywhere — a name on a solid amber or sky ground is a name nobody can
+  read. The label needs `flex-1`: with only `min-w-0` the box measures 0,
+  `MarqueeText` reads that as overflow, gives the text `w-max`, and the box
+  stays 0 wide forever.
 - **A calendar run is a badge, not a hairline.** Soft wash + full-strength
   label + a ring, because the two things that would give it more weight both
   cost legibility: a solid fill needs white text, and amber (3.19:1), sky

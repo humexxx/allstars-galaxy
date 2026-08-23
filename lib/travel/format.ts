@@ -58,7 +58,11 @@ export function formatTripMoney(value: number, currency: string): string {
 }
 
 /**
- * "$600" alone, or "$600 – $800" when the two ends differ.
+ * "$600" alone, or "$600 ~ $800" when the two ends differ.
+ *
+ * A tilde, not a dash: money written "$600 – $800" reads as a subtraction or
+ * a negative figure at a glance, and the itinerary is full of both real
+ * arithmetic and real dates using dashes. `~` says "about" and nothing else.
  *
  * Lives here, not beside the component that first needed it: it is pure
  * formatting, and its old home was a `"use client"` module — which meant the
@@ -67,7 +71,7 @@ export function formatTripMoney(value: number, currency: string): string {
  */
 export function moneyRange(low: number, high: number, currency: string): string {
   return high > low
-    ? `${formatTripMoney(low, currency)} – ${formatTripMoney(high, currency)}`
+    ? `${formatTripMoney(low, currency)} ~ ${formatTripMoney(high, currency)}`
     : formatTripMoney(low, currency);
 }
 

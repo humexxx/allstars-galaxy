@@ -46,7 +46,7 @@ describe("itemCost", () => {
     expect(cost.times).toBe(2);
     expect(cost.low).toBe(200);
     expect(cost.high).toBe(400);
-    // The entered figures survive so the UI can still show "$100 – $200/night".
+    // The entered figures survive so the UI can still show "$100 ~ $200/night".
     expect(cost.unitLow).toBe(100);
     expect(cost.unitHigh).toBe(200);
   });

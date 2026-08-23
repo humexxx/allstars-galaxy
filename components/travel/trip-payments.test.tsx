@@ -47,7 +47,7 @@ describe("TripPayments", () => {
     renderCard(null);
 
     expect(screen.getByText("$800")).toBeInTheDocument();
-    expect(screen.getByText("of $4,600 – $5,000")).toBeInTheDocument();
+    expect(screen.getByText("of $4,600 ~ $5,000")).toBeInTheDocument();
   });
 
   it("narrows to one traveller's payments when they are selected", () => {
@@ -55,7 +55,7 @@ describe("TripPayments", () => {
 
     // Twice: the headline, and the single row that makes it up.
     expect(screen.getAllByText("$300")).toHaveLength(2);
-    expect(screen.getByText("of $2,300 – $2,500")).toBeInTheDocument();
+    expect(screen.getByText("of $2,300 ~ $2,500")).toBeInTheDocument();
     // Jason's $500 belongs to Jason.
     expect(screen.queryByText("$500")).not.toBeInTheDocument();
   });

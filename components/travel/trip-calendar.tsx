@@ -453,6 +453,9 @@ export function TripCalendar({
                               e.stopPropagation();
                             }}
                             className={cn(
+                              // Hidden on a phone: 14px of a 46px bar is a
+                              // third of the room the name needs, and the
+                              // colour already says which category it is.
                               "hidden shrink-0 sm:block",
                               !readOnly && "cursor-grab active:cursor-grabbing"
                             )}
@@ -463,9 +466,18 @@ export function TripCalendar({
                             // Title and price are one label, not two boxes
                             // competing for a bar that can be a single day
                             // wide. Pinned to the right, the price ate the
-                            // title whole — a flight read "$600 – $" and never
+                            // title whole — a flight read "$600 ~ $" and never
                             // said where it went.
-                            <MarqueeText className="hidden text-2xs font-medium leading-none sm:block">
+                            //
+                            // Shown at every size: a one-day bar on a phone
+                            // fits about five characters, which still beats a
+                            // coloured stripe with nothing on it.
+                            //
+                            // `flex-1`, or the box shrinks to nothing — with
+                            // only `min-w-0` it measures 0, MarqueeText reads
+                            // that as overflow, gives the text `w-max`, and
+                            // the box it lives in stays 0 wide forever.
+                            <MarqueeText className="min-w-0 flex-1 text-2xs font-medium leading-none">
                               {label}
                             </MarqueeText>
                           )}

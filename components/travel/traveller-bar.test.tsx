@@ -33,7 +33,7 @@ describe("TravellerBar", () => {
     // different face is clicked.
     render(<Harness />);
 
-    expect(screen.getByText("$4,600 – $5,000")).toBeInTheDocument();
+    expect(screen.getByText("$4,600 ~ $5,000")).toBeInTheDocument();
     expect(screen.getByText("trip total")).toBeInTheDocument();
   });
 
@@ -41,7 +41,7 @@ describe("TravellerBar", () => {
     render(<Harness />);
 
     fireEvent.click(screen.getByTitle(/Bruno Fabián/));
-    expect(screen.getByText("$2,300 – $2,500")).toBeInTheDocument();
+    expect(screen.getByText("$2,300 ~ $2,500")).toBeInTheDocument();
     expect(screen.getByText("Bruno Fabián pays")).toBeInTheDocument();
   });
 

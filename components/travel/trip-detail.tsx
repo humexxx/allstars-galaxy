@@ -252,7 +252,11 @@ export function TripDetail({
               onSelect={setSelected}
               onManage={() => setMembersOpen(true)}
             />
-              <div className="flex shrink-0 gap-2">
+              {/* A column on a phone. Side by side they took a third of a
+                  326px banner, and the row they shared with the total and the
+                  faces had no width left — the manage-travellers button was
+                  wrapping onto a line of its own. */}
+              <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 {/* Sharing sits with the trip, not in a card down the page:
                     it is something you do to the whole thing, and which
                     traveller is selected changes what the link will show. */}

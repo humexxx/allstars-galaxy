@@ -44,12 +44,14 @@ export default async function PublicTripLayout({
             <span className="hidden sm:inline">Allstars Galaxy</span>
           </Link>
           <div className="flex min-w-0 items-center gap-2">
+            {/* Theme first, then the way in. The buttons that take somebody
+                somewhere belong at the end of the bar, where the eye stops. */}
+            <ModeToggle />
             <ShareCta
               inviteeEmail={view?.share.inviteeEmail ?? null}
               currentUserEmail={currentUser?.email ?? null}
               shareToken={token}
             />
-            <ModeToggle />
           </div>
         </div>
       </header>

@@ -53,13 +53,22 @@ test.describe("Travel planner — share links", () => {
     await page.goto(url);
     await page.waitForSelector("main header");
 
-    const rows = page.locator("main input[readonly]");
-    await page.getByRole("button", { name: /^Create$/i }).click();
+    // Sharing lives behind the banner's button now, not in a card.
+    await page.getByRole("button", { name: "Share" }).click();
+    const dialog = page.locator("[role=dialog]:visible").first();
+    await expect(dialog).toBeVisible();
+
+    const rows = dialog.locator("input[readonly]");
+    await dialog.getByRole("button", { name: /^Create$/i }).click();
     await expect(rows).toHaveCount(1, { timeout: 15_000 });
     const anyoneLink = (await rows.first().inputValue()).trim();
 
+    // Picking a traveller re-scopes the link, so the dialog closes and
+    // reopens around that choice.
+    await page.keyboard.press("Escape");
     await page.getByTitle(/Bruno Fabián/).click();
-    await page.getByRole("button", { name: /^For /i }).click();
+    await page.getByRole("button", { name: "Share" }).click();
+    await dialog.getByRole("button", { name: /^For /i }).click();
     await expect(rows).toHaveCount(2, { timeout: 15_000 });
     const values = await rows.evaluateAll((els) =>
       els.map((e) => (e as HTMLInputElement).value.trim())
@@ -68,7 +77,7 @@ test.describe("Travel planner — share links", () => {
 
     // Both links are labelled with what they expose, so two links to one trip
     // are told apart without opening them.
-    await expect(page.locator("[data-slot=badge]").getByText("Whole trip")).toBeVisible();
+    await expect(dialog.locator("[data-slot=badge]").getByText("Whole trip")).toBeVisible();
 
     const browser = await chromium.launch();
     const anon = await browser.newContext();

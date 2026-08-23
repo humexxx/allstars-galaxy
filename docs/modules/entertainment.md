@@ -131,6 +131,15 @@ NBA and NFL still use mocks.
   [`MarqueeText`](../../components/travel/marquee-text.tsx), which measures the
   overflow and leaves a label that already fits completely alone. It respects
   `prefers-reduced-motion`.
+- **Sharing lives on the banner, not in a card down the page.** It is
+  something you do to the whole trip, and which traveller is selected changes
+  what the link will show — so the button sits beside Edit, where that state
+  is visible. `TripSharePanel` is the dialog's body; it renders no `Card` of
+  its own.
+- **Each active link can show its QR** (`qrcode.react`). A phone cannot be
+  handed a URL, and the code is how a link crosses to a device that is not
+  this one. The code is drawn on white whatever the theme — a dark surface
+  inverts the quiet zone and most scanners give up.
 - **A calendar bar is a control: tap it to edit, drag its glyph to move it.**
   Only the glyph is draggable — a bar that is both clickable and draggable
   needs one of them to have its own handle, or every attempt to open an item

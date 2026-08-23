@@ -11,6 +11,7 @@ import {
   List as ListIcon,
   MapPin,
   Pencil,
+  Share2,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -94,6 +95,7 @@ export function TripDetail({
    *  rather than in the banner because it re-costs the itinerary too. */
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<TripView>("list");
+  const [shareOpen, setShareOpen] = useState(false);
 
   /** The traveller who is the signed-in owner, matched by name or email. */
   const youId = useMemo(() => {
@@ -249,6 +251,12 @@ export function TripDetail({
               onManage={() => setMembersOpen(true)}
             />
               <div className="flex shrink-0 gap-2">
+                {/* Sharing sits with the trip, not in a card down the page:
+                    it is something you do to the whole thing, and which
+                    traveller is selected changes what the link will show. */}
+                <Button size="sm" variant="secondary" onClick={() => setShareOpen(true)}>
+                  <Share2 className="mr-1 size-3.5" /> Share
+                </Button>
                 <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}>
                   <Pencil className="mr-1 size-3.5" /> Edit
                 </Button>
@@ -311,14 +319,6 @@ export function TripDetail({
             selected={selected}
           />
           <TripGallery trip={trip} />
-          <TripSharePanel
-            trip={trip}
-            baseUrl={baseUrl}
-            // A link inherits whoever is in focus, so "share this with Bruno"
-            // is the same gesture as "show me Bruno's numbers".
-            scopeToMemberId={selected}
-            scopeName={viewer?.name ?? null}
-          />
         </div>
       </div>
 
@@ -334,6 +334,26 @@ export function TripDetail({
           onClose={() => setMembersOpen(false)}
         />
       )}
+
+      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Share this trip</DialogTitle>
+            <DialogDescription>
+              A private link anyone can open — no account needed. Revoke it and
+              it stops working.
+            </DialogDescription>
+          </DialogHeader>
+          <TripSharePanel
+            trip={trip}
+            baseUrl={baseUrl}
+            // A link inherits whoever is in focus, so "share this with Bruno"
+            // is the same gesture as "show me Bruno's numbers".
+            scopeToMemberId={selected}
+            scopeName={viewer?.name ?? null}
+          />
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">

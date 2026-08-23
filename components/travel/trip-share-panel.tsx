@@ -3,11 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { format } from "date-fns";
-import { Check, Copy, Link2, Loader2, Trash2 } from "lucide-react";
+import { Check, Copy, Link2, Loader2, QrCode, Trash2 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   InputGroup,
   InputGroupAddon,
@@ -97,102 +97,95 @@ export function TripSharePanel({
   const revoked = trip.shares.filter((s) => s.revokedAt !== null || isExpired(s));
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Share</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4 ">
-        <form onSubmit={handleCreate} className="flex flex-col gap-2 ">
-          <Label htmlFor="share-email" className="text-xs">
-            Generate a private link
-          </Label>
-          <InputGroup>
-            <InputGroupInput
-              id="share-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="friend@example.com"
-              disabled={creating}
-            />
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton type="submit" variant="default" disabled={creating}>
-                {creating ? <Loader2 className="animate-spin" /> : <Link2 />}
-                {scopeName ? `For ${scopeName.split(" ")[0]}` : "Create"}
-              </InputGroupButton>
-            </InputGroupAddon>
-          </InputGroup>
-          {/* Said before the click, not after: which traveller a link exposes
-              is not something to discover from the result. */}
-          <Text variant="small">
-            {scopeToMemberId && scopeName ? (
-              <>
-                This link will show{" "}
-                <span className="font-medium text-foreground">{scopeName}&apos;s</span>{" "}
-                share of each cost — not the trip totals, and not the other
-                travellers. Pick <span className="font-medium text-foreground">All</span>{" "}
-                above the cover photo for a link to the whole trip.
-              </>
-            ) : (
-              <>
-                This link will show the plan without any prices. Pick a traveller above
-                the cover photo first to send somebody their own share instead.
-              </>
-            )}
-          </Text>
-          <Text variant="small">
-            The email is just a label — we don&apos;t send a message. Copy the link and share it
-            on WhatsApp, X, Slack or Instagram and the preview card will appear automatically.
-          </Text>
-        </form>
-
-        {active.length > 0 && (
-          <div className="flex flex-col gap-2 ">
-            <Text variant="small" weight="medium">Active links</Text>
-            <ul className="flex flex-col gap-2 ">
-              {active.map((share) => (
-                <ShareRow
-                  key={share.id}
-                  tripId={trip.id}
-                  share={share}
-                  baseUrl={baseUrl}
-                  copied={copiedToken === share.token}
-                  memberName={
-                    trip.members.find((m) => m.id === share.memberId)?.name ?? null
-                  }
-                  onCopy={() => handleCopy(share.token)}
-                />
-              ))}
-            </ul>
-          </div>
+    <div className="flex flex-col gap-4">
+      <form onSubmit={handleCreate} className="flex flex-col gap-2 ">
+        <Label htmlFor="share-email" className="text-xs">
+          Generate a private link
+        </Label>
+        <InputGroup>
+          <InputGroupInput
+            id="share-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="friend@example.com"
+            disabled={creating}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton type="submit" variant="default" disabled={creating}>
+              {creating ? <Loader2 className="animate-spin" /> : <Link2 />}
+              {scopeName ? `For ${scopeName.split(" ")[0]}` : "Create"}
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      {/* Said before the click, not after: which traveller a link exposes is
+          not something to discover from the result. */}
+      <Text variant="small">
+        {scopeToMemberId && scopeName ? (
+          <>
+            This link shows{" "}
+            <span className="font-medium text-foreground">{scopeName}&apos;s</span>{" "}
+            share of each cost — not the trip totals, and not the other
+            travellers. Close this and pick{" "}
+            <span className="font-medium text-foreground">All</span> above the
+            cover photo for a link to the whole trip.
+          </>
+        ) : (
+          <>
+            This link shows the plan without any prices. Close this and pick a
+            traveller above the cover photo to send somebody their own share
+            instead. The email is only a label — nothing is sent.
+          </>
         )}
+      </Text>
+      </form>
 
-        {revoked.length > 0 && (
-          <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer">
-              Revoked or expired ({revoked.length})
-            </summary>
-            <ul className="flex flex-col gap-1 mt-2">
-              {revoked.map((share) => (
-                <li key={share.id} className="flex items-center justify-between rounded border bg-muted/30 px-2 py-1">
-                  <Text as="span" variant="small">
-                    {share.inviteeEmail ?? "Anonymous"} ·{" "}
-                    {share.revokedAt ? (
-                      <Mono>{format(new Date(share.revokedAt), "MMM d")}</Mono>
-                    ) : share.expiresAt ? (
-                      <Mono>expired {format(new Date(share.expiresAt), "MMM d")}</Mono>
-                    ) : (
-                      ""
-                    )}
-                  </Text>
-                  <DeleteRevokedButton tripId={trip.id} shareId={share.id} />
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </CardContent>
-    </Card>
+      {active.length > 0 && (
+        <div className="flex flex-col gap-2 ">
+          <Text variant="small" weight="medium">Active links</Text>
+          <ul className="flex flex-col gap-2 ">
+            {active.map((share) => (
+              <ShareRow
+                key={share.id}
+                tripId={trip.id}
+                share={share}
+                baseUrl={baseUrl}
+                copied={copiedToken === share.token}
+                memberName={
+                  trip.members.find((m) => m.id === share.memberId)?.name ?? null
+                }
+                onCopy={() => handleCopy(share.token)}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {revoked.length > 0 && (
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer">
+            Revoked or expired ({revoked.length})
+          </summary>
+          <ul className="flex flex-col gap-1 mt-2">
+            {revoked.map((share) => (
+              <li key={share.id} className="flex items-center justify-between rounded border bg-muted/30 px-2 py-1">
+                <Text as="span" variant="small">
+                  {share.inviteeEmail ?? "Anonymous"} ·{" "}
+                  {share.revokedAt ? (
+                    <Mono>{format(new Date(share.revokedAt), "MMM d")}</Mono>
+                  ) : share.expiresAt ? (
+                    <Mono>expired {format(new Date(share.expiresAt), "MMM d")}</Mono>
+                  ) : (
+                    ""
+                  )}
+                </Text>
+                <DeleteRevokedButton tripId={trip.id} shareId={share.id} />
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
   );
 }
 
@@ -214,6 +207,7 @@ function ShareRow({
 }) {
   const router = useRouter();
   const [busy, startTransition] = useTransition();
+  const [showQr, setShowQr] = useState(false);
   const url = shareUrl(baseUrl, share.token);
 
   const handleRevoke = () => {
@@ -259,6 +253,17 @@ function ShareRow({
       <InputGroup className="h-8">
         <InputGroupInput readOnly value={url} className="font-mono text-2xs" />
         <InputGroupAddon align="inline-end">
+          {/* A phone cannot be handed a URL. The code is the way this link
+              crosses to a device that is not this one. */}
+          <InputGroupButton
+            type="button"
+            size="icon-xs"
+            onClick={() => setShowQr((v) => !v)}
+            aria-label={showQr ? "Hide QR code" : "Show QR code"}
+            aria-expanded={showQr}
+          >
+            <QrCode />
+          </InputGroupButton>
           <InputGroupButton
             type="button"
             size="icon-xs"
@@ -269,6 +274,19 @@ function ShareRow({
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
+
+      {showQr && (
+        <div className="flex flex-col items-center gap-2 rounded-md border bg-background p-3">
+          {/* White behind the code whatever the theme: a dark surface inverts
+              the quiet zone and most scanners give up. */}
+          <div className="rounded bg-white p-2">
+            <QRCodeSVG value={url} size={132} level="M" marginSize={0} />
+          </div>
+          <Text className="text-2xs text-muted-foreground">
+            Point a camera at this to open the link
+          </Text>
+        </div>
+      )}
     </li>
   );
 }

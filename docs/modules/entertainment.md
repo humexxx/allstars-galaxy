@@ -177,6 +177,13 @@ NBA and NFL still use mocks.
    row *is* the control, so every price, subtotal and video runs to the
   card's edge on every screen, and the day header needs no spacer to stay in
   step with them.
+- **Logging a payment is one line, not a form.** The amount is the only thing
+  that cannot be guessed — the date is today, the note is usually nothing, and
+  who paid is whoever the card is already filtered to (the picker appears only
+  on the unfiltered list). Anything else is a correction, and corrections go
+  through the record, which already edits all three. It is the same
+  `InputGroup` the gallery and the share panel end in, so the three cards in
+  the side column close the same way.
 - **A payment is a record, not a row of controls.** Tapping it opens a dialog;
   the delete button used to hold space at the right of every row, which is what
   pushed each amount off the card's edge.

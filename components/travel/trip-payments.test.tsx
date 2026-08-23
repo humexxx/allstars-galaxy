@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TripPayments, type PaymentsTraveller } from "./trip-payments";
@@ -76,12 +76,33 @@ describe("TripPayments", () => {
   });
 
   it("names who paid only when the list mixes people", () => {
-    renderCard(null);
-    expect(screen.getByText("Bruno Fabián")).toBeInTheDocument();
+    const mixed = renderCard(null);
+    expect(
+      within(mixed.container.querySelector("ul")!).getByText("Bruno Fabián")
+    ).toBeInTheDocument();
 
+    const focused = renderCard("b");
+    // The rows carry no name: the card already says whose list this is.
+    expect(
+      within(focused.container.querySelector("ul")!).queryByText("Bruno Fabián")
+    ).toBeNull();
+  });
+
+  it("logs a payment from one line instead of a form", () => {
+    // The amount is the only thing that cannot be guessed — the date is
+    // today, the note is usually nothing, and who paid is whoever the card
+    // is already showing.
     renderCard("b");
-    // Once, in the header badge — not repeated on every line of their own list.
-    expect(screen.getAllByText("Bruno Fabián")).toHaveLength(2);
+
+    expect(screen.getByLabelText("Amount")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+    // No "who paid" question when the card has already answered it.
+    expect(screen.queryByLabelText("Who paid")).not.toBeInTheDocument();
+  });
+
+  it("asks who paid only when the list is everybody's", () => {
+    renderCard(null);
+    expect(screen.getByLabelText("Who paid")).toBeInTheDocument();
   });
 
   it("says so plainly when a traveller has paid nothing", () => {

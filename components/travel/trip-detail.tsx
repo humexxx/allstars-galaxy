@@ -121,6 +121,7 @@ export function TripDetail({
           scheduledOn: i.scheduledOn,
           endsOn: i.endsOn,
           payerIds: i.payerIds,
+          attendeeIds: i.attendeeIds,
         })),
         trip.members.map((m) => ({
           id: m.id,

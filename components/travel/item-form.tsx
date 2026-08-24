@@ -550,7 +550,11 @@ export function ItemForm({
         </div>
       )}
 
-      {fields.photos && (
+      {/* The picker is hidden on a category that has nothing to photograph,
+          but photos already attached still have to be reachable — an item
+          re-categorised to Flight would otherwise keep them with no way to
+          look at or remove them. */}
+      {(fields.photos || shownPhotos.length > 0) && (
       <Field className="gap-1">
         <FieldLabel className="text-xs">Photos</FieldLabel>
         {shownPhotos.length > 0 && (
@@ -582,6 +586,7 @@ export function ItemForm({
             ))}
           </div>
         )}
+        {fields.photos && (
         <PhotoPicker
           variant="compact"
           folder={tripId}
@@ -601,6 +606,7 @@ export function ItemForm({
             else toast.error(res.error);
           }}
         />
+        )}
       </Field>
       )}
 

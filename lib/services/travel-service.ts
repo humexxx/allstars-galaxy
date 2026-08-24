@@ -6,6 +6,20 @@ import { cache } from "react";
 import { and, asc, desc, eq, inArray, isNull, notInArray } from "drizzle-orm";
 
 import { db } from "@/db";
+
+/** `[{ itemId, memberId }]` → `Map<itemId, memberId[]>`, for payers and attendees alike. */
+function groupByItem(rows: { itemId: string; memberId: string }[]): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const row of rows) {
+    const list = map.get(row.itemId) ?? [];
+    list.push(row.memberId);
+    map.set(row.itemId, list);
+  }
+  return map;
+}
+
+/** The handle inside `db.transaction`, which is the same shape as `db`. */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 import {
   trips,
   tripContributions,
@@ -199,17 +213,8 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
 
   // A photo belongs to one place or the other: the gallery is the trip's own
   // photos, and an item's photos travel with the item.
-  const byItem = (rows: { itemId: string; memberId: string }[]) => {
-    const map = new Map<string, string[]>();
-    for (const row of rows) {
-      const list = map.get(row.itemId) ?? [];
-      list.push(row.memberId);
-      map.set(row.itemId, list);
-    }
-    return map;
-  };
-  const payersByItem = byItem(payers);
-  const attendeesByItem = byItem(attendees);
+  const payersByItem = groupByItem(payers);
+  const attendeesByItem = groupByItem(attendees);
 
   const photosByItem = new Map<string, typeof photos>();
   for (const photo of photos) {
@@ -290,49 +295,27 @@ export async function deleteTrip(userId: string, tripId: string): Promise<void> 
 // ---------- items ----------
 
 /**
- * Replaces an item's payers wholesale.
+ * Replaces one of an item's member lists wholesale.
  *
  * Delete-then-insert rather than a diff: the set is at most a handful of rows
  * and reconciling it would be more code than it saves. Members are checked
  * against the trip for the same reason everything else here is — the foreign
  * key proves the row exists, not which trip it belongs to.
- */
-async function setItemPayers(
-  tripId: string,
-  itemId: string,
-  memberIds: string[]
-): Promise<void> {
-  await db.delete(tripItemPayers).where(eq(tripItemPayers.itemId, itemId));
-  if (memberIds.length === 0) return;
-
-  const valid = await db
-    .select({ id: tripMembers.id })
-    .from(tripMembers)
-    .where(and(eq(tripMembers.tripId, tripId), inArray(tripMembers.id, memberIds)));
-  if (valid.length !== memberIds.length) {
-    throw new Error("Traveller not found on this trip");
-  }
-
-  await db
-    .insert(tripItemPayers)
-    .values(memberIds.map((memberId) => ({ itemId, memberId })));
-}
-
-/**
- * Replace who an item is for. Empty means everybody, so no rows.
  *
- * Same trip-membership check as `setItemPayers`: a foreign key proves the
- * member exists, not that they are on this trip.
+ * Takes the table because payers and attendees differ in nothing else, and two
+ * copies of this drift the moment one of them is fixed.
  */
-async function setItemAttendees(
+async function setItemMembers(
+  table: typeof tripItemPayers | typeof tripItemAttendees,
+  tx: Tx,
   tripId: string,
   itemId: string,
   memberIds: string[]
 ): Promise<void> {
-  await db.delete(tripItemAttendees).where(eq(tripItemAttendees.itemId, itemId));
+  await tx.delete(table).where(eq(table.itemId, itemId));
   if (memberIds.length === 0) return;
 
-  const valid = await db
+  const valid = await tx
     .select({ id: tripMembers.id })
     .from(tripMembers)
     .where(and(eq(tripMembers.tripId, tripId), inArray(tripMembers.id, memberIds)));
@@ -340,9 +323,7 @@ async function setItemAttendees(
     throw new Error("Traveller not found on this trip");
   }
 
-  await db
-    .insert(tripItemAttendees)
-    .values(memberIds.map((memberId) => ({ itemId, memberId })));
+  await tx.insert(table).values(memberIds.map((memberId) => ({ itemId, memberId })));
 }
 
 export async function addTripItem(
@@ -351,7 +332,11 @@ export async function addTripItem(
   data: TripItemInput
 ): Promise<TripItem> {
   await ensureTripOwnership(tripId, userId);
-  const [row] = await db
+  // Three tables in one save. Without a transaction a rejected traveller left
+  // the item written and its member lists half-replaced — the item silently
+  // becoming everybody's while the user was told the save failed.
+  return db.transaction(async (tx) => {
+  const [row] = await tx
     .insert(tripItems)
     .values({
       tripId,
@@ -371,9 +356,16 @@ export async function addTripItem(
       sortOrder: data.sortOrder ?? 0,
     })
     .returning();
-  if (data.payerIds?.length) await setItemPayers(tripId, row.id, data.payerIds);
-  if (data.attendeeIds?.length) await setItemAttendees(tripId, row.id, data.attendeeIds);
+  // A brand-new row has nothing to clear, so only a named list is worth a
+  // round trip here. On update it is unconditional — clearing is meaningful.
+  if (data.payerIds?.length) {
+    await setItemMembers(tripItemPayers, tx, tripId, row.id, data.payerIds);
+  }
+  if (data.attendeeIds?.length) {
+    await setItemMembers(tripItemAttendees, tx, tripId, row.id, data.attendeeIds);
+  }
   return row;
+  });
 }
 
 export async function updateTripItem(
@@ -382,7 +374,8 @@ export async function updateTripItem(
   data: UpdateTripItemInput
 ): Promise<TripItem> {
   await ensureTripOwnership(tripId, userId);
-  const [row] = await db
+  return db.transaction(async (tx) => {
+  const [row] = await tx
     .update(tripItems)
     .set({
       title: data.title,
@@ -403,11 +396,16 @@ export async function updateTripItem(
     })
     .where(and(eq(tripItems.id, data.id), eq(tripItems.tripId, tripId)))
     .returning();
+  // The item can be gone — deleted in another tab while this dialog was open.
+  // `moveTripItem` has always guarded this; without it `row.id` below is a
+  // TypeError instead of a message.
+  if (!row) throw new Error("Item not found on this trip");
   // Always, not only when non-empty: clearing the list is how an item goes
   // back to the trip's own split.
-  await setItemPayers(tripId, row.id, data.payerIds ?? []);
-  await setItemAttendees(tripId, row.id, data.attendeeIds ?? []);
+  await setItemMembers(tripItemPayers, tx, tripId, row.id, data.payerIds ?? []);
+  await setItemMembers(tripItemAttendees, tx, tripId, row.id, data.attendeeIds ?? []);
   return row;
+  });
 }
 
 /** Just the dates. See `moveTripItemSchema` for why nothing else travels. */
@@ -679,17 +677,8 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
     stopsByItem.set(stop.itemId, list);
   }
 
-  const groupBy = (rows: { itemId: string; memberId: string }[]) => {
-    const map = new Map<string, string[]>();
-    for (const row of rows) {
-      const list = map.get(row.itemId) ?? [];
-      list.push(row.memberId);
-      map.set(row.itemId, list);
-    }
-    return map;
-  };
-  const payersByItem = groupBy(payers);
-  const attendeesByItem = groupBy(attendees);
+  const payersByItem = groupByItem(payers);
+  const attendeesByItem = groupByItem(attendees);
 
   const photosByItem = new Map<string, typeof photos>();
   for (const photo of photos) {
@@ -713,9 +702,20 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
   // is all four travellers' even though two of them cover it. The split above
   // still runs over every item, so the totals are unaffected.
   const scope = scopeRows ? buildScope(scopeRows, enriched, share.memberId!) : null;
-  const visible = share.memberId
-    ? enriched.filter((i) => itemConcerns(i.attendeeIds, share.memberId!))
-    : enriched;
+  // The member lists did their work above; they do not cross the boundary.
+  // A public link is unauthenticated, and `payerIds`/`attendeeIds` are raw
+  // trip_members UUIDs — enough to count and correlate the other travellers a
+  // scoped link exists to hide.
+  const visible = (
+    share.memberId
+      ? enriched.filter((i) => itemConcerns(i.attendeeIds, share.memberId!))
+      : enriched
+  ).map((item) => {
+    const { payerIds, attendeeIds, ...rest } = item;
+    void payerIds;
+    void attendeeIds;
+    return rest;
+  });
 
   return {
     trip,
@@ -801,6 +801,7 @@ function buildScope(
       scheduledOn: i.scheduledOn,
       endsOn: i.endsOn,
       payerIds: i.payerIds,
+      attendeeIds: i.attendeeIds,
     })),
     members.map((m) => ({
       id: m.id,

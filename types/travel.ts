@@ -91,10 +91,20 @@ export type PublicTripScope = {
   paid: number;
 };
 
+/**
+ * An item as a public link may see it.
+ *
+ * `payerIds` and `attendeeIds` are deliberately absent: they are raw
+ * `trip_members` UUIDs, a public link is unauthenticated, and a scoped one
+ * exists precisely to keep the other travellers out of the payload. The
+ * service uses both lists to narrow and to split, then drops them.
+ */
+export type PublicTripItem = Omit<TripItemWithStops, "payerIds" | "attendeeIds">;
+
 export type PublicTripView = {
   trip: Trip;
   /** With stops: a cruise's ports are half of what its row says. */
-  items: TripItemWithStops[];
+  items: PublicTripItem[];
   photos: TripPhoto[];
   share: TripShare;
   /** Null when the link covers the whole trip. */

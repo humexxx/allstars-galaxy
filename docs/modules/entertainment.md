@@ -362,7 +362,11 @@ NBA and NFL still use mocks.
   site will quote.
 - **Who is on an item and who pays for it are two lists, not one.**
   `trip_item_attendees` answers the first, `trip_item_payers` the second, and
-  both mean "everybody" when empty. Filtering on payers was wrong in both
+  both mean "everybody" when empty. **Naming no payer means the attendees
+  pay** — otherwise the form's own default (a named attendee, payers left on
+  *Everyone*) billed the other travellers for something the itinerary had just
+  told them they were not on. A `per_person` price likewise multiplies by the
+  attendees, not the whole party. Filtering on payers was wrong in both
   directions: the festival all four travellers are going to vanished off the
   two who are not paying for it, and a flight one person takes stayed on
   everybody else's day. The form asks both questions side by side (*Who's
@@ -376,10 +380,18 @@ NBA and NFL still use mocks.
   narrowed **server-side** in `getPublicTrip` instead, so the trip's member ids
   never reach the browser; the split still runs over every item, so the totals
   are unaffected.
+- **A public link never carries `payerIds` / `attendeeIds`.** They are raw
+  `trip_members` UUIDs and the page is unauthenticated; `getPublicTripByToken`
+  narrows and splits with them and then drops them, which is why the payload
+  type is `PublicTripItem` rather than `TripItemWithStops`.
+- **Item writes run in a transaction.** One save touches `trip_items`,
+  `trip_item_payers` and `trip_item_attendees`; without one, a rejected
+  traveller left the item written and its member lists half-replaced.
 - **A flight offers neither a video nor a photo** (`video` and `photos` in
   [`lib/travel/item-fields.ts`](../../lib/travel/item-fields.ts)). The row is
   two airport codes and a fare — the pickers were inviting a picture of
-  nothing.
+  nothing. Photos already attached still render, so an item re-categorised to
+  Flight does not strand them out of reach.
 - **The calendar draws every run on a day.** There used to be a four-lane cap
   with a "+N" chip on the overflow; a day with six things on it now shows six
   and the week's row grows to fit. `capLanes` went with it.

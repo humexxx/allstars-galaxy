@@ -117,3 +117,26 @@ describe("unitSuffix", () => {
     expect(unitSuffix("total")).toBe("");
   });
 });
+
+describe("a per-person price on an item not everybody is on", () => {
+  it("multiplies by the people it is for, not the whole party", () => {
+    // A fare for one traveller times four is three fares nobody is taking.
+    const cost = itemCost(
+      {
+        price: "500.00", priceMax: null, priceUnit: "per_person",
+        scheduledOn: "2027-03-12", endsOn: null, attendeeIds: ["ana"],
+      },
+      4
+    );
+    expect(cost.times).toBe(1);
+    expect(cost.low).toBe(500);
+  });
+
+  it("falls back to the party when the item names nobody", () => {
+    const cost = itemCost(
+      { price: "500.00", priceMax: null, priceUnit: "per_person", scheduledOn: null, endsOn: null },
+      4
+    );
+    expect(cost.times).toBe(4);
+  });
+});

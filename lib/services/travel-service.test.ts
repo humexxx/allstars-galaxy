@@ -86,6 +86,10 @@ vi.mock("@/db", () => ({
       const rows = deleteQueue.shift() ?? [];
       return makeDeleteThenable(rows);
     }),
+    // Item writes touch three tables and run in a transaction. The handle has
+    // the same shape as `db`, so hand the callback the mock itself and let the
+    // same FIFO queues serve it.
+    transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(dbMock)),
   },
 }));
 
@@ -214,7 +218,7 @@ describe("getTripWithRelations", () => {
       { ...items[0], stops, photos: [], payerIds: [], attendeeIds: [] },
     ]);
     expect(out?.members).toEqual(members);
-    // 1 for the trip + 7 parallel queries for relations. The count is the
+    // 1 for the trip + 8 parallel queries for relations. The count is the
     // point: every relation is one query for the whole trip, so adding a
     // relation must not add a query per row.
     expect(dbMock.select).toHaveBeenCalledTimes(9);
@@ -547,9 +551,10 @@ describe("getPublicTripByToken", () => {
     expect(out?.trip).toEqual(trip);
     // Items carry their stops: a cruise's ports are half of what its row
     // says, and a link that hides them shows a booking, not a journey.
-    expect(out?.items).toEqual(
-      items.map((i) => ({ ...i, stops: [], photos: [], payerIds: [], attendeeIds: [] }))
-    );
+    // No `payerIds` / `attendeeIds`: those are trip_members UUIDs and a public
+    // link is unauthenticated. The service narrows and splits with them, then
+    // drops them before the payload crosses the boundary.
+    expect(out?.items).toEqual(items.map((i) => ({ ...i, stops: [], photos: [] })));
     expect(out?.photos).toEqual(photos);
   });
 

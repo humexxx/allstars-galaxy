@@ -115,7 +115,13 @@ export function splitTrip(items: SplitItem[], members: SplitMember[]): MemberSha
     const cost = itemCost(item, partySize);
     if (cost.high === 0) continue;
 
-    const payers = item.payerIds.filter((id) => byMember.has(id));
+    // Naming nobody means whoever is ON it pays for it. Falling straight
+    // through to the trip's own split instead billed the other three for a
+    // flight the itinerary had just told them they were not taking — the
+    // exact combination the form offers by default (a named attendee, payers
+    // left on "Everyone").
+    const named = item.payerIds.length > 0 ? item.payerIds : (item.attendeeIds ?? []);
+    const payers = named.filter((id) => byMember.has(id));
 
     if (item.priceUnit === "per_person") {
       // A per-person price is already one person's cost. Whoever it applies to

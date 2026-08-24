@@ -214,3 +214,45 @@ describe("whose trip an item belongs to", () => {
     expect(itemConcerns(["jason", "jafet"], "ana")).toBe(false);
   });
 });
+
+describe("an item only some travellers are on", () => {
+  const four: SplitMember[] = ["jason", "jafet", "ana", "ale"].map((id) => ({
+    id, name: id, sharePercent: null,
+  }));
+
+  it("bills whoever is on it when no payer is named", () => {
+    // The default the form offers: a named attendee, payers left on
+    // "Everyone". Falling through to the trip's split charged the other three
+    // for a flight the itinerary had just told them they were not taking.
+    const shares = splitTrip(
+      [item({ id: "mex", title: "MEX → KEF", price: "800.00", attendeeIds: ["ana"] })],
+      four
+    );
+    expect(shares.find((s) => s.memberId === "ana")!.owedLow).toBe(800);
+    expect(shares.find((s) => s.memberId === "jason")!.owedLow).toBe(0);
+  });
+
+  it("still lets payers override who is on it", () => {
+    // The festival: all four go, two of them pay.
+    const shares = splitTrip(
+      [item({ id: "tml", title: "Festival", price: "2000.00", payerIds: ["jason", "jafet"] })],
+      four
+    );
+    expect(shares.find((s) => s.memberId === "jason")!.owedLow).toBe(1000);
+    expect(shares.find((s) => s.memberId === "ana")!.owedLow).toBe(0);
+  });
+
+  it("counts a per-person price by the people it is for", () => {
+    const shares = splitTrip(
+      [
+        item({
+          id: "fare", title: "Fare", price: "500.00",
+          priceUnit: "per_person", attendeeIds: ["jason", "jafet"],
+        }),
+      ],
+      four
+    );
+    expect(shares.find((s) => s.memberId === "jafet")!.owedLow).toBe(500);
+    expect(shares.find((s) => s.memberId === "ana")!.owedLow).toBe(0);
+  });
+});

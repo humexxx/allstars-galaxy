@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Text, Mono } from "@/components/ui/typography";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import {
   createRoadPathProgressAction,
+  deleteRoadPathProgressAction,
 } from "@/app/actions/road-path";
+import { runAction } from "@/lib/actions/run";
 import { createRoadPathProgressSchema, type CreateRoadPathProgressInput } from "@/schemas/road-path";
-import { toast } from "sonner";
 import type { RoadPathProgress } from "@/types";
 import { format } from "date-fns";
 
@@ -38,15 +39,22 @@ export function ProgressTracker({ roadPathId, progress, unit, onRefresh }: Progr
   });
 
   const onSubmit = async (data: CreateRoadPathProgressInput) => {
-    try {
-      await createRoadPathProgressAction(data);
-      toast.success("Progress recorded");
-      reset();
-      setShowForm(false);
-      onRefresh();
-    } catch {
-      toast.error("Failed to record progress");
-    }
+    const { ok } = await runAction(createRoadPathProgressAction(data), {
+      success: "Progress recorded",
+      failure: "Failed to record progress",
+    });
+    if (!ok) return;
+    reset({ roadPathId });
+    setShowForm(false);
+    onRefresh();
+  };
+
+  const handleDelete = async (id: string) => {
+    const { ok } = await runAction(deleteRoadPathProgressAction(id), {
+      success: "Entry removed",
+      failure: "Failed to remove the entry",
+    });
+    if (ok) onRefresh();
   };
 
   const sortedProgress = progress.toSorted((a, b) => {
@@ -66,9 +74,20 @@ export function ProgressTracker({ roadPathId, progress, unit, onRefresh }: Progr
                 {entry.date && <Mono>{format(new Date(entry.date), "MMM d, yyyy")}</Mono>}
               </Text>
             </div>
-            {entry.notes && (
-              <Text variant="muted">{entry.notes}</Text>
-            )}
+            <div className="flex items-center gap-2">
+              {entry.notes && <Text variant="muted">{entry.notes}</Text>}
+              {/* A mistyped figure moves the whole percentage, so it has to be
+                  removable — the action existed, the button did not. */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                onClick={() => handleDelete(entry.id)}
+                aria-label="Remove this entry"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         ))}
 

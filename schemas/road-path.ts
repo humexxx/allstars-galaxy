@@ -48,7 +48,10 @@ export const createRoadPathMilestoneSchema = z.object({
   title: z.string().min(1, "Title is required").max(200, "Title too long"),
   description: z.string().max(2000, "Description too long").nullable().optional(),
   targetValue: z.number().positive().nullable().optional(),
-  order: z.number().min(0),
+  /** Optional: the action asks the database where the end of the list is. A
+   *  client counting the prop it was rendered with gave every milestone after
+   *  the first the same order. */
+  order: z.number().min(0).optional(),
 });
 
 export type CreateRoadPathMilestoneData = z.infer<typeof createRoadPathMilestoneSchema>;

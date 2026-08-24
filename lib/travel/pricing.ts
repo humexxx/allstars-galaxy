@@ -6,6 +6,8 @@ export type PricedItem = {
   priceUnit: TripPriceUnit;
   scheduledOn: string | null;
   endsOn: string | null;
+  /** Who is on it. Empty (or absent) means the whole party. */
+  attendeeIds?: string[];
 };
 
 /**
@@ -25,13 +27,18 @@ export function nightsBetween(from: string | null, to: string | null): number {
   return nights > 0 ? nights : 1;
 }
 
-/** How many times an item's unit price applies. */
+/**
+ * How many times an item's unit price applies.
+ *
+ * A per-person price counts the people it is FOR, not everybody on the trip:
+ * a fare for one traveller multiplied by four is three fares nobody is taking.
+ */
 export function multiplier(item: PricedItem, partySize: number): number {
   switch (item.priceUnit) {
     case "per_night":
       return nightsBetween(item.scheduledOn, item.endsOn);
     case "per_person":
-      return Math.max(1, partySize);
+      return Math.max(1, item.attendeeIds?.length || partySize);
     default:
       return 1;
   }

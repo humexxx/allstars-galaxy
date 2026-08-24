@@ -145,7 +145,8 @@ export async function getRoadPathMilestones(roadPathId: string, userId: string):
 
 export async function createRoadPathMilestone(
   userId: string,
-  data: CreateRoadPathMilestoneData
+  /** `order` is resolved by the caller — see `createRoadPathMilestoneAction`. */
+  data: CreateRoadPathMilestoneData & { order: number }
 ): Promise<RoadPathMilestone> {
   await ensureRoadPathOwnership(data.roadPathId, userId);
 

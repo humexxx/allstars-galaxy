@@ -38,6 +38,13 @@ export type ItemFieldSpec = {
   startLabel: string;
   endLabel: string;
   /**
+   * Whether a photo belongs on this kind of item.
+   *
+   * A flight has nothing to photograph — the row is two airport codes and a
+   * fare — and the picker sat there inviting a shot of nothing.
+   */
+  photos: boolean;
+  /**
    * An example of the thing, not of the field.
    *
    * "Check-in at Hotel Bairro Alto" under a form set to Food is a prompt for
@@ -55,6 +62,7 @@ const DEFAULTS: ItemFieldSpec = {
   roundTrip: false,
   endDay: true,
   video: true,
+  photos: true,
   itinerary: false,
   startLabel: "Day",
   endLabel: "End day",
@@ -75,6 +83,7 @@ const BY_CATEGORY: Record<TripItemCategory, Partial<ItemFieldSpec>> = {
     // The return date IS the end day, but only once it is a return trip.
     endDay: false,
     video: false,
+    photos: false,
     startLabel: "Departs",
     // Airlines quote per traveller, but what lands in this field is the
     // number off the checkout page — one booking for everybody flying. The

@@ -219,12 +219,23 @@ body {
     text-rendering: optimizeLegibility;
   }
 
-  /* Kill the document-level overscroll bounce / rubber-band (and pull-to-
-     refresh / scroll-chaining) on the app shell. Inner scroll containers keep
-     their own behaviour — e.g. the combobox uses `overscroll-contain`. */
+  /* Horizontal overscroll is never wanted: it chains into the browser's
+     back-swipe. Vertical is left alone on a phone, because `overscroll-behavior`
+     of `none` OR `contain` on the viewport is what disables pull-to-refresh,
+     and on a phone that gesture is how people reload. Inner scroll containers
+     keep their own behaviour — e.g. the combobox uses `overscroll-contain`. */
   html,
   body {
-    overscroll-behavior: none;
+    overscroll-behavior-x: none;
+  }
+
+  /* From `md` up the shell is a fixed-height app frame, so the document edge
+     is never reached and the rubber-band is pure noise. */
+  @media (min-width: 48rem) {
+    html,
+    body {
+      overscroll-behavior: none;
+    }
   }
 
   /* Tabular numerals for numeric/data-heavy surfaces. Opt-in via the

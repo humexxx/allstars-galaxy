@@ -3,6 +3,11 @@
 import { Plus, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Mono, Text } from "@/components/ui/typography";
 import { moneyRange } from "@/lib/travel/format";
 import { cn } from "@/lib/utils";
@@ -98,58 +103,83 @@ export function TravellerBar({
         <div className="flex items-center gap-1">
           {/* An explicit way back to the total — clicking the selected face
               again also works, but nothing on screen said so. */}
-          <button
-            type="button"
-            aria-pressed={selected === null}
-            title="Whole trip"
-            onClick={() => onSelect(null)}
-            className={cn(
-              "grid h-8 place-items-center rounded-full px-2.5 text-2xs font-semibold transition",
-              selected === null
-                ? "bg-white text-black"
-                : "bg-black/60 text-white ring-1 ring-white/20 hover:bg-black/75"
-            )}
-          >
-            All
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-pressed={selected === null}
+                onClick={() => onSelect(null)}
+                className={cn(
+                  "grid h-8 cursor-pointer place-items-center rounded-full px-2.5 text-2xs font-semibold transition",
+                  selected === null
+                    ? "bg-white text-black"
+                    : "bg-black/60 text-white ring-1 ring-white/20 hover:bg-black/75"
+                )}
+              >
+                All
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Whole trip</TooltipContent>
+          </Tooltip>
 
           {travellers.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              aria-pressed={selected === t.id}
-              title={`${t.name}${t.isYou ? " (you)" : ""} — ${moneyRange(t.owedLow, t.owedHigh, currency)}`}
-              onClick={() => onSelect(selected === t.id ? null : t.id)}
-              className={cn(
-                "grid size-8 place-items-center rounded-full text-2xs font-semibold transition",
-                selected === t.id
-                  ? "bg-white text-black"
-                  : "bg-black/60 text-white ring-1 ring-white/20 hover:bg-black/75",
-                // A ring, not a colour: "this one is you", not a different
-                // kind of traveller.
-                t.isYou && selected !== t.id && "ring-2 ring-white/70"
-              )}
-            >
-              {initials(t.name)}
-            </button>
+            /* Two initials cannot tell Jason from Jafet, or Ana from
+               Alejandra. A native `title` said so but never showed on a
+               phone, which is where the chips are smallest. */
+            <Tooltip key={t.id}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-pressed={selected === t.id}
+                  aria-label={`${t.name}${t.isYou ? " (you)" : ""}`}
+                  onClick={() => onSelect(selected === t.id ? null : t.id)}
+                  className={cn(
+                    "grid size-8 cursor-pointer place-items-center rounded-full text-2xs font-semibold transition",
+                    selected === t.id
+                      ? "bg-white text-black"
+                      : "bg-black/60 text-white ring-1 ring-white/20 hover:bg-black/75",
+                    // A ring, not a colour: "this one is you", not a different
+                    // kind of traveller.
+                    t.isYou && selected !== t.id && "ring-2 ring-white/70"
+                  )}
+                >
+                  {initials(t.name)}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <span className="block font-medium">
+                  {t.name}
+                  {t.isYou && <span className="ml-1 opacity-70">(you)</span>}
+                </span>
+                <span className="block opacity-80">
+                  {moneyRange(t.owedLow, t.owedHigh, currency)}
+                </span>
+              </TooltipContent>
+            </Tooltip>
           ))}
         </div>
       )}
 
-      <Button
-        size="sm"
-        variant="ghost"
-        className="h-8 gap-1 bg-black/60 px-2 text-white/90 ring-1 ring-white/20 hover:bg-black/75 hover:text-white"
-        onClick={onManage}
-      >
-        {travellers.length === 0 ? (
-          <>
-            <Plus className="size-3.5" /> Add travellers
-          </>
-        ) : (
-          <Users className="size-3.5" />
-        )}
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label="Manage travellers"
+            className="h-8 gap-1 bg-black/60 px-2 text-white/90 ring-1 ring-white/20 hover:bg-black/75 hover:text-white"
+            onClick={onManage}
+          >
+            {travellers.length === 0 ? (
+              <>
+                <Plus className="size-3.5" /> Add travellers
+              </>
+            ) : (
+              <Users className="size-3.5" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Manage travellers</TooltipContent>
+      </Tooltip>
     </div>
   );
 }

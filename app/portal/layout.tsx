@@ -29,7 +29,13 @@ export default async function PortalLayout({
   return (
     <SidebarProvider defaultOpen={true}>
       <DevToolsProvider>
-        <div className="flex h-svh w-full flex-col">
+        {/* On a phone the DOCUMENT scrolls, so the browser's own pull-to-refresh
+            works — it only fires when the root scroller is overscrolled at the
+            top, and a shell pinned to `h-svh` with the content in an inner
+            `overflow-auto` never gives it the chance. From `md` up the shell
+            goes back to filling the viewport with its own scrolling pane,
+            which is what keeps the sidebar and header fixed. */}
+        <div className="flex min-h-svh w-full flex-col md:h-svh">
           <AppHeader
             realUser={ctx.realUser}
             impersonatedUser={ctx.impersonatedUser}
@@ -44,7 +50,7 @@ export default async function PortalLayout({
             <SidebarInset>
               {/* No container here: each route renders its own
                   `PortalPageContainer` and declares the width it needs. */}
-              <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
+              <main className="flex min-h-0 min-w-0 flex-1 flex-col md:overflow-auto">
                 {children}
               </main>
             </SidebarInset>

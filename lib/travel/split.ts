@@ -40,6 +40,18 @@ export type MemberShare = {
 };
 
 /**
+ * Is this traveller named in a per-item list?
+ *
+ * Empty means everybody, which is what an empty list has always meant here.
+ * Used for attendees — who an item is FOR — and deliberately not for payers:
+ * the festival is all four travellers' even though two of them cover it, so
+ * filtering an itinerary on who pays hides it from the two being invited.
+ */
+export function itemConcerns(memberIds: string[], memberId: string): boolean {
+  return memberIds.length === 0 || memberIds.includes(memberId);
+}
+
+/**
  * How the trip splits when an item names no payers.
  *
  * Members with an explicit percentage take it; the rest divide what is left
@@ -103,7 +115,13 @@ export function splitTrip(items: SplitItem[], members: SplitMember[]): MemberSha
     const cost = itemCost(item, partySize);
     if (cost.high === 0) continue;
 
-    const payers = item.payerIds.filter((id) => byMember.has(id));
+    // Naming nobody means whoever is ON it pays for it. Falling straight
+    // through to the trip's own split instead billed the other three for a
+    // flight the itinerary had just told them they were not taking — the
+    // exact combination the form offers by default (a named attendee, payers
+    // left on "Everyone").
+    const named = item.payerIds.length > 0 ? item.payerIds : (item.attendeeIds ?? []);
+    const payers = named.filter((id) => byMember.has(id));
 
     if (item.priceUnit === "per_person") {
       // A per-person price is already one person's cost. Whoever it applies to

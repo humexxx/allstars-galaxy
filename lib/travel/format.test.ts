@@ -8,7 +8,7 @@ describe("moneyRange", () => {
   });
 
   it("shows both ends when they do not", () => {
-    expect(moneyRange(600, 800, "USD")).toBe("$600 – $800");
+    expect(moneyRange(600, 800, "USD")).toBe("$600 ~ $800");
   });
 });
 

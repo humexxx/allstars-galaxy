@@ -33,6 +33,24 @@ export type TripItemStop = {
 
 export type TripItemWithStops = TripItem & {
   stops: TripItemStop[];
+  /**
+   * Members covering this item. Empty means "however the trip splits".
+   *
+   * The table has existed since the schema did and nothing ever read it, so
+   * every item was divided among everybody — which is wrong the moment two
+   * people share a festival ticket the other two are not going to.
+   */
+  payerIds: string[];
+  /**
+   * Members this item is FOR. Empty means everybody on the trip.
+   *
+   * Separate from `payerIds` because the two answer different questions: all
+   * four travellers go to the festival and two of them cover the package, and
+   * a flight from one city is one traveller's whether or not somebody else
+   * paid for it. Filtering read `payerIds` for a while and got both cases
+   * wrong.
+   */
+  attendeeIds: string[];
   /** Photos attached to this item rather than to the trip's gallery. */
   photos: TripPhoto[];
 };
@@ -73,10 +91,20 @@ export type PublicTripScope = {
   paid: number;
 };
 
+/**
+ * An item as a public link may see it.
+ *
+ * `payerIds` and `attendeeIds` are deliberately absent: they are raw
+ * `trip_members` UUIDs, a public link is unauthenticated, and a scoped one
+ * exists precisely to keep the other travellers out of the payload. The
+ * service uses both lists to narrow and to split, then drops them.
+ */
+export type PublicTripItem = Omit<TripItemWithStops, "payerIds" | "attendeeIds">;
+
 export type PublicTripView = {
   trip: Trip;
   /** With stops: a cruise's ports are half of what its row says. */
-  items: TripItemWithStops[];
+  items: PublicTripItem[];
   photos: TripPhoto[];
   share: TripShare;
   /** Null when the link covers the whole trip. */

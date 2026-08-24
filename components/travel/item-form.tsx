@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -61,11 +62,84 @@ const PRICE_UNIT_LABELS: Record<TripPriceUnit, string> = {
  * calendar from a bar — and reaching into the itinerary for it would drag the
  * whole list along with it.
  */
+type Traveller = { id: string; name: string };
+
+/** "Ana and Alejandra", or "Jason, Ana and Alejandra". */
+function names(ids: string[], travellers: Traveller[]): string {
+  const picked = ids.map((id) => travellers.find((t) => t.id === id)?.name ?? "?");
+  if (picked.length <= 1) return picked.join("");
+  return `${picked.slice(0, -1).join(", ")} and ${picked[picked.length - 1]}`;
+}
+
+/**
+ * A row of traveller chips where an empty selection means everybody.
+ *
+ * "Everyone" is the absence of a choice, not a choice of its own — an empty
+ * list is already what both of these fields mean by "all of them".
+ */
+function TravellerChips({
+  label,
+  travellers,
+  selected,
+  onChange,
+  allLabel,
+  hint,
+}: {
+  label: string;
+  travellers: Traveller[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  allLabel: string;
+  hint: string;
+}) {
+  const chip =
+    "h-8 rounded-full px-3 text-xs data-[active=true]:border-foreground/30 data-[active=true]:bg-foreground/5";
+  return (
+    <Field className="gap-1">
+      <FieldLabel className="text-xs">{label}</FieldLabel>
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          data-active={selected.length === 0}
+          className={chip}
+          onClick={() => onChange([])}
+        >
+          {allLabel}
+        </Button>
+        {travellers.map((t) => {
+          const on = selected.includes(t.id);
+          return (
+            <Button
+              key={t.id}
+              type="button"
+              size="sm"
+              variant="outline"
+              data-active={on}
+              className={chip}
+              onClick={() =>
+                onChange(on ? selected.filter((id) => id !== t.id) : [...selected, t.id])
+              }
+            >
+              {t.name}
+            </Button>
+          );
+        })}
+      </div>
+      <Text variant="small" className="text-muted-foreground">
+        {hint}
+      </Text>
+    </Field>
+  );
+}
+
 export function ItemForm({
   tripId,
   item,
   defaultDate,
   currency,
+  travellers = [],
   onDone,
 }: {
   tripId: string;
@@ -73,6 +147,8 @@ export function ItemForm({
   defaultDate?: string | null;
   /** Drives the symbol shown inside the amount fields. */
   currency: string;
+  /** Who is on the trip, so this item can name who is covering it. */
+  travellers?: { id: string; name: string }[];
   onDone: () => void;
 }) {
   const router = useRouter();
@@ -107,6 +183,10 @@ export function ItemForm({
     { url: string; storagePath: string | null; source: "upload" | "url" }[]
   >([]);
   const [notes, setNotes] = useState(item?.notes ?? "");
+  /** Empty means the trip's own split — the common case, so it is the default. */
+  const [payerIds, setPayerIds] = useState<string[]>(item?.payerIds ?? []);
+  /** Empty means everybody is on it, which is also the common case. */
+  const [attendeeIds, setAttendeeIds] = useState<string[]>(item?.attendeeIds ?? []);
 
   /** Saved photos and picked-but-unsaved ones, shown as one strip. */
   const shownPhotos = [
@@ -184,6 +264,8 @@ export function ItemForm({
         endsOn: endsOn || null,
         videoUrl: videoUrl.trim() || null,
         notes: notes.trim() || null,
+        payerIds,
+        attendeeIds,
       };
       const res = item
         ? await updateTripItemAction(tripId, { id: item.id, ...payload })
@@ -214,13 +296,13 @@ export function ItemForm({
       onSubmit={handleSubmit}
       // No panel of its own any more: it lives in a dialog, and a bordered
       // box inside a bordered box is one frame too many.
-      className="flex flex-col gap-4"
+      className="flex flex-col gap-3"
     >
       {/* Category first, and on its own line. It decides which fields appear
           below it, what the price can be quoted in and what a good title
           looks like — so it is the question to answer first, not a control
           squeezed beside the title with a different weight to it. */}
-      <Field className="gap-1.5">
+      <Field className="gap-1">
         <FieldLabel htmlFor={`category-${item?.id ?? "new"}`} className="text-xs">
           Category
         </FieldLabel>
@@ -260,7 +342,7 @@ export function ItemForm({
       </Field>
 
       {fields.title ? (
-        <Field className="gap-1.5">
+        <Field className="gap-1">
           <FieldLabel htmlFor={`title-${item?.id ?? "new"}`} className="text-xs">
             Title
           </FieldLabel>
@@ -287,8 +369,8 @@ export function ItemForm({
         </Text>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field className="gap-1.5">
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        <Field className={cn("gap-1", showEnd ? "" : "sm:col-span-2")}>
           <FieldLabel htmlFor={`date-${item?.id ?? "new"}`} className="text-xs">
             {fields.startLabel}
           </FieldLabel>
@@ -299,7 +381,7 @@ export function ItemForm({
           />
         </Field>
         {showEnd && (
-          <Field className="gap-1.5">
+          <Field className="gap-1">
             <FieldLabel htmlFor={`ends-${item?.id ?? "new"}`} className="text-xs">
               {endDayLabel(fields, roundTrip)}{" "}
               <span className="text-muted-foreground">(optional)</span>
@@ -315,8 +397,8 @@ export function ItemForm({
           </Field>
         )}
         {fields.route && (
-          <>
-            <Field className="gap-1.5">
+          <div className="grid grid-cols-2 gap-2.5 sm:col-span-2">
+            <Field className="gap-1">
               <FieldLabel htmlFor={`from-${item?.id ?? "new"}`} className="text-xs">From</FieldLabel>
               <AirportPicker
                 id={`from-${item?.id ?? "new"}`}
@@ -325,7 +407,7 @@ export function ItemForm({
                 placeholder="SJO or San José"
               />
             </Field>
-            <Field className="gap-1.5">
+            <Field className="gap-1">
               <FieldLabel htmlFor={`to-${item?.id ?? "new"}`} className="text-xs">To</FieldLabel>
               <AirportPicker
                 id={`to-${item?.id ?? "new"}`}
@@ -334,7 +416,7 @@ export function ItemForm({
                 placeholder="MCO or Orlando"
               />
             </Field>
-          </>
+          </div>
         )}
 
         {fields.roundTrip && (
@@ -356,10 +438,11 @@ export function ItemForm({
           </label>
         )}
 
-        {/* A price and its upper bound are one question asked twice; split
-            across rows by the parent grid they read as two. */}
-        <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
-        <Field className="gap-1.5">
+        {/* A price, its ceiling and what it is quoted per are one question
+            asked three ways. On three separate rows they read as three, and
+            they were a third of the dialog's height. */}
+        <div className="grid grid-cols-2 gap-2.5 sm:col-span-2 sm:grid-cols-[1fr_1fr_1.2fr]">
+        <Field className="gap-1">
           <FieldLabel htmlFor={`price-${item?.id ?? "new"}`} className="text-xs">
             Price <span className="text-muted-foreground">(or low estimate)</span>
           </FieldLabel>
@@ -371,7 +454,7 @@ export function ItemForm({
             placeholder="0.00"
           />
         </Field>
-        <Field className="gap-1.5">
+        <Field className="gap-1">
           <FieldLabel htmlFor={`pricemax-${item?.id ?? "new"}`} className="text-xs">
             Up to <span className="text-muted-foreground">(optional)</span>
           </FieldLabel>
@@ -383,9 +466,7 @@ export function ItemForm({
             placeholder="0.00"
           />
         </Field>
-        </div>
-
-        <Field className="gap-1.5 sm:col-span-2">
+        <Field className="col-span-2 gap-1 sm:col-span-1">
           <FieldLabel className="text-xs">That price is</FieldLabel>
           <Select
             value={priceUnit}
@@ -405,7 +486,12 @@ export function ItemForm({
             </SelectContent>
           </Select>
         </Field>
-        <Field className="gap-1.5 sm:col-span-2">
+        </div>
+
+        {/* Two optional URLs, side by side: as full-width rows they took as
+            much of the dialog as the price did. A category with no video
+            field leaves the link the whole row. */}
+        <Field className={cn("gap-1", fields.video ? "" : "sm:col-span-2")}>
           <FieldLabel htmlFor={`link-${item?.id ?? "new"}`} className="text-xs">Link</FieldLabel>
           <Input
             id={`link-${item?.id ?? "new"}`}
@@ -416,7 +502,7 @@ export function ItemForm({
           />
         </Field>
         {fields.video && (
-        <Field className="gap-1.5 sm:col-span-2">
+        <Field className="gap-1">
           <FieldLabel htmlFor={`video-${item?.id ?? "new"}`} className="text-xs">
             Video
           </FieldLabel>
@@ -431,7 +517,45 @@ export function ItemForm({
         )}
       </div>
 
-      <Field className="gap-1.5">
+      {travellers.length > 1 && (
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          {/* Who is on it and who pays for it are different questions, and
+              answering only the second got both cases wrong: the festival all
+              four are going to vanished off the two who are not paying for
+              it, and a flight one person takes stayed on everybody's day. */}
+          <TravellerChips
+            label="Who's coming"
+            travellers={travellers}
+            selected={attendeeIds}
+            onChange={setAttendeeIds}
+            allLabel="Everyone"
+            hint={
+              attendeeIds.length === 0
+                ? "On everybody's itinerary."
+                : `Only on ${names(attendeeIds, travellers)}'s itinerary.`
+            }
+          />
+          <TravellerChips
+            label="Who pays for this"
+            travellers={travellers}
+            selected={payerIds}
+            onChange={setPayerIds}
+            allLabel="Everyone"
+            hint={
+              payerIds.length === 0
+                ? "Divided the way the trip divides."
+                : `Only ${names(payerIds, travellers)} — split equally between them.`
+            }
+          />
+        </div>
+      )}
+
+      {/* The picker is hidden on a category that has nothing to photograph,
+          but photos already attached still have to be reachable — an item
+          re-categorised to Flight would otherwise keep them with no way to
+          look at or remove them. */}
+      {(fields.photos || shownPhotos.length > 0) && (
+      <Field className="gap-1">
         <FieldLabel className="text-xs">Photos</FieldLabel>
         {shownPhotos.length > 0 && (
           <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
@@ -462,6 +586,7 @@ export function ItemForm({
             ))}
           </div>
         )}
+        {fields.photos && (
         <PhotoPicker
           variant="compact"
           folder={tripId}
@@ -481,7 +606,9 @@ export function ItemForm({
             else toast.error(res.error);
           }}
         />
+        )}
       </Field>
+      )}
 
       {fields.itinerary && item && (
         <div className="flex flex-col gap-1.5 ">
@@ -508,13 +635,13 @@ export function ItemForm({
         </div>
       )}
 
-      <Field className="gap-1.5">
+      <Field className="gap-1">
         <FieldLabel htmlFor={`notes-${item?.id ?? "new"}`} className="text-xs">Notes</FieldLabel>
         <Textarea
           id={`notes-${item?.id ?? "new"}`}
           value={notes ?? ""}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Reservation reference, confirmation code, who's coming…"
+          placeholder="Reservation reference, confirmation code, what to pack…"
           rows={2}
         />
       </Field>

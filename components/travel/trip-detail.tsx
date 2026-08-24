@@ -120,9 +120,8 @@ export function TripDetail({
           priceUnit: i.priceUnit,
           scheduledOn: i.scheduledOn,
           endsOn: i.endsOn,
-          // Per-item payers have no UI yet; until they do every item follows
-          // the trip's own split, which is what an empty list means.
-          payerIds: [],
+          payerIds: i.payerIds,
+          attendeeIds: i.attendeeIds,
         })),
         trip.members.map((m) => ({
           id: m.id,
@@ -160,6 +159,7 @@ export function TripDetail({
     const share = shares.find((s) => s.memberId === selected);
     if (!share) return null;
     return {
+      memberId: share.memberId,
       name: share.name,
       isYou: share.memberId === youId,
       lines: new Map(share.lines.map((l) => [l.itemId, { low: l.low, high: l.high }])),
@@ -208,7 +208,11 @@ export function TripDetail({
         </Tabs>
       </div>
 
-      <header className="overflow-hidden rounded-xl border">
+      {/* Full bleed on a phone. The page container's 16px gutters were
+          cropping the cover on both sides for no gain — a photograph wants the
+          screen. `-mx-4` cancels exactly that padding; from `sm` up the card
+          sits back inside it with its border and corners. */}
+      <header className="-mx-4 overflow-hidden border-y sm:mx-0 sm:rounded-xl sm:border">
         <div
           // 21/9 leaves 167px on a 390px phone, and the pill, the buttons and
           // the title all landed on top of each other. The floor wins on a
@@ -253,7 +257,11 @@ export function TripDetail({
               onSelect={setSelected}
               onManage={() => setMembersOpen(true)}
             />
-              <div className="flex shrink-0 gap-2">
+              {/* A column on a phone. Side by side they took a third of a
+                  326px banner, and the row they shared with the total and the
+                  faces had no width left — the manage-travellers button was
+                  wrapping onto a line of its own. */}
+              <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 {/* Sharing sits with the trip, not in a card down the page:
                     it is something you do to the whole thing, and which
                     traveller is selected changes what the link will show. */}
@@ -292,7 +300,15 @@ export function TripDetail({
             </div>
 
             <div className="flex flex-col gap-2">
-              <Heading level="h1" className="text-white">{trip.title}</Heading>
+              <Heading
+                level="h1"
+                // A trip name is long by nature ("Islandia, Finlandia &
+                // Tomorrowland Winter"), and at the h1's own 30px it ran to
+                // two lines and owned the banner on a phone.
+                className="text-2xl text-white sm:text-4xl"
+              >
+                {trip.title}
+              </Heading>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
                 {trip.destination && (
                   <span className="inline-flex items-center gap-1.5">
@@ -373,7 +389,7 @@ export function TripDetail({
       </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Edit trip</DialogTitle>
             <DialogDescription>

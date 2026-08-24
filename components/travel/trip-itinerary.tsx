@@ -42,7 +42,7 @@ import {
 import { itemCost, unitSuffix } from "@/lib/travel/pricing";
 import { CategoryIcon, categoryMeta } from "@/components/travel/category";
 import { ItemForm } from "@/components/travel/item-form";
-import { readerCost, type ItineraryViewer } from "@/lib/travel/viewer";
+import { readerCost, viewerItems, type ItineraryViewer } from "@/lib/travel/viewer";
 export type { ItineraryViewer };
 
 import { Badge } from "@/components/ui/badge";
@@ -111,22 +111,29 @@ export function TripItinerary({
   viewer = null,
 }: TripItineraryProps) {
   const [adding, setAdding] = useState(false);
+  /** Only what the selected traveller is part of; the whole plan otherwise. */
+  const items = useMemo(() => viewerItems(trip.items, viewer), [trip.items, viewer]);
   const groups = useMemo(
-    () => groupByDay(trip.items, partySize, viewer),
-    [trip.items, partySize, viewer]
+    () => groupByDay(items, partySize, viewer),
+    [items, partySize, viewer]
   );
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          Itinerary
-          {/* The count belongs with the thing it counts, not in the banner. */}
-          {trip.items.length > 0 && (
-            <Badge variant="secondary" className="text-2xs font-normal">
-              {trip.items.length}
-            </Badge>
-          )}
+        {/* On a phone the whose-share badge goes under the heading rather
+            than beside it: inline, a name like "Alejandra's share" pushed the
+            row against Add item with nowhere left to go. */}
+        <CardTitle className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
+          <span className="flex items-center gap-2">
+            Itinerary
+            {/* The count belongs with the thing it counts, not in the banner. */}
+            {items.length > 0 && (
+              <Badge variant="secondary" className="text-2xs font-normal">
+                {items.length}
+              </Badge>
+            )}
+          </span>
           {/* Every price below is one person's, and a reader who missed the
               click upstairs would otherwise read them as the trip's. */}
           {viewer && (
@@ -173,6 +180,7 @@ export function TripItinerary({
                   currency={trip.currency}
                   partySize={partySize}
                   viewer={viewer}
+                  travellers={trip.members.map((m) => ({ id: m.id, name: m.name }))}
                 />
               ))}
             </ul>
@@ -195,6 +203,7 @@ export function TripItinerary({
             tripId={trip.id}
             defaultDate={trip.startDate}
             currency={trip.currency}
+            travellers={trip.members.map((m) => ({ id: m.id, name: m.name }))}
             onDone={() => setAdding(false)}
           />
         </DialogContent>
@@ -209,6 +218,7 @@ function ItemRow({
   currency,
   partySize,
   viewer,
+  travellers,
 }: {
   tripId: string;
   item: TripItemWithStops;
@@ -216,6 +226,7 @@ function ItemRow({
   /** How many people the per-person prices apply to. */
   partySize: number;
   viewer: ItineraryViewer | null;
+  travellers: { id: string; name: string }[];
 }) {
   const [editing, setEditing] = useState(false);
   const meta = categoryMeta(item.category);
@@ -373,6 +384,7 @@ function ItemRow({
           item={item}
           defaultDate={item.scheduledOn}
           currency={currency}
+          travellers={travellers}
           onDone={() => setEditing(false)}
         />
       </DialogContent>

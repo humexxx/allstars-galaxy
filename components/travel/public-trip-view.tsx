@@ -27,6 +27,7 @@ import { itemCost, tripCost, unitSuffix } from "@/lib/travel/pricing";
 import { CategoryIcon, categoryMeta } from "@/components/travel/category";
 import { PublicTripViews } from "@/components/travel/public-trip-views";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
+import { ActivityVideo } from "@/components/travel/activity-video";
 
 const NO_DATE_KEY = "__no_date__";
 
@@ -105,6 +106,9 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
 
   const publicViewer = scope
     ? {
+        // The service has already narrowed `items` to this traveller's, and
+        // the trip's member ids stay on the server.
+        memberId: null,
         name: scope.memberName,
         isYou: false,
         lines: new Map(scope.lines.map((l) => [l.itemId, { low: l.low, high: l.high }])),
@@ -118,8 +122,11 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
       }
     : { low: 0, high: 0 };
 
+  // Full bleed on a phone, like the planner's — the page gutters were cropping
+  // the cover for no gain. The negative margin lives on the wrapper in
+  // `PublicTripViews`, which is also the view switcher's positioning context.
   const banner = (
-      <header className="overflow-hidden rounded-xl border">
+      <header className="overflow-hidden border-y sm:rounded-xl sm:border">
         <div
           // Same floor as the planner's banner: at 21/9 a 390px phone leaves
           // 167px and the pill lands on top of the title.
@@ -158,7 +165,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <Heading level="h1" className="text-white">
+              <Heading level="h1" className="text-2xl text-white sm:text-4xl">
                 {trip.title}
               </Heading>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
@@ -307,6 +314,19 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                                       />
                                     </div>
                                   ))}
+                                </div>
+                              )}
+                              {/* The same embed the planner shows. It routes
+                                  YouTube through youtube-nocookie, which is
+                                  the whole reason that choice exists: a
+                                  visitor holding a share token has agreed to
+                                  nothing. */}
+                              {item.videoUrl && (
+                                <div className="pt-2">
+                                  <ActivityVideo
+                                    url={item.videoUrl}
+                                    title={item.title}
+                                  />
                                 </div>
                               )}
                             </div>

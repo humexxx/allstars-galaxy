@@ -75,6 +75,10 @@ export const updateTripSchema = z
 // ---------- trip items ----------
 
 export const tripItemSchema = z.object({
+  /** Members covering this item. Empty (or absent) = the trip's own split. */
+  payerIds: z.array(z.string().uuid()).optional(),
+  /** Members this item is for. Empty (or absent) = everybody on the trip. */
+  attendeeIds: z.array(z.string().uuid()).optional(),
   title: z.string().min(1).max(200),
   category: tripItemCategorySchema.default("activity"),
   link: z.string().url().max(2000).nullable().optional(),

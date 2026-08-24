@@ -60,6 +60,10 @@ export function AppSidebar({
       {...props}
     >
       <SidebarContent className="gap-0 px-2 pt-18">
+        {/* A real landmark: the sidebar IS the app's primary navigation, and
+            since the header's duplicate nav was dropped this was the only
+            place left to carry it — the portal had no <nav> at all. */}
+        <nav aria-label="Main" className="flex flex-col">
         {sections.map((section, idx) => (
           <SidebarGroup key={section.label ?? `section-${idx}`} className="py-1">
             {section.label && (
@@ -105,6 +109,7 @@ export function AppSidebar({
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
+        </nav>
       </SidebarContent>
 
       {/* The running version, where you look when something behaves oddly and

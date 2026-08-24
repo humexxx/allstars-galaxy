@@ -502,6 +502,11 @@ describe("getRoadPathDetailAction", () => {
       progressRate: 0.5,
     } as unknown as Awaited<ReturnType<typeof calculateRoadPathStats>>;
 
+    const roadPath = { id: ROAD_PATH_ID, currentValue: "7" } as unknown as Awaited<
+      ReturnType<typeof getRoadPath>
+    >;
+
+    vi.mocked(getRoadPath).mockResolvedValueOnce(roadPath);
     vi.mocked(getRoadPathMilestones).mockResolvedValueOnce(milestones);
     vi.mocked(getRoadPathProgress).mockResolvedValueOnce(progress);
     vi.mocked(calculateRoadPathStats).mockResolvedValueOnce(stats);
@@ -510,11 +515,31 @@ describe("getRoadPathDetailAction", () => {
 
     expect(result).toEqual({
       success: true,
-      data: { milestones, progress, stats },
+      data: { roadPath, milestones, progress, stats },
     });
     expect(getRoadPathMilestones).toHaveBeenCalledWith(ROAD_PATH_ID, USER_ID);
     expect(getRoadPathProgress).toHaveBeenCalledWith(ROAD_PATH_ID, USER_ID);
     expect(calculateRoadPathStats).toHaveBeenCalledWith(ROAD_PATH_ID, USER_ID);
+  });
+
+  it("reports a road path that is not there rather than half a payload", async () => {
+    // The detail reads `currentValue` off this object. Returning success with
+    // no path would have the view render somebody's percentage against
+    // nothing at all.
+    vi.mocked(getRoadPath).mockResolvedValueOnce(null);
+    vi.mocked(getRoadPathMilestones).mockResolvedValueOnce([]);
+    vi.mocked(getRoadPathProgress).mockResolvedValueOnce([]);
+    vi.mocked(calculateRoadPathStats).mockResolvedValueOnce({
+      totalProgress: 0,
+      completedMilestones: 0,
+      totalMilestones: 0,
+      daysRemaining: null,
+      progressRate: 0,
+    });
+
+    const result = await getRoadPathDetailAction(ROAD_PATH_ID);
+
+    expect(result.success).toBe(false);
   });
 });
 

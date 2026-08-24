@@ -138,7 +138,12 @@ export async function createRoadPathMilestoneAction(data: CreateRoadPathMileston
   if (!parsed.success) {
     return { success: false as const, error: "Invalid input" };
   }
-  const milestone = await createRoadPathMilestone(ctx.effectiveUserId, parsed.data);
+  const milestone = await createRoadPathMilestone(ctx.effectiveUserId, {
+    ...parsed.data,
+    order:
+      parsed.data.order ??
+      (await getNextMilestoneOrder(parsed.data.roadPathId, ctx.effectiveUserId)),
+  });
 
   await logImpersonatedMutation({
     action: "roadPathMilestone.create",
@@ -205,13 +210,20 @@ export async function getRoadPathProgressAction(
 
 export async function getRoadPathDetailAction(roadPathId: string) {
   const ctx = await requireEffectiveContext();
-  const [milestones, progress, stats] = await Promise.all([
+  // The path itself travels with its stats. Without it the detail read
+  // `currentValue` off the snapshot it was opened with, so logging progress
+  // moved the percentage while the figure under it stayed where it was.
+  const [roadPath, milestones, progress, stats] = await Promise.all([
+    getRoadPath(roadPathId, ctx.effectiveUserId),
     getRoadPathMilestones(roadPathId, ctx.effectiveUserId),
     getRoadPathProgress(roadPathId, ctx.effectiveUserId),
     calculateRoadPathStats(roadPathId, ctx.effectiveUserId),
   ]);
+  if (!roadPath) {
+    return { success: false as const, error: "Road path not found" };
+  }
 
-  return { success: true, data: { milestones, progress, stats } };
+  return { success: true as const, data: { roadPath, milestones, progress, stats } };
 }
 
 export async function createRoadPathProgressAction(data: CreateRoadPathProgressInput) {

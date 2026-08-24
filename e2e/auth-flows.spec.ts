@@ -73,11 +73,18 @@ test.describe("Auth — public pages", () => {
     await expect(page.getByLabel("Email")).toBeVisible();
   });
 
-  test("/signup renders the signup form", async ({ page }) => {
+  test("/signup follows ALLOW_SIGNUPS", async ({ page }) => {
     const response = await page.goto("/signup");
     expect(response?.status()).toBeLessThan(400);
-    // The signup form has an Email and Password input at minimum.
-    await expect(page.getByLabel("Email")).toBeVisible();
+    // The flag is fail-closed and decides server-side which of the two this
+    // page even is. Asserting the form unconditionally made the spec fail on
+    // any environment with signups shut, which is the safe default.
+    if (process.env.ALLOW_SIGNUPS === "true") {
+      await expect(page.getByLabel("Email")).toBeVisible();
+    } else {
+      await expect(page.getByRole("heading", { name: /Signups are closed/i })).toBeVisible();
+      await expect(page.getByLabel("Email")).toHaveCount(0);
+    }
   });
 
   test("anonymous /portal access redirects to /login", async ({ page }) => {

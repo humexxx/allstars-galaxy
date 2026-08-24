@@ -102,7 +102,7 @@ test.describe("Travel planner — share links", () => {
       // His half of the flight, the cruise fare charged to him in full, and
       // what he has already handed over.
       expect(brunoText).toMatch(/bruno/i);
-      expect(brunoText).toContain("$2,200 – $2,300");
+      expect(brunoText).toContain("$2,200 ~ $2,300");
       expect(brunoText).toContain("$300");
       expect(brunoText).toContain("$1,900");
       // The other traveller is the whole reason this link is scoped.

@@ -86,6 +86,10 @@ vi.mock("@/db", () => ({
       const rows = deleteQueue.shift() ?? [];
       return makeDeleteThenable(rows);
     }),
+    // Item writes touch three tables and run in a transaction. The handle has
+    // the same shape as `db`, so hand the callback the mock itself and let the
+    // same FIFO queues serve it.
+    transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(dbMock)),
   },
 }));
 
@@ -210,12 +214,14 @@ describe("getTripWithRelations", () => {
     expect(out?.shares).toEqual(shares);
     // Each item carries its own stops, attached from the single stops query
     // rather than one query per item.
-    expect(out?.items).toEqual([{ ...items[0], stops, photos: [] }]);
+    expect(out?.items).toEqual([
+      { ...items[0], stops, photos: [], payerIds: [], attendeeIds: [] },
+    ]);
     expect(out?.members).toEqual(members);
-    // 1 for the trip + 6 parallel queries for relations. The count is the
+    // 1 for the trip + 8 parallel queries for relations. The count is the
     // point: every relation is one query for the whole trip, so adding a
     // relation must not add a query per row.
-    expect(dbMock.select).toHaveBeenCalledTimes(7);
+    expect(dbMock.select).toHaveBeenCalledTimes(9);
   });
 });
 
@@ -535,6 +541,8 @@ describe("getPublicTripByToken", () => {
     queueSelect(items); // items
     queueSelect(photos); // photos
     queueSelect([]); // stops
+    queueSelect([]); // payers
+    queueSelect([]); // attendees
 
     const out = await getPublicTripByToken("tok");
 
@@ -543,6 +551,9 @@ describe("getPublicTripByToken", () => {
     expect(out?.trip).toEqual(trip);
     // Items carry their stops: a cruise's ports are half of what its row
     // says, and a link that hides them shows a booking, not a journey.
+    // No `payerIds` / `attendeeIds`: those are trip_members UUIDs and a public
+    // link is unauthenticated. The service narrows and splits with them, then
+    // drops them before the payload crosses the boundary.
     expect(out?.items).toEqual(items.map((i) => ({ ...i, stops: [], photos: [] })));
     expect(out?.photos).toEqual(photos);
   });
@@ -568,6 +579,8 @@ describe("getPublicTripByToken", () => {
     queueSelect(items);
     queueSelect([]); // photos
     queueSelect([]); // stops
+    queueSelect([]); // payers
+    queueSelect([]); // attendees
     queueSelect([
       { id: "jason", name: "Jason Hume", sharePercent: null },
       { id: "bruno", name: "Bruno Fabián", sharePercent: null },
@@ -585,10 +598,10 @@ describe("getPublicTripByToken", () => {
     });
     // Jason is nowhere in what crosses the boundary.
     expect(JSON.stringify(out)).not.toContain("Jason");
-    // Five relation queries, not six: the scope reuses the items already in
-    // hand. Counting them is what keeps a second round trip from creeping
-    // back in behind the first.
-    expect(dbMock.select).toHaveBeenCalledTimes(7);
+    // The scope reuses the items already in hand rather than querying them a
+    // second time. Counting the selects is what keeps a second round trip
+    // from creeping back in behind the first.
+    expect(dbMock.select).toHaveBeenCalledTimes(9);
   });
 
   it("leaves an unscoped link with no traveller attached", async () => {
@@ -600,6 +613,8 @@ describe("getPublicTripByToken", () => {
     queueSelect([]); // items
     queueSelect([]); // photos
     queueSelect([]); // stops
+    queueSelect([]); // payers
+    queueSelect([]); // attendees
 
     const out = await getPublicTripByToken("tok");
     expect(out?.scope).toBeNull();
@@ -617,6 +632,8 @@ describe("getPublicTripByToken", () => {
     queueSelect([]); // items
     queueSelect([]); // photos
     queueSelect([]); // stops
+    queueSelect([]); // payers
+    queueSelect([]); // attendees
     queueSelect([{ id: "jason", name: "Jason Hume", sharePercent: null }]);
     queueSelect([]); // payments
 

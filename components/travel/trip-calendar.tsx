@@ -46,11 +46,10 @@ import {
 } from "@/components/ui/dialog";
 import { categoryMeta } from "./category";
 
-import { readerCost, type ItineraryViewer } from "@/lib/travel/viewer";
+import { readerCost, viewerItems, type ItineraryViewer } from "@/lib/travel/viewer";
 import {
   addMonths,
   isoDay,
-  capLanes,
   daysBetween,
   layOutWeek,
   monthWeeks,
@@ -88,15 +87,6 @@ const LANE_HEIGHT = 22;
 /** Breathing room between two runs stacked on the same day. */
 const LANE_GAP = 4;
 const MIN_CELL = 64;
-/**
- * How tall a day is allowed to get before its tail becomes a count.
- *
- * A cell grows a lane at a time, which is right for the second and third
- * thing on a day and wrong for the eighth — one packed day stretches every
- * other cell in its week to match, and a month of those stops reading as a
- * month.
- */
-const MAX_LANES = 4;
 
 /** Static so Tailwind can see them; arbitrary values would not be generated. */
 const COL_START = [
@@ -139,9 +129,12 @@ export function TripCalendar({
   const tripMonth = trip.startDate.slice(0, 7);
   const [month, setMonth] = useState(tripMonth);
 
+  /** Only what the selected traveller is part of; the whole plan otherwise. */
+  const mine = useMemo(() => viewerItems(trip.items, viewer), [trip.items, viewer]);
+
   const items: CalendarItem[] = useMemo(
     () =>
-      trip.items
+      mine
         .filter((i) => i.scheduledOn)
         .map((i) => ({
           id: i.id,
@@ -150,7 +143,7 @@ export function TripCalendar({
           scheduledOn: i.scheduledOn,
           endsOn: i.endsOn,
         })),
-    [trip.items]
+    [mine]
   );
 
   const weeks = useMemo(() => monthWeeks(month), [month]);
@@ -163,13 +156,12 @@ export function TripCalendar({
   const laidOut = useMemo(
     () =>
       weeks.map((week) => {
-        const all = layOutWeek(week, items);
-        const { visible, hidden, hiddenByDay } = capLanes(all, MAX_LANES);
-        const lanes = Math.min(
-          MAX_LANES,
-          all.reduce((n, seg) => Math.max(n, seg.lane + 1), 0)
-        );
-        return { week, segments: visible, hidden, hiddenByDay, lanes };
+        // Every run is drawn. A day with six things on it shows six — the
+        // week's row grows to fit rather than trading the tail for a "+3"
+        // that has to be opened somewhere else to be read.
+        const segments = layOutWeek(week, items);
+        const lanes = segments.reduce((n, seg) => Math.max(n, seg.lane + 1), 0);
+        return { week, segments, lanes };
       }),
     [weeks, items]
   );
@@ -239,8 +231,11 @@ export function TripCalendar({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          {format(parseDay(`${month}-01`), "MMMM yyyy")}
+        {/* Same as the itinerary's: the badge sits under the month on a
+            phone, where the month arrows already own the other end of the
+            row. */}
+        <CardTitle className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
+          <span>{format(parseDay(`${month}-01`), "MMMM yyyy")}</span>
           {viewer && (
             <Badge variant="outline" className="text-2xs font-normal">
               {viewer.isYou ? "your share" : `${viewer.name}'s share`}
@@ -293,7 +288,7 @@ export function TripCalendar({
           ))}
         </div>
 
-        {laidOut.map(({ week, segments, hidden, hiddenByDay, lanes }) => {
+        {laidOut.map(({ week, segments, lanes }) => {
           const cellHeight = Math.max(
             MIN_CELL,
             LANE_TOP + lanes * LANE_HEIGHT + 6
@@ -453,6 +448,9 @@ export function TripCalendar({
                               e.stopPropagation();
                             }}
                             className={cn(
+                              // Hidden on a phone: 14px of a 46px bar is a
+                              // third of the room the name needs, and the
+                              // colour already says which category it is.
                               "hidden shrink-0 sm:block",
                               !readOnly && "cursor-grab active:cursor-grabbing"
                             )}
@@ -463,9 +461,18 @@ export function TripCalendar({
                             // Title and price are one label, not two boxes
                             // competing for a bar that can be a single day
                             // wide. Pinned to the right, the price ate the
-                            // title whole — a flight read "$600 – $" and never
+                            // title whole — a flight read "$600 ~ $" and never
                             // said where it went.
-                            <MarqueeText className="hidden text-2xs font-medium leading-none sm:block">
+                            //
+                            // Shown at every size: a one-day bar on a phone
+                            // fits about five characters, which still beats a
+                            // coloured stripe with nothing on it.
+                            //
+                            // `flex-1`, or the box shrinks to nothing — with
+                            // only `min-w-0` it measures 0, MarqueeText reads
+                            // that as overflow, gives the text `w-max`, and
+                            // the box it lives in stays 0 wide forever.
+                            <MarqueeText className="min-w-0 flex-1 text-2xs font-medium leading-none">
                               {label}
                             </MarqueeText>
                           )}
@@ -489,45 +496,6 @@ export function TripCalendar({
                   );
                 })}
 
-                {hiddenByDay.map((count, day) =>
-                  count === 0 ? null : (
-                    <Tooltip key={`more-${day}`}>
-                      <TooltipTrigger asChild>
-                        {/* Not a control: there is nowhere to go that the
-                            list view does not already do better. It carries
-                            the names so the day is still answerable without
-                            leaving the month. */}
-                        <span
-                          data-slot="calendar-more"
-                          tabIndex={0}
-                          role="button"
-                          aria-label={`${count} more on ${dayLabel(week[day])}`}
-                          style={{ gridRow: MAX_LANES, height: LANE_HEIGHT - LANE_GAP }}
-                          className={cn(
-                            "pointer-events-auto col-span-1 mx-0.5 truncate rounded-sm px-1",
-                            "outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                            "text-2xs font-medium text-muted-foreground hover:bg-muted",
-                            COL_START[day]
-                          )}
-                        >
-                          +{count}
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-64">
-                        <span className="block font-medium">
-                          {count} more on {dayLabel(week[day])}
-                        </span>
-                        {hidden
-                          .filter((h) => day >= h.start && day < h.start + h.span)
-                          .map((h) => (
-                            <span key={h.item.id} className="block opacity-80">
-                              {h.item.title}
-                            </span>
-                          ))}
-                      </TooltipContent>
-                    </Tooltip>
-                  )
-                )}
               </div>
             </div>
           );
@@ -548,6 +516,7 @@ export function TripCalendar({
               item={editing}
               defaultDate={editing.scheduledOn}
               currency={trip.currency}
+              travellers={trip.members.map((m) => ({ id: m.id, name: m.name }))}
               onDone={() => setEditing(null)}
             />
           )}

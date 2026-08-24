@@ -34,7 +34,7 @@ export function InvestmentMethodSelector({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Select Investment Method</DialogTitle>
         </DialogHeader>

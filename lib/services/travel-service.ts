@@ -3,13 +3,29 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { cache } from "react";
 
-import { and, asc, desc, eq, isNull, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, notInArray } from "drizzle-orm";
 
 import { db } from "@/db";
+
+/** `[{ itemId, memberId }]` → `Map<itemId, memberId[]>`, for payers and attendees alike. */
+function groupByItem(rows: { itemId: string; memberId: string }[]): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const row of rows) {
+    const list = map.get(row.itemId) ?? [];
+    list.push(row.memberId);
+    map.set(row.itemId, list);
+  }
+  return map;
+}
+
+/** The handle inside `db.transaction`, which is the same shape as `db`. */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 import {
   trips,
   tripContributions,
   tripItems,
+  tripItemAttendees,
+  tripItemPayers,
   tripItemStops,
   tripMembers,
   tripPhotos,
@@ -24,6 +40,7 @@ import type {
   Trip,
   TripContribution,
   TripItem,
+  TripItemWithStops,
   TripPhoto,
   TripShare,
   TripWithRelations,
@@ -40,7 +57,7 @@ import type {
   MoveTripItemInput,
 } from "@/schemas/travel";
 
-import { splitTrip } from "@/lib/travel/split";
+import { itemConcerns, splitTrip } from "@/lib/travel/split";
 
 import { ensureOwnedRow } from "./ownership";
 
@@ -121,7 +138,8 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     .where(and(eq(trips.id, tripId), eq(trips.userId, userId)));
   if (!trip) return null;
 
-  const [items, photos, shares, stops, members, contributions] = await Promise.all([
+  const [items, photos, shares, stops, members, contributions, payers, attendees] =
+    await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -170,6 +188,20 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       // Newest first: a payment log is read from the top, and the question it
       // answers is "did the last one land", not "what happened first".
       .orderBy(desc(tripContributions.paidOn), desc(tripContributions.createdAt)),
+    // Who covers what, in one query for the trip. `splitTrip` has honoured
+    // this since it was written; nothing ever loaded it, so every item was
+    // divided among everybody.
+    db
+      .select({ itemId: tripItemPayers.itemId, memberId: tripItemPayers.memberId })
+      .from(tripItemPayers)
+      .innerJoin(tripItems, eq(tripItemPayers.itemId, tripItems.id))
+      .where(eq(tripItems.tripId, tripId)),
+    // And who is actually ON each item, which is a different question.
+    db
+      .select({ itemId: tripItemAttendees.itemId, memberId: tripItemAttendees.memberId })
+      .from(tripItemAttendees)
+      .innerJoin(tripItems, eq(tripItemAttendees.itemId, tripItems.id))
+      .where(eq(tripItems.tripId, tripId)),
   ]);
 
   const stopsByItem = new Map<string, typeof stops>();
@@ -181,6 +213,9 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
 
   // A photo belongs to one place or the other: the gallery is the trip's own
   // photos, and an item's photos travel with the item.
+  const payersByItem = groupByItem(payers);
+  const attendeesByItem = groupByItem(attendees);
+
   const photosByItem = new Map<string, typeof photos>();
   for (const photo of photos) {
     if (!photo.itemId) continue;
@@ -195,6 +230,8 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       ...i,
       stops: stopsByItem.get(i.id) ?? [],
       photos: photosByItem.get(i.id) ?? [],
+      payerIds: payersByItem.get(i.id) ?? [],
+      attendeeIds: attendeesByItem.get(i.id) ?? [],
     })),
     photos: photos.filter((p) => !p.itemId),
     shares,
@@ -257,13 +294,49 @@ export async function deleteTrip(userId: string, tripId: string): Promise<void> 
 
 // ---------- items ----------
 
+/**
+ * Replaces one of an item's member lists wholesale.
+ *
+ * Delete-then-insert rather than a diff: the set is at most a handful of rows
+ * and reconciling it would be more code than it saves. Members are checked
+ * against the trip for the same reason everything else here is — the foreign
+ * key proves the row exists, not which trip it belongs to.
+ *
+ * Takes the table because payers and attendees differ in nothing else, and two
+ * copies of this drift the moment one of them is fixed.
+ */
+async function setItemMembers(
+  table: typeof tripItemPayers | typeof tripItemAttendees,
+  tx: Tx,
+  tripId: string,
+  itemId: string,
+  memberIds: string[]
+): Promise<void> {
+  await tx.delete(table).where(eq(table.itemId, itemId));
+  if (memberIds.length === 0) return;
+
+  const valid = await tx
+    .select({ id: tripMembers.id })
+    .from(tripMembers)
+    .where(and(eq(tripMembers.tripId, tripId), inArray(tripMembers.id, memberIds)));
+  if (valid.length !== memberIds.length) {
+    throw new Error("Traveller not found on this trip");
+  }
+
+  await tx.insert(table).values(memberIds.map((memberId) => ({ itemId, memberId })));
+}
+
 export async function addTripItem(
   userId: string,
   tripId: string,
   data: TripItemInput
 ): Promise<TripItem> {
   await ensureTripOwnership(tripId, userId);
-  const [row] = await db
+  // Three tables in one save. Without a transaction a rejected traveller left
+  // the item written and its member lists half-replaced — the item silently
+  // becoming everybody's while the user was told the save failed.
+  return db.transaction(async (tx) => {
+  const [row] = await tx
     .insert(tripItems)
     .values({
       tripId,
@@ -283,7 +356,16 @@ export async function addTripItem(
       sortOrder: data.sortOrder ?? 0,
     })
     .returning();
+  // A brand-new row has nothing to clear, so only a named list is worth a
+  // round trip here. On update it is unconditional — clearing is meaningful.
+  if (data.payerIds?.length) {
+    await setItemMembers(tripItemPayers, tx, tripId, row.id, data.payerIds);
+  }
+  if (data.attendeeIds?.length) {
+    await setItemMembers(tripItemAttendees, tx, tripId, row.id, data.attendeeIds);
+  }
   return row;
+  });
 }
 
 export async function updateTripItem(
@@ -292,7 +374,8 @@ export async function updateTripItem(
   data: UpdateTripItemInput
 ): Promise<TripItem> {
   await ensureTripOwnership(tripId, userId);
-  const [row] = await db
+  return db.transaction(async (tx) => {
+  const [row] = await tx
     .update(tripItems)
     .set({
       title: data.title,
@@ -313,7 +396,16 @@ export async function updateTripItem(
     })
     .where(and(eq(tripItems.id, data.id), eq(tripItems.tripId, tripId)))
     .returning();
+  // The item can be gone — deleted in another tab while this dialog was open.
+  // `moveTripItem` has always guarded this; without it `row.id` below is a
+  // TypeError instead of a message.
+  if (!row) throw new Error("Item not found on this trip");
+  // Always, not only when non-empty: clearing the list is how an item goes
+  // back to the trip's own split.
+  await setItemMembers(tripItemPayers, tx, tripId, row.id, data.payerIds ?? []);
+  await setItemMembers(tripItemAttendees, tx, tripId, row.id, data.attendeeIds ?? []);
   return row;
+  });
 }
 
 /** Just the dates. See `moveTripItemSchema` for why nothing else travels. */
@@ -534,7 +626,7 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
   // and payments do not depend on the items or the photos, so awaiting them
   // afterwards would have cost a second round trip for no ordering reason —
   // and at ~86ms each that is the whole budget of a small page.
-  const [items, photos, stops, scopeRows] = await Promise.all([
+  const [items, photos, stops, payers, attendees, scopeRows] = await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -561,6 +653,20 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
       .innerJoin(tripItems, eq(tripItemStops.itemId, tripItems.id))
       .where(eq(tripItems.tripId, trip.id))
       .orderBy(asc(tripItemStops.dayNumber)),
+    // Who covers what, in one query for the trip. `splitTrip` has honoured
+    // this since it was written; nothing ever loaded it, so every item was
+    // divided among everybody.
+    db
+      .select({ itemId: tripItemPayers.itemId, memberId: tripItemPayers.memberId })
+      .from(tripItemPayers)
+      .innerJoin(tripItems, eq(tripItemPayers.itemId, tripItems.id))
+      .where(eq(tripItems.tripId, trip.id)),
+    // And who is on each item — what a scoped link narrows to.
+    db
+      .select({ itemId: tripItemAttendees.itemId, memberId: tripItemAttendees.memberId })
+      .from(tripItemAttendees)
+      .innerJoin(tripItems, eq(tripItemAttendees.itemId, tripItems.id))
+      .where(eq(tripItems.tripId, trip.id)),
     share.memberId ? loadScopeRows(trip.id, share.memberId) : null,
   ]);
 
@@ -571,6 +677,9 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
     stopsByItem.set(stop.itemId, list);
   }
 
+  const payersByItem = groupByItem(payers);
+  const attendeesByItem = groupByItem(attendees);
+
   const photosByItem = new Map<string, typeof photos>();
   for (const photo of photos) {
     if (!photo.itemId) continue;
@@ -579,17 +688,44 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
     photosByItem.set(photo.itemId, list);
   }
 
+  const enriched = items.map((i) => ({
+    ...i,
+    stops: stopsByItem.get(i.id) ?? [],
+    photos: photosByItem.get(i.id) ?? [],
+    payerIds: payersByItem.get(i.id) ?? [],
+    attendeeIds: attendeesByItem.get(i.id) ?? [],
+  }));
+
+  // A link made for one traveller shows that traveller's trip: Ana's flight
+  // from Mexico is not a $0 line on Jafet's page, it is not on his page at
+  // all. Narrowed on who is ON the item, not who pays for it — the festival
+  // is all four travellers' even though two of them cover it. The split above
+  // still runs over every item, so the totals are unaffected.
+  const scope = scopeRows ? buildScope(scopeRows, enriched, share.memberId!) : null;
+  // The member lists did their work above; they do not cross the boundary.
+  // A public link is unauthenticated, and `payerIds`/`attendeeIds` are raw
+  // trip_members UUIDs — enough to count and correlate the other travellers a
+  // scoped link exists to hide.
+  const visible = (
+    share.memberId
+      ? enriched.filter((i) => itemConcerns(i.attendeeIds, share.memberId!))
+      : enriched
+  ).map((item) => {
+    const { payerIds, attendeeIds, ...rest } = item;
+    void payerIds;
+    void attendeeIds;
+    return rest;
+  });
+
   return {
     trip,
-    items: items.map((i) => ({
-      ...i,
-      stops: stopsByItem.get(i.id) ?? [],
-      photos: photosByItem.get(i.id) ?? [],
-    })),
+    items: visible,
     photos: photos.filter((p) => !p.itemId),
     share,
-    // Built from the items already in hand rather than fetched again.
-    scope: scopeRows ? buildScope(scopeRows, items, share.memberId!) : null,
+    // Built from the items already in hand rather than fetched again — and
+    // from the enriched ones, or a scoped link would split a festival ticket
+    // among people who are not going to it.
+    scope,
   };
 });
 
@@ -643,7 +779,7 @@ async function loadScopeRows(
  */
 function buildScope(
   rows: ScopeRows,
-  items: TripItem[],
+  items: TripItemWithStops[],
   memberId: string
 ): PublicTripScope | null {
   const { members, paidRows } = rows;
@@ -664,7 +800,8 @@ function buildScope(
       priceUnit: i.priceUnit,
       scheduledOn: i.scheduledOn,
       endsOn: i.endsOn,
-      payerIds: [],
+      payerIds: i.payerIds,
+      attendeeIds: i.attendeeIds,
     })),
     members.map((m) => ({
       id: m.id,

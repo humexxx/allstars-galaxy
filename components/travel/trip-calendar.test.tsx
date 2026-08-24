@@ -25,6 +25,7 @@ const item = (over: Partial<TripItemWithStops>): TripItemWithStops =>
 const trip = (items: TripItemWithStops[]): TripWithRelations =>
   ({
     id: "t1", currency: "USD", startDate: "2027-01-15", endDate: "2027-01-24", items,
+    members: [] as TripWithRelations["members"],
   }) as TripWithRelations;
 
 const CRUISE = item({
@@ -112,8 +113,9 @@ describe("TripCalendar", () => {
         trip={trip([CRUISE])}
         partySize={2}
         viewer={{
+          memberId: null,
           name: "Bruno Fabián",
-          isYou: false,
+      isYou: false,
           lines: new Map([["c", { low: 1900, high: 1900 }]]),
         }}
       />

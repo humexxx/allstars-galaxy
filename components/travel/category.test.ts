@@ -40,12 +40,13 @@ describe("category identity", () => {
     }
   });
 
-  it("keeps the calendar bar solid on a phone and soft on a pointer", () => {
-    // A bar a few pixels tall with no room for a label has only its colour to
-    // carry the meaning; one that does carry a label needs to sit behind it,
-    // with the edge doing the work a darker fill would cost in contrast.
+  it("keeps the calendar bar soft at every size", () => {
+    // The bar carries a label on a phone too now, and a name on a solid amber
+    // or sky ground is a name nobody can read. The edge does the work a
+    // darker fill would cost in contrast.
     for (const c of CATEGORIES) {
-      expect(c.bar).toMatch(/^bg-\S+ text-\S+ sm:bg-\S+ sm:ring-1 sm:ring-\S+ sm:hover:bg-\S+$/);
+      expect(c.bar).toMatch(/^bg-\S+ text-\S+ ring-1 ring-\S+ sm:hover:bg-\S+$/);
+      expect(c.bar).not.toMatch(/sm:bg-/);
     }
   });
 });

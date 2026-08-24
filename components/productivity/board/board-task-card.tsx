@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
@@ -12,13 +13,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
-import type { BoardTask, TaskPriority } from "@/types";
+import { TaskDialog } from "./task-dialog";
+import type { BoardColumn, BoardTask, TaskPriority } from "@/types";
+import type { CreateBoardTaskData } from "@/schemas/board";
 import { cn } from "@/lib/utils";
 
 type BoardTaskCardProps = {
   task: BoardTask;
   isOverlay?: boolean;
+  /** Every column, so the edit form can move the task. */
+  columns?: BoardColumn[];
   onDelete?: (taskId: string) => Promise<void>;
+  onUpdate?: (taskId: string, data: CreateBoardTaskData) => Promise<void>;
 };
 
 const PRIORITY_STYLES: Record<TaskPriority, { bar: string; label: string; tone: string }> = {
@@ -27,7 +33,14 @@ const PRIORITY_STYLES: Record<TaskPriority, { bar: string; label: string; tone: 
   high: { bar: "bg-rose-500", label: "High", tone: "text-rose-600 dark:text-rose-400" },
 };
 
-export function BoardTaskCard({ task, isOverlay, onDelete }: BoardTaskCardProps): React.ReactElement {
+export function BoardTaskCard({
+  task,
+  isOverlay,
+  columns = [],
+  onDelete,
+  onUpdate,
+}: BoardTaskCardProps): React.ReactElement {
+  const [editing, setEditing] = useState(false);
   const {
     attributes,
     listeners,
@@ -90,11 +103,16 @@ export function BoardTaskCard({ task, isOverlay, onDelete }: BoardTaskCardProps)
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {onUpdate ? (
+                <DropdownMenuItem onSelect={() => setEditing(true)}>
+                  Edit task
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 onClick={() => onDelete(task.id)}
                 className="text-destructive"
               >
-                Delete Task
+                Delete task
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -120,6 +138,16 @@ export function BoardTaskCard({ task, isOverlay, onDelete }: BoardTaskCardProps)
             </Mono>
           ) : null}
         </div>
+      ) : null}
+
+      {onUpdate ? (
+        <TaskDialog
+          columns={columns}
+          task={task}
+          open={editing}
+          onOpenChange={setEditing}
+          onSubmit={(data) => onUpdate(task.id, data)}
+        />
       ) : null}
     </div>
   );

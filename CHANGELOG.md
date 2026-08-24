@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.6.0](https://github.com/humexxx/allstars-galaxy/compare/v0.5.1...v0.6.0) (2026-08-24)
+
+
+### Features
+
+* **sports:** put the sport in the URL and fetch only that one ([09deae9](https://github.com/humexxx/allstars-galaxy/commit/09deae9c0033cd433616cc44d407753ae237a31b))
+* **travel:** a traveller's itinerary is their own, and a day shows all of it ([732c751](https://github.com/humexxx/allstars-galaxy/commit/732c75198f9cb9796d823867a98d2c37606d9e25))
+* **travel:** let an item name who pays for it ([dfb9812](https://github.com/humexxx/allstars-galaxy/commit/dfb981284ab2d0803f717e6f96759050dd787103))
+* **travel:** show attached videos on a shared link ([2b3a9d0](https://github.com/humexxx/allstars-galaxy/commit/2b3a9d0c36f5e58f56073ef019780344abdd6bc9))
+* **travel:** who is on an item is a separate question from who pays ([6fa2b73](https://github.com/humexxx/allstars-galaxy/commit/6fa2b731999fe41cec6b39e9e298203ac3edcb73))
+* **travel:** write price ranges with ~, and label calendar bars on a phone ([485cbca](https://github.com/humexxx/allstars-galaxy/commit/485cbca659207d46ff84dde3b95749b8ef707f07))
+
+
+### Bug Fixes
+
+* **ci:** tell gh which repo to open the sync PR in ([e132a3a](https://github.com/humexxx/allstars-galaxy/commit/e132a3aad06f3b39c700314cf7c2d177e879d4fc))
+* **portal:** give the sidebar a nav landmark, and unstick two e2e specs ([ed71b7b](https://github.com/humexxx/allstars-galaxy/commit/ed71b7bbcd5849f56ba164ce4fb2a9c6f8411a42))
+* **portal:** let a phone pull to refresh ([1211001](https://github.com/humexxx/allstars-galaxy/commit/12110011b73416d0a9c17131ee5ace76cb120274))
+* **productivity:** land a dragged card where it was dropped ([0df4b4f](https://github.com/humexxx/allstars-galaxy/commit/0df4b4f06dde597679e8000faf41d481597b22aa))
+* **productivity:** make the board and road paths finish what they start ([50dfd3f](https://github.com/humexxx/allstars-galaxy/commit/50dfd3f28df79b834d4d5a22df43148d93c86bb9))
+* **sports:** padel is Premier Padel, and wears the paddle in its own header ([8fbff77](https://github.com/humexxx/allstars-galaxy/commit/8fbff7797559d40bdb7fd8e15190e5bf25ef2eec))
+* **travel:** a lighter banner on a phone and a form that fits on screen ([2d192d2](https://github.com/humexxx/allstars-galaxy/commit/2d192d22f7dcdf64e32ebf78456f8b90b428d785))
+* **travel:** charge an item to whoever is on it, and stop leaking member ids ([d407770](https://github.com/humexxx/allstars-galaxy/commit/d407770d94c13a798350f5e190746a48cd30d732))
+* **travel:** drop the whose-share badge under the heading on a phone ([c3e4554](https://github.com/humexxx/allstars-galaxy/commit/c3e45541111c3e1a1bbfed45c9f0ed0ab4b67b45))
+* **travel:** full-bleed cover on a phone, and one more badge under its heading ([1f48a9a](https://github.com/humexxx/allstars-galaxy/commit/1f48a9af13b7c3d9c8af5eb5199d398fb1628e9d))
+* **travel:** name the traveller chips instead of leaving two initials ([20e09d0](https://github.com/humexxx/allstars-galaxy/commit/20e09d0517649d3044aa7b202994f856fc1dce95))
+* **travel:** stack the banner's trip actions on a phone ([3bd398a](https://github.com/humexxx/allstars-galaxy/commit/3bd398a5942327bcb37a6ee4c6cd1e5d93dc18fa))
+* **ui:** stop dialogs scrolling sideways on a phone ([457daf2](https://github.com/humexxx/allstars-galaxy/commit/457daf255768ac0fc88ec76e8710b6e8aef6d858))
+
 ## [0.5.1](https://github.com/humexxx/allstars-galaxy/compare/v0.5.0...v0.5.1) (2026-08-23)
 
 

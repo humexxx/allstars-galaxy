@@ -21,6 +21,21 @@ UI.**
    which owns the outer padding and max-width. Put page content inside it; don't
    add your own outer `px-*`/`py-*` shell on a page.
 
+## The app shell scrolls differently on a phone
+
+Below `md` the **document** is the scroller: `app/portal/layout.tsx` uses
+`min-h-svh` and its `<main>` drops `overflow-auto`. That is what lets the
+browser's own pull-to-refresh work — the gesture only fires when the root
+scroller is overscrolled at the top, and a shell pinned to `h-svh` with the
+content in an inner `overflow-auto` never gives it the chance. `globals.css`
+matches: `overscroll-behavior-x: none` everywhere (horizontal chaining runs
+into the back-swipe), vertical left alone below `md` — `none` *or* `contain`
+on the viewport is what disables pull-to-refresh.
+
+From `md` up the shell goes back to a fixed-height app frame with its own
+scrolling pane, which is what keeps the sidebar and header in place, and
+`overscroll-behavior: none` returns because the document edge is never reached.
+
 ## Dialogs on a phone
 
 - **Override `DialogContent`'s width from `sm:` up, never unprefixed.** The

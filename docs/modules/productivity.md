@@ -53,6 +53,16 @@ auto-generated tasks.
   never fills and never reports — `order` on a milestone, `targetValue` read
   through `valueAsNumber` as `NaN` — leaves a submit button that does nothing
   at all and says nothing about why.
+- **The drop index is measured against the destination column WITH the dragged
+  card still in it.** That is the convention `reorderTask` uses (arrayMove
+  semantics). Measuring against the list with the card removed made every
+  downward move land one slot short, and made the shortest one — onto the very
+  next card — compare equal to where it already was and get swallowed by the
+  no-op guard. The optimistic update renumbers **both** columns, because the
+  service closes the gap the card leaves behind.
+- **A milestone's `order` is resolved server-side** by `getNextMilestoneOrder`.
+  A client counting the prop it was rendered with gave every milestone after
+  the first in one session the same value.
 - **The board's collision detection is `closestCorners`, not the default.** A
   column's droppable rect contains every card in it, so rect-intersection
   always resolved a drop to the column and `over.id` was never a task id —

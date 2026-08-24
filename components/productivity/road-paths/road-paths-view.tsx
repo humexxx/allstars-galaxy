@@ -63,7 +63,7 @@ export function RoadPathsView({ initialRoadPaths }: RoadPathsViewProps) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-16">
         <Text variant="muted">No road paths yet. Create your first one.</Text>
-        <CreateRoadPathDialog onSuccess={refresh}>
+        <CreateRoadPathDialog>
           <Button>
             <Plus className="mr-2 h-4 w-4" />
             Create Road Path

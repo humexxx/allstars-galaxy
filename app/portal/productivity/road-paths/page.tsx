@@ -10,16 +10,29 @@ export const metadata: Metadata = {
   description: "Track your long-term goals and progress",
 };
 
-export default async function RoadPathsPage() {
+export default async function RoadPathsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ path?: string }>;
+}) {
   const ctx = await requireEffectiveContext();
-  const roadPaths = await getUserRoadPaths(ctx.effectiveUserId);
+  const [roadPaths, { path }] = await Promise.all([
+    getUserRoadPaths(ctx.effectiveUserId),
+    searchParams,
+  ]);
+  // `?path=` means the view has swapped the grid for one path's detail, and a
+  // Create Road Path button sitting on top of that belongs to a screen that is
+  // no longer there.
+  const showingDetail = Boolean(path);
 
   return (
     <section className="space-y-6">
       <PageHeader
         title="Road Paths"
         description="Track your long-term goals and progress."
-        actions={roadPaths.length > 0 ? <CreateRoadPathDialog /> : undefined}
+        actions={
+          roadPaths.length > 0 && !showingDetail ? <CreateRoadPathDialog /> : undefined
+        }
       />
       <RoadPathsView initialRoadPaths={roadPaths} />
     </section>

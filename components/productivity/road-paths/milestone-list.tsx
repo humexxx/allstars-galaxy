@@ -32,12 +32,7 @@ export function MilestoneList({ roadPathId, milestones, onRefresh }: MilestoneLi
     reset,
   } = useForm<CreateRoadPathMilestoneData>({
     resolver: zodResolver(createRoadPathMilestoneSchema),
-    defaultValues: {
-      roadPathId,
-      // Required by the schema. Nothing filled it, so every milestone failed
-      // validation and the form sat there saying nothing.
-      order: milestones.length,
-    },
+    defaultValues: { roadPathId },
   });
 
   const onSubmit = async (data: CreateRoadPathMilestoneData) => {
@@ -46,7 +41,7 @@ export function MilestoneList({ roadPathId, milestones, onRefresh }: MilestoneLi
       failure: "Failed to create milestone",
     });
     if (!ok) return;
-    reset({ roadPathId, order: milestones.length });
+    reset({ roadPathId });
     setShowForm(false);
     onRefresh();
   };

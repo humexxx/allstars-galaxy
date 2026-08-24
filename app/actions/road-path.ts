@@ -138,7 +138,12 @@ export async function createRoadPathMilestoneAction(data: CreateRoadPathMileston
   if (!parsed.success) {
     return { success: false as const, error: "Invalid input" };
   }
-  const milestone = await createRoadPathMilestone(ctx.effectiveUserId, parsed.data);
+  const milestone = await createRoadPathMilestone(ctx.effectiveUserId, {
+    ...parsed.data,
+    order:
+      parsed.data.order ??
+      (await getNextMilestoneOrder(parsed.data.roadPathId, ctx.effectiveUserId)),
+  });
 
   await logImpersonatedMutation({
     action: "roadPathMilestone.create",

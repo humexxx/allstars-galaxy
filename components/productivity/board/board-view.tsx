@@ -143,25 +143,36 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     if (!columns.some((c) => c.id === destinationColumnId)) return;
 
     const sourceColumnId = task.columnId;
-    const destination = (taskIndex.byColumnId[destinationColumnId] ?? []).filter(
-      (t) => t.id !== taskId
-    );
-    const at = overTask ? destination.findIndex((t) => t.id === overTask.id) : -1;
+    const sameColumn = sourceColumnId === destinationColumnId;
+    // The index is taken against the destination column AS IT STANDS, with the
+    // dragged card still in it — that is the convention `reorderTask` uses.
+    // Measuring against the list with the card removed made every downward
+    // move land one slot short, and made the shortest one (onto the next card)
+    // compare equal to where it already was and get dropped by the guard.
+    const column = taskIndex.byColumnId[destinationColumnId] ?? [];
+    const at = overTask ? column.findIndex((t) => t.id === overTask.id) : -1;
     // Released on the column itself rather than on a card: the end of the list.
-    const newOrder = at === -1 ? destination.length : at;
+    const end = sameColumn ? Math.max(0, column.length - 1) : column.length;
+    const newOrder = at === -1 ? end : at;
 
-    if (sourceColumnId === destinationColumnId && task.order === newOrder) return;
+    if (sameColumn && task.order === newOrder) return;
 
     const previousTasks = tasks;
 
-    // Optimistic UI update — server call is enqueued below. The whole
-    // destination column is renumbered so the card sits where it was dropped
-    // instead of jumping to the top and back.
+    // Optimistic UI update — server call is enqueued below. BOTH columns are
+    // renumbered: the service closes the gap the card leaves behind, and a
+    // client that only renumbered the destination drifted out of step with it
+    // until the next load.
     setTasks((prev) => {
-      const moved = { ...task, columnId: destinationColumnId, order: newOrder };
-      const reordered = [...destination];
-      reordered.splice(newOrder, 0, moved);
-      const orders = new Map(reordered.map((t, i) => [t.id, i]));
+      const moved = { ...task, columnId: destinationColumnId };
+      const target = sameColumn ? column.filter((t) => t.id !== taskId) : [...column];
+      target.splice(newOrder, 0, moved);
+      const orders = new Map(target.map((t, i) => [t.id, i]));
+      if (!sameColumn) {
+        (taskIndex.byColumnId[sourceColumnId] ?? [])
+          .filter((t) => t.id !== taskId)
+          .forEach((t, i) => orders.set(t.id, i));
+      }
       return prev.map((t) => {
         const order = orders.get(t.id);
         if (order === undefined) return t;
@@ -207,16 +218,14 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
       if (result.success) {
         setTasks((prev) => prev.map((t) => (t.id === tempId ? result.data : t)));
       } else {
-        // The action reports failure in its return value. Without this branch
-        // the placeholder row stayed on the board looking saved, and only a
-        // reload revealed that nothing had been.
-        setTasks((prev) => prev.filter((t) => t.id !== tempId));
-        toast.error(result.error || "Failed to create task");
+        // The action reports failure in its return value, so throw and let the
+        // one catch below roll back and report. Doing it here as well stacked
+        // two toasts, the second of which discarded the server's message.
         throw new Error(result.error || "Failed to create task");
       }
     } catch (error) {
       setTasks((prev) => prev.filter((t) => t.id !== tempId));
-      toast.error("Failed to create task");
+      toast.error(error instanceof Error ? error.message : "Failed to create task");
       throw error;
     } finally {
       setPendingMutations((n) => n - 1);
@@ -235,13 +244,11 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
       if (result.success) {
         setColumns((prev) => prev.map((c) => (c.id === tempId ? result.data : c)));
       } else {
-        setColumns((prev) => prev.filter((c) => c.id !== tempId));
-        toast.error(result.error || "Failed to create column");
         throw new Error(result.error || "Failed to create column");
       }
     } catch (error) {
       setColumns((prev) => prev.filter((c) => c.id !== tempId));
-      toast.error("Failed to create column");
+      toast.error(error instanceof Error ? error.message : "Failed to create column");
       throw error;
     } finally {
       setPendingMutations((n) => n - 1);

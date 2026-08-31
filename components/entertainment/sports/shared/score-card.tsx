@@ -1,4 +1,4 @@
-import { ChevronRight, Circle } from "lucide-react";
+import { Circle } from "lucide-react";
 
 import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
@@ -60,11 +60,16 @@ export function ScoreCard({ match, teams, className }: ScoreCardProps) {
   return (
     <div
       className={cn(
-        "group relative grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border bg-card px-3 py-2.5 transition-shadow hover:shadow-sm",
+        "relative grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border bg-card px-3 py-2.5",
         className,
       )}
     >
       <div className="min-w-0 space-y-1">
+        {match.stageLabel && (
+          <span className="block truncate text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+            {match.stageLabel}
+          </span>
+        )}
         <TeamRow
           team={home}
           score={match.homeScore}
@@ -104,7 +109,6 @@ export function ScoreCard({ match, teams, className }: ScoreCardProps) {
           )
         )}
       </div>
-      <ChevronRight className="pointer-events-none absolute right-1.5 top-1/2 hidden h-3 w-3 -translate-y-1/2 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 lg:block" />
     </div>
   );
 }

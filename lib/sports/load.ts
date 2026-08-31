@@ -9,6 +9,7 @@ import { PADEL_DATA } from "@/lib/data/sports/padel";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
 import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
 import { getFootballData, getWorldCupData } from "@/lib/services/football-data-service";
+import { getNbaData } from "@/lib/services/balldontlie-nba-service";
 import { getF1Data } from "@/lib/services/jolpica-f1-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
@@ -39,7 +40,7 @@ export async function loadSport(sport: SportId): Promise<SportPayload> {
     case "tennis":
       return { sport, data: (await getTennisData()) ?? TENNIS_DATA };
     case "nba":
-      return { sport, data: NBA_DATA };
+      return { sport, data: (await getNbaData()) ?? NBA_DATA };
     case "nfl":
       return { sport, data: NFL_DATA };
   }

@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Eyebrow, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { NbaConference, NbaData, Team } from "@/types/sports";
 
@@ -28,6 +29,15 @@ export function NbaView({ data }: NbaViewProps) {
     () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
     [data.teams],
   );
+  const hasStandings = data.standings.length > 0;
+  const played = useMemo(
+    () => data.games.filter((g) => g.status !== "scheduled"),
+    [data.games]
+  );
+  const upcoming = useMemo(
+    () => data.games.filter((g) => g.status === "scheduled"),
+    [data.games]
+  );
 
   return (
     <Tabs defaultValue="games" className="space-y-6">
@@ -38,21 +48,48 @@ export function NbaView({ data }: NbaViewProps) {
         tabs={
           <TabsList>
             <TabsTrigger value="games">Games</TabsTrigger>
-            <TabsTrigger value="standings">Standings</TabsTrigger>
+            {/* balldontlie's free tier does not serve /standings, and a table
+                invented next to real scores is worse than no table. */}
+            {hasStandings && <TabsTrigger value="standings">Standings</TabsTrigger>}
           </TabsList>
         }
       >
         <TabsContent value="games">
-          <div className="grid gap-2 sm:grid-cols-2">
-            {data.games.map((g) => (
-              <ScoreCard key={g.id} match={g} teams={teamsMap} />
-            ))}
-          </div>
+          {data.games.length === 0 ? (
+            <Card>
+              <CardContent className="py-10 text-center">
+                <Text variant="muted">No games scheduled right now.</Text>
+              </CardContent>
+            </Card>
+          ) : (
+            /* Split, not one undifferentiated grid: out of season the list is
+               half finished finals and half fixtures months away, and the two
+               were rendering as the same thing. */
+            <div className="flex flex-col gap-6">
+              {([
+                ["Results", played],
+                ["Upcoming", upcoming],
+              ] as const).map(([label, list]) =>
+                list.length === 0 ? null : (
+                  <section key={label} className="flex flex-col gap-2">
+                    <Eyebrow>{label}</Eyebrow>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {list.map((g) => (
+                        <ScoreCard key={g.id} match={g} teams={teamsMap} />
+                      ))}
+                    </div>
+                  </section>
+                )
+              )}
+            </div>
+          )}
         </TabsContent>
 
-        <TabsContent value="standings">
-          <NbaStandings data={data} teamsMap={teamsMap} />
-        </TabsContent>
+        {hasStandings && (
+          <TabsContent value="standings">
+            <NbaStandings data={data} teamsMap={teamsMap} />
+          </TabsContent>
+        )}
       </SportShell>
     </Tabs>
   );

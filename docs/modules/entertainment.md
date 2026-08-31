@@ -1,7 +1,7 @@
 # Entertainment
 
 > **Status:** In progress (travel shipped + dashboard card; sports UI shipped, favourites end-to-end on DB; LoL, F1, football, World Cup, padel and tennis wired to free live providers)
-> **Last reviewed:** 2026-08-23
+> **Last reviewed:** 2026-08-31
 
 ## Overview
 Two sub-modules: Travel Planner (trips, items, photos, public sharing) and
@@ -494,10 +494,26 @@ NBA and NFL still use mocks.
   (the `SportPayload` union, `isSportId`, `SAMPLE_DATA_SPORTS`);
   [`lib/sports/load.ts`](../../lib/sports/load.ts) is `server-only` and does the
   fetching.
-- **NBA and NFL say they are sample data**, via `SAMPLE_DATA_SPORTS`. They have
-  no free provider with current data, so they render a hand-written season — and
-  a five-game May schedule under "Season 2025–26" with nothing admitting it is a
-  fixture reads as a broken live view.
+- **The NBA is live** via balldontlie
+  ([`lib/services/balldontlie-nba-service.ts`](../../lib/services/balldontlie-nba-service.ts)),
+  `BALLDONTLIE_API_KEY`. Two things shape it: the free tier allows **five
+  requests a minute shared by every visitor**, so a cold cache spends exactly
+  one — a single wide window, trimmed to the last six results and next six
+  fixtures in memory rather than by a second request; and `/standings` is not
+  on the free tier, so `standings` comes back empty and the view drops the tab
+  instead of showing an invented table beside real scores. Out of season that
+  window is what surfaces June's finals next to October's opener, and the
+  heading names the season the **results** belong to, not the fixtures'.
+- **Only the NFL is sample data now**, via `SAMPLE_DATA_SPORTS`. It has no free
+  provider with current data, so it renders a hand-written season — and a
+  hand-written season with nothing admitting it reads as a broken live view.
+- **A `ScoreCard` prints its `stageLabel`** and does not pretend to be a link.
+  It carried the label without showing it, so a Finals game and a Tuesday in
+  November looked identical, and a hover chevron promised a screen that does
+  not exist.
+- **`TeamBadge` picks its ink from the background's luminance.** Club colours
+  are whatever the league uses and some are nearly white — the Spurs' silver
+  rendered white-on-white.
 - **A bracket with nobody in it is not rendered as a bracket.** Providers hand
   back the shape of a playoff before the draw is made — LoL returned eight
   TBD-vs-TBD slots — so `isBracketDrawn`

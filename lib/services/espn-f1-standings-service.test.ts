@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { __testing } from "./espn-f1-standings-service";
@@ -35,5 +38,36 @@ describe("teamCode", () => {
 
   it("has nothing to say about a missing name", () => {
     expect(teamCode(undefined)).toBeUndefined();
+  });
+});
+
+describe("teamLogo", () => {
+  it("maps the names ESPN actually reports", () => {
+    expect(__testing.teamLogo("Mercedes")).toBe("/f1/teams/mercedes.png");
+    // ESPN says "Red Bull"; the logo file is named for the full entrant.
+    expect(__testing.teamLogo("Red Bull")).toBe("/f1/teams/red-bull-racing.png");
+    expect(__testing.teamLogo("Racing Bulls")).toBe("/f1/teams/racing-bulls.png");
+    expect(__testing.teamLogo("  aston martin ")).toBe("/f1/teams/aston-martin.png");
+  });
+
+  it("gives nothing for a team with no logo published, so the badge falls back", () => {
+    // Both joined the grid for 2026 and F1 has published no mark for them.
+    expect(__testing.teamLogo("Audi")).toBeUndefined();
+    expect(__testing.teamLogo("Cadillac")).toBeUndefined();
+    expect(__testing.teamLogo(undefined)).toBeUndefined();
+  });
+});
+
+describe("the vendored logo files", () => {
+  it("exist for every team the map claims one for", () => {
+    // The map returning a path proves nothing about the file being there, and
+    // a renamed asset would fail silently as a blank badge.
+    const teams = ["Mercedes", "Ferrari", "McLaren", "Red Bull", "Racing Bulls",
+                   "Alpine", "Haas", "Williams", "Aston Martin"];
+    for (const team of teams) {
+      const url = __testing.teamLogo(team);
+      expect(url, team).toBeDefined();
+      expect(existsSync(join(process.cwd(), "public", url!)), url).toBe(true);
+    }
   });
 });

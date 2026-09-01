@@ -72,8 +72,24 @@ export function F1StandingsTabs({
   );
 }
 
-/** A driver's face, or a constructor's colour with its code on it. */
+/** A driver's face, a constructor's logo, or its livery as a last resort. */
 function Portrait({ row }: { row: F1StandingRow }) {
+  if (row.logoUrl) {
+    // On white, always: these marks are drawn for a white ground (Mercedes is
+    // silver, Aston Martin near-black) and would sink into the dark surface.
+    return (
+      <span className="relative size-7 shrink-0 overflow-hidden rounded-full bg-white ring-1 ring-black/10">
+        <Image
+          src={row.logoUrl}
+          alt=""
+          fill
+          sizes="28px"
+          className="object-contain p-0.5"
+        />
+      </span>
+    );
+  }
+
   if (row.imageUrl) {
     return (
       <span className="relative size-7 shrink-0 overflow-hidden rounded-full bg-muted ring-1 ring-border">
@@ -96,7 +112,7 @@ function Portrait({ row }: { row: F1StandingRow }) {
     );
   }
 
-  // No constructor logo exists anywhere public, so the livery does the work.
+  // A team with no logo published yet — the livery does the work.
   return (
     <span
       aria-hidden

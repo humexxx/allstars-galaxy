@@ -8,6 +8,36 @@ const REVALIDATE_SECONDS = 300;
 const HEADSHOT = (id: string) =>
   `https://a.espncdn.com/i/headshots/rpm/players/full/${id}.png`;
 
+/**
+ * Team logos, vendored under `public/f1/teams/`.
+ *
+ * ESPN serves no constructor logo — every `teamlogos` path 404s for racing —
+ * so these come from F1's own media CDN. They are copied into the repo rather
+ * than hotlinked because that CDN is versioned by season and moves: the 2026
+ * paths already 404 while the 2025 ones serve. 36 KB buys a badge that cannot
+ * break mid-season.
+ *
+ * Keyed by the team name ESPN reports, lower-cased. Two teams joined the grid
+ * for 2026 and have no logo published yet; they fall through to the livery
+ * badge, which is why that fallback stays.
+ */
+const TEAM_LOGOS: Record<string, string> = {
+  mercedes: "mercedes",
+  ferrari: "ferrari",
+  mclaren: "mclaren",
+  "red bull": "red-bull-racing",
+  "racing bulls": "racing-bulls",
+  alpine: "alpine",
+  haas: "haas",
+  williams: "williams",
+  "aston martin": "aston-martin",
+};
+
+function teamLogo(name: string | undefined): string | undefined {
+  const slug = name ? TEAM_LOGOS[name.trim().toLowerCase()] : undefined;
+  return slug ? `/f1/teams/${slug}.png` : undefined;
+}
+
 type EspnStat = { name?: string; displayValue?: string; value?: number };
 
 type EspnEntry = {
@@ -40,6 +70,8 @@ export type F1StandingRow = {
   imageUrl?: string;
   /** A driver's country flag. */
   flagUrl?: string;
+  /** A constructor's team logo, when one is published for it. */
+  logoUrl?: string;
   /** A constructor's livery colour, for its badge. */
   color?: string;
   /** A constructor's short code, shown when there is no logo. */
@@ -90,8 +122,8 @@ function rank(entry: EspnEntry, index: number): number {
  * athlete id — which is the headshot's filename — and the constructors'
  * livery colours. No key, same endpoint espn.com uses.
  *
- * Constructors have no logo anywhere public, so they get their colour and
- * their code instead of a broken image.
+ * ESPN publishes no constructor logo, so those come from `TEAM_LOGOS`; a team
+ * with none yet falls back to its livery colour and code.
  */
 async function fetchStandings(top: number): Promise<F1DashboardStandings> {
   const res = await fetch(URL, { next: { revalidate: REVALIDATE_SECONDS } });
@@ -118,6 +150,7 @@ async function fetchStandings(top: number): Promise<F1DashboardStandings> {
       position: rank(e, i),
       name: e.team?.shortDisplayName ?? e.team?.displayName ?? "—",
       points: stat(e, "points", "championshipPts"),
+      logoUrl: teamLogo(e.team?.displayName),
       color: e.team?.color ? `#${e.team.color}` : undefined,
       // Not `abbreviation`: ESPN returns driver initials there for a
       // constructor — Mercedes came back as "LP". The name is the only field
@@ -143,4 +176,4 @@ export const getF1DashboardStandings = unstable_cache(
 );
 
 /** Pure helpers, exported for their tests — nothing here touches the network. */
-export const __testing = { stat, teamCode };
+export const __testing = { stat, teamCode, teamLogo };

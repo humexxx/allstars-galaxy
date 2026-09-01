@@ -543,6 +543,9 @@ NBA and NFL still use mocks.
     writes had silently stopped in September 2025 while its cache document kept
     updating daily, so the migration had to read both.
   - `RAPIDAPI_KEY` unset just means no refresh — the stored archive still reads.
+  - **The dashboard card is gated on F1 being a favourite**, like the sports
+    card beside it. A motorsport wire on the desk of somebody who does not
+    follow it is noise, and the dashboard already works that way.
 - **A `ScoreCard` prints its `stageLabel`** and does not pretend to be a link.
   It carried the label without showing it, so a Finals game and a Tuesday in
   November looked identical, and a hover chevron promised a screen that does

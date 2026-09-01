@@ -7,6 +7,7 @@ import { applyMonthlyInterest } from "@/lib/services/interest-service";
 import { createDailySnapshots } from "@/lib/services/snapshot-service";
 import { createDailyFinanceSnapshots } from "@/lib/services/finance-snapshot-service";
 import { createAutomatedTasksForAllRoadPaths } from "@/lib/services/task-automation-service";
+import { refreshF1News } from "@/lib/services/rapidapi-f1-news-service";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 if (!CRON_SECRET) {
@@ -151,6 +152,26 @@ async function processAutomatedTasks(today: Date) {
   }
 }
 
+/**
+ * Pull the day's F1 news.
+ *
+ * This used to be a Cloud Function in the humex-champions Firebase project on
+ * its own 08:00 UTC schedule. It lives here now so one app owns the RapidAPI
+ * quota and the archive.
+ */
+async function processF1News(today: Date) {
+  try {
+    const result = await refreshF1News();
+    await updateAppState("last_f1_news_run", today.toISOString());
+    return result;
+  } catch (error) {
+    console.error("Failed to refresh F1 news:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    await updateAppState("last_f1_news_run", today.toISOString(), errorMessage);
+    throw error;
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     if (!isAuthorized(request.headers.get("authorization"))) {
@@ -166,6 +187,7 @@ export async function GET(request: NextRequest) {
       snapshots?: unknown;
       financeSnapshots?: { date: Date; totalPlans: number; snapshotsCreated: number; errors: string[] };
       tasks?: Array<{ userId: string; tasksCreated: number }>;
+      f1News?: { fetched: number; stored: number };
       errors: Array<{ operation: string; error: string }>;
     } = {
       errors: [],
@@ -211,6 +233,16 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Refresh F1 news (independent operation)
+    try {
+      results.f1News = await processF1News(today);
+    } catch (error) {
+      results.errors.push({
+        operation: "f1_news",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+
     return NextResponse.json({
       success: results.errors.length === 0,
       date: today.toISOString(),
@@ -225,6 +257,7 @@ export async function GET(request: NextRequest) {
           }
         : { totalPlans: 0, snapshotsCreated: 0, errors: [] },
       taskCreationResults: results.tasks ?? [],
+      f1News: results.f1News ?? { fetched: 0, stored: 0 },
       errors: results.errors,
     });
   } catch (error) {

@@ -14,15 +14,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import type { F1Data } from "@/types/sports";
 
+import { NewsList, type NewsItem } from "../shared/news-list";
 import { SportShell } from "../shared/sport-shell";
 import { StatusPill } from "../shared/status-pill";
 import { SportsTh } from "../shared/table-primitives";
 
 type F1ViewProps = {
   data: F1Data;
+  /** Stored F1 news, newest first. Empty hides the tab. */
+  news?: NewsItem[];
 };
 
-export function F1View({ data }: F1ViewProps) {
+export function F1View({ data, news = [] }: F1ViewProps) {
   return (
     <Tabs defaultValue="drivers" className="space-y-6">
       <SportShell
@@ -34,6 +37,7 @@ export function F1View({ data }: F1ViewProps) {
             <TabsTrigger value="drivers">Drivers</TabsTrigger>
             <TabsTrigger value="constructors">Constructors</TabsTrigger>
             <TabsTrigger value="races">Races</TabsTrigger>
+            {news.length > 0 && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }
       >
@@ -193,6 +197,12 @@ export function F1View({ data }: F1ViewProps) {
             ))}
           </div>
         </TabsContent>
+
+        {news.length > 0 && (
+          <TabsContent value="news">
+            <NewsList items={news} />
+          </TabsContent>
+        )}
       </SportShell>
     </Tabs>
   );

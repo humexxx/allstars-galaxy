@@ -143,7 +143,7 @@ function SportContent({ payload }: { payload: SportPayload }) {
     case "worldcup":
       return <WorldCupView data={payload.data} />;
     case "f1":
-      return <F1View data={payload.data} />;
+      return <F1View data={payload.data} news={payload.news} />;
     case "nba":
       return <NbaView data={payload.data} />;
     case "tennis":

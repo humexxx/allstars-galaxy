@@ -1,4 +1,5 @@
 import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
+import type { F1NewsArticle } from "@/lib/services/rapidapi-f1-news-service";
 import type {
   F1Data,
   FootballLeagueData,
@@ -19,7 +20,7 @@ import type {
 export type SportPayload =
   | { sport: "football"; leagues: FootballLeagueData[] }
   | { sport: "worldcup"; data: FootballLeagueData }
-  | { sport: "f1"; data: F1Data }
+  | { sport: "f1"; data: F1Data; news: F1NewsArticle[] }
   | { sport: "lol"; data: LolData }
   | { sport: "padel"; data: PadelData }
   | { sport: "tennis"; data: TennisData }

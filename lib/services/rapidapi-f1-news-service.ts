@@ -1,0 +1,122 @@
+import "server-only";
+
+import { desc, sql } from "drizzle-orm";
+
+import { db } from "@/db";
+import { f1News, type F1NewsImage } from "@/db/schema";
+
+const BASE_URL = "https://f1-motorsport-data.p.rapidapi.com";
+const HOST = "f1-motorsport-data.p.rapidapi.com";
+/** The provider's own window. Asking for more returns the same 25. */
+const FEED_LIMIT = 25;
+
+type RapidImage = {
+  url?: string;
+  alt?: string;
+  caption?: string;
+  width?: number;
+  height?: number;
+};
+
+type RapidArticle = {
+  dataSourceIdentifier?: string;
+  headline?: string;
+  description?: string;
+  link?: string;
+  images?: RapidImage[];
+};
+
+export type F1NewsArticle = {
+  id: string;
+  headline: string;
+  description: string | null;
+  link: string | null;
+  images: F1NewsImage[];
+  firstSeenAt: Date;
+};
+
+function articlesFrom(payload: unknown): RapidArticle[] {
+  if (Array.isArray(payload)) return payload as RapidArticle[];
+  const data = (payload as { data?: unknown })?.data;
+  return Array.isArray(data) ? (data as RapidArticle[]) : [];
+}
+
+/**
+ * Pull the provider's current window and keep whatever is new.
+ *
+ * The feed is the last 25 articles and nothing else — anything that falls off
+ * is gone for good, which is why this stores rather than caches. Upserting on
+ * the provider's own id makes a re-run idempotent: the same article arriving
+ * again refreshes its row instead of adding one, and `first_seen_at` keeps the
+ * first sighting so the archive stays in order.
+ */
+export async function refreshF1News(): Promise<{ fetched: number; stored: number }> {
+  const key = process.env.RAPIDAPI_KEY;
+  if (!key) throw new Error("RAPIDAPI_KEY is not configured");
+
+  const res = await fetch(`${BASE_URL}/news?limit=${FEED_LIMIT}`, {
+    headers: { "X-RapidAPI-Host": HOST, "X-RapidAPI-Key": key },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`rapidapi f1 ${res.status} on /news`);
+
+  const articles = articlesFrom(await res.json());
+  const rows = articles
+    .filter((a) => a.dataSourceIdentifier && a.headline)
+    .map((a) => ({
+      articleId: String(a.dataSourceIdentifier),
+      headline: a.headline as string,
+      description: a.description ?? null,
+      link: a.link ?? null,
+      images: (a.images ?? [])
+        .filter((i): i is RapidImage & { url: string } => Boolean(i.url))
+        .map((i) => ({
+          url: i.url,
+          alt: i.alt,
+          caption: i.caption,
+          width: i.width,
+          height: i.height,
+        })),
+    }));
+
+  if (rows.length === 0) return { fetched: articles.length, stored: 0 };
+
+  await db
+    .insert(f1News)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: f1News.articleId,
+      set: {
+        headline: sql`excluded.headline`,
+        description: sql`excluded.description`,
+        link: sql`excluded.link`,
+        images: sql`excluded.images`,
+        updatedAt: new Date(),
+      },
+    });
+
+  return { fetched: articles.length, stored: rows.length };
+}
+
+/**
+ * The stored archive, newest first.
+ *
+ * Reads the table, never the provider: the page should not depend on a
+ * third-party call, and the daily refresh is what keeps this current.
+ */
+export async function getF1News(limit = 12): Promise<F1NewsArticle[]> {
+  const rows = await db
+    .select()
+    .from(f1News)
+    .orderBy(desc(f1News.firstSeenAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    id: r.articleId,
+    headline: r.headline,
+    description: r.description,
+    link: r.link,
+    images: r.images ?? [],
+    firstSeenAt: r.firstSeenAt,
+  }));
+}

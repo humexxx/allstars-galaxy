@@ -1253,6 +1253,50 @@ export const tripSharesRelations = relations(tripShares, ({ one }) => ({
 // /types/sports.ts) so adding/removing sports does not require an enum
 // migration. The UNIQUE (user_id, sport_id) constraint backs the toggle
 // semantics in the manage-favourites sheet.
+/**
+ * F1 news, kept rather than fetched on demand.
+ *
+ * RapidAPI's feed is a rolling window of the last 25 articles, so anything
+ * older is gone the moment it falls off. Storing each article is what makes an
+ * archive possible at all — the 163 rows this started with came from the
+ * humex-champions Firebase project, which had been collecting them daily since
+ * August 2025.
+ *
+ * `articleId` is RapidAPI's own `dataSourceIdentifier`, and it is what makes a
+ * refresh idempotent: the same article arriving twice updates its row instead
+ * of adding one.
+ */
+export const f1News = pgTable(
+  "f1_news",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    articleId: text("article_id").notNull(),
+    headline: text("headline").notNull(),
+    description: text("description"),
+    link: text("link"),
+    /** `[{ url, alt, caption, width, height }]` as the provider sends it. */
+    images: jsonb("images").$type<F1NewsImage[]>().default([]).notNull(),
+    /** When the article first reached us, not when it was published — the
+     *  provider does not send a publication date. */
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("f1_news_article_id_uniq").on(t.articleId),
+    index("f1_news_first_seen_at_idx").on(t.firstSeenAt),
+  ]
+);
+
+export type F1NewsImage = {
+  url: string;
+  alt?: string;
+  caption?: string;
+  width?: number;
+  height?: number;
+};
+
 export const userSportsPreferences = pgTable(
   "user_sports_preferences",
   {

@@ -337,6 +337,13 @@
       "when": 1787509841972,
       "tag": "0047_warm_doomsday",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1788238414379,
+      "tag": "0048_quick_glorian",
+      "breakpoints": true
     }
   ]
 }

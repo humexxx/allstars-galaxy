@@ -528,6 +528,21 @@ NBA and NFL still use mocks.
   - **Players travel as `drawPlayers`, a list not a Map**, so they cross the
     server/client boundary as plain data; the view builds the lookup.
   - Rankings are still a fixture — nobody free serves them.
+- **F1 news is stored, not fetched on demand** — `f1_news` (migration `0048`),
+  read by [`lib/services/rapidapi-f1-news-service.ts`](../../lib/services/rapidapi-f1-news-service.ts).
+  RapidAPI's feed is a rolling window of the last 25 articles, so anything
+  older is gone the moment it falls off; keeping each one is what makes an
+  archive possible. `article_id` is the provider's own `dataSourceIdentifier`
+  and carries a unique index, so a refresh upserts and re-running the cron
+  never duplicates. The page reads the table and never the provider.
+  - **The refresh rides the existing daily cron** (`/api/cron/daily`), not a
+    schedule of its own.
+  - **It came from the humex-champions Firebase project**, which had been
+    collecting the same feed on an 08:00 UTC Cloud Function since August 2025.
+    188 articles were migrated across. Worth knowing: that project's per-article
+    writes had silently stopped in September 2025 while its cache document kept
+    updating daily, so the migration had to read both.
+  - `RAPIDAPI_KEY` unset just means no refresh — the stored archive still reads.
 - **A `ScoreCard` prints its `stageLabel`** and does not pretend to be a link.
   It carried the label without showing it, so a Finals game and a Tuesday in
   November looked identical, and a hover chevron promised a screen that does

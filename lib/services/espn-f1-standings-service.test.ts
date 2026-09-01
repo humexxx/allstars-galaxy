@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -68,6 +68,22 @@ describe("the vendored logo files", () => {
       const url = __testing.teamLogo(team);
       expect(url, team).toBeDefined();
       expect(existsSync(join(process.cwd(), "public", url!)), url).toBe(true);
+    }
+  });
+
+  it("are the processed files, not raw downloads from F1's CDN", () => {
+    // The design depends on the marks having no background: F1 ships them
+    // plated on opaque white, which on the dark card is a row of bright
+    // discs. Dropping a fresh download in would bring that back silently.
+    //
+    // Dimensions are the proxy — every raw F1 asset is exactly 96x96 and
+    // ours are trimmed to their bounding box, so none can be. It does not
+    // prove the alpha is right, but it catches the one way this regresses.
+    for (const team of ["Mercedes", "Ferrari", "Red Bull", "Aston Martin"]) {
+      const buf = readFileSync(join(process.cwd(), "public", __testing.teamLogo(team)!));
+      const width = buf.readUInt32BE(16);
+      const height = buf.readUInt32BE(20);
+      expect([width, height], team).not.toEqual([96, 96]);
     }
   });
 });

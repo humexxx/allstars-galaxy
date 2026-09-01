@@ -17,6 +17,14 @@ const HEADSHOT = (id: string) =>
  * paths already 404 while the 2025 ones serve. 36 KB buys a badge that cannot
  * break mid-season.
  *
+ * They are also not the files F1 serves. Each ships pre-plated on an opaque
+ * white rounded square — only the four corners are transparent — which on a
+ * dark card renders as a row of bright discs. The plate is flood-filled away
+ * from the border inwards (so white *inside* a mark survives: Mercedes' star,
+ * Haas' box) and the result trimmed to its bounding box, so a wide mark like
+ * Red Bull's fills the badge instead of floating in it. Every mark then reads
+ * on both surfaces with no plate at all.
+ *
  * Keyed by the team name ESPN reports, lower-cased. Two teams joined the grid
  * for 2026 and have no logo published yet; they fall through to the livery
  * badge, which is why that fallback stays.

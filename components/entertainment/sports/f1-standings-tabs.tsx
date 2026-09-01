@@ -75,17 +75,11 @@ export function F1StandingsTabs({
 /** A driver's face, a constructor's logo, or its livery as a last resort. */
 function Portrait({ row }: { row: F1StandingRow }) {
   if (row.logoUrl) {
-    // On white, always: these marks are drawn for a white ground (Mercedes is
-    // silver, Aston Martin near-black) and would sink into the dark surface.
+    // No plate. The marks sit straight on the card the way a driver's photo
+    // does — see the note on the assets in the service for why that works.
     return (
-      <span className="relative size-7 shrink-0 overflow-hidden rounded-full bg-white ring-1 ring-black/10">
-        <Image
-          src={row.logoUrl}
-          alt=""
-          fill
-          sizes="28px"
-          className="object-contain p-0.5"
-        />
+      <span className="relative size-7 shrink-0">
+        <Image src={row.logoUrl} alt="" fill sizes="28px" className="object-contain" />
       </span>
     );
   }

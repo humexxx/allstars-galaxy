@@ -75,11 +75,18 @@ export function F1StandingsTabs({
 /** A driver's face, a constructor's logo, or its livery as a last resort. */
 function Portrait({ row }: { row: F1StandingRow }) {
   if (row.logoUrl) {
-    // No plate. The marks sit straight on the card the way a driver's photo
-    // does — see the note on the assets in the service for why that works.
+    // The same circle a driver's photo gets. It is filled with `muted` rather
+    // than white so it reads as part of the card instead of a lit disc — the
+    // marks are unplated (see the service), so the fill is a real choice here.
     return (
-      <span className="relative size-7 shrink-0">
-        <Image src={row.logoUrl} alt="" fill sizes="28px" className="object-contain" />
+      <span className="relative size-7 shrink-0 overflow-hidden rounded-full bg-muted ring-1 ring-border">
+        <Image
+          src={row.logoUrl}
+          alt=""
+          fill
+          sizes="28px"
+          className="object-contain p-0.5"
+        />
       </span>
     );
   }

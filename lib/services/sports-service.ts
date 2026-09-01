@@ -83,10 +83,19 @@ export async function setSportFavorite(
  * more APIs are wired in, this function stays the single place to swap
  * implementations.
  */
+/**
+ * The dashboard's per-sport highlights.
+ *
+ * `exclude` is how F1 stays out of this card: it has one of its own that
+ * carries the same highlight plus its news, and the same race in two cards
+ * next to each other is just the same race twice.
+ */
 export async function getDashboardSportsSummary(
-  userId: string
+  userId: string,
+  exclude: readonly SportId[] = []
 ): Promise<DashboardSportHighlight[]> {
-  const favIds = await listUserFavoriteSportIds(userId);
+  const all = await listUserFavoriteSportIds(userId);
+  const favIds = all.filter((id) => !exclude.includes(id));
   const [lolData, f1Data, footballLeagues, worldCupData, padelData, tennisData] =
     await Promise.all([
       favIds.includes("lol") ? getLolData() : Promise.resolve(null),
@@ -110,6 +119,17 @@ export async function getDashboardSportsSummary(
       }),
     )
     .filter((h): h is DashboardSportHighlight => h !== null);
+}
+
+/** Just F1's highlight, for the card that owns it on the dashboard. */
+export async function getF1DashboardHighlight(): Promise<DashboardSportHighlight | null> {
+  const meta = SPORTS_BY_ID.get("f1");
+  if (!meta) return null;
+  const data = (await getF1Data()) ?? F1_DATA;
+  return f1Highlight(
+    { sportId: "f1", emoji: meta.emoji, label: meta.label },
+    data
+  );
 }
 
 type HighlightContext = {

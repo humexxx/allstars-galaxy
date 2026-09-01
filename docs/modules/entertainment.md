@@ -543,10 +543,16 @@ NBA and NFL still use mocks.
     writes had silently stopped in September 2025 while its cache document kept
     updating daily, so the migration had to read both.
   - `RAPIDAPI_KEY` unset just means no refresh — the stored archive still reads.
-  - **The dashboard card is gated on F1 being a favourite**, like the sports
-    card beside it. A motorsport wire on the desk of somebody who does not
-    follow it is noise, and the dashboard already works that way. It shows
-    **one** story — a dashboard card is a glance — with the wire a click away.
+  - **F1 owns one dashboard card**, `DashboardF1Card`: the next race and the
+    wire together, gated on the favourite. `getDashboardSportsSummary` takes an
+    `exclude` list so the general sports card leaves F1 out — the same race
+    printed in two cards side by side is the same race twice. That card also
+    **steps aside entirely** when F1 is somebody's only favourite, rather than
+    asking for favourites they have already picked.
+  - It is **two thirds of the row, not the whole of it** — one sport among
+    several — and the news is a scroll-snap rail rather than a carousel
+    library: the card is narrow, a swipe is the gesture already used here, and
+    it adds no dependency.
   - **`/news/f1/[id]` is a public page**, like a shared trip: no auth, its own
     layout, and OG tags so the link unfurls. Every headline in the app points
     there rather than straight at the source, because that page is the one

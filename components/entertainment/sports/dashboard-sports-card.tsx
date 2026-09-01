@@ -4,7 +4,10 @@ import { ArrowRight, Circle, Star, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Heading, Text } from "@/components/ui/typography";
-import { getDashboardSportsSummary } from "@/lib/services/sports-service";
+import {
+  getDashboardSportsSummary,
+  listUserFavoriteSportIds,
+} from "@/lib/services/sports-service";
 import { cn } from "@/lib/utils";
 import type { DashboardSportHighlight } from "@/types/sports";
 
@@ -15,7 +18,17 @@ type DashboardSportsCardProps = {
 };
 
 export async function DashboardSportsCard({ userId }: DashboardSportsCardProps) {
-  const highlights = await getDashboardSportsSummary(userId);
+  // F1 has a card of its own on this dashboard, with its news under the same
+  // highlight. Listing it here too would print the same race twice.
+  const [favorites, highlights] = await Promise.all([
+    listUserFavoriteSportIds(userId),
+    getDashboardSportsSummary(userId, ["f1"]),
+  ]);
+
+  // Following only F1 is not the same as following nothing: the card that
+  // owns F1 is already on screen, so this one steps aside rather than asking
+  // for favourites somebody has already picked.
+  if (highlights.length === 0 && favorites.length > 0) return null;
 
   if (highlights.length === 0) {
     return (

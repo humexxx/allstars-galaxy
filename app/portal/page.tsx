@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/portal/page-header";
 import { PortalPageContainer } from "@/components/portal/page-container";
 import { DashboardFinanceCard } from "@/components/finance/dashboard-finance-card";
 import { DashboardConfirmationHost } from "@/components/finance/dashboard-confirmation-host";
-import { DashboardF1NewsCard } from "@/components/entertainment/sports/dashboard-f1-news-card";
+import { DashboardF1Card } from "@/components/entertainment/sports/dashboard-f1-card";
 import { DashboardSportsCard } from "@/components/entertainment/sports/dashboard-sports-card";
 import { DashboardTravelCard } from "@/components/travel/dashboard-travel-card";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
@@ -30,7 +30,7 @@ export default async function PortalPage() {
         <DashboardFinanceCard userId={ctx.effectiveUserId} />
         <DashboardTravelCard userId={ctx.effectiveUserId} />
         <DashboardSportsCard userId={ctx.effectiveUserId} />
-        <DashboardF1NewsCard userId={ctx.effectiveUserId} />
+        <DashboardF1Card userId={ctx.effectiveUserId} />
       </div>
       <DashboardConfirmationHost userId={ctx.effectiveUserId} />
       </section>

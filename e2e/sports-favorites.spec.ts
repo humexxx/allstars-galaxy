@@ -77,15 +77,19 @@ test.describe("Sports favorites", () => {
     await sheet.getByRole("button", { name: "Done" }).click();
 
     await page.goto("/portal");
-    await expect(page.getByText(/Following 2 sports/i)).toBeVisible();
 
-    // Each card carries the sport's label as a visually-uppercased eyebrow.
-    // The DOM text is the registry label ("Football", "Formula 1"); the
-    // `uppercase` Tailwind class only changes how it renders.
+    // F1 has its own card on this dashboard — the highlight AND the news —
+    // so the general Sports card counts the rest. Two favourites, one of them
+    // F1, means this card is following one.
+    await expect(page.getByText(/Following 1 sport/i)).toBeVisible();
+
+    // The sports card carries each sport's label as a visually-uppercased
+    // eyebrow; the DOM text is the registry label and `uppercase` only changes
+    // how it renders.
     await expect(page.getByText(/^Football$/).first()).toBeVisible();
-    await expect(page.getByText(/^Formula 1$/).first()).toBeVisible();
 
-    // F1 highlight should reference the leader's points line.
+    // F1's own card, with the same leader line it used to contribute here.
+    await expect(page.getByRole("heading", { name: "Formula 1" })).toBeVisible();
     await expect(page.getByText("Drivers' leader")).toBeVisible();
     await expect(page.getByText(/^.+ · \d+ pts$/).first()).toBeVisible();
   });

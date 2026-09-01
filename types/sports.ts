@@ -133,6 +133,10 @@ export type StandingBand =
 // ---------- Knockout bracket ----------
 
 export type BracketRoundId =
+  // A Grand Slam draw starts two rounds earlier than any knockout the other
+  // sports have: 128 players is a round of 128.
+  | "round-of-128"
+  | "round-of-64"
   | "round-of-32"
   | "round-of-16"
   | "quarter-final"
@@ -303,6 +307,13 @@ export type RacquetData = {
   season: number;
   rankings: PlayerRanking[];
   tournaments: RacquetTournament[];
+  /**
+   * Everyone appearing in any of this tour's draws.
+   *
+   * A list rather than a Map so it crosses the server/client boundary as
+   * plain data; the view builds the lookup.
+   */
+  drawPlayers?: Team[];
 };
 
 export type TennisData = {

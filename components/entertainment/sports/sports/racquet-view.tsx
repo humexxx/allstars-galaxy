@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Minus, Trophy } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,21 +35,19 @@ type RacquetViewProps = {
   title: string;
   subtitle: string;
   tours: TourTab[];
-  /** Everyone who appears in any draw, keyed by id. */
-  players?: Map<string, Team>;
 };
 
-export function RacquetView({
-  emoji,
-  title,
-  subtitle,
-  tours,
-  players = new Map(),
-}: RacquetViewProps) {
+export function RacquetView({ emoji, title, subtitle, tours }: RacquetViewProps) {
   const defaultTour = tours[0]?.value ?? "main";
   const [tourValue, setTourValue] = useState<string>(defaultTour);
   const activeTour = tours.find((t) => t.value === tourValue) ?? tours[0];
   const drawn = activeTour.data.tournaments.filter((t) => t.bracket?.length);
+  // The players travel with the tour as a list so they cross the boundary as
+  // plain data; the lookup is built here.
+  const players = useMemo(
+    () => new Map((activeTour.data.drawPlayers ?? []).map((p) => [p.id, p])),
+    [activeTour.data.drawPlayers]
+  );
 
   return (
     <Tabs defaultValue="rankings" className="space-y-6">

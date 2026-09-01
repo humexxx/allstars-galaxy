@@ -2,7 +2,9 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 
+import { getEspnDraw } from "@/lib/services/espn-tennis-service";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
+import type { EspnDraw } from "@/lib/services/espn-tennis-service";
 import type {
   RacquetData,
   RacquetTour,
@@ -134,9 +136,35 @@ async function fetchTennisFromApi(): Promise<TennisData> {
     safeFetch(`/eventspastleague.php?id=${WTA_LEAGUE_ID}`),
   ]);
 
+  // The draw comes from ESPN's public scoreboard: TheSportsDB's free tier
+  // serves a calendar and no matches at all, so a bracket has to come from
+  // somewhere else. Neither needs a key.
+  const [atpDraw, wtaDraw] = await Promise.all([
+    getEspnDraw("atp"),
+    getEspnDraw("wta"),
+  ]);
+
   return {
-    atp: buildTour("atp", TENNIS_DATA.atp, atpNext.events, atpPast.events),
-    wta: buildTour("wta", TENNIS_DATA.wta, wtaNext.events, wtaPast.events),
+    atp: withDraw(buildTour("atp", TENNIS_DATA.atp, atpNext.events, atpPast.events), atpDraw),
+    wta: withDraw(buildTour("wta", TENNIS_DATA.wta, wtaNext.events, wtaPast.events), wtaDraw),
+  };
+}
+
+/**
+ * Puts a live draw at the front of a tour's tournament list.
+ *
+ * The event is already in the calendar TheSportsDB returned, but without a
+ * bracket — this is the same tournament with its matches, so it replaces the
+ * calendar entry rather than sitting beside it as a duplicate.
+ */
+function withDraw(tour: RacquetData, draw: EspnDraw | null): RacquetData {
+  if (!draw) return tour;
+  const sameName = (t: { name: string }) =>
+    t.name.toLowerCase() === draw.tournament.name.toLowerCase();
+  return {
+    ...tour,
+    tournaments: [draw.tournament, ...tour.tournaments.filter((t) => !sameName(t))],
+    drawPlayers: draw.players,
   };
 }
 

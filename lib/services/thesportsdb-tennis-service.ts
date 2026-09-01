@@ -110,7 +110,13 @@ function buildTour(
     tour,
     season: new Date().getFullYear(),
     rankings: fallback.rankings,
-    tournaments,
+    // The live calendar, plus any fixture entry that carries a draw. The API's
+    // free tier serves no draws at all, so dropping the fixture wholesale
+    // threw away the only bracket there is.
+    tournaments: [
+      ...tournaments,
+      ...fallback.tournaments.filter((t) => t.bracket?.length),
+    ],
   };
 }
 

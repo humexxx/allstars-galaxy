@@ -38,4 +38,10 @@ export function isSportId(value: string | undefined): value is SportId {
  * this set when balldontlie was wired up; the NFL has no free provider with
  * current data.
  */
-export const SAMPLE_DATA_SPORTS: ReadonlySet<SportId> = new Set<SportId>(["nfl"]);
+export const SAMPLE_DATA_SPORTS: ReadonlySet<SportId> = new Set<SportId>([
+  "nfl",
+  // TheSportsDB serves the tournament calendar and nothing else on the free
+  // tier — no rankings and no draws — so those are a fixture. The 2025 US Open
+  // draw is the exception and is labelled with its own year.
+  "tennis",
+]);

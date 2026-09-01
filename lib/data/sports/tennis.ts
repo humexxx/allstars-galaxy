@@ -1,4 +1,11 @@
-import type { PlayerRanking, RacquetTournament, TennisData } from "@/types/sports";
+import { playerEntry } from "@/components/entertainment/sports/shared/draw-match-card";
+import type {
+  BracketRound,
+  PlayerRanking,
+  RacquetTournament,
+  Team,
+  TennisData,
+} from "@/types/sports";
 
 const ATP_RANKINGS: PlayerRanking[] = [
   { position: 1, name: "Jannik Sinner", shortName: "J. Sinner", countryCode: "ITA", flagEmoji: "🇮🇹", points: 11830, movement: 0 },
@@ -26,6 +33,80 @@ const WTA_RANKINGS: PlayerRanking[] = [
   { position: 10, name: "Barbora Krejčíková", shortName: "B. Krejčíková", countryCode: "CZE", flagEmoji: "🇨🇿", points: 3050, movement: 0 },
 ];
 
+/**
+ * The 2025 US Open men's final rounds — real, and the one part of this file
+ * that is not invented.
+ *
+ * Verified across ATP/Olympics/Wikipedia coverage: Alcaraz beat Sinner
+ * 6–2 3–6 6–1 6–4 in the final, having beaten Djokovic 6–4 7–6 6–2, while
+ * Sinner beat Auger-Aliassime 6–1 3–6 6–3 6–4. The quarter-final scores could
+ * not be confirmed cleanly from any source, so they are not here rather than
+ * guessed — a draw with made-up scores in it is worse than a shorter one.
+ *
+ * A set is a `leg`: the bracket already carries per-leg scores and a set is
+ * exactly that with a different name.
+ */
+const US_OPEN_2025_DRAW: BracketRound[] = [
+  {
+    id: "semi-final",
+    label: "Semi-finals",
+    matches: [
+      {
+        id: "uso25-sf1",
+        homeTeamId: "alcaraz",
+        awayTeamId: "djokovic",
+        winnerTeamId: "alcaraz",
+        date: "2025-09-05",
+        legs: [
+          { homeScore: 6, awayScore: 4 },
+          { homeScore: 7, awayScore: 6 },
+          { homeScore: 6, awayScore: 2 },
+        ],
+      },
+      {
+        id: "uso25-sf2",
+        homeTeamId: "sinner",
+        awayTeamId: "auger",
+        winnerTeamId: "sinner",
+        date: "2025-09-05",
+        legs: [
+          { homeScore: 6, awayScore: 1 },
+          { homeScore: 3, awayScore: 6 },
+          { homeScore: 6, awayScore: 3 },
+          { homeScore: 6, awayScore: 4 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "final",
+    label: "Final",
+    matches: [
+      {
+        id: "uso25-f",
+        homeTeamId: "alcaraz",
+        awayTeamId: "sinner",
+        winnerTeamId: "alcaraz",
+        date: "2025-09-07",
+        legs: [
+          { homeScore: 6, awayScore: 2 },
+          { homeScore: 3, awayScore: 6 },
+          { homeScore: 6, awayScore: 1 },
+          { homeScore: 6, awayScore: 4 },
+        ],
+      },
+    ],
+  },
+];
+
+/** The players in that draw, in the shape the bracket's team map expects. */
+export const US_OPEN_2025_PLAYERS = new Map<string, Team>([
+  playerEntry("alcaraz", "C. Alcaraz", "🇪🇸", 2),
+  playerEntry("sinner", "J. Sinner", "🇮🇹", 1),
+  playerEntry("djokovic", "N. Djokovic", "🇷🇸", 7),
+  playerEntry("auger", "F. Auger-Aliassime", "🇨🇦", 25),
+]);
+
 const ATP_TOURNAMENTS: RacquetTournament[] = [
   { id: "atp-ao", name: "Australian Open", surface: "Hard", location: "Melbourne", startDate: "2026-01-19", endDate: "2026-02-01", status: "completed", champion: "J. Sinner", runnerUp: "A. Zverev" },
   { id: "atp-iw", name: "Indian Wells", surface: "Hard", location: "Indian Wells", startDate: "2026-03-09", endDate: "2026-03-22", status: "completed", champion: "C. Alcaraz", runnerUp: "D. Medvedev" },
@@ -34,6 +115,20 @@ const ATP_TOURNAMENTS: RacquetTournament[] = [
   { id: "atp-rome", name: "Italian Open", surface: "Clay", location: "Rome", startDate: "2026-05-08", endDate: "2026-05-18", status: "completed", champion: "J. Sinner", runnerUp: "C. Alcaraz" },
   { id: "atp-rg", name: "Roland Garros", surface: "Clay", location: "Paris", startDate: "2026-05-25", endDate: "2026-06-07", status: "live" },
   { id: "atp-wim", name: "Wimbledon", surface: "Grass", location: "London", startDate: "2026-06-29", endDate: "2026-07-12", status: "upcoming" },
+  // The one entry with a real draw behind it, so it keeps its own year rather
+  // than being folded into the invented season around it.
+  {
+    id: "atp-uso-2025",
+    name: "US Open 2025",
+    surface: "Hard",
+    location: "New York",
+    startDate: "2025-08-24",
+    endDate: "2025-09-07",
+    status: "completed",
+    champion: "C. Alcaraz",
+    runnerUp: "J. Sinner",
+    bracket: US_OPEN_2025_DRAW,
+  },
 ];
 
 const WTA_TOURNAMENTS: RacquetTournament[] = [
@@ -45,6 +140,7 @@ const WTA_TOURNAMENTS: RacquetTournament[] = [
   { id: "wta-rg", name: "Roland Garros", surface: "Clay", location: "Paris", startDate: "2026-05-25", endDate: "2026-06-07", status: "live" },
   { id: "wta-wim", name: "Wimbledon", surface: "Grass", location: "London", startDate: "2026-06-29", endDate: "2026-07-12", status: "upcoming" },
 ];
+
 
 export const TENNIS_DATA: TennisData = {
   atp: {

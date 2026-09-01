@@ -20,8 +20,10 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
-import type { RacquetData } from "@/types/sports";
+import type { RacquetData, Team } from "@/types/sports";
 
+import { DrawMatchCard } from "../shared/draw-match-card";
+import { KnockoutBracket } from "../shared/knockout-bracket";
 import { SportShell } from "../shared/sport-shell";
 import { StatusPill } from "../shared/status-pill";
 import { SportsTh } from "../shared/table-primitives";
@@ -33,12 +35,21 @@ type RacquetViewProps = {
   title: string;
   subtitle: string;
   tours: TourTab[];
+  /** Everyone who appears in any draw, keyed by id. */
+  players?: Map<string, Team>;
 };
 
-export function RacquetView({ emoji, title, subtitle, tours }: RacquetViewProps) {
+export function RacquetView({
+  emoji,
+  title,
+  subtitle,
+  tours,
+  players = new Map(),
+}: RacquetViewProps) {
   const defaultTour = tours[0]?.value ?? "main";
   const [tourValue, setTourValue] = useState<string>(defaultTour);
   const activeTour = tours.find((t) => t.value === tourValue) ?? tours[0];
+  const drawn = activeTour.data.tournaments.filter((t) => t.bracket?.length);
 
   return (
     <Tabs defaultValue="rankings" className="space-y-6">
@@ -66,6 +77,9 @@ export function RacquetView({ emoji, title, subtitle, tours }: RacquetViewProps)
           <TabsList>
             <TabsTrigger value="rankings">Rankings</TabsTrigger>
             <TabsTrigger value="tournaments">Tournaments</TabsTrigger>
+            {/* Only when there is a draw to show. A tab that opens on nothing
+                is worse than one that is not there. */}
+            {drawn.length > 0 && <TabsTrigger value="draw">Draw</TabsTrigger>}
           </TabsList>
         }
       >
@@ -75,8 +89,58 @@ export function RacquetView({ emoji, title, subtitle, tours }: RacquetViewProps)
         <TabsContent value="tournaments">
           <TournamentsList data={activeTour.data} />
         </TabsContent>
+        {drawn.length > 0 && (
+          <TabsContent value="draw">
+            <DrawPanel tournaments={drawn} players={players} />
+          </TabsContent>
+        )}
       </SportShell>
     </Tabs>
+  );
+}
+
+/**
+ * The draw for one tournament, the way a draw sheet reads: pick the event,
+ * then follow the winners across.
+ */
+function DrawPanel({
+  tournaments,
+  players,
+}: {
+  tournaments: RacquetData["tournaments"];
+  players: Map<string, Team>;
+}) {
+  const [openId, setOpenId] = useState(tournaments[0]?.id ?? "");
+  const open = tournaments.find((t) => t.id === openId) ?? tournaments[0];
+
+  return (
+    <div className="flex flex-col gap-4">
+      {tournaments.length > 1 && (
+        <Select value={open.id} onValueChange={setOpenId}>
+          <SelectTrigger className="w-full sm:w-72">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {tournaments.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                {t.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      <Card>
+        <CardContent className="p-3 sm:p-4">
+          <KnockoutBracket
+            rounds={open.bracket ?? []}
+            teams={players}
+            renderMatch={(match, teams) => (
+              <DrawMatchCard match={match} teams={teams} />
+            )}
+          />
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

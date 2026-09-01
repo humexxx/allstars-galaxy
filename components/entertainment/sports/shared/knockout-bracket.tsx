@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,28 @@ type KnockoutBracketProps = {
   rounds: BracketRound[];
   teams: Map<string, Team>;
   className?: string;
+  /**
+   * How one tie is drawn. Football's two-legged card is the default; tennis
+   * passes its own, because a draw wants seeds, flags and set scores rather
+   * than L1/L2 columns and an aggregate.
+   */
+  renderMatch?: (match: BracketMatch, teams: Map<string, Team>) => ReactNode;
 };
 
 const VISIBLE_COUNT = 3;
+
+/** The card for one tie: the sport's own, or football's two-legged default. */
+function Tie({
+  match,
+  teams,
+  render,
+}: {
+  match: BracketMatch;
+  teams: Map<string, Team>;
+  render?: (match: BracketMatch, teams: Map<string, Team>) => ReactNode;
+}) {
+  return <>{render ? render(match, teams) : <LegScoreCard match={match} teams={teams} />}</>;
+}
 
 /** Index of the CURRENT round: first with an undecided tie; a fully decided
  *  bracket lands on the final instead of opening on the oldest round. */
@@ -30,7 +49,7 @@ function initialWindowStart(rounds: BracketRound[]): number {
   return Math.min(currentRoundIndex(rounds), maxStart);
 }
 
-export function KnockoutBracket({ rounds, teams, className }: KnockoutBracketProps) {
+export function KnockoutBracket({ rounds, teams, className, renderMatch }: KnockoutBracketProps) {
   if (rounds.length === 0 || !isBracketDrawn(rounds)) {
     return (
       <div
@@ -46,8 +65,8 @@ export function KnockoutBracket({ rounds, teams, className }: KnockoutBracketPro
 
   return (
     <div className={className}>
-      <MobileBracket rounds={rounds} teams={teams} className="sm:hidden" />
-      <DesktopBracket rounds={rounds} teams={teams} className="hidden sm:block" />
+      <MobileBracket rounds={rounds} teams={teams} renderMatch={renderMatch} className="sm:hidden" />
+      <DesktopBracket rounds={rounds} teams={teams} renderMatch={renderMatch} className="hidden sm:block" />
     </div>
   );
 }
@@ -101,6 +120,7 @@ function MobileBracket({
   rounds,
   teams,
   className,
+  renderMatch,
 }: KnockoutBracketProps) {
   const [activeIdx, setActiveIdx] = useState(() => currentRoundIndex(rounds));
 
@@ -157,16 +177,14 @@ function MobileBracket({
             return (
               <div key={nextMatch.id} className="flex items-stretch">
                 <div className="flex min-w-0 flex-1 flex-col justify-around gap-3">
-                  {top && <LegScoreCard match={top} teams={teams} />}
-                  {bottom && <LegScoreCard match={bottom} teams={teams} />}
+                  {top && <Tie match={top} teams={teams} render={renderMatch} />}
+                  {bottom && <Tie match={bottom} teams={teams} render={renderMatch} />}
                 </div>
                 <PairConnector />
                 <div className="flex min-w-0 flex-1 items-center">
-                  <LegScoreCard
-                    match={nextMatch}
-                    teams={teams}
-                    className="w-full"
-                  />
+                  <div className="w-full">
+                    <Tie match={nextMatch} teams={teams} render={renderMatch} />
+                  </div>
                 </div>
               </div>
             );
@@ -175,7 +193,7 @@ function MobileBracket({
       ) : (
         <div className="flex flex-col gap-3">
           {active.matches.map((match) => (
-            <LegScoreCard key={match.id} match={match} teams={teams} />
+            <Tie key={match.id} match={match} teams={teams} render={renderMatch} />
           ))}
         </div>
       )}
@@ -197,7 +215,7 @@ function PairConnector() {
 
 // ---------- Desktop: 3-column sliding window ----------
 
-function DesktopBracket({ rounds, teams, className }: KnockoutBracketProps) {
+function DesktopBracket({ rounds, teams, className, renderMatch }: KnockoutBracketProps) {
   const [windowStart, setWindowStart] = useState(() => initialWindowStart(rounds));
   const maxStart = Math.max(0, rounds.length - VISIBLE_COUNT);
 
@@ -265,7 +283,7 @@ function DesktopBracket({ rounds, teams, className }: KnockoutBracketProps) {
         {visibleRounds.map((round) => (
           <div key={round.id} className="flex flex-col justify-around gap-3">
             {round.matches.map((match) => (
-              <LegScoreCard key={match.id} match={match} teams={teams} />
+              <Tie key={match.id} match={match} teams={teams} render={renderMatch} />
             ))}
           </div>
         ))}

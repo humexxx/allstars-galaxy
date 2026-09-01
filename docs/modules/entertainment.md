@@ -507,6 +507,22 @@ NBA and NFL still use mocks.
 - **Only the NFL is sample data now**, via `SAMPLE_DATA_SPORTS`. It has no free
   provider with current data, so it renders a hand-written season — and a
   hand-written season with nothing admitting it reads as a broken live view.
+- **Tennis has a draw.** `RacquetTournament.bracket` had been in the type since
+  the start with nothing rendering it. `KnockoutBracket` now takes an optional
+  `renderMatch`, so the same round/lane/mobile machinery draws a tennis tie
+  through `DrawMatchCard` — seeds, flags and set-by-set scores, the won set
+  highlighted — instead of football's L1/L2-plus-aggregate card. **A set is a
+  `leg`**: the type already carried per-leg scores and a set is exactly that
+  under another name, so nothing new was needed to hold one.
+- **Tennis is sample data**, and now says so. TheSportsDB's free tier serves
+  the tournament calendar and nothing else — no rankings, no draws. The one
+  exception is the **2025 US Open** draw, which is real (Alcaraz d. Sinner
+  6–2 3–6 6–1 6–4, and both semi-finals) and therefore keeps its own year in a
+  list that is otherwise invented. The quarter-finals are absent rather than
+  guessed: no source parsed cleanly, and a draw with made-up scores in it is
+  worse than a shorter one. A live draw needs a provider key nobody has yet.
+- **The live tennis service keeps fixture tournaments that carry a draw.**
+  Replacing the list wholesale threw away the only bracket there is.
 - **A `ScoreCard` prints its `stageLabel`** and does not pretend to be a link.
   It carried the label without showing it, so a Finals game and a Tuesday in
   November looked identical, and a hover chevron promised a screen that does

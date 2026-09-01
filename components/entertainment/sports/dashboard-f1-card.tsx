@@ -5,11 +5,13 @@ import { ArrowRight, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Heading, Mono, Text } from "@/components/ui/typography";
+import { getF1DashboardStandings } from "@/lib/services/espn-f1-standings-service";
 import { getF1News } from "@/lib/services/rapidapi-f1-news-service";
 import {
   getF1DashboardHighlight,
   listUserFavoriteSportIds,
 } from "@/lib/services/sports-service";
+import { F1StandingsTabs } from "@/components/entertainment/sports/f1-standings-tabs";
 import type { F1NewsImage } from "@/db/schema";
 
 const F1_PATH = "/portal/entertainment/sports?sport=f1";
@@ -37,16 +39,16 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
   const favorites = await listUserFavoriteSportIds(userId);
   if (!favorites.includes("f1")) return null;
 
-  const [highlight, news] = await Promise.all([
+  const [highlight, news, standings] = await Promise.all([
     getF1DashboardHighlight(),
     getF1News(SHOWN),
+    getF1DashboardStandings(3),
   ]);
   if (!highlight && news.length === 0) return null;
 
   return (
-    // Two thirds, not the whole row: it is one sport among several. A third
-    // was too narrow for the slider to show a story and a half.
-    <Card className="flex flex-col md:col-span-2">
+    // Half the row: one sport among several, beside whatever comes next.
+    <Card className="flex flex-col">
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
@@ -72,29 +74,24 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
         {highlight && (
           <Link
             href={F1_PATH}
-            className="flex flex-col gap-1 rounded-lg border bg-card p-3 transition-colors hover:border-primary/60"
+            className="flex items-start justify-between gap-2 rounded-lg border bg-card p-2.5 transition-colors hover:border-primary/60"
           >
-            <span className="flex items-start justify-between gap-2">
-              <span className="text-sm font-semibold leading-snug">
-                {highlight.headline}
-              </span>
-              {highlight.tone === "live" && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-2xs font-medium text-emerald-600 dark:text-emerald-400">
-                  <Circle className="h-2 w-2 animate-pulse fill-current" /> Live
-                </span>
-              )}
+            <span className="min-w-0 text-xs font-semibold leading-snug">
+              {highlight.headline}
             </span>
-            {highlight.secondary && (
-              <span className="flex items-center justify-between gap-2 text-xs">
-                <span className="text-muted-foreground">
-                  {highlight.secondary.label}
-                </span>
-                <Mono className="font-medium tabular-nums">
-                  {highlight.secondary.value}
-                </Mono>
+            {highlight.tone === "live" && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-2xs font-medium text-emerald-600 dark:text-emerald-400">
+                <Circle className="h-2 w-2 animate-pulse fill-current" /> Live
               </span>
             )}
           </Link>
+        )}
+
+        {standings && (
+          <F1StandingsTabs
+            drivers={standings.drivers}
+            constructors={standings.constructors}
+          />
         )}
 
         {news.length > 0 && (
@@ -112,7 +109,7 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
                   <Link
                     key={item.id}
                     href={`/news/f1/${item.id}`}
-                    className="group flex w-52 shrink-0 snap-start flex-col gap-2 rounded-lg border bg-card p-2 transition-colors hover:border-primary/60"
+                    className="group flex w-44 shrink-0 snap-start flex-col gap-2 rounded-lg border bg-card p-2 transition-colors hover:border-primary/60"
                   >
                     {image?.url && (
                       <div className="relative aspect-[16/9] w-full overflow-hidden rounded-md bg-muted">
@@ -120,7 +117,7 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
                           src={image.url}
                           alt={image.alt ?? ""}
                           fill
-                          sizes="208px"
+                          sizes="176px"
                           className="object-cover"
                           // The provider's CDN is whatever ESPN is using that
                           // week; an allowlist would break the day it changes.

@@ -88,10 +88,13 @@ test.describe("Sports favorites", () => {
     // how it renders.
     await expect(page.getByText(/^Football$/).first()).toBeVisible();
 
-    // F1's own card, with the same leader line it used to contribute here.
+    // F1's own card: the championship's top three, either table.
     await expect(page.getByRole("heading", { name: "Formula 1" })).toBeVisible();
-    await expect(page.getByText("Drivers' leader")).toBeVisible();
-    await expect(page.getByText(/^.+ · \d+ pts$/).first()).toBeVisible();
+    const drivers = page.getByRole("tab", { name: "Drivers" });
+    await expect(drivers).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Constructors" })).toBeVisible();
+    // Three rows, each ending in a points figure.
+    await expect(page.getByText("pts").first()).toBeVisible();
   });
 
   test("untoggling the last favourite returns the dashboard to its empty state", async ({

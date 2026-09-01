@@ -26,7 +26,10 @@ export default async function PortalPage() {
         title="Dashboard"
         description="Snapshots from across your workspace."
       />
-      <div className="grid auto-rows-min gap-4 md:grid-cols-3">
+      {/* Two columns, and every card but F1's spans both. F1's takes one, so
+          it sits at half the row — one sport among several rather than a
+          banner. */}
+      <div className="grid auto-rows-min gap-4 md:grid-cols-2">
         <DashboardFinanceCard userId={ctx.effectiveUserId} />
         <DashboardTravelCard userId={ctx.effectiveUserId} />
         <DashboardSportsCard userId={ctx.effectiveUserId} />

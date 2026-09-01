@@ -545,7 +545,15 @@ NBA and NFL still use mocks.
   - `RAPIDAPI_KEY` unset just means no refresh — the stored archive still reads.
   - **The dashboard card is gated on F1 being a favourite**, like the sports
     card beside it. A motorsport wire on the desk of somebody who does not
-    follow it is noise, and the dashboard already works that way.
+    follow it is noise, and the dashboard already works that way. It shows
+    **one** story — a dashboard card is a glance — with the wire a click away.
+  - **`/news/f1/[id]` is a public page**, like a shared trip: no auth, its own
+    layout, and OG tags so the link unfurls. Every headline in the app points
+    there rather than straight at the source, because that page is the one
+    worth sending somebody and it carries the rest of the wire underneath.
+  - **The page never reproduces the article.** RapidAPI sends a headline, a
+    short description and a link; the story belongs to whoever wrote it, so the
+    page shows the summary and points at the original.
 - **A `ScoreCard` prints its `stageLabel`** and does not pretend to be a link.
   It carried the label without showing it, so a Finals game and a Tuesday in
   November looked identical, and a hover chevron promised a screen that does

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { desc, sql } from "drizzle-orm";
+import { desc, eq, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { f1News, type F1NewsImage } from "@/db/schema";
@@ -96,6 +96,46 @@ export async function refreshF1News(): Promise<{ fetched: number; stored: number
     });
 
   return { fetched: articles.length, stored: rows.length };
+}
+
+/** One article by the provider's id, for its own page. */
+export async function getF1Article(articleId: string): Promise<F1NewsArticle | null> {
+  const [row] = await db
+    .select()
+    .from(f1News)
+    .where(eq(f1News.articleId, articleId))
+    .limit(1);
+  if (!row) return null;
+  return {
+    id: row.articleId,
+    headline: row.headline,
+    description: row.description,
+    link: row.link,
+    images: row.images ?? [],
+    firstSeenAt: row.firstSeenAt,
+  };
+}
+
+/** The rest of the wire, for the bottom of an article's page. */
+export async function getOtherF1News(
+  excludeArticleId: string,
+  limit = 6
+): Promise<F1NewsArticle[]> {
+  const rows = await db
+    .select()
+    .from(f1News)
+    .where(ne(f1News.articleId, excludeArticleId))
+    .orderBy(desc(f1News.firstSeenAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    id: r.articleId,
+    headline: r.headline,
+    description: r.description,
+    link: r.link,
+    images: r.images ?? [],
+    firstSeenAt: r.firstSeenAt,
+  }));
 }
 
 /**

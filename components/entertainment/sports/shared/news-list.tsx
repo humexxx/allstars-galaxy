@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Mono, Text } from "@/components/ui/typography";
@@ -40,13 +40,13 @@ export function NewsList({ items }: { items: NewsItem[] }) {
     <div className="grid gap-3 sm:grid-cols-2">
       {items.map((item) => {
         const image = thumbnail(item.images);
-        const Wrapper = item.link ? "a" : "div";
         return (
-          <Wrapper
+          // Our own page, not the source: it is shareable, it carries the
+          // rest of the wire underneath, and the way out to the original is
+          // on it.
+          <Link
             key={item.id}
-            {...(item.link
-              ? { href: item.link, target: "_blank", rel: "noopener noreferrer" }
-              : {})}
+            href={`/news/f1/${item.id}`}
             className="group flex gap-3 rounded-lg border bg-card p-3 transition-colors hover:border-primary/50"
           >
             {image?.url && (
@@ -65,13 +65,8 @@ export function NewsList({ items }: { items: NewsItem[] }) {
               </div>
             )}
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="flex items-start gap-1.5">
-                <span className="min-w-0 flex-1 text-sm font-medium leading-snug">
-                  {item.headline}
-                </span>
-                {item.link && (
-                  <ExternalLink className="mt-0.5 size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                )}
+              <span className="text-sm font-medium leading-snug">
+                {item.headline}
               </span>
               {item.description && (
                 <Text variant="small" className="line-clamp-2">
@@ -86,7 +81,7 @@ export function NewsList({ items }: { items: NewsItem[] }) {
                 })}
               </Mono>
             </div>
-          </Wrapper>
+          </Link>
         );
       })}
     </div>

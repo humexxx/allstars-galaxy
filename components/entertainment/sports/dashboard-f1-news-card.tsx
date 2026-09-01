@@ -10,8 +10,6 @@ import { listUserFavoriteSportIds } from "@/lib/services/sports-service";
 import type { F1NewsImage } from "@/db/schema";
 
 const F1_PATH = "/portal/entertainment/sports?sport=f1";
-/** Enough to be worth a card, few enough to stay one. */
-const SHOWN = 3;
 
 /** The widest image the provider sent — its list runs small crops to full bleed. */
 function thumbnail(images: F1NewsImage[]): F1NewsImage | null {
@@ -30,8 +28,11 @@ export async function DashboardF1NewsCard({ userId }: { userId: string }) {
   const favorites = await listUserFavoriteSportIds(userId);
   if (!favorites.includes("f1")) return null;
 
-  const news = await getF1News(SHOWN);
-  if (news.length === 0) return null;
+  // One story. A dashboard card is a glance, and the wire is one click away.
+  const [latest] = await getF1News(1);
+  if (!latest) return null;
+
+  const image = thumbnail(latest.images);
 
   return (
     <Card className="col-span-full">
@@ -48,49 +49,46 @@ export async function DashboardF1NewsCard({ userId }: { userId: string }) {
           </div>
           <Button variant="outline" size="sm" asChild>
             <Link href={F1_PATH}>
-              All news <ArrowRight className="ml-1 h-3 w-3" />
+              More news <ArrowRight className="ml-1 h-3 w-3" />
             </Link>
           </Button>
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {news.map((item) => {
-            const image = thumbnail(item.images);
-            const Wrapper = item.link ? "a" : "div";
-            return (
-              <Wrapper
-                key={item.id}
-                {...(item.link
-                  ? { href: item.link, target: "_blank", rel: "noopener noreferrer" }
-                  : {})}
-                className="group flex h-full flex-col gap-2 rounded-lg border bg-card p-3 transition-colors hover:border-primary/60"
-              >
-                {image?.url && (
-                  <div className="relative aspect-[16/9] w-full overflow-hidden rounded-md bg-muted">
-                    <Image
-                      src={image.url}
-                      alt={image.alt ?? ""}
-                      fill
-                      sizes="(max-width: 640px) 100vw, 320px"
-                      className="object-cover"
-                      // The provider's CDN is whatever ESPN is using that week;
-                      // an allowlist would break silently the day it changes.
-                      unoptimized
-                    />
-                  </div>
-                )}
-                <span className="text-sm font-medium leading-snug">{item.headline}</span>
-                <Mono className="mt-auto text-2xs text-muted-foreground">
-                  {item.firstSeenAt.toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </Mono>
-              </Wrapper>
-            );
-          })}
-        </div>
+        <Link
+          href={`/news/f1/${latest.id}`}
+          className="group flex flex-col gap-3 rounded-lg border bg-card p-3 transition-colors hover:border-primary/60 sm:flex-row"
+        >
+          {image?.url && (
+            <div className="relative aspect-[16/9] w-full shrink-0 overflow-hidden rounded-md bg-muted sm:aspect-square sm:size-28">
+              <Image
+                src={image.url}
+                alt={image.alt ?? ""}
+                fill
+                sizes="(max-width: 640px) 100vw, 112px"
+                className="object-cover"
+                // The provider's CDN is whatever ESPN is using that week; an
+                // allowlist would break silently the day it changes.
+                unoptimized
+              />
+            </div>
+          )}
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <span className="text-sm font-medium leading-snug">{latest.headline}</span>
+            {latest.description && (
+              <Text variant="small" className="line-clamp-2">
+                {latest.description}
+              </Text>
+            )}
+            <Mono className="mt-auto text-2xs text-muted-foreground">
+              {latest.firstSeenAt.toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </Mono>
+          </div>
+        </Link>
       </CardContent>
     </Card>
   );

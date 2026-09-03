@@ -1,27 +1,34 @@
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
-import type { CookieOptions } from "@supabase/ssr"
+import { env } from "@/lib/env";
 
-export async function createClient() {
-  const cookieStore = await cookies()
+type ServerClient = ReturnType<typeof createServerClient>;
+
+export async function createClient(): Promise<ServerClient> {
+  const cookieStore = await cookies();
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
+    env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ?? "",
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll()
+          return cookieStore.getAll();
         },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+        setAll(
+          cookiesToSet: { name: string; value: string; options: CookieOptions }[]
+        ) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
-            )
-          } catch {}
+            );
+          } catch {
+            // Called from a Server Component: cookies are read-only there and
+            // the proxy refreshes the session instead.
+          }
         },
       },
     }
-  )
+  );
 }

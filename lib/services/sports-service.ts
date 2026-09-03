@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { and, asc, eq } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -46,10 +47,16 @@ export async function listUserSportsFavorites(
     .orderBy(asc(userSportsPreferences.createdAt));
 }
 
-export async function listUserFavoriteSportIds(userId: string): Promise<SportId[]> {
+/**
+ * Request-cached: the dashboard's sports card, its F1 card and the summary
+ * builder all ask for the same list during one render.
+ */
+export const listUserFavoriteSportIds = cache(async function listUserFavoriteSportIds(
+  userId: string
+): Promise<SportId[]> {
   const rows = await listUserSportsFavorites(userId);
   return rows.map((row) => row.sportId as SportId);
-}
+});
 
 export async function setSportFavorite(
   userId: string,

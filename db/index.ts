@@ -1,11 +1,20 @@
+import "server-only";
+
 import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres"; // 
+import postgres from "postgres";
+
+import { env } from "@/lib/env";
+
 import * as schema from "./schema";
 
-const connectionString = process.env.DATABASE_URL!;
-const url = connectionString.includes('?') ? `${connectionString}&sslmode=require` : `${connectionString}?sslmode=require`;
+const connectionString = env.DATABASE_URL ?? "";
+const url = connectionString.includes("?")
+  ? `${connectionString}&sslmode=require`
+  : `${connectionString}?sslmode=require`;
 
-console.log("🔌 Connecting to DB at:", url.replace(/:[^:@]+@/, ":****@"));
+if (process.env.NODE_ENV === "development") {
+  console.log("🔌 Connecting to DB at:", url.replace(/:[^:@]+@/, ":****@"));
+}
 
 // `prepare: false` — prepared statements aren't supported in "Transaction" pool
 // mode. The timeouts recycle connections so a stale/half-open pooled connection

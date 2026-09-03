@@ -101,13 +101,19 @@ async function ensureOwnership(planId: string, userId: string): Promise<void> {
 
 // ---------- plan CRUD ----------
 
-export async function listUserPlans(userId: string): Promise<FinancePlan[]> {
+/**
+ * Request-cached: the dashboard's finance card and the plans layout both list
+ * the user's plans during one render, so the second call is free.
+ */
+export const listUserPlans = cache(async function listUserPlans(
+  userId: string
+): Promise<FinancePlan[]> {
   return db
     .select()
     .from(financePlans)
     .where(eq(financePlans.userId, userId))
     .orderBy(asc(financePlans.createdAt));
-}
+});
 
 /**
  * Wrapped in React's `cache()` so calls from `generateMetadata` and the page
@@ -296,15 +302,22 @@ export async function setPlanColor(
     .where(eq(financePlans.id, planId));
 }
 
-/** Returns the user's main plan, or null if none has been marked. */
-export async function getMainPlan(userId: string): Promise<FinancePlan | null> {
+/**
+ * Returns the user's main plan, or null if none has been marked.
+ *
+ * Request-cached: the dashboard's finance card and its confirmation host both
+ * resolve the main plan in the same render.
+ */
+export const getMainPlan = cache(async function getMainPlan(
+  userId: string
+): Promise<FinancePlan | null> {
   const [plan] = await db
     .select()
     .from(financePlans)
     .where(and(eq(financePlans.userId, userId), eq(financePlans.isMain, true)))
     .limit(1);
   return plan ?? null;
-}
+});
 
 export async function clonePlan(
   userId: string,

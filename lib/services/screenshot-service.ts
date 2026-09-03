@@ -1,3 +1,4 @@
+import { upstreamSignal } from "./upstream";
 /**
  * Thin wrapper around microlink.io's free screenshot API. We use it so
  * the More Apps page can render real previews of sibling projects
@@ -21,6 +22,7 @@ export async function getScreenshotUrl(
     apiUrl.searchParams.set("meta", "false");
 
     const res = await fetch(apiUrl.toString(), {
+      signal: upstreamSignal(),
       next: { revalidate: 86_400 }, // 24h
     });
     if (!res.ok) return null;

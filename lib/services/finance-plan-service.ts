@@ -1414,12 +1414,15 @@ export function compareDebtStrategies(
   };
 }
 
-export async function getPortfolioValueForUser(userId: string): Promise<number> {
+/** Request-cached: every projection on a plans page asks for this. */
+export const getPortfolioValueForUser = cache(async function getPortfolioValueForUser(
+  userId: string
+): Promise<number> {
   const portfolio = await getUserPortfolio(userId);
   if (!portfolio) return 0;
   const stats = await getPortfolioStats(portfolio.id);
   return stats.totalValue;
-}
+});
 
 /**
  * Value-weighted average monthly ROI (as a decimal) of the user's current
@@ -1427,7 +1430,9 @@ export async function getPortfolioValueForUser(userId: string): Promise<number> 
  * holding value. Returns 0 when the user has no portfolio or no holdings,
  * which makes projections hold the portfolio flat (the safe fallback).
  */
-export async function getPortfolioWeightedMonthlyRoi(userId: string): Promise<number> {
+export const getPortfolioWeightedMonthlyRoi = cache(async function getPortfolioWeightedMonthlyRoi(
+  userId: string
+): Promise<number> {
   const portfolio = await getUserPortfolio(userId);
   if (!portfolio) return 0;
   const assets = await getPortfolioAssets(portfolio.id);
@@ -1440,7 +1445,7 @@ export async function getPortfolioWeightedMonthlyRoi(userId: string): Promise<nu
     totalWeight += asset.holdingAmount;
   }
   return totalWeight > 0 ? weightedRoi / totalWeight : 0;
-}
+});
 
 /**
  * Resolves the monthly ROI (as a decimal) of the plan's auto-invest method, or

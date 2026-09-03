@@ -1,17 +1,25 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { db } from "@/db";
 import { portfolios, transactions, investmentMethods, users, portfolioSnapshots } from "@/db/schema";
 import { eq, and, inArray, ne, desc } from "drizzle-orm";
 import type { Portfolio, PortfolioTransaction, PortfolioStats, PortfolioAsset, MethodInvestors, TransactionStatus, TransactionType } from "@/types/portfolio";
 import type { ManagedContribution } from "@/lib/finance/managed-capital";
 
-export async function getUserPortfolio(userId: string): Promise<Portfolio | null> {
+/**
+ * Request-cached: the plans pages and the projection helpers each look the
+ * portfolio up on their own, several times per render.
+ */
+export const getUserPortfolio = cache(async function getUserPortfolio(
+  userId: string
+): Promise<Portfolio | null> {
   const portfolio = await db.query.portfolios.findFirst({
     where: eq(portfolios.userId, userId),
   });
   return portfolio || null;
-}
+});
 
 export async function createPortfolio(userId: string, name?: string): Promise<Portfolio> {
   const [portfolio] = await db
@@ -24,7 +32,9 @@ export async function createPortfolio(userId: string, name?: string): Promise<Po
   return portfolio;
 }
 
-export async function getPortfolioStats(portfolioId: string): Promise<PortfolioStats> {
+export const getPortfolioStats = cache(async function getPortfolioStats(
+  portfolioId: string
+): Promise<PortfolioStats> {
   // Get all approved buy transactions to calculate currentValue (totalValue) and initialValue (costBasis)
   const buyTransactions = await db
     .select()
@@ -70,7 +80,7 @@ export async function getPortfolioStats(portfolioId: string): Promise<PortfolioS
     totalInvestmentMethods: uniqueInvestmentMethods,
     activeTransactions: activeTransactionsCount,
   };
-}
+});
 
 export async function getPortfolioTransactions(portfolioId: string): Promise<PortfolioTransaction[]> {
   const allTransactions = await db
@@ -100,7 +110,9 @@ export async function getPortfolioTransactions(portfolioId: string): Promise<Por
   );
 }
 
-export async function getPortfolioAssets(portfolioId: string): Promise<PortfolioAsset[]> {
+export const getPortfolioAssets = cache(async function getPortfolioAssets(
+  portfolioId: string
+): Promise<PortfolioAsset[]> {
   const allTransactions = await db
     .select({
       investmentMethodId: transactions.investmentMethodId,
@@ -177,7 +189,7 @@ export async function getPortfolioAssets(portfolioId: string): Promise<Portfolio
   });
 
   return assets.filter((asset) => asset.holdingAmount > 0 || asset.pendingAmount > 0);
-}
+});
 
 /**
  * Get current value and growth for a specific transaction

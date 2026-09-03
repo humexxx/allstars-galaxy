@@ -54,17 +54,28 @@ import { runDailySnapshotsAction } from "@/app/actions/dev-tools";
 import { ConfirmationDialog } from "./confirmation-dialog";
 import { PeriodCompareDialog } from "./period-compare-dialog";
 import { FinancialHealthDonut } from "./financial-health-donut";
-import { PlanCalendar } from "./plan-calendar";
 import { PlanLineEditor } from "./plan-line-editor";
 import { PlanDebtEditor } from "./plan-debt-editor";
 import { PlanForm, type InvestmentMethodOption } from "./plan-form";
-import { ProjectionTable } from "./projection-table";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 // Recharts is one of the heaviest deps in the app — lazy-load the chart so the
 // projection editor's initial bundle stays small. The skeleton matches the
 // rendered chart's responsive height so swapping in the real chart doesn't
 // shift the hero (it's the first thing on screen).
+// The calendar is the largest module in the editor and the table is the least
+// visited view; neither is on screen until the reader switches to it, so they
+// join the chart in loading on demand.
+const PlanCalendar = dynamic(
+  () => import("./plan-calendar").then((mod) => mod.PlanCalendar),
+  { loading: () => <Skeleton className="min-h-80 w-full" /> }
+);
+
+const ProjectionTable = dynamic(
+  () => import("./projection-table").then((mod) => mod.ProjectionTable),
+  { loading: () => <Skeleton className="h-72 w-full" /> }
+);
+
 const ProjectionChart = dynamic(
   () => import("./projection-chart").then((mod) => mod.ProjectionChart),
   {

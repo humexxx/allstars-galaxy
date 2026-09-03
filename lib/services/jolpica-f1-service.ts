@@ -9,6 +9,7 @@ import type {
   F1Driver,
   F1Race,
 } from "@/types/sports";
+import { upstreamSignal } from "./upstream";
 
 const JOLPICA_BASE_URL = "https://api.jolpi.ca/ergast/f1";
 const REVALIDATE_SECONDS = 300;
@@ -262,6 +263,7 @@ function driverCode(driver: JolpicaDriver): string {
 
 async function fetchJolpica<T>(path: string): Promise<T> {
   const res = await fetch(`${JOLPICA_BASE_URL}${path}`, {
+    signal: upstreamSignal(),
     next: { revalidate: REVALIDATE_SECONDS },
   });
   if (!res.ok) throw new Error(`Jolpica ${res.status} on ${path}`);

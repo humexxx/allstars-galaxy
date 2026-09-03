@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -19,7 +20,11 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   financeMilestones: [...DEFAULT_FINANCE_MILESTONES],
 };
 
-export async function getUserPreferences(
+/**
+ * Request-cached: the plans layout and the plan page both read it during one
+ * render.
+ */
+export const getUserPreferences = cache(async function getUserPreferences(
   userId: string
 ): Promise<UserPreferences> {
   const row = await db.query.userPreferences.findFirst({
@@ -32,7 +37,7 @@ export async function getUserPreferences(
     // so only null falls back.
     financeMilestones: row.financeMilestones ?? [...DEFAULT_FINANCE_MILESTONES],
   };
-}
+});
 
 export async function setFinanceMilestones(
   userId: string,

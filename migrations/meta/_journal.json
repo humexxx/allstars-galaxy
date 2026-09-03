@@ -344,6 +344,13 @@
       "when": 1788238414379,
       "tag": "0048_quick_glorian",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1788417942997,
+      "tag": "0049_warm_swordsman",
+      "breakpoints": true
     }
   ]
 }

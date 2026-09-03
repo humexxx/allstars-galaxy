@@ -1,6 +1,7 @@
 import "server-only";
 
 import { unstable_cache } from "next/cache";
+import { upstreamSignal } from "./upstream";
 
 const URL = "https://site.api.espn.com/apis/v2/sports/racing/f1/standings";
 const REVALIDATE_SECONDS = 300;
@@ -134,7 +135,10 @@ function rank(entry: EspnEntry, index: number): number {
  * with none yet falls back to its livery colour and code.
  */
 async function fetchStandings(top: number): Promise<F1DashboardStandings> {
-  const res = await fetch(URL, { next: { revalidate: REVALIDATE_SECONDS } });
+  const res = await fetch(URL, {
+    signal: upstreamSignal(),
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
   if (!res.ok) throw new Error(`espn f1 standings ${res.status}`);
   const json = (await res.json()) as EspnStandings;
 

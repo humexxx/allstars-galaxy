@@ -1,9 +1,11 @@
 import "server-only";
 
+import { cache } from "react";
 import { desc, eq, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { f1News, type F1NewsImage } from "@/db/schema";
+import { upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://f1-motorsport-data.p.rapidapi.com";
 const HOST = "f1-motorsport-data.p.rapidapi.com";
@@ -55,6 +57,7 @@ export async function refreshF1News(): Promise<{ fetched: number; stored: number
   if (!key) throw new Error("RAPIDAPI_KEY is not configured");
 
   const res = await fetch(`${BASE_URL}/news?limit=${FEED_LIMIT}`, {
+    signal: upstreamSignal(),
     headers: { "X-RapidAPI-Host": HOST, "X-RapidAPI-Key": key },
     cache: "no-store",
   });
@@ -99,7 +102,10 @@ export async function refreshF1News(): Promise<{ fetched: number; stored: number
 }
 
 /** One article by the provider's id, for its own page. */
-export async function getF1Article(articleId: string): Promise<F1NewsArticle | null> {
+/** Request-cached: `generateMetadata` and the page body share one read. */
+export const getF1Article = cache(async function getF1Article(
+  articleId: string
+): Promise<F1NewsArticle | null> {
   const [row] = await db
     .select()
     .from(f1News)
@@ -114,7 +120,7 @@ export async function getF1Article(articleId: string): Promise<F1NewsArticle | n
     images: row.images ?? [],
     firstSeenAt: row.firstSeenAt,
   };
-}
+});
 
 /** The rest of the wire, for the bottom of an article's page. */
 export async function getOtherF1News(

@@ -87,9 +87,25 @@ export async function backfillTransactionAllocations(
   if (owned.length === 0) return { priced: 0, skipped: 0, errors: [] };
   const methodIds = owned.map((m) => m.id);
 
-  const policies = new Map<string, MethodAllocationRow[]>();
-  for (const methodId of methodIds) {
-    policies.set(methodId, await getMethodAllocations(methodId));
+  // One query for every owned method's policy, grouped in memory — a query
+  // per method made this O(methods) round-trips on every backfill.
+  const policyRows = await db
+    .select({
+      methodId: methodAllocations.methodId,
+      assetId: methodAllocations.assetId,
+      percent: methodAllocations.percent,
+      symbol: priceAssets.symbol,
+      name: priceAssets.name,
+    })
+    .from(methodAllocations)
+    .innerJoin(priceAssets, eq(methodAllocations.assetId, priceAssets.id))
+    .where(inArray(methodAllocations.methodId, methodIds));
+
+  const policies = new Map<string, MethodAllocationRow[]>(
+    methodIds.map((id) => [id, []])
+  );
+  for (const { methodId, ...row } of policyRows) {
+    policies.get(methodId)?.push({ ...row, percent: parseFloat(row.percent) });
   }
 
   const pending = await db

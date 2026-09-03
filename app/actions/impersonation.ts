@@ -7,12 +7,12 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
-import { requireAdmin } from "@/lib/services/auth-server";
+import { requireAdminCached } from "@/lib/services/auth-server";
 import { IMPERSONATION_COOKIE } from "@/lib/services/impersonation";
 import { impersonationSchema } from "@/schemas/impersonation";
 
 export async function startImpersonationAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireAdminCached();
 
   const parsed = impersonationSchema.safeParse({
     userId: formData.get("userId"),
@@ -53,7 +53,7 @@ export async function startImpersonationAction(formData: FormData) {
 }
 
 export async function stopImpersonationAction() {
-  await requireAdmin();
+  await requireAdminCached();
 
   const cookieStore = await cookies();
   cookieStore.delete(IMPERSONATION_COOKIE);

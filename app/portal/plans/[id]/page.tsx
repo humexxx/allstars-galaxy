@@ -46,10 +46,13 @@ export default async function PlanDetailPage({ params }: PageProps) {
   // forward line) starts from the user's most recent real numbers instead of
   // the original plan baseline. Returns the plan unchanged when there are no
   // confirmations. The raw `plan` is still what the editor mutates.
-  const baseline = await buildCalibratedPlan(plan);
-
-  // Milestones are a global user preference, not plan data — edited in Settings.
-  const preferences = await getUserPreferences(ctx.effectiveUserId);
+  //
+  // Milestones are a global user preference, not plan data — edited in
+  // Settings. Independent of the calibration, so the two resolve together.
+  const [baseline, preferences] = await Promise.all([
+    buildCalibratedPlan(plan),
+    getUserPreferences(ctx.effectiveUserId),
+  ]);
 
   const [portfolioValue, autoInvestRate, investmentMethods, history] =
     await Promise.all([

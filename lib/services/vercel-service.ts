@@ -27,6 +27,7 @@ import type {
   AppListing,
   AppProvider,
 } from "@/app/portal/more-apps/apps-data";
+import { upstreamSignal } from "./upstream";
 
 type VercelDeployment = {
   id?: string;
@@ -68,6 +69,7 @@ export async function listVercelProjects(): Promise<AppListing[]> {
     // Fetch projects + user info in parallel.
     const [projectsRes, user] = await Promise.all([
       fetch(`${VERCEL_API_BASE}/v9/projects?limit=100`, {
+        signal: upstreamSignal(),
         headers: { Authorization: `Bearer ${token}` },
         next: { revalidate: 600 }, // 10 min
       }),
@@ -100,6 +102,7 @@ async function fetchVercelUser(
 ): Promise<{ id: string; username: string } | null> {
   try {
     const res = await fetch(`${VERCEL_API_BASE}/v2/user`, {
+      signal: upstreamSignal(),
       headers: { Authorization: `Bearer ${token}` },
       next: { revalidate: 86_400 }, // 24h
     });
@@ -119,6 +122,7 @@ async function fetchTeamSlug(
 ): Promise<string | null> {
   try {
     const res = await fetch(`${VERCEL_API_BASE}/v2/teams/${teamId}`, {
+      signal: upstreamSignal(),
       headers: { Authorization: `Bearer ${token}` },
       next: { revalidate: 86_400 }, // 24h
     });

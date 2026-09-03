@@ -11,6 +11,7 @@ import type {
   RacquetTournament,
   TennisData,
 } from "@/types/sports";
+import { upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://www.thesportsdb.com/api/v1/json/3";
 const REVALIDATE_SECONDS = 300;
@@ -46,6 +47,7 @@ function extractTournamentName(strEvent: string): string {
 
 async function fetchTsd<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
+    signal: upstreamSignal(),
     next: { revalidate: REVALIDATE_SECONDS },
   });
   if (!res.ok) throw new Error(`thesportsdb ${res.status} on ${path}`);

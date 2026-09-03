@@ -82,37 +82,37 @@ export async function refreshPrices(): Promise<PriceFetchResult> {
   return { fetched: rows.length, skipped, errors };
 }
 
-/** Epoch millis of the most recent quote per asset; absent when never quoted. */
-async function latestQuoteTimes(assetIds: string[]): Promise<Map<string, number>> {
-  const rows = await db
-    .select({ assetId: priceQuotes.assetId, fetchedAt: priceQuotes.fetchedAt })
+/**
+ * Newest quote row per asset. `DISTINCT ON` with the matching
+ * `(asset_id, fetched_at desc)` index reads one row per asset; the history is
+ * append-only and grows every day, so pulling it all and keeping the first row
+ * in JS was a query that got slower for as long as the app ran.
+ */
+async function latestQuoteRows(
+  assetIds: string[]
+): Promise<Array<{ assetId: string; price: string; fetchedAt: Date }>> {
+  if (assetIds.length === 0) return [];
+  return db
+    .selectDistinctOn([priceQuotes.assetId], {
+      assetId: priceQuotes.assetId,
+      price: priceQuotes.price,
+      fetchedAt: priceQuotes.fetchedAt,
+    })
     .from(priceQuotes)
     .where(inArray(priceQuotes.assetId, assetIds))
-    .orderBy(desc(priceQuotes.fetchedAt));
+    .orderBy(priceQuotes.assetId, desc(priceQuotes.fetchedAt));
+}
 
-  const latest = new Map<string, number>();
-  for (const r of rows) {
-    if (!latest.has(r.assetId)) latest.set(r.assetId, r.fetchedAt.getTime());
-  }
-  return latest;
+/** Epoch millis of the most recent quote per asset; absent when never quoted. */
+async function latestQuoteTimes(assetIds: string[]): Promise<Map<string, number>> {
+  const rows = await latestQuoteRows(assetIds);
+  return new Map(rows.map((r) => [r.assetId, r.fetchedAt.getTime()]));
 }
 
 /** Latest quote per asset, keyed by asset id. */
 export async function getLatestPrices(assetIds: string[]): Promise<Map<string, number>> {
-  if (assetIds.length === 0) return new Map();
-
-  const quotes = await db
-    .select()
-    .from(priceQuotes)
-    .where(inArray(priceQuotes.assetId, assetIds))
-    .orderBy(desc(priceQuotes.fetchedAt));
-
-  const latest = new Map<string, number>();
-  for (const q of quotes) {
-    // Ordered newest-first, so the first row per asset wins.
-    if (!latest.has(q.assetId)) latest.set(q.assetId, parseFloat(q.price));
-  }
-  return latest;
+  const rows = await latestQuoteRows(assetIds);
+  return new Map(rows.map((r) => [r.assetId, parseFloat(r.price)]));
 }
 
 /** Every asset that can back a holding, newest listing last. */

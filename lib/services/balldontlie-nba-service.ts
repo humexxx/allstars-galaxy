@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache";
 
 import { NBA_DATA } from "@/lib/data/sports/nba";
 import type { Match, MatchStatus, NbaData, Team } from "@/types/sports";
+import { upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://api.balldontlie.io/v1";
 const REVALIDATE_SECONDS = 300;
@@ -66,6 +67,7 @@ async function fetchBdl<T>(path: string): Promise<T> {
   const token = process.env.BALLDONTLIE_API_KEY;
   if (!token) throw new Error("BALLDONTLIE_API_KEY not configured");
   const res = await fetch(`${BASE_URL}${path}`, {
+    signal: upstreamSignal(),
     headers: { Authorization: token },
     next: { revalidate: REVALIDATE_SECONDS },
   });

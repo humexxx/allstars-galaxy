@@ -717,74 +717,81 @@ export function ComparePlansChart({
   months,
   pastMonths = 3,
 }: CompareChartProps) {
+  // Every derived table below is O(periods × plans) and the parents re-render
+  // on each focus change and metric switch, so it is computed once per input.
+  // The single-plan chart above does the same for its series.
+  const { seriesByPlan, boundary, data, compareConfig, yAxisWidth } = useMemo(() => {
+    // Map each plan to a stable, CSS-safe series key (series0, series1, …) to avoid
+    // building CSS custom properties from raw UUIDs.
+    const seriesByPlan = projections.map((proj, i) => ({
+      proj,
+      key: `series${i}`,
+    }));
+
+    const maxMonths = Math.max(...projections.map((p) => p.months.length));
+
+    // Window the plot around today. Rows are indexed (not calendar-joined), so
+    // the boundary is derived from the first projection's dates — the same basis
+    // the row labels already use.
+    const window = months
+      ? computeProjectionWindow(projections[0], months, new Date(), 1, pastMonths)
+      : { startIndex: 0, count: maxMonths, pastCount: 0, todayIndex: 0 };
+    const boundary = months ? window.pastCount : -1;
+
+    const data = Array.from({ length: window.count }, (_, i) => {
+      const srcIdx = window.startIndex + i;
+      const row: Record<string, string | number | null> = {
+        month: projections[0].months[srcIdx]
+          ? MONTH_FORMATTER.format(projections[0].months[srcIdx].date)
+          : `M+${srcIdx + 1}`,
+        // Carried so the dot renderer can spot today's row from the payload
+        // rather than trusting Recharts' per-series index (the past series is
+        // null-padded, so the two don't line up).
+        idx: i,
+      };
+      for (const { proj, key } of seriesByPlan) {
+        const m = proj.months[srcIdx];
+        const value = m ? Number(m[metric].toFixed(2)) : 0;
+        // The boundary row carries BOTH keys so the solid and dashed segments
+        // meet instead of leaving a gap at today.
+        row[`${key}Past`] = boundary < 0 || i <= boundary ? value : null;
+        // Without a window there is no "today" to split on, so everything is one
+        // solid line and the dashed series stays empty (rendering both would lay
+        // a dashed line straight over the solid one).
+        row[`${key}Future`] = boundary >= 0 && i >= boundary ? value : null;
+      }
+      return row;
+    });
+
+    // Keyed by the real dataKeys: ChartLegendContent resolves labels through
+    // `item.dataKey`, so a bare `series0` entry would leave the legend swatches
+    // unlabelled now that each plan draws `series0Past` + `series0Future`.
+    const compareConfig: ChartConfig = seriesByPlan.reduce((acc, { proj, key }) => {
+      const entry = { label: proj.plan.name, color: proj.plan.color };
+      acc[`${key}Past`] = entry;
+      acc[`${key}Future`] = entry;
+      return acc;
+    }, {} as ChartConfig);
+
+    // A fixed axis width reserved room for labels that are rarely that wide — on
+    // a 375px card that cost ~14% of the plot area. Size it to the widest tick we
+    // actually render instead. 8px/glyph is an upper bound for Geist digits at
+    // text-xs (measured: "350k" needs 40px including the 4px tick margin — at
+    // 7px/glyph it clipped by 4px), and the +10 keeps a little headroom.
+    const widestTick = data.reduce((widest, row) => {
+      for (const { key } of seriesByPlan) {
+        const v = row[`${key}Past`] ?? row[`${key}Future`];
+        const label = formatMoneyTick(Number(v) || 0);
+        if (label.length > widest.length) widest = label;
+      }
+      return widest;
+    }, "0");
+    const yAxisWidth = Math.max(32, widestTick.length * 8 + 10);
+
+    return { seriesByPlan, boundary, data, compareConfig, yAxisWidth };
+  }, [projections, metric, months, pastMonths]);
+
   if (projections.length === 0) return null;
-
-  // Map each plan to a stable, CSS-safe series key (series0, series1, …) to avoid
-  // building CSS custom properties from raw UUIDs.
-  const seriesByPlan = projections.map((proj, i) => ({
-    proj,
-    key: `series${i}`,
-  }));
-
-  const maxMonths = Math.max(...projections.map((p) => p.months.length));
-
-  // Window the plot around today. Rows are indexed (not calendar-joined), so
-  // the boundary is derived from the first projection's dates — the same basis
-  // the row labels already use.
-  const window = months
-    ? computeProjectionWindow(projections[0], months, new Date(), 1, pastMonths)
-    : { startIndex: 0, count: maxMonths, pastCount: 0, todayIndex: 0 };
-  const boundary = months ? window.pastCount : -1;
-
-  const data = Array.from({ length: window.count }, (_, i) => {
-    const srcIdx = window.startIndex + i;
-    const row: Record<string, string | number | null> = {
-      month: projections[0].months[srcIdx]
-        ? MONTH_FORMATTER.format(projections[0].months[srcIdx].date)
-        : `M+${srcIdx + 1}`,
-      // Carried so the dot renderer can spot today's row from the payload
-      // rather than trusting Recharts' per-series index (the past series is
-      // null-padded, so the two don't line up).
-      idx: i,
-    };
-    for (const { proj, key } of seriesByPlan) {
-      const m = proj.months[srcIdx];
-      const value = m ? Number(m[metric].toFixed(2)) : 0;
-      // The boundary row carries BOTH keys so the solid and dashed segments
-      // meet instead of leaving a gap at today.
-      row[`${key}Past`] = boundary < 0 || i <= boundary ? value : null;
-      // Without a window there is no "today" to split on, so everything is one
-      // solid line and the dashed series stays empty (rendering both would lay
-      // a dashed line straight over the solid one).
-      row[`${key}Future`] = boundary >= 0 && i >= boundary ? value : null;
-    }
-    return row;
-  });
-
-  // Keyed by the real dataKeys: ChartLegendContent resolves labels through
-  // `item.dataKey`, so a bare `series0` entry would leave the legend swatches
-  // unlabelled now that each plan draws `series0Past` + `series0Future`.
-  const compareConfig: ChartConfig = seriesByPlan.reduce((acc, { proj, key }) => {
-    const entry = { label: proj.plan.name, color: proj.plan.color };
-    acc[`${key}Past`] = entry;
-    acc[`${key}Future`] = entry;
-    return acc;
-  }, {} as ChartConfig);
-
-  // A fixed axis width reserved room for labels that are rarely that wide — on
-  // a 375px card that cost ~14% of the plot area. Size it to the widest tick we
-  // actually render instead. 8px/glyph is an upper bound for Geist digits at
-  // text-xs (measured: "350k" needs 40px including the 4px tick margin — at
-  // 7px/glyph it clipped by 4px), and the +10 keeps a little headroom.
-  const widestTick = data.reduce((widest, row) => {
-    for (const { key } of seriesByPlan) {
-      const v = row[`${key}Past`] ?? row[`${key}Future`];
-      const label = formatMoneyTick(Number(v) || 0);
-      if (label.length > widest.length) widest = label;
-    }
-    return widest;
-  }, "0");
-  const yAxisWidth = Math.max(32, widestTick.length * 8 + 10);
 
   return (
     <ChartContainer config={compareConfig} className={`${heightClass} w-full`}>

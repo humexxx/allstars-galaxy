@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/services/auth-server";
+import { requireAdminCached } from "@/lib/services/auth-server";
 import { applyMonthlyInterest } from "@/lib/services/interest-service";
 import {
   createManualSnapshotsForAllPortfolios,
@@ -25,7 +25,7 @@ export async function createManualSnapshotAction(
   totalValue: number;
   snapshotsCreated: number;
 }> {
-  await requireAdmin();
+  await requireAdminCached();
 
   const validated = manualSnapshotFormSchema.parse(data);
 
@@ -49,7 +49,7 @@ export async function deleteManualSnapshotsAction(): Promise<{
   success: true;
   portfoliosProcessed: number;
 }> {
-  await requireAdmin();
+  await requireAdminCached();
 
   const { portfoliosProcessed } = await deleteManualSnapshotsForAllPortfolios();
 

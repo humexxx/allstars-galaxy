@@ -12,8 +12,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { InvestmentMethodsView } from "@/components/portfolio/investment-methods-view";
 import type { AssetOption } from "@/components/portal/allocation-dialog";
 import type { MethodAllocationSummary } from "@/components/portal/allocation-dialog";
-import { MarginChart } from "@/components/portal/margin-chart";
-import { InvestorBreakdown } from "@/components/portal/investor-breakdown";
 import { MethodEditorDialog } from "@/components/portfolio/method-editor-dialog";
 import { AllocationDialog } from "@/components/portal/allocation-dialog";
 import type { MarginHistoryInputView } from "@/components/portal/margin-chart";
@@ -23,6 +21,7 @@ import type { MarginOverview } from "@/lib/services/margin-service";
 
 import { StatCard, maskValue, statToneClass } from "@/components/ui/stat-card";
 import { Sparkline } from "@/components/portfolio/sparkline";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Heading, Text } from "@/components/ui/typography";
 import {
   Tabs,
@@ -116,6 +115,26 @@ type PortfolioData = {
   investorBreakdown: InvestorBreakdownRow[];
   currentUserId: string;
 };
+
+// The owner-only panels pull recharts and a long table into the portfolio
+// chunk for every visitor, though only method owners ever see them. Split them
+// so an investor's bundle stops paying for the owner's dashboard.
+const MarginChart = dynamic(
+  () =>
+    import("@/components/portal/margin-chart").then((mod) => mod.MarginChart),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-80 w-full rounded-xl" />,
+  }
+);
+
+const InvestorBreakdown = dynamic(
+  () =>
+    import("@/components/portal/investor-breakdown").then(
+      (mod) => mod.InvestorBreakdown
+    ),
+  { loading: () => <Skeleton className="h-64 w-full rounded-xl" /> }
+);
 
 const PerformanceChart = dynamic(
   () =>

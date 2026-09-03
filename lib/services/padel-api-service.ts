@@ -10,6 +10,7 @@ import type {
   RacquetTour,
   RacquetTournament,
 } from "@/types/sports";
+import { upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://padelapi.org/api";
 const REVALIDATE_SECONDS = 300;
@@ -88,6 +89,7 @@ async function fetchPadel<T>(path: string): Promise<T> {
   const token = process.env.PADEL_API_KEY;
   if (!token) throw new Error("PADEL_API_KEY not configured");
   const res = await fetch(`${BASE_URL}${path}`, {
+    signal: upstreamSignal(),
     headers: { Authorization: `Bearer ${token}` },
     next: { revalidate: REVALIDATE_SECONDS },
   });

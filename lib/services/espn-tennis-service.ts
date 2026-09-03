@@ -8,6 +8,7 @@ import type {
   RacquetTournament,
   Team,
 } from "@/types/sports";
+import { upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/tennis";
 export const REVALIDATE_SECONDS = 300;
@@ -200,6 +201,7 @@ function drawFrom(event: EspnEvent, slug: string): EspnDraw | null {
 
 async function fetchScoreboard(tour: "atp" | "wta"): Promise<EspnScoreboard> {
   const res = await fetch(`${BASE_URL}/${tour}/scoreboard`, {
+    signal: upstreamSignal(),
     next: { revalidate: REVALIDATE_SECONDS },
   });
   if (!res.ok) throw new Error(`espn tennis ${res.status} for ${tour}`);

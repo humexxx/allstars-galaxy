@@ -17,6 +17,7 @@ import type {
   MatchStatus,
   Team,
 } from "@/types/sports";
+import { upstreamSignal } from "./upstream";
 
 // Lolesports' public-but-unofficial endpoint. The x-api-key value is the same
 // one their own site (lolesports.com) ships in its frontend — it's a
@@ -113,6 +114,7 @@ type LolesportsStandingsEntry = { stages: LolesportsStage[] };
 async function fetchLolesports<T>(path: string): Promise<T> {
   const url = `${LOLESPORTS_BASE_URL}${path}${path.includes("?") ? "&" : "?"}hl=en-US`;
   const res = await fetch(url, {
+    signal: upstreamSignal(),
     headers: { "x-api-key": LOLESPORTS_API_KEY },
     next: { revalidate: REVALIDATE_SECONDS },
   });

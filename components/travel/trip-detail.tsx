@@ -63,9 +63,14 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 type TripView = "list" | "calendar";
 import { TripGallery } from "./trip-gallery";
 import { TripPayments } from "./trip-payments";
-import { TripSharePanel } from "./trip-share-panel";
 import { tripCost } from "@/lib/travel/pricing";
 import { TravellerBar } from "@/components/travel/traveller-bar";
+// Behind a dialog nobody opens on most visits, and it carries the QR encoder.
+const TripSharePanel = dynamic(
+  () => import("./trip-share-panel").then((m) => m.TripSharePanel),
+  { loading: () => <Skeleton className="h-64 w-full" /> }
+);
+
 const MembersDialog = dynamic(
   () => import("@/components/travel/members-dialog").then((m) => ({
     default: m.MembersDialog,

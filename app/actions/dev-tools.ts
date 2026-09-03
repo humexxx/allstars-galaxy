@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import { requireAdmin } from "@/lib/services/auth-server";
+import { requireAdminCached } from "@/lib/services/auth-server";
 import { createDailyFinanceSnapshots } from "@/lib/services/finance-snapshot-service";
 import { createDailySnapshots } from "@/lib/services/snapshot-service";
 
@@ -26,7 +26,7 @@ export async function runDailySnapshotsAction(): Promise<
   ActionResult<RunDailySnapshotsResult>
 > {
   return safe("dev-tools:run-daily-snapshots", async () => {
-    await requireAdmin();
+    await requireAdminCached();
 
     const today = new Date();
     const finance = await createDailyFinanceSnapshots(today);

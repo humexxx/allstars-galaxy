@@ -152,6 +152,8 @@ export const priceQuotes = pgTable(
   (t) => [
     index("price_quotes_asset_id_idx").on(t.assetId),
     index("price_quotes_fetched_at_idx").on(t.fetchedAt),
+    // Serves the "newest quote per asset" DISTINCT ON in price-service.
+    index("price_quotes_asset_id_fetched_at_idx").on(t.assetId, t.fetchedAt.desc()),
   ]
 );
 

@@ -5,7 +5,7 @@ vi.mock("next/cache", () => ({
 }));
 
 vi.mock("@/lib/services/auth-server", () => ({
-  requireAdmin: vi.fn(),
+  requireAdminCached: vi.fn(),
 }));
 
 vi.mock("@/lib/services/interest-service", () => ({
@@ -18,7 +18,7 @@ vi.mock("@/lib/services/snapshot-service", () => ({
 }));
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/services/auth-server";
+import { requireAdminCached } from "@/lib/services/auth-server";
 import { applyMonthlyInterest } from "@/lib/services/interest-service";
 import {
   createManualSnapshotsForAllPortfolios,
@@ -34,9 +34,9 @@ import {
 const ADMIN_ID = "00000000-0000-4000-8000-0000000000aa";
 
 beforeEach(() => {
-  vi.mocked(requireAdmin).mockResolvedValue({
+  vi.mocked(requireAdminCached).mockResolvedValue({
     id: ADMIN_ID,
-  } as unknown as Awaited<ReturnType<typeof requireAdmin>>);
+  } as unknown as Awaited<ReturnType<typeof requireAdminCached>>);
 });
 
 afterEach(() => {
@@ -63,7 +63,7 @@ describe("createManualSnapshotAction", () => {
       totalValue: 12345.67,
       snapshotsCreated: 3,
     });
-    expect(requireAdmin).toHaveBeenCalledTimes(1);
+    expect(requireAdminCached).toHaveBeenCalledTimes(1);
     expect(applyMonthlyInterest).not.toHaveBeenCalled();
     expect(createManualSnapshotsForAllPortfolios).toHaveBeenCalledWith(
       date,
@@ -105,7 +105,7 @@ describe("createManualSnapshotAction", () => {
   });
 
   it("propagates the admin-required rejection and skips all work", async () => {
-    vi.mocked(requireAdmin).mockRejectedValueOnce(
+    vi.mocked(requireAdminCached).mockRejectedValueOnce(
       new Error("Forbidden: Admin access required"),
     );
 
@@ -175,14 +175,14 @@ describe("deleteManualSnapshotsAction", () => {
     const result = await deleteManualSnapshotsAction();
 
     expect(result).toEqual({ success: true, portfoliosProcessed: 4 });
-    expect(requireAdmin).toHaveBeenCalledTimes(1);
+    expect(requireAdminCached).toHaveBeenCalledTimes(1);
     expect(deleteManualSnapshotsForAllPortfolios).toHaveBeenCalledTimes(1);
     expect(revalidatePath).toHaveBeenCalledWith("/portal/portfolio");
     expect(revalidatePath).toHaveBeenCalledTimes(1);
   });
 
   it("propagates the admin-required rejection without deleting", async () => {
-    vi.mocked(requireAdmin).mockRejectedValueOnce(
+    vi.mocked(requireAdminCached).mockRejectedValueOnce(
       new Error("Forbidden: Admin access required"),
     );
 

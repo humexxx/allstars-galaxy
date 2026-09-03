@@ -22,7 +22,7 @@ vi.mock("next/headers", () => ({
 }));
 
 vi.mock("@/lib/services/auth-server", () => ({
-  requireAdmin: vi.fn(),
+  requireAdminCached: vi.fn(),
 }));
 
 // The action imports `db` and `users` and queries via `select().from().where()`.
@@ -45,7 +45,7 @@ vi.mock("drizzle-orm", () => ({
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/services/auth-server";
+import { requireAdminCached } from "@/lib/services/auth-server";
 
 import {
   startImpersonationAction,
@@ -72,9 +72,9 @@ function buildSelectChain(rows: Array<{ id: string; role: "admin" | "user" }>) {
 }
 
 beforeEach(() => {
-  vi.mocked(requireAdmin).mockResolvedValue({
+  vi.mocked(requireAdminCached).mockResolvedValue({
     id: ADMIN_ID,
-  } as unknown as Awaited<ReturnType<typeof requireAdmin>>);
+  } as unknown as Awaited<ReturnType<typeof requireAdminCached>>);
 });
 
 afterEach(() => {
@@ -93,7 +93,7 @@ describe("startImpersonationAction", () => {
       `NEXT_REDIRECT:/portal`,
     );
 
-    expect(requireAdmin).toHaveBeenCalledTimes(1);
+    expect(requireAdminCached).toHaveBeenCalledTimes(1);
     expect(cookieSet).toHaveBeenCalledTimes(1);
     expect(cookieSet).toHaveBeenCalledWith(
       "cg_impersonating",
@@ -176,8 +176,8 @@ describe("startImpersonationAction", () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 
-  it("propagates the admin-required rejection from requireAdmin", async () => {
-    vi.mocked(requireAdmin).mockRejectedValueOnce(
+  it("propagates the admin-required rejection from requireAdminCached", async () => {
+    vi.mocked(requireAdminCached).mockRejectedValueOnce(
       new Error("Forbidden: Admin access required"),
     );
 
@@ -200,14 +200,14 @@ describe("stopImpersonationAction", () => {
       "NEXT_REDIRECT:/portal/admin/users",
     );
 
-    expect(requireAdmin).toHaveBeenCalledTimes(1);
+    expect(requireAdminCached).toHaveBeenCalledTimes(1);
     expect(cookieDelete).toHaveBeenCalledWith("cg_impersonating");
     expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
     expect(redirect).toHaveBeenCalledWith("/portal/admin/users");
   });
 
   it("propagates the admin-required rejection without touching cookies", async () => {
-    vi.mocked(requireAdmin).mockRejectedValueOnce(
+    vi.mocked(requireAdminCached).mockRejectedValueOnce(
       new Error("Forbidden: Admin access required"),
     );
 

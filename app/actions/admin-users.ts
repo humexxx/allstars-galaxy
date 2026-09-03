@@ -2,14 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/services/auth-server";
+import { requireAdminCached } from "@/lib/services/auth-server";
 import { updateUserRole } from "@/lib/services/user-service";
 import { updateUserRoleSchema, type UpdateUserRoleData } from "@/schemas/admin";
 
 export async function updateUserRoleAction(
   input: UpdateUserRoleData,
 ): Promise<{ success: true }> {
-  const admin = await requireAdmin();
+  const admin = await requireAdminCached();
 
   const parsed = updateUserRoleSchema.safeParse(input);
   if (!parsed.success) {

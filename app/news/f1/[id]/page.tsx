@@ -46,10 +46,10 @@ export default async function F1ArticlePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const article = await getF1Article(id);
+  const [article, others] = await Promise.all([getF1Article(id), getOtherF1News(id)]);
   if (!article) notFound();
 
-  const [image, others] = [hero(article.images), await getOtherF1News(id)];
+  const image = hero(article.images);
 
   return (
     <article className="flex flex-col gap-8">

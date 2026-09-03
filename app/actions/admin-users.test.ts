@@ -5,7 +5,7 @@ vi.mock("next/cache", () => ({
 }));
 
 vi.mock("@/lib/services/auth-server", () => ({
-  requireAdmin: vi.fn(),
+  requireAdminCached: vi.fn(),
 }));
 
 vi.mock("@/lib/services/user-service", () => ({
@@ -13,7 +13,7 @@ vi.mock("@/lib/services/user-service", () => ({
 }));
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/services/auth-server";
+import { requireAdminCached } from "@/lib/services/auth-server";
 import { updateUserRole } from "@/lib/services/user-service";
 
 import { updateUserRoleAction } from "./admin-users";
@@ -23,9 +23,9 @@ const ADMIN_ID = "00000000-0000-4000-8000-0000000000aa";
 const TARGET_USER_ID = "11111111-1111-4111-8111-111111111111";
 
 beforeEach(() => {
-  vi.mocked(requireAdmin).mockResolvedValue({
+  vi.mocked(requireAdminCached).mockResolvedValue({
     id: ADMIN_ID,
-  } as unknown as Awaited<ReturnType<typeof requireAdmin>>);
+  } as unknown as Awaited<ReturnType<typeof requireAdminCached>>);
 });
 
 afterEach(() => {
@@ -40,7 +40,7 @@ describe("updateUserRoleAction", () => {
     });
 
     expect(result).toEqual({ success: true });
-    expect(requireAdmin).toHaveBeenCalledTimes(1);
+    expect(requireAdminCached).toHaveBeenCalledTimes(1);
     expect(updateUserRole).toHaveBeenCalledWith(TARGET_USER_ID, "admin");
     expect(revalidatePath).toHaveBeenCalledWith("/portal/admin/users");
     expect(revalidatePath).toHaveBeenCalledTimes(1);
@@ -103,7 +103,7 @@ describe("updateUserRoleAction", () => {
   });
 
   it("propagates the rejection when the caller is not an admin", async () => {
-    vi.mocked(requireAdmin).mockRejectedValueOnce(
+    vi.mocked(requireAdminCached).mockRejectedValueOnce(
       new Error("Forbidden: Admin access required"),
     );
 

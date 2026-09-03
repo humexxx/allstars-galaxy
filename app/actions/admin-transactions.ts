@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/services/auth-server";
+import { requireAdminCached } from "@/lib/services/auth-server";
 import { createApprovalSnapshot } from "@/lib/services/snapshot-service";
 import {
   approveTransactionById,
@@ -13,7 +13,7 @@ import { adminTransactionIdSchema } from "@/schemas/admin";
 export async function approveTransaction(
   transactionId: string,
 ): Promise<{ success: true }> {
-  const admin = await requireAdmin();
+  const admin = await requireAdminCached();
 
   const parsed = adminTransactionIdSchema.safeParse(transactionId);
   if (!parsed.success) throw new Error("Invalid ID");
@@ -36,7 +36,7 @@ export async function approveTransaction(
 export async function rejectTransaction(
   transactionId: string,
 ): Promise<{ success: true }> {
-  const admin = await requireAdmin();
+  const admin = await requireAdminCached();
 
   const parsed = adminTransactionIdSchema.safeParse(transactionId);
   if (!parsed.success) throw new Error("Invalid ID");

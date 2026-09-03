@@ -182,7 +182,7 @@ function TripCard({ trip, dimmed = false }: { trip: Trip; dimmed?: boolean }) {
             {relativeDays(trip.startDate)}
           </div>
         </div>
-        <CardContent className="flex flex-col gap-2 p-4">
+        <CardContent className="flex flex-col gap-2">
           <div className="flex items-start justify-between gap-2">
             <Heading level="h6" as="h3" className="line-clamp-1">
               {trip.title}
@@ -263,8 +263,8 @@ function TripCalendar({ trips }: { trips: Trip[] }) {
   }, [bars, days]);
 
   return (
-    <Card>
-      <CardContent className="p-3 sm:p-4">
+    <Card size="sm">
+      <CardContent>
         <div className="mb-3 flex items-center justify-between">
           <Heading level="h5" as="h3">
             {format(cursor, "MMMM yyyy")}

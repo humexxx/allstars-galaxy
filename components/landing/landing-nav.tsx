@@ -25,7 +25,7 @@ export function LandingNav() {
             href="/"
             className="flex items-center gap-2 text-base font-semibold tracking-tight"
           >
-            <GalaxyLogo variant="light" className="size-6" />
+            <GalaxyLogo className="size-6" />
             Allstars Galaxy
           </Link>
           <nav className="hidden items-center gap-6 md:flex">

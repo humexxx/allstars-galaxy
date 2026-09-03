@@ -89,28 +89,35 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-export const investmentMethods = pgTable("investment_methods", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  description: text("description"),
-  // Who runs this method. Other users invest through them, so this is what
-  // "who is invested in MY methods" is keyed on, and it is ALSO the display
-  // credit — there used to be a free-text `author` column beside it, which
-  // could name someone who did not run the method. One relation, one answer.
-  // Nullable: a method without an owner is the old global-catalogue behaviour.
-  // SET NULL rather than cascade — deleting an admin must never delete a
-  // method other people hold money in.
-  ownerUserId: uuid("owner_user_id").references(() => users.id, {
-    onDelete: "set null",
-  }),
-  riskLevel: riskLevelEnum("risk_level").notNull(),
-  monthlyRoi: numeric("monthly_roi", { precision: 7, scale: 4 }).notNull(),
-  // Disabled methods are hidden from portfolio transaction selectors but still
-  // appear in finance plan auto-invest pickers (so they can be modelled as
-  // hypothetical scenarios without being actively used).
-  enabled: boolean("enabled").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+export const investmentMethods = pgTable(
+  "investment_methods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
+    // Who runs this method. Other users invest through them, so this is what
+    // "who is invested in MY methods" is keyed on, and it is ALSO the display
+    // credit — there used to be a free-text `author` column beside it, which
+    // could name someone who did not run the method. One relation, one answer.
+    // Nullable: a method without an owner is the old global-catalogue behaviour.
+    // SET NULL rather than cascade — deleting an admin must never delete a
+    // method other people hold money in.
+    ownerUserId: uuid("owner_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    riskLevel: riskLevelEnum("risk_level").notNull(),
+    monthlyRoi: numeric("monthly_roi", { precision: 7, scale: 4 }).notNull(),
+    // Disabled methods are hidden from portfolio transaction selectors but still
+    // appear in finance plan auto-invest pickers (so they can be modelled as
+    // hypothetical scenarios without being actively used).
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  // "Whose methods" is the hot filter for margin, portfolio and allocation
+  // reads; every other user-keyed column already carries one.
+  (t) => [index("investment_methods_owner_user_id_idx").on(t.ownerUserId)]
+);
 
 /**
  * Where an admin actually deploys the capital raised by a method, and what it

@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { PageHeaderSkeleton } from "@/components/skeletons/page-header-skeleton"
 
 /**
  * Generic page skeleton used by `loading.tsx` boundaries across the portal.
@@ -15,10 +16,7 @@ export function PageSkeleton({
 }) {
   return (
     <section className="space-y-6" aria-hidden="true">
-      <div className="space-y-2">
-        <Skeleton className="h-7 w-48" />
-        <Skeleton className="h-4 w-72" />
-      </div>
+      <PageHeaderSkeleton />
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: cards }).map((_, i) => (
           <Skeleton key={i} className={`${cardHeight} w-full`} />

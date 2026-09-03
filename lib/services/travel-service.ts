@@ -984,7 +984,12 @@ export async function setTripMembers(
         sortOrder: i,
       };
       if (m.id) {
-        await tx.update(tripMembers).set(values).where(eq(tripMembers.id, m.id));
+        // Scoped to this trip: a member id borrowed from somebody else's trip
+        // would otherwise be overwritten and re-parented onto this one.
+        await tx
+          .update(tripMembers)
+          .set(values)
+          .where(and(eq(tripMembers.id, m.id), eq(tripMembers.tripId, tripId)));
       } else {
         await tx.insert(tripMembers).values(values);
       }

@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Mono, Text } from "@/components/ui/typography";
 import type { F1NewsImage } from "@/db/schema";
 
@@ -28,11 +28,10 @@ function thumbnail(images: F1NewsImage[]): F1NewsImage | null {
 export function NewsList({ items }: { items: NewsItem[] }) {
   if (items.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-10 text-center">
-          <Text variant="muted">No news stored yet.</Text>
-        </CardContent>
-      </Card>
+      <EmptyState
+        title="No news yet"
+        description="Stories land here once the daily refresh has run."
+      />
     );
   }
 

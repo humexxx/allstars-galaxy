@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { getDashboardTravelSummary } from "@/lib/services/travel-service";
+import { formatTripMoney } from "@/lib/travel/format";
 import type { DashboardTravelFeaturedTrip, DashboardTravelTripState } from "@/types/travel";
 
 const TRAVEL_PATH = "/portal/entertainment/travel-planner";
@@ -128,7 +129,7 @@ function FeaturedTripCard({ trip }: { trip: DashboardTravelFeaturedTrip }) {
             </span>
             {trip.totalEstimate > 0 && (
               <Mono className="text-xs font-medium text-foreground">
-                {formatMoney(trip.totalEstimate, trip.currency)}
+                {formatTripMoney(trip.totalEstimate, trip.currency)}
               </Mono>
             )}
           </div>
@@ -181,19 +182,6 @@ function formatDateRange(start: string, end: string | null): string {
     return `${s.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${fmt(e)}`;
   }
   return `${fmt(s)} – ${fmt(e)}`;
-}
-
-function formatMoney(value: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(value);
-  } catch {
-    return `${currency} ${value.toFixed(2)}`;
-  }
 }
 
 function relativeLabel(trip: DashboardTravelFeaturedTrip): string {

@@ -21,7 +21,7 @@ export default function ForgotPasswordPage() {
           </Link>
         </header>
         <div className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-xs" aria-label="Forgot password form">
+          <div className="w-full max-w-xs">
             <ForgotPasswordForm />
           </div>
         </div>
@@ -29,7 +29,7 @@ export default function ForgotPasswordPage() {
       <aside className="bg-muted relative hidden lg:block" aria-hidden="true">
         <Image
           src="/images/placeholder.svg"
-          alt="Decorative background"
+          alt=""
           fill
           className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
           sizes="50vw"

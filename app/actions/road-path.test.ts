@@ -158,7 +158,7 @@ describe("createRoadPathAction", () => {
         entityId: ROAD_PATH_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 
   it("triggers createAutomatedTasksForRoadPath when createFirstTask + autoCreateTasks are set", async () => {
@@ -210,7 +210,7 @@ describe("createRoadPathAction", () => {
     expect(result).toEqual({ success: true, data: path });
     expect(createAutomatedTasksForRoadPath).toHaveBeenCalledOnce();
     expect(logImpersonatedMutation).toHaveBeenCalledOnce();
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
     errorSpy.mockRestore();
   });
 
@@ -252,7 +252,7 @@ describe("updateRoadPathAction", () => {
         entityId: ROAD_PATH_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 
   it("throws when the road path is not found", async () => {
@@ -297,7 +297,7 @@ describe("deleteRoadPathAction", () => {
         entityId: ROAD_PATH_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 });
 
@@ -345,7 +345,7 @@ describe("createRoadPathMilestoneAction", () => {
         entityId: MILESTONE_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 
   it("rejects payloads with a non-uuid roadPathId", async () => {
@@ -387,7 +387,7 @@ describe("updateRoadPathMilestoneAction", () => {
         entityId: MILESTONE_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 
   it("throws when the milestone is not found", async () => {
@@ -433,7 +433,7 @@ describe("deleteRoadPathMilestoneAction", () => {
         entityId: MILESTONE_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 });
 
@@ -568,7 +568,7 @@ describe("createRoadPathProgressAction", () => {
         entityId: PROGRESS_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 
   it("rejects payloads with a non-uuid roadPathId", async () => {
@@ -599,7 +599,7 @@ describe("deleteRoadPathProgressAction", () => {
         entityId: PROGRESS_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 });
 

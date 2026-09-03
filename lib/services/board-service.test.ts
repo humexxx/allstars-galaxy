@@ -265,7 +265,17 @@ describe("initializeDefaultColumns", () => {
 // ---------- createBoardTask ----------
 
 describe("createBoardTask", () => {
+  it("refuses a column the user does not own", async () => {
+    columnsFindFirst.mockResolvedValueOnce(undefined);
+
+    await expect(
+      createBoardTask(USER_ID, { columnId: COLUMN_ID, title: "Sneaky", order: 0 })
+    ).rejects.toThrow("Column not found");
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+
   it("inserts with userId + data merged and returns the created row", async () => {
+    columnsFindFirst.mockResolvedValueOnce({ id: COLUMN_ID });
     const created = makeTask({ title: "Write tests", order: 5 });
     returningMock.mockResolvedValueOnce([created]);
 
@@ -392,6 +402,8 @@ describe("reorderTask", () => {
     tasksFindFirst
       .mockResolvedValueOnce(original)
       .mockResolvedValueOnce(finalState);
+    // The destination column has to be the user's own.
+    columnsFindFirst.mockResolvedValueOnce({ id: COLUMN_ID_2 });
 
     const result = await reorderTask(
       TASK_ID,

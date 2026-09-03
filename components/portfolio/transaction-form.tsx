@@ -181,7 +181,7 @@ export function TransactionForm({
           <FieldError errors={[errors.amount]} />
         </Field>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid gap-4 sm:grid-cols-3">
           <Field className="col-span-2">
             <FieldLabel>Date</FieldLabel>
             {isAdmin ? (
@@ -244,7 +244,9 @@ export function TransactionForm({
 
       <div className="rounded-lg bg-muted p-4">
         <Text variant="muted">Total Spent</Text>
-        <div className="text-3xl font-bold">$ <Mono>{total}</Mono></div>
+        <Mono as="div" className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          ${total}
+        </Mono>
       </div>
 
       <div className="flex gap-2">

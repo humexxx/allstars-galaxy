@@ -5,6 +5,7 @@ import { EyeOff, Pencil } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
@@ -124,11 +125,14 @@ export function InvestmentMethodsView({
       </div>
 
       {methods.length === 0 ? (
-        <Card>
-          <CardContent className="p-6">
-            <Text variant="muted">No investment methods available yet.</Text>
-          </CardContent>
-        </Card>
+        <EmptyState
+          title="No investment methods yet"
+          description={
+            isOwnerView
+              ? "Create a method and investors will be able to put money into it."
+              : "Methods appear here once a provider publishes one."
+          }
+        />
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

@@ -35,6 +35,8 @@ import {
   type CreateRoadPathProgressInput,
 } from "@/schemas/road-path";
 
+// The segment has no page of its own; the layout scope reaches /road-paths
+// and /board, which is where road-path edits show up.
 const PATH = "/portal/productivity";
 
 export async function getUserRoadPathsAction() {
@@ -77,7 +79,7 @@ export async function createRoadPathAction(data: CreateRoadPathInput) {
     entityTable: "road_paths",
     entityId: path.id,
   });
-  revalidatePath(PATH);
+  revalidatePath(PATH, "layout");
   return { success: true, data: path };
 }
 
@@ -103,7 +105,7 @@ export async function updateRoadPathAction(data: UpdateRoadPathData) {
     before,
     after: path,
   });
-  revalidatePath(PATH);
+  revalidatePath(PATH, "layout");
   return { success: true, data: path };
 }
 
@@ -122,7 +124,7 @@ export async function deleteRoadPathAction(roadPathId: string) {
     entityId: roadPathId,
     before,
   });
-  revalidatePath(PATH);
+  revalidatePath(PATH, "layout");
   return { success: true };
 }
 
@@ -150,7 +152,7 @@ export async function createRoadPathMilestoneAction(data: CreateRoadPathMileston
     entityTable: "road_path_milestones",
     entityId: milestone.id,
   });
-  revalidatePath(PATH);
+  revalidatePath(PATH, "layout");
   return { success: true, data: milestone };
 }
 
@@ -170,7 +172,7 @@ export async function updateRoadPathMilestoneAction(data: UpdateRoadPathMileston
     entityTable: "road_path_milestones",
     entityId: milestone.id,
   });
-  revalidatePath(PATH);
+  revalidatePath(PATH, "layout");
   return { success: true, data: milestone };
 }
 
@@ -183,7 +185,7 @@ export async function deleteRoadPathMilestoneAction(milestoneId: string) {
     entityTable: "road_path_milestones",
     entityId: milestoneId,
   });
-  revalidatePath(PATH);
+  revalidatePath(PATH, "layout");
   return { success: true };
 }
 
@@ -239,7 +241,7 @@ export async function createRoadPathProgressAction(data: CreateRoadPathProgressI
     entityTable: "road_path_progress",
     entityId: progress.id,
   });
-  revalidatePath(PATH);
+  revalidatePath(PATH, "layout");
   return { success: true, data: progress };
 }
 
@@ -252,7 +254,7 @@ export async function deleteRoadPathProgressAction(progressId: string) {
     entityTable: "road_path_progress",
     entityId: progressId,
   });
-  revalidatePath(PATH);
+  revalidatePath(PATH, "layout");
   return { success: true };
 }
 

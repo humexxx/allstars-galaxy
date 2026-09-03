@@ -15,7 +15,7 @@ export function LandingHero() {
         className="pointer-events-none absolute inset-0 -z-0"
         style={{
           background:
-            "radial-gradient(60% 50% at 50% 0%, rgba(99,102,241,0.10) 0%, rgba(255,255,255,0) 70%)",
+            "radial-gradient(60% 50% at 50% 0%, color-mix(in oklch, var(--primary) 14%, transparent) 0%, transparent 70%)",
         }}
       />
       {/* Grid lines, masked to fade at the edges */}
@@ -24,7 +24,9 @@ export function LandingHero() {
         className="pointer-events-none absolute inset-0 -z-0 opacity-60"
         style={{
           backgroundImage:
-            "linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px)",
+            // Token-based so the grid is visible on the dark surface too; a
+            // fixed black line at 5% disappeared there.
+            "linear-gradient(to right, var(--border) 1px, transparent 1px), linear-gradient(to bottom, var(--border) 1px, transparent 1px)",
           backgroundSize: "56px 56px",
           maskImage:
             "radial-gradient(ellipse at center, black 40%, transparent 75%)",
@@ -47,10 +49,7 @@ export function LandingHero() {
           in one orbit.
         </Heading>
 
-        <Text
-          variant="lead"
-          className="mx-auto mt-6 max-w-2xl text-balance text-base sm:text-lg"
-        >
+        <Text variant="lead" className="mx-auto mt-6 max-w-2xl text-balance">
           Allstars Galaxy is the calm command center for your portfolio, your
           plans, your week and the trips you take along the way — built for
           people who compound.
@@ -80,7 +79,7 @@ export function LandingHero() {
       {/* Faux product card — KPI tiles + a sparkline-ish bar chart, framed
           like a Mac window. Pure HTML/CSS, no image asset needed. */}
       <div className="relative mx-auto max-w-5xl px-6 pb-24">
-        <div className="relative overflow-hidden rounded-xl border bg-card p-1 shadow-[0_30px_120px_-20px_rgba(80,80,160,0.18)]">
+        <div className="relative overflow-hidden rounded-xl border bg-card p-1 shadow-2xl shadow-primary/10">
           <div className="rounded-lg border bg-muted p-6 sm:p-8">
             <div className="mb-6 flex items-center justify-between border-b pb-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -114,7 +113,7 @@ export function LandingHero() {
                   <div className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
                     {kpi.value}
                   </div>
-                  <div className="mt-1 text-xs text-emerald-600">
+                  <div className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
                     {kpi.delta}
                   </div>
                 </div>

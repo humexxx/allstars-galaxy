@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { PageHeaderSkeleton } from "@/components/skeletons/page-header-skeleton"
 
 /**
  * Mirrors `PlanForm`: three cards, not one flat form.
@@ -38,10 +39,7 @@ function FormCard({
 export default function NewPlanLoading() {
   return (
     <section className="space-y-6" aria-hidden="true">
-      <div className="space-y-2">
-        <Skeleton className="h-7 w-48" />
-        <Skeleton className="h-4 w-96 max-w-full" />
-      </div>
+      <PageHeaderSkeleton descriptionWidth="w-96" />
 
       {/* Plan basics — two-column grid of name, description, dates, savings… */}
       <FormCard titleWidth="w-28">

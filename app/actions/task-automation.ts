@@ -30,7 +30,7 @@ export async function createAutomatedTaskAction(roadPathId: string) {
       entityId: task.id,
     });
   }
-  revalidatePath("/portal/productivity");
+  revalidatePath("/portal/productivity", "layout");
 
   return {
     success: true as const,
@@ -51,7 +51,7 @@ export async function createAutomatedTasksForAllAction() {
       entityId: task.id,
     });
   }
-  revalidatePath("/portal/productivity");
+  revalidatePath("/portal/productivity", "layout");
 
   return {
     success: true,

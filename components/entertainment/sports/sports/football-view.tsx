@@ -10,7 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eyebrow, Text } from "@/components/ui/typography";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Eyebrow } from "@/components/ui/typography";
 import { Card, CardContent } from "@/components/ui/card";
 import type { FootballLeagueData, FootballLeagueId, Team } from "@/types/sports";
 
@@ -115,7 +116,7 @@ export function FootballView({ leagues }: FootballViewProps) {
 
         <TabsContent value="matches">
           {league.matches.length === 0 ? (
-            <EmptyBlock message="No matches available yet." />
+            <EmptyState title="No matches available yet" />
           ) : (
             <MatchesGrid league={league} teamsMap={teamsMap} />
           )}
@@ -123,7 +124,7 @@ export function FootballView({ leagues }: FootballViewProps) {
 
         <TabsContent value="table">
           {league.standings.length === 0 ? (
-            <EmptyBlock message="No standings available yet." />
+            <EmptyState title="No standings available yet" />
           ) : (
             <Card>
               <CardContent className="p-0">
@@ -135,8 +136,8 @@ export function FootballView({ leagues }: FootballViewProps) {
 
         {league.league.hasKnockout && league.knockout && (
           <TabsContent value="knockout">
-            <Card>
-              <CardContent className="p-4">
+            <Card size="sm">
+              <CardContent>
                 <KnockoutBracket rounds={league.knockout} teams={teamsMap} />
               </CardContent>
             </Card>
@@ -200,10 +201,3 @@ function MatchesGrid({
   );
 }
 
-function EmptyBlock({ message }: { message: string }) {
-  return (
-    <div className="rounded-lg border border-dashed p-8 text-center">
-      <Text variant="muted">{message}</Text>
-    </div>
-  );
-}

@@ -433,7 +433,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <Heading level="h3" className="font-semibold">
+              <Heading level="h3" as="h1">
                 {data.portfolio.name}
               </Heading>
               <Badge variant="secondary" className="text-xs">

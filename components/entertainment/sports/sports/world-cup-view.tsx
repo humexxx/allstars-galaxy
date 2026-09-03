@@ -48,8 +48,8 @@ export function WorldCupView({ data }: WorldCupViewProps) {
       >
         <TabsContent value="knockout">
           {hasKnockout && data.knockout ? (
-            <Card>
-              <CardContent className="p-4">
+            <Card size="sm">
+              <CardContent>
                 <KnockoutBracket rounds={data.knockout} teams={teamsMap} />
               </CardContent>
             </Card>

@@ -16,7 +16,7 @@ export async function updateUserRoleAction(
     throw new Error("Invalid input");
   }
 
-  if (parsed.data.userId === admin.id && parsed.data.role === "user") {
+  if (parsed.data.userId === admin.id && parsed.data.role !== "admin") {
     throw new Error("You cannot demote yourself");
   }
 

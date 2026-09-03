@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -43,8 +44,9 @@ export function TransactionFilters() {
       }`}
     >
       <div className="flex w-full flex-col gap-2 sm:w-72">
-        <span className="text-sm font-medium">User ID</span>
+        <Label htmlFor="filter-user-id">User ID</Label>
         <Input
+          id="filter-user-id"
           placeholder="Filter by User ID..."
           defaultValue={userId}
           onChange={(e) => setParam("userId", e.target.value)}
@@ -53,13 +55,13 @@ export function TransactionFilters() {
       </div>
 
       <div className="flex w-full flex-col gap-2 sm:w-50">
-        <span className="text-sm font-medium">Status</span>
+        <Label htmlFor="filter-status">Status</Label>
         <Select
           value={status}
           onValueChange={(value) => setParam("status", value)}
           disabled={isPending}
         >
-          <SelectTrigger>
+          <SelectTrigger id="filter-status">
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
           <SelectContent>
@@ -72,13 +74,13 @@ export function TransactionFilters() {
       </div>
 
       <div className="flex w-full flex-col gap-2 sm:w-50">
-        <span className="text-sm font-medium">Type</span>
+        <Label htmlFor="filter-type">Type</Label>
         <Select
           value={type}
           onValueChange={(value) => setParam("type", value)}
           disabled={isPending}
         >
-          <SelectTrigger>
+          <SelectTrigger id="filter-type">
             <SelectValue placeholder="All Types" />
           </SelectTrigger>
           <SelectContent>

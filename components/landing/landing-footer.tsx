@@ -46,7 +46,7 @@ export function LandingFooter() {
         <div className="grid gap-12 md:grid-cols-6">
           <div className="md:col-span-2">
             <Link href="/" className="inline-flex items-center gap-2.5 text-foreground">
-              <GalaxyLogo variant="light" />
+              <GalaxyLogo />
               <span className="text-base font-semibold tracking-tight">Allstars Galaxy</span>
             </Link>
             <Text variant="muted" className="mt-4 max-w-sm leading-relaxed">

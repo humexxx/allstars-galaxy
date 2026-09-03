@@ -7,7 +7,7 @@ import { env } from "@/lib/env";
 
 import * as schema from "./schema";
 
-const connectionString = env.DATABASE_URL ?? "";
+const connectionString = env.DATABASE_URL;
 const url = connectionString.includes("?")
   ? `${connectionString}&sslmode=require`
   : `${connectionString}?sslmode=require`;

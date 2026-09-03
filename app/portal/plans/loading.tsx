@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { PageHeaderSkeleton } from "@/components/skeletons/page-header-skeleton"
 
 /**
  * Mirrors the PlansWorkspace silhouette: page header with its action, then the
@@ -13,13 +14,7 @@ export default function PlansLoading() {
   return (
     <section className="space-y-6" aria-hidden="true">
       {/* PageHeader: title + description on the left, "New plan" on the right */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-2">
-          <Skeleton className="h-7 w-48" />
-          <Skeleton className="h-4 w-80 max-w-full" />
-        </div>
-        <Skeleton className="h-9 w-28 shrink-0" />
-      </div>
+      <PageHeaderSkeleton actions={1} descriptionWidth="w-80" />
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Projection comparison */}
@@ -45,7 +40,7 @@ export default function PlansLoading() {
           </div>
           <div className="space-y-2 px-6 pb-6">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-[72px] w-full rounded-lg" />
+              <Skeleton key={i} className="h-18 w-full rounded-lg" />
             ))}
           </div>
         </div>

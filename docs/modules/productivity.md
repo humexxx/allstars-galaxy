@@ -1,7 +1,7 @@
 # Productivity
 
 > **Status:** Active
-> **Last reviewed:** 2026-08-22
+> **Last reviewed:** 2026-09-03
 
 ## Overview
 Two surfaces: a personal kanban *board* for day-to-day tasks, and *road paths*
@@ -9,8 +9,8 @@ for long-term goals with milestones, progress tracking, and scheduled
 auto-generated tasks.
 
 ## Routes
-- `/portal/productivity/board` — kanban board
-- `/portal/productivity/road-paths` — long-term goals + milestones
+- `/portal/productivity/board` — kanban board (`board/layout.tsx`, wide container)
+- `/portal/productivity/road-paths` — long-term goals + milestones (`road-paths/layout.tsx`, default container)
 
 ## Server actions — `/app/actions/`
 - `board.ts` — column/task CRUD, reordering, board initialization
@@ -41,6 +41,12 @@ auto-generated tasks.
 
 ## Notes
 - Conventional Commits scope: `productivity`
+- **A task can only sit in the caller's own column.** `createBoardTask`,
+  `updateBoardTask` and a cross-column `reorderTask` run
+  `ensureColumnOwnership` first; a foreign `columnId` used to be inserted as-is
+  and surfaced under the other user's column.
+- `/portal/productivity` has no page, so mutations revalidate it with the
+  `"layout"` type — the default `"page"` type matched nothing.
 - Auto-task generation runs on the daily cron — see `task-automation.ts`.
 - Board UI keeps optimistic state locally with explicit rollback on error (not via React 19's `useOptimistic`) because the DnD reorder queue depends on a stable local state model.
 - **A server action reports failure in its return value; only a crash throws.**

@@ -63,7 +63,7 @@ describe("createAutomatedTaskAction", () => {
       USER_ID,
       ROAD_PATH_ID,
     );
-    expect(revalidatePath).toHaveBeenCalledWith("/portal/productivity");
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/productivity", "layout");
     expect(revalidatePath).toHaveBeenCalledTimes(1);
   });
 
@@ -81,7 +81,7 @@ describe("createAutomatedTaskAction", () => {
       USER_ID,
       ROAD_PATH_ID,
     );
-    expect(revalidatePath).toHaveBeenCalledWith("/portal/productivity");
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/productivity", "layout");
   });
 
   it("returns an error envelope when roadPathId is not a uuid (safeParse fails)", async () => {
@@ -142,7 +142,7 @@ describe("createAutomatedTasksForAllAction", () => {
     });
     expect(requireEffectiveContext).toHaveBeenCalledTimes(1);
     expect(createAutomatedTasksForAllRoadPaths).toHaveBeenCalledWith(USER_ID);
-    expect(revalidatePath).toHaveBeenCalledWith("/portal/productivity");
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/productivity", "layout");
     expect(revalidatePath).toHaveBeenCalledTimes(1);
   });
 
@@ -158,7 +158,7 @@ describe("createAutomatedTasksForAllAction", () => {
       data: [],
       message: "0 task(s) created",
     });
-    expect(revalidatePath).toHaveBeenCalledWith("/portal/productivity");
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/productivity", "layout");
   });
 
   it("propagates the unauthenticated rejection", async () => {

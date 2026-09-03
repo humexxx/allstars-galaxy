@@ -1,3 +1,5 @@
+import "server-only";
+
 import { upstreamSignal } from "./upstream";
 /**
  * Thin wrapper around microlink.io's free screenshot API. We use it so

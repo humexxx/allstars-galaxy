@@ -73,6 +73,9 @@ export function MilestoneList({ roadPathId, milestones, onRefresh }: MilestoneLi
             <Checkbox
               checked={milestone.completedAt !== null}
               onCheckedChange={() => handleToggle(milestone)}
+              aria-label={`Mark ${milestone.title} ${
+                milestone.completedAt !== null ? "incomplete" : "complete"
+              }`}
             />
             <span className={milestone.completedAt !== null ? "line-through text-muted-foreground flex-1" : "flex-1"}>
               {milestone.title}

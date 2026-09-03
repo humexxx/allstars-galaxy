@@ -60,8 +60,8 @@ export function NflView({ data }: NflViewProps) {
 
         {hasPlayoffs && (
           <TabsContent value="playoffs">
-            <Card>
-              <CardContent className="p-4">
+            <Card size="sm">
+              <CardContent>
                 <KnockoutBracket rounds={data.playoffs} teams={teamsMap} />
               </CardContent>
             </Card>

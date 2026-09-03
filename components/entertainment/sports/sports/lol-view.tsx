@@ -105,8 +105,8 @@ export function LolView({ data }: LolViewProps) {
 
         {hasPlayoffs && (
           <TabsContent value="playoffs">
-            <Card>
-              <CardContent className="p-4">
+            <Card size="sm">
+              <CardContent>
                 <KnockoutBracket rounds={split.playoffs!} teams={teamsMap} />
               </CardContent>
             </Card>

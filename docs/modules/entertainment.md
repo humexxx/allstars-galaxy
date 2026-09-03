@@ -1,7 +1,7 @@
 # Entertainment
 
 > **Status:** In progress (travel shipped + dashboard card; sports UI shipped, favourites end-to-end on DB; LoL, F1, football, World Cup, padel and tennis wired to free live providers)
-> **Last reviewed:** 2026-08-31
+> **Last reviewed:** 2026-09-03
 
 ## Overview
 Two sub-modules: Travel Planner (trips, items, photos, public sharing) and
@@ -15,7 +15,7 @@ NBA and NFL still use mocks.
 - `/portal/entertainment/travel-planner` — list of trips (authenticated)
 - `/portal/entertainment/travel-planner/new` — create trip
 - `/portal/entertainment/travel-planner/[id]` — trip detail + editor
-- `/trips/[token]` — **public** shared trip view (top-level, no auth)
+- `/trips/[token]` — **public** shared trip view (top-level, no auth); `loading.tsx` paints the shell before the trip resolves
 - `/portal/entertainment/sports` — sports hub with tabs per sport + manage-favourites sheet
 
 ## Server actions — `/app/actions/`
@@ -111,6 +111,11 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **`setTripMembers` scopes every member update to the trip.** A member id
+  borrowed from somebody else's trip used to be overwritten and re-parented.
+- **Sports feeds carry an 8s abort signal** (`lib/services/upstream.ts`); a hung
+  provider falls through to the mock fallback instead of holding the render.
+  `listUserFavoriteSportIds` is request-cached — the dashboard asks three times.
 - **The trip page has two views**, switched by `Tabs` next to *All trips*: the
   list answers *what is the plan*, the calendar answers *what does the month
   look like*. `TripCalendar` draws a whole month with arrows either side and a

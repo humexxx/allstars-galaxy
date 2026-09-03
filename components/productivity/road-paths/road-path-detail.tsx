@@ -80,7 +80,7 @@ export function RoadPathDetail({ roadPath, onBack, onRefresh }: RoadPathDetailPr
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={onBack}>
+        <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back to road paths">
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">

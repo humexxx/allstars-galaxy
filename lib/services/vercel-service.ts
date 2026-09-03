@@ -22,6 +22,8 @@
  * - https://vercel.com/docs/rest-api/reference/endpoints/user/get-the-user
  * - https://vercel.com/docs/rest-api/reference/endpoints/teams/get-a-team
  */
+import "server-only";
+
 import { env } from "@/lib/env";
 import type {
   AppListing,

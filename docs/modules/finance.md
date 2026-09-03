@@ -1,7 +1,7 @@
 # Finance
 
 > **Status:** Active
-> **Last reviewed:** 2026-08-11
+> **Last reviewed:** 2026-09-03
 
 ## Overview
 Personal financial planning: users build *plans* (scenarios) with incomes,
@@ -101,8 +101,9 @@ gated on the `showContextAvatar` preference — see [Settings](./settings.md).
 - Conventional Commits scope: `finance`
 - Cron job `/api/cron/daily` may write snapshots into this module — keep in sync with [Portfolio](./portfolio.md).
 - All actions wrap their handler in `safe()` from `@/lib/actions/safe` so service errors translate to `{ success: false, error: "Action failed" }` for the client.
-- `getPlanWithLines` is wrapped in `React.cache()` so `generateMetadata` and the page body share one DB hit per request.
-- `ProjectionChart` and `ComparePlansChart` are lazy-loaded via `next/dynamic({ ssr: false })` to keep recharts out of the initial bundle.
+- `getPlanWithLines`, `listUserPlans`, `getMainPlan`, `getPortfolioValueForUser` and `getPortfolioWeightedMonthlyRoi` are wrapped in `React.cache()` so the dashboard cards, the plans layout and every projection on a plans page share one DB hit per request.
+- `saveConfirmation` checks that every `debtBalances[].debtId` belongs to the plan before writing; a foreign debt id would otherwise feed another plan's calibration.
+- `ProjectionChart` and `ComparePlansChart` are lazy-loaded via `next/dynamic({ ssr: false })` to keep recharts out of the initial bundle; `PlanCalendar` and `ProjectionTable` load the same way since neither is on screen until the reader switches view. `ComparePlansChart` memoises its derived series.
 - **Chart = real past + forecast future.** The projection chart plots periods that have **closed before** today's period from **real recorded snapshots** (`finance_plan_snapshots`, solid line) and today's period forward from the **projection** (dashed). The merge is the pure `buildChartSeries` in [`lib/finance/chart-series.ts`](../../lib/finance/chart-series.ts) (with `computeProjectionWindow`); both halves bucket by **accounting period** via `periodIndexForDate(anchorDay, …)` so a day-15 projection period and a snapshot dated day-30 of the same period share one x-slot, and the solid/dashed boundary sits on the period that truly contains today (not a raw calendar-month bucket). No snapshots yet → it falls back to the re-simulated projection window. `ProjectionChart` takes a flat `points: {date,netWorth}[]` + `pastCount` + `color` (the caller does the merge). `getRecentMonthlySnapshots` (the history feed) also dedups **per accounting period** (`anchorDay = confirmationDayOfMonth`), not per raw calendar month, so with a non-1 anchor the "latest per period" representative lines up 1:1 with `buildChartSeries`'s period bucketing (a calendar-month dedup could otherwise drop two snapshots into one period and leave the next empty).
 - **The plan page projection is confirmation-calibrated.** `app/portal/plans/[id]/page.tsx` builds `baseline = buildCalibratedPlan(plan)` (now exported from `finance-snapshot-service.ts`) and projects **that**, so confirming real balances actually moves the forecast + KPIs (the dialog's "new baseline going forward" promise). The raw `plan` is still what the line/debt editors mutate; `baseline` also seeds the partial-period "today" net worth. The `compare/` page still uses the raw plan (calibration is per-page, to avoid changing scenario comparisons). The dashboard `DashboardFinanceCard` is **also** calibrated now (same `buildCalibratedPlan`) and locates today's period for its "now" KPIs.
 - `app/portal/plans/loading.tsx`, `app/portal/plans/new/loading.tsx`, `app/portal/plans/compare/loading.tsx`, `app/portal/plans/[id]/loading.tsx`, `app/portal/plans/[id]/not-found.tsx`, and `app/portal/plans/error.tsx` give the routes a proper skeleton / 404 / error experience. The `[id]/loading.tsx` mirrors the PlanEditor silhouette (title/tabs header + the Overview hero: 3/4 main panel = default Graph view + the bottom view-switcher, beside the 1/4 gauge/cycle/strategy sidebar) so the swap to the real editor feels like content filling in rather than a layout shift.

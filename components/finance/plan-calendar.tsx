@@ -1759,7 +1759,7 @@ function CalendarCell({
           : ""
       } ${
         isDragOver ? "border-primary/70 bg-primary/5 ring-1 ring-primary/50" : ""
-      } ${isExpanded ? "min-h-[320px]" : "min-h-[140px]"} ${
+      } ${isExpanded ? "min-h-80" : "min-h-35"} ${
         isExpanded || extra > 0
           ? "cursor-pointer hover:bg-muted hover:text-foreground"
           : ""
@@ -1815,7 +1815,7 @@ function CalendarCell({
 
       <ul
         className={`space-y-1 ${
-          isExpanded ? "max-h-[260px] overflow-y-auto pr-0.5" : ""
+          isExpanded ? "max-h-65 overflow-y-auto pr-0.5" : ""
         }`}
       >
         {visible.map((entry) => (

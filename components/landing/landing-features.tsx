@@ -45,7 +45,7 @@ export function LandingFeatures() {
               <Mono className="text-xs font-semibold text-muted-foreground">
                 {s.n}
               </Mono>
-              <Heading level="h3" className="mt-4 text-xl sm:text-xl">
+              <Heading level="h3" className="mt-4">
                 {s.title}
               </Heading>
               <Text variant="muted" className="mt-2 leading-relaxed">

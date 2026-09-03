@@ -48,7 +48,7 @@ export function InvestmentMethodSelector({
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <ScrollArea className="h-[400px]">
+          <ScrollArea className="max-h-[60svh]">
             <div className="flex flex-col gap-2">
               {filteredMethods.map((method) => (
                 <Button

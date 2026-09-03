@@ -125,10 +125,24 @@ export async function getUserBoardTasks(userId: string): Promise<BoardTaskWithCo
   return tasks;
 }
 
+/**
+ * A column id is caller-supplied. Without this a task could be filed under
+ * another user's column, where their column query would pick it up.
+ */
+async function ensureColumnOwnership(columnId: string, userId: string): Promise<void> {
+  const column = await db.query.boardColumns.findFirst({
+    where: and(eq(boardColumns.id, columnId), eq(boardColumns.userId, userId)),
+    columns: { id: true },
+  });
+  if (!column) throw new Error("Column not found");
+}
+
 export async function createBoardTask(
   userId: string,
   data: CreateBoardTaskData & { order: number }
 ): Promise<BoardTask> {
+  await ensureColumnOwnership(data.columnId, userId);
+
   const [task] = await db
     .insert(boardTasks)
     .values({
@@ -145,6 +159,8 @@ export async function updateBoardTask(
   userId: string,
   data: Omit<UpdateBoardTaskData, "id">
 ): Promise<BoardTask> {
+  if (data.columnId) await ensureColumnOwnership(data.columnId, userId);
+
   const [task] = await db
     .update(boardTasks)
     .set({
@@ -175,6 +191,7 @@ export async function reorderTask(
 
   const oldOrder = task.order;
   const isSameColumn = sourceColumnId === destinationColumnId;
+  if (!isSameColumn) await ensureColumnOwnership(destinationColumnId, userId);
 
   if (isSameColumn) {
     if (newOrder > oldOrder) {

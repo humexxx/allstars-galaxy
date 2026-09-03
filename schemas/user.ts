@@ -1,8 +1,11 @@
 import { z } from "zod";
 
-export const userRoleEnum = z.enum(["admin", "user"]);
+import { USER_ROLES } from "@/types/user";
 
-export type UserRole = z.infer<typeof userRoleEnum>;
+/** Zod view of the single `UserRole` definition in `types/user.ts`. */
+export const userRoleEnum = z.enum(USER_ROLES);
+
+export type { UserRole } from "@/types/user";
 
 export const userFormSchema = z.object({
   email: z.string().email({ message: "Invalid email address" }),
@@ -12,4 +15,3 @@ export const userFormSchema = z.object({
 });
 
 export type UserFormData = z.infer<typeof userFormSchema>;
-

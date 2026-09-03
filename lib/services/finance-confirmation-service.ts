@@ -1,11 +1,12 @@
 import "server-only";
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
   financePlanConfirmations,
   financePlanDebtConfirmations,
+  financePlanDebts,
   financePlans,
 } from "@/db/schema";
 
@@ -152,6 +153,17 @@ export async function saveConfirmation(
   );
 
   const monthAnchor = isoDate(periodAnchorFor(today, confirmationDayOfMonth));
+
+  // Debt ids are caller-supplied. A balance recorded against another plan's
+  // debt would feed that plan's calibration, so every id must be this plan's.
+  if (input.debtBalances.length > 0) {
+    const ids = [...new Set(input.debtBalances.map((d) => d.debtId))];
+    const owned = await db
+      .select({ id: financePlanDebts.id })
+      .from(financePlanDebts)
+      .where(and(eq(financePlanDebts.planId, input.planId), inArray(financePlanDebts.id, ids)));
+    if (owned.length !== ids.length) throw new Error("Debt not found");
+  }
 
   const conf = await db.transaction(async (tx) => {
     const [row] = await tx

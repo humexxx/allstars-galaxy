@@ -22,10 +22,10 @@ export function LandingSplit() {
 
         <div className="mt-12 grid gap-4 lg:grid-cols-3">
           <div className="rounded-xl border bg-card p-8 lg:col-span-2">
-            <div className="mb-4 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">
-              <Zap className="h-3 w-3 text-emerald-500" />
+            <Eyebrow as="div" className="mb-4 inline-flex items-center gap-2">
+              <Zap className="h-3 w-3 text-emerald-500 dark:text-emerald-400" />
               Compare
-            </div>
+            </Eyebrow>
             <Heading level="h3">
               Build plans. Compare scenarios side by side.
             </Heading>
@@ -36,9 +36,9 @@ export function LandingSplit() {
             </Text>
             <div className="mt-6 grid grid-cols-2 gap-3">
               <div className="rounded-lg border bg-muted p-4">
-                <div className="text-2xs font-medium uppercase tracking-widest text-muted-foreground">
+                <Eyebrow as="div" className="text-2xs">
                   Plan A
-                </div>
+                </Eyebrow>
                 <Mono className="mt-1 block text-sm text-foreground">
                   Save 25% · 7% return
                 </Mono>
@@ -47,9 +47,9 @@ export function LandingSplit() {
                 </div>
               </div>
               <div className="rounded-lg border bg-muted p-4">
-                <div className="text-2xs font-medium uppercase tracking-widest text-muted-foreground">
+                <Eyebrow as="div" className="text-2xs">
                   Plan B
-                </div>
+                </Eyebrow>
                 <Mono className="mt-1 block text-sm text-foreground">
                   Save 35% · 6% return
                 </Mono>
@@ -61,10 +61,10 @@ export function LandingSplit() {
           </div>
 
           <div className="rounded-xl border bg-card p-8">
-            <div className="mb-4 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+            <Eyebrow as="div" className="mb-4 inline-flex items-center gap-2">
               <Lock className="h-3 w-3" />
               Yours
-            </div>
+            </Eyebrow>
             <Heading level="h3">
               Your data, your workspace.
             </Heading>
@@ -74,7 +74,7 @@ export function LandingSplit() {
               number.
             </Text>
             <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+              <ShieldCheck className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
               Row-level ownership, enforced server-side
             </div>
           </div>

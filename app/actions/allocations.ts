@@ -215,6 +215,7 @@ export async function updateMethodAction(input: UpdateMethodInput) {
         riskLevel,
         monthlyRoi: monthlyRoi.toFixed(4),
         enabled,
+        updatedAt: new Date(),
       })
       .where(eq(investmentMethods.id, methodId));
 

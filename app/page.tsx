@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { SkipLink } from "@/components/skip-link";
 import { LandingNav } from "@/components/landing/landing-nav";
 import { LandingHero } from "@/components/landing/landing-hero";
 import { LandingStats } from "@/components/landing/landing-stats";
@@ -18,8 +19,9 @@ export const metadata: Metadata = {
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background text-foreground antialiased">
+      <SkipLink />
       <LandingNav />
-      <main>
+      <main id="main-content" tabIndex={-1} className="outline-none">
         <LandingHero />
         <LandingStats />
         <LandingModules />

@@ -75,8 +75,8 @@ export function DevToolsDrawer() {
               <div className="space-y-6">
                 {grouped.map(({ section, items }) => (
                   <section key={section} className="space-y-2">
-                    <Eyebrow asChild className="text-2xs">
-                      <h3>{section}</h3>
+                    <Eyebrow as="div" className="text-2xs" role="heading" aria-level={3}>
+                      {section}
                     </Eyebrow>
                     <ul className="space-y-2">
                       {items.map((helper) => (

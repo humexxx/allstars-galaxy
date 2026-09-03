@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { PageHeaderSkeleton } from "@/components/skeletons/page-header-skeleton"
 import { PortalPageContainer } from "@/components/portal/page-container"
 
 /**
@@ -14,16 +15,7 @@ export default function PortfolioLoading() {
     <PortalPageContainer>
       <section className="space-y-6" aria-hidden="true">
         {/* Header: name + description left, Export / Add transaction right */}
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div className="space-y-2">
-            <Skeleton className="h-7 w-52" />
-            <Skeleton className="h-4 w-80 max-w-full" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-9 w-28" />
-            <Skeleton className="h-9 w-36" />
-          </div>
-        </div>
+        <PageHeaderSkeleton actions={2} descriptionWidth="w-80" />
 
         {/* Tab strip */}
         <Skeleton className="h-9 w-72 rounded-lg" />

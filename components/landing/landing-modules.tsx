@@ -117,11 +117,7 @@ export function LandingModules() {
                 </div>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <Heading
-                      level="h4"
-                      as="h3"
-                      className="text-lg font-medium sm:text-lg"
-                    >
+                    <Heading level="h4" as="h3">
                       {title}
                     </Heading>
                     {isSoon && (
@@ -149,7 +145,11 @@ export function LandingModules() {
             }
 
             return (
-              <Link key={title} href={href} className="bg-card">
+              <Link
+                key={title}
+                href={href}
+                className="bg-card outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              >
                 {body}
               </Link>
             );

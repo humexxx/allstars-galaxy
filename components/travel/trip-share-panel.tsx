@@ -323,7 +323,7 @@ function ShareRow({
             aria-label="Open this link"
             // White behind the code whatever the theme: a dark surface
             // inverts the quiet zone and most scanners give up.
-            className="rounded bg-white p-2 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded bg-white p-2 outline-none ring-offset-2 ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
           >
             <QRCodeSVG value={url} size={132} level="M" marginSize={0} />
           </a>

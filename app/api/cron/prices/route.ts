@@ -21,21 +21,20 @@ import { backfillAllOwners } from "@/lib/services/allocation-service";
 // with many individually-quoted tickers is slow rather than heavy.
 export const maxDuration = 60;
 
-const CRON_SECRET = process.env.CRON_SECRET;
-if (!CRON_SECRET) {
-  throw new Error("CRON_SECRET is not configured");
-}
-const EXPECTED_AUTH_HEADER = `Bearer ${CRON_SECRET}`;
-
+/**
+ * Read at request time, not module load: a module-scope throw made every
+ * `next build` without the secret fail while collecting page data, and an
+ * unset secret should refuse requests, not builds. Fail closed either way.
+ */
 function isAuthorized(authHeader: string | null): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  const expected = `Bearer ${secret}`;
   // Length check first: timingSafeEqual throws on a length mismatch.
-  if (!authHeader || authHeader.length !== EXPECTED_AUTH_HEADER.length) {
+  if (!authHeader || authHeader.length !== expected.length) {
     return false;
   }
-  return timingSafeEqual(
-    Buffer.from(authHeader),
-    Buffer.from(EXPECTED_AUTH_HEADER)
-  );
+  return timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
 }
 
 export async function GET(request: NextRequest) {
@@ -43,19 +42,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await refreshPrices();
+  try {
+    const result = await refreshPrices();
 
-  // Then price any contribution approved since the last run. Doing it here and
-  // not only on demand is what stops a new investor's money being silently
-  // absent from the margin until somebody presses a button.
-  const backfill = await backfillAllOwners();
+    // Then price any contribution approved since the last run. Doing it here
+    // and not only on demand is what stops a new investor's money being
+    // silently absent from the margin until somebody presses a button.
+    const backfill = await backfillAllOwners();
 
-  // Partial failures are reported, not thrown: one unpriced asset must not
-  // discard the quotes that did land.
-  return NextResponse.json({
-    ok: true,
-    ...result,
-    backfill,
-    at: new Date().toISOString(),
-  });
+    // Partial failures are reported, not thrown: one unpriced asset must not
+    // discard the quotes that did land.
+    return NextResponse.json({
+      ok: true,
+      ...result,
+      backfill,
+      at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Price cron error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }

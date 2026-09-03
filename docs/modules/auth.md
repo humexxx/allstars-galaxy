@@ -1,7 +1,7 @@
 # Auth
 
 > **Status:** Active
-> **Last reviewed:** 2026-07-05
+> **Last reviewed:** 2026-09-03
 
 ## Overview
 Supabase-backed authentication: email/password login, signup, password reset,
@@ -48,8 +48,11 @@ and SSR-friendly session management. Server-side action wrappers
   is NOT in the role — that is `investment_methods.owner_user_id`, and every
   ownership check reads it. Restating ownership in the role would give two
   sources of truth that can disagree.
-- `UserRole` in [`types/user.ts`](../../types/user.ts) is the single definition.
-  The union was previously spelled out by hand in ten files, which is how a new
+- `UserRole` in [`types/user.ts`](../../types/user.ts) is the single definition,
+  derived from the `USER_ROLES` tuple there; `schemas/user.ts`'s `userRoleEnum`
+  is `z.enum(USER_ROLES)` and re-exports the type rather than redefining it (a
+  second two-value copy there is what had made `provider` unreachable). The
+  union was previously spelled out by hand in ten files, which is how a new
   role ends up half-added; `nav-config`'s `Role` is now an alias of it.
 - **Impersonation refuses admin targets in both directions.** The action blocks
   starting one, and `loadEffectiveContext` re-checks on every read — a role can

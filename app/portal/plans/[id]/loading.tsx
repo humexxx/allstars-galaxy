@@ -83,7 +83,7 @@ export default function PlanDetailLoading() {
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm lg:flex-1">
               <div className="space-y-4 px-6 pt-4 pb-6">
                 <div className="flex flex-col items-center gap-1.5">
-                  <Skeleton className="h-[120px] w-[120px] rounded-full" />
+                  <Skeleton className="size-30 rounded-full" />
                   <Skeleton className="h-3 w-24" />
                 </div>
                 <div>
@@ -104,7 +104,7 @@ export default function PlanDetailLoading() {
                 <Skeleton className="h-3 w-28" />
                 <div className="grid gap-1.5">
                   {Array.from({ length: 3 }).map((_, i) => (
-                    <Skeleton key={i} className="h-[52px] w-full rounded-md" />
+                    <Skeleton key={i} className="h-13 w-full rounded-md" />
                   ))}
                 </div>
               </div>

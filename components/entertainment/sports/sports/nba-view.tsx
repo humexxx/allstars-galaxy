@@ -108,8 +108,8 @@ function NbaStandings({
     .sort((a, b) => a.position - b.position);
 
   return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
+    <Card size="sm">
+      <CardContent className="space-y-3">
         <Tabs value={conf} onValueChange={(v) => setConf(v as NbaConference)}>
           <TabsList variant="line">
             <TabsTrigger value="east">Eastern Conference</TabsTrigger>

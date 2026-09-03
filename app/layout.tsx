@@ -21,6 +21,7 @@ export const metadata: Metadata = {
     description:
       "Personal finance plans, portfolio tracking, productivity boards and travel planning in one workspace.",
   },
+  twitter: { card: "summary" },
   // app/icon.svg is auto-picked by Next.js as the primary favicon. The
   // light/dark variants in /public are referenced explicitly so the app
   // shell can hot-swap them when the user flips the theme.

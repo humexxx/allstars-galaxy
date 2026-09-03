@@ -524,7 +524,7 @@ export function PlanEditor({
           {/* Compact page title: Heading "h3" (text-2xl at ≥640px) at the
               page-title weight (font-semibold), matching the shadcn docs scale. */}
           <div className="flex flex-wrap items-center gap-2">
-            <Heading level="h3" className="font-semibold">
+            <Heading level="h3" as="h1">
               {title}
             </Heading>
             {ghost && (
@@ -637,7 +637,7 @@ export function PlanEditor({
                 isPreview && "bg-muted/40 ring-1 ring-foreground/10"
               )}
             >
-              <CardContent className="space-y-4 pt-4">
+              <CardContent className="space-y-4">
                 <div className="flex flex-col items-center gap-1.5">
                   <FinancialHealthDonut
                     obligations={dFixedOutflow}
@@ -750,7 +750,7 @@ export function PlanEditor({
                 {/* All three options on screen with their cost, rather than a
                     badge you have to expand: the choice is a trade-off, and
                     hiding the alternatives hid the trade-off. */}
-                <CardContent className="min-h-0 overflow-y-auto pt-3">
+                <CardContent className="min-h-0 overflow-y-auto">
                   <StrategyPicker
                     comparison={debtComparison}
                     currentStrategy={currentStrategy}
@@ -971,7 +971,7 @@ function ScenarioDeltaCard({
           Scenario vs base
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-1 pt-3">
+      <CardContent className="space-y-1">
         <Text variant="small" as="p" className="flex items-center gap-1.5 pb-1">
           <GitBranch className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">{ghost.name}</span>

@@ -3,11 +3,12 @@
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
+  Briefcase,
   MoreHorizontal,
   Search,
   ShieldCheck,
-  ShieldOff,
   UserCog,
+  UserRound,
 } from "lucide-react";
 
 import {
@@ -46,10 +47,16 @@ import { Mono, Text } from "@/components/ui/typography";
 import { startImpersonationAction } from "@/app/actions/impersonation";
 import { updateUserRoleAction } from "@/app/actions/admin-users";
 
-import type { UserListItem } from "@/types";
+import { USER_ROLES, type UserListItem, type UserRole } from "@/types";
 
-// Pre-build the row action set so the UI stays declarative
-// and the user's selected behaviour (Impersonate + role toggle) is the only surface.
+// One entry per role, in the order the menu lists them. The role answers a
+// single question — may this account create investment methods — so the
+// labels say that rather than restating the enum.
+const ROLE_META: Record<UserRole, { label: string; hint: string; icon: typeof UserRound }> = {
+  admin: { label: "Admin", hint: "Everything, plus impersonation", icon: ShieldCheck },
+  provider: { label: "Provider", hint: "Can run investment methods", icon: Briefcase },
+  user: { label: "User", hint: "Invests through providers", icon: UserRound },
+};
 
 type UsersTableProps = {
   users: UserListItem[];
@@ -58,7 +65,7 @@ type UsersTableProps = {
 
 type PendingRoleChange = {
   user: UserListItem;
-  nextRole: "admin" | "user";
+  nextRole: UserRole;
 };
 
 export function UsersTable({ users, currentAdminId }: UsersTableProps) {
@@ -91,7 +98,9 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
     startRoleTransition(async () => {
       try {
         await updateUserRoleAction({ userId: user.id, role: nextRole });
-        toast.success(`${user.fullName ?? user.email ?? "User"} is now ${nextRole}`);
+        toast.success(
+          `${user.fullName ?? user.email ?? "User"} is now ${ROLE_META[nextRole].label.toLowerCase()}`
+        );
         setPendingRoleChange(null);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to update role");
@@ -131,10 +140,11 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
             <TableBody>
               {filtered.map((user) => {
                 const isSelf = user.id === currentAdminId;
-                const isAdmin = user.role === "admin";
+                const role: UserRole = user.role ?? "user";
+                const isAdmin = role === "admin";
                 const displayName = user.fullName || user.email || "Unknown";
                 const initial = (user.fullName || user.email || "?").charAt(0).toUpperCase();
-                const nextRole: "admin" | "user" = isAdmin ? "user" : "admin";
+                const RoleIcon = ROLE_META[role].icon;
 
                 return (
                   <TableRow key={user.id} className={isSelf ? "bg-muted/30" : undefined}>
@@ -160,14 +170,10 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {isAdmin ? (
-                        <Badge variant="default" className="gap-1">
-                          <ShieldCheck className="h-3 w-3" />
-                          Admin
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">User</Badge>
-                      )}
+                      <Badge variant={isAdmin ? "default" : "secondary"} className="gap-1">
+                        <RoleIcon className="h-3 w-3" />
+                        {ROLE_META[role].label}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       {isSelf ? (
@@ -212,24 +218,25 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
                               </DropdownMenuItem>
                             )}
 
-                            <DropdownMenuItem
-                              onSelect={(e) => {
-                                e.preventDefault();
-                                setPendingRoleChange({ user, nextRole });
-                              }}
-                            >
-                              {isAdmin ? (
-                                <>
-                                  <ShieldOff className="mr-2 h-4 w-4" />
-                                  Demote to user
-                                </>
-                              ) : (
-                                <>
-                                  <ShieldCheck className="mr-2 h-4 w-4" />
-                                  Promote to admin
-                                </>
-                              )}
-                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel className="text-2xs font-normal uppercase tracking-wide text-muted-foreground">
+                              Set role
+                            </DropdownMenuLabel>
+                            {USER_ROLES.filter((r) => r !== role).map((nextRole) => {
+                              const Icon = ROLE_META[nextRole].icon;
+                              return (
+                                <DropdownMenuItem
+                                  key={nextRole}
+                                  onSelect={(e) => {
+                                    e.preventDefault();
+                                    setPendingRoleChange({ user, nextRole });
+                                  }}
+                                >
+                                  <Icon className="mr-2 h-4 w-4" />
+                                  {ROLE_META[nextRole].label}
+                                </DropdownMenuItem>
+                              );
+                            })}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}

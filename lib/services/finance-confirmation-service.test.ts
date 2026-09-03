@@ -396,8 +396,34 @@ describe("saveConfirmation", () => {
     return chain;
   }
 
+  /** The debt-id check: db.select().from().where() over the plan's own debts. */
+  function mockPlanDebts(ids: string[]) {
+    const chain = makeSelectChain(ids.map((id) => ({ id })));
+    selectImpl.mockReturnValueOnce(chain);
+    return chain;
+  }
+
+  it("refuses a debt id that belongs to another plan", async () => {
+    mockOwnershipOk();
+    mockPlanDebts(["debt-A"]); // debt-B is not this plan's
+
+    await expect(
+      saveConfirmation(USER_ID, {
+        planId: PLAN_ID,
+        confirmedSavings: "1.00",
+        confirmedInvestments: "0.00",
+        debtBalances: [
+          { debtId: "debt-A", confirmedBalance: "1.00" },
+          { debtId: "debt-B", confirmedBalance: "1.00" },
+        ],
+      })
+    ).rejects.toThrow("Debt not found");
+    expect(txInsertImpl).not.toHaveBeenCalled();
+  });
+
   it("inserts a new confirmation and any per-debt rows inside the transaction", async () => {
     mockOwnershipOk();
+    mockPlanDebts(["debt-A", "debt-B"]);
     const row = buildConfirmation({ id: "new-conf" });
 
     const insertConfChain = mockTxInsertConfirmation(row);

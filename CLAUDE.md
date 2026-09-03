@@ -77,6 +77,11 @@ pnpm db:seed        # Seed database
 - Coverage: `pnpm test:coverage` (powered by `@vitest/coverage-v8`). The
   service + action layers sit above 80% statements / 85% lines as of the last
   audit.
+- CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs lint, `tsc`,
+  vitest **and `pnpm build`** with placeholder env (`SKIP_ENV_VALIDATION=1`).
+  The build is the only check that catches a server/client boundary mistake or
+  a module-scope env throw, so nothing may read a secret at import time — the
+  cron routes read `CRON_SECRET` per request for exactly this reason.
 
 ## Architecture
 

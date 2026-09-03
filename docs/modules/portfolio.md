@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active (page redesigned to mirror plan-editor layout)
-> **Last reviewed:** 2026-08-15
+> **Last reviewed:** 2026-09-03
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -47,14 +47,18 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `portfolios` — user's portfolio account
 - `transactions` — buy/withdrawal transactions with approval workflow
 - `portfolio_snapshots` — historical portfolio value
-- `investment_methods` — investment vehicles with risk/ROI metadata
+- `investment_methods` — investment vehicles with risk/ROI metadata; `owner_user_id` indexed, `updated_at` set by `updateMethodAction`
 - `price_assets` — catalogue of quotable assets (`symbol`, `external_id`, `source`)
-- `price_quotes` — append-only price history, one row per fetch
+- `price_quotes` — append-only price history, one row per fetch; `(asset_id, fetched_at desc)` index serves the `DISTINCT ON` latest-price read
 - `method_allocations` — the policy: what share of incoming money goes to which asset
 - `transaction_allocations` — what each contribution actually bought, at that day's price (immutable)
 - `app_state` — global key-value (cron state, etc.) — also touched by other modules
 
 ## Notes
+- **Owner-only panels load on demand.** `MarginChart` and `InvestorBreakdown`
+  are `next/dynamic` in `portfolio-client.tsx`, so an investor's bundle does not
+  carry the owner dashboard. `getUserPortfolio` / `getPortfolioStats` /
+  `getPortfolioAssets` are request-cached — every plan projection asks for them.
 - **Methods have an owner.** `investment_methods.owner_user_id` (nullable, FK
   SET NULL) is the admin who runs the method; other users invest through them.
   NULL keeps the old global-catalogue behaviour, and is now also the only case

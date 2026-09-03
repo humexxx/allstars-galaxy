@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/portal/page-header";
 import { PortalPageContainer } from "@/components/portal/page-container";
-import { Text } from "@/components/ui/typography";
+import { EmptyState } from "@/components/ui/empty-state";
 import { requireAdminOrRedirect } from "@/lib/services/auth-server";
 import { MoreAppsList } from "@/components/more-apps/more-apps-list";
 import { getScreenshotUrl } from "@/lib/services/screenshot-service";
@@ -68,7 +68,10 @@ export default async function MoreAppsPage() {
         description="Quick links to my other apps and projects."
       />
       {apps.length === 0 ? (
-        <Text variant="muted">No apps to show yet.</Text>
+        <EmptyState
+          title="No apps to show yet"
+          description="Apps appear here once they are listed in the catalogue."
+        />
       ) : (
         <MoreAppsList
           items={apps.map((app, i) => ({ app, screenshotUrl: screenshots[i] }))}

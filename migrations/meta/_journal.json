@@ -351,6 +351,13 @@
       "when": 1788417942997,
       "tag": "0049_warm_swordsman",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1788418281193,
+      "tag": "0050_supreme_cable",
+      "breakpoints": true
     }
   ]
 }

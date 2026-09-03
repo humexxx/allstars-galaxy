@@ -9,20 +9,20 @@ import { createDailyFinanceSnapshots } from "@/lib/services/finance-snapshot-ser
 import { createAutomatedTasksForAllRoadPaths } from "@/lib/services/task-automation-service";
 import { refreshF1News } from "@/lib/services/rapidapi-f1-news-service";
 
-const CRON_SECRET = process.env.CRON_SECRET;
-if (!CRON_SECRET) {
-  throw new Error("CRON_SECRET is not configured");
-}
-const EXPECTED_AUTH_HEADER = `Bearer ${CRON_SECRET}`;
-
+/**
+ * Read at request time, not module load: a module-scope throw made every
+ * `next build` without the secret fail while collecting page data, and an
+ * unset secret should refuse requests, not builds. Fail closed either way.
+ */
 function isAuthorized(authHeader: string | null): boolean {
-  if (!authHeader || authHeader.length !== EXPECTED_AUTH_HEADER.length) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  const expected = `Bearer ${secret}`;
+  // Length check first: timingSafeEqual throws on a length mismatch.
+  if (!authHeader || authHeader.length !== expected.length) {
     return false;
   }
-  return timingSafeEqual(
-    Buffer.from(authHeader),
-    Buffer.from(EXPECTED_AUTH_HEADER)
-  );
+  return timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
 }
 
 async function updateAppState(key: string, value: string, error: string | null = null) {
@@ -271,12 +271,8 @@ export async function GET(request: NextRequest) {
       console.error("Failed to log error:", logError);
     }
 
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        message: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
+    // The message is logged above and stored in app_state; the response
+    // carries no driver or constraint text.
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

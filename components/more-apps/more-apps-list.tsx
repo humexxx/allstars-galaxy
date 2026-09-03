@@ -115,7 +115,9 @@ export function MoreAppsList({ items }: { items: AppWithScreenshot[] }) {
           <button
             type="button"
             onClick={() => setShowHidden((v) => !v)}
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            aria-expanded={showHidden}
+            aria-controls="hidden-apps"
+            className="inline-flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             {showHidden ? (
               <ChevronDown className="size-4" />

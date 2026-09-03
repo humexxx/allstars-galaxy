@@ -202,7 +202,7 @@ export function PlansWorkspace({
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Select value={range} onValueChange={setRange}>
-                  <SelectTrigger size="sm" className="w-[9.5rem]">
+                  <SelectTrigger size="sm" className="w-38">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

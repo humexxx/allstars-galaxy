@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { PageHeaderSkeleton } from "@/components/skeletons/page-header-skeleton"
 
 /**
  * Mirrors the real Compare screen: back link, header, then the two cards
@@ -13,10 +14,7 @@ export default function ComparePlansLoading() {
     <section className="space-y-6" aria-hidden="true">
       <Skeleton className="h-8 w-32" />
 
-      <div className="space-y-2">
-        <Skeleton className="h-7 w-48" />
-        <Skeleton className="h-4 w-80 max-w-full" />
-      </div>
+      <PageHeaderSkeleton descriptionWidth="w-80" />
 
       {/* Selector card — one chip per plan */}
       <div className="space-y-3 rounded-xl border bg-card p-6 shadow-sm">

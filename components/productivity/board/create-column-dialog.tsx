@@ -13,8 +13,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Plus } from "lucide-react";
 import { createBoardColumnSchema, type CreateBoardColumnData } from "@/schemas/board";
 import { toast } from "sonner";
@@ -33,7 +34,7 @@ export function CreateColumnDialog({ onCreate, nextOrder }: CreateColumnDialogPr
     reset,
   } = useForm<CreateBoardColumnData>({
     resolver: zodResolver(createBoardColumnSchema),
-    defaultValues: { order: nextOrder },
+    defaultValues: { name: "", order: nextOrder },
   });
 
   const onSubmit = async (data: CreateBoardColumnData): Promise<void> => {
@@ -41,7 +42,7 @@ export function CreateColumnDialog({ onCreate, nextOrder }: CreateColumnDialogPr
       await onCreate({ ...data, order: nextOrder });
       toast.success("Column created");
       setOpen(false);
-      reset({ order: nextOrder + 1 });
+      reset({ name: "", order: nextOrder + 1 });
     } catch {
       // parent already showed an error toast
     }
@@ -51,25 +52,31 @@ export function CreateColumnDialog({ onCreate, nextOrder }: CreateColumnDialogPr
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline">
-          <Plus className="mr-2 h-4 w-4" />
-          Add Column
+          <Plus />
+          Add column
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create New Column</DialogTitle>
-          <DialogDescription>Add a new column to your board</DialogDescription>
+          <DialogTitle>Create new column</DialogTitle>
+          <DialogDescription>Add a new column to your board.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Title</Label>
-            <Input id="name" placeholder="Column title" {...register("name")} />
-            {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-          </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+          <Field data-invalid={!!errors.name}>
+            <FieldLabel htmlFor="column-name">Title</FieldLabel>
+            <Input
+              id="column-name"
+              placeholder="Column title"
+              aria-invalid={!!errors.name}
+              {...register("name")}
+            />
+            <FieldError errors={[errors.name]} />
+          </Field>
 
           <DialogFooter>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Creating..." : "Create Column"}
+              {isSubmitting && <Spinner />}
+              {isSubmitting ? "Creating…" : "Create column"}
             </Button>
           </DialogFooter>
         </form>

@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { ALLOCATION_TOLERANCE } from "@/lib/finance/allocation";
 
+import { idSchema } from "./common";
+
 /**
  * A method's investment policy: which assets incoming money is split across.
  *
@@ -11,11 +13,11 @@ import { ALLOCATION_TOLERANCE } from "@/lib/finance/allocation";
  */
 export const setAllocationsSchema = z
   .object({
-    methodId: z.string().uuid(),
+    methodId: idSchema,
     allocations: z
       .array(
         z.object({
-          assetId: z.string().uuid(),
+          assetId: idSchema,
           percent: z.coerce.number().gt(0, "Use a share above zero").max(100),
         })
       )
@@ -59,13 +61,15 @@ export const createPriceAssetSchema = z
 
 /** Hand-pricing an asset no provider covers. */
 export const setManualPriceSchema = z.object({
-  assetId: z.string().uuid(),
+  assetId: idSchema,
   price: z.coerce.number().positive("Price must be greater than zero").finite(),
 });
 
-export type SetAllocationsInput = z.infer<typeof setAllocationsSchema>;
-export type CreatePriceAssetInput = z.infer<typeof createPriceAssetSchema>;
-export type SetManualPriceInput = z.infer<typeof setManualPriceSchema>;
+export type SetAllocationsData = z.infer<typeof setAllocationsSchema>;
+/** What the form sends — `symbol` is upper-cased by the schema. */
+export type CreatePriceAssetInput = z.input<typeof createPriceAssetSchema>;
+export type CreatePriceAssetData = z.infer<typeof createPriceAssetSchema>;
+export type SetManualPriceData = z.infer<typeof setManualPriceSchema>;
 
 /**
  * Editing a method you own.
@@ -75,7 +79,7 @@ export type SetManualPriceInput = z.infer<typeof setManualPriceSchema>;
  * changing it moves what you owe — it is not a cosmetic field.
  */
 export const updateMethodSchema = z.object({
-  methodId: z.string().uuid(),
+  methodId: idSchema,
   name: z.string().trim().min(1, "Name is required").max(120),
   description: z.string().trim().max(500).optional().nullable(),
   // `author` is deliberately absent: it is the person who runs the method, so
@@ -90,4 +94,4 @@ export const updateMethodSchema = z.object({
   enabled: z.boolean(),
 });
 
-export type UpdateMethodInput = z.infer<typeof updateMethodSchema>;
+export type UpdateMethodData = z.infer<typeof updateMethodSchema>;

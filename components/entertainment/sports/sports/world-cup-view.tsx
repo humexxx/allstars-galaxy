@@ -3,8 +3,9 @@
 import { useMemo } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eyebrow, Text } from "@/components/ui/typography";
+import { Eyebrow } from "@/components/ui/typography";
 import type { FootballLeagueData, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
@@ -27,7 +28,7 @@ export function WorldCupView({ data }: WorldCupViewProps) {
   const defaultTab = hasKnockout ? "knockout" : "matches";
 
   return (
-    <Tabs defaultValue={defaultTab} className="space-y-6">
+    <Tabs defaultValue={defaultTab} className="gap-6">
       <SportShell
         emoji="🏆"
         title={data.league.name}
@@ -54,13 +55,13 @@ export function WorldCupView({ data }: WorldCupViewProps) {
               </CardContent>
             </Card>
           ) : (
-            <EmptyBlock message="The knockout stage hasn't started yet." />
+            <EmptyState title="The knockout stage hasn't started yet." />
           )}
         </TabsContent>
 
         <TabsContent value="matches">
           {data.matches.length === 0 ? (
-            <EmptyBlock message="No matches available yet." />
+            <EmptyState title="No matches available yet." />
           ) : (
             <MatchesGrid data={data} teamsMap={teamsMap} />
           )}
@@ -70,10 +71,10 @@ export function WorldCupView({ data }: WorldCupViewProps) {
           {hasGroups && data.groups ? (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {data.groups.map((group) => (
-                <div key={group.label} className="space-y-2">
-                  <Eyebrow className="text-2xs">{group.label}</Eyebrow>
+                <div key={group.label} className="flex flex-col gap-2">
+                  <Eyebrow size="sm">{group.label}</Eyebrow>
                   <Card>
-                    <CardContent className="p-0">
+                    <CardContent className="px-0">
                       <StandingsTable
                         standings={group.standings}
                         teams={teamsMap}
@@ -84,7 +85,7 @@ export function WorldCupView({ data }: WorldCupViewProps) {
               ))}
             </div>
           ) : (
-            <EmptyBlock message="Group tables are not available." />
+            <EmptyState title="Group tables are not available." />
           )}
         </TabsContent>
       </SportShell>
@@ -109,10 +110,10 @@ function MatchesGrid({
   );
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {Object.entries(grouped).map(([label, group]) => (
-        <div key={label} className="space-y-2">
-          <Eyebrow className="text-2xs">{label}</Eyebrow>
+        <div key={label} className="flex flex-col gap-2">
+          <Eyebrow size="sm">{label}</Eyebrow>
           <div className="grid gap-2 sm:grid-cols-2">
             {group.map((match) => (
               <ScoreCard key={match.id} match={match} teams={teamsMap} />
@@ -120,14 +121,6 @@ function MatchesGrid({
           </div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function EmptyBlock({ message }: { message: string }) {
-  return (
-    <div className="rounded-lg border border-dashed p-8 text-center">
-      <Text variant="muted">{message}</Text>
     </div>
   );
 }

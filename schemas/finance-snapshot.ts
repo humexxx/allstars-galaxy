@@ -1,36 +1,13 @@
 import { z } from "zod";
 
 /**
- * Mirrors `snapshotSourceEnum` from /schemas/snapshot.ts for the finance plan
- * domain. Keep both files structurally identical so reviewers don't have to
- * second-guess where the canonical Zod enum lives.
- *
- * Values map 1:1 to the Postgres `finance_snapshot_source` enum.
+ * Where a finance-plan snapshot came from. Values map 1:1 to the Postgres
+ * `finance_snapshot_source` enum in db/schema.ts.
  */
-export const financeSnapshotSourceEnum = z.enum([
+export const financeSnapshotSourceSchema = z.enum([
   "system_cron",
   "confirmation",
   "manual",
 ]);
 
-export type FinanceSnapshotSource = z.infer<typeof financeSnapshotSourceEnum>;
-
-/**
- * Mirrors `financeConfirmationSourceEnum` in db/schema.ts. "user" = the human
- * confirmed; "auto" = the cron rolled the baseline through a skipped period.
- */
-export const financeConfirmationSourceEnum = z.enum(["user", "auto"]);
-
-export type FinanceConfirmationSource = z.infer<
-  typeof financeConfirmationSourceEnum
->;
-
-export const manualFinanceSnapshotFormSchema = z.object({
-  planId: z.string().uuid(),
-  date: z.coerce.date(),
-  source: financeSnapshotSourceEnum.default("manual"),
-});
-
-export type ManualFinanceSnapshotFormData = z.infer<
-  typeof manualFinanceSnapshotFormSchema
->;
+export type FinanceSnapshotSource = z.infer<typeof financeSnapshotSourceSchema>;

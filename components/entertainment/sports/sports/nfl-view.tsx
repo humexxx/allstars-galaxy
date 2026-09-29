@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import type { NflConference, NflData, Team } from "@/types/sports";
 
@@ -33,7 +34,7 @@ export function NflView({ data }: NflViewProps) {
   const hasPlayoffs = data.playoffs.length > 0;
 
   return (
-    <Tabs defaultValue={hasPlayoffs ? "playoffs" : "games"} className="space-y-6">
+    <Tabs defaultValue={hasPlayoffs ? "playoffs" : "games"} className="gap-6">
       <SportShell
         emoji="🏈"
         title="American Football · NFL"
@@ -85,14 +86,19 @@ function NflStandings({
     .sort((a, b) => a.position - b.position);
 
   return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
-        <Tabs value={conf} onValueChange={(v) => setConf(v as NflConference)}>
-          <TabsList variant="line">
-            <TabsTrigger value="afc">AFC</TabsTrigger>
-            <TabsTrigger value="nfc">NFC</TabsTrigger>
-          </TabsList>
-        </Tabs>
+    <Card size="sm">
+      <CardContent className="flex flex-col gap-3">
+        {/* A segmented control: both conferences share the one table below. */}
+        <ToggleGroup
+          type="single"
+          size="sm"
+          value={conf}
+          onValueChange={(v) => v && setConf(v as NflConference)}
+          aria-label="Conference"
+        >
+          <ToggleGroupItem value="afc">AFC</ToggleGroupItem>
+          <ToggleGroupItem value="nfc">NFC</ToggleGroupItem>
+        </ToggleGroup>
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">

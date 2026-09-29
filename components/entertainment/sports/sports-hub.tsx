@@ -1,13 +1,16 @@
 "use client";
 
-import { useMemo, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { Loader2, Star } from "lucide-react";
+import { useMemo } from "react";
+import Link, { useLinkStatus } from "next/link";
+import { Info, Star } from "lucide-react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Spinner } from "@/components/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { SPORTS } from "@/lib/data/sports/registry";
 import { SAMPLE_DATA_SPORTS, type SportPayload } from "@/lib/sports/payload";
-import type { SportId } from "@/types/sports";
+import type { SportId, SportMeta } from "@/types/sports";
 
 import { F1View } from "./sports/f1-view";
 import { FootballView } from "./sports/football-view";
@@ -31,8 +34,6 @@ export function SportsHub({
   favoriteSportIds = [],
   payload,
 }: SportsHubProps) {
-  const router = useRouter();
-  const [isSwitching, startSwitching] = useTransition();
   const favSet = useMemo(() => new Set(favoriteSportIds), [favoriteSportIds]);
 
   // Render favourites first so the user lands on their most-watched sports.
@@ -47,20 +48,10 @@ export function SportsHub({
   );
 
   return (
-    <div className="space-y-6">
-      <SportSelector
-        active={activeSport}
-        onChange={(sport) =>
-          startSwitching(() => router.push(`?sport=${sport}`, { scroll: false }))
-        }
-        favSet={favSet}
-        sports={orderedSports}
-        busy={isSwitching}
-      />
+    <div className="flex flex-col gap-6">
+      <SportSelector active={activeSport} favSet={favSet} sports={orderedSports} />
       {SAMPLE_DATA_SPORTS.has(activeSport) && <SampleDataNotice />}
-      <div className={cn(isSwitching && "opacity-50 transition-opacity")}>
-        <SportContent payload={payload} />
-      </div>
+      <SportContent payload={payload} />
     </div>
   );
 }
@@ -68,71 +59,93 @@ export function SportsHub({
 /**
  * Says out loud that a sport is a fixture.
  *
- * NBA and NFL have no free provider with current data, so they render a
+ * The NFL has no free provider with current data, so it renders a
  * hand-written season. Nothing on the page admitted it, which made a stale
  * scoreboard look like a broken live one.
  */
 function SampleDataNotice() {
   return (
-    <div className="rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground">
-      Sample data — no live provider is wired up for this sport yet, so these
-      fixtures and standings are made up.
-    </div>
+    // A standing note, not an alert: nothing happened, so nothing to announce.
+    <Alert role="note">
+      <Info />
+      <AlertTitle>Sample data</AlertTitle>
+      <AlertDescription>
+        No live provider is wired up for this sport yet, so these fixtures and
+        standings are made up.
+      </AlertDescription>
+    </Alert>
   );
 }
 
+/**
+ * The sport strip. Each sport is a link (`?sport=`), so it navigates like one:
+ * middle-click opens it, Back returns, and the active one is `aria-current`.
+ */
 function SportSelector({
   active,
-  onChange,
   favSet,
   sports,
-  busy = false,
 }: {
   active: SportId;
-  onChange: (sport: SportId) => void;
   favSet: Set<SportId>;
-  sports: typeof SPORTS;
-  /** A sport is being fetched — the strip stays usable, the tab says so. */
-  busy?: boolean;
+  sports: SportMeta[];
 }) {
   return (
-    <div className="relative -mx-2 flex gap-2 overflow-x-auto px-2 pb-1">
-      {sports.map((sport) => {
-        const isActive = sport.id === active;
-        const isFav = favSet.has(sport.id);
-        return (
-          <button
-            key={sport.id}
-            type="button"
-            onClick={() => onChange(sport.id)}
-            aria-current={isActive ? "page" : undefined}
-            title={sport.label}
-            className={cn(
-              "flex shrink-0 cursor-pointer items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
-              isActive
-                ? "border-foreground/15 bg-foreground/5 text-foreground shadow-xs"
-                : "border-transparent bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            {isActive && busy ? (
-              <Loader2 aria-hidden className="h-4 w-4 animate-spin" />
-            ) : (
-              <span aria-hidden className="text-base leading-none">
-                {sport.emoji}
-              </span>
-            )}
-            <span>{sport.shortLabel}</span>
-            {isFav && (
-              <Star
-                aria-hidden
-                className="h-3 w-3 fill-warning text-warning"
-                strokeWidth={2}
-              />
-            )}
-          </button>
-        );
-      })}
-    </div>
+    <nav aria-label="Sports" className="relative -mx-2 overflow-x-auto px-2 pb-1">
+      <ul className="flex gap-2">
+        {sports.map((sport) => {
+          const isActive = sport.id === active;
+          const link = (
+            <Link
+              href={`?sport=${sport.id}`}
+              scroll={false}
+              aria-current={isActive ? "page" : undefined}
+              className={cn(
+                "flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                isActive
+                  ? "border-foreground/15 bg-foreground/5 text-foreground shadow-xs"
+                  : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <SportMark emoji={sport.emoji} />
+              <span>{sport.shortLabel}</span>
+              {favSet.has(sport.id) && (
+                <>
+                  <Star aria-hidden className="size-3 fill-warning text-warning" strokeWidth={2} />
+                  <span className="sr-only">(favorite)</span>
+                </>
+              )}
+            </Link>
+          );
+          return (
+            <li key={sport.id} className="shrink-0">
+              {/* The strip shows the short label; the full name ("League of
+                  Legends") rides in a tooltip where the two differ. */}
+              {sport.label === sport.shortLabel ? (
+                link
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>{link}</TooltipTrigger>
+                  <TooltipContent>{sport.label}</TooltipContent>
+                </Tooltip>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+/** The sport's emoji, swapped for a spinner while its link is loading. */
+function SportMark({ emoji }: { emoji: string }) {
+  const { pending } = useLinkStatus();
+  return pending ? (
+    <Spinner />
+  ) : (
+    <span aria-hidden className="text-base leading-none">
+      {emoji}
+    </span>
   );
 }
 

@@ -12,7 +12,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Mono } from "@/components/ui/typography";
+import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
 import type { Projection, ProjectionMonth } from "@/types/finance";
 
@@ -168,9 +174,9 @@ export function ProjectionTable({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       {isLongHorizon && (
-        <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           <span>
             {showAll
               ? `Showing all ${visibleMonths.length} months`
@@ -186,7 +192,7 @@ export function ProjectionTable({
           </Button>
         </div>
       )}
-      <div className="rounded-md border">
+      <div className="rounded-lg border">
         <div
           ref={scrollContainerRef}
           className="max-h-120 overflow-auto scroll-smooth"
@@ -201,8 +207,20 @@ export function ProjectionTable({
                 <TableHead className="text-right">Income</TableHead>
                 <TableHead className="text-right">Expenses</TableHead>
                 <TableHead className="text-right">Debt pmt</TableHead>
-                <TableHead className="text-right" title="Investment + savings interest earned minus debt interest accrued">
-                  Net interest
+                <TableHead className="text-right">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        tabIndex={0}
+                        className="cursor-help rounded-sm underline decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        Net interest
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Investment + savings interest earned minus debt interest accrued
+                    </TooltipContent>
+                  </Tooltip>
                 </TableHead>
                 {hasInvestments && <TableHead className="text-right">Investments</TableHead>}
                 <TableHead className="text-right">Total debt</TableHead>
@@ -235,14 +253,22 @@ export function ProjectionTable({
                         return <span className="text-muted-foreground">—</span>;
                       }
                       const isPositive = net > 0;
+                      const detail = `Earned ${formatCurrency(m.investmentsInterest + m.savingsInterest)} · Paid ${formatCurrency(m.totalInterestAccrued)}`;
+                      // Pointer-only tooltip: a tab stop per row would bury the
+                      // table. The same detail is in the sr-only text.
                       return (
-                        <Mono
-                          className={isPositive ? "text-success" : "text-destructive"}
-                          title={`Earned ${formatCurrency(m.investmentsInterest + m.savingsInterest)} · Paid ${formatCurrency(m.totalInterestAccrued)}`}
-                        >
-                          {isPositive ? "+" : "−"}
-                          {formatCurrency(Math.abs(net))}
-                        </Mono>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Mono
+                              className={isPositive ? "text-success" : "text-destructive"}
+                            >
+                              {isPositive ? "+" : "−"}
+                              {formatCurrency(Math.abs(net))}
+                              <span className="sr-only"> ({detail})</span>
+                            </Mono>
+                          </TooltipTrigger>
+                          <TooltipContent>{detail}</TooltipContent>
+                        </Tooltip>
                       );
                     })()}
                   </TableCell>
@@ -255,11 +281,10 @@ export function ProjectionTable({
                     {formatCurrency(m.totalDebt)}
                   </TableCell>
                   <TableCell
-                    className={`text-right font-mono font-semibold tabular-nums ${
-                      m.netWorth >= 0
-                        ? "text-success"
-                        : "text-destructive"
-                    }`}
+                    className={cn(
+                      "text-right font-mono font-semibold tabular-nums",
+                      m.netWorth >= 0 ? "text-success" : "text-destructive"
+                    )}
                   >
                     {formatCurrency(m.netWorth)}
                   </TableCell>
@@ -273,7 +298,7 @@ export function ProjectionTable({
         // Footer button sits OUTSIDE the scroll container so it's always
         // visible at the bottom of the table, regardless of how far the
         // user has scrolled inside the table body.
-        <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           <span>
             Showing {effectiveCount} of {totalAvailable} months
           </span>
@@ -283,7 +308,7 @@ export function ProjectionTable({
             size="sm"
             onClick={handleLoadMore}
           >
-            <Plus className="mr-1 h-3.5 w-3.5" />
+            <Plus />
             Load {nextStep} more {nextStep === 1 ? "month" : "months"}
           </Button>
         </div>

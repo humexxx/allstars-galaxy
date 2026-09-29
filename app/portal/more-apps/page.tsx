@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LayoutGrid } from "lucide-react";
 
 import { PageHeader } from "@/components/portal/page-header";
 import { PortalPageContainer } from "@/components/portal/page-container";
@@ -7,22 +8,17 @@ import { requireAdminOrRedirect } from "@/lib/services/auth-server";
 import { MoreAppsList } from "@/components/more-apps/more-apps-list";
 import { getScreenshotUrl } from "@/lib/services/screenshot-service";
 import { listVercelProjects } from "@/lib/services/vercel-service";
-import {
-  MANUAL_APPS,
-  VERCEL_EXCLUDE,
-  VERCEL_OVERRIDES,
-  type AppListing,
-} from "./apps-data";
+import type { AppListing } from "@/types/apps";
+import { MANUAL_APPS, VERCEL_EXCLUDE, VERCEL_OVERRIDES } from "./apps-data";
 
 export const metadata: Metadata = {
   title: "More Apps",
   description: "Quick links to my other apps and projects.",
 };
 
-// Page-level cache: Vercel data refreshes every 10 min inside the
-// service. We re-render the shell at most hourly so manual edits to
-// apps-data.ts surface promptly on navigation.
-export const revalidate = 3_600;
+// No page-level `revalidate`: the admin gate reads cookies, so this page is
+// dynamic anyway. The caching lives in the services (Vercel 10 min,
+// screenshots 24h).
 
 async function buildAppList(): Promise<AppListing[]> {
   const vercelProjects = await listVercelProjects();
@@ -62,13 +58,13 @@ export default async function MoreAppsPage() {
 
   return (
     <PortalPageContainer>
-      <section className="space-y-6">
       <PageHeader
         title="More apps"
         description="Quick links to my other apps and projects."
       />
       {apps.length === 0 ? (
         <EmptyState
+          icon={LayoutGrid}
           title="No apps to show yet"
           description="Apps appear here once they are listed in the catalogue."
         />
@@ -77,7 +73,6 @@ export default async function MoreAppsPage() {
           items={apps.map((app, i) => ({ app, screenshotUrl: screenshots[i] }))}
         />
       )}
-      </section>
     </PortalPageContainer>
   );
 }

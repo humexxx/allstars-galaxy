@@ -1,10 +1,18 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Circle } from "lucide-react";
+import { ArrowRight, Flag } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Heading, Mono, Text } from "@/components/ui/typography";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Eyebrow, Mono } from "@/components/ui/typography";
+import { formatShortDay } from "@/lib/utils/date";
 import { getF1DashboardStandings } from "@/lib/services/espn-f1-standings-service";
 import { getF1News } from "@/lib/services/rapidapi-f1-news-service";
 import {
@@ -12,6 +20,7 @@ import {
   listUserFavoriteSportIds,
 } from "@/lib/services/sports-service";
 import { F1StandingsTabs } from "@/components/entertainment/sports/f1-standings-tabs";
+import { StatusPill } from "@/components/entertainment/sports/shared/status-pill";
 import type { F1NewsImage } from "@/db/schema";
 
 const F1_PATH = "/portal/entertainment/sports?sport=f1";
@@ -50,40 +59,32 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
     // Half the row: one sport among several, beside whatever comes next.
     <Card className="flex flex-col">
       <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <Heading level="h5" as="h2" className="flex items-center gap-2">
-              <span aria-hidden>🏎️</span>
-              Formula 1
-            </Heading>
-            {highlight && (
-              <Text variant="muted" className="mt-1 truncate">
-                {highlight.context}
-              </Text>
-            )}
-          </div>
-          <Button variant="ghost" size="sm" asChild>
+        {/* A lucide mark like the other dashboard cards (the hub itself
+            keeps the sport emoji). */}
+        <CardTitle as="h2" className="flex items-center gap-2">
+          <Flag className="size-5" aria-hidden />
+          Formula 1
+        </CardTitle>
+        {highlight && <CardDescription className="truncate">{highlight.context}</CardDescription>}
+        <CardAction>
+          <Button variant="outline" size="sm" asChild>
             <Link href={F1_PATH}>
-              Open <ArrowRight className="ml-1 h-3 w-3" />
+              Open <ArrowRight />
             </Link>
           </Button>
-        </div>
+        </CardAction>
       </CardHeader>
 
       <CardContent className="flex flex-1 flex-col gap-3">
         {highlight && (
           <Link
             href={F1_PATH}
-            className="flex items-start justify-between gap-2 rounded-lg border bg-card p-2.5 transition-colors hover:border-primary/60"
+            className="flex items-start justify-between gap-2 rounded-lg border bg-card p-2.5 transition-colors hover:bg-muted/40"
           >
             <span className="min-w-0 text-xs font-semibold leading-snug">
               {highlight.headline}
             </span>
-            {highlight.tone === "live" && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-2xs font-medium text-success">
-                <Circle className="h-2 w-2 animate-pulse fill-current" /> Live
-              </span>
-            )}
+            {highlight.tone === "live" && <StatusPill status="live" />}
           </Link>
         )}
 
@@ -96,9 +97,7 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
 
         {news.length > 0 && (
           <div className="flex flex-1 flex-col gap-1.5">
-            <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-              Latest news
-            </span>
+            <Eyebrow size="sm">Latest news</Eyebrow>
             {/* Scroll-snap rather than a carousel library: the card is narrow,
                 a swipe is the gesture people already use here, and it adds no
                 dependency. The rail is the same one the travel gallery uses. */}
@@ -109,13 +108,13 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
                   <Link
                     key={item.id}
                     href={`/news/f1/${item.id}`}
-                    className="group flex w-44 shrink-0 snap-start flex-col gap-2 rounded-lg border bg-card p-2 transition-colors hover:border-primary/60"
+                    className="group flex w-44 shrink-0 snap-start flex-col gap-2 rounded-lg border bg-card p-2 transition-colors hover:bg-muted/40"
                   >
                     {image?.url && (
-                      <div className="relative aspect-[16/9] w-full overflow-hidden rounded-md bg-muted">
+                      <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
                         <Image
                           src={image.url}
-                          alt={image.alt ?? ""}
+                          alt={image.alt ?? item.headline}
                           fill
                           sizes="176px"
                           className="object-cover"
@@ -129,10 +128,7 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
                       {item.headline}
                     </span>
                     <Mono className="mt-auto text-2xs text-muted-foreground">
-                      {item.firstSeenAt.toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                      })}
+                      {formatShortDay(item.firstSeenAt)}
                     </Mono>
                   </Link>
                 );

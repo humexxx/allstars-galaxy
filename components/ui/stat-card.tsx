@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader } from "@/components/ui/card";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
@@ -54,11 +54,11 @@ export function StatCard({
 }: StatCardProps) {
   return (
     <Card size="sm" className={className}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
+      <CardHeader>
         <Eyebrow as="div">{label}</Eyebrow>
-        {action}
+        {action && <CardAction>{action}</CardAction>}
       </CardHeader>
-      <CardContent className="space-y-1">
+      <CardContent className="flex flex-col gap-1">
         {/* One row, never wrapping. Letting the share drop to its own line
             gave cards different heights and knocked every sublabel out of
             alignment across the grid — and which cards wrapped depended on how

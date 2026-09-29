@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { safe } from "@/lib/actions/safe";
+import { safe, type ActionResult } from "@/lib/actions/safe";
 import {
   logImpersonatedMutation,
   requireEffectiveContext,
@@ -10,18 +10,20 @@ import {
 import { setSportFavorite } from "@/lib/services/sports-service";
 import {
   setSportFavoriteSchema,
-  type SetSportFavoriteInput,
+  type SetSportFavoriteData,
 } from "@/schemas/sports";
 
 const SPORTS_PATH = "/portal/entertainment/sports";
 const DASHBOARD_PATH = "/portal";
 
-export async function setSportFavoriteAction(input: SetSportFavoriteInput) {
+export async function setSportFavoriteAction(
+  input: SetSportFavoriteData
+): Promise<ActionResult> {
   return safe("sports", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = setSportFavoriteSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false as const, error: "Invalid input" };
+      return { success: false, error: "Invalid input" };
     }
     await setSportFavorite(
       ctx.effectiveUserId,
@@ -35,6 +37,6 @@ export async function setSportFavoriteAction(input: SetSportFavoriteInput) {
     });
     revalidatePath(SPORTS_PATH);
     revalidatePath(DASHBOARD_PATH);
-    return { success: true as const };
+    return { success: true };
   });
 }

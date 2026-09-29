@@ -1,9 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { EyeOff, SlidersHorizontal } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,8 +12,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -23,17 +27,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Mono, Text } from "@/components/ui/typography";
 import { updateMethodAction } from "@/app/actions/allocations";
+import { runAction } from "@/lib/actions/run";
+import type { MethodAllocationSummary } from "@/types/margin";
 import type { InvestmentMethod } from "@/types/portfolio";
 
-export type MethodAllocationView = {
-  assetId: string;
-  symbol: string;
-  percent: number;
-};
+type RiskLevel = InvestmentMethod["riskLevel"];
 
 /**
  * Editing a method you own.
@@ -51,42 +54,38 @@ export function MethodEditorDialog({
   onClose,
 }: {
   method: InvestmentMethod;
-  allocations: MethodAllocationView[];
+  allocations: MethodAllocationSummary["allocations"];
   onEditAllocation: () => void;
   onClose: () => void;
 }) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   const [name, setName] = useState(method.name);
   const [description, setDescription] = useState(method.description ?? "");
-  const [riskLevel, setRiskLevel] = useState<string>(method.riskLevel);
+  const [riskLevel, setRiskLevel] = useState<RiskLevel>(method.riskLevel);
   const [monthlyRoi, setMonthlyRoi] = useState(String(method.monthlyRoi));
   const [enabled, setEnabled] = useState(method.enabled);
 
-  const submit = () => {
+  const submit = (): void => {
     startTransition(async () => {
-      const result = await updateMethodAction({
-        methodId: method.id,
-        name,
-        description: description || null,
-        riskLevel: riskLevel as "Low" | "Medium" | "High",
-        monthlyRoi: Number(monthlyRoi),
-        enabled,
-      });
-      if (result?.success) {
-        toast.success("Method saved");
-        router.refresh();
-        onClose();
-      } else {
-        toast.error(result?.error ?? "Could not save the method");
-      }
+      const result = await runAction(
+        updateMethodAction({
+          methodId: method.id,
+          name,
+          description: description || null,
+          riskLevel,
+          monthlyRoi: Number(monthlyRoi),
+          enabled,
+        }),
+        { success: "Method saved", failure: "Failed to save method" }
+      );
+      if (result.ok) onClose();
     });
   };
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Edit method</DialogTitle>
           <DialogDescription>
@@ -94,18 +93,18 @@ export function MethodEditorDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor="method-name">Name</Label>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="method-name">Name</FieldLabel>
             <Input
               id="method-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
-          </div>
+          </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="method-description">Description</Label>
+          <Field>
+            <FieldLabel htmlFor="method-description">Description</FieldLabel>
             <Textarea
               id="method-description"
               rows={3}
@@ -113,11 +112,11 @@ export function MethodEditorDialog({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="How you describe this to a client"
             />
-          </div>
+          </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="method-risk">Risk</Label>
-            <Select value={riskLevel} onValueChange={setRiskLevel}>
+          <Field>
+            <FieldLabel htmlFor="method-risk">Risk</FieldLabel>
+            <Select value={riskLevel} onValueChange={(v) => setRiskLevel(v as RiskLevel)}>
               <SelectTrigger id="method-risk">
                 <SelectValue />
               </SelectTrigger>
@@ -127,14 +126,14 @@ export function MethodEditorDialog({
                 <SelectItem value="High">High</SelectItem>
               </SelectContent>
             </Select>
-            <Text className="text-2xs text-muted-foreground">
+            <FieldDescription>
               Credited to you — a method is attributed to whoever runs it, so
               there is nothing to set here.
-            </Text>
-          </div>
+            </FieldDescription>
+          </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="method-roi">Fixed monthly return (%)</Label>
+          <Field>
+            <FieldLabel htmlFor="method-roi">Fixed monthly return (%)</FieldLabel>
             <Input
               id="method-roi"
               type="number"
@@ -143,30 +142,32 @@ export function MethodEditorDialog({
               value={monthlyRoi}
               onChange={(e) => setMonthlyRoi(e.target.value)}
             />
-            <Text className="text-2xs text-muted-foreground">
+            <FieldDescription>
               The only figure a client sees, and what their balance compounds at.
               Changing it changes what you owe — it is not cosmetic.
-            </Text>
-          </div>
+            </FieldDescription>
+          </Field>
 
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <div className="space-y-0.5">
-              <Label htmlFor="method-enabled">Open to new money</Label>
-              <Text className="text-2xs text-muted-foreground">
+          <Field orientation="horizontal" className="rounded-lg border p-3">
+            <FieldContent>
+              <FieldLabel htmlFor="method-enabled">Open to new money</FieldLabel>
+              <FieldDescription>
                 Disabled methods keep existing positions but leave the transaction
                 form.
-              </Text>
-            </div>
+              </FieldDescription>
+            </FieldContent>
             <Switch id="method-enabled" checked={enabled} onCheckedChange={setEnabled} />
-          </div>
+          </Field>
 
           {/* Internal half. Deliberately fenced off and labelled. */}
-          <div className="space-y-3 rounded-lg border border-dashed bg-muted/30 p-4">
+          <div className="flex flex-col gap-3 rounded-lg border border-dashed bg-muted/30 p-4">
             <div className="flex items-center gap-2">
-              <EyeOff className="size-4 text-muted-foreground" />
-              <Text className="text-xs font-medium">Internal — clients never see this</Text>
+              <EyeOff aria-hidden className="size-4 text-muted-foreground" />
+              <Text variant="small" weight="medium" className="text-foreground">
+                Internal — clients never see this
+              </Text>
             </div>
-            <Text className="text-2xs text-muted-foreground">
+            <Text variant="small">
               Where the pooled money goes. It drives your margin; the client only ever
               sees the fixed return above.
             </Text>
@@ -177,18 +178,19 @@ export function MethodEditorDialog({
                   : allocations.map((a) => `${a.percent}% ${a.symbol}`).join(" · ")}
               </Mono>
               <Button size="sm" variant="outline" onClick={onEditAllocation}>
-                <SlidersHorizontal className="size-4" />
+                <SlidersHorizontal />
                 {allocations.length === 0 ? "Set allocation" : "Change"}
               </Button>
             </div>
           </div>
-        </div>
+        </FieldGroup>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isPending}>
             Cancel
           </Button>
           <Button onClick={submit} disabled={isPending || !name.trim()}>
+            {isPending && <Spinner />}
             {isPending ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>

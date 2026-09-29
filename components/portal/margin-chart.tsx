@@ -2,43 +2,33 @@
 
 import { useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, Legend, ReferenceLine, XAxis, YAxis } from "recharts";
-import { SlidersHorizontal } from "lucide-react";
+import { ChartLine, SlidersHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { Mono, Text } from "@/components/ui/typography";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { maskValue } from "@/components/ui/stat-card";
-import { formatCurrency } from "@/lib/utils/format";
+import { formatCurrency, formatCurrencyCompact } from "@/lib/utils/format";
+import { formatMonthLong } from "@/lib/utils/date";
 import { buildMarginHistory } from "@/lib/finance/margin-history";
 import { cn } from "@/lib/utils";
+import type { MarginHistoryInput } from "@/types/margin";
 
-export type MarginHistoryInputView = {
-  contributions: {
-    month: string;
-    assetId: string;
-    quantity: number;
-    amount: number;
-    investorId: string;
-    methodId: string;
-  }[];
-  liabilities: {
-    month: string;
-    currentValue: number;
-    monthlyRoi: number;
-    isOwn: boolean;
-    investorId: string;
-    methodId: string;
-  }[];
-  prices: [string, number][];
-  today: string;
-  investors: { id: string; name: string; isOwn: boolean }[];
-  methods: { id: string; name: string }[];
-};
+/** Range options, months back from today; "all" keeps the whole history. */
+const RANGES = [
+  ["3", "3M"],
+  ["6", "6M"],
+  ["12", "1Y"],
+  ["all", "All"],
+] as const;
+type RangeValue = (typeof RANGES)[number][0];
 
 const CONFIG = {
   deployed: { label: "Allocations", color: "var(--chart-1)" },
@@ -60,7 +50,7 @@ export function MarginChart({
   input,
   hideValues = false,
 }: {
-  input: MarginHistoryInputView;
+  input: MarginHistoryInput;
   hideValues?: boolean;
 }) {
   const [investorId, setInvestorId] = useState<string | null>(null);
@@ -68,7 +58,8 @@ export function MarginChart({
   // Months back from today, or null for everything. Trimming the range is a
   // different question from filtering who is in it, so it gets its own control
   // rather than hiding inside the popover.
-  const [months, setMonths] = useState<number | null>(null);
+  const [range, setRange] = useState<RangeValue>("all");
+  const months = range === "all" ? null : Number(range);
 
   const data = useMemo(() => {
     const keep = <T extends { investorId: string; methodId: string }>(rows: T[]) =>
@@ -92,75 +83,79 @@ export function MarginChart({
   }, [input, investorId, methodId, months]);
 
   const filtered = investorId !== null || methodId !== null;
+  const clearFilters = (): void => {
+    setInvestorId(null);
+    setMethodId(null);
+  };
 
   if (data.length < 2) {
-    return (
-      <Text variant="small" className="text-muted-foreground">
-        {filtered
-          ? "Nothing to plot for this filter."
-          : "Not enough history yet — the chart needs at least two months of contributions."}
-      </Text>
+    return filtered ? (
+      <EmptyState
+        icon={ChartLine}
+        title="Nothing to plot for this filter"
+        action={
+          <Button variant="outline" size="sm" onClick={clearFilters}>
+            Clear filters
+          </Button>
+        }
+      />
+    ) : (
+      <EmptyState
+        icon={ChartLine}
+        title="Not enough history yet"
+        description="The chart needs at least two months of contributions."
+      />
     );
   }
 
   const latest = data[data.length - 1];
-  const money = (v: number) =>
+  const money = (v: number): string =>
     hideValues ? maskValue(formatCurrency(v)) : formatCurrency(v);
 
   return (
-    <section className="space-y-3">
+    <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1">
-          <Text variant="small" className="text-muted-foreground">
-            Margin {filtered && <span className="text-2xs">(filtered)</span>}
-          </Text>
+        <div className="flex flex-col gap-1">
+          <Eyebrow as="div">
+            Margin {filtered && <span className="normal-case tracking-normal">(filtered)</span>}
+          </Eyebrow>
           <Mono
             className={cn(
-              "text-2xl font-semibold tabular-nums sm:text-3xl",
-              latest.margin >= 0
-                ? "text-success"
-                : "text-destructive"
+              "text-xl font-semibold tabular-nums sm:text-2xl",
+              latest.margin >= 0 ? "text-success" : "text-destructive"
             )}
           >
             {money(latest.margin)}
           </Mono>
-          <Text className="text-2xs text-muted-foreground">
+          <Text variant="small">
             {money(latest.deployed)} deployed against {money(latest.liability)} owed
           </Text>
         </div>
 
         <div className="flex items-center gap-2">
-          <div role="group" aria-label="Date range" className="flex items-center gap-1">
-            {(
-              [
-                [3, "3M"],
-                [6, "6M"],
-                [12, "1Y"],
-                [null, "All"],
-              ] as const
-            ).map(([value, label]) => (
-              <Button
-                key={label}
-                variant="ghost"
-                size="sm"
-                data-active={months === value}
-                className="h-8 rounded-full px-2.5 font-mono text-xs tabular-nums text-muted-foreground data-[active=true]:bg-foreground/5 data-[active=true]:text-foreground"
-                onClick={() => setMonths(value)}
-              >
+          <ToggleGroup
+            type="single"
+            size="sm"
+            aria-label="Date range"
+            value={range}
+            onValueChange={(v) => v && setRange(v as RangeValue)}
+          >
+            {RANGES.map(([value, label]) => (
+              <ToggleGroupItem key={value} value={value} className="font-mono tabular-nums">
                 {label}
-              </Button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" data-active={filtered}>
-              <SlidersHorizontal className="size-4" />
-              Filters
-              {filtered && <span className="ml-1 text-2xs">on</span>}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-64 space-y-4">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm">
+                <SlidersHorizontal />
+                Filters
+                {filtered && <span className="text-2xs">on</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="flex w-64 flex-col gap-4">
             <FilterGroup
               label="Investor"
               options={input.investors.map((i) => ({
@@ -177,20 +172,12 @@ export function MarginChart({
               onChange={setMethodId}
             />
             {filtered && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full"
-                onClick={() => {
-                  setInvestorId(null);
-                  setMethodId(null);
-                }}
-              >
+              <Button variant="ghost" size="sm" className="w-full" onClick={clearFilters}>
                 Clear filters
               </Button>
             )}
-          </PopoverContent>
-        </Popover>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -203,7 +190,6 @@ export function MarginChart({
             axisLine={false}
             tickMargin={8}
             minTickGap={24}
-            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
             tickFormatter={(m: string) => {
               const [y, mo] = m.split("-");
               return new Date(Number(y), Number(mo) - 1).toLocaleDateString("en-US", {
@@ -215,14 +201,7 @@ export function MarginChart({
             tickLine={false}
             axisLine={false}
             width={hideValues ? 8 : 56}
-            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-            tickFormatter={(v: number) =>
-              hideValues
-                ? ""
-                : Math.abs(v) >= 1000
-                  ? `$${Math.round(v / 1000)}k`
-                  : `$${Math.round(v)}`
-            }
+            tickFormatter={(v: number) => (hideValues ? "" : formatCurrencyCompact(v))}
           />
           <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.4} />
           <ChartTooltip
@@ -236,13 +215,7 @@ export function MarginChart({
                     <Mono className="tabular-nums">{money(value as number)}</Mono>
                   </span>
                 )}
-                labelFormatter={(m: string) => {
-                  const [y, mo] = m.split("-");
-                  return new Date(Number(y), Number(mo) - 1).toLocaleDateString("en-US", {
-                    month: "long",
-                    year: "numeric",
-                  });
-                }}
+                labelFormatter={(m: string) => formatMonthLong(`${m}-01`)}
               />
             }
           />
@@ -275,7 +248,7 @@ export function MarginChart({
         </AreaChart>
       </ChartContainer>
 
-      <Text className="text-2xs text-muted-foreground">
+      <Text variant="small" className="text-2xs">
         Where Allocations sits below Owed, the promised return is being covered out
         of pocket.
       </Text>
@@ -283,6 +256,10 @@ export function MarginChart({
   );
 }
 
+const ALL = "__all__";
+
+/** One-of-many chip row with an "All" chip; picking the active chip again
+ *  falls back to All, which is how the filter is cleared from the row. */
 function FilterGroup({
   label,
   options,
@@ -295,31 +272,25 @@ function FilterGroup({
   onChange: (v: string | null) => void;
 }) {
   return (
-    <div className="space-y-2">
-      <Text className="text-2xs font-medium text-muted-foreground">{label}</Text>
-      <div className="flex flex-wrap gap-1.5">
-        <Button
-          variant="outline"
-          size="sm"
-          data-active={value === null}
-          className="h-7 rounded-full px-2.5 text-xs data-[active=true]:border-foreground/30 data-[active=true]:bg-foreground/5"
-          onClick={() => onChange(null)}
-        >
-          All
-        </Button>
+    <div className="flex flex-col gap-2">
+      <Eyebrow as="div" size="sm">
+        {label}
+      </Eyebrow>
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        aria-label={label}
+        value={value ?? ALL}
+        onValueChange={(v) => onChange(!v || v === ALL ? null : v)}
+      >
+        <ToggleGroupItem value={ALL}>All</ToggleGroupItem>
         {options.map((o) => (
-          <Button
-            key={o.id}
-            variant="outline"
-            size="sm"
-            data-active={value === o.id}
-            className="h-7 rounded-full px-2.5 text-xs data-[active=true]:border-foreground/30 data-[active=true]:bg-foreground/5"
-            onClick={() => onChange(value === o.id ? null : o.id)}
-          >
+          <ToggleGroupItem key={o.id} value={o.id}>
             {o.label}
-          </Button>
+          </ToggleGroupItem>
         ))}
-      </div>
+      </ToggleGroup>
     </div>
   );
 }

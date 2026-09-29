@@ -1,20 +1,22 @@
 import Link from "next/link"
+import { FileQuestionMark } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Heading, Text } from "@/components/ui/typography"
+import { EmptyState } from "@/components/ui/empty-state"
 
 export default function PlanNotFound() {
   return (
-    <section className="flex min-h-[60svh] flex-col items-center justify-center gap-6 text-center">
-      <div className="space-y-2">
-        <Heading level="h3" as="h1">Plan not found</Heading>
-        <Text variant="muted">
-          This finance plan doesn&apos;t exist or you don&apos;t have access to it.
-        </Text>
-      </div>
-      <Button asChild>
-        <Link href="/portal/plans">Back to plans</Link>
-      </Button>
-    </section>
+    <EmptyState
+      variant="card"
+      titleAs="h1"
+      icon={FileQuestionMark}
+      title="Plan not found"
+      description="This finance plan doesn’t exist or you don’t have access to it."
+      action={
+        <Button asChild>
+          <Link href="/portal/plans">Back to plans</Link>
+        </Button>
+      }
+    />
   )
 }

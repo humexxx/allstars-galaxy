@@ -1,7 +1,7 @@
 # Finance
 
 > **Status:** Active
-> **Last reviewed:** 2026-09-11
+> **Last reviewed:** 2026-09-29
 
 ## Overview
 Personal financial planning: users build *plans* (scenarios) with incomes,
@@ -15,12 +15,12 @@ calibrated. Health scoring and scenario comparison are part of this module.
 - `/portal/plans/compare` — side-by-side scenario comparison
 
 ## Server actions — `/app/actions/`
-- `finance-plans.ts` — CRUD + lifecycle for finance plans (create, update, delete, clone, set-as-main, `setPlanColorAction`) and projection calculations
+- `finance-plans.ts` — CRUD + lifecycle for finance plans (create, update, delete, clone, set-as-main, `setPlanColorAction`) and projection calculations. Every action returns `ActionResult<X>`; every mutation calls `revalidatePlans()` (the `/portal/plans` layout **and** `/portal`, whose dashboard card shows the main plan)
 - `finance-confirmations.ts` — save monthly confirmation snapshots and per-debt balance confirmations
 - `dev-tools.ts` — `runDailySnapshotsAction` (admin-only): runs the daily finance + portfolio snapshot job on demand, surfaced via the dev drawer
 
 ## Services — `/lib/services/`
-- `finance-plan-service.ts` — also exports `getFinanceMood` (request-cached; the
+- `finance-plan-service.ts` — `listUserPlansWithLines` (every plan with its lines in five queries, for the list and compare pages); `updateIncome` / `updateExpense` / `updateDebt` / `updatePlan` throw a not-found error when no row on the caller's plan matched. Also exports `getFinanceMood` (request-cached; the
   main plan's outcome as a mascot pose), the pure `deriveFinanceMood`, and
   `setPlanColor` (colour-only update for the rail swatch)
 - `finance-confirmation-service.ts` — confirmations + `autoConfirmSkippedPeriods` (cron baseline roll-forward)
@@ -31,13 +31,15 @@ calibrated. Health scoring and scenario comparison are part of this module.
 - `finance.ts` — includes `planColorSchema` (colour-only update; restricted to a
   `var(--chart-N)` token or a 6-digit hex, since the value is written into a
   `style` attribute and an SVG `stroke`)
-- `finance-snapshot.ts`
+- `finance.ts` also exports `recurrenceTypeSchema`, `planNameSchema`, `cloneFinancePlanSchema` / `CloneFinancePlanData`. Types are `…Data`; `…Input` (`z.input`) only for the schemas with defaults (create/update plan, income, expense, debt)
+- `finance-snapshot.ts` — `financeSnapshotSourceSchema`
 - `finance-confirmations.ts` — `confirmationSchema` / `ConfirmationData` (monthly actuals payload; shared by the action and `finance-confirmation-service`)
 
 ## Types — `/types/`
-- `finance.ts` — includes `PlanSummary` (per-plan outcome shown on the rail) and
-  `FinanceMood` (mascot pose)
-- `snapshot.ts`
+- `finance.ts` — includes `PlanSummary` (per-plan outcome shown on the rail),
+  `FinanceMood` (mascot pose), `InvestmentMethodOption`, and the constant
+  lists the unions derive from (`RECURRENCE_TYPES`, `DEBT_STRATEGIES`,
+  `DEBT_PAYMENT_TYPES`, `OVERRIDE_SIDES`, `OVERRIDE_ACTIONS`)
 
 ## Components
 `components/finance/` — plan editors, projection charts, confirmation dialogs,

@@ -14,10 +14,18 @@ vi.mock("@/db", () => ({
   },
 }));
 
+vi.mock("./ownership", () => ({
+  ensureOwnedRow: vi.fn().mockResolvedValue({ id: "plan-1", userId: "user-1" }),
+}));
+
+import { db } from "@/db";
 import {
   compareDebtStrategies,
   deriveFinanceMood,
   projectPlan,
+  updateDebt,
+  updateExpense,
+  updateIncome,
 } from "./finance-plan-service";
 import type {
   FinancePlan,
@@ -798,5 +806,49 @@ describe("deriveFinanceMood", () => {
         projection({ months: [{ netWorth: 900 }, { netWorth: 400 }] })
       )
     ).toBe("steady");
+  });
+});
+
+describe("line updates on a line from another plan", () => {
+  // The plan is owned, but the line id matches nothing on it: the update's
+  // WHERE (id AND planId) returns no row.
+  function updateReturning(rows: unknown[]): void {
+    const chain = {
+      set: () => chain,
+      where: () => chain,
+      returning: () => Promise.resolve(rows),
+    };
+    vi.mocked(db.update).mockReturnValueOnce(chain as never);
+  }
+
+  const line = { id: "foreign-line", name: "X", monthlyAmount: "1", kind: "recurring" };
+
+  it("throws a not-found error for an income instead of returning undefined", async () => {
+    updateReturning([]);
+    await expect(
+      updateIncome("user-1", "plan-1", { ...line, recurrenceType: "monthly_day" } as never)
+    ).rejects.toThrow("Income not found on this plan");
+  });
+
+  it("throws a not-found error for an expense", async () => {
+    updateReturning([]);
+    await expect(
+      updateExpense("user-1", "plan-1", { ...line, recurrenceType: "monthly_day" } as never)
+    ).rejects.toThrow("Expense not found on this plan");
+  });
+
+  it("throws a not-found error for a debt", async () => {
+    updateReturning([]);
+    await expect(
+      updateDebt("user-1", "plan-1", { id: "foreign-debt", recurrenceType: "monthly_day" } as never)
+    ).rejects.toThrow("Debt not found on this plan");
+  });
+
+  it("returns the row when it exists", async () => {
+    const row = { id: "line-1" };
+    updateReturning([row]);
+    await expect(
+      updateIncome("user-1", "plan-1", { ...line, recurrenceType: "monthly_day" } as never)
+    ).resolves.toBe(row);
   });
 });

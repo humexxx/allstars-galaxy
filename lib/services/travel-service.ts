@@ -47,15 +47,15 @@ import type {
   TripWithRelations,
 } from "@/types/travel";
 import type {
-  CreateTripInput,
-  CreateTripShareInput,
-  TripContributionInput,
-  UpdateTripContributionInput,
-  TripItemInput,
-  TripPhotoInput,
-  UpdateTripInput,
-  UpdateTripItemInput,
-  MoveTripItemInput,
+  CreateTripData,
+  CreateTripShareData,
+  TripContributionData,
+  UpdateTripContributionData,
+  TripItemData,
+  TripPhotoData,
+  UpdateTripData,
+  UpdateTripItemData,
+  MoveTripItemData,
 } from "@/schemas/travel";
 
 import { itemConcerns, splitTrip } from "@/lib/travel/split";
@@ -246,7 +246,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
 
 export async function createTrip(
   userId: string,
-  data: CreateTripInput
+  data: CreateTripData
 ): Promise<Trip> {
   const [trip] = await db
     .insert(trips)
@@ -267,7 +267,7 @@ export async function createTrip(
 
 export async function updateTrip(
   userId: string,
-  data: UpdateTripInput
+  data: UpdateTripData
 ): Promise<Trip> {
   await ensureTripOwnership(data.id, userId);
   const [trip] = await db
@@ -283,14 +283,17 @@ export async function updateTrip(
       color: data.color,
       updatedAt: new Date(),
     })
-    .where(eq(trips.id, data.id))
+    // Owner in the WHERE as well as the pre-check: the check and the write are
+    // two statements, and the write must not trust what was true between them.
+    .where(and(eq(trips.id, data.id), eq(trips.userId, userId)))
     .returning();
+  if (!trip) throw new Error("Trip not found");
   return trip;
 }
 
 export async function deleteTrip(userId: string, tripId: string): Promise<void> {
   await ensureTripOwnership(tripId, userId);
-  await db.delete(trips).where(eq(trips.id, tripId));
+  await db.delete(trips).where(and(eq(trips.id, tripId), eq(trips.userId, userId)));
 }
 
 // ---------- items ----------
@@ -330,7 +333,7 @@ async function setItemMembers(
 export async function addTripItem(
   userId: string,
   tripId: string,
-  data: TripItemInput
+  data: TripItemData
 ): Promise<TripItem> {
   await ensureTripOwnership(tripId, userId);
   // Three tables in one save. Without a transaction a rejected traveller left
@@ -372,7 +375,7 @@ export async function addTripItem(
 export async function updateTripItem(
   userId: string,
   tripId: string,
-  data: UpdateTripItemInput
+  data: UpdateTripItemData
 ): Promise<TripItem> {
   await ensureTripOwnership(tripId, userId);
   return db.transaction(async (tx) => {
@@ -413,7 +416,7 @@ export async function updateTripItem(
 export async function moveTripItem(
   userId: string,
   tripId: string,
-  data: MoveTripItemInput
+  data: MoveTripItemData
 ): Promise<TripItem> {
   await ensureTripOwnership(tripId, userId);
   const [row] = await db
@@ -441,7 +444,7 @@ export async function deleteTripItem(
 export async function addTripPhoto(
   userId: string,
   tripId: string,
-  data: TripPhotoInput
+  data: TripPhotoData
 ): Promise<TripPhoto> {
   await ensureTripOwnership(tripId, userId);
   const [row] = await db
@@ -477,7 +480,7 @@ export async function deleteTripPhoto(
 export async function createTripShare(
   userId: string,
   tripId: string,
-  data: CreateTripShareInput
+  data: CreateTripShareData
 ): Promise<TripShare> {
   await ensureTripOwnership(tripId, userId);
   if (data.memberId) await ensureMemberBelongsToTrip(data.memberId, tripId);
@@ -535,7 +538,7 @@ export async function deleteTripShare(
 export async function addTripContribution(
   userId: string,
   tripId: string,
-  data: TripContributionInput
+  data: TripContributionData
 ): Promise<TripContribution> {
   await ensureTripOwnership(tripId, userId);
   await ensureMemberBelongsToTrip(data.memberId, tripId);
@@ -556,7 +559,7 @@ export async function addTripContribution(
 export async function updateTripContribution(
   userId: string,
   tripId: string,
-  data: UpdateTripContributionInput
+  data: UpdateTripContributionData
 ): Promise<TripContribution> {
   await ensureTripOwnership(tripId, userId);
   const [row] = await db
@@ -702,14 +705,15 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
   // all. Narrowed on who is ON the item, not who pays for it — the festival
   // is all four travellers' even though two of them cover it. The split above
   // still runs over every item, so the totals are unaffected.
-  const scope = scopeRows ? buildScope(scopeRows, enriched, share.memberId!) : null;
+  const scopedTo = share.memberId;
+  const scope = scopeRows && scopedTo ? buildScope(scopeRows, enriched, scopedTo) : null;
   // The member lists did their work above; they do not cross the boundary.
   // A public link is unauthenticated, and `payerIds`/`attendeeIds` are raw
   // trip_members UUIDs — enough to count and correlate the other travellers a
   // scoped link exists to hide.
   const visible = (
-    share.memberId
-      ? enriched.filter((i) => itemConcerns(i.attendeeIds, share.memberId!))
+    scopedTo
+      ? enriched.filter((i) => itemConcerns(i.attendeeIds, scopedTo))
       : enriched
   ).map((item) => {
     const { payerIds, attendeeIds, ...rest } = item;
@@ -935,21 +939,6 @@ export async function setTripItemStops(
       }))
     );
   });
-}
-
-/** Everyone on a trip, in the order they were added. */
-export async function listTripMembers(userId: string, tripId: string) {
-  return db
-    .select({
-      id: tripMembers.id,
-      name: tripMembers.name,
-      email: tripMembers.email,
-      sharePercent: tripMembers.sharePercent,
-    })
-    .from(tripMembers)
-    .innerJoin(trips, eq(tripMembers.tripId, trips.id))
-    .where(and(eq(tripMembers.tripId, tripId), eq(trips.userId, userId)))
-    .orderBy(asc(tripMembers.sortOrder), asc(tripMembers.createdAt));
 }
 
 /**

@@ -3,15 +3,19 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { db } from "@/db";
-import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
 
 import { requireAdminCached } from "@/lib/services/auth-server";
-import { IMPERSONATION_COOKIE } from "@/lib/services/impersonation";
+import {
+  IMPERSONATION_COOKIE,
+  getImpersonationTarget,
+} from "@/lib/services/impersonation";
 import { impersonationSchema } from "@/schemas/impersonation";
 
-export async function startImpersonationAction(formData: FormData) {
+/**
+ * Throws and redirects rather than returning an `ActionResult`: this is a
+ * `<form action>` target, so a failure lands on the admin error boundary.
+ */
+export async function startImpersonationAction(formData: FormData): Promise<never> {
   const admin = await requireAdminCached();
 
   const parsed = impersonationSchema.safeParse({
@@ -25,10 +29,7 @@ export async function startImpersonationAction(formData: FormData) {
     throw new Error("You cannot impersonate yourself");
   }
 
-  const [target] = await db
-    .select({ id: users.id, role: users.role })
-    .from(users)
-    .where(eq(users.id, parsed.data.userId));
+  const target = await getImpersonationTarget(parsed.data.userId);
 
   if (!target) {
     throw new Error("User not found");
@@ -52,7 +53,7 @@ export async function startImpersonationAction(formData: FormData) {
   redirect("/portal");
 }
 
-export async function stopImpersonationAction() {
+export async function stopImpersonationAction(): Promise<never> {
   await requireAdminCached();
 
   const cookieStore = await cookies();

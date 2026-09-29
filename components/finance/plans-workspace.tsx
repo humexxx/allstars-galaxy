@@ -2,15 +2,22 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
-import { Copy, Highlighter, MoreHorizontal, Star, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { useMemo, useRef, useState, useTransition } from "react";
+import { Copy, Highlighter, LineChart, MoreHorizontal, Star, Trash2 } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Select,
   SelectContent,
@@ -18,8 +25,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Mono, Text } from "@/components/ui/typography";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Eyebrow, Mono } from "@/components/ui/typography";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,6 +50,8 @@ import {
   setMainPlanAction,
 } from "@/app/actions/finance-plans";
 import { PlanColorPicker } from "./plan-color-picker";
+import { runAction } from "@/lib/actions/run";
+import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
 import type { FinancePlan, PlanSummary, Projection } from "@/types/finance";
 
@@ -52,9 +61,11 @@ const ComparePlansChart = dynamic(
   () => import("./projection-chart").then((mod) => mod.ComparePlansChart),
   {
     ssr: false,
-    loading: () => <Skeleton className="h-64 w-full sm:h-80 lg:h-[460px]" />,
+    loading: () => <Skeleton className={`w-full ${CHART_HEIGHT}`} />,
   }
 );
+
+const CHART_HEIGHT = "h-64 sm:h-80 lg:h-115";
 
 type Metric = "netWorth" | "totalDebt";
 
@@ -98,8 +109,11 @@ export function PlansWorkspace({
   summaries: Record<string, PlanSummary>;
   projections: Projection[];
 }) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  // Deleting a row unmounts the menu that opened the dialog, so focus would
+  // fall back to <body>; it lands on the list heading instead.
+  const listHeadingRef = useRef<HTMLHeadingElement>(null);
+  const deletedRef = useRef(false);
   const [pendingDelete, setPendingDelete] = useState<FinancePlan | null>(null);
   const [selected, setSelected] = useState<Set<string>>(
     new Set(plans.map((p) => p.id))
@@ -151,41 +165,37 @@ export function PlansWorkspace({
     });
   };
 
+  // The actions revalidate the plans segment, so the new props arrive with
+  // their response — no router.refresh() needed.
   const handleClone = (plan: FinancePlan) => {
     startTransition(async () => {
-      const result = await clonePlanAction(plan.id, `${plan.name} (copy)`);
-      if (result.success) {
-        toast.success("Plan cloned");
-        router.refresh();
-      } else {
-        toast.error(result.error);
-      }
+      await runAction(clonePlanAction(plan.id, `${plan.name} (copy)`), {
+        success: "Plan cloned",
+        failure: "Failed to clone plan",
+      });
     });
   };
 
   const handleSetMain = (plan: FinancePlan) => {
     if (plan.isMain) return;
     startTransition(async () => {
-      const result = await setMainPlanAction(plan.id);
-      if (result.success) {
-        toast.success(`${plan.name} is now your main plan`);
-        router.refresh();
-      } else {
-        toast.error(result.error);
-      }
+      await runAction(setMainPlanAction(plan.id), {
+        success: `${plan.name} is now your main plan`,
+        failure: "Failed to set the main plan",
+      });
     });
   };
 
   const handleDelete = () => {
     if (!pendingDelete) return;
     startTransition(async () => {
-      const result = await deletePlanAction(pendingDelete.id);
-      if (result.success) {
-        toast.success("Plan deleted");
+      const result = await runAction(deletePlanAction(pendingDelete.id), {
+        success: "Plan deleted",
+        failure: "Failed to delete plan",
+      });
+      if (result.ok) {
+        deletedRef.current = true;
         setPendingDelete(null);
-        router.refresh();
-      } else {
-        toast.error(result.error);
       }
     });
   };
@@ -201,44 +211,47 @@ export function PlansWorkspace({
           stretches to match the chart card's height. */}
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="min-w-0 lg:col-span-2">
-          <CardHeader className="pb-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <CardTitle>Projection comparison</CardTitle>
-                {focusedPlan && (
-                  <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-                    <span
-                      className="size-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: focusedPlan.color }}
-                      aria-hidden="true"
-                    />
-                    <span className="truncate">{focusedPlan.name}</span>
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Select value={range} onValueChange={setRange}>
-                  <SelectTrigger size="sm" className="w-38">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RANGES.map((r) => (
-                      <SelectItem key={r.value} value={r.value}>
-                        {r.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Tabs value={metric} onValueChange={(v) => setMetric(v as Metric)}>
-                  <TabsList>
-                    {(Object.keys(METRIC_LABEL) as Metric[]).map((m) => (
-                      <TabsTrigger key={m} value={m}>
-                        {METRIC_LABEL[m]}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              </div>
+          <CardHeader className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <CardTitle as="h2">Projection comparison</CardTitle>
+              {focusedPlan && (
+                <Badge variant="outline" className="min-w-0 text-muted-foreground">
+                  <span
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: focusedPlan.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">{focusedPlan.name}</span>
+                </Badge>
+              )}
+            </div>
+            {/* Both controls at h-8, so the row has one height. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={range} onValueChange={setRange}>
+                <SelectTrigger size="sm" className="w-38" aria-label="Horizon">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RANGES.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <ToggleGroup
+                type="single"
+                size="sm"
+                value={metric}
+                onValueChange={(v) => v && setMetric(v as Metric)}
+                aria-label="Metric"
+              >
+                {(Object.keys(METRIC_LABEL) as Metric[]).map((m) => (
+                  <ToggleGroupItem key={m} value={m}>
+                    {METRIC_LABEL[m]}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
             </div>
           </CardHeader>
           {/* The Card default of px-6 costs 48 of a 375px screen before a
@@ -246,14 +259,17 @@ export function PlansWorkspace({
               keeps the standard gutter. */}
           <CardContent className="px-3 sm:px-6">
             {filtered.length === 0 ? (
-              <div className="flex h-64 items-center justify-center sm:h-80 lg:h-[460px]">
-                <Text variant="muted">Select at least one plan to chart.</Text>
-              </div>
+              <EmptyState
+                icon={LineChart}
+                title="No plans in the chart"
+                description="Select at least one plan to chart."
+                className={cn("flex flex-col justify-center", CHART_HEIGHT)}
+              />
             ) : (
               <ComparePlansChart
                 projections={filtered}
                 metric={metric}
-                heightClass="h-64 sm:h-80 lg:h-[460px]"
+                heightClass={CHART_HEIGHT}
                 focusedPlanId={focusedId}
                 months={months}
                 pastMonths={PAST_MONTHS}
@@ -263,16 +279,18 @@ export function PlansWorkspace({
         </Card>
 
         <Card className="min-w-0">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-2xs font-medium uppercase tracking-wide text-muted-foreground lg:text-xs">
-              Your plans
-            </CardTitle>
-            <Text variant="small" className="text-muted-foreground">
+          <CardHeader>
+            <Eyebrow asChild>
+              <h2 ref={listHeadingRef} tabIndex={-1} className="outline-none">
+                Your plans
+              </h2>
+            </Eyebrow>
+            <CardDescription>
               Point at a plan to highlight it. Its dot sets the line colour.
-            </Text>
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
+            <ul className="flex flex-col gap-2">
               {plans.map((plan) => {
                 const s = summaries[plan.id];
                 const inChart = selected.has(plan.id);
@@ -283,20 +301,17 @@ export function PlansWorkspace({
                     onMouseLeave={() =>
                       setHoveredId((cur) => (cur === plan.id ? null : cur))
                     }
-                    className={`flex items-center gap-2.5 rounded-lg border p-2.5 transition-colors hover:border-foreground/20 ${
-                      focusedId === plan.id ? "border-foreground/30 bg-muted/50" : ""
-                    }`}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-lg border p-2.5 transition-colors hover:bg-muted/40",
+                      focusedId === plan.id && "border-foreground/30 bg-muted/50"
+                    )}
                   >
                     <Checkbox
                       checked={inChart}
                       onCheckedChange={() => toggle(plan.id)}
                       aria-label={`Toggle ${plan.name} in chart`}
                     />
-                    <PlanColorPicker
-                      plan={plan}
-                      pinned={pinnedId === plan.id}
-                      onChanged={() => router.refresh()}
-                    />
+                    <PlanColorPicker plan={plan} pinned={pinnedId === plan.id} />
                     <Link
                       href={`/portal/plans/${plan.id}`}
                       className="min-w-0 flex-1"
@@ -309,10 +324,13 @@ export function PlansWorkspace({
                           {plan.name}
                         </span>
                         {plan.isMain && (
-                          <Star
-                            className="h-3.5 w-3.5 shrink-0 fill-yellow-400 text-yellow-500"
-                            aria-label="Main plan"
-                          />
+                          <>
+                            <Star
+                              className="size-3.5 shrink-0 fill-warning text-warning"
+                              aria-hidden="true"
+                            />
+                            <span className="sr-only">(main plan)</span>
+                          </>
                         )}
                       </div>
                       {s && (
@@ -320,9 +338,7 @@ export function PlansWorkspace({
                           <span className="inline-flex items-center gap-1">
                             NW
                             <Mono
-                              className={`tabular-nums ${
-                                s.endingNetWorth >= 0 ? POSITIVE : NEGATIVE
-                              }`}
+                              className={s.endingNetWorth >= 0 ? POSITIVE : NEGATIVE}
                             >
                               {formatCurrency(s.endingNetWorth)}
                             </Mono>
@@ -346,11 +362,10 @@ export function PlansWorkspace({
                       <DropdownMenuTrigger asChild>
                         <Button
                           variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 shrink-0"
+                          size="icon-sm"
                           aria-label={`Actions for ${plan.name}`}
                         >
-                          <MoreHorizontal className="h-4 w-4" />
+                          <MoreHorizontal />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
@@ -364,7 +379,7 @@ export function PlansWorkspace({
                             )
                           }
                         >
-                          <Highlighter className="mr-2 h-4 w-4" />
+                          <Highlighter />
                           {pinnedId === plan.id
                             ? "Stop highlighting"
                             : "Highlight in chart"}
@@ -373,20 +388,19 @@ export function PlansWorkspace({
                           onSelect={() => handleSetMain(plan)}
                           disabled={plan.isMain}
                         >
-                          <Star className="mr-2 h-4 w-4" />
+                          <Star />
                           {plan.isMain ? "Main plan" : "Set as main"}
                         </DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => handleClone(plan)}>
-                          <Copy className="mr-2 h-4 w-4" /> Clone
+                          <Copy />
+                          Clone
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onSelect={(e) => {
-                            e.preventDefault();
-                            setPendingDelete(plan);
-                          }}
-                          className="text-destructive"
+                          variant="destructive"
+                          onSelect={() => setPendingDelete(plan)}
                         >
-                          <Trash2 className="mr-2 h-4 w-4" /> Delete
+                          <Trash2 />
+                          Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -404,7 +418,14 @@ export function PlansWorkspace({
           if (!open) setPendingDelete(null);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(e) => {
+            if (!deletedRef.current) return;
+            deletedRef.current = false;
+            e.preventDefault();
+            listHeadingRef.current?.focus();
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this plan?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -414,11 +435,17 @@ export function PlansWorkspace({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            {/* preventDefault keeps the dialog open until the delete lands, so
+                the pending state is visible and a failure has somewhere to be. */}
             <AlertDialogAction
-              onClick={handleDelete}
+              variant="destructive"
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
               disabled={isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
+              {isPending && <Spinner />}
               {isPending ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>

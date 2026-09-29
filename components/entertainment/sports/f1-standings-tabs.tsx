@@ -3,15 +3,15 @@
 import Image from "next/image";
 import { useState } from "react";
 
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import type { F1StandingRow } from "@/lib/services/espn-f1-standings-service";
+import type { F1StandingRow } from "@/types/sports";
 
 /** Black or white, whichever reads on that livery. Same rule as `TeamBadge`. */
 function readableInk(hex: string | undefined): string {
   if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return "#fff";
-  const channel = (v: number) => {
+  const channel = (v: number): number => {
     const c = v / 255;
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   };
@@ -34,21 +34,23 @@ export function F1StandingsTabs({
   drivers: F1StandingRow[];
   constructors: F1StandingRow[];
 }) {
-  const [tab, setTab] = useState("drivers");
+  const [tab, setTab] = useState<"drivers" | "constructors">("drivers");
   const rows = tab === "drivers" ? drivers : constructors;
 
   return (
     <div className="flex flex-col gap-2">
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="h-7">
-          <TabsTrigger value="drivers" className="text-2xs">
-            Drivers
-          </TabsTrigger>
-          <TabsTrigger value="constructors" className="text-2xs">
-            Constructors
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {/* A segmented control, not Tabs: one list swaps its rows, there are no
+          panels for tab triggers to point at. */}
+      <ToggleGroup
+        type="single"
+        size="sm"
+        value={tab}
+        onValueChange={(v) => v && setTab(v as typeof tab)}
+        aria-label="Championship"
+      >
+        <ToggleGroupItem value="drivers">Drivers</ToggleGroupItem>
+        <ToggleGroupItem value="constructors">Constructors</ToggleGroupItem>
+      </ToggleGroup>
 
       <ol className="flex flex-col gap-1">
         {rows.map((row) => (

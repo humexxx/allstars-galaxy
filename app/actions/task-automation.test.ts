@@ -31,6 +31,8 @@ const USER_ID = "00000000-0000-4000-8000-000000000001";
 const ROAD_PATH_ID = "11111111-1111-4111-8111-111111111111";
 
 beforeEach(() => {
+  // safe() logs the failures these tests provoke on purpose.
+  vi.spyOn(console, "error").mockImplementation(() => {});
   vi.mocked(requireEffectiveContext).mockResolvedValue({
     realUser: { id: USER_ID } as never,
     realRole: "user",
@@ -42,6 +44,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("createAutomatedTaskAction", () => {
@@ -56,7 +59,7 @@ describe("createAutomatedTaskAction", () => {
     expect(result).toEqual({
       success: true,
       data: task,
-      message: "Task created successfully",
+      message: "Task created",
     });
     expect(requireEffectiveContext).toHaveBeenCalledTimes(1);
     expect(createAutomatedTasksForRoadPath).toHaveBeenCalledWith(
@@ -100,25 +103,27 @@ describe("createAutomatedTaskAction", () => {
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("propagates an unauthenticated rejection without calling the service", async () => {
+  it("returns a failure for an unauthenticated caller without calling the service", async () => {
     vi.mocked(requireEffectiveContext).mockRejectedValueOnce(new Error("Unauthorized"));
 
-    await expect(
-      createAutomatedTaskAction(ROAD_PATH_ID),
-    ).rejects.toThrow("Unauthorized");
+    await expect(createAutomatedTaskAction(ROAD_PATH_ID)).resolves.toEqual({
+      success: false,
+      error: "Action failed",
+    });
 
     expect(createAutomatedTasksForRoadPath).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("propagates service-layer failures and does not revalidate", async () => {
+  it("returns a failure for service-layer errors and does not revalidate", async () => {
     vi.mocked(createAutomatedTasksForRoadPath).mockRejectedValueOnce(
       new Error("pg boom"),
     );
 
-    await expect(
-      createAutomatedTaskAction(ROAD_PATH_ID),
-    ).rejects.toThrow("pg boom");
+    await expect(createAutomatedTaskAction(ROAD_PATH_ID)).resolves.toEqual({
+      success: false,
+      error: "Action failed",
+    });
 
     expect(revalidatePath).not.toHaveBeenCalled();
   });
@@ -138,7 +143,7 @@ describe("createAutomatedTasksForAllAction", () => {
     expect(result).toEqual({
       success: true,
       data: tasks,
-      message: "3 task(s) created",
+      message: "3 tasks created",
     });
     expect(requireEffectiveContext).toHaveBeenCalledTimes(1);
     expect(createAutomatedTasksForAllRoadPaths).toHaveBeenCalledWith(USER_ID);
@@ -146,7 +151,7 @@ describe("createAutomatedTasksForAllAction", () => {
     expect(revalidatePath).toHaveBeenCalledTimes(1);
   });
 
-  it("returns 0 task(s) created when no tasks were generated", async () => {
+  it("returns '0 tasks created' when no tasks were generated", async () => {
     vi.mocked(createAutomatedTasksForAllRoadPaths).mockResolvedValueOnce(
       [] as unknown as Awaited<ReturnType<typeof createAutomatedTasksForAllRoadPaths>>,
     );
@@ -156,17 +161,18 @@ describe("createAutomatedTasksForAllAction", () => {
     expect(result).toEqual({
       success: true,
       data: [],
-      message: "0 task(s) created",
+      message: "0 tasks created",
     });
     expect(revalidatePath).toHaveBeenCalledWith("/portal/productivity", "layout");
   });
 
-  it("propagates the unauthenticated rejection", async () => {
+  it("returns a failure for an unauthenticated caller", async () => {
     vi.mocked(requireEffectiveContext).mockRejectedValueOnce(new Error("Unauthorized"));
 
-    await expect(createAutomatedTasksForAllAction()).rejects.toThrow(
-      "Unauthorized",
-    );
+    await expect(createAutomatedTasksForAllAction()).resolves.toEqual({
+      success: false,
+      error: "Action failed",
+    });
 
     expect(createAutomatedTasksForAllRoadPaths).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();

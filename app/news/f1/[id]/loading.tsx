@@ -18,7 +18,7 @@ export default function F1ArticleLoading() {
         <Skeleton className="h-4 w-11/12" />
         <Skeleton className="h-4 w-2/3" />
       </div>
-      <Skeleton className="h-9 w-44" />
+      <Skeleton className="h-10 w-44" />
     </div>
   );
 }

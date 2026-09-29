@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-export const impersonationSchema = z.object({
-  userId: z.string().uuid(),
-});
+import { idSchema } from "./common";
 
-export type ImpersonationData = z.infer<typeof impersonationSchema>;
+export const impersonationSchema = z.object({
+  userId: idSchema,
+});

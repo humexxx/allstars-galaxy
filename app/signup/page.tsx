@@ -21,7 +21,7 @@ export default function SignupPage() {
       <section className="flex flex-col gap-4 p-6 md:p-12">
         <header className="flex justify-center gap-2 md:justify-start">
           <Link href="/" className="flex items-center gap-2 font-medium">
-            <Logo className="size-6" />
+            <Logo className="size-6" decorative />
             Allstars Galaxy
           </Link>
         </header>

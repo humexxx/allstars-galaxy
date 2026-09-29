@@ -1,9 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { format } from "date-fns";
-import { Check, Copy, Link2, Loader2, QrCode, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { Check, Copy, Link2, QrCode, Trash2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 
@@ -15,6 +13,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Mono, Text } from "@/components/ui/typography";
+import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Field, FieldLabel } from "@/components/ui/field";
 import {
@@ -31,6 +30,7 @@ import {
   deleteTripShareAction,
   revokeTripShareAction,
 } from "@/app/actions/travel";
+import { formatShortDay } from "@/lib/utils/date";
 import type { TripShare, TripWithRelations } from "@/types/travel";
 
 type TripSharePanelProps = {
@@ -52,10 +52,24 @@ export function TripSharePanel({
   baseUrl,
   scopeToMemberId = null,
 }: TripSharePanelProps) {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [creating, startCreate] = useTransition();
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Where focus lands when the row holding it is revoked or deleted: the row
+   * unmounts, and without somewhere to go focus falls to the top of the page.
+   */
+  const labelInputRef = useRef<HTMLInputElement>(null);
+  const refocus = (): void => labelInputRef.current?.focus();
+
+  // The "copied" tick outlives a closed dialog otherwise.
+  useEffect(
+    () => () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    },
+    []
+  );
   // Who the link is for is asked here, not inherited from a click behind the
   // dialog. It starts on whoever is in focus, so the common case is still one
   // button — but changing your mind no longer means closing this first.
@@ -74,19 +88,18 @@ export function TripSharePanel({
         inviteeEmail: trimmed || null,
         memberId: scopeId === EVERYONE ? null : scopeId,
       });
-      if (res.success && res.data) {
-        const url = shareUrl(baseUrl, res.data.token);
-        try {
-          await navigator.clipboard.writeText(url);
-          toast.success("Share link copied to clipboard");
-        } catch {
-          toast.success("Share link created");
-        }
-        setEmail("");
-        router.refresh();
-      } else if (!res.success) {
+      if (!res.success) {
         toast.error(res.error);
+        return;
       }
+      const url = shareUrl(baseUrl, res.data.token);
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Share link copied to clipboard");
+      } catch {
+        toast.success("Share link created");
+      }
+      setEmail("");
     });
   };
 
@@ -94,9 +107,13 @@ export function TripSharePanel({
     try {
       await navigator.clipboard.writeText(shareUrl(baseUrl, token));
       setCopiedToken(token);
-      setTimeout(() => setCopiedToken((current) => (current === token ? null : current)), 1500);
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(
+        () => setCopiedToken((current) => (current === token ? null : current)),
+        1500
+      );
     } catch {
-      toast.error("Couldn't copy to clipboard");
+      toast.error("Failed to copy the link");
     }
   };
 
@@ -112,7 +129,7 @@ export function TripSharePanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <form onSubmit={handleCreate} className="flex flex-col gap-2 ">
+      <form onSubmit={handleCreate} className="flex flex-col gap-2">
         <Field className="gap-1.5">
           <FieldLabel htmlFor="share-scope" className="text-xs">
             Who is this link for?
@@ -140,6 +157,7 @@ export function TripSharePanel({
           </FieldLabel>
           <InputGroup>
             <InputGroupInput
+              ref={labelInputRef}
               id="share-email"
               type="email"
               value={email}
@@ -149,7 +167,7 @@ export function TripSharePanel({
             />
             <InputGroupAddon align="inline-end">
               <InputGroupButton type="submit" variant="default" disabled={creating}>
-                {creating ? <Loader2 className="animate-spin" /> : <Link2 />}
+                {creating ? <Spinner /> : <Link2 />}
                 {scopeName ? `For ${scopeName.split(" ")[0]}` : "Create"}
               </InputGroupButton>
             </InputGroupAddon>
@@ -176,9 +194,13 @@ export function TripSharePanel({
       </form>
 
       {active.length > 0 && (
-        <div className="flex flex-col gap-2 ">
+        <div className="flex flex-col gap-2">
           <Text variant="small" weight="medium">Active links</Text>
-          <ul className="flex flex-col gap-2 ">
+          {/* Announced, because the copy button only swaps its own icon. */}
+          <span role="status" className="sr-only">
+            {copiedToken ? "Link copied" : ""}
+          </span>
+          <ul className="flex flex-col gap-2">
             {active.map((share) => (
               <ShareRow
                 key={share.id}
@@ -190,6 +212,7 @@ export function TripSharePanel({
                   trip.members.find((m) => m.id === share.memberId)?.name ?? null
                 }
                 onCopy={() => handleCopy(share.token)}
+                onRemoved={refocus}
               />
             ))}
           </ul>
@@ -201,20 +224,25 @@ export function TripSharePanel({
           <summary className="cursor-pointer">
             Revoked or expired ({revoked.length})
           </summary>
-          <ul className="flex flex-col gap-1 mt-2">
+          <ul className="mt-2 flex flex-col gap-1">
             {revoked.map((share) => (
               <li key={share.id} className="flex items-center justify-between rounded border bg-muted/30 px-2 py-1">
                 <Text as="span" variant="small">
                   {share.inviteeEmail ?? "Anonymous"} ·{" "}
                   {share.revokedAt ? (
-                    <Mono>{format(new Date(share.revokedAt), "MMM d")}</Mono>
+                    <Mono>{formatShortDay(share.revokedAt)}</Mono>
                   ) : share.expiresAt ? (
-                    <Mono>expired {format(new Date(share.expiresAt), "MMM d")}</Mono>
+                    <Mono>expired {formatShortDay(share.expiresAt)}</Mono>
                   ) : (
                     ""
                   )}
                 </Text>
-                <DeleteRevokedButton tripId={trip.id} shareId={share.id} />
+                <DeleteRevokedButton
+                  tripId={trip.id}
+                  shareId={share.id}
+                  label={share.inviteeEmail ?? "anonymous link"}
+                  onRemoved={refocus}
+                />
               </li>
             ))}
           </ul>
@@ -231,6 +259,7 @@ function ShareRow({
   copied,
   memberName,
   onCopy,
+  onRemoved,
 }: {
   tripId: string;
   share: TripShare;
@@ -239,8 +268,8 @@ function ShareRow({
   /** Traveller this link is scoped to, or null for the whole trip. */
   memberName: string | null;
   onCopy: () => void;
+  onRemoved: () => void;
 }) {
-  const router = useRouter();
   const [busy, startTransition] = useTransition();
   const [showQr, setShowQr] = useState(false);
   const url = shareUrl(baseUrl, share.token);
@@ -250,7 +279,7 @@ function ShareRow({
       const res = await revokeTripShareAction(tripId, share.id);
       if (res.success) {
         toast.success("Link revoked");
-        router.refresh();
+        onRemoved();
       } else {
         toast.error(res.error);
       }
@@ -272,21 +301,26 @@ function ShareRow({
         </span>
         <Button
           type="button"
-          size="icon"
+          size="icon-sm"
           variant="ghost"
-          className="size-9 text-destructive hover:text-destructive sm:size-7"
+          className="text-destructive hover:text-destructive"
           onClick={handleRevoke}
           disabled={busy}
-          aria-label="Revoke link"
+          aria-label={`Revoke link for ${share.inviteeEmail ?? memberName ?? "anyone"}`}
         >
-          <Trash2 className="size-3.5" />
+          {busy ? <Spinner /> : <Trash2 />}
         </Button>
       </div>
       {/* One control instead of a box that looks like a field sitting next to
           a button that is not part of it. The link stays selectable, and the
           thing you actually want — copy — is inside it. */}
       <InputGroup className="h-8">
-        <InputGroupInput readOnly value={url} className="font-mono text-2xs" />
+        <InputGroupInput
+          readOnly
+          value={url}
+          aria-label="Share link"
+          className="font-mono text-2xs"
+        />
         <InputGroupAddon align="inline-end">
           {/* A phone cannot be handed a URL. The code is the way this link
               crosses to a device that is not this one. */}
@@ -336,29 +370,35 @@ function ShareRow({
   );
 }
 
-function DeleteRevokedButton({ tripId, shareId }: { tripId: string; shareId: string }) {
-  const router = useRouter();
+function DeleteRevokedButton({
+  tripId,
+  shareId,
+  label,
+  onRemoved,
+}: {
+  tripId: string;
+  shareId: string;
+  /** Who the link was for, so each row's button says which one it removes. */
+  label: string;
+  onRemoved: () => void;
+}) {
   const [busy, startTransition] = useTransition();
   return (
     <Button
       type="button"
-      size="icon"
+      size="icon-sm"
       variant="ghost"
-      className="size-8 sm:size-6"
       onClick={() =>
         startTransition(async () => {
           const res = await deleteTripShareAction(tripId, shareId);
-          if (res.success) {
-            router.refresh();
-          } else {
-            toast.error(res.error);
-          }
+          if (res.success) onRemoved();
+          else toast.error(res.error);
         })
       }
       disabled={busy}
-      aria-label="Delete record"
+      aria-label={`Delete the record of ${label}`}
     >
-      <Trash2 className="size-3.5" />
+      {busy ? <Spinner /> : <Trash2 />}
     </Button>
   );
 }

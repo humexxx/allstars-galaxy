@@ -86,10 +86,9 @@ import {
   approveTransactionById,
   calculateTotal,
   createTransaction,
-  getPortfolioTransactions,
   rejectTransactionById,
 } from "./transaction-service";
-import type { Transaction } from "@/types";
+import type { Transaction } from "@/types/transaction";
 import type { Portfolio } from "@/types/portfolio";
 
 const USER_ID = "00000000-0000-0000-0000-000000000001";
@@ -271,27 +270,6 @@ describe("createTransaction", () => {
 
     expect(getUserPortfolioMock).not.toHaveBeenCalled();
     expect(insertMock).not.toHaveBeenCalled();
-  });
-});
-
-// ---------- getPortfolioTransactions ----------
-
-describe("getPortfolioTransactions", () => {
-  it("selects all transactions belonging to the given portfolio", async () => {
-    const rows = [makeTransaction(), makeTransaction({ id: "tx-2" })];
-    selectWhere.mockResolvedValueOnce(rows);
-
-    const result = await getPortfolioTransactions(PORTFOLIO_ID);
-
-    expect(result).toEqual(rows);
-    expect(selectMock).toHaveBeenCalledOnce();
-    expect(selectFrom).toHaveBeenCalledOnce();
-    expect(selectWhere).toHaveBeenCalledOnce();
-  });
-
-  it("returns an empty array when the portfolio has no transactions", async () => {
-    selectWhere.mockResolvedValueOnce([]);
-    await expect(getPortfolioTransactions(PORTFOLIO_ID)).resolves.toEqual([]);
   });
 });
 

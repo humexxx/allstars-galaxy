@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { toast } from "sonner";
 import { useTransition } from "react";
 import { UserCog, X } from "lucide-react";
 import { User } from "@supabase/supabase-js";
@@ -13,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NavUser } from "./nav-user";
 import { stopImpersonationAction } from "@/app/actions/impersonation";
-import { type Role } from "@/components/portal/nav-config";
+import type { UserRole } from "@/types/user";
 import { cn } from "@/lib/utils";
 
 type ImpersonatedUser = {
@@ -27,7 +28,7 @@ type AppHeaderProps = {
   impersonatedUser: ImpersonatedUser | null;
   /** Effective role from the server context (DB-backed). Drives whether the
    *  Admin link surfaces in the horizontal nav. */
-  role?: Role;
+  role?: UserRole;
   isImpersonating?: boolean;
 };
 
@@ -62,7 +63,12 @@ export function AppHeader({
 
   const handleStop = () => {
     startStop(async () => {
-      await stopImpersonationAction();
+      // Success redirects server-side; anything that comes back here failed.
+      try {
+        await stopImpersonationAction();
+      } catch {
+        toast.error("Failed to stop impersonating");
+      }
     });
   };
 
@@ -74,7 +80,7 @@ export function AppHeader({
         // a solid fallback where backdrop-filter isn't supported. The only time
         // we frame it is while impersonating, to keep that state obvious.
         isImpersonating
-          ? "border-b border-warning/40 bg-warning/15"
+          ? "border-b border-warning/30 bg-warning/10"
           : "bg-background/95 supports-[backdrop-filter]:bg-background/60 backdrop-blur"
       )}
     >
@@ -94,7 +100,7 @@ export function AppHeader({
         // the mark; from sm up the box is exactly what it was.
         className="-m-2 flex shrink-0 items-center gap-2 rounded-md p-2 transition-opacity hover:opacity-80 sm:m-0 sm:p-0"
       >
-        <Logo className="size-5" />
+        <Logo className="size-5" decorative />
         <span className="hidden text-sm font-semibold tracking-tight sm:inline">
           Allstars Galaxy
         </span>
@@ -105,11 +111,8 @@ export function AppHeader({
       <div className="flex flex-1 items-center justify-center gap-2">
         {isImpersonating && (
           <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className="border-warning/60 bg-background/60 text-warning"
-            >
-              <UserCog className="mr-1 h-3 w-3" />
+            <Badge variant="warning">
+              <UserCog />
               Impersonating
             </Badge>
             <span className="text-sm font-medium text-foreground">
@@ -131,9 +134,9 @@ export function AppHeader({
             size="sm"
             onClick={handleStop}
             disabled={isStopping}
-            className="border-warning/60 bg-background/60 text-warning hover:bg-warning/20"
+            className="border-warning/30 text-warning hover:bg-warning/10 hover:text-warning"
           >
-            <X className="mr-1 h-3.5 w-3.5" />
+            <X />
             {isStopping ? "Stopping…" : "Stop impersonating"}
           </Button>
         )}

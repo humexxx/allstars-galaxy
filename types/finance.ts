@@ -4,8 +4,6 @@ import type {
   financePlanExpenses,
   financePlanDebts,
   financePlanLineOverrides,
-  financePlanSnapshots,
-  financePlanSnapshotDebts,
   financePlanConfirmations,
   financePlanDebtConfirmations,
 } from "@/db/schema";
@@ -16,10 +14,24 @@ export type FinancePlanExpense = typeof financePlanExpenses.$inferSelect;
 export type FinancePlanDebt = typeof financePlanDebts.$inferSelect;
 export type FinancePlanLineOverride =
   typeof financePlanLineOverrides.$inferSelect;
-export type OverrideSide = "income" | "expense" | "debt";
-export type OverrideAction = "skip" | "reschedule" | "amount";
-export type FinancePlanSnapshot = typeof financePlanSnapshots.$inferSelect;
-export type FinancePlanSnapshotDebt = typeof financePlanSnapshotDebts.$inferSelect;
+
+/**
+ * The literal unions below mirror pgEnums in `db/schema.ts` and back the Zod
+ * enums in `schemas/finance.ts`. Each is spelled out once here; the calendar,
+ * the line and debt dialogs and the projection used to redeclare them.
+ */
+export const OVERRIDE_SIDES = ["income", "expense", "debt"] as const;
+export type OverrideSide = (typeof OVERRIDE_SIDES)[number];
+export const OVERRIDE_ACTIONS = ["skip", "reschedule", "amount"] as const;
+export type OverrideAction = (typeof OVERRIDE_ACTIONS)[number];
+
+/** `monthly_day` is the historical behaviour and the default. */
+export const RECURRENCE_TYPES = [
+  "monthly_day",
+  "monthly_weekday",
+  "every_n_months",
+] as const;
+export type RecurrenceType = (typeof RECURRENCE_TYPES)[number];
 export type FinancePlanConfirmation = typeof financePlanConfirmations.$inferSelect;
 export type FinancePlanDebtConfirmation = typeof financePlanDebtConfirmations.$inferSelect;
 
@@ -27,8 +39,10 @@ export type ConfirmationWithDebts = FinancePlanConfirmation & {
   debtConfirmations: FinancePlanDebtConfirmation[];
 };
 
-export type DebtStrategy = "avalanche" | "snowball" | "none";
-export type DebtPaymentType = "fixed" | "percent_of_balance";
+export const DEBT_STRATEGIES = ["avalanche", "snowball", "none"] as const;
+export type DebtStrategy = (typeof DEBT_STRATEGIES)[number];
+export const DEBT_PAYMENT_TYPES = ["fixed", "percent_of_balance"] as const;
+export type DebtPaymentType = (typeof DEBT_PAYMENT_TYPES)[number];
 
 export type FinancePlanWithLines = FinancePlan & {
   incomes: FinancePlanIncome[];
@@ -86,6 +100,14 @@ export type StrategyComparison = {
   recommended: DebtStrategy;
   interestSaved: number; // savings of recommended vs worst
   monthsSaved: number; // months saved by recommended vs worst
+};
+
+/** An investment method as the plan form's auto-invest picker lists it. */
+export type InvestmentMethodOption = {
+  id: string;
+  name: string;
+  monthlyRoi: string;
+  enabled: boolean;
 };
 
 /** Card/rail-level outcome of a projection, precomputed server-side. */

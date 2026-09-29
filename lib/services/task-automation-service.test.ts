@@ -13,6 +13,7 @@ const roadPathsFindMany = vi.fn();
 const boardColumnsFindFirst = vi.fn();
 const insertMock = vi.fn();
 const updateMock = vi.fn();
+const selectDistinctMock = vi.fn();
 
 vi.mock("@/db", () => ({
   db: {
@@ -27,6 +28,8 @@ vi.mock("@/db", () => ({
     },
     insert: (...args: unknown[]) => insertMock(...args),
     update: (...args: unknown[]) => updateMock(...args),
+    // db.selectDistinct(...).from(...).where(...) -> rows
+    selectDistinct: (...args: unknown[]) => selectDistinctMock(...args),
     transaction: (cb: (tx: unknown) => Promise<unknown>) =>
       cb({
         insert: (...args: unknown[]) => insertMock(...args),
@@ -43,8 +46,8 @@ vi.mock("./board-service", () => ({
 
 import {
   createAutomatedTasksForAllRoadPaths,
+  createAutomatedTasksForAllUsers,
   createAutomatedTasksForRoadPath,
-  getNextTaskDueDate,
   getTaskTitle,
   shouldCreateTask,
 } from "./task-automation-service";
@@ -251,62 +254,6 @@ describe("getTaskTitle", () => {
     expect(getTaskTitle("Read", "weekly")).toBe("Weekly: Read");
     expect(getTaskTitle("Read", "biweekly")).toBe("Biweekly: Read");
     expect(getTaskTitle("Read", "monthly")).toBe("Monthly: Read");
-  });
-});
-
-// ---------- getNextTaskDueDate ----------
-
-describe("getNextTaskDueDate", () => {
-  it("adds 1 day for daily", async () => {
-    const next = await getNextTaskDueDate(
-      "daily",
-      new Date("2026-06-15T00:00:00Z")
-    );
-    expect(next.toISOString()).toBe("2026-06-16T00:00:00.000Z");
-  });
-
-  it("adds 2 days for every_other_day", async () => {
-    const next = await getNextTaskDueDate(
-      "every_other_day",
-      new Date("2026-06-15T00:00:00Z")
-    );
-    expect(next.toISOString()).toBe("2026-06-17T00:00:00.000Z");
-  });
-
-  it("adds 7 days for weekly", async () => {
-    const next = await getNextTaskDueDate(
-      "weekly",
-      new Date("2026-06-15T00:00:00Z")
-    );
-    expect(next.toISOString()).toBe("2026-06-22T00:00:00.000Z");
-  });
-
-  it("adds 14 days for biweekly", async () => {
-    const next = await getNextTaskDueDate(
-      "biweekly",
-      new Date("2026-06-15T00:00:00Z")
-    );
-    expect(next.toISOString()).toBe("2026-06-29T00:00:00.000Z");
-  });
-
-  it("adds a calendar month for monthly", async () => {
-    // setMonth handles month rollover for us — 2026-06-15 → 2026-07-15.
-    const next = await getNextTaskDueDate(
-      "monthly",
-      new Date("2026-06-15T00:00:00Z")
-    );
-    expect(next.toISOString()).toBe("2026-07-15T00:00:00.000Z");
-  });
-
-  it("defaults to NOW when no lastDate is provided", async () => {
-    const next = await getNextTaskDueDate("daily");
-    expect(next.toISOString()).toBe("2026-06-16T12:00:00.000Z");
-  });
-
-  it("does not mutate the input date", async () => {
-    const base = new Date("2026-06-15T00:00:00Z");
-    await getNextTaskDueDate("monthly", base);
-    expect(base.toISOString()).toBe("2026-06-15T00:00:00.000Z");
   });
 });
 
@@ -553,5 +500,38 @@ describe("createAutomatedTasksForAllRoadPaths", () => {
       "DB error"
     );
     expect(updateMock).not.toHaveBeenCalled();
+  });
+});
+
+// ---------- createAutomatedTasksForAllUsers ----------
+
+describe("createAutomatedTasksForAllUsers", () => {
+  function ownersQuery(rows: Array<{ userId: string }>): void {
+    selectDistinctMock.mockReturnValueOnce({
+      from: () => ({ where: () => Promise.resolve(rows) }),
+    });
+  }
+
+  it("visits only users with a live auto-creating path, and keeps going past a failure", async () => {
+    const OTHER = "00000000-0000-0000-0000-000000000002";
+    ownersQuery([{ userId: USER_ID }, { userId: OTHER }]);
+    // First user: the path lookup blows up. Second: nothing due.
+    roadPathsFindMany.mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce([]);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const run = await createAutomatedTasksForAllUsers();
+
+    expect(run).toEqual({ created: [], failedUserIds: [USER_ID] });
+    expect(roadPathsFindMany).toHaveBeenCalledTimes(2);
+    errorSpy.mockRestore();
+  });
+
+  it("does nothing when nobody has an auto-creating path", async () => {
+    ownersQuery([]);
+
+    const run = await createAutomatedTasksForAllUsers();
+
+    expect(run).toEqual({ created: [], failedUserIds: [] });
+    expect(roadPathsFindMany).not.toHaveBeenCalled();
   });
 });

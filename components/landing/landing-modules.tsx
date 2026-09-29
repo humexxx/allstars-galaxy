@@ -10,6 +10,7 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Eyebrow, Heading, Text } from "@/components/ui/typography";
 
 type ModuleItem = {
@@ -44,7 +45,7 @@ const MODULES: ModuleItem[] = [
     title: "Investment Methods",
     description:
       "A catalogue of strategies grouped by author, each with its risk badge and expected returns. Reuse them inside your plans.",
-    href: "/portal/investment-methods",
+    href: "/portal/portfolio",
     status: "live",
   },
   {
@@ -121,9 +122,7 @@ export function LandingModules() {
                       {title}
                     </Heading>
                     {isSoon && (
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Soon
-                      </span>
+                      <Badge variant="secondary">Soon</Badge>
                     )}
                   </div>
                   {!isSoon && (

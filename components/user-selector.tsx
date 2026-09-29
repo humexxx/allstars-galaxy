@@ -25,6 +25,8 @@ type User = {
 };
 
 type UserSelectorProps = {
+  /** Set on the trigger so a `<label htmlFor>` names it. */
+  id?: string;
   users: User[];
   value: string;
   onValueChange: (value: string) => void;
@@ -34,10 +36,11 @@ type UserSelectorProps = {
 };
 
 export function UserSelector({
+  id,
   users,
   value,
   onValueChange,
-  placeholder = "Select user...",
+  placeholder = "Select user…",
   disabled = false,
   className,
 }: UserSelectorProps) {
@@ -49,26 +52,28 @@ export function UserSelector({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
+          type="button"
           variant="outline"
           role="combobox"
           aria-expanded={open}
           className={cn("w-full justify-between", className)}
           disabled={disabled}
         >
-          <div className="flex items-center gap-2">
-            <UserIcon className="h-4 w-4 text-muted-foreground" />
-            <span className={cn(!value && "text-muted-foreground")}>
+          <div className="flex min-w-0 items-center gap-2">
+            <UserIcon className="text-muted-foreground" />
+            <span className={cn("truncate", !value && "text-muted-foreground")}>
               {selectedUser
                 ? selectedUser.fullName || selectedUser.email
                 : placeholder}
             </span>
           </div>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <ChevronsUpDown className="shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-(--radix-popover-trigger-width) min-w-80 p-0">
         <Command>
-          <CommandInput placeholder="Search users..." />
+          <CommandInput placeholder="Search users…" />
           <CommandList>
             <CommandEmpty>No user found.</CommandEmpty>
             <CommandGroup>
@@ -88,7 +93,6 @@ export function UserSelector({
                 >
                   <Check
                     className={cn(
-                      "mr-2 h-4 w-4",
                       value === user.id ? "opacity-100" : "opacity-0"
                     )}
                   />

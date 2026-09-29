@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ListOrdered, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -9,7 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,6 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Text } from "@/components/ui/typography";
 import { MoneyInput } from "@/components/ui/money-input";
 
@@ -49,6 +50,8 @@ import { ItineraryEditor } from "@/components/travel/itinerary-editor";
 import { PhotoPicker } from "@/components/travel/photo-picker";
 import { CATEGORIES, categoryMeta, CategoryIcon } from "@/components/travel/category";
 
+type FormErrors = Partial<Record<"title" | "price" | "priceMax" | "endsOn", string>>;
+
 const PRICE_UNIT_LABELS: Record<TripPriceUnit, string> = {
   total: "a total",
   per_night: "per night",
@@ -71,11 +74,16 @@ function names(ids: string[], travellers: Traveller[]): string {
   return `${picked.slice(0, -1).join(", ")} and ${picked[picked.length - 1]}`;
 }
 
+/** The "Everyone" chip's value inside the group; never saved. */
+const EVERYONE = "__everyone__";
+
 /**
  * A row of traveller chips where an empty selection means everybody.
  *
  * "Everyone" is the absence of a choice, not a choice of its own — an empty
- * list is already what both of these fields mean by "all of them".
+ * list is already what both of these fields mean by "all of them". It sits in
+ * the same multi-select group so the whole row is one control with one name,
+ * and every chip announces whether it is pressed.
  */
 function TravellerChips({
   label,
@@ -92,45 +100,35 @@ function TravellerChips({
   allLabel: string;
   hint: string;
 }) {
-  const chip =
-    "h-8 rounded-full px-3 text-xs data-[active=true]:border-foreground/30 data-[active=true]:bg-foreground/5";
   return (
-    <Field className="gap-1">
-      <FieldLabel className="text-xs">{label}</FieldLabel>
-      <div className="flex flex-wrap gap-1.5">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          data-active={selected.length === 0}
-          className={chip}
-          onClick={() => onChange([])}
-        >
+    <FieldSet className="gap-1">
+      <FieldLegend variant="label" className="mb-1 text-xs">
+        {label}
+      </FieldLegend>
+      <ToggleGroup
+        type="multiple"
+        variant="outline"
+        size="sm"
+        value={selected.length === 0 ? [EVERYONE] : selected}
+        onValueChange={(next) => {
+          // Pressing "Everyone" clears the named travellers; pressing a name
+          // releases "Everyone". Pressing "Everyone" again leaves it on — it
+          // is what an empty selection means.
+          const choseEveryone = next.includes(EVERYONE) && selected.length > 0;
+          onChange(choseEveryone ? [] : next.filter((id) => id !== EVERYONE));
+        }}
+      >
+        <ToggleGroupItem value={EVERYONE} className="rounded-full px-3">
           {allLabel}
-        </Button>
-        {travellers.map((t) => {
-          const on = selected.includes(t.id);
-          return (
-            <Button
-              key={t.id}
-              type="button"
-              size="sm"
-              variant="outline"
-              data-active={on}
-              className={chip}
-              onClick={() =>
-                onChange(on ? selected.filter((id) => id !== t.id) : [...selected, t.id])
-              }
-            >
-              {t.name}
-            </Button>
-          );
-        })}
-      </div>
-      <Text variant="small" className="text-muted-foreground">
-        {hint}
-      </Text>
-    </Field>
+        </ToggleGroupItem>
+        {travellers.map((t) => (
+          <ToggleGroupItem key={t.id} value={t.id} className="rounded-full px-3">
+            {t.name}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+      <Text variant="small">{hint}</Text>
+    </FieldSet>
   );
 }
 
@@ -151,7 +149,6 @@ export function ItemForm({
   travellers?: { id: string; name: string }[];
   onDone: () => void;
 }) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [deleting, startDelete] = useTransition();
   const [title, setTitle] = useState(item?.title ?? "");
@@ -187,6 +184,7 @@ export function ItemForm({
   const [payerIds, setPayerIds] = useState<string[]>(item?.payerIds ?? []);
   /** Empty means everybody is on it, which is also the common case. */
   const [attendeeIds, setAttendeeIds] = useState<string[]>(item?.attendeeIds ?? []);
+  const [errors, setErrors] = useState<FormErrors>({});
 
   /** Saved photos and picked-but-unsaved ones, shown as one strip. */
   const shownPhotos = [
@@ -195,14 +193,14 @@ export function ItemForm({
   ];
 
   const removePhoto = (photo: { id: string | null; url: string }) => {
-    if (!photo.id) {
+    const photoId = photo.id;
+    if (!photoId) {
       setPending((p) => p.filter((x) => x.url !== photo.url));
       return;
     }
     startTransition(async () => {
-      const res = await deleteTripPhotoAction(tripId, photo.id!);
-      if (res.success) router.refresh();
-      else toast.error(res.error);
+      const res = await deleteTripPhotoAction(tripId, photoId);
+      if (!res.success) toast.error(res.error);
     });
   };
 
@@ -212,7 +210,6 @@ export function ItemForm({
       const res = await deleteTripItemAction(tripId, item.id);
       if (res.success) {
         toast.success("Item removed");
-        router.refresh();
         onDone();
       } else {
         toast.error(res.error);
@@ -225,29 +222,26 @@ export function ItemForm({
     const effectiveTitle = fields.title
       ? title.trim()
       : deriveTitle(category, { fromCode, toCode, roundTrip }, categoryMeta(category).label);
-    if (!effectiveTitle) {
-      toast.error("Item needs a title");
-      return;
-    }
+    // Reported beside the field that is wrong, not in a toast that vanishes
+    // and names no field.
     const money = /^\d+(\.\d{1,2})?$/;
+    const found: FormErrors = {};
+    if (!effectiveTitle) found.title = "Item needs a title";
     if (price && !money.test(price)) {
-      toast.error("Price must be a non-negative number with up to 2 decimals");
-      return;
+      found.price = "A non-negative number with up to 2 decimals";
     }
     if (priceMax && !money.test(priceMax)) {
-      toast.error("Max price must be a non-negative number with up to 2 decimals");
-      return;
+      found.priceMax = "A non-negative number with up to 2 decimals";
+    } else if (price && priceMax && parseFloat(priceMax) < parseFloat(price)) {
+      // A range that runs backwards is a typo, and silently storing it would
+      // make the trip total nonsense.
+      found.priceMax = "Cannot be below the price";
     }
-    // A range that runs backwards is a typo, and silently storing it would
-    // make the trip total nonsense.
-    if (price && priceMax && parseFloat(priceMax) < parseFloat(price)) {
-      toast.error("Max price cannot be below the price");
-      return;
+    if (showEnd && endsOn && scheduledOn && endsOn < scheduledOn) {
+      found.endsOn = "Cannot be before the start day";
     }
-    if (endsOn && scheduledOn && endsOn < scheduledOn) {
-      toast.error("End day cannot be before the start day");
-      return;
-    }
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
 
     startTransition(async () => {
       const payload = {
@@ -272,24 +266,32 @@ export function ItemForm({
       const res = item
         ? await updateTripItemAction(tripId, { id: item.id, ...payload })
         : await addTripItemAction(tripId, payload);
-      if (res.success && !item && res.data && pending.length > 0) {
+      if (!res.success) {
+        toast.error(res.error);
+        return;
+      }
+      let failedPhotos = 0;
+      if (!item && pending.length > 0) {
         // Sequential on purpose: sortOrder is the order they were picked in,
         // and firing them together would race for it.
         for (let i = 0; i < pending.length; i++) {
-          await addTripPhotoAction(tripId, {
+          const photo = await addTripPhotoAction(tripId, {
             ...pending[i],
             itemId: res.data.id,
             sortOrder: i,
           });
+          if (!photo.success) failedPhotos++;
         }
       }
-      if (res.success) {
-        toast.success(item ? "Item updated" : "Item added");
-        router.refresh();
-        onDone();
-      } else {
-        toast.error(res.error);
+      toast.success(item ? "Item updated" : "Item added");
+      // The item saved either way; say which photos did not rather than
+      // reporting a clean success over missing pictures.
+      if (failedPhotos > 0) {
+        toast.error(
+          `${failedPhotos} ${failedPhotos === 1 ? "photo" : "photos"} could not be attached`
+        );
       }
+      onDone();
     });
   };
 
@@ -344,7 +346,7 @@ export function ItemForm({
       </Field>
 
       {fields.title ? (
-        <Field className="gap-1">
+        <Field className="gap-1" data-invalid={!!errors.title}>
           <FieldLabel htmlFor={`title-${item?.id ?? "new"}`} className="text-xs">
             Title
           </FieldLabel>
@@ -355,10 +357,12 @@ export function ItemForm({
             placeholder={fields.titlePlaceholder}
             required
             autoFocus
+            aria-invalid={!!errors.title}
           />
+          <FieldError>{errors.title}</FieldError>
         </Field>
       ) : (
-        <Text variant="small" className="text-muted-foreground">
+        <Text variant="small">
           Saved as{" "}
           <span className="font-medium text-foreground">
             {deriveTitle(
@@ -383,7 +387,7 @@ export function ItemForm({
           />
         </Field>
         {showEnd && (
-          <Field className="gap-1">
+          <Field className="gap-1" data-invalid={!!errors.endsOn}>
             <FieldLabel htmlFor={`ends-${item?.id ?? "new"}`} className="text-xs">
               {endDayLabel(fields, roundTrip)}{" "}
               <span className="text-muted-foreground">(optional)</span>
@@ -395,7 +399,9 @@ export function ItemForm({
               min={scheduledOn || undefined}
               placeholder="Not set"
               clearable
+              aria-invalid={!!errors.endsOn}
             />
+            <FieldError>{errors.endsOn}</FieldError>
           </Field>
         )}
         {fields.route && (
@@ -444,7 +450,7 @@ export function ItemForm({
             asked three ways. On three separate rows they read as three, and
             they were a third of the dialog's height. */}
         <div className="grid grid-cols-2 gap-2.5 sm:col-span-2 sm:grid-cols-[1fr_1fr_1.2fr]">
-        <Field className="gap-1">
+        <Field className="gap-1" data-invalid={!!errors.price}>
           <FieldLabel htmlFor={`price-${item?.id ?? "new"}`} className="text-xs">
             Price <span className="text-muted-foreground">(or low estimate)</span>
           </FieldLabel>
@@ -454,9 +460,11 @@ export function ItemForm({
             onChange={setPrice}
             currency={currency}
             placeholder="0.00"
+            aria-invalid={!!errors.price}
           />
+          <FieldError>{errors.price}</FieldError>
         </Field>
-        <Field className="gap-1">
+        <Field className="gap-1" data-invalid={!!errors.priceMax}>
           <FieldLabel htmlFor={`pricemax-${item?.id ?? "new"}`} className="text-xs">
             Up to <span className="text-muted-foreground">(optional)</span>
           </FieldLabel>
@@ -466,15 +474,19 @@ export function ItemForm({
             onChange={setPriceMax}
             currency={currency}
             placeholder="0.00"
+            aria-invalid={!!errors.priceMax}
           />
+          <FieldError>{errors.priceMax}</FieldError>
         </Field>
         <Field className="col-span-2 gap-1 sm:col-span-1">
-          <FieldLabel className="text-xs">That price is</FieldLabel>
+          <FieldLabel htmlFor={`unit-${item?.id ?? "new"}`} className="text-xs">
+            That price is
+          </FieldLabel>
           <Select
             value={priceUnit}
             onValueChange={(v) => setPriceUnit(v as TripPriceUnit)}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger id={`unit-${item?.id ?? "new"}`} className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -557,18 +569,20 @@ export function ItemForm({
           re-categorised to Flight would otherwise keep them with no way to
           look at or remove them. */}
       {(fields.photos || shownPhotos.length > 0) && (
-      <Field className="gap-1">
-        <FieldLabel className="text-xs">Photos</FieldLabel>
+      <FieldSet className="gap-1">
+        <FieldLegend variant="label" className="mb-1 text-xs">
+          Photos
+        </FieldLegend>
         {shownPhotos.length > 0 && (
           <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
-            {shownPhotos.map((photo) => (
+            {shownPhotos.map((photo, i) => (
               <div
                 key={photo.key}
                 className="group relative aspect-square w-20 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
               >
                 <Image
                   src={photo.url}
-                  alt=""
+                  alt={`${title.trim() || "Item"} photo ${i + 1}`}
                   fill
                   sizes="80px"
                   className="object-cover"
@@ -576,13 +590,13 @@ export function ItemForm({
                 />
                 <Button
                   type="button"
-                  size="icon"
+                  size="icon-xs"
                   variant="secondary"
-                  className="absolute right-1 top-1 size-7 sm:size-6"
+                  className="absolute right-1 top-1"
                   onClick={() => removePhoto(photo)}
-                  aria-label="Remove photo"
+                  aria-label={`Remove photo ${i + 1}`}
                 >
-                  <Trash2 className="size-3" />
+                  <Trash2 />
                 </Button>
               </div>
             ))}
@@ -604,16 +618,15 @@ export function ItemForm({
               itemId: item.id,
               sortOrder: item.photos.length,
             });
-            if (res.success) router.refresh();
-            else toast.error(res.error);
+            if (!res.success) toast.error(res.error);
           }}
         />
         )}
-      </Field>
+      </FieldSet>
       )}
 
       {fields.itinerary && item && (
-        <div className="flex flex-col gap-1.5 ">
+        <div className="flex flex-col gap-1.5">
           {editingStops ? (
             <ItineraryEditor
               tripId={tripId}
@@ -628,7 +641,7 @@ export function ItemForm({
               variant="outline"
               onClick={() => setEditingStops(true)}
             >
-              <ListOrdered className="size-4" />
+              <ListOrdered />
               {item.stops.length > 0
                 ? `Edit itinerary (${item.stops.length} days)`
                 : "Add itinerary"}
@@ -657,22 +670,22 @@ export function ItemForm({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
             className="text-destructive hover:text-destructive"
             disabled={isPending || deleting}
             onClick={handleDelete}
           >
-            <Trash2 className="mr-1 size-3.5" />
+            {deleting ? <Spinner /> : <Trash2 />}
             {deleting ? "Removing…" : "Delete"}
           </Button>
         ) : (
           <span />
         )}
         <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="sm" onClick={onDone}>
+          <Button type="button" variant="outline" onClick={onDone}>
             Cancel
           </Button>
-          <Button type="submit" size="sm" disabled={isPending}>
+          <Button type="submit" disabled={isPending}>
+            {isPending && <Spinner />}
             {isPending ? "Saving…" : item ? "Save" : "Add item"}
           </Button>
         </div>

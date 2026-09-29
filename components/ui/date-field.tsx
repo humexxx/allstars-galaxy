@@ -37,8 +37,16 @@ export function DateField({
   clearable = false,
   disabled,
   className,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
 }: {
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
   id?: string;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
   value: string;
   onChange: (day: string) => void;
   placeholder?: string;
@@ -71,6 +79,10 @@ export function DateField({
           type="button"
           variant={showClear ? "ghost" : "outline"}
           disabled={disabled}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedBy}
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledBy}
           className={cn(
             // `min-w-0 flex-1`, never `w-full`: with a clear button beside it,
             // "100% of the row" is 100% plus a button, and the row overflowed
@@ -80,7 +92,7 @@ export function DateField({
             !selected && "text-muted-foreground"
           )}
         >
-          <CalendarIcon className="mr-2 size-4 shrink-0" />
+          <CalendarIcon className="shrink-0" />
           <span className="truncate">
             {selected ? format(selected, "EEE, d MMM yyyy") : placeholder}
           </span>

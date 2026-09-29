@@ -72,11 +72,11 @@ export function PeriodCompareDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-muted-foreground">{todayLabel}</span>
-            <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+            <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span>{targetLabel}</span>
           </DialogTitle>
           <DialogDescription>
@@ -112,16 +112,14 @@ export function PeriodCompareDialog({
                   className="rounded-lg border bg-muted/20 px-3 py-2.5"
                 >
                   <div className="flex items-baseline justify-between gap-3">
-                    <Text variant="small" className="text-muted-foreground">
-                      {row.label}
-                    </Text>
+                    <Text variant="small">{row.label}</Text>
                     <Mono className="text-base font-semibold tabular-nums sm:text-lg">
                       {formatCurrency(then)}
                     </Mono>
                   </div>
 
                   <div className="mt-1 flex items-center justify-between gap-3">
-                    <Text variant="small" className="text-muted-foreground">
+                    <Text variant="small">
                       from{" "}
                       <Mono className="tabular-nums">{formatCurrency(now)}</Mono>
                     </Text>

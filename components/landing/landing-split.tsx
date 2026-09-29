@@ -36,7 +36,7 @@ export function LandingSplit() {
             </Text>
             <div className="mt-6 grid grid-cols-2 gap-3">
               <div className="rounded-lg border bg-muted p-4">
-                <Eyebrow as="div" className="text-2xs">
+                <Eyebrow as="div" size="sm">
                   Plan A
                 </Eyebrow>
                 <Mono className="mt-1 block text-sm text-foreground">
@@ -47,7 +47,7 @@ export function LandingSplit() {
                 </div>
               </div>
               <div className="rounded-lg border bg-muted p-4">
-                <Eyebrow as="div" className="text-2xs">
+                <Eyebrow as="div" size="sm">
                   Plan B
                 </Eyebrow>
                 <Mono className="mt-1 block text-sm text-foreground">

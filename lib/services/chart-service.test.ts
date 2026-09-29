@@ -15,10 +15,8 @@ vi.mock("@/db", () => ({
   },
 }));
 
-import {
-  getPortfolioPerformanceData,
-  type TimeRange,
-} from "./chart-service";
+import { getPortfolioPerformanceData } from "./chart-service";
+import type { TimeRange } from "@/types/chart";
 
 function seedRows(
   rows: Array<{ date: Date; totalValue: string }>

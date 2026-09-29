@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import type { FinancePlanWithLines, Projection } from "@/types/finance";
+import { idSchema } from "@/schemas/common";
 
 import { PlanEditor } from "@/components/finance/plan-editor";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
+import { listInvestmentMethods } from "@/lib/services/investment-method-service";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { getUserPreferences } from "@/lib/services/user-preferences-service";
 import {
@@ -12,7 +14,6 @@ import {
   getAutoInvestRate,
   getPlanWithLines,
   getPortfolioValueForUser,
-  listInvestmentMethods,
   projectPlanWithPortfolio,
 } from "@/lib/services/finance-plan-service";
 import {
@@ -29,6 +30,8 @@ type PageProps = {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
+  // A non-uuid would reach Postgres as a cast error and a 500.
+  if (!idSchema.safeParse(id).success) return { title: "Plan" };
   const ctx = await requireEffectiveContext();
   const plan = await getPlanWithLines(id, ctx.effectiveUserId);
   return {
@@ -38,6 +41,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function PlanDetailPage({ params }: PageProps) {
   const { id } = await params;
+  if (!idSchema.safeParse(id).success) notFound();
   const ctx = await requireEffectiveContext();
   const plan = await getPlanWithLines(id, ctx.effectiveUserId);
   if (!plan) notFound();
@@ -49,6 +53,10 @@ export default async function PlanDetailPage({ params }: PageProps) {
   //
   // Milestones are a global user preference, not plan data — edited in
   // Settings. Independent of the calibration, so the two resolve together.
+  // One "now" for the whole render: the editor derives today's period, its
+  // KPIs and the chart from it, and reading the clock again on the client
+  // would render a different day than the server did near midnight.
+  const now = new Date();
   const [baseline, preferences] = await Promise.all([
     buildCalibratedPlan(plan),
     getUserPreferences(ctx.effectiveUserId),
@@ -68,7 +76,7 @@ export default async function PlanDetailPage({ params }: PageProps) {
         plan.id,
         ctx.effectiveUserId,
         36,
-        new Date(),
+        now,
         plan.confirmationDayOfMonth
       ),
     ]);
@@ -132,8 +140,9 @@ export default async function PlanDetailPage({ params }: PageProps) {
       : null;
 
   return (
-    <section className="space-y-4">
+    <section className="flex flex-col gap-6">
       <PlanEditor
+        now={now}
         plan={plan}
         baseline={baseline}
         projection={projection}

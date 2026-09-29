@@ -1,12 +1,14 @@
 import "server-only";
 
 import { unstable_cache } from "next/cache";
+import type { F1DashboardStandings } from "@/types/sports";
+
 import { upstreamSignal } from "./upstream";
 
 const URL = "https://site.api.espn.com/apis/v2/sports/racing/f1/standings";
 const REVALIDATE_SECONDS = 300;
 /** ESPN's own headshot path for racing. */
-const HEADSHOT = (id: string) =>
+const HEADSHOT = (id: string): string =>
   `https://a.espncdn.com/i/headshots/rpm/players/full/${id}.png`;
 
 /**
@@ -69,27 +71,6 @@ type EspnEntry = {
 
 type EspnStandings = {
   children?: Array<{ name?: string; standings?: { entries?: EspnEntry[] } }>;
-};
-
-export type F1StandingRow = {
-  position: number;
-  name: string;
-  points: number;
-  /** A driver's headshot, or nothing for a constructor. */
-  imageUrl?: string;
-  /** A driver's country flag. */
-  flagUrl?: string;
-  /** A constructor's team logo, when one is published for it. */
-  logoUrl?: string;
-  /** A constructor's livery colour, for its badge. */
-  color?: string;
-  /** A constructor's short code, shown when there is no logo. */
-  code?: string;
-};
-
-export type F1DashboardStandings = {
-  drivers: F1StandingRow[];
-  constructors: F1StandingRow[];
 };
 
 /**

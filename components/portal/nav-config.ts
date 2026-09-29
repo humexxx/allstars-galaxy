@@ -8,12 +8,7 @@
  * product area.
  */
 
-// The navigation's own alias for the account role. Aliased from the single
-// definition rather than spelled out again — the two drifted the moment a
-// third role appeared.
 import type { UserRole } from "@/types/user";
-
-export type Role = UserRole;
 
 export type NavLeaf = {
   title: string;
@@ -73,7 +68,7 @@ export const PORTAL_NAV: NavSection[] = [
   },
 ];
 
-function adminAllowed(role: Role | undefined, isImpersonating: boolean): boolean {
+function adminAllowed(role: UserRole | undefined, isImpersonating: boolean): boolean {
   return role === "admin" && !isImpersonating;
 }
 
@@ -84,7 +79,7 @@ function adminAllowed(role: Role | undefined, isImpersonating: boolean): boolean
  * decide whether to render them.
  */
 export function visibleSections(
-  role: Role | undefined,
+  role: UserRole | undefined,
   isImpersonating = false
 ): NavSection[] {
   return PORTAL_NAV.filter(

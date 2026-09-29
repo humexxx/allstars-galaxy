@@ -26,10 +26,14 @@ beforeEach(() => {
   vi.mocked(requireAdminCached).mockResolvedValue({
     id: ADMIN_ID,
   } as unknown as Awaited<ReturnType<typeof requireAdminCached>>);
+  vi.mocked(updateUserRole).mockResolvedValue(true);
+  // safe() logs unexpected failures; keep the test output quiet.
+  vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("updateUserRoleAction", () => {
@@ -57,25 +61,25 @@ describe("updateUserRoleAction", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/portal/admin/users");
   });
 
-  it("throws Invalid input on malformed payload and does not touch the service", async () => {
+  it("returns Invalid input on malformed payload and does not touch the service", async () => {
     await expect(
       updateUserRoleAction({
         userId: "not-a-uuid",
         role: "admin",
       } as never),
-    ).rejects.toThrow("Invalid input");
+    ).resolves.toEqual({ success: false, error: "Invalid input" });
 
     expect(updateUserRole).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("throws Invalid input on an unknown role", async () => {
+  it("returns Invalid input on an unknown role", async () => {
     await expect(
       updateUserRoleAction({
         userId: TARGET_USER_ID,
         role: "superuser",
       } as never),
-    ).rejects.toThrow("Invalid input");
+    ).resolves.toEqual({ success: false, error: "Invalid input" });
 
     expect(updateUserRole).not.toHaveBeenCalled();
   });
@@ -86,7 +90,7 @@ describe("updateUserRoleAction", () => {
         userId: ADMIN_ID,
         role: "user",
       }),
-    ).rejects.toThrow("You cannot demote yourself");
+    ).resolves.toEqual({ success: false, error: "You cannot demote yourself" });
 
     expect(updateUserRole).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
@@ -102,7 +106,7 @@ describe("updateUserRoleAction", () => {
     expect(updateUserRole).toHaveBeenCalledWith(ADMIN_ID, "admin");
   });
 
-  it("propagates the rejection when the caller is not an admin", async () => {
+  it("fails generically when the caller is not an admin", async () => {
     vi.mocked(requireAdminCached).mockRejectedValueOnce(
       new Error("Forbidden: Admin access required"),
     );
@@ -112,13 +116,13 @@ describe("updateUserRoleAction", () => {
         userId: TARGET_USER_ID,
         role: "admin",
       }),
-    ).rejects.toThrow("Forbidden: Admin access required");
+    ).resolves.toEqual({ success: false, error: "Action failed" });
 
     expect(updateUserRole).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("surfaces service-layer failures to the caller", async () => {
+  it("turns service-layer failures into a generic error", async () => {
     vi.mocked(updateUserRole).mockRejectedValueOnce(new Error("pg boom"));
 
     await expect(
@@ -126,9 +130,21 @@ describe("updateUserRoleAction", () => {
         userId: TARGET_USER_ID,
         role: "admin",
       }),
-    ).rejects.toThrow("pg boom");
+    ).resolves.toEqual({ success: false, error: "Action failed" });
 
     // revalidate only runs after the service call resolves successfully
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("reports a user that no longer exists", async () => {
+    vi.mocked(updateUserRole).mockResolvedValueOnce(false);
+
+    const result = await updateUserRoleAction({
+      userId: TARGET_USER_ID,
+      role: "admin",
+    });
+
+    expect(result).toEqual({ success: false, error: "User not found" });
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

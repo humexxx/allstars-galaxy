@@ -9,10 +9,12 @@ import {
   financePlanExpenses,
   financePlanDebts,
   financePlanLineOverrides,
+  investmentMethods,
 } from "@/db/schema";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import type {
+  DebtPaymentType,
   DebtStrategy,
   FinanceMood,
   FinancePlan,
@@ -23,18 +25,20 @@ import type {
   FinancePlanWithLines,
   Projection,
   ProjectionMonth,
+  RecurrenceType,
+  StrategyComparison,
 } from "@/types/finance";
 import type {
-  CreateFinancePlanInput,
-  DeleteLineOverrideInput,
-  LineOverrideInput,
-  PlanDebtInput,
-  PlanExpenseInput,
-  PlanIncomeInput,
-  UpdateFinancePlanInput,
-  UpdatePlanDebtInput,
-  UpdatePlanExpenseInput,
-  UpdatePlanIncomeInput,
+  CreateFinancePlanData,
+  DeleteLineOverrideData,
+  LineOverrideData,
+  PlanDebtData,
+  PlanExpenseData,
+  PlanIncomeData,
+  UpdateFinancePlanData,
+  UpdatePlanDebtData,
+  UpdatePlanExpenseData,
+  UpdatePlanIncomeData,
 } from "@/schemas/finance";
 
 import {
@@ -155,9 +159,54 @@ export const getPlanWithLines = cache(async function getPlanWithLines(
   return { ...plan, incomes, expenses, debts, overrides };
 });
 
+/**
+ * Every plan the user owns with its lines, in five queries however many plans
+ * there are. The list and compare pages project every plan; loading each one
+ * through `getPlanWithLines` was one round-trip per plan.
+ */
+export const listUserPlansWithLines = cache(async function listUserPlansWithLines(
+  userId: string
+): Promise<FinancePlanWithLines[]> {
+  const plans = await listUserPlans(userId);
+  if (plans.length === 0) return [];
+  const ids = plans.map((p) => p.id);
+
+  const [incomes, expenses, debts, overrides] = await Promise.all([
+    db
+      .select()
+      .from(financePlanIncomes)
+      .where(inArray(financePlanIncomes.planId, ids))
+      .orderBy(asc(financePlanIncomes.sortOrder), asc(financePlanIncomes.createdAt)),
+    db
+      .select()
+      .from(financePlanExpenses)
+      .where(inArray(financePlanExpenses.planId, ids))
+      .orderBy(asc(financePlanExpenses.sortOrder), asc(financePlanExpenses.createdAt)),
+    db
+      .select()
+      .from(financePlanDebts)
+      .where(inArray(financePlanDebts.planId, ids))
+      .orderBy(asc(financePlanDebts.sortOrder), asc(financePlanDebts.createdAt)),
+    db
+      .select()
+      .from(financePlanLineOverrides)
+      .where(inArray(financePlanLineOverrides.planId, ids)),
+  ]);
+
+  const byPlan = <T extends { planId: string }>(rows: T[], planId: string): T[] =>
+    rows.filter((r) => r.planId === planId);
+  return plans.map((plan) => ({
+    ...plan,
+    incomes: byPlan(incomes, plan.id),
+    expenses: byPlan(expenses, plan.id),
+    debts: byPlan(debts, plan.id),
+    overrides: byPlan(overrides, plan.id),
+  }));
+});
+
 export async function createPlan(
   userId: string,
-  data: CreateFinancePlanInput
+  data: CreateFinancePlanData
 ): Promise<FinancePlan> {
   return db.transaction(async (tx) => {
     // Auto-set as main when the user has no plans yet. Keeps the
@@ -197,7 +246,7 @@ export async function createPlan(
 
 export async function updatePlan(
   userId: string,
-  data: UpdateFinancePlanInput
+  data: UpdateFinancePlanData
 ): Promise<FinancePlan> {
   await ensureOwnership(data.id, userId);
   if (data.basedOnPlanId != null) {
@@ -228,8 +277,10 @@ export async function updatePlan(
       basedOnPlanId: data.basedOnPlanId,
       updatedAt: new Date(),
     })
-    .where(eq(financePlans.id, data.id))
+    .where(and(eq(financePlans.id, data.id), eq(financePlans.userId, userId)))
     .returning();
+  // Ownership was checked above, so a miss means the plan was deleted since.
+  if (!plan) throw new Error("Plan not found");
   return plan;
 }
 
@@ -242,9 +293,11 @@ export async function deletePlan(userId: string, planId: string): Promise<void> 
     const [target] = await tx
       .select({ isMain: financePlans.isMain })
       .from(financePlans)
-      .where(eq(financePlans.id, planId));
+      .where(and(eq(financePlans.id, planId), eq(financePlans.userId, userId)));
 
-    await tx.delete(financePlans).where(eq(financePlans.id, planId));
+    await tx
+      .delete(financePlans)
+      .where(and(eq(financePlans.id, planId), eq(financePlans.userId, userId)));
 
     if (target?.isMain) {
       const [nextOldest] = await tx
@@ -285,7 +338,7 @@ export async function setMainPlan(
     await tx
       .update(financePlans)
       .set({ isMain: true })
-      .where(eq(financePlans.id, planId));
+      .where(and(eq(financePlans.id, planId), eq(financePlans.userId, userId)));
   });
 }
 
@@ -299,7 +352,7 @@ export async function setPlanColor(
   await db
     .update(financePlans)
     .set({ color, updatedAt: new Date() })
-    .where(eq(financePlans.id, planId));
+    .where(and(eq(financePlans.id, planId), eq(financePlans.userId, userId)));
 }
 
 /**
@@ -420,7 +473,7 @@ export async function clonePlan(
 export async function addIncome(
   userId: string,
   planId: string,
-  data: PlanIncomeInput
+  data: PlanIncomeData
 ): Promise<FinancePlanIncome> {
   await ensureOwnership(planId, userId);
   const [row] = await db
@@ -448,7 +501,7 @@ export async function addIncome(
 export async function updateIncome(
   userId: string,
   planId: string,
-  data: UpdatePlanIncomeInput
+  data: UpdatePlanIncomeData
 ): Promise<FinancePlanIncome> {
   await ensureOwnership(planId, userId);
   const [row] = await db
@@ -470,6 +523,9 @@ export async function updateIncome(
     })
     .where(and(eq(financePlanIncomes.id, data.id), eq(financePlanIncomes.planId, planId)))
     .returning();
+  // The plan is the user's, but the line id is the caller's: one from another
+  // plan matches nothing.
+  if (!row) throw new Error("Income not found on this plan");
   return row;
 }
 
@@ -498,7 +554,7 @@ export async function deleteIncome(
 export async function addExpense(
   userId: string,
   planId: string,
-  data: PlanExpenseInput
+  data: PlanExpenseData
 ): Promise<FinancePlanExpense> {
   await ensureOwnership(planId, userId);
   const [row] = await db
@@ -524,7 +580,7 @@ export async function addExpense(
 export async function updateExpense(
   userId: string,
   planId: string,
-  data: UpdatePlanExpenseInput
+  data: UpdatePlanExpenseData
 ): Promise<FinancePlanExpense> {
   await ensureOwnership(planId, userId);
   const [row] = await db
@@ -544,6 +600,9 @@ export async function updateExpense(
     })
     .where(and(eq(financePlanExpenses.id, data.id), eq(financePlanExpenses.planId, planId)))
     .returning();
+  // The plan is the user's, but the line id is the caller's: one from another
+  // plan matches nothing.
+  if (!row) throw new Error("Expense not found on this plan");
   return row;
 }
 
@@ -570,7 +629,7 @@ export async function deleteExpense(
 export async function addDebt(
   userId: string,
   planId: string,
-  data: PlanDebtInput
+  data: PlanDebtData
 ): Promise<FinancePlanDebt> {
   await ensureOwnership(planId, userId);
   const [row] = await db
@@ -599,7 +658,7 @@ export async function addDebt(
 export async function updateDebt(
   userId: string,
   planId: string,
-  data: UpdatePlanDebtInput
+  data: UpdatePlanDebtData
 ): Promise<FinancePlanDebt> {
   await ensureOwnership(planId, userId);
   const [row] = await db
@@ -622,6 +681,9 @@ export async function updateDebt(
     })
     .where(and(eq(financePlanDebts.id, data.id), eq(financePlanDebts.planId, planId)))
     .returning();
+  // The plan is the user's, but the line id is the caller's: one from another
+  // plan matches nothing.
+  if (!row) throw new Error("Debt not found on this plan");
   return row;
 }
 
@@ -656,7 +718,7 @@ export async function deleteDebt(
 export async function upsertLineOverride(
   userId: string,
   planId: string,
-  data: LineOverrideInput
+  data: LineOverrideData
 ): Promise<void> {
   await ensureOwnership(planId, userId);
   await db
@@ -689,7 +751,7 @@ export async function upsertLineOverride(
 export async function deleteLineOverride(
   userId: string,
   planId: string,
-  data: DeleteLineOverrideInput
+  data: DeleteLineOverrideData
 ): Promise<void> {
   await ensureOwnership(planId, userId);
   await db
@@ -714,13 +776,13 @@ type DebtRuntimeState = {
   // For 'fixed' debts this is the constant monthly payment. For 'percent_of_balance'
   // debts it is recomputed each month as max(balance * pct, floor).
   scheduledPaymentFixed: number;
-  paymentType: import("@/types/finance").DebtPaymentType;
+  paymentType: DebtPaymentType;
   minPercent: number;
   minFloor: number;
   // Recurrence model — see RecurrenceType. monthly_day / monthly_weekday hit
   // every month; every_n_months hits on the every-N cycle anchored at
   // anchorKey (interest still accrues every month, payments don't).
-  recurrenceType: "monthly_day" | "monthly_weekday" | "every_n_months";
+  recurrenceType: RecurrenceType;
   intervalMonths: number | null;
   anchorKey: number | null;
   // Day-of-month fields drive WHEN inside a month the payment lands, which
@@ -769,7 +831,7 @@ function debtPaymentDayInMonth(
 // the dedicated `debtPaymentDayInMonth` because they're already a richer
 // runtime state.
 type RecurringDayShape = {
-  recurrenceType: "monthly_day" | "monthly_weekday" | "every_n_months";
+  recurrenceType: RecurrenceType;
   dayOfMonth: number | null;
   weekOfMonth: number | null;
   dayOfWeek: number | null;
@@ -857,7 +919,7 @@ function dayInPeriodFor(date: Date, period: Period): number {
 // hit months in the cycle anchored at anchorKey.
 function isRecurringHitMonth(
   monthKey: number,
-  recurrenceType: "monthly_day" | "monthly_weekday" | "every_n_months",
+  recurrenceType: RecurrenceType,
   intervalMonths: number | null,
   anchorKey: number | null
 ): boolean {
@@ -969,7 +1031,7 @@ export function projectPlan(
   // recurrenceStart — fall back to the plan's startMonth.
   const planStartKey = yearMonthKeyFromDate(plan.startMonth);
   const anchorFor = (
-    type: "monthly_day" | "monthly_weekday" | "every_n_months",
+    type: RecurrenceType,
     recurrenceStart: string | null
   ): number | null =>
     type === "every_n_months"
@@ -1041,7 +1103,7 @@ export function projectPlan(
     balance: num(d.initialBalance),
     rate: num(d.monthlyInterestRate),
     scheduledPaymentFixed: num(d.monthlyPayment),
-    paymentType: d.paymentType as import("@/types/finance").DebtPaymentType,
+    paymentType: d.paymentType as DebtPaymentType,
     minPercent: num(d.minPaymentPercent),
     minFloor: num(d.minPaymentFloor),
     recurrenceType: d.recurrenceType,
@@ -1368,7 +1430,7 @@ export function compareDebtStrategies(
   expenses: FinancePlanExpense[],
   debts: FinancePlanDebt[],
   options: ProjectOptions = {}
-): import("@/types/finance").StrategyComparison {
+): StrategyComparison {
   const surplusForCompare =
     num(plan.surplusToDebtsPercent) > 0 ? plan.surplusToDebtsPercent : "0.6";
 
@@ -1456,7 +1518,6 @@ export const getPortfolioWeightedMonthlyRoi = cache(async function getPortfolioW
  */
 export async function getAutoInvestRate(plan: FinancePlan): Promise<number> {
   if (!plan.autoInvestMethodId) return 0;
-  const { investmentMethods } = await import("@/db/schema");
   const [row] = await db
     .select({ monthlyRoi: investmentMethods.monthlyRoi })
     .from(investmentMethods)
@@ -1527,18 +1588,3 @@ export const getFinanceMood = cache(async function getFinanceMood(
   return deriveFinanceMood(await projectPlanWithPortfolio(full, userId));
 });
 
-export async function listInvestmentMethods(
-  options: { includeDisabled?: boolean } = {}
-): Promise<Array<{ id: string; name: string; monthlyRoi: string; enabled: boolean }>> {
-  const { investmentMethods } = await import("@/db/schema");
-  const rows = await db
-    .select({
-      id: investmentMethods.id,
-      name: investmentMethods.name,
-      monthlyRoi: investmentMethods.monthlyRoi,
-      enabled: investmentMethods.enabled,
-    })
-    .from(investmentMethods)
-    .orderBy(asc(investmentMethods.name));
-  return options.includeDisabled ? rows : rows.filter((r) => r.enabled);
-}

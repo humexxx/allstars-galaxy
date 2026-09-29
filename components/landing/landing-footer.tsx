@@ -12,7 +12,7 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
     title: "Finance",
     links: [
       { label: "Portfolio", href: "/portal/portfolio" },
-      { label: "Investment Methods", href: "/portal/investment-methods" },
+      { label: "Investment Methods", href: "/portal/portfolio" },
       { label: "Finance Plans", href: "/portal/plans" },
     ],
   },

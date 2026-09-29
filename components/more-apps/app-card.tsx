@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -27,18 +28,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ProviderIcon } from "@/components/more-apps/provider-icon";
-import {
-  deriveConsoleUrl,
-  type AppListing,
-} from "@/app/portal/more-apps/apps-data";
+import { deriveConsoleUrl } from "@/app/portal/more-apps/apps-data";
+import type { AppListing } from "@/types/apps";
 
 // Deterministic per-app gradient — used when no screenshot is available.
+// Placeholder art, so it borrows the chart palette rather than raw hues.
 const GRADIENT_BY_SLUG: Record<string, string> = {
-  "cv-galaxy": "from-sky-500 to-cyan-500",
-  "padel-galaxy": "from-success to-teal-500",
-  "trim-success": "from-orange-500 to-destructive",
-  lixcore: "from-violet-500 to-purple-500",
+  "cv-galaxy": "from-chart-1 to-chart-3",
+  "padel-galaxy": "from-chart-2 to-chart-4",
+  "trim-success": "from-chart-3 to-chart-5",
+  lixcore: "from-chart-4 to-chart-1",
 };
+const FALLBACK_GRADIENT = "from-muted-foreground to-foreground/70";
 
 const PROVIDER_LABEL: Record<AppListing["provider"], string> = {
   vercel: "Vercel",
@@ -72,8 +73,9 @@ export function AppCard({
   onHide?: () => void;
   onShow?: () => void;
 }) {
-  const isLive = app.status === "live" && Boolean(app.url);
-  const gradient = GRADIENT_BY_SLUG[app.slug] ?? "from-slate-500 to-slate-700";
+  const liveUrl = app.status === "live" ? app.url : null;
+  const isLive = Boolean(liveUrl);
+  const gradient = GRADIENT_BY_SLUG[app.slug] ?? FALLBACK_GRADIENT;
   const domain = getHostname(app.url);
   const consoleUrl = deriveConsoleUrl(app);
 
@@ -89,7 +91,7 @@ export function AppCard({
     <Card
       className={cn(
         "flex flex-col transition-shadow",
-        isLive && "hover:ring-foreground/25 hover:shadow-md",
+        isLive && "hover:ring-foreground/15 hover:shadow-md",
         (!isLive || onShow) && "opacity-60"
       )}
     >
@@ -108,7 +110,7 @@ export function AppCard({
         <div
           aria-hidden="true"
           className={cn(
-            "flex aspect-video w-full items-center justify-center rounded-t-xl bg-gradient-to-br text-6xl font-bold text-white/90 select-none",
+            "flex aspect-video w-full items-center justify-center rounded-t-xl bg-gradient-to-br text-6xl font-bold text-background/90 select-none",
             gradient
           )}
         >
@@ -117,76 +119,62 @@ export function AppCard({
       )}
 
       <CardHeader>
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 space-y-1">
-            <CardTitle className="line-clamp-1">{app.name}</CardTitle>
-            <CardDescription className="line-clamp-2">
-              {description}
-            </CardDescription>
-          </div>
-          {hasMenuItems && (
+        <CardTitle as="h3" className="line-clamp-1">
+          {app.name}
+        </CardTitle>
+        <CardDescription className="line-clamp-2">{description}</CardDescription>
+        {hasMenuItems && (
+          <CardAction>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="-mr-2 h-8 w-8"
+                  size="icon-sm"
+                  className="-mr-2"
                   aria-label={`Actions for ${app.name}`}
                 >
-                  <MoreHorizontal className="h-4 w-4" />
+                  <MoreHorizontal />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {consoleUrl && (
                   <DropdownMenuItem asChild>
-                    <a
-                      href={consoleUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <ProviderIcon
-                        provider={app.provider}
-                        className="mr-2 h-4 w-4"
-                      />
+                    <a href={consoleUrl} target="_blank" rel="noopener noreferrer">
+                      <ProviderIcon provider={app.provider} className="size-4" />
                       {PROVIDER_CONSOLE_LABEL[app.provider]}
                     </a>
                   </DropdownMenuItem>
                 )}
-                {(consoleUrl && (onHide || onShow)) && <DropdownMenuSeparator />}
+                {consoleUrl && (onHide || onShow) && <DropdownMenuSeparator />}
                 {onShow && (
                   <DropdownMenuItem onSelect={onShow}>
-                    <Eye className="mr-2 h-4 w-4" /> Unhide
+                    <Eye /> Unhide
                   </DropdownMenuItem>
                 )}
                 {onHide && (
                   <DropdownMenuItem onSelect={onHide}>
-                    <EyeOff className="mr-2 h-4 w-4" /> Hide
+                    <EyeOff /> Hide
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-          )}
-        </div>
+          </CardAction>
+        )}
       </CardHeader>
 
       <CardContent className="flex flex-1 flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <Badge variant="outline" className="gap-1">
-            <ProviderIcon provider={app.provider} className="size-3" />
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">
+            <ProviderIcon provider={app.provider} />
             {PROVIDER_LABEL[app.provider]}
           </Badge>
-          <Badge variant={isLive ? "secondary" : "outline"} className="gap-1.5">
-            <span
-              aria-hidden="true"
-              className={cn(
-                "inline-block size-1.5 rounded-full",
-                isLive ? "bg-success" : "bg-muted-foreground/40"
-              )}
-            />
+          <Badge variant={isLive ? "success" : "outline"}>
             {isLive ? "Live" : "Coming soon"}
           </Badge>
           {app.updatedAt && (
-            <Badge variant="outline">
+            // Relative to "now", which the server and the browser read at
+            // different moments — the minute can differ between the two.
+            <Badge variant="outline" suppressHydrationWarning>
               Updated{" "}
               {formatDistanceToNow(new Date(app.updatedAt), { addSuffix: true })}
             </Badge>
@@ -199,17 +187,17 @@ export function AppCard({
         </div>
 
         <div className="mt-auto">
-          {isLive ? (
+          {liveUrl ? (
             <Button variant="outline" className="w-full" asChild>
-              <a href={app.url!} target="_blank" rel="noopener noreferrer">
+              <a href={liveUrl} target="_blank" rel="noopener noreferrer">
                 Open
-                <ExternalLink className="ml-1 h-4 w-4" />
+                <ExternalLink />
               </a>
             </Button>
           ) : (
             <Button variant="outline" className="w-full" disabled>
               Coming soon
-              <ArrowRight className="ml-1 h-4 w-4" />
+              <ArrowRight />
             </Button>
           )}
         </div>

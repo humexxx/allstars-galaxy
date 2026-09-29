@@ -7,8 +7,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { getUserRole } from "./auth-server";
 import { getUserPortfolio, createPortfolio } from "./portfolio-service";
 import type { Portfolio } from "@/types/portfolio";
-import type { Transaction } from "@/types";
-import type { TransactionInput } from "@/types/transaction";
+import type { Transaction, TransactionInput } from "@/types/transaction";
 
 export async function createTransaction(
   targetUserId: string,
@@ -54,13 +53,6 @@ export async function createTransaction(
     .returning();
 
   return { transaction, portfolio };
-}
-
-export async function getPortfolioTransactions(portfolioId: string): Promise<Transaction[]> {
-  return await db
-    .select()
-    .from(transactions)
-    .where(eq(transactions.portfolioId, portfolioId));
 }
 
 export function calculateTotal(amount: string, fee: string): string {

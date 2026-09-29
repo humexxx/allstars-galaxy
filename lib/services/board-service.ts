@@ -54,7 +54,7 @@ export async function updateBoardColumn(
   columnId: string,
   userId: string,
   data: Omit<UpdateBoardColumnData, "id">
-): Promise<BoardColumn> {
+): Promise<BoardColumn | null> {
   const [column] = await db
     .update(boardColumns)
     .set({
@@ -64,7 +64,8 @@ export async function updateBoardColumn(
     .where(and(eq(boardColumns.id, columnId), eq(boardColumns.userId, userId)))
     .returning();
 
-  return column;
+  // No row: the id was not this user's column.
+  return column ?? null;
 }
 
 export async function deleteBoardColumn(columnId: string, userId: string): Promise<void> {
@@ -158,7 +159,7 @@ export async function updateBoardTask(
   taskId: string,
   userId: string,
   data: Omit<UpdateBoardTaskData, "id">
-): Promise<BoardTask> {
+): Promise<BoardTask | null> {
   if (data.columnId) await ensureColumnOwnership(data.columnId, userId);
 
   const [task] = await db
@@ -170,7 +171,7 @@ export async function updateBoardTask(
     .where(and(eq(boardTasks.id, taskId), eq(boardTasks.userId, userId)))
     .returning();
 
-  return task;
+  return task ?? null;
 }
 
 export async function deleteBoardTask(taskId: string, userId: string): Promise<void> {

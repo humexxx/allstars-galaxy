@@ -1,5 +1,3 @@
-import { db } from "@/db";
-import { investmentMethods } from "@/db/schema";
 import type { Metadata } from "next";
 import {
   getUserPortfolio,
@@ -11,10 +9,11 @@ import {
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
 import { getManagedOverview } from "@/lib/services/margin-service";
 import { getAllocationsByTransaction } from "@/lib/services/allocation-service";
-import { getLatestPrices } from "@/lib/services/price-service";
-import { listPriceAssets } from "@/lib/services/price-service";
+import { listAllInvestmentMethods } from "@/lib/services/investment-method-service";
+import { getLatestPrices, listPriceAssets } from "@/lib/services/price-service";
 import { getAllUsers } from "@/lib/services/user-service";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
+import type { ChartDataPoint } from "@/types/chart";
 import type { PortfolioTransaction } from "@/types/portfolio";
 import PortfolioClientPage from "@/components/portal/portfolio-client";
 import { PortalPageContainer } from "@/components/portal/page-container";
@@ -56,7 +55,7 @@ export default async function PortfolioPage() {
     // InvestmentMethodsView, which filters to enabled itself and exposes a dev
     // toggle for the disabled ones. Consumers that only want the live set
     // (the transaction form) filter below.
-    db.select().from(investmentMethods),
+    listAllInvestmentMethods(),
     usersPromise,
     investorsPromise,
     managedOverviewPromise,
@@ -66,7 +65,7 @@ export default async function PortfolioPage() {
 
   let stats = null;
   let transactions: PortfolioTransaction[] = [];
-  let chartData: { date: string; value: number }[] = [];
+  let chartData: ChartDataPoint[] = [];
 
   if (portfolio) {
     [stats, transactions, chartData] = await Promise.all([
@@ -119,7 +118,6 @@ export default async function PortfolioPage() {
     isAdmin,
     users,
     methodInvestors,
-    margin: methodInvestors.length > 0 ? managedOverview.overview : null,
     methodAllocations: managedOverview.allocations,
     marginHistory: managedOverview.history,
     marginHistoryInput: managedOverview.historyInput,

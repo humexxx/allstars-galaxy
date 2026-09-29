@@ -36,3 +36,8 @@ export type RoadPathStats = {
   daysRemaining: number | null;
   progressRate: number;
 };
+
+export type RoadPathDetail = {
+  roadPath: RoadPathWithDetails;
+  stats: RoadPathStats;
+};

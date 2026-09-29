@@ -6,18 +6,27 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
-import type { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { createTripAction, updateTripAction } from "@/app/actions/travel";
-import { createTripSchema, type CreateTripInput } from "@/schemas/travel";
+import {
+  createTripSchema,
+  type CreateTripData,
+  type CreateTripInput,
+} from "@/schemas/travel";
 import type { Trip } from "@/types/travel";
 
 import { PhotoPicker } from "./photo-picker";
 
+const TRIP_LIST_PATH = "/portal/entertainment/travel-planner";
+
+/** Categorical slots, in order — see "Chart colours" in CLAUDE.md. */
 const COLORS = [
   "var(--chart-1)",
   "var(--chart-2)",
@@ -26,13 +35,29 @@ const COLORS = [
   "var(--chart-5)",
 ];
 
-type TripFormValues = z.input<typeof createTripSchema>;
-
 function todayIso(): string {
   return format(new Date(), "yyyy-MM-dd");
 }
 
-export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
+export function TripForm({
+  trip,
+  onCancel,
+  onSaved,
+}: {
+  trip?: Trip;
+  /**
+   * Inside the edit dialog, Cancel closes the dialog. Without it (the "new
+   * trip" page) Cancel goes back to the list — `router.back()` left the app
+   * altogether for anybody who opened the page from a link.
+   */
+  onCancel?: () => void;
+  /**
+   * Called after an edit saves. The dialog has to close itself: the action's
+   * revalidation re-renders the trip page in place, and pushing to the same
+   * URL never remounted it, so the dialog used to sit open over the result.
+   */
+  onSaved?: () => void;
+}): React.ReactElement {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -46,7 +71,7 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
     handleSubmit,
     control,
     formState: { errors },
-  } = useForm<TripFormValues, unknown, CreateTripInput>({
+  } = useForm<CreateTripInput, unknown, CreateTripData>({
     resolver: zodResolver(createTripSchema),
     defaultValues: {
       title: trip?.title ?? "",
@@ -62,159 +87,198 @@ export function TripForm({ trip }: { trip?: Trip }): React.ReactElement {
 
   const startDate = useWatch({ control, name: "startDate" });
 
-  const onSubmit = (values: CreateTripInput): void => {
+  const onSubmit = (values: CreateTripData): void => {
     startTransition(async () => {
-      const result = trip
-        ? await updateTripAction({ id: trip.id, ...values })
-        : await createTripAction(values);
-
-      if (result.success) {
-        toast.success(trip ? "Trip saved" : "Trip created");
-        router.push(`/portal/entertainment/travel-planner/${result.data!.id}`);
-        router.refresh();
-      } else {
-        toast.error(result.error);
+      if (trip) {
+        const result = await updateTripAction({ id: trip.id, ...values });
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success("Trip saved");
+        onSaved?.();
+        return;
       }
+
+      const result = await createTripAction(values);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Trip created");
+      router.push(`${TRIP_LIST_PATH}/${result.data.id}`);
     });
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6 ">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
       <div className="grid gap-6 md:grid-cols-2">
-            <div className="flex flex-col gap-4 ">
-              <Field className="gap-2">
-                <FieldLabel htmlFor="trip-title">Title</FieldLabel>
-                <Input
-                  id="trip-title"
-                  placeholder="Summer in Lisbon"
-                  required
-                  autoFocus
-                  {...register("title", {
-                    setValueAs: (v: string | null) => v?.trim() ?? "",
-                  })}
-                />
-                {errors.title && (
-                  <p className="text-sm text-destructive">{errors.title.message}</p>
-                )}
-              </Field>
+        <div className="flex flex-col gap-4">
+          <Field className="gap-2" data-invalid={!!errors.title}>
+            <FieldLabel htmlFor="trip-title">Title</FieldLabel>
+            <Input
+              id="trip-title"
+              placeholder="Summer in Lisbon"
+              required
+              autoFocus
+              aria-invalid={!!errors.title}
+              {...register("title", {
+                setValueAs: (v: string | null) => v?.trim() ?? "",
+              })}
+            />
+            <FieldError errors={[errors.title]} />
+          </Field>
 
-              <Field className="gap-2">
-                <FieldLabel htmlFor="trip-destination">Destination</FieldLabel>
-                <Input
-                  id="trip-destination"
-                  placeholder="Lisbon, Portugal"
-                  {...register("destination", {
-                    setValueAs: (v: string | null) => v?.trim() || null,
-                  })}
-                />
-              </Field>
+          <Field className="gap-2" data-invalid={!!errors.destination}>
+            <FieldLabel htmlFor="trip-destination">Destination</FieldLabel>
+            <Input
+              id="trip-destination"
+              placeholder="Lisbon, Portugal"
+              aria-invalid={!!errors.destination}
+              {...register("destination", {
+                setValueAs: (v: string | null) => v?.trim() || null,
+              })}
+            />
+            <FieldError errors={[errors.destination]} />
+          </Field>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Field className="gap-2">
-                  <FieldLabel htmlFor="trip-start">Start</FieldLabel>
-                  <Input id="trip-start" type="date" required {...register("startDate")} />
-                  {errors.startDate && (
-                    <p className="text-sm text-destructive">{errors.startDate.message}</p>
-                  )}
-                </Field>
-                <Field className="gap-2">
-                  <FieldLabel htmlFor="trip-end">End</FieldLabel>
-                  <Input
-                    id="trip-end"
-                    type="date"
-                    min={startDate || undefined}
-                    {...register("endDate", { setValueAs: (v: string) => v || null })}
-                  />
-                  {errors.endDate && (
-                    <p className="text-sm text-destructive">{errors.endDate.message}</p>
-                  )}
-                </Field>
-              </div>
-
-              <Field className="gap-2">
-                <Field className="gap-2">
-                  <FieldLabel htmlFor="trip-currency">Currency</FieldLabel>
-                  <Input
-                    id="trip-currency"
-                    maxLength={3}
-                    placeholder="USD"
-                    className="uppercase"
-                    {...register("currency", {
-                      setValueAs: (v: string | null) =>
-                        v?.trim().toUpperCase() || "USD",
-                    })}
-                  />
-                  {errors.currency && (
-                    <p className="text-sm text-destructive">{errors.currency.message}</p>
-                  )}
-                </Field>
-              </Field>
-
-            </div>
-
-            <Field className="gap-2">
-              <FieldLabel>Cover photo</FieldLabel>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field className="gap-2" data-invalid={!!errors.startDate}>
+              <FieldLabel htmlFor="trip-start">Start</FieldLabel>
               <Controller
                 control={control}
-                name="coverPhotoUrl"
+                name="startDate"
                 render={({ field }) => (
-                  <PhotoPicker
-                    folder={trip?.id ?? "covers"}
-                    previewUrl={field.value ?? null}
-                    onPick={(r) => field.onChange(r.url)}
-                    onClear={() => field.onChange(null)}
+                  <DateField
+                    id="trip-start"
+                    value={field.value}
+                    onChange={field.onChange}
+                    aria-invalid={!!errors.startDate}
                   />
                 )}
               />
+              <FieldError errors={[errors.startDate]} />
             </Field>
+            <Field className="gap-2" data-invalid={!!errors.endDate}>
+              <FieldLabel htmlFor="trip-end">End</FieldLabel>
+              <Controller
+                control={control}
+                name="endDate"
+                render={({ field }) => (
+                  <DateField
+                    id="trip-end"
+                    value={field.value ?? ""}
+                    onChange={(day) => field.onChange(day || null)}
+                    min={startDate || undefined}
+                    placeholder="Same day"
+                    clearable
+                    aria-invalid={!!errors.endDate}
+                  />
+                )}
+              />
+              <FieldError errors={[errors.endDate]} />
+            </Field>
+          </div>
 
+          <Field className="gap-2" data-invalid={!!errors.currency}>
+            <FieldLabel htmlFor="trip-currency">Currency</FieldLabel>
+            <Input
+              id="trip-currency"
+              maxLength={3}
+              placeholder="USD"
+              className="uppercase"
+              aria-invalid={!!errors.currency}
+              {...register("currency", {
+                setValueAs: (v: string | null) => v?.trim().toUpperCase() || "USD",
+              })}
+            />
+            <FieldError errors={[errors.currency]} />
+          </Field>
+        </div>
+
+        {/* A fieldset, not a label: the picker is several controls (tabs, a
+            link box, an upload button), and a <label> can name only one. */}
+        <FieldSet className="gap-2">
+          <FieldLegend variant="label" className="mb-2">
+            Cover photo
+          </FieldLegend>
+          <Controller
+            control={control}
+            name="coverPhotoUrl"
+            render={({ field }) => (
+              <PhotoPicker
+                folder={trip?.id ?? "covers"}
+                previewUrl={field.value ?? null}
+                onPick={(r) => field.onChange(r.url)}
+                onClear={() => field.onChange(null)}
+              />
+            )}
+          />
+          <FieldError errors={[errors.coverPhotoUrl]} />
+        </FieldSet>
       </div>
 
       {/* Full width, below the two columns: five swatches wrapped into a ragged
           3-2 block inside a half column, and a textarea is the one field that
           genuinely wants the whole dialog. Both being in the left column is
           also what made it tower over the cover photo beside it. */}
-      <Field className="gap-2">
-        <FieldLabel>Color</FieldLabel>
+      <FieldSet className="gap-2">
+        <FieldLegend variant="label" className="mb-2">
+          Color
+        </FieldLegend>
         <Controller
           control={control}
           name="color"
           render={({ field }) => (
-            <div className="flex flex-wrap items-center gap-2">
-              {COLORS.map((c) => (
-                <button
+            // A single-select group, so the chosen swatch is announced as
+            // checked rather than shown by its ring alone.
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              value={field.value}
+              onValueChange={(v) => v && field.onChange(v)}
+              className="gap-2"
+            >
+              {COLORS.map((c, i) => (
+                <ToggleGroupItem
                   key={c}
-                  type="button"
-                  aria-label={`Use color ${c}`}
-                  onClick={() => field.onChange(c)}
-                  className={`size-7 rounded-full border-2 ${
-                    field.value === c ? "border-foreground" : "border-transparent"
-                  }`}
+                  value={c}
+                  aria-label={`Color ${i + 1}`}
+                  className="size-7 min-w-0 flex-none rounded-full border-2 border-transparent p-0 shadow-none data-[state=on]:border-foreground"
+                  // The swatch IS the value; a token class per slot would
+                  // have to be kept in step with COLORS by hand.
                   style={{ backgroundColor: c }}
                 />
               ))}
-            </div>
+            </ToggleGroup>
           )}
         />
-      </Field>
+      </FieldSet>
 
-      <Field className="gap-2">
+      <Field className="gap-2" data-invalid={!!errors.description}>
         <FieldLabel htmlFor="trip-description">Notes</FieldLabel>
         <Textarea
           id="trip-description"
           placeholder="What is this trip about?"
           rows={3}
+          aria-invalid={!!errors.description}
           {...register("description", {
             setValueAs: (v: string | null) => v?.trim() || null,
           })}
         />
+        <FieldError errors={[errors.description]} />
       </Field>
 
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="ghost" onClick={() => router.back()}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel ?? (() => router.push(TRIP_LIST_PATH))}
+        >
           Cancel
         </Button>
         <Button type="submit" disabled={isPending}>
+          {isPending && <Spinner />}
           {isPending ? "Saving…" : trip ? "Save changes" : "Create trip"}
         </Button>
       </div>

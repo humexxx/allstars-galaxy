@@ -6,12 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { userPreferences } from "@/db/schema";
 import { DEFAULT_FINANCE_MILESTONES } from "@/lib/finance/milestones";
-
-export type UserPreferences = {
-  showContextAvatar: boolean;
-  /** Net-worth milestones annotated on the projection charts. */
-  financeMilestones: number[];
-};
+import type { UserPreferences } from "@/types/preferences";
 
 // Defaults live here (not in the DB) so a user without a row — i.e. anyone
 // who never touched settings — gets them without a backfill.

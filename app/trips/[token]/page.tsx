@@ -1,27 +1,21 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { format } from "date-fns";
 
 import { PublicTripViewRenderer } from "@/components/travel/public-trip-view";
 import { getBaseUrl } from "@/lib/env";
 import { getPublicTripByToken } from "@/lib/services/travel-service";
+import { formatDayRange } from "@/lib/utils/date";
 
 export const dynamic = "force-dynamic";
 
 type Params = { token: string };
 
-function describeTrip(trip: { destination: string | null; startDate: string; endDate: string | null }): string {
-  const [y, m, d] = trip.startDate.split("-").map(Number);
-  const start = new Date(y, m - 1, d);
-  const end = trip.endDate
-    ? (() => {
-        const [ey, em, ed] = trip.endDate!.split("-").map(Number);
-        return new Date(ey, em - 1, ed);
-      })()
-    : null;
-  const dateLabel = end
-    ? `${format(start, "MMM d")} – ${format(end, "MMM d, yyyy")}`
-    : format(start, "MMM d, yyyy");
+function describeTrip(trip: {
+  destination: string | null;
+  startDate: string;
+  endDate: string | null;
+}): string {
+  const dateLabel = formatDayRange(trip.startDate, trip.endDate);
   return trip.destination ? `${trip.destination} · ${dateLabel}` : dateLabel;
 }
 

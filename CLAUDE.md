@@ -173,8 +173,12 @@ All code, comments, and documentation in **English**.
 
 ### Schemas
 - Location: `/schemas` folder
-- Naming: `[name]Schema` + `[Name]Data`
+- Naming: `[name]Schema` + `[Name]Data` (`z.infer`). Add an `[Name]Input`
+  (`z.input`) only when the schema transforms, defaults or coerces — that is
+  what the action accepts; the service takes the parsed `…Data`.
 - Export both schema and inferred type
+- Shared primitives live in `schemas/common.ts`: `idSchema` (never an inline
+  `z.string().uuid()`), `isoDateSchema`, `moneySchema`
 
 ### Database Changes
 1. Edit `db/schema.ts`

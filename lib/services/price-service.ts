@@ -5,7 +5,7 @@ import { desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { priceAssets, priceQuotes } from "@/db/schema";
 import { fetchCoinGeckoPrices } from "./price-providers/coingecko";
-import { fetchDailyCloses, fetchMassivePrices } from "./price-providers/massive";
+import { fetchMassivePrices } from "./price-providers/massive";
 import type { PriceableAsset } from "./price-providers/types";
 
 export type PriceFetchResult = {
@@ -32,7 +32,9 @@ const MANUAL = "manual";
 export async function refreshPrices(): Promise<PriceFetchResult> {
   const assets = await db.select().from(priceAssets).where(ne(priceAssets.source, MANUAL));
 
-  const priceable = assets.filter((a) => a.externalId);
+  const priceable = assets.filter(
+    (a): a is typeof a & { externalId: string } => !!a.externalId
+  );
   let skipped = assets.length - priceable.length;
 
   if (priceable.length === 0) {
@@ -50,7 +52,7 @@ export async function refreshPrices(): Promise<PriceFetchResult> {
   const bySource = new Map<string, PriceableAsset[]>();
   for (const a of ordered) {
     const list = bySource.get(a.source) ?? [];
-    list.push({ id: a.id, symbol: a.symbol, externalId: a.externalId! });
+    list.push({ id: a.id, symbol: a.symbol, externalId: a.externalId });
     bySource.set(a.source, list);
   }
 
@@ -115,12 +117,19 @@ export async function getLatestPrices(assetIds: string[]): Promise<Map<string, n
   return new Map(rows.map((r) => [r.assetId, parseFloat(r.price)]));
 }
 
-/** Every asset that can back a holding, newest listing last. */
-export async function listPriceAssets() {
+export type PriceAsset = typeof priceAssets.$inferSelect;
+
+/** Every asset that can back a holding, ordered by ticker. */
+export async function listPriceAssets(): Promise<PriceAsset[]> {
   return db.select().from(priceAssets).orderBy(priceAssets.symbol);
 }
 
-export async function getPriceAssetBySymbol(symbol: string) {
+export async function getPriceAsset(assetId: string): Promise<PriceAsset | null> {
+  const [row] = await db.select().from(priceAssets).where(eq(priceAssets.id, assetId)).limit(1);
+  return row ?? null;
+}
+
+export async function getPriceAssetBySymbol(symbol: string): Promise<PriceAsset | null> {
   const [row] = await db
     .select()
     .from(priceAssets)
@@ -129,67 +138,26 @@ export async function getPriceAssetBySymbol(symbol: string) {
   return row ?? null;
 }
 
+/** Add an asset to the shared catalogue. */
+export async function createPriceAsset(data: {
+  symbol: string;
+  name: string;
+  source: PriceAsset["source"];
+  externalId: string | null;
+}): Promise<{ id: string }> {
+  const [created] = await db
+    .insert(priceAssets)
+    .values(data)
+    .returning({ id: priceAssets.id });
+  return created;
+}
+
 /**
- * Write month-end closes for an asset going back to `from`.
- *
- * The margin chart needs prices at each past month, and the cron only ever
- * records today. Persisting them means the chart is a plain DB read rather
- * than a provider call on every page load — which matters when the free tier
- * allows 5 requests a minute.
- *
- * Idempotent by construction: a month already carrying a quote is skipped, so
- * running this repeatedly costs one API call and writes nothing.
+ * Price an asset by hand. An ordinary quote row, so a manual price and a
+ * fetched one are the same kind of fact and the margin reads them identically.
  */
-export async function backfillHistoricalQuotes(
-  from: string,
-  to: string
-): Promise<{ written: number; errors: string[] }> {
-  const assets = await db
-    .select()
-    .from(priceAssets)
-    .where(eq(priceAssets.source, "massive"));
-
-  const errors: string[] = [];
-  const rows: { assetId: string; price: string; fetchedAt: Date }[] = [];
-
-  for (const asset of assets) {
-    if (!asset.externalId) continue;
-
-    const existing = await db
-      .select({ fetchedAt: priceQuotes.fetchedAt })
-      .from(priceQuotes)
-      .where(eq(priceQuotes.assetId, asset.id));
-    const haveMonth = new Set(
-      existing.map((e) => e.fetchedAt.toISOString().slice(0, 7))
-    );
-
-    const { bars, error } = await fetchDailyCloses(asset.externalId, from, to);
-    if (error) {
-      errors.push(`${asset.symbol}: ${error}`);
-      continue;
-    }
-
-    // Last bar of each month wins — a month-end close is the convention the
-    // rest of the app already uses for monthly figures.
-    const lastOfMonth = new Map<string, { day: string; close: number }>();
-    for (const bar of bars) {
-      const month = bar.day.slice(0, 7);
-      const cur = lastOfMonth.get(month);
-      if (!cur || bar.day > cur.day) lastOfMonth.set(month, bar);
-    }
-
-    for (const [month, bar] of lastOfMonth) {
-      if (haveMonth.has(month)) continue;
-      rows.push({
-        assetId: asset.id,
-        price: bar.close.toFixed(8),
-        fetchedAt: new Date(`${bar.day}T23:59:00.000Z`),
-      });
-    }
-  }
-
-  if (rows.length > 0) await db.insert(priceQuotes).values(rows);
-  return { written: rows.length, errors };
+export async function insertManualQuote(assetId: string, price: number): Promise<void> {
+  await db.insert(priceQuotes).values({ assetId, price: price.toFixed(8) });
 }
 
 /** Month-end price per asset, keyed `assetId|YYYY-MM`. */

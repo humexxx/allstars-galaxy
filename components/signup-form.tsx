@@ -6,12 +6,14 @@ import {
   Field,
   FieldDescription,
   FieldGroup,
+  FieldError,
   FieldLabel,
   FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Heading, Text } from "@/components/ui/typography"
-import { AuthService } from "@/lib/services/auth-service"
+import { AuthService } from "@/lib/auth/auth-client"
 import { signupSchema, type SignupData } from "@/schemas/auth"
 import { useState } from "react"
 import { useForm } from "react-hook-form"
@@ -50,8 +52,8 @@ export function SignupForm({
 
     try {
       await AuthService.signUpWithEmail(data.email, data.password, data.name, next)
-      // Usually signup requires email confirmation, so we might want to show a message
-      // But for now let's just push to home or show success
+      // Supabase holds the account until the email is confirmed, so the next
+      // stop is the login page with that instruction on it.
       const params = new URLSearchParams({
         message: "Check your email for confirmation link",
       })
@@ -90,53 +92,47 @@ export function SignupForm({
         </div>
 
         {error && (
-          <div
-            className="text-destructive text-sm text-center p-2 bg-destructive/10 rounded"
-            role="alert"
-            aria-live="polite"
-          >
-            {error}
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
-        <Field>
-          <FieldLabel htmlFor="name">Full Name</FieldLabel>
-          <Input id="name" type="text" placeholder="John Doe" autoComplete="name" {...register("name")} />
-          {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+        <Field data-invalid={!!errors.name}>
+          <FieldLabel htmlFor="name">Full name</FieldLabel>
+          <Input id="name" type="text" placeholder="John Doe" autoComplete="name" aria-invalid={!!errors.name} {...register("name")} />
+          <FieldError errors={[errors.name]} />
         </Field>
-        <Field>
+        <Field data-invalid={!!errors.email}>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" type="email" placeholder="m@example.com" autoComplete="email" {...register("email")} />
-          {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+          <Input id="email" type="email" placeholder="m@example.com" autoComplete="email" aria-invalid={!!errors.email} {...register("email")} />
+          <FieldError errors={[errors.email]} />
           <FieldDescription>
             We&apos;ll use this to contact you. We won&apos;t share your email.
           </FieldDescription>
         </Field>
-        <Field>
+        <Field data-invalid={!!errors.password}>
           <FieldLabel htmlFor="password">Password</FieldLabel>
-          <Input id="password" type="password" autoComplete="new-password" {...register("password")} />
-          {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+          <Input id="password" type="password" autoComplete="new-password" aria-invalid={!!errors.password} {...register("password")} />
+          <FieldError errors={[errors.password]} />
           <FieldDescription>
             Must be at least 8 characters.
           </FieldDescription>
         </Field>
-        <Field>
-          <FieldLabel htmlFor="confirm-password">Confirm Password</FieldLabel>
-          <Input id="confirm-password" type="password" autoComplete="new-password" {...register("confirmPassword")} />
-          {errors.confirmPassword && (
-            <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>
-          )}
+        <Field data-invalid={!!errors.confirmPassword}>
+          <FieldLabel htmlFor="confirm-password">Confirm password</FieldLabel>
+          <Input id="confirm-password" type="password" autoComplete="new-password" aria-invalid={!!errors.confirmPassword} {...register("confirmPassword")} />
+          <FieldError errors={[errors.confirmPassword]} />
           <FieldDescription>Please confirm your password.</FieldDescription>
         </Field>
         <Field>
           <Button type="submit" disabled={isLoading} className="w-full">
-            {isSubmitting ? "Creating account..." : "Create Account"}
+            {isSubmitting ? "Creating account…" : "Create account"}
           </Button>
         </Field>
         <FieldSeparator>Or continue with</FieldSeparator>
         <Field>
           <Button variant="outline" type="button" onClick={handleGoogleLogin} className="w-full" disabled={isLoading}>
-            <svg viewBox="0 0 24 24" className="mr-2 h-4 w-4" aria-hidden="true" fill="currentColor">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                 fill="#4285F4"
@@ -157,7 +153,7 @@ export function SignupForm({
             Google
           </Button>
           <FieldDescription className="px-6 text-center">
-            Already have an account? <Link href={loginHref}>Login</Link>
+            Already have an account? <Link href={loginHref}>Log in</Link>
           </FieldDescription>
         </Field>
       </FieldGroup>

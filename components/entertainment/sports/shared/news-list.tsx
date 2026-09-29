@@ -1,18 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Newspaper } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Mono, Text } from "@/components/ui/typography";
 import type { F1NewsImage } from "@/db/schema";
-
-export type NewsItem = {
-  id: string;
-  headline: string;
-  description: string | null;
-  link: string | null;
-  images: F1NewsImage[];
-  firstSeenAt: Date;
-};
+import { formatDay } from "@/lib/utils/date";
+import type { F1NewsArticle } from "@/types/sports";
 
 /**
  * A wire of articles, newest first.
@@ -25,10 +19,11 @@ function thumbnail(images: F1NewsImage[]): F1NewsImage | null {
   return images.reduce((best, i) => ((i.width ?? 0) > (best.width ?? 0) ? i : best));
 }
 
-export function NewsList({ items }: { items: NewsItem[] }) {
+export function NewsList({ items }: { items: F1NewsArticle[] }) {
   if (items.length === 0) {
     return (
       <EmptyState
+        icon={Newspaper}
         title="No news yet"
         description="Stories land here once the daily refresh has run."
       />
@@ -46,13 +41,13 @@ export function NewsList({ items }: { items: NewsItem[] }) {
           <Link
             key={item.id}
             href={`/news/f1/${item.id}`}
-            className="group flex gap-3 rounded-lg border bg-card p-3 transition-colors hover:border-primary/50"
+            className="group flex gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-muted/40"
           >
             {image?.url && (
               <div className="relative size-20 shrink-0 overflow-hidden rounded-md bg-muted">
                 <Image
                   src={image.url}
-                  alt={image.alt ?? ""}
+                  alt={image.alt ?? item.headline}
                   fill
                   sizes="80px"
                   className="object-cover"
@@ -64,20 +59,16 @@ export function NewsList({ items }: { items: NewsItem[] }) {
               </div>
             )}
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="text-sm font-medium leading-snug">
+              <Text as="span" weight="medium" className="leading-snug">
                 {item.headline}
-              </span>
+              </Text>
               {item.description && (
                 <Text variant="small" className="line-clamp-2">
                   {item.description}
                 </Text>
               )}
-              <Mono className="mt-auto text-2xs text-muted-foreground">
-                {item.firstSeenAt.toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
+              <Mono className="mt-auto text-2xs text-muted-foreground" suppressHydrationWarning>
+                {formatDay(item.firstSeenAt)}
               </Mono>
             </div>
           </Link>

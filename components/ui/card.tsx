@@ -30,11 +30,18 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
+function CardTitle({
+  className,
+  as: Comp = "div",
+  ...props
+}: React.ComponentProps<"div"> & {
+  /** Render as a real heading when the card title is one in the outline. */
+  as?: "div" | "h2" | "h3" | "h4"
+}) {
   return (
-    <div
+    <Comp
       data-slot="card-title"
-      className={cn("text-base leading-normal font-semibold group-data-[size=sm]/card:text-sm", className)}
+      className={cn("text-base font-medium tracking-tight text-balance sm:text-lg group-data-[size=sm]/card:text-sm group-data-[size=sm]/card:sm:text-base", className)}
       {...props}
     />
   )

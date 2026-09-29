@@ -74,11 +74,23 @@ export async function requireAdminCached(): Promise<User> {
   return user;
 }
 
+/** True for the two errors the gates above throw on purpose. */
+function isAuthGateError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err.message === "Unauthorized" || err.message.startsWith("Forbidden"))
+  );
+}
+
 export async function requireAdminOrRedirect(fallback = "/portal"): Promise<User> {
   try {
     return await requireAdminCached();
-  } catch {
-    redirect(fallback);
+  } catch (err) {
+    // Only "not signed in / not an admin" means "go elsewhere". A database
+    // outage swallowed here became a silent bounce to the dashboard, which
+    // looks exactly like a permissions bug.
+    if (isAuthGateError(err)) redirect(fallback);
+    throw err;
   }
 }
 

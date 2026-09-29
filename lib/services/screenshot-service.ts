@@ -33,7 +33,9 @@ export async function getScreenshotUrl(
       data?: { screenshot?: { url?: string } };
     };
     return json?.data?.screenshot?.url ?? null;
-  } catch {
+  } catch (error) {
+    // Best-effort: the card renders its placeholder art instead.
+    console.error("[screenshot-service] Error fetching preview:", error);
     return null;
   }
 }

@@ -122,6 +122,37 @@ export async function createAutomatedTasksForRoadPath(userId: string, roadPathId
   });
 }
 
+export type AutomatedTasksRun = {
+  created: Array<{ userId: string; tasksCreated: number }>;
+  failedUserIds: string[];
+};
+
+/**
+ * The daily cron's pass: every user with a live auto-creating road path.
+ *
+ * Only those users are visited — walking every account ran one empty query
+ * per user who never set a schedule. One user's failure is logged and skipped
+ * so it cannot stop the rest.
+ */
+export async function createAutomatedTasksForAllUsers(): Promise<AutomatedTasksRun> {
+  const owners = await db
+    .selectDistinct({ userId: roadPaths.userId })
+    .from(roadPaths)
+    .where(and(eq(roadPaths.autoCreateTasks, true), isNull(roadPaths.completedAt)));
+
+  const run: AutomatedTasksRun = { created: [], failedUserIds: [] };
+  for (const { userId } of owners) {
+    try {
+      const tasks = await createAutomatedTasksForAllRoadPaths(userId);
+      if (tasks.length > 0) run.created.push({ userId, tasksCreated: tasks.length });
+    } catch (error) {
+      console.error(`Failed to create automated tasks for user ${userId}:`, error);
+      run.failedUserIds.push(userId);
+    }
+  }
+  return run;
+}
+
 export async function createAutomatedTasksForAllRoadPaths(userId: string): Promise<BoardTask[]> {
   // 1. Fetch all candidate paths in one query.
   const activePaths = await db.query.roadPaths.findMany({
@@ -185,29 +216,4 @@ export async function createAutomatedTasksForAllRoadPaths(userId: string): Promi
 
     return createdTasks;
   });
-}
-
-export async function getNextTaskDueDate(frequency: RoadPathFrequency, lastDate?: Date): Promise<Date> {
-  const baseDate = lastDate || new Date();
-  const nextDate = new Date(baseDate);
-
-  switch (frequency) {
-    case "daily":
-      nextDate.setDate(nextDate.getDate() + 1);
-      break;
-    case "every_other_day":
-      nextDate.setDate(nextDate.getDate() + 2);
-      break;
-    case "weekly":
-      nextDate.setDate(nextDate.getDate() + 7);
-      break;
-    case "biweekly":
-      nextDate.setDate(nextDate.getDate() + 14);
-      break;
-    case "monthly":
-      nextDate.setMonth(nextDate.getMonth() + 1);
-      break;
-  }
-
-  return nextDate;
 }

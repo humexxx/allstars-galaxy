@@ -12,6 +12,19 @@ export function formatCurrency(value: number | string | null | undefined): strin
   return CURRENCY_FORMATTER.format(num);
 }
 
+/** "$350k", "$1.5M", "-$2k" — axis ticks and chips, never a balance. */
+export function formatCurrencyCompact(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) return "$0";
+  const num = typeof value === "string" ? parseFloat(value) : value;
+  if (Number.isNaN(num)) return "$0";
+  const sign = num < 0 ? "-" : "";
+  const abs = Math.abs(num);
+  const trim = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, ""));
+  if (abs >= 1_000_000) return `${sign}$${trim(abs / 1_000_000)}M`;
+  if (abs >= 1_000) return `${sign}$${trim(Math.round(abs / 100) / 10)}k`;
+  return `${sign}$${Math.round(abs)}`;
+}
+
 export function formatSignedCurrency(value: number | string | null | undefined): string {
   if (value === null || value === undefined) return "$0.00";
   const num = typeof value === "string" ? parseFloat(value) : value;

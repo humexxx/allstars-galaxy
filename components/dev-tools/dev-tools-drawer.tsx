@@ -5,6 +5,7 @@ import { Wrench } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Sheet,
   SheetContent,
@@ -12,9 +13,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Eyebrow, Text } from "@/components/ui/typography";
-import { cn } from "@/lib/utils";
 
 import {
   type DevToolHelper,
@@ -48,19 +49,15 @@ export function DevToolsDrawer() {
         size="icon"
         aria-label="Open dev tools"
         onClick={() => setOpen(true)}
-        className={cn(
-          "fixed bottom-4 right-4 z-40 h-10 w-10 rounded-full shadow-lg",
-          "border border-warning/40 bg-warning/10 text-warning hover:bg-warning/20",
-          ""
-        )}
+        className="fixed right-4 bottom-4 z-40 rounded-full border border-warning/30 bg-warning/10 text-warning shadow-lg hover:bg-warning/20"
       >
-        <Wrench className="h-4 w-4" />
+        <Wrench />
       </Button>
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="right" className="flex w-full flex-col gap-0 sm:max-w-sm">
           <SheetHeader className="border-b">
             <SheetTitle className="flex items-center gap-2">
-              <Wrench className="h-4 w-4 text-warning" /> Dev tools
+              <Wrench aria-hidden className="size-4 text-warning" /> Dev tools
             </SheetTitle>
             <SheetDescription>
               Page-scoped helpers — only visible in development.
@@ -68,17 +65,15 @@ export function DevToolsDrawer() {
           </SheetHeader>
           <div className="flex-1 overflow-y-auto p-4">
             {grouped.length === 0 ? (
-              <Text variant="muted" className="text-sm">
-                No helpers registered for this page yet.
-              </Text>
+              <EmptyState icon={Wrench} title="No helpers registered for this page yet" />
             ) : (
-              <div className="space-y-6">
+              <div className="flex flex-col gap-6">
                 {grouped.map(({ section, items }) => (
-                  <section key={section} className="space-y-2">
-                    <Eyebrow as="div" className="text-2xs" role="heading" aria-level={3}>
+                  <section key={section} className="flex flex-col gap-2">
+                    <Eyebrow as="div" size="sm" role="heading" aria-level={3}>
                       {section}
                     </Eyebrow>
-                    <ul className="space-y-2">
+                    <ul className="flex flex-col gap-2">
                       {items.map((helper) => (
                         <li key={helper.id ?? helper.kind}>
                           <HelperRow helper={helper} />
@@ -99,13 +94,8 @@ export function DevToolsDrawer() {
 function HelperRow({ helper }: { helper: DevToolHelper }) {
   if (helper.kind === "toggle") {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-md border bg-card p-3">
-        <div className="min-w-0">
-          <p className="text-sm font-medium">{helper.label}</p>
-          {helper.description && (
-            <p className="text-xs text-muted-foreground">{helper.description}</p>
-          )}
-        </div>
+      <div className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
+        <HelperText label={helper.label} description={helper.description} />
         <Switch
           checked={helper.checked}
           onCheckedChange={helper.onChange}
@@ -119,7 +109,16 @@ function HelperRow({ helper }: { helper: DevToolHelper }) {
     return <ActionRow helper={helper} />;
   }
 
-  return <div className="rounded-md border bg-card p-3">{helper.render()}</div>;
+  return <div className="rounded-lg border bg-card p-3">{helper.render()}</div>;
+}
+
+function HelperText({ label, description }: { label: string; description?: string }) {
+  return (
+    <div className="min-w-0">
+      <Text weight="medium">{label}</Text>
+      {description && <Text variant="small">{description}</Text>}
+    </div>
+  );
 }
 
 function ActionRow({
@@ -129,7 +128,7 @@ function ActionRow({
 }) {
   const [pending, startTransition] = React.useTransition();
   const Icon = helper.icon;
-  const handleClick = () => {
+  const handleClick = (): void => {
     startTransition(async () => {
       try {
         await helper.onRun();
@@ -142,20 +141,15 @@ function ActionRow({
   };
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border bg-card p-3">
-      <div className="min-w-0">
-        <p className="text-sm font-medium">{helper.label}</p>
-        {helper.description && (
-          <p className="text-xs text-muted-foreground">{helper.description}</p>
-        )}
-      </div>
+    <div className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
+      <HelperText label={helper.label} description={helper.description} />
       <Button
         size="sm"
         variant={helper.variant === "destructive" ? "destructive" : "outline"}
         onClick={handleClick}
         disabled={pending}
       >
-        {Icon && <Icon className="mr-1 h-3.5 w-3.5" />}
+        {pending ? <Spinner /> : Icon && <Icon />}
         {pending ? "Running…" : "Run"}
       </Button>
     </div>

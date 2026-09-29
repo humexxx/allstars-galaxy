@@ -28,7 +28,7 @@ export function ShareCta({ inviteeEmail, currentUserEmail, shareToken }: ShareCt
     return (
       <Button asChild size="sm" variant="ghost">
         <Link href="/portal/entertainment/travel-planner">
-          My trips <ArrowRight className="ml-1 size-3.5" />
+          My trips <ArrowRight />
         </Link>
       </Button>
     );
@@ -58,7 +58,7 @@ export function ShareCta({ inviteeEmail, currentUserEmail, shareToken }: ShareCt
       <Button asChild size="sm">
         <Link href={signupHref}>
           {inviteeEmail ? "Continue" : "Sign up"}
-          <ArrowRight className="ml-1 size-3.5" />
+          <ArrowRight />
         </Link>
       </Button>
     </div>

@@ -3,11 +3,15 @@
 import { useState, type ReactNode } from "react";
 import { CalendarDays, List as ListIcon } from "lucide-react";
 
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { TripWithRelations } from "@/types/travel";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import type { CalendarTrip } from "@/types/travel";
 
 import { TripCalendar } from "./trip-calendar";
 import type { ItineraryViewer } from "@/lib/travel/viewer";
+
+/** Light-on-dark segments: the track sits on a photograph, not on the page. */
+const BANNER_SEGMENT =
+  "text-white/70 hover:text-white data-[state=on]:bg-white data-[state=on]:text-black";
 
 /**
  * The same two readings the planner offers, on a link that grants neither.
@@ -31,7 +35,7 @@ export function PublicTripViews({
   banner: ReactNode;
   list: ReactNode;
   aside: ReactNode;
-  trip: TripWithRelations;
+  trip: CalendarTrip;
   viewer: ItineraryViewer | null;
   showPrices: boolean;
 }) {
@@ -48,26 +52,32 @@ export function PublicTripViews({
             for the same reason: the photograph underneath is unknown, and a
             light control over a beach is a control nobody can see. */}
         <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
-          <Tabs value={view} onValueChange={(v) => setView(v as "list" | "calendar")}>
-            <TabsList className="border-0 bg-black/70 text-white/70 ring-1 ring-white/15 backdrop-blur-sm">
-              <TabsTrigger
-                value="list"
+          {/* A segmented control, not Tabs: the two readings render into
+              the same column below, so there are no panels to own. */}
+          <ToggleGroup
+            type="single"
+            value={view}
+            onValueChange={(v) => v && setView(v as "list" | "calendar")}
+            aria-label="View"
+            className="bg-black/70 ring-1 ring-white/15 backdrop-blur-sm"
+          >
+            <ToggleGroupItem
+              value="list"
               aria-label="List"
-                className="gap-1.5 data-[state=active]:bg-white data-[state=active]:text-black"
-              >
-                <ListIcon className="size-3.5" />
-                <span className="hidden sm:inline">List</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="calendar"
+              className={BANNER_SEGMENT}
+            >
+              <ListIcon />
+              <span className="hidden sm:inline">List</span>
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="calendar"
               aria-label="Calendar"
-                className="gap-1.5 data-[state=active]:bg-white data-[state=active]:text-black"
-              >
-                <CalendarDays className="size-3.5" />
-                <span className="hidden sm:inline">Calendar</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+              className={BANNER_SEGMENT}
+            >
+              <CalendarDays />
+              <span className="hidden sm:inline">Calendar</span>
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
       </div>
 

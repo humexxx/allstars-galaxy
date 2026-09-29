@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { CalendarX } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -11,7 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eyebrow, Text } from "@/components/ui/typography";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Eyebrow } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { NbaConference, NbaData, Team } from "@/types/sports";
 
@@ -40,7 +43,7 @@ export function NbaView({ data }: NbaViewProps) {
   );
 
   return (
-    <Tabs defaultValue="games" className="space-y-6">
+    <Tabs defaultValue="games" className="gap-6">
       <SportShell
         emoji="🏀"
         title="NBA"
@@ -56,11 +59,7 @@ export function NbaView({ data }: NbaViewProps) {
       >
         <TabsContent value="games">
           {data.games.length === 0 ? (
-            <Card>
-              <CardContent className="py-10 text-center">
-                <Text variant="muted">No games scheduled right now.</Text>
-              </CardContent>
-            </Card>
+            <EmptyState icon={CalendarX} title="No games scheduled right now." />
           ) : (
             /* Split, not one undifferentiated grid: out of season the list is
                half finished finals and half fixtures months away, and the two
@@ -109,13 +108,18 @@ function NbaStandings({
 
   return (
     <Card size="sm">
-      <CardContent className="space-y-3">
-        <Tabs value={conf} onValueChange={(v) => setConf(v as NbaConference)}>
-          <TabsList variant="line">
-            <TabsTrigger value="east">Eastern Conference</TabsTrigger>
-            <TabsTrigger value="west">Western Conference</TabsTrigger>
-          </TabsList>
-        </Tabs>
+      <CardContent className="flex flex-col gap-3">
+        {/* A segmented control: both conferences share the one table below. */}
+        <ToggleGroup
+          type="single"
+          size="sm"
+          value={conf}
+          onValueChange={(v) => v && setConf(v as NbaConference)}
+          aria-label="Conference"
+        >
+          <ToggleGroupItem value="east">Eastern Conference</ToggleGroupItem>
+          <ToggleGroupItem value="west">Western Conference</ToggleGroupItem>
+        </ToggleGroup>
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">

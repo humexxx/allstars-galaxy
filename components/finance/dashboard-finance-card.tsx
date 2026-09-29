@@ -1,14 +1,29 @@
 import Link from "next/link";
-import { ArrowRight, PlusCircle, TrendingUp, Wallet } from "lucide-react";
+import {
+  ArrowRight,
+  PlusCircle,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
 
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Heading, Mono, Text } from "@/components/ui/typography";
+import { statToneClass } from "@/components/ui/stat-card";
+import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
-import { formatCurrency } from "@/lib/utils/format";
+import { formatDay } from "@/lib/utils/date";
+import { formatCurrency, formatSignedCurrency } from "@/lib/utils/format";
 import {
   getAutoInvestRate,
   getMainPlan,
@@ -38,21 +53,22 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     return (
       <Card className="col-span-full">
         <CardHeader>
-          <Heading level="h5" as="h2" className="flex items-center gap-2">
-            <Wallet className="h-5 w-5" />
+          <CardTitle as="h2" className="flex items-center gap-2">
+            <Wallet className="size-5 shrink-0" aria-hidden="true" />
             Finance plan
-          </Heading>
-        </CardHeader>
-        <CardContent className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Text variant="muted">
+          </CardTitle>
+          <CardDescription>
             Build a plan to project your savings, debts and net worth month by month.
-          </Text>
-          <Button asChild>
-            <Link href="/portal/plans/new">
-              <PlusCircle className="mr-1 h-4 w-4" /> Create plan
-            </Link>
-          </Button>
-        </CardContent>
+          </CardDescription>
+          <CardAction>
+            <Button asChild>
+              <Link href="/portal/plans/new">
+                <PlusCircle />
+                Create plan
+              </Link>
+            </Button>
+          </CardAction>
+        </CardHeader>
       </Card>
     );
   }
@@ -107,7 +123,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   const delta = endNetWorth - currentNetWorth;
   const totalDebt = todayMonth?.totalDebt ?? 0;
 
-  const kpis: Array<{ label: string; value: string; tone?: "neutral" | "positive" | "negative" | "primary" }> = [
+  const kpis: Array<{ label: string; value: string; tone?: KpiTone }> = [
     { label: "Savings now", value: formatCurrency(todayMonth?.savings ?? 0) },
     { label: "Investments", value: formatCurrency(todayMonth?.investments ?? 0), tone: "primary" },
     { label: "Debt now", value: formatCurrency(totalDebt) },
@@ -130,53 +146,47 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   return (
     <Card className="col-span-full">
       <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1 space-y-1">
-            <Heading level="h5" as="h2" className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 shrink-0" />
-              <span className="truncate">{featured.name}</span>
-            </Heading>
-            <Text variant="muted" className="font-mono tabular-nums">
-              12-month projection · updated {featured.updatedAt.toLocaleDateString()}
-            </Text>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className={cn(
-                "gap-1 font-mono tabular-nums",
-                delta >= 0
-                  ? "border-success/30 bg-success/10 text-success"
-                  : "border-destructive/30 bg-destructive/10 text-destructive"
-              )}
-            >
-              <TrendingUp className="h-3 w-3" />
-              {delta >= 0 ? "+" : ""}
-              {formatCurrency(delta)} · 12 mo
-            </Badge>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/portal/plans/${featured.id}`}>
-                Open <ArrowRight className="ml-1 h-3 w-3" />
-              </Link>
-            </Button>
-          </div>
-        </div>
+        <CardTitle as="h2" className="flex min-w-0 items-center gap-2">
+          <Wallet className="size-5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{featured.name}</span>
+        </CardTitle>
+        {/* The delta rides the description line, not the action slot: beside
+            the button it squeezed the plan name to a few characters on phones. */}
+        <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 tabular-nums">
+          <span>12-month projection · updated {formatDay(featured.updatedAt)}</span>
+          <Badge variant={delta >= 0 ? "success" : "destructive"} className="font-mono tabular-nums">
+            {delta >= 0 ? <TrendingUp /> : <TrendingDown />}
+            {formatSignedCurrency(delta)} · 12 mo
+          </Badge>
+        </CardDescription>
+        <CardAction>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/portal/plans/${featured.id}`}>
+              Open
+              <ArrowRight />
+            </Link>
+          </Button>
+        </CardAction>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {kpis.map((k) => (
             <KpiTile key={k.label} {...k} />
           ))}
         </div>
-
-        <div className="mt-4">
-          <DashboardFinanceMiniChart data={points} />
-        </div>
+        <DashboardFinanceMiniChart data={points} />
       </CardContent>
     </Card>
   );
 }
 
+type KpiTone = "neutral" | "positive" | "negative" | "primary";
+
+/**
+ * The StatCard figure (Eyebrow label, Mono value, `statToneClass`) as a tile
+ * inside this card rather than a card of its own. One step smaller than
+ * StatCard's figure: five of these share a row from `sm`.
+ */
 function KpiTile({
   label,
   value,
@@ -184,19 +194,17 @@ function KpiTile({
 }: {
   label: string;
   value: string;
-  tone?: "neutral" | "positive" | "negative" | "primary";
+  tone?: KpiTone;
 }) {
   return (
-    <div className="rounded-md border bg-card/50 p-3">
-      <Text variant="small" className="uppercase tracking-wide">
+    <div className="flex flex-col gap-1 rounded-lg border p-3">
+      <Eyebrow size="sm" as="div">
         {label}
-      </Text>
+      </Eyebrow>
       <Mono
         className={cn(
-          "mt-1 block text-lg font-semibold tabular-nums sm:text-xl",
-          tone === "positive" && "text-success",
-          tone === "negative" && "text-destructive",
-          tone === "primary" && "text-primary"
+          "text-lg font-semibold tabular-nums sm:text-xl",
+          tone === "primary" ? "text-primary" : tone !== "neutral" && statToneClass(tone)
         )}
       >
         {value}

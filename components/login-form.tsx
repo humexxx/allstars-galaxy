@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button"
 import {
   Field,
   FieldGroup,
+  FieldError,
   FieldLabel,
   FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Heading, Text } from "@/components/ui/typography"
-import { AuthService } from "@/lib/services/auth-service"
+import { AuthService } from "@/lib/auth/auth-client"
 import { loginSchema, type LoginData } from "@/schemas/auth"
 import { useState } from "react"
 import { useForm } from "react-hook-form"
@@ -38,8 +40,13 @@ export function LoginForm({
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
-  // OAuth failures come back as ?error= from /auth/callback — surface them.
-  const [error, setError] = useState<string | null>(searchParams.get("error"))
+  // OAuth failures come back as ?error= from /auth/callback. Read it on every
+  // render rather than seeding state from it once: a second failed OAuth round
+  // trip changes the URL without remounting the form.
+  const [submitError, setError] = useState<string | null>(null)
+  const [urlErrorDismissed, setUrlErrorDismissed] = useState(false)
+  const urlError = urlErrorDismissed ? null : searchParams.get("error")
+  const error = submitError ?? urlError
   // Sign-up hands off here with ?message= ("check your email"); it was written
   // but never read, so a new account landed on a bare login form.
   const message = searchParams.get("message")
@@ -57,6 +64,7 @@ export function LoginForm({
 
   const onSubmit = async (data: LoginData): Promise<void> => {
     setError(null)
+    setUrlErrorDismissed(true)
 
     try {
       await AuthService.loginWithPassword(data.email, data.password)
@@ -88,37 +96,29 @@ export function LoginForm({
     >
       <FieldGroup>
         <div className="flex flex-col items-center gap-1 text-center">
-          <Heading level="h3" as="h1">Login to your account</Heading>
+          <Heading level="h3" as="h1">Log in to your account</Heading>
           <Text variant="muted" className="text-balance">
-            Enter your email below to login
+            Enter your email below to log in
           </Text>
         </div>
         
         {message && !error && (
-          <div
-            className="text-muted-foreground text-sm text-center p-2 bg-muted rounded"
-            role="alert"
-            aria-live="polite"
-          >
-            {message}
-          </div>
+          <Alert role="status">
+            <AlertDescription>{message}</AlertDescription>
+          </Alert>
         )}
         {error && (
-          <div
-            className="text-destructive text-sm text-center p-2 bg-destructive/10 rounded"
-            role="alert"
-            aria-live="polite"
-          >
-            {error}
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
-        <Field>
+        <Field data-invalid={!!errors.email}>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" type="email" placeholder="m@example.com" autoComplete="email" {...register("email")} />
-          {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+          <Input id="email" type="email" placeholder="m@example.com" autoComplete="email" aria-invalid={!!errors.email} {...register("email")} />
+          <FieldError errors={[errors.email]} />
         </Field>
-        <Field>
+        <Field data-invalid={!!errors.password}>
           <div className="flex items-center">
             <FieldLabel htmlFor="password">Password</FieldLabel>
             <Link
@@ -128,18 +128,18 @@ export function LoginForm({
               Forgot your password?
             </Link>
           </div>
-          <Input id="password" type="password" autoComplete="current-password" {...register("password")} />
-          {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+          <Input id="password" type="password" autoComplete="current-password" aria-invalid={!!errors.password} {...register("password")} />
+          <FieldError errors={[errors.password]} />
         </Field>
         <Field>
           <Button type="submit" disabled={isLoading} className="w-full">
-            {isSubmitting ? "Logging in..." : "Login"}
+            {isSubmitting ? "Logging in…" : "Log in"}
           </Button>
         </Field>
         <FieldSeparator>Or continue with</FieldSeparator>
         <Field>
           <Button variant="outline" type="button" onClick={handleGoogleLogin} className="w-full" disabled={isLoading}>
-            <svg viewBox="0 0 24 24" className="mr-2 h-4 w-4" aria-hidden="true" fill="currentColor">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                 fill="#4285F4"

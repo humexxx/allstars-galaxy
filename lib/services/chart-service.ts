@@ -5,12 +5,7 @@ import { portfolioSnapshots } from "@/db/schema";
 import { eq, and, gte, asc } from "drizzle-orm";
 import { subDays, subMonths, startOfMonth, getDate } from "date-fns";
 
-export type TimeRange = "30d" | "90d" | "120d" | "1yr" | "All";
-
-export interface ChartDataPoint {
-  date: string;
-  value: number;
-}
+import type { ChartDataPoint, TimeRange } from "@/types/chart";
 
 /**
  * Get portfolio performance data for charts

@@ -16,10 +16,6 @@ export interface User {
   updatedAt: Date
 }
 
-export interface AuthUser {
-  name: string
-}
-
 export type UserListItem = {
   id: string;
   email: string | null;

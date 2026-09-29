@@ -18,8 +18,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Mono } from "@/components/ui/typography";
+import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
+import { formatShortDay } from "@/lib/utils/date";
 import { isBracketDrawn } from "@/lib/sports/bracket";
 import type {
   LolData,
@@ -50,11 +51,11 @@ export function LolView({ data }: LolViewProps) {
     [split],
   );
 
-  const hasPlayoffs = !!split.playoffs && split.playoffs.length > 0;
+  const playoffs = split.playoffs && split.playoffs.length > 0 ? split.playoffs : null;
   // A bracket that exists but names nobody is not somewhere to land: opening
   // on it showed "not drawn yet" as the first thing on the page while the
   // split's actual matches sat one tab away.
-  const playoffsDrawn = hasPlayoffs && isBracketDrawn(split.playoffs!);
+  const playoffsDrawn = playoffs !== null && isBracketDrawn(playoffs);
 
   return (
     // Keyed by region: switching to a region without playoffs while on the
@@ -63,7 +64,7 @@ export function LolView({ data }: LolViewProps) {
     <Tabs
       key={region}
       defaultValue={playoffsDrawn ? "playoffs" : "matches"}
-      className="space-y-6"
+      className="gap-6"
     >
       <SportShell
         emoji="🎮"
@@ -71,7 +72,7 @@ export function LolView({ data }: LolViewProps) {
         subtitle={`${split.name} · ${split.season}`}
         controls={
           <Select value={region} onValueChange={(v) => setRegion(v as LolRegion)}>
-            <SelectTrigger className="w-56">
+            <SelectTrigger className="w-56" aria-label="Region">
               <SelectValue placeholder="Region" />
             </SelectTrigger>
             <SelectContent>
@@ -87,7 +88,7 @@ export function LolView({ data }: LolViewProps) {
           <TabsList>
             <TabsTrigger value="matches">Matches</TabsTrigger>
             <TabsTrigger value="standings">Standings</TabsTrigger>
-            {hasPlayoffs && <TabsTrigger value="playoffs">Playoffs</TabsTrigger>}
+            {playoffs && <TabsTrigger value="playoffs">Playoffs</TabsTrigger>}
           </TabsList>
         }
       >
@@ -103,11 +104,11 @@ export function LolView({ data }: LolViewProps) {
           <LolStandings split={split} teamsMap={teamsMap} />
         </TabsContent>
 
-        {hasPlayoffs && (
+        {playoffs && (
           <TabsContent value="playoffs">
             <Card size="sm">
               <CardContent>
-                <KnockoutBracket rounds={split.playoffs!} teams={teamsMap} />
+                <KnockoutBracket rounds={playoffs} teams={teamsMap} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -139,23 +140,19 @@ function LolMatchCard({
 
   return (
     <div className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
-      <div className="min-w-0 space-y-1.5">
+      <div className="flex min-w-0 flex-col gap-1.5">
         {match.stageLabel && (
-          <div className="text-2xs uppercase tracking-wide text-muted-foreground">
+          <Eyebrow size="sm" as="div">
             {match.stageLabel} · BO{match.bestOf}
-          </div>
+          </Eyebrow>
         )}
         <LolTeamRow team={home} score={match.homeScore} winner={homeWon} scheduled={isScheduled} />
         <LolTeamRow team={away} score={match.awayScore} winner={awayWon} scheduled={isScheduled} />
       </div>
       <div className="border-l pl-3 text-right">
-        <Mono className="text-2xs uppercase tracking-wide text-muted-foreground">
-          {isScheduled
-            ? new Date(match.date).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })
-            : match.status.toUpperCase()}
+        {/* An instant: server (UTC) and browser can land on different days. */}
+        <Mono className="text-2xs uppercase tracking-wide text-muted-foreground" suppressHydrationWarning>
+          {isScheduled ? formatShortDay(match.date) : match.status.toUpperCase()}
         </Mono>
       </div>
     </div>
@@ -202,7 +199,7 @@ function LolStandings({
 }) {
   return (
     <Card>
-      <CardContent className="p-0">
+      <CardContent className="px-0">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">

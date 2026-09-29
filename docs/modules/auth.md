@@ -1,17 +1,22 @@
 # Auth
 
 > **Status:** Active
-> **Last reviewed:** 2026-09-11
+> **Last reviewed:** 2026-09-29
 
 ## Overview
 Supabase-backed authentication: email/password login, signup, password reset,
-and SSR-friendly session management. Server-side action wrappers
-(`authenticatedAction`, `adminAction`) enforce auth on every mutation.
+and SSR-friendly session management. Every server action opens with one of the
+gates in `lib/services/auth-server.ts` / `lib/services/impersonation.ts`.
 
 ## Routes
 - `/login`
 - `/signup`
 - `/forgot-password`
+- `/update-password` — where the reset email lands (through `/auth/callback`,
+  which signs the user in) to choose the new password. Without a session it
+  sends the user back to `/forgot-password`. The reset link used to point at
+  `/portal/profile/update-password`, a route that never existed, so a reset
+  could not be completed.
 - `/auth/callback` — OAuth / email confirmation callback. Surfaces failures
   instead of bouncing silently: provider `error`/`error_description` params, a
   missing `code`, and `exchangeCodeForSession` errors all redirect to
@@ -22,13 +27,18 @@ and SSR-friendly session management. Server-side action wrappers
 ## Server actions — `/app/actions/`
 - `auth.ts` — `signOutAction` (server-side sign-out + redirect to `/login`). Login / signup / password reset still use the Supabase client directly because they depend on `window.location.origin` for redirect URLs.
 
-## Services — `/lib/services/`
-- `auth-service.ts` — Supabase client setup
-- `auth-server.ts` — `authenticatedAction`, `adminAction` wrappers (used by every mutation in the app)
+## Services
+- `lib/auth/auth-client.ts` — `AuthService`, the **browser** calls (password
+  and Google sign-in, sign-up, reset email, `updatePassword`). It lives outside
+  `lib/services` because everything there is `server-only`.
+- `lib/services/auth-server.ts` — `requireAuth[Cached]`, `requireAdmin[Cached]`,
+  `requireProvider`, `requireAdminOrRedirect` (redirects only on an
+  unauthorized/forbidden error; a database failure is rethrown, not disguised
+  as a bounce to the dashboard).
 
 ## Schemas — `/schemas/`
 - `user.ts`
-- `auth.ts` — `loginSchema`, `signupSchema`, `forgotPasswordSchema` (+ `Data` types) backing the RHF auth forms
+- `auth.ts` — `loginSchema`, `signupSchema`, `forgotPasswordSchema`, `updatePasswordSchema` (+ `Data` types) backing the RHF auth forms. New passwords need 8+ characters — the sign-up form already said so while the schema accepted one.
 
 ## Types — `/types/`
 - `user.ts`
@@ -37,6 +47,10 @@ and SSR-friendly session management. Server-side action wrappers
 - `components/login-form.tsx`
 - `components/signup-form.tsx`
 - `components/forgot-password-form.tsx`
+- `components/update-password-form.tsx`
+
+All four use `Alert` for form-level errors and `Field` + `FieldError` with
+`aria-invalid` for field errors.
 
 ## DB tables
 - `auth.users` (Supabase managed) — referenced by `users` via FK

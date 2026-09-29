@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -23,15 +23,13 @@ export function DashboardCardSkeleton({
   return (
     <Card className={cn("col-span-full", className)} aria-hidden="true">
       <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-2">
-            <Skeleton className="h-5 w-40" />
-            <Skeleton className="h-4 w-64 max-w-full" />
-          </div>
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-4 w-64 max-w-full" />
+        <CardAction>
           <Skeleton className="h-8 w-24" />
-        </div>
+        </CardAction>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col gap-4">
         <div
           className={cn(
             "grid gap-3",

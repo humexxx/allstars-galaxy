@@ -1,18 +1,9 @@
 import { z } from "zod";
 
-// SportId enum mirrors the literal union in /types/sports.ts. Keeping it as a
-// flat enum here means the action layer can reject unknown sport keys before
-// hitting the service / DB.
-export const sportIdSchema = z.enum([
-  "football",
-  "worldcup",
-  "padel",
-  "f1",
-  "nba",
-  "tennis",
-  "nfl",
-  "lol",
-]);
+import { SPORT_IDS } from "@/types/sports";
+
+// Rejects unknown sport keys before they reach the service / DB.
+export const sportIdSchema = z.enum(SPORT_IDS);
 
 // Toggle payload used by the manage-favourites sheet. `isFavorite=true` upserts
 // the (userId, sportId) row, `false` deletes it.
@@ -21,4 +12,4 @@ export const setSportFavoriteSchema = z.object({
   isFavorite: z.boolean(),
 });
 
-export type SetSportFavoriteInput = z.infer<typeof setSportFavoriteSchema>;
+export type SetSportFavoriteData = z.infer<typeof setSportFavoriteSchema>;

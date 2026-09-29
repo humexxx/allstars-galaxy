@@ -4,13 +4,21 @@ import { debtFreeMonthsFromNow } from "@/lib/finance/chart-series";
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LineChart } from "lucide-react";
+
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Eyebrow, Heading, Mono } from "@/components/ui/typography";
 
 import { formatCurrency } from "@/lib/utils/format";
 import type { Projection } from "@/types/finance";
@@ -73,29 +81,32 @@ export function CompareView({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <Card>
-        <CardHeader className="pb-3">
-          <Eyebrow as="div">Plans in chart</Eyebrow>
+        <CardHeader>
+          <Eyebrow asChild>
+            <h2>Plans in chart</h2>
+          </Eyebrow>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3">
             {projections.map((p) => (
               <label
                 key={p.plan.id}
-                className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2"
+                className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium"
               >
+                {/* The wrapping label names the checkbox: a second <Label>
+                    inside it was a label nested in a label. */}
                 <Checkbox
                   checked={selected.has(p.plan.id)}
                   onCheckedChange={() => toggle(p.plan.id)}
-                  aria-label={`Toggle ${p.plan.name}`}
                 />
                 <span
-                  className="h-3 w-3 rounded-full"
+                  className="size-3 rounded-full"
                   style={{ backgroundColor: p.plan.color }}
                   aria-hidden="true"
                 />
-                <Label className="cursor-pointer">{p.plan.name}</Label>
+                <span>{p.plan.name}</span>
               </label>
             ))}
           </div>
@@ -104,19 +115,27 @@ export function CompareView({
 
       <Card>
         <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle>Projection comparison</CardTitle>
-            <Tabs value={metric} onValueChange={(v) => setMetric(v as Metric)}>
-              <TabsList>
-                <TabsTrigger value="netWorth">Net worth</TabsTrigger>
-                <TabsTrigger value="totalDebt">Total debt</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
+          <CardTitle as="h2">Projection comparison</CardTitle>
+          <CardAction>
+            <ToggleGroup
+              type="single"
+              size="sm"
+              value={metric}
+              onValueChange={(v) => v && setMetric(v as Metric)}
+              aria-label="Metric"
+            >
+              <ToggleGroupItem value="netWorth">Net worth</ToggleGroupItem>
+              <ToggleGroupItem value="totalDebt">Total debt</ToggleGroupItem>
+            </ToggleGroup>
+          </CardAction>
         </CardHeader>
         <CardContent>
           {filtered.length === 0 ? (
-            <Text variant="muted">Select at least one plan above.</Text>
+            <EmptyState
+              icon={LineChart}
+              title="No plans selected"
+              description="Select at least one plan above."
+            />
           ) : (
             <ComparePlansChart projections={filtered} metric={metric} />
           )}
@@ -124,52 +143,56 @@ export function CompareView({
       </Card>
 
       {showEndingState && (
-      <Card>
-        <CardHeader>
-          <CardTitle>Ending state per plan</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {projections.map((p) => (
-              <div
-                key={p.plan.id}
-                className="rounded-md border p-4"
-                style={{ borderLeftColor: p.plan.color, borderLeftWidth: 4 }}
-              >
-                <div className="flex items-center justify-between">
-                  <Heading level="h6" as="p">{p.plan.name}</Heading>
-                  {debtFreeMonthsFromNow(p) !== null && (
-                    <Badge variant="outline">
-                      {debtFreeMonthsFromNow(p) === 0
-                        ? "Debt-free"
-                        : `Debt-free in ${debtFreeMonthsFromNow(p)} mo`}
-                    </Badge>
-                  )}
-                </div>
-                <dl className="mt-3 space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Savings</dt>
-                    <dd><Mono>{formatCurrency(p.endingSavings)}</Mono></dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Debt</dt>
-                    <dd><Mono>{formatCurrency(p.endingDebt)}</Mono></dd>
-                  </div>
-                  <div className="flex justify-between border-t pt-1 font-semibold">
-                    <dt>Net worth</dt>
-                    <dd>
-                      <Mono className={p.endingNetWorth >= 0 ? "text-success" : "text-destructive"}>
-                        {formatCurrency(p.endingNetWorth)}
-                      </Mono>
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle as="h2">Ending state per plan</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {projections.map((p) => (
+                <EndingStateTile key={p.plan.id} projection={p} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
+    </div>
+  );
+}
+
+function EndingStateTile({ projection: p }: { projection: Projection }) {
+  const debtFreeIn = debtFreeMonthsFromNow(p);
+  return (
+    <div
+      className="rounded-lg border p-4"
+      style={{ borderLeftColor: p.plan.color, borderLeftWidth: 4 }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <Heading level="h6" as="h3">{p.plan.name}</Heading>
+        {debtFreeIn !== null && (
+          <Badge variant="outline">
+            {debtFreeIn === 0 ? "Debt-free" : `Debt-free in ${debtFreeIn} mo`}
+          </Badge>
+        )}
+      </div>
+      <dl className="mt-3 flex flex-col gap-1 text-sm">
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">Savings</dt>
+          <dd><Mono>{formatCurrency(p.endingSavings)}</Mono></dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">Debt</dt>
+          <dd><Mono>{formatCurrency(p.endingDebt)}</Mono></dd>
+        </div>
+        <div className="flex justify-between border-t pt-1 font-semibold">
+          <dt>Net worth</dt>
+          <dd>
+            <Mono className={p.endingNetWorth >= 0 ? "text-success" : "text-destructive"}>
+              {formatCurrency(p.endingNetWorth)}
+            </Mono>
+          </dd>
+        </div>
+      </dl>
     </div>
   );
 }

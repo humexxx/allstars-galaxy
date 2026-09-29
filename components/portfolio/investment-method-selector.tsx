@@ -1,14 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { InvestmentMethod } from "@/types/portfolio";
@@ -36,18 +41,23 @@ export function InvestmentMethodSelector({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Select Investment Method</DialogTitle>
+          <DialogTitle>Select investment method</DialogTitle>
+          <DialogDescription>
+            Pick where this money goes. You can change it on the next step.
+          </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
+          <InputGroup>
+            <InputGroupAddon>
+              <Search aria-hidden />
+            </InputGroupAddon>
+            <InputGroupInput
               placeholder="Search"
-              className="pl-10"
+              aria-label="Search methods"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
-          </div>
+          </InputGroup>
           <ScrollArea className="max-h-[60svh]">
             <div className="flex flex-col gap-2">
               {filteredMethods.map((method) => (
@@ -60,28 +70,14 @@ export function InvestmentMethodSelector({
                   }}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
                       <span className="text-sm font-semibold text-primary">
                         {method.name.substring(0, 2).toUpperCase()}
                       </span>
                     </div>
-                    <div className="flex flex-col items-start">
-                      <span className="font-medium">{method.name}</span>
-                    </div>
+                    <span className="font-medium">{method.name}</span>
                   </div>
-                  <svg
-                    className="h-5 w-5 text-muted-foreground"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
+                  <ChevronRight aria-hidden className="text-muted-foreground" />
                 </Button>
               ))}
             </div>

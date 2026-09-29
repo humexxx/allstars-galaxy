@@ -35,18 +35,18 @@ export function SportShell({
   className,
 }: SportShellProps) {
   return (
-    <div className={cn("space-y-6", className)}>
+    <div className={cn("flex flex-col gap-6", className)}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex items-center gap-3">
           {emoji && (
             <span
               aria-hidden
-              className="grid h-12 w-12 place-items-center rounded-xl bg-muted/60 text-2xl ring-1 ring-foreground/10"
+              className="grid size-12 place-items-center rounded-xl bg-muted/60 text-2xl ring-1 ring-foreground/10"
             >
               {emoji}
             </span>
           )}
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <Heading level="h3" as="h2">
               {title}
             </Heading>

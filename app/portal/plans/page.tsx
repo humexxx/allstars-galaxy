@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-
-import { debtFreeMonthsFromNow } from "@/lib/finance/chart-series";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { LineChart, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/portal/page-header";
@@ -10,10 +8,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PlansWorkspace } from "@/components/finance/plans-workspace";
 import type { PlanSummary } from "@/types/finance";
 
+import { debtFreeMonthsFromNow } from "@/lib/finance/chart-series";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import {
-  getPlanWithLines,
-  listUserPlans,
+  listUserPlansWithLines,
   projectPlanWithPortfolio,
 } from "@/lib/services/finance-plan-service";
 
@@ -26,16 +24,13 @@ export const dynamic = "force-dynamic";
 
 export default async function FinancePlansPage() {
   const ctx = await requireEffectiveContext();
-  const plans = await listUserPlans(ctx.effectiveUserId);
+  const plans = await listUserPlansWithLines(ctx.effectiveUserId);
 
   // Project every plan so each card can surface its outcome (debt-free date +
   // projected net worth) and the plans can be stacked in one comparison chart.
   // Personal-finance plans are few, so the per-plan projection cost is fine.
   const projections = await Promise.all(
-    plans.map(async (p) => {
-      const full = await getPlanWithLines(p.id, ctx.effectiveUserId);
-      return projectPlanWithPortfolio(full!, ctx.effectiveUserId);
-    })
+    plans.map((p) => projectPlanWithPortfolio(p, ctx.effectiveUserId))
   );
 
   const summaries: Record<string, PlanSummary> = Object.fromEntries(
@@ -51,14 +46,14 @@ export default async function FinancePlansPage() {
   );
 
   return (
-    <section className="space-y-6">
+    <section className="flex flex-col gap-6">
       <PageHeader
         title="Finance Plans"
         description="Build scenarios for your income, expenses, debts and projected net worth."
         actions={
           <Button asChild>
             <Link href="/portal/plans/new">
-              <Plus className="mr-1 h-4 w-4" />
+              <Plus />
               New plan
             </Link>
           </Button>
@@ -68,12 +63,13 @@ export default async function FinancePlansPage() {
       {plans.length === 0 ? (
         <EmptyState
           variant="card"
+          icon={LineChart}
           title="No plans yet"
           description="Create your first plan to start modelling income, debts and savings."
           action={
             <Button asChild>
               <Link href="/portal/plans/new">
-                <Plus className="mr-1 h-4 w-4" />
+                <Plus />
                 Create plan
               </Link>
             </Button>

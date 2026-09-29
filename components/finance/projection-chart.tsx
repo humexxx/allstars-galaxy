@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -25,8 +25,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { formatCurrency, formatCurrencyCompact } from "@/lib/utils/format";
 import type { ChartConfig } from "@/types/chart";
 import type { Projection } from "@/types/finance";
+
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 // Format projection dates in UTC — the projection generates months at UTC
 // midnight, so any local timezone with a negative offset would shift the
@@ -44,22 +47,8 @@ const config = {
   netWorth: { label: "Net worth", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
-// Compact, human-readable money formatter for axis ticks AND on-point labels.
-// Examples: 0, 750, 10k, 250k, 1M, 1.5M, 12M.
-function formatMoneyTick(v: number): string {
-  if (v === 0) return "0";
-  const abs = Math.abs(v);
-  const sign = v < 0 ? "-" : "";
-  if (abs >= 1_000_000) {
-    const m = abs / 1_000_000;
-    return `${sign}${m % 1 < 0.05 ? Math.round(m) : m.toFixed(1)}M`;
-  }
-  if (abs >= 1_000) {
-    const k = abs / 1_000;
-    return `${sign}${k % 1 < 0.05 ? Math.round(k) : k.toFixed(1)}k`;
-  }
-  return `${sign}${Math.round(abs)}`;
-}
+// Axis ticks and milestone labels: "$350k", "$1.5M".
+const formatMoneyTick = formatCurrencyCompact;
 
 // Friendly distance-from-today string for milestone tooltips. Whole months
 // only — fractional months feel awkward in a casual hover tip.
@@ -108,7 +97,11 @@ function MilestoneLabel(props: {
     >
       <Tooltip delayDuration={100}>
         <TooltipTrigger asChild>
-          <span className="block cursor-help text-center text-2xs font-medium leading-none text-foreground">
+          {/* Focusable so the time-gap tip is reachable without a pointer. */}
+          <span
+            tabIndex={0}
+            className="block cursor-help rounded-sm text-center text-2xs font-medium leading-none text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             {formatMoneyTick(props.milestone)}
           </span>
         </TooltipTrigger>
@@ -120,14 +113,9 @@ function MilestoneLabel(props: {
   );
 }
 
-// Full-precision money for the hover tooltip (e.g. -52,102.02). The axis ticks
-// use the compact formatter; the tooltip wants the exact figure.
-function formatMoneyFull(v: number): string {
-  return v.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+// Full-precision money for the hover tooltip ("-$52,102.02"), the same form
+// the sidebar beside the chart uses. The axis ticks use the compact formatter.
+const formatMoneyFull = formatCurrency;
 
 // One labelled line inside the custom tooltip: colour swatch + label on the
 // left, right-aligned mono value.
@@ -146,7 +134,8 @@ function TooltipRow({
     <div className="flex items-center justify-between gap-4">
       <span className="flex items-center gap-1.5 text-muted-foreground">
         <span
-          className="h-2 w-2 shrink-0 rounded-[2px]"
+          aria-hidden="true"
+          className="size-2 shrink-0 rounded-xs"
           style={{ backgroundColor: swatch }}
         />
         {label}
@@ -197,7 +186,7 @@ function PointTooltip(props: {
   const delta = ghost != null ? row.rawValue - ghost : null;
 
   return (
-    <div className="grid min-w-[10rem] gap-1.5 rounded-lg border border-border/50 bg-popover px-2.5 py-1.5 text-xs shadow-xl">
+    <div className="grid min-w-40 gap-1.5 rounded-lg border border-border/50 bg-popover px-2.5 py-1.5 text-xs shadow-xl">
       <div className="font-medium">{row.monthLabel}</div>
       <div className="grid gap-1">
         <TooltipRow
@@ -208,7 +197,7 @@ function PointTooltip(props: {
         />
         {debt > 0 && (
           <TooltipRow
-            swatch="#f43f5e"
+            swatch="var(--destructive)"
             label="Debt"
             value={formatMoneyFull(debt)}
             valueClass="text-destructive"
@@ -216,7 +205,7 @@ function PointTooltip(props: {
         )}
         {investments > 0 && (
           <TooltipRow
-            swatch="#10b981"
+            swatch="var(--success)"
             label="Investments"
             value={formatMoneyFull(investments)}
             valueClass="text-success"
@@ -251,7 +240,8 @@ type DotRenderProps = {
 };
 
 // Pulsing "you are here" marker for today's point: a solid dot with an
-// expanding, fading ring (SMIL — self-contained, no global CSS needed).
+// expanding, fading ring (SMIL — self-contained, no global CSS needed). SMIL
+// ignores `prefers-reduced-motion`, so the ring is left out when it is set.
 function TodayPulseDot({
   cx,
   cy,
@@ -261,22 +251,25 @@ function TodayPulseDot({
   cy: number;
   color: string;
 }) {
+  const reducedMotion = usePrefersReducedMotion();
   return (
     <g>
-      <circle cx={cx} cy={cy} r={5} fill={color} opacity={0.35}>
-        <animate
-          attributeName="r"
-          values="5;16"
-          dur="1.6s"
-          repeatCount="indefinite"
-        />
-        <animate
-          attributeName="opacity"
-          values="0.4;0"
-          dur="1.6s"
-          repeatCount="indefinite"
-        />
-      </circle>
+      {!reducedMotion && (
+        <circle cx={cx} cy={cy} r={5} fill={color} opacity={0.35}>
+          <animate
+            attributeName="r"
+            values="5;16"
+            dur="1.6s"
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="opacity"
+            values="0.4;0"
+            dur="1.6s"
+            repeatCount="indefinite"
+          />
+        </circle>
+      )}
       <circle cx={cx} cy={cy} r={5} fill={color} />
     </g>
   );
@@ -323,7 +316,12 @@ type ProjectionChartProps = {
   milestones?: readonly number[];
 };
 
-export function ProjectionChart({
+/**
+ * Memoised: the plan editor re-renders on every hovered point (the sidebar
+ * previews that period), and the chart's props are stable across those
+ * renders, so recharts is spared a full re-render per mouse move.
+ */
+export const ProjectionChart = memo(function ProjectionChart({
   points,
   pastCount = 0,
   color,
@@ -463,10 +461,25 @@ export function ProjectionChart({
     return Dot;
   };
 
+  const first = data[0];
+  const last = data.at(-1);
+  const today = data[pastCount];
+
   return (
     <div ref={containerRef} className="min-w-0">
-      <ChartContainer config={config} className={`${heightClass} w-full`}>
+      {/* The line in words, for anyone who can't see it. */}
+      {first && last && (
+        <p className="sr-only">
+          Net worth {formatMoneyFull(first.rawValue)} in {first.monthLabel}
+          {today && today !== first && today !== last
+            ? `, ${formatMoneyFull(today.rawValue)} today (${today.monthLabel})`
+            : ""}
+          , projected {formatMoneyFull(last.rawValue)} by {last.monthLabel}.
+        </p>
+      )}
+      <ChartContainer config={config} className={cn(heightClass, "w-full")}>
         <LineChart
+          accessibilityLayer
           data={data}
           margin={{ left: 10, right: 20, top: 30, bottom: 0 }}
           className={onSelectIndex ? "cursor-pointer" : undefined}
@@ -627,7 +640,7 @@ export function ProjectionChart({
       </ChartContainer>
     </div>
   );
-}
+});
 
 /**
  * Dot renderer for the comparison chart: nothing anywhere except today's row,
@@ -674,7 +687,7 @@ function ComparePlansTooltip(props: {
   if (!row) return null;
 
   return (
-    <div className="grid min-w-[10rem] gap-1.5 rounded-lg border border-border/50 bg-popover px-2.5 py-1.5 text-xs shadow-xl">
+    <div className="grid min-w-40 gap-1.5 rounded-lg border border-border/50 bg-popover px-2.5 py-1.5 text-xs shadow-xl">
       <div className="font-medium">{String(row.month ?? "")}</div>
       <div className="grid gap-1">
         {seriesByPlan.map(({ proj, key }) => {
@@ -809,10 +822,14 @@ export function ComparePlansChart({
   if (projections.length === 0) return null;
 
   return (
-    <ChartContainer config={compareConfig} className={`${heightClass} w-full`}>
+    <ChartContainer config={compareConfig} className={cn(heightClass, "w-full")}>
       {/* No left margin: the YAxis already reserves its own label gutter, so a
           margin on top of it is pure dead space. */}
-      <LineChart data={data} margin={{ left: 0, right: 4, top: 10, bottom: 0 }}>
+      <LineChart
+        accessibilityLayer
+        data={data}
+        margin={{ left: 0, right: 4, top: 10, bottom: 0 }}
+      >
         {/* Full grid here (unlike the single-plan chart above, which stays
             horizontal-only because its milestone markers already carry the x
             axis). Kept recessive — dashed and low opacity — so it reads as

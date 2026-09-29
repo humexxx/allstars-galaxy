@@ -48,11 +48,8 @@ vi.mock("./finance-confirmation-service", () => ({
 import {
   createConfirmationSnapshot,
   createDailyFinanceSnapshots,
-  createManualFinanceSnapshot,
-  deleteManualFinanceSnapshots,
   getProjectedStateForMonth,
   getRecentMonthlySnapshots,
-  listSnapshots,
 } from "./finance-snapshot-service";
 import type {
   ConfirmationWithDebts,
@@ -160,14 +157,6 @@ function makeInsertChain(snapshotId = "snap-id") {
   };
   const chain = {
     values: vi.fn().mockReturnValue(valuesResult),
-  };
-  return chain;
-}
-
-function makeDeleteChain() {
-  // db.delete(table).where(cond) is awaited directly.
-  const chain = {
-    where: vi.fn().mockResolvedValue(undefined),
   };
   return chain;
 }
@@ -341,46 +330,6 @@ describe("createConfirmationSnapshot", () => {
 
 // ---------- createManualFinanceSnapshot ----------
 
-describe("createManualFinanceSnapshot", () => {
-  beforeEach(() => {
-    getLatestConfirmationMock.mockResolvedValue(null);
-    getPortfolioValueForUserMock.mockResolvedValue(0);
-    getAutoInvestRateMock.mockResolvedValue(0);
-  });
-
-  it("writes a snapshot tagged as 'manual'", async () => {
-    getPlanWithLinesMock.mockResolvedValueOnce(buildPlan());
-    projectPlanMock.mockReturnValueOnce({
-      months: [buildProjectionMonth()],
-    });
-
-    const insertChain = makeInsertChain();
-    insertImpl.mockReturnValueOnce(insertChain);
-
-    const date = new Date(Date.UTC(2026, 0, 10));
-    await createManualFinanceSnapshot(PLAN_ID, USER_ID, date);
-
-    expect(insertChain.values.mock.calls[0][0].source).toBe("manual");
-  });
-
-  it("defaults to 'new Date()' when no date is supplied", async () => {
-    vi.useFakeTimers();
-    const now = new Date(Date.UTC(2026, 5, 7, 12, 0, 0));
-    vi.setSystemTime(now);
-
-    getPlanWithLinesMock.mockResolvedValueOnce(buildPlan());
-    projectPlanMock.mockReturnValueOnce({
-      months: [buildProjectionMonth()],
-    });
-    const insertChain = makeInsertChain();
-    insertImpl.mockReturnValueOnce(insertChain);
-
-    await createManualFinanceSnapshot(PLAN_ID, USER_ID);
-
-    expect(insertChain.values.mock.calls[0][0].date).toEqual(now);
-  });
-});
-
 // ---------- createDailyFinanceSnapshots ----------
 
 describe("createDailyFinanceSnapshots", () => {
@@ -504,73 +453,7 @@ describe("createDailyFinanceSnapshots", () => {
 
 // ---------- deleteManualFinanceSnapshots ----------
 
-describe("deleteManualFinanceSnapshots", () => {
-  it("deletes after verifying ownership", async () => {
-    mockOwnershipOk();
-    const deleteChain = makeDeleteChain();
-    deleteImpl.mockReturnValueOnce(deleteChain);
-
-    await deleteManualFinanceSnapshots(PLAN_ID, USER_ID);
-
-    expect(deleteImpl).toHaveBeenCalledOnce();
-    expect(deleteChain.where).toHaveBeenCalledOnce();
-  });
-
-  it("throws and never deletes when the user doesn't own the plan", async () => {
-    mockOwnershipMissing();
-
-    await expect(
-      deleteManualFinanceSnapshots(PLAN_ID, USER_ID)
-    ).rejects.toThrow("Plan not found");
-
-    expect(deleteImpl).not.toHaveBeenCalled();
-  });
-});
-
 // ---------- listSnapshots ----------
-
-describe("listSnapshots", () => {
-  it("returns snapshot rows after verifying ownership", async () => {
-    mockOwnershipOk();
-    const rows = [
-      {
-        date: new Date(Date.UTC(2026, 0, 5)),
-        savings: "100.00",
-        investments: "200.00",
-        totalDebt: "50.00",
-        netWorth: "250.00",
-        source: "system_cron" as const,
-      },
-    ];
-    const listChain = makeSelectChain(rows);
-    selectImpl.mockReturnValueOnce(listChain);
-
-    const result = await listSnapshots(PLAN_ID, USER_ID);
-
-    expect(result).toEqual(rows);
-    // Ownership + list = two select calls.
-    expect(selectImpl).toHaveBeenCalledTimes(2);
-    expect(listChain.limit).toHaveBeenCalledWith(365);
-  });
-
-  it("uses the explicit limit when supplied", async () => {
-    mockOwnershipOk();
-    const listChain = makeSelectChain([]);
-    selectImpl.mockReturnValueOnce(listChain);
-
-    await listSnapshots(PLAN_ID, USER_ID, { limit: 7 });
-
-    expect(listChain.limit).toHaveBeenCalledWith(7);
-  });
-
-  it("throws when the plan isn't owned by the user", async () => {
-    mockOwnershipMissing();
-
-    await expect(listSnapshots(PLAN_ID, USER_ID)).rejects.toThrow(
-      "Plan not found"
-    );
-  });
-});
 
 // ---------- getRecentMonthlySnapshots ----------
 

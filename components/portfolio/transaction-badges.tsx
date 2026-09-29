@@ -1,20 +1,12 @@
 import { Badge } from "@/components/ui/badge";
-import type { TransactionStatus, TransactionType } from "@/types/portfolio";
+import type { TransactionStatus, TransactionType } from "@/types/transaction";
 
 export function StatusBadge({ status }: { status: TransactionStatus }) {
   switch (status) {
     case "approved":
-      return (
-        <Badge variant="outline" className="border-success/30 bg-success/10 text-success">
-          Approved
-        </Badge>
-      );
+      return <Badge variant="success">Approved</Badge>;
     case "pending":
-      return (
-        <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">
-          Pending
-        </Badge>
-      );
+      return <Badge variant="warning">Pending</Badge>;
     case "rejected":
       return <Badge variant="destructive">Rejected</Badge>;
     case "closed":

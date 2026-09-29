@@ -2,9 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { format } from "date-fns";
 import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -24,9 +22,10 @@ import {
 import { Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { moneyRange } from "@/lib/travel/format";
+import { formatMonthLong, formatWeekdayDay } from "@/lib/utils/date";
 import { MarqueeText } from "./marquee-text";
 
-import type { TripItemWithStops, TripWithRelations } from "@/types/travel";
+import type { CalendarTrip, TripItemWithStops } from "@/types/travel";
 import { moveTripItemAction } from "@/app/actions/travel";
 /**
  * Loaded when an item is opened, never before.
@@ -53,7 +52,6 @@ import {
   daysBetween,
   layOutWeek,
   monthWeeks,
-  parseDay,
   shiftDay,
   type CalendarItem,
 } from "@/lib/travel/calendar";
@@ -71,7 +69,7 @@ const DND_MIME = "application/x-allstars-trip-item";
 type DragPayload = { id: string; grabbedOn: string };
 
 function dayLabel(day: string | null | undefined): string {
-  return day ? format(parseDay(day), "EEE d MMM") : "—";
+  return day ? formatWeekdayDay(day) : "—";
 }
 
 /**
@@ -117,7 +115,7 @@ export function TripCalendar({
   readOnly = false,
   showPrices = true,
 }: {
-  trip: TripWithRelations;
+  trip: CalendarTrip;
   partySize?: number;
   viewer?: ItineraryViewer | null;
   /** A share link created without prices must not print them on the bars. */
@@ -195,22 +193,21 @@ export function TripCalendar({
   const [editing, setEditing] = useState<TripItemWithStops | null>(null);
   const [overDay, setOverDay] = useState<string | null>(null);
   const [isMoving, startMove] = useTransition();
-  const router = useRouter();
 
   const handleDrop = (payload: DragPayload, targetDay: string) => {
     const item = byId.get(payload.id);
     if (!item?.scheduledOn) return;
     const delta = daysBetween(payload.grabbedOn, targetDay);
     if (delta === 0) return;
+    const scheduledOn = shiftDay(item.scheduledOn, delta);
     startMove(async () => {
       const res = await moveTripItemAction(trip.id, {
         id: item.id,
-        scheduledOn: shiftDay(item.scheduledOn!, delta),
+        scheduledOn,
         endsOn: item.endsOn ? shiftDay(item.endsOn, delta) : null,
       });
       if (res.success) {
-        toast.success(`Moved to ${dayLabel(shiftDay(item.scheduledOn!, delta))}`);
-        router.refresh();
+        toast.success(`Moved to ${dayLabel(scheduledOn)}`);
       } else {
         toast.error(res.error);
       }
@@ -238,8 +235,11 @@ export function TripCalendar({
         {/* Same as the itinerary's: the badge sits under the month on a
             phone, where the month arrows already own the other end of the
             row. */}
-        <CardTitle className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
-          <span>{format(parseDay(`${month}-01`), "MMMM yyyy")}</span>
+        <CardTitle
+          as="h2"
+          className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2"
+        >
+          <span>{formatMonthLong(`${month}-01`)}</span>
           {viewer && (
             <Badge variant="outline" className="text-2xs font-normal">
               {viewer.isYou ? "your share" : `${viewer.name}'s share`}
@@ -249,22 +249,20 @@ export function TripCalendar({
         <CardAction>
           <div className="flex items-center gap-1">
             <Button
-              size="icon"
+              size="icon-sm"
               variant="ghost"
-              className="size-9 sm:size-8"
               aria-label="Previous month"
               onClick={() => setMonth((m) => addMonths(m, -1))}
             >
-              <ChevronLeft className="size-4" />
+              <ChevronLeft />
             </Button>
             <Button
-              size="icon"
+              size="icon-sm"
               variant="ghost"
-              className="size-9 sm:size-8"
               aria-label="Next month"
               onClick={() => setMonth((m) => addMonths(m, 1))}
             >
-              <ChevronRight className="size-4" />
+              <ChevronRight />
             </Button>
             {/* Wandering off into empty months is the whole point of the
                 arrows; this is the way back without counting clicks. */}
@@ -275,7 +273,7 @@ export function TripCalendar({
               disabled={month === tripMonth}
               onClick={() => setMonth(tripMonth)}
             >
-              <MapPin className="mr-1 size-3.5" />
+              <MapPin />
               Trip
             </Button>
           </div>
@@ -327,6 +325,8 @@ export function TripCalendar({
                   return (
                     <div
                       key={day}
+                      // Today is otherwise only a ring of colour.
+                      aria-current={day === today ? "date" : undefined}
                       // A computed layout, not a spacing choice — see the
                       // constants above.
                       style={{ minHeight: cellHeight }}
@@ -386,7 +386,9 @@ export function TripCalendar({
                           // pointer-only — and the focus-visible marquee rule
                           // in globals.css could never match.
                           tabIndex={0}
-                          role={readOnly ? undefined : "button"}
+                          // A read-only bar is not a control, but its label
+                          // still needs a role to be read out.
+                          role={readOnly ? "note" : "button"}
                           aria-label={
                             readOnly ? seg.item.title : `Edit ${seg.item.title}`
                           }
@@ -414,7 +416,10 @@ export function TripCalendar({
                           }}
                           className={cn(
                             "group/bar pointer-events-auto flex min-w-0 items-center gap-1 overflow-hidden px-1",
-                            readOnly ? "outline-none" : "cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            // Focusable either way (see tabIndex), so the ring
+                            // is too — the shared page's bars had no focus mark.
+                            "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            !readOnly && "cursor-pointer",
                             isMoving && "opacity-60",
                             meta.bar,
                             COL_START[seg.start],
@@ -436,7 +441,9 @@ export function TripCalendar({
                               to edit. */}
                           <span
                             draggable={!readOnly}
-                            aria-label="Drag to move"
+                            // Pointer-only affordance; the keyboard path is
+                            // the edit dialog the bar itself opens.
+                            aria-hidden
                             onClick={(e) => e.stopPropagation()}
                             onDragStart={(e) => {
                               const payload: DragPayload = {
@@ -507,7 +514,7 @@ export function TripCalendar({
       </CardContent>
 
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent className="max-h-[90vh] sm:max-w-2xl overflow-y-auto">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editing?.title}</DialogTitle>
             <DialogDescription>

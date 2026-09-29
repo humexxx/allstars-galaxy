@@ -4,7 +4,9 @@ import { cache } from "react";
 import { desc, eq, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db";
-import { f1News, type F1NewsImage } from "@/db/schema";
+import { f1News } from "@/db/schema";
+import type { F1NewsArticle } from "@/types/sports";
+
 import { upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://f1-motorsport-data.p.rapidapi.com";
@@ -26,15 +28,6 @@ type RapidArticle = {
   description?: string;
   link?: string;
   images?: RapidImage[];
-};
-
-export type F1NewsArticle = {
-  id: string;
-  headline: string;
-  description: string | null;
-  link: string | null;
-  images: F1NewsImage[];
-  firstSeenAt: Date;
 };
 
 function articlesFrom(payload: unknown): RapidArticle[] {

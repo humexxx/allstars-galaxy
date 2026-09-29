@@ -7,9 +7,12 @@ import { ArrowRight, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { getF1Article, getOtherF1News } from "@/lib/services/rapidapi-f1-news-service";
+import { formatLongDay, formatShortDay } from "@/lib/utils/date";
 import type { F1NewsImage } from "@/db/schema";
 
-export const dynamic = "force-dynamic";
+// Public and cookie-free, so it can be cached: every link unfurl used to hit
+// the database. An hour is plenty — the cron refreshes the wire once a day.
+export const revalidate = 3600;
 
 /** The widest image the provider sent — its list runs small crops to full bleed. */
 function hero(images: F1NewsImage[]): F1NewsImage | null {
@@ -55,24 +58,19 @@ export default async function F1ArticlePage({
     <article className="flex flex-col gap-8">
       <div className="flex flex-col gap-4">
         <Eyebrow>Formula 1</Eyebrow>
-        <Heading level="h1" className="text-2xl sm:text-4xl">
+        <Heading level="hero" as="h1">
           {article.headline}
         </Heading>
         <Mono className="text-xs text-muted-foreground">
-          {article.firstSeenAt.toLocaleDateString(undefined, {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
+          {formatLongDay(article.firstSeenAt)}
         </Mono>
       </div>
 
       {image?.url && (
-        <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl bg-muted">
+        <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-muted">
           <Image
             src={image.url}
-            alt={image.alt ?? ""}
+            alt={image.alt ?? article.headline}
             fill
             priority
             sizes="(max-width: 896px) 100vw, 896px"
@@ -101,7 +99,7 @@ export default async function F1ArticlePage({
         <div className="flex flex-col gap-2">
           <Button asChild className="self-start">
             <a href={article.link} target="_blank" rel="noopener noreferrer">
-              Read the full story <ExternalLink className="ml-1.5 size-3.5" />
+              Read the full story <ExternalLink />
             </a>
           </Button>
           <Text variant="small">Opens the original report at the source.</Text>
@@ -116,7 +114,7 @@ export default async function F1ArticlePage({
             </Heading>
             <Button variant="ghost" size="sm" asChild>
               <Link href="/portal/entertainment/sports?sport=f1">
-                All news <ArrowRight className="ml-1 size-3" />
+                All news <ArrowRight />
               </Link>
             </Button>
           </div>
@@ -127,7 +125,7 @@ export default async function F1ArticlePage({
                 <Link
                   key={other.id}
                   href={`/news/f1/${other.id}`}
-                  className="group flex gap-3 rounded-lg border bg-card p-3 transition-colors hover:border-primary/50"
+                  className="group flex gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-muted/40"
                 >
                   {thumb?.url && (
                     <div className="relative size-16 shrink-0 overflow-hidden rounded-md bg-muted">
@@ -142,14 +140,11 @@ export default async function F1ArticlePage({
                     </div>
                   )}
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="text-sm font-medium leading-snug">
+                    <Text as="span" weight="medium" className="leading-snug">
                       {other.headline}
-                    </span>
+                    </Text>
                     <Mono className="mt-auto text-2xs text-muted-foreground">
-                      {other.firstSeenAt.toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                      })}
+                      {formatShortDay(other.firstSeenAt)}
                     </Mono>
                   </div>
                 </Link>

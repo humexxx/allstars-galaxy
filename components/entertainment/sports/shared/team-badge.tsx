@@ -8,9 +8,9 @@ type TeamBadgeProps = {
 };
 
 const sizeMap = {
-  sm: "h-5 w-5 text-2xs",
-  md: "h-6 w-6 text-2xs",
-  lg: "h-8 w-8 text-xs",
+  sm: "size-5 text-2xs",
+  md: "size-6 text-2xs",
+  lg: "size-8 text-xs",
 };
 
 /**
@@ -22,7 +22,7 @@ const sizeMap = {
  */
 function readableInk(hex: string | undefined): string {
   if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return "#fff";
-  const channel = (v: number) => {
+  const channel = (v: number): number => {
     const c = v / 255;
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   };

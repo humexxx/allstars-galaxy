@@ -1,28 +1,27 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import {
-  ArrowLeft,
   CalendarDays,
   Camera,
-  ChevronDown,
   ClipboardCheck,
   GitBranch,
   LineChart,
   type LucideIcon,
+  MoreHorizontal,
   Star,
   Table2,
   Unlink,
   Zap,
 } from "lucide-react";
 
+import { PageHeader } from "@/components/portal/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,21 +31,20 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { EmptyState } from "@/components/ui/empty-state";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Heading, Mono, Text } from "@/components/ui/typography";
+import { Toggle } from "@/components/ui/toggle";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 
 import { useRegisterDevTool } from "@/components/dev-tools/dev-tools-context";
 import { runDailySnapshotsAction } from "@/app/actions/dev-tools";
@@ -56,8 +54,16 @@ import { PeriodCompareDialog } from "./period-compare-dialog";
 import { FinancialHealthDonut } from "./financial-health-donut";
 import { PlanLineEditor } from "./plan-line-editor";
 import { PlanDebtEditor } from "./plan-debt-editor";
-import { PlanForm, type InvestmentMethodOption } from "./plan-form";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { PlanForm } from "./plan-form";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 
 // Recharts is one of the heaviest deps in the app — lazy-load the chart so the
 // projection editor's initial bundle stays small. The skeleton matches the
@@ -100,9 +106,9 @@ import {
   updatePlanIncomeAction,
   upsertLineOverrideAction,
 } from "@/app/actions/finance-plans";
+import type { ActionResult } from "@/lib/actions/safe";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
-import { useIsMobile } from "@/hooks/use-mobile";
 import {
   isDateInPeriod,
   monthsInPeriod,
@@ -121,8 +127,10 @@ import type {
   DebtStrategy,
   FinancePlanLineOverride,
   FinancePlanWithLines,
+  InvestmentMethodOption,
   Projection,
   ProjectionMonth,
+  RecurrenceType,
   StrategyComparison,
 } from "@/types/finance";
 
@@ -148,11 +156,14 @@ const HOVER_PERIOD_LABEL = new Intl.DateTimeFormat("en-US", {
 /**
  * Animates toward `target` whenever it changes (easeOutQuint, like the health
  * donut), so the sidebar figures count up/down on hover instead of snapping.
- * Initial render starts AT the target — no mount animation.
+ * Initial render starts AT the target — no mount animation. With reduced
+ * motion the figure simply changes.
  */
 function useAnimatedNumber(target: number, duration = 350): number {
+  const reducedMotion = usePrefersReducedMotion();
   const [display, setDisplay] = useState(target);
   useEffect(() => {
+    if (reducedMotion) return;
     let cancelled = false;
     let from: number | null = null;
     const start = performance.now();
@@ -171,8 +182,16 @@ function useAnimatedNumber(target: number, duration = 350): number {
       cancelled = true;
       cancelAnimationFrame(raf);
     };
-  }, [target, duration]);
-  return display;
+  }, [target, duration, reducedMotion]);
+  return reducedMotion ? target : display;
+}
+
+/** What a mutation hands to `wrap`: any server action's result. */
+type Wrap = <T>(fn: () => Promise<ActionResult<T>>) => Promise<void>;
+
+/** For fire-and-forget calls to `wrap`, which has already toasted a failure. */
+function settle(promise: Promise<void>): void {
+  promise.catch(() => undefined);
 }
 
 /** Base plan overlay data for scenario plans (plans with basedOnPlanId). */
@@ -210,8 +229,13 @@ type PlanEditorProps = {
   milestones?: readonly number[];
   title: string;
   description: string;
-  /** When set, renders a back-arrow before the title linking here. */
+  /** When set, renders the header's back link to here. */
   backHref?: string;
+  /** The server's clock for this render. "Today" — the current period, the
+   *  KPIs, the chart's today point — is derived from it rather than from
+   *  `new Date()` on each side, which rendered a different day on the client
+   *  than the server did around midnight. */
+  now: Date;
 };
 
 export function PlanEditor({
@@ -228,18 +252,29 @@ export function PlanEditor({
   title,
   description,
   backHref,
+  now,
 }: PlanEditorProps) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
 
-  const wrap = <T,>(fn: () => Promise<{ success: boolean; error?: string } & T>) =>
+  // The one place a mutation's failure is announced. It rejects so the caller
+  // can keep its dialog open, and callers must not toast again. It settles
+  // even when the action itself throws (a dropped connection), or a form's
+  // "Saving…" would never clear.
+  const wrap: Wrap = (fn) =>
     new Promise<void>((resolve, reject) => {
       startTransition(async () => {
-        const result = await fn();
-        if (result.success) resolve();
-        else {
-          toast.error(result.error ?? "Action failed");
-          reject(new Error(result.error ?? "failed"));
+        try {
+          const result = await fn();
+          if (result.success) {
+            resolve();
+          } else {
+            toast.error(result.error);
+            reject(new Error(result.error));
+          }
+        } catch (err) {
+          toast.error("Failed to save changes");
+          reject(err);
         }
       });
     });
@@ -255,7 +290,7 @@ export function PlanEditor({
       periodIndexForDate(
         baseline.startMonth,
         baseline.confirmationDayOfMonth,
-        new Date()
+        now
       )
     ),
     Math.max(0, projection.months.length - 1)
@@ -476,7 +511,7 @@ export function PlanEditor({
   const handleCreateScenario = () =>
     wrap(async () => {
       const result = await createScenarioAction(plan.id, `${plan.name} (scenario)`);
-      if (result.success && result.data) {
+      if (result.success) {
         toast.success("Scenario created");
         router.push(`/portal/plans/${result.data.id}`);
       }
@@ -489,6 +524,7 @@ export function PlanEditor({
   // keeps a stable identity (useRegisterDevTool re-registers on identity
   // change, which would loop with an inline object).
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const openConfirmation = useCallback(() => setConfirmOpen(true), [setConfirmOpen]);
   const [forceConfirmationTool] = useState(() => ({
     id: "finance:force-confirmation",
     kind: "action" as const,
@@ -522,90 +558,56 @@ export function PlanEditor({
     },
   }));
   useRegisterDevTool(runSnapshotsTool);
-  // Label shown on the More dropdown — surfaces the current sub-section when
-  // one is active so users always see where they are.
-  const moreLabel =
-    tab === "setup" ? "Setup" : tab === "settings" ? "Settings" : "More";
-  const moreActive = tab === "setup" || tab === "settings";
-
   return (
-    <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="space-y-6">
-      {/* Header: title block on the left, tabs on the right of the SAME row so
-          the chart sits higher (visible on load without scrolling). The
-          financial-health gauge moved into the Overview sidebar (next to the
-          chart), so the header stays lightweight on every tab. Wraps to two
-          rows on mobile. */}
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-        {/* Title block sits flush with the content/card edge; the back-arrow
-            hangs in the left gutter via absolute positioning so it doesn't
-            indent the title or description. */}
-        <div className="relative min-w-0 space-y-1">
-          {backHref && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              asChild
-              className="absolute top-0 -left-8 text-muted-foreground"
-            >
-              <Link href={backHref} aria-label="Back to plans">
-                <ArrowLeft className="size-4" />
-              </Link>
-            </Button>
-          )}
-          {/* Compact page title: Heading "h3" (text-2xl at ≥640px) at the
-              page-title weight (font-semibold), matching the shadcn docs scale. */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Heading level="h3" as="h1">
-              {title}
-            </Heading>
-            {ghost && (
-              <Badge variant="outline" className="gap-1 text-xs">
-                <GitBranch className="h-3 w-3" />
-                Based on: {ghost.name}
-              </Badge>
-            )}
-          </div>
-          <Text variant="muted">{description}</Text>
-          {periodLabel && (
-            <Text variant="muted" className="font-mono text-xs">
-              Current period · {periodLabel}
-            </Text>
-          )}
-        </div>
-        {/* Overview is the primary surface (Graph / Table / Calendar live in
-            its in-panel switcher); Setup and Settings — used less often and more
-            "admin"-flavoured — live in the More dropdown next to it. */}
-        <div className="flex flex-wrap items-center gap-2">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-          </TabsList>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant={moreActive ? "default" : "outline"}
-                size="sm"
-                className="h-9"
-              >
-                {moreLabel}
-                <ChevronDown className="ml-1 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem onSelect={() => setTab("setup")}>
-                Setup
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setTab("settings")}>
-                Settings
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void handleCreateScenario()}>
-                Create scenario
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
+    <Tabs
+      value={tab}
+      onValueChange={(v) => setTab(v as typeof tab)}
+      className="gap-6"
+    >
+      {/* Title, tabs and the rest of the plan's actions share one header row
+          so the chart starts higher; it wraps to two rows on phones. */}
+      <PageHeader
+        size="compact"
+        back={backHref ? { href: backHref, label: "Plans" } : undefined}
+        title={title}
+        badge={
+          ghost && (
+            <Badge variant="outline">
+              <GitBranch />
+              Based on: {ghost.name}
+            </Badge>
+          )
+        }
+        description={description}
+        meta={periodLabel && `Current period · ${periodLabel}`}
+        actions={
+          <>
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="setup">Setup</TabsTrigger>
+              <TabsTrigger value="settings">Settings</TabsTrigger>
+            </TabsList>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label="More plan actions">
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={isPending}
+                  onSelect={() => settle(handleCreateScenario())}
+                >
+                  <GitBranch />
+                  Create scenario
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+      />
 
-      <TabsContent value="overview" className="space-y-6">
+      <TabsContent value="overview" className="flex flex-col gap-6">
         <ProjectionPanel
           projection={projection}
           pastProjection={pastProjection}
@@ -617,7 +619,8 @@ export function PlanEditor({
           onTogglePortfolio={handleTogglePortfolio}
           onHoverFigures={setHoverFigures}
           milestones={milestones}
-          onConfirmToday={() => setConfirmOpen(true)}
+          onConfirmToday={openConfirmation}
+          now={now}
           calendar={
             <PlanCalendar
               plan={plan}
@@ -656,7 +659,10 @@ export function PlanEditor({
                 This wrapper is what it positions against. */}
             <div className="relative flex min-h-0 flex-col lg:flex-1">
               {isPreview && (
-                <div className="pointer-events-none absolute -top-2.5 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-popover px-2.5 py-0.5 text-2xs font-medium shadow-sm">
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -top-2.5 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-popover px-2.5 py-0.5 text-2xs font-medium shadow-sm"
+                >
                   {hoverFigures.label}
                 </div>
               )}
@@ -665,10 +671,11 @@ export function PlanEditor({
                 // lg:flex-1 — fills the sidebar column so its bottom edge tracks
                 // the main panel's fixed height (see ProjectionPanel's grid).
                 "transition-all duration-200 lg:flex-1",
-                isPreview && "bg-muted/40 ring-1 ring-foreground/10"
+                // Card already draws the ring; the preview only darkens it.
+                isPreview && "bg-muted/40 ring-foreground/10"
               )}
             >
-              <CardContent className="space-y-4">
+              <CardContent className="flex flex-col gap-4">
                 <div className="flex flex-col items-center gap-1.5">
                   <FinancialHealthDonut
                     obligations={dFixedOutflow}
@@ -676,15 +683,16 @@ export function PlanEditor({
                     size={120}
                     showFooter={false}
                   />
-                  <Text variant="small" as="p" className="text-2xs uppercase tracking-wide">
+                  <Eyebrow size="sm" as="p">
                     {isPeriodMode ? "Period health" : "Monthly health"}
-                  </Text>
+                  </Eyebrow>
                 </div>
                 <div>
                   <StatRow
                     label={incomeLabel}
                     value={dIncome}
                     tone="positive"
+                    description="Every income landing in the current period."
                     breakdown={
                       <BreakdownList
                         items={activeIncomeRows.map((r) => ({
@@ -700,6 +708,7 @@ export function PlanEditor({
                   <StatRow
                     label={expensesLabel}
                     value={dFixedOutflow}
+                    description="Expenses and debt minimums due this period."
                     breakdown={
                       <BreakdownList
                         groups={[
@@ -728,6 +737,7 @@ export function PlanEditor({
                   <StatRow
                     label="Total debt"
                     value={dTotalDebt}
+                    description="What each debt stands at this period."
                     tone={dTotalDebt > 0 ? "negative" : undefined}
                     hint={
                       plan.debts.length === 0
@@ -750,6 +760,7 @@ export function PlanEditor({
                   <StatRow
                     label="Surplus"
                     value={dSurplus}
+                    description="Income less fixed obligations, and where the rest goes."
                     tone={dSurplus >= 0 ? "positive" : "negative"}
                     hint={dSurplus < 0 ? "Spends more than it earns" : undefined}
                     breakdown={
@@ -773,10 +784,10 @@ export function PlanEditor({
             )}
             {debtComparison && (
               <Card className="min-h-0">
-                <CardHeader className="pb-0">
-                  <CardTitle className="text-2xs font-medium uppercase tracking-wide text-muted-foreground lg:text-xs">
-                    Debt payoff strategy
-                  </CardTitle>
+                <CardHeader>
+                  <Eyebrow asChild>
+                    <h2 id="debt-strategy-heading">Debt payoff strategy</h2>
+                  </Eyebrow>
                 </CardHeader>
                 {/* All three options on screen with their cost, rather than a
                     badge you have to expand: the choice is a trade-off, and
@@ -786,6 +797,7 @@ export function PlanEditor({
                     comparison={debtComparison}
                     currentStrategy={currentStrategy}
                     onChange={handleChangeStrategy}
+                    pending={isPending}
                   />
                 </CardContent>
               </Card>
@@ -795,7 +807,7 @@ export function PlanEditor({
         />
       </TabsContent>
 
-      <TabsContent value="setup" className="space-y-6">
+      <TabsContent value="setup" className="flex flex-col gap-6">
         <Card>
           <CardContent>
             <PlanLineEditor
@@ -852,14 +864,14 @@ export function PlanEditor({
         </Card>
       </TabsContent>
 
-      <TabsContent value="settings" className="space-y-4">
-        <MainPlanToggle plan={plan} wrap={wrap} />
+      <TabsContent value="settings" className="flex flex-col gap-6">
+        <MainPlanToggle plan={plan} wrap={wrap} pending={isPending} />
         {plan.basedOnPlanId && (
           <Card>
             <CardContent className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <GitBranch className="h-5 w-5 shrink-0 text-muted-foreground" />
-                <div className="space-y-0.5">
+                <GitBranch className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <div className="flex flex-col gap-0.5">
                   <Text weight="medium">Scenario plan</Text>
                   <Text variant="small">
                     {ghost
@@ -872,18 +884,21 @@ export function PlanEditor({
                 type="button"
                 variant="outline"
                 size="sm"
+                disabled={isPending}
                 onClick={() =>
-                  wrap(async () => {
-                    const result = await updatePlanAction({
-                      ...fullPlanPayload(),
-                      basedOnPlanId: null,
-                    });
-                    if (result.success) toast.success("Detached from base plan");
-                    return result;
-                  })
+                  settle(
+                    wrap(async () => {
+                      const result = await updatePlanAction({
+                        ...fullPlanPayload(),
+                        basedOnPlanId: null,
+                      });
+                      if (result.success) toast.success("Detached from base plan");
+                      return result;
+                    })
+                  )
                 }
               >
-                <Unlink className="mr-1.5 h-3.5 w-3.5" />
+                {isPending ? <Spinner /> : <Unlink />}
                 Detach
               </Button>
             </CardContent>
@@ -918,30 +933,30 @@ export function PlanEditor({
 /**
  * Banner card in the Settings tab that surfaces whether THIS plan is the
  * user's main plan, and offers a one-click promotion when it isn't. The
- * `wrap` helper threads through PlanEditor's startTransition so the toast +
- * router.refresh stays consistent with every other server-action button.
+ * `wrap` helper threads through PlanEditor's startTransition so its failure
+ * toast stays consistent with every other server-action button.
  */
 function MainPlanToggle({
   plan,
   wrap,
+  pending,
 }: {
   plan: FinancePlanWithLines;
-  wrap: <T,>(
-    fn: () => Promise<{ success: boolean; error?: string } & T>
-  ) => Promise<void>;
+  wrap: Wrap;
+  pending: boolean;
 }) {
   return (
     <Card>
       <CardContent className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Star
-            className={`h-5 w-5 shrink-0 ${
-              plan.isMain
-                ? "fill-yellow-400 text-yellow-500"
-                : "text-muted-foreground"
-            }`}
+            aria-hidden="true"
+            className={cn(
+              "size-5 shrink-0",
+              plan.isMain ? "fill-warning text-warning" : "text-muted-foreground"
+            )}
           />
-          <div className="space-y-0.5">
+          <div className="flex flex-col gap-0.5">
             <Text weight="medium">
               {plan.isMain ? "Main plan" : "Set as main plan"}
             </Text>
@@ -957,14 +972,18 @@ function MainPlanToggle({
             type="button"
             variant="outline"
             size="sm"
+            disabled={pending}
             onClick={() =>
-              wrap(async () => {
-                const result = await setMainPlanAction(plan.id);
-                if (result.success) toast.success(`${plan.name} is now your main plan`);
-                return result;
-              })
+              settle(
+                wrap(async () => {
+                  const result = await setMainPlanAction(plan.id);
+                  if (result.success) toast.success(`${plan.name} is now your main plan`);
+                  return result;
+                })
+              )
             }
           >
+            {pending && <Spinner />}
             Make main
           </Button>
         )}
@@ -994,24 +1013,23 @@ function ScenarioDeltaCard({
       : null;
   return (
     <Card>
-      <CardHeader className="pb-0">
-        <CardTitle className="text-2xs font-medium uppercase tracking-wide text-muted-foreground lg:text-xs">
-          Scenario vs base
-        </CardTitle>
+      <CardHeader>
+        <Eyebrow asChild>
+          <h2>Scenario vs base</h2>
+        </Eyebrow>
       </CardHeader>
-      <CardContent className="space-y-1">
+      <CardContent className="flex flex-col gap-1">
         <Text variant="small" as="p" className="flex items-center gap-1.5 pb-1">
-          <GitBranch className="h-3.5 w-3.5 shrink-0" />
+          <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="truncate">{ghost.name}</span>
         </Text>
         <div className="flex items-center justify-between gap-3 border-t py-2">
           <Text variant="small" as="span">Ending net worth</Text>
           <Mono
-            className={`text-sm font-semibold ${
-              netWorthDelta >= 0
-                ? "text-success"
-                : "text-destructive"
-            }`}
+            className={cn(
+              "text-sm font-semibold",
+              netWorthDelta >= 0 ? "text-success" : "text-destructive"
+            )}
           >
             {netWorthDelta >= 0 ? "+" : "−"}
             {formatCurrency(Math.abs(netWorthDelta))}
@@ -1021,11 +1039,10 @@ function ScenarioDeltaCard({
           <div className="flex items-center justify-between gap-3 border-t py-2">
             <Text variant="small" as="span">Debt-free</Text>
             <Mono
-              className={`text-sm font-semibold ${
-                debtFreeDelta <= 0
-                  ? "text-success"
-                  : "text-destructive"
-              }`}
+              className={cn(
+                "text-sm font-semibold",
+                debtFreeDelta <= 0 ? "text-success" : "text-destructive"
+              )}
             >
               {debtFreeDelta === 0
                 ? "same"
@@ -1072,6 +1089,8 @@ type ProjectionPanelProps = {
   portfolioEnabled: boolean;
   /** Persists a new includePortfolio value (full-payload plan update). */
   onTogglePortfolio: (next: boolean) => Promise<void>;
+  /** The server's clock for this render — see PlanEditorProps. */
+  now: Date;
 };
 
 const STRATEGY_LABEL: Record<DebtStrategy, string> = {
@@ -1113,8 +1132,8 @@ const PLAN_VIEW_ICON: Record<PlanView, LucideIcon> = {
   calendar: CalendarDays,
 };
 
-// Segmented control for the view switcher — clear on every device. On mobile a
-// swipe + the dots below offer the carousel-style alternative.
+// Segmented control for the view switcher — clear on every device. On touch a
+// horizontal swipe offers the carousel-style alternative.
 function ViewSwitcher({
   value,
   onChange,
@@ -1123,37 +1142,27 @@ function ViewSwitcher({
   onChange: (next: PlanView) => void;
 }) {
   return (
-    <div
-      role="group"
+    <ToggleGroup
+      type="single"
+      size="sm"
+      value={value}
+      onValueChange={(v) => v && onChange(v as PlanView)}
       aria-label="Plan view"
-      className="inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
     >
       {PLAN_VIEWS.map((v) => {
         const Icon = PLAN_VIEW_ICON[v];
-        const active = value === v;
         return (
-          <button
-            key={v}
-            type="button"
-            aria-pressed={active}
-            aria-label={PLAN_VIEW_LABEL[v]}
-            onClick={() => onChange(v)}
-            className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition ${
-              active
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Icon className="h-3.5 w-3.5" />
-            {/* Icon-only on phones: this now shares a row with the Portfolio
+          <ToggleGroupItem key={v} value={v} aria-label={PLAN_VIEW_LABEL[v]}>
+            <Icon />
+            {/* Icon-only on phones: this shares a row with the Portfolio
                 switch and four horizon presets, and the labels pushed that
                 cluster onto three lines. The icons are distinct and the
                 aria-label carries the name. */}
             <span className="hidden sm:inline">{PLAN_VIEW_LABEL[v]}</span>
-          </button>
+          </ToggleGroupItem>
         );
       })}
-    </div>
+    </ToggleGroup>
   );
 }
 
@@ -1234,7 +1243,7 @@ function nthWeekdayOfMonth(
 
 function recurringHitDayInMonth(
   row: {
-    recurrenceType: "monthly_day" | "monthly_weekday" | "every_n_months";
+    recurrenceType: RecurrenceType;
     dayOfMonth: number | null;
     weekOfMonth: number | null;
     dayOfWeek: number | null;
@@ -1254,11 +1263,10 @@ function recurringHitDayInMonth(
   }
   if (row.recurrenceType === "every_n_months") {
     if (!row.intervalMonths || row.intervalMonths < 1) return null;
-    const anchor = row.recurrenceStart
+    const start = row.recurrenceStart;
+    const anchor = start
       ? (() => {
-          const [y, m] = row.recurrenceStart!
-            .split("-")
-            .map((p) => parseInt(p, 10));
+          const [y, m] = start.split("-").map((p) => parseInt(p, 10));
           return Number.isFinite(y) && Number.isFinite(m) ? y * 12 + (m - 1) : null;
         })()
       : planStartMonth.getUTCFullYear() * 12 + planStartMonth.getUTCMonth();
@@ -1375,9 +1383,9 @@ function hitDayWithinWindow(
 function computeTodaySnapshot(
   plan: FinancePlanWithLines,
   projection: Projection,
-  anchorDay: number
+  anchorDay: number,
+  now: Date
 ): TodaySnapshot | null {
-  const now = new Date();
   const planStart = new Date(plan.startMonth);
   const monthOffset = periodIndexForDate(planStart, anchorDay, now);
 
@@ -1539,6 +1547,7 @@ function ProjectionPanel({
   portfolioHistory = [],
   portfolioEnabled,
   onTogglePortfolio,
+  now,
 }: ProjectionPanelProps) {
   // View switcher — Graph (chart) / Table / Calendar. Segmented control (every
   // device) sits at the BOTTOM, Polymarket-style; horizontal swipe on touch
@@ -1568,11 +1577,13 @@ function ProjectionPanel({
   // Window with the active horizon: ~25% past + 75% future. Edges shift when
   // the plan started recently so we never look past data we don't have. Used
   // for the KPIs + the monthly-breakdown table (both are forecast views).
-  const window = computeProjectionWindow(
-    projection,
-    horizonMonths,
-    new Date(),
-    anchorDay
+  //
+  // Everything below is memoised: hovering the chart re-renders the editor on
+  // every point, and without it the series (and every figure derived from it)
+  // was rebuilt each time, handing the chart new props mid-hover.
+  const window = useMemo(
+    () => computeProjectionWindow(projection, horizonMonths, now, anchorDay),
+    [projection, horizonMonths, now, anchorDay]
   );
 
   // Day-aware "today" net worth: strips income/expense from the period-end
@@ -1581,22 +1592,22 @@ function ProjectionPanel({
   // Refined against the CALIBRATED baseline — its startMonth + initials match
   // the projection we're refining, so period indexing and the period-0 seed
   // line up with confirmed reality.
-  const todaySnapshot = computeTodaySnapshot(baseline, projection, anchorDay);
+  const todaySnapshot = useMemo(
+    () => computeTodaySnapshot(baseline, projection, anchorDay, now),
+    [baseline, projection, anchorDay, now]
+  );
 
   // Chart series: real snapshots for the past, calibrated projection for the
   // future. Falls back to the projection-only window when there's no history.
   // Today's point carries the same figures as the Today KPI.
-  const chartSeries = alignTodayPoint(
-    buildChartSeries(
-      history,
-      projection,
-      horizonMonths,
-      new Date(),
-      anchorDay,
-      pastProjection
-    ),
-    todaySnapshot,
-    anchorDay
+  const chartSeries = useMemo(
+    () =>
+      alignTodayPoint(
+        buildChartSeries(history, projection, horizonMonths, now, anchorDay, pastProjection),
+        todaySnapshot,
+        anchorDay
+      ),
+    [history, projection, horizonMonths, now, anchorDay, pastProjection, todaySnapshot]
   );
 
   // Scenario ghost: the base plan's net worth aligned to this chart's points
@@ -1610,11 +1621,11 @@ function ProjectionPanel({
     // `alignTodayPoint`); the ghost has to be read the same way or the two
     // plans show a spurious delta at today equal to the flows still to come.
     if (ghost.plan && values[chartSeries.pastCount] != null) {
-      const snap = computeTodaySnapshot(ghost.plan, ghost.projection, anchorDay);
+      const snap = computeTodaySnapshot(ghost.plan, ghost.projection, anchorDay, now);
       if (snap) values[chartSeries.pastCount] = snap.netWorth;
     }
     return values;
-  }, [ghost, showGhost, chartSeries.points, chartSeries.pastCount, anchorDay]);
+  }, [ghost, showGhost, chartSeries.points, chartSeries.pastCount, anchorDay, now]);
 
   // Portfolio series: recorded snapshots for the past, the projection's
   // (growing) portfolioValue for the future. Only when the plan includes it.
@@ -1632,9 +1643,14 @@ function ProjectionPanel({
         : undefined,
     [portfolioEnabled, chartSeries, portfolioHistory, projection, anchorDay]
   );
+  // The switch stays enabled while saving: disabling the control that has
+  // focus drops keyboard focus to <body>. Input is ignored instead.
   const handlePortfolioSwitch = (next: boolean) => {
+    if (portfolioPending) return;
     setPortfolioPending(true);
-    void onTogglePortfolio(next).finally(() => setPortfolioPending(false));
+    onTogglePortfolio(next)
+      .catch(() => undefined)
+      .finally(() => setPortfolioPending(false));
   };
 
   // Per-point period figures for the sidebar hover preview. Flows (income /
@@ -1663,14 +1679,17 @@ function ProjectionPanel({
 
   // Hovering today's point is "the present" — treat it as no preview so the
   // sidebar only takes the backdrop/chip treatment for OTHER periods.
-  const handleHoverIndex = (idx: number | null): void => {
-    if (!onHoverFigures) return;
-    if (idx === null || idx === chartSeries.pastCount) {
-      onHoverFigures(null);
-      return;
-    }
-    onHoverFigures(pointFigures[idx] ?? null);
-  };
+  const handleHoverIndex = useCallback(
+    (idx: number | null): void => {
+      if (!onHoverFigures) return;
+      if (idx === null || idx === chartSeries.pastCount) {
+        onHoverFigures(null);
+        return;
+      }
+      onHoverFigures(pointFigures[idx] ?? null);
+    },
+    [onHoverFigures, chartSeries.pastCount, pointFigures]
+  );
 
   // Full projection month behind each chart point, resolved by accounting
   // PERIOD (not calendar month) for the same reason as `pointFigures`.
@@ -1692,13 +1711,16 @@ function ProjectionPanel({
   // Clicking today means "record what actually happened", not "preview" — so it
   // hands off to the confirmation dialog. Every other point opens the compare
   // dialog for that period.
-  const handleSelectIndex = (idx: number): void => {
-    if (idx === chartSeries.pastCount) {
-      onConfirmToday?.();
-      return;
-    }
-    setComparedIdx(idx);
-  };
+  const handleSelectIndex = useCallback(
+    (idx: number): void => {
+      if (idx === chartSeries.pastCount) {
+        onConfirmToday?.();
+        return;
+      }
+      setComparedIdx(idx);
+    },
+    [chartSeries.pastCount, onConfirmToday]
+  );
   const todayMonthIdx = window.startIndex + window.pastCount;
   const todayMonth = projection.months[todayMonthIdx];
   // "Next period" forecast — the projection for the period right after today.
@@ -1734,48 +1756,45 @@ function ProjectionPanel({
     <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
       <div className="flex flex-wrap items-end gap-x-6 gap-y-1">
         <div>
-          <Text variant="small" as="p" className="text-2xs uppercase tracking-wide">
+          <Eyebrow size="sm" as="p">
             Today {todayMonth ? FORMATTER.format(todayMonth.date) : ""}
-          </Text>
+          </Eyebrow>
           <Mono
             as="p"
-            className={`text-xl font-bold sm:text-2xl ${
-              today >= 0
-                ? "text-success"
-                : "text-destructive"
-            }`}
+            className={cn(
+              "text-xl font-semibold tabular-nums sm:text-2xl",
+              today >= 0 ? "text-success" : "text-destructive"
+            )}
           >
             {formatCurrency(today)}
           </Mono>
         </div>
         {nextMonth && next !== undefined && (
           <div>
-            <Text variant="small" as="p" className="text-2xs uppercase tracking-wide">
+            <Eyebrow size="sm" as="p">
               Next {FORMATTER.format(nextMonth.date)}
-            </Text>
+            </Eyebrow>
             <Mono
               as="p"
-              className={`text-sm font-semibold ${
-                next >= 0
-                  ? "text-success"
-                  : "text-destructive"
-              }`}
+              className={cn(
+                "text-sm font-semibold",
+                next >= 0 ? "text-success" : "text-destructive"
+              )}
             >
               {formatCurrency(next)}
             </Mono>
           </div>
         )}
         <div>
-          <Text variant="small" as="p" className="text-2xs uppercase tracking-wide">
+          <Eyebrow size="sm" as="p">
             End {futureMonth ? FORMATTER.format(futureMonth.date) : ""}
-          </Text>
+          </Eyebrow>
           <Mono
             as="p"
-            className={`text-sm font-semibold ${
-              future >= 0
-                ? "text-success"
-                : "text-destructive"
-            }`}
+            className={cn(
+              "text-sm font-semibold",
+              future >= 0 ? "text-success" : "text-destructive"
+            )}
           >
             {formatCurrency(future)}
           </Mono>
@@ -1783,11 +1802,10 @@ function ProjectionPanel({
             <Text
               variant="small"
               as="p"
-              className={`text-2xs ${
-                endDelta >= 0
-                  ? "text-success"
-                  : "text-destructive"
-              }`}
+              className={cn(
+                "text-2xs",
+                endDelta >= 0 ? "text-success" : "text-destructive"
+              )}
             >
               {endDelta >= 0 ? "+" : "−"}
               {formatCurrency(Math.abs(endDelta))} vs base
@@ -1795,62 +1813,57 @@ function ProjectionPanel({
           )}
         </div>
       </div>
+      {/* Every control here is h-8, so the cluster wraps as one row height. */}
       <div className="flex flex-wrap items-center gap-2">
         {/* View first — it decides what the rest of this cluster even applies
             to (Portfolio and the horizon presets only shape the Graph). */}
         <ViewSwitcher value={view} onChange={goView} />
+        {/* The keyboard path to what clicking today's chart point does. */}
+        {onConfirmToday && (
+          <Button variant="outline" size="sm" onClick={onConfirmToday}>
+            <ClipboardCheck />
+            Confirm period
+          </Button>
+        )}
         {/* Chart toggles: portfolio series (persists to the plan) and the
             scenario ghost line (view-only). Sit beside the horizon presets so
             everything that shapes the chart lives in one cluster. */}
-        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 py-1.5 text-xs font-medium text-muted-foreground">
+        <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 text-xs font-medium text-muted-foreground">
           <Switch
             checked={portfolioEnabled}
             onCheckedChange={handlePortfolioSwitch}
-            disabled={portfolioPending}
-            aria-label="Include portfolio in the projection"
+            aria-disabled={portfolioPending}
+            aria-busy={portfolioPending}
           />
           Portfolio
         </label>
         {ghost && (
-          <button
-            type="button"
-            onClick={() => setShowGhost((v) => !v)}
-            aria-pressed={showGhost}
-            className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
-              showGhost
-                ? "bg-card text-foreground shadow-sm"
-                : "bg-muted/30 text-muted-foreground hover:text-foreground"
-            }`}
+          <Toggle
+            variant="outline"
+            pressed={showGhost}
+            onPressedChange={setShowGhost}
+            className="text-xs"
           >
             vs base
-          </button>
+          </Toggle>
         )}
-        <div
-          role="group"
+        <ToggleGroup
+          type="single"
+          size="sm"
+          value={String(horizonMonths)}
+          onValueChange={(v) => v && setHorizonMonths(Number(v))}
           aria-label="Projection horizon"
-          className="inline-flex items-center gap-1 rounded-md border bg-muted/30 p-1"
         >
-          {HORIZON_PRESETS.map((preset) => {
-            const disabled = preset.months > maxAvailable;
-            const active = horizonMonths === preset.months;
-            return (
-              <button
-                key={preset.months}
-                type="button"
-                onClick={() => setHorizonMonths(preset.months)}
-                disabled={disabled}
-                aria-pressed={active}
-                className={`rounded px-2.5 py-1 text-xs font-medium transition ${
-                  active
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
-              >
-                {preset.label}
-              </button>
-            );
-          })}
-        </div>
+          {HORIZON_PRESETS.map((preset) => (
+            <ToggleGroupItem
+              key={preset.months}
+              value={String(preset.months)}
+              disabled={preset.months > maxAvailable}
+            >
+              {preset.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
       </div>
     </div>
   );
@@ -1860,9 +1873,9 @@ function ProjectionPanel({
     // narrow sidebar (gauge + cycle figures + debt strategy) rides the right
     // 1/4. One column on mobile.
     //
-    // Equal heights on desktop: the view area is FIXED at lg:h-[640px] — every
+    // Equal heights on desktop: the view area is FIXED at lg:h-160 — every
     // view (graph / table / calendar) fills exactly that box, scrolling
-    // internally when taller — and the sidebar column is lg:min-h-[640px] so its
+    // internally when taller — and the sidebar column is lg:h-160 so its
     // cards stretch to the same bottom edge (min- rather than fixed, so the
     // expanded strategy picker can grow past it instead of clipping). Keep the
     // two values in sync. On mobile everything sizes naturally.
@@ -1870,29 +1883,28 @@ function ProjectionPanel({
       {/* min-w-0 on both grid children: grid items default to min-width:auto,
           so wide content (the table, recharts' measured svg) would inflate the
           column past the viewport on mobile instead of shrinking. */}
-      <div className="min-w-0 space-y-3 lg:col-span-3">
+      <div className="flex min-w-0 flex-col gap-3 lg:col-span-3">
         {/* Active view. Swipe handlers on the stable wrapper; the keyed child
             fades in on switch (no horizontal slide → nothing clips the card's
             border/shadow). The active view brings its own Card. */}
         <div
-          className="touch-pan-y lg:h-[640px]"
+          className="touch-pan-y lg:h-160"
           onTouchStart={swipe.onTouchStart}
           onTouchEnd={swipe.onTouchEnd}
         >
-          <div key={view} className="animate-in fade-in-0 duration-200 lg:h-full">
+          <div key={view} className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200 lg:h-full">
             {view === "calendar" ? (
               // The calendar card is taller than the panel box — scroll it
               // inside so the Calendar view keeps the same footprint.
               <div className="lg:h-full lg:overflow-y-auto">{calendar}</div>
             ) : (
               <Card className="lg:h-full">
-                <CardHeader className="gap-3 pb-3">{forecastHeader}</CardHeader>
+                <CardHeader className="gap-3">{forecastHeader}</CardHeader>
                 <CardContent
-                  className={
-                    view === "chart"
-                      ? "pt-0 lg:min-h-0 lg:flex-1"
-                      : "pt-0 lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
-                  }
+                  className={cn(
+                    "lg:min-h-0 lg:flex-1",
+                    view === "table" && "lg:overflow-y-auto"
+                  )}
                 >
                   {view === "chart" ? (
                     <ProjectionChart
@@ -1925,7 +1937,7 @@ function ProjectionPanel({
       {/* flex column so the figures card (lg:flex-1, set by the parent) absorbs
           the leftover height and the sidebar's bottom edge lines up with the
           main panel's. */}
-      <div className="flex min-w-0 flex-col gap-3 lg:h-[640px] lg:gap-4">
+      <div className="flex min-w-0 flex-col gap-3 lg:h-160 lg:gap-4">
         {sidebar}
       </div>
 
@@ -1957,10 +1969,12 @@ function StrategyPicker({
   comparison,
   currentStrategy,
   onChange,
+  pending,
 }: {
   comparison: StrategyComparison;
   currentStrategy: DebtStrategy;
   onChange: (next: DebtStrategy) => Promise<void>;
+  pending: boolean;
 }) {
   const rows: { key: DebtStrategy; data: StrategyComparison["avalanche"] }[] = [
     { key: "avalanche", data: comparison.avalanche },
@@ -1974,84 +1988,71 @@ function StrategyPicker({
   );
 
   return (
-    <div role="radiogroup" aria-label="Debt payoff strategy" className="grid gap-1.5">
+    // Not `disabled` while saving: that would disable the radio that has just
+    // taken focus and drop the keyboard to <body>. Input is ignored instead.
+    <RadioGroup
+      value={currentStrategy}
+      onValueChange={(v) => {
+        if (!pending) settle(onChange(v as DebtStrategy));
+      }}
+      aria-labelledby="debt-strategy-heading"
+      aria-busy={pending}
+      className="gap-1.5"
+    >
       {rows.map(({ key, data }) => {
-        const isCurrent = key === currentStrategy;
         // What this option costs against the cheapest one — the number that
         // actually decides it, so it sits on the row instead of behind a click.
         const costVsBest = data.totalInterestPaid - minInterest;
         const isCheapest = costVsBest < 0.5;
+        const id = `debt-strategy-${key}`;
         return (
-          <button
+          <label
             key={key}
-            type="button"
-            role="radio"
-            aria-checked={isCurrent}
-            disabled={isCurrent}
-            onClick={() => void onChange(key)}
-            className={cn(
-              "flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left transition",
-              isCurrent
-                ? "cursor-default border-foreground bg-muted/40"
-                : "hover:border-foreground/60 hover:bg-muted/30"
-            )}
+            htmlFor={id}
+            className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-2 transition hover:border-foreground/60 hover:bg-muted/30 has-data-checked:border-foreground has-data-checked:bg-muted/40"
           >
-            <span className="flex min-w-0 items-center gap-1.5">
-              {/* Radio dot: selection can't ride on the border alone. */}
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  isCurrent ? "bg-foreground" : "bg-muted-foreground/30"
-                )}
-              />
+            <span className="flex min-w-0 items-center gap-2">
+              <RadioGroupItem id={id} value={key} />
               <span className="truncate text-xs font-medium">
                 {STRATEGY_LABEL[key]}
               </span>
               {isCheapest && (
-                <Zap
-                  className="size-3 shrink-0 text-warning"
-                  aria-label="Cheapest"
-                />
+                <Zap className="size-3 shrink-0 text-warning" aria-hidden="true" />
               )}
             </span>
             <span className="flex shrink-0 flex-col items-end leading-tight">
-              <Mono className="text-2xs tabular-nums text-muted-foreground">
+              <Mono className="text-2xs text-muted-foreground">
                 {data.monthsToDebtFree !== null
                   ? `${data.monthsToDebtFree} mo`
                   : "beyond horizon"}
               </Mono>
               <Mono
                 className={cn(
-                  "text-2xs tabular-nums",
-                  isCheapest
-                    ? "text-success"
-                    : "text-muted-foreground"
+                  "text-2xs",
+                  isCheapest ? "text-success" : "text-muted-foreground"
                 )}
               >
-                {isCheapest
-                  ? "cheapest"
-                  : `+${formatCurrency(costVsBest)}`}
+                {isCheapest ? "cheapest" : `+${formatCurrency(costVsBest)}`}
               </Mono>
             </span>
-          </button>
+          </label>
         );
       })}
-    </div>
+    </RadioGroup>
   );
 }
 
 /**
  * Compact label/value row for the condensed Overview sidebar. Tapping a row
- * (when it has a `breakdown`) opens the per-line detail — a bottom **sheet** on
- * mobile (thumb-reachable), a centered **dialog** on desktop (a bottom sheet
- * reads as a stray panel pinned to the corner on a wide screen).
+ * (when it has a `breakdown`) opens the per-line detail in a dialog — which is
+ * already a bottom sheet on phones.
  */
 function StatRow({
   label,
   value,
   tone,
   hint,
+  description,
   breakdown,
 }: {
   label: string;
@@ -2059,24 +2060,25 @@ function StatRow({
   tone?: "positive" | "negative";
   /** Optional one-line context shown under the value (e.g. "Debt-free in 8 mo"). */
   hint?: string;
+  /** One line under the breakdown dialog's title. */
+  description?: string;
   breakdown?: React.ReactNode;
 }) {
-  const isMobile = useIsMobile();
   // Count up/down toward the latest value (e.g. while a chart point is
   // hovered) instead of snapping. No-op on mount and for static values.
   const animatedValue = useAnimatedNumber(value);
-  const colorClass =
-    tone === "positive"
-      ? "text-success"
-      : tone === "negative"
-      ? "text-destructive"
-      : "";
 
   const inner = (
     <>
       <Text variant="small" as="span">{label}</Text>
       <span className="text-right">
-        <Mono className={`block text-sm font-semibold ${colorClass}`}>
+        <Mono
+          className={cn(
+            "block text-sm font-semibold",
+            tone === "positive" && "text-success",
+            tone === "negative" && "text-destructive"
+          )}
+        >
           {formatCurrency(animatedValue)}
         </Mono>
         {hint && (
@@ -2094,38 +2096,24 @@ function StatRow({
     return <div className={rowClass}>{inner}</div>;
   }
 
-  const trigger = (
-    <button
-      type="button"
-      aria-label={`Show ${label} breakdown`}
-      className={`${rowClass} w-full text-left transition hover:bg-muted/30`}
-    >
-      {inner}
-    </button>
-  );
-
-  if (isMobile) {
-    return (
-      <Sheet>
-        <SheetTrigger asChild>{trigger}</SheetTrigger>
-        <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{label}</SheetTitle>
-          </SheetHeader>
-          <div className="px-4 pb-6">{breakdown}</div>
-        </SheetContent>
-      </Sheet>
-    );
-  }
-
   return (
     <Dialog>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+      <DialogTrigger asChild>
+        {/* No aria-label: it would replace the visible figure in the name. */}
+        <button
+          type="button"
+          className={cn(rowClass, "w-full text-left transition hover:bg-muted/30")}
+        >
+          {inner}
+          <span className="sr-only">, show breakdown</span>
+        </button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{label}</DialogTitle>
+          {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
-        <div className="pb-1">{breakdown}</div>
+        {breakdown}
       </DialogContent>
     </Dialog>
   );
@@ -2150,19 +2138,19 @@ function BreakdownList({
   const sections: BreakdownGroup[] = groups ?? [{ items: items ?? [] }];
   const hasAny = sections.some((g) => g.items.length > 0);
   if (!hasAny) {
-    return <Text variant="muted">{emptyLabel}</Text>;
+    return <EmptyState title={emptyLabel} />;
   }
   return (
-    <div className="space-y-3 text-sm">
+    <div className="flex flex-col gap-3 text-sm">
       {sections.map((section, gi) =>
         section.items.length === 0 ? null : (
-          <div key={gi} className="space-y-1.5">
+          <div key={gi} className="flex flex-col gap-1.5">
             {section.heading && (
-              <div className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Eyebrow size="sm" as="div">
                 {section.heading}
-              </div>
+              </Eyebrow>
             )}
-            <ul className="space-y-1.5">
+            <ul className="flex flex-col gap-1.5">
               {section.items.map((item, idx) => (
                 <li
                   key={`${item.name}-${idx}`}
@@ -2217,8 +2205,8 @@ function SurplusBreakdown({
     { label: "Debt minimums", value: formatCurrency(minDebtPayments), op: "−" },
   ];
   return (
-    <div className="space-y-3 text-sm">
-      <ul className="space-y-1.5">
+    <div className="flex flex-col gap-3 text-sm">
+      <ul className="flex flex-col gap-1.5">
         {rows.map((r) => (
           <li key={r.label} className="flex items-baseline justify-between gap-4">
             <span>
@@ -2231,16 +2219,12 @@ function SurplusBreakdown({
       </ul>
       <div className="flex items-baseline justify-between gap-4 border-t pt-2 font-semibold">
         <span>= Surplus</span>
-        <Mono
-          className={
-            surplus >= 0 ? "text-success" : "text-destructive"
-          }
-        >
+        <Mono className={surplus >= 0 ? "text-success" : "text-destructive"}>
           {formatCurrency(surplus)}
         </Mono>
       </div>
       {surplus > 0 && (
-        <ul className="space-y-1.5 border-t pt-2 text-muted-foreground">
+        <ul className="flex flex-col gap-1.5 border-t pt-2 text-muted-foreground">
           <li className="flex items-baseline justify-between gap-4">
             <span>→ Extra debt</span>
             <Mono>{formatCurrency(toExtraDebt)}</Mono>

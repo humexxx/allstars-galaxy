@@ -21,7 +21,7 @@ import { backfillAllOwners } from "@/lib/services/allocation-service";
 // with many individually-quoted tickers is slow rather than heavy.
 export const maxDuration = 60;
 
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!isCronAuthorized(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

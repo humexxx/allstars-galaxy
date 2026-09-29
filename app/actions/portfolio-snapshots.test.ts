@@ -38,10 +38,13 @@ beforeEach(() => {
   vi.mocked(requireAdminCached).mockResolvedValue({
     id: ADMIN_ID,
   } as unknown as Awaited<ReturnType<typeof requireAdminCached>>);
+  // safe() logs unexpected failures; keep the test output quiet.
+  vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("createManualSnapshotAction", () => {
@@ -61,8 +64,7 @@ describe("createManualSnapshotAction", () => {
 
     expect(result).toEqual({
       success: true,
-      totalValue: 12345.67,
-      snapshotsCreated: 3,
+      data: { totalValue: 12345.67, snapshotsCreated: 3 },
     });
     expect(requireAdminCached).toHaveBeenCalledTimes(1);
     expect(applyMonthlyInterest).not.toHaveBeenCalled();
@@ -94,8 +96,7 @@ describe("createManualSnapshotAction", () => {
 
     expect(result).toEqual({
       success: true,
-      totalValue: 500,
-      snapshotsCreated: 2,
+      data: { totalValue: 500, snapshotsCreated: 2 },
     });
     expect(applyMonthlyInterest).toHaveBeenCalledWith(date);
     expect(createManualSnapshotsForAllPortfolios).toHaveBeenCalledWith(
@@ -105,7 +106,7 @@ describe("createManualSnapshotAction", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/portal/portfolio");
   });
 
-  it("propagates the admin-required rejection and skips all work", async () => {
+  it("fails generically when the caller is not an admin and skips all work", async () => {
     vi.mocked(requireAdminCached).mockRejectedValueOnce(
       new Error("Forbidden: Admin access required"),
     );
@@ -116,35 +117,34 @@ describe("createManualSnapshotAction", () => {
         applyInterest: false,
         source: "manual",
       }),
-    ).rejects.toThrow("Forbidden: Admin access required");
+    ).resolves.toEqual({ success: false, error: "Action failed" });
 
     expect(applyMonthlyInterest).not.toHaveBeenCalled();
     expect(createManualSnapshotsForAllPortfolios).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("throws when date is missing (zod .parse() rejects invalid input)", async () => {
+  it("returns a validation error when date is missing", async () => {
     await expect(
       createManualSnapshotAction({
-        // missing date — .parse() will throw
         applyInterest: false,
         source: "manual",
       } as never),
-    ).rejects.toThrow();
+    ).resolves.toMatchObject({ success: false });
 
     expect(applyMonthlyInterest).not.toHaveBeenCalled();
     expect(createManualSnapshotsForAllPortfolios).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("throws when source is not in the snapshot source enum", async () => {
+  it("returns a validation error when source is not a snapshot source", async () => {
     await expect(
       createManualSnapshotAction({
         date: new Date("2026-01-15T00:00:00Z"),
         applyInterest: false,
         source: "totally-bogus-source",
       } as never),
-    ).rejects.toThrow();
+    ).resolves.toMatchObject({ success: false });
 
     expect(createManualSnapshotsForAllPortfolios).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
@@ -161,7 +161,7 @@ describe("createManualSnapshotAction", () => {
         applyInterest: false,
         source: "manual",
       }),
-    ).rejects.toThrow("pg boom");
+    ).resolves.toEqual({ success: false, error: "Action failed" });
 
     expect(revalidatePath).not.toHaveBeenCalled();
   });
@@ -175,21 +175,22 @@ describe("deleteManualSnapshotsAction", () => {
 
     const result = await deleteManualSnapshotsAction();
 
-    expect(result).toEqual({ success: true, portfoliosProcessed: 4 });
+    expect(result).toEqual({ success: true, data: { portfoliosProcessed: 4 } });
     expect(requireAdminCached).toHaveBeenCalledTimes(1);
     expect(deleteManualSnapshotsForAllPortfolios).toHaveBeenCalledTimes(1);
     expect(revalidatePath).toHaveBeenCalledWith("/portal/portfolio");
     expect(revalidatePath).toHaveBeenCalledTimes(1);
   });
 
-  it("propagates the admin-required rejection without deleting", async () => {
+  it("fails generically without deleting when the caller is not an admin", async () => {
     vi.mocked(requireAdminCached).mockRejectedValueOnce(
       new Error("Forbidden: Admin access required"),
     );
 
-    await expect(deleteManualSnapshotsAction()).rejects.toThrow(
-      "Forbidden: Admin access required",
-    );
+    await expect(deleteManualSnapshotsAction()).resolves.toEqual({
+      success: false,
+      error: "Action failed",
+    });
 
     expect(deleteManualSnapshotsForAllPortfolios).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
@@ -200,7 +201,10 @@ describe("deleteManualSnapshotsAction", () => {
       new Error("pg boom"),
     );
 
-    await expect(deleteManualSnapshotsAction()).rejects.toThrow("pg boom");
+    await expect(deleteManualSnapshotsAction()).resolves.toEqual({
+      success: false,
+      error: "Action failed",
+    });
 
     expect(revalidatePath).not.toHaveBeenCalled();
   });

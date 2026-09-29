@@ -1,9 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronsUpDown } from "lucide-react";
 
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Spinner } from "@/components/ui/spinner";
 import { Mono, Text } from "@/components/ui/typography";
 import { searchAirportsAction } from "@/app/actions/airports";
 import type { Airport } from "@/lib/travel/airports";
@@ -15,7 +25,12 @@ import { cn } from "@/lib/utils";
  * Whatever is typed IS the value — suggestions only fill it in faster. A small
  * airfield, a bus terminal, "Grandma's house": the field must accept it,
  * because a picker that refuses what the traveller actually meant is worse
- * than a plain text box.
+ * than a plain text box. So every keystroke in the search box is committed,
+ * and closing the list keeps it.
+ *
+ * Popover + Command, the combobox `UserSelector` uses, rather than a
+ * hand-rolled list: the roles, the active-option tracking and the arrow keys
+ * all come with it.
  *
  * Search runs on the server. The dataset is ~7,900 airports and shipping it to
  * the browser would cost 115 KB gzipped for one form field.
@@ -31,14 +46,11 @@ export function AirportPicker({
   onChange: (value: string) => void;
   placeholder?: string;
 }) {
-  const [results, setResults] = useState<Airport[]>([]);
   const [open, setOpen] = useState(false);
+  const [results, setResults] = useState<Airport[]>([]);
   const [loading, setLoading] = useState(false);
-  const [highlight, setHighlight] = useState(0);
-  // Whether the user has reached for a suggestion (arrow keys / hover). Enter
-  // otherwise keeps submitting the form, as the comment below promised.
-  const [armed, setArmed] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
+  /** The airport last chosen from the list, so the field can show its flag. */
+  const [picked, setPicked] = useState<Airport | null>(null);
 
   const query = value.trim();
   // Derived rather than cleared through state: a short query has no results by
@@ -47,6 +59,7 @@ export function AirportPicker({
   const visible = query.length < 2 ? [] : results;
 
   useEffect(() => {
+    if (!open) return;
     const q = value.trim();
     if (q.length < 2) return;
     // Debounced: a request per keystroke would fire five times for "MCO  " and
@@ -56,12 +69,16 @@ export function AirportPicker({
       // Loading starts when the request does, not when typing does: a spinner
       // during the debounce flickers on and off for anyone typing at speed.
       setLoading(true);
-      const hits = await searchAirportsAction(q);
-      if (cancelled) return;
-      setResults(hits);
-      setHighlight(0);
-      setArmed(false);
-      setLoading(false);
+      try {
+        const res = await searchAirportsAction(q);
+        if (!cancelled) setResults(res.success ? res.data : []);
+      } catch {
+        // A failed lookup is a picker with no suggestions, not a stuck spinner:
+        // the typed value is still the value.
+        if (!cancelled) setResults([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }, 180);
 
     return () => {
@@ -69,115 +86,88 @@ export function AirportPicker({
       clearTimeout(timer);
       setLoading(false);
     };
-  }, [value]);
-
-  // Clicking away closes the list without discarding what was typed.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
+  }, [value, open]);
 
   const pick = (airport: Airport) => {
     onChange(airport.code);
+    setPicked(airport);
     setOpen(false);
   };
 
-  const exact = visible.find(
-    (a) => a.code.toLowerCase() === value.trim().toLowerCase()
-  );
+  const flag = picked && picked.code === value ? picked.flag : null;
 
   return (
-    <div ref={boxRef} className="relative">
-      <Input
-        id={id}
-        value={value}
-        autoComplete="off"
-        placeholder={placeholder}
-        onChange={(e) => {
-          onChange(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={(e) => {
-          if (!open || visible.length === 0) return;
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setArmed(true);
-            setHighlight((h) => (h + 1) % visible.length);
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setArmed(true);
-            setHighlight((h) => (h - 1 + visible.length) % visible.length);
-          } else if (e.key === "Enter") {
-            // Only steal Enter when a suggestion is actually highlighted —
-            // otherwise it must keep submitting the form.
-            if (!armed) return;
-            e.preventDefault();
-            pick(visible[highlight]);
-          } else if (e.key === "Escape") {
-            setOpen(false);
-          }
-        }}
-      />
-
-      {/* The flag confirms the pick without spending a row on it. */}
-      {exact && !open && (
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm">
-          {exact.flag}
-        </span>
-      )}
-      {loading && open && (
-        <Loader2 className="pointer-events-none absolute right-3 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />
-      )}
-
-      {open && visible.length > 0 && (
-        <ul
-          role="listbox"
-          className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md"
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          id={id}
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
         >
-          {visible.map((a, i) => (
-            <li key={a.code}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={i === highlight}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left",
-                  i === highlight ? "bg-accent" : "hover:bg-accent/60"
-                )}
-                onMouseEnter={() => {
-                  setHighlight(i);
-                  setArmed(true);
-                }}
-                onClick={() => pick(a)}
-              >
-                <span className="text-base leading-none">{a.flag}</span>
-                <Mono className="w-10 shrink-0 text-xs font-semibold">{a.code}</Mono>
-                <span className="min-w-0 flex-1">
-                  <Text className="truncate text-xs">{a.city || a.name}</Text>
-                  {a.city && (
-                    <Text className="truncate text-2xs text-muted-foreground">
-                      {a.name}
-                    </Text>
-                  )}
-                </span>
-                {a.code.toLowerCase() === value.trim().toLowerCase() && (
-                  <Check className="size-3.5 shrink-0 text-muted-foreground" />
-                )}
-              </button>
-            </li>
-          ))}
-          <li className="px-2 py-1.5">
-            <Text className="text-2xs text-muted-foreground">
-              Not listed? Whatever you type is kept as-is.
-            </Text>
-          </li>
-        </ul>
-      )}
-    </div>
+          <span className={cn("truncate", !value && "text-muted-foreground")}>
+            {value || placeholder}
+          </span>
+          <span className="flex shrink-0 items-center gap-1.5">
+            {/* The flag confirms the pick without spending a row on it. */}
+            {flag && <span className="text-sm leading-none">{flag}</span>}
+            <ChevronsUpDown className="opacity-50" />
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-(--radix-popover-trigger-width) min-w-72 p-0" align="start">
+        {/* Filtering happens on the server, so cmdk must not filter again. */}
+        <Command shouldFilter={false}>
+          <CommandInput
+            value={value}
+            onValueChange={onChange}
+            placeholder="Code, city or airport"
+          />
+          <CommandList>
+            {loading && visible.length === 0 ? (
+              <div className="flex justify-center py-6">
+                <Spinner className="text-muted-foreground" />
+              </div>
+            ) : (
+              <CommandEmpty>
+                {query.length < 2
+                  ? "Type two letters to search."
+                  : "No airport matches — what you typed is kept."}
+              </CommandEmpty>
+            )}
+            {visible.length > 0 && (
+              <CommandGroup>
+                {visible.map((a) => (
+                  <CommandItem
+                    key={a.code}
+                    value={a.code}
+                    data-checked={a.code.toLowerCase() === query.toLowerCase()}
+                    onSelect={() => pick(a)}
+                  >
+                    <span className="text-base leading-none">{a.flag}</span>
+                    <Mono className="w-10 shrink-0 text-xs font-semibold">{a.code}</Mono>
+                    <span className="min-w-0 flex-1">
+                      <Text as="span" className="block truncate text-xs">
+                        {a.city || a.name}
+                      </Text>
+                      {a.city && (
+                        <Text as="span" variant="small" className="block truncate text-2xs">
+                          {a.name}
+                        </Text>
+                      )}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+          </CommandList>
+          <Text variant="small" className="border-t px-3 py-2 text-2xs">
+            Not listed? Whatever you type is kept as-is.
+          </Text>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }

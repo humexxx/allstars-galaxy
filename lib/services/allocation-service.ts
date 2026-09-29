@@ -5,15 +5,17 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   investmentMethods,
+  methodAllocations,
   priceAssets,
   transactionAllocations,
   transactions,
 } from "@/db/schema";
-import { methodAllocations } from "@/db/schema";
 import {
+  isCompleteAllocation,
   splitContribution,
   unitsFor,
-  type Allocation, isCompleteAllocation } from "@/lib/finance/allocation";
+  type Allocation,
+} from "@/lib/finance/allocation";
 import { closeOnOrBefore, fetchDailyCloses } from "./price-providers/massive";
 
 export type MethodAllocationRow = {
@@ -22,23 +24,6 @@ export type MethodAllocationRow = {
   name: string;
   percent: number;
 };
-
-export async function getMethodAllocations(
-  methodId: string
-): Promise<MethodAllocationRow[]> {
-  const rows = await db
-    .select({
-      assetId: methodAllocations.assetId,
-      percent: methodAllocations.percent,
-      symbol: priceAssets.symbol,
-      name: priceAssets.name,
-    })
-    .from(methodAllocations)
-    .innerJoin(priceAssets, eq(methodAllocations.assetId, priceAssets.id))
-    .where(eq(methodAllocations.methodId, methodId));
-
-  return rows.map((r) => ({ ...r, percent: parseFloat(r.percent) }));
-}
 
 /** Replace a method's policy wholesale — partial edits would leave gaps. */
 export async function setMethodAllocations(
@@ -144,7 +129,7 @@ export async function backfillTransactionAllocations(
   // size inside the 5 req/min free tier.
   const assetIds = new Set<string>();
   for (const t of todo) {
-    for (const a of policies.get(t.methodId!) ?? []) assetIds.add(a.assetId);
+    for (const a of policies.get(t.methodId) ?? []) assetIds.add(a.assetId);
   }
   if (assetIds.size === 0) {
     return { priced: 0, skipped: todo.length, errors: ["no allocation configured"] };
@@ -176,7 +161,7 @@ export async function backfillTransactionAllocations(
   let skipped = 0;
 
   for (const t of todo) {
-    const policy = policies.get(t.methodId!) ?? [];
+    const policy = policies.get(t.methodId) ?? [];
     if (policy.length === 0) {
       skipped++;
       continue;
@@ -244,8 +229,20 @@ export async function backfillAllOwners(): Promise<BackfillResult> {
   return totals;
 }
 
+export type DerivedHoldingRow = {
+  transactionId: string;
+  methodId: string;
+  assetId: string;
+  quantity: string;
+  amount: string;
+  priceAtPurchase: string;
+  pricedOn: Date;
+  symbol: string;
+  name: string;
+};
+
 /** Positions derived from every priced contribution, grouped by method. */
-export async function getDerivedHoldings(methodIds: string[]) {
+export async function getDerivedHoldings(methodIds: string[]): Promise<DerivedHoldingRow[]> {
   if (methodIds.length === 0) return [];
 
   return db

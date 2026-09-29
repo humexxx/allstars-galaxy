@@ -29,7 +29,7 @@ export default async function PortalPage() {
 
   return (
     <PortalPageContainer>
-      <section className="space-y-6">
+      <section className="flex flex-col gap-6">
         <PageHeader
           title="Dashboard"
           description="Snapshots from across your workspace."

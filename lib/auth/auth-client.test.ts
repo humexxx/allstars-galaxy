@@ -7,11 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // position after hoisting.
 const { supabaseAuthMock, createClientMock } = vi.hoisted(() => {
   const auth = {
-    signInWithOtp: vi.fn(),
     signInWithOAuth: vi.fn(),
     signInWithPassword: vi.fn(),
     signUp: vi.fn(),
-    signOut: vi.fn(),
+    updateUser: vi.fn(),
     resetPasswordForEmail: vi.fn(),
   };
   return {
@@ -24,7 +23,7 @@ vi.mock("@/lib/supabase", () => ({
   createClient: createClientMock,
 }));
 
-import { AuthService, signOut } from "./auth-service";
+import { AuthService } from "./auth-client";
 
 beforeEach(() => {
   createClientMock.mockClear();
@@ -35,27 +34,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-});
-
-describe("AuthService.signInWithEmail", () => {
-  it("resolves when supabase returns no error and forwards the callback redirect", async () => {
-    supabaseAuthMock.signInWithOtp.mockResolvedValueOnce({ error: null });
-
-    await expect(AuthService.signInWithEmail("user@example.com")).resolves.toBeUndefined();
-    expect(supabaseAuthMock.signInWithOtp).toHaveBeenCalledWith({
-      email: "user@example.com",
-      options: {
-        emailRedirectTo: `${location.origin}/auth/callback`,
-      },
-    });
-  });
-
-  it("rethrows the supabase error", async () => {
-    const error = new Error("otp failed");
-    supabaseAuthMock.signInWithOtp.mockResolvedValueOnce({ error });
-
-    await expect(AuthService.signInWithEmail("user@example.com")).rejects.toBe(error);
-  });
 });
 
 describe("AuthService.signInWithGoogle", () => {
@@ -185,22 +163,6 @@ describe("AuthService.signUpWithEmail", () => {
   });
 });
 
-describe("AuthService.signOut", () => {
-  it("resolves when supabase returns no error", async () => {
-    supabaseAuthMock.signOut.mockResolvedValueOnce({ error: null });
-
-    await expect(AuthService.signOut()).resolves.toBeUndefined();
-    expect(supabaseAuthMock.signOut).toHaveBeenCalledTimes(1);
-  });
-
-  it("rethrows the supabase error", async () => {
-    const error = new Error("signout failed");
-    supabaseAuthMock.signOut.mockResolvedValueOnce({ error });
-
-    await expect(AuthService.signOut()).rejects.toBe(error);
-  });
-});
-
 describe("AuthService.resetPasswordForEmail", () => {
   it("passes redirectTo pointing at the update-password callback", async () => {
     supabaseAuthMock.resetPasswordForEmail.mockResolvedValueOnce({ error: null });
@@ -210,7 +172,7 @@ describe("AuthService.resetPasswordForEmail", () => {
     expect(supabaseAuthMock.resetPasswordForEmail).toHaveBeenCalledWith(
       "user@example.com",
       {
-        redirectTo: `${location.origin}/auth/callback?next=/portal/profile/update-password`,
+        redirectTo: `${location.origin}/auth/callback?next=/update-password`,
       }
     );
   });
@@ -225,11 +187,19 @@ describe("AuthService.resetPasswordForEmail", () => {
   });
 });
 
-describe("signOut helper", () => {
-  it("invokes supabase signOut and swallows the result", async () => {
-    supabaseAuthMock.signOut.mockResolvedValueOnce({ error: null });
 
-    await expect(signOut()).resolves.toBeUndefined();
-    expect(supabaseAuthMock.signOut).toHaveBeenCalledTimes(1);
+describe("AuthService.updatePassword", () => {
+  it("updates the signed-in user's password", async () => {
+    supabaseAuthMock.updateUser.mockResolvedValueOnce({ error: null });
+
+    await expect(AuthService.updatePassword("new-secret-1")).resolves.toBeUndefined();
+    expect(supabaseAuthMock.updateUser).toHaveBeenCalledWith({ password: "new-secret-1" });
+  });
+
+  it("rethrows the supabase error", async () => {
+    const error = new Error("weak password");
+    supabaseAuthMock.updateUser.mockResolvedValueOnce({ error });
+
+    await expect(AuthService.updatePassword("x")).rejects.toBe(error);
   });
 });

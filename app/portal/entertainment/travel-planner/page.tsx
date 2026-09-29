@@ -9,6 +9,7 @@ import { TripsOverview } from "@/components/travel/trips-overview";
 
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { listUserTrips } from "@/lib/services/travel-service";
+import { isoDay } from "@/lib/travel/calendar";
 
 export const metadata: Metadata = {
   title: "Travel Planner",
@@ -20,16 +21,19 @@ export const dynamic = "force-dynamic";
 export default async function TravelPlannerPage() {
   const ctx = await requireEffectiveContext();
   const trips = await listUserTrips(ctx.effectiveUserId);
+  // Decided here, once, so the server render and the browser agree on which
+  // trips are upcoming and how far away they are.
+  const today = isoDay(new Date());
 
   return (
-    <section className="space-y-6">
+    <section className="flex flex-col gap-6">
       <PageHeader
         title="Travel Planner"
         description="Plan your upcoming trips, attach links and prices, share with a private link."
         actions={
           <Button asChild>
             <Link href="/portal/entertainment/travel-planner/new">
-              <Plus className="mr-1 h-4 w-4" />
+              <Plus />
               New trip
             </Link>
           </Button>
@@ -43,16 +47,16 @@ export default async function TravelPlannerPage() {
           title="No trips yet"
           description="Create your first trip to start planning destinations, dates and bookings."
           action={
-            <Button asChild className="w-full">
+            <Button asChild>
               <Link href="/portal/entertainment/travel-planner/new">
-                <Plus className="mr-1 h-4 w-4" />
+                <Plus />
                 Create trip
               </Link>
             </Button>
           }
         />
       ) : (
-        <TripsOverview trips={trips} />
+        <TripsOverview trips={trips} today={today} />
       )}
     </section>
   );

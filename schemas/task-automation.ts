@@ -1,7 +1,9 @@
 import { z } from "zod";
 
+import { idSchema } from "@/schemas/common";
+
 export const createAutomatedTaskSchema = z.object({
-  roadPathId: z.string().uuid(),
+  roadPathId: idSchema,
 });
 
-export type CreateAutomatedTaskInput = z.infer<typeof createAutomatedTaskSchema>;
+export type CreateAutomatedTaskData = z.infer<typeof createAutomatedTaskSchema>;

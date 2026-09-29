@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Heading, Mono } from "@/components/ui/typography";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 
 import { deleteTripAction } from "@/app/actions/travel";
 import {
@@ -57,7 +58,7 @@ const TripForm = dynamic(
 import { TripItinerary } from "./trip-itinerary";
 import type { ItineraryViewer } from "@/lib/travel/viewer";
 import { TripCalendar } from "./trip-calendar";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 /** Which reading of the plan is on screen. */
 type TripView = "list" | "calendar";
@@ -176,8 +177,8 @@ export function TripDetail({
       const res = await deleteTripAction(trip.id);
       if (res.success) {
         toast.success("Trip deleted");
+        setConfirmDelete(false);
         router.push("/portal/entertainment/travel-planner");
-        router.refresh();
       } else {
         toast.error(res.error);
       }
@@ -185,32 +186,41 @@ export function TripDetail({
   };
 
   return (
-    <section className="flex flex-col gap-6 ">
+    <section className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-2">
-        <Button variant="ghost" size="sm" asChild>
+        {/* The same back link as \`PageHeader\`'s — this page has a photo hero
+            instead of a header, but the way out should look the same. */}
+        <Button variant="ghost" size="sm" className="-ml-2" asChild>
           <Link href="/portal/entertainment/travel-planner">
-            <ArrowLeft className="mr-1 size-4" /> All trips
+            <ArrowLeft /> All trips
           </Link>
         </Button>
 
         {/* Two readings of the same plan. The list answers "what is the
             plan"; the calendar answers "what does the week look like" —
             where the free days are, how long the cruise really runs. */}
-        <Tabs value={view} onValueChange={(v) => setView(v as TripView)}>
-          <TabsList>
-            {/* Named even where the word is hidden: below `sm` the label is
-                `hidden`, which left the tab with no accessible name at all —
-                invisible to a screen reader and unfindable by role. */}
-            <TabsTrigger value="list" aria-label="List" className="gap-1.5">
-              <ListIcon className="size-3.5" />
-              <span className="hidden sm:inline">List</span>
-            </TabsTrigger>
-            <TabsTrigger value="calendar" aria-label="Calendar" className="gap-1.5">
-              <CalendarDays className="size-3.5" />
-              <span className="hidden sm:inline">Calendar</span>
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {/* A segmented control, not Tabs: both readings render into the same
+            column below, so there are no tab panels for the triggers to own. */}
+        <ToggleGroup
+          type="single"
+          size="sm"
+          value={view}
+          // Radix lets the pressed segment be pressed off; a view switcher
+          // always has one view on.
+          onValueChange={(v) => v && setView(v as TripView)}
+          aria-label="View"
+        >
+          {/* Named even where the word is hidden: below `sm` the label is
+              `hidden`, which left the control with no accessible name. */}
+          <ToggleGroupItem value="list" aria-label="List">
+            <ListIcon />
+            <span className="hidden sm:inline">List</span>
+          </ToggleGroupItem>
+          <ToggleGroupItem value="calendar" aria-label="Calendar">
+            <CalendarDays />
+            <span className="hidden sm:inline">Calendar</span>
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       {/* Full bleed on a phone. The page container's 16px gutters were
@@ -222,7 +232,7 @@ export function TripDetail({
           // 21/9 leaves 167px on a 390px phone, and the pill, the buttons and
           // the title all landed on top of each other. The floor wins on a
           // phone, the ratio wins from tablet up.
-          className="relative min-h-72 w-full bg-muted sm:aspect-[21/9] sm:min-h-0"
+          className="relative min-h-72 w-full bg-muted sm:aspect-21/9 sm:min-h-0"
           style={trip.coverPhotoUrl ? undefined : { backgroundColor: trip.color }}
         >
           {trip.coverPhotoUrl && (
@@ -280,7 +290,7 @@ export function TripDetail({
                   onClick={() => setShareOpen(true)}
                   aria-label="Share this trip"
                 >
-                  <Share2 className="size-3.5 sm:mr-1" />
+                  <Share2 />
                   <span className="hidden sm:inline">Share</span>
                 </Button>
                 <Button
@@ -289,29 +299,29 @@ export function TripDetail({
                   onClick={() => setEditOpen(true)}
                   aria-label="Edit this trip"
                 >
-                  <Pencil className="size-3.5 sm:mr-1" />
+                  <Pencil />
                   <span className="hidden sm:inline">Edit</span>
                 </Button>
+                {/* Same solid surface as its neighbours, red only in the icon:
+                    the tinted \`destructive\` variant is translucent, and over
+                    an unknown photograph it disappears. */}
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="bg-destructive/90 text-destructive-foreground hover:bg-destructive"
+                  className="text-destructive"
                   onClick={() => setConfirmDelete(true)}
                   aria-label="Delete trip"
                 >
-                  <Trash2 className="size-3.5" />
+                  <Trash2 />
                 </Button>
               </div>
             </div>
 
             <div className="flex flex-col gap-2">
-              <Heading
-                level="h1"
-                // A trip name is long by nature ("Islandia, Finlandia &
-                // Tomorrowland Winter"), and at the h1's own 30px it ran to
-                // two lines and owned the banner on a phone.
-                className="text-2xl text-white sm:text-4xl"
-              >
+              {/* \`hero\`, not \`h1\`: a trip name is long by nature ("Islandia,
+                  Finlandia & Tomorrowland Winter"), and at the h1's 30px it ran
+                  to two lines and owned the banner on a phone. */}
+              <Heading level="hero" className="text-white">
                 {trip.title}
               </Heading>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
@@ -376,7 +386,7 @@ export function TripDetail({
       )}
 
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Share this trip</DialogTitle>
             <DialogDescription>
@@ -394,7 +404,7 @@ export function TripDetail({
       </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Edit trip</DialogTitle>
             <DialogDescription>
@@ -402,7 +412,11 @@ export function TripDetail({
             </DialogDescription>
           </DialogHeader>
           <Suspense>
-            <TripForm trip={trip} />
+            <TripForm
+              trip={trip}
+              onCancel={() => setEditOpen(false)}
+              onSaved={() => setEditOpen(false)}
+            />
           </Suspense>
         </DialogContent>
       </Dialog>
@@ -419,10 +433,16 @@ export function TripDetail({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDelete}
+              variant="destructive"
+              // Radix closes the dialog on click; held open so the pending
+              // label shows and a failure has somewhere to land.
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
               disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
+              {isDeleting && <Spinner />}
               {isDeleting ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>

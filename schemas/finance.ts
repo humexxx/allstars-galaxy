@@ -1,38 +1,36 @@
 import { z } from "zod";
 
-// Non-negative monetary value (no leading minus). Mirrors the CHECK constraints
-// in the DB so values must be >= 0 at every layer.
-const decimal = z
-  .string()
-  .regex(/^\d+(\.\d{1,2})?$/, "Must be a non-negative number with up to 2 decimals");
+import { idSchema, isoDateSchema, moneySchema } from "@/schemas/common";
+import {
+  DEBT_PAYMENT_TYPES,
+  DEBT_STRATEGIES,
+  OVERRIDE_ACTIONS,
+  OVERRIDE_SIDES,
+  RECURRENCE_TYPES,
+} from "@/types/finance";
+
+// Money is non-negative at every layer: the DB carries the same CHECK.
+const decimal = moneySchema;
 
 // Non-negative numeric rate.
 const rate = z
   .string()
   .regex(/^\d+(\.\d{1,6})?$/, "Must be a non-negative numeric rate");
 
-// ISO date string YYYY-MM-DD. We accept the string form because the date column
-// in Postgres is calendar-day-only — no timezone. Client passes "2026-08-15".
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Must be a YYYY-MM-DD date");
+const isoDate = isoDateSchema;
 
 const lineKind = z.enum(["recurring", "one_time"]);
 
 // Recurrence model shared by income / expense / debt. monthly_day is the
 // historical behaviour (and the default) so existing rows keep working with no
 // migration of values — only the column type was added.
-const recurrenceType = z.enum([
-  "monthly_day",
-  "monthly_weekday",
-  "every_n_months",
-]);
+export const recurrenceTypeSchema = z.enum(RECURRENCE_TYPES);
 
 // Fields a recurring entry can carry depending on recurrenceType. All optional
 // at the validation surface; superRefine below enforces which ones are needed
 // per type so we keep clear error paths.
 const recurrenceFields = {
-  recurrenceType: recurrenceType.default("monthly_day"),
+  recurrenceType: recurrenceTypeSchema.default("monthly_day"),
   weekOfMonth: z.number().int().min(1).max(5).nullable().optional(),
   dayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
   intervalMonths: z.number().int().min(1).max(12).nullable().optional(),
@@ -40,7 +38,7 @@ const recurrenceFields = {
 };
 
 type RecurrenceShape = {
-  recurrenceType?: z.infer<typeof recurrenceType>;
+  recurrenceType?: RecurrenceTypeData;
   weekOfMonth?: number | null;
   dayOfWeek?: number | null;
   intervalMonths?: number | null;
@@ -49,18 +47,18 @@ type RecurrenceShape = {
 
 // Validates that fields specific to a recurrenceType are present when chosen.
 // Pulled out so the same logic powers create + update for every line side.
-function refineRecurrence<T extends RecurrenceShape>(val: T, ctx: z.RefinementCtx) {
+function refineRecurrence<T extends RecurrenceShape>(val: T, ctx: z.RefinementCtx): void {
   if (val.recurrenceType === "monthly_weekday") {
     if (val.weekOfMonth == null) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["weekOfMonth"],
         message: "Pick which week (1–5) for monthly-weekday recurrence",
       });
     }
     if (val.dayOfWeek == null) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["dayOfWeek"],
         message: "Pick which weekday for monthly-weekday recurrence",
       });
@@ -68,7 +66,7 @@ function refineRecurrence<T extends RecurrenceShape>(val: T, ctx: z.RefinementCt
   } else if (val.recurrenceType === "every_n_months") {
     if (val.intervalMonths == null) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["intervalMonths"],
         message: "Set the month interval (1–12)",
       });
@@ -76,8 +74,10 @@ function refineRecurrence<T extends RecurrenceShape>(val: T, ctx: z.RefinementCt
   }
 }
 
+export const planNameSchema = z.string().trim().min(1).max(120);
+
 export const createFinancePlanSchema = z.object({
-  name: z.string().min(1).max(120),
+  name: planNameSchema,
   description: z.string().max(1000).optional().nullable(),
   startMonth: z.coerce.date(),
   monthsAhead: z.number().int().min(12).max(120),
@@ -85,9 +85,9 @@ export const createFinancePlanSchema = z.object({
   monthlySavingsRate: rate.default("0"),
   includePortfolio: z.boolean().default(false),
   surplusToDebtsPercent: rate.default("0"),
-  debtStrategy: z.enum(["avalanche", "snowball", "none"]).default("avalanche"),
+  debtStrategy: z.enum(DEBT_STRATEGIES).default("avalanche"),
   autoInvestPercent: rate.default("0"),
-  autoInvestMethodId: z.string().uuid().nullable().optional(),
+  autoInvestMethodId: idSchema.nullable().optional(),
   initialInvestments: decimal.default("0"),
   // 0 = disabled monthly confirmation. Otherwise day of month 1..28.
   confirmationDayOfMonth: z.number().int().min(0).max(28).default(1),
@@ -102,17 +102,23 @@ export const createFinancePlanSchema = z.object({
  * no business there.
  */
 export const planColorSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   color: z
     .string()
     .regex(/^(#[0-9a-fA-F]{6}|var\(--chart-[1-5]\))$/, "Unsupported colour"),
 });
 
 export const updateFinancePlanSchema = createFinancePlanSchema.extend({
-  id: z.string().uuid(),
+  id: idSchema,
   // Scenario link. Only settable via update (scenarios are created by cloning);
   // null detaches the scenario from its base plan.
-  basedOnPlanId: z.string().uuid().nullable().optional(),
+  basedOnPlanId: idSchema.nullable().optional(),
+});
+
+/** Copy a plan (or branch a scenario off it) under a new name. */
+export const cloneFinancePlanSchema = z.object({
+  planId: idSchema,
+  name: planNameSchema,
 });
 
 // Income line shape + refinement. kind=one_time needs a date; kind=recurring
@@ -132,11 +138,11 @@ const incomeShape = {
 function refineIncome(
   val: z.infer<z.ZodObject<typeof incomeShape>>,
   ctx: z.RefinementCtx
-) {
+): void {
   if (val.kind === "one_time") {
     if (!val.date) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["date"],
         message: "One-time income requires a date",
       });
@@ -146,7 +152,7 @@ function refineIncome(
   // Recurring branch — start/end window + recurrence-specific fields.
   if (val.startDate && val.endDate && val.startDate > val.endDate) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: "custom",
       path: ["endDate"],
       message: "End date must be on or after start date",
     });
@@ -156,7 +162,7 @@ function refineIncome(
 
 export const planIncomeSchema = z.object(incomeShape).superRefine(refineIncome);
 export const updatePlanIncomeSchema = z
-  .object({ id: z.string().uuid(), ...incomeShape })
+  .object({ id: idSchema, ...incomeShape })
   .superRefine(refineIncome);
 
 // Expense line shape + refinement. Same shape as income minus start/end window.
@@ -173,11 +179,11 @@ const expenseShape = {
 function refineExpense(
   val: z.infer<z.ZodObject<typeof expenseShape>>,
   ctx: z.RefinementCtx
-) {
+): void {
   if (val.kind === "one_time") {
     if (!val.date) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["date"],
         message: "One-time expense requires a date",
       });
@@ -189,7 +195,7 @@ function refineExpense(
 
 export const planExpenseSchema = z.object(expenseShape).superRefine(refineExpense);
 export const updatePlanExpenseSchema = z
-  .object({ id: z.string().uuid(), ...expenseShape })
+  .object({ id: idSchema, ...expenseShape })
   .superRefine(refineExpense);
 
 // Debts are always recurring — the recurrence-type refinement runs
@@ -199,7 +205,7 @@ const debtShape = {
   initialBalance: decimal.default("0"),
   monthlyInterestRate: rate.default("0"),
   monthlyPayment: decimal.default("0"),
-  paymentType: z.enum(["fixed", "percent_of_balance"]).default("fixed"),
+  paymentType: z.enum(DEBT_PAYMENT_TYPES).default("fixed"),
   minPaymentPercent: rate.default("0"),
   minPaymentFloor: decimal.default("0"),
   // Day of the month the minimum payment is due. Null = treated as day 1 by
@@ -209,40 +215,56 @@ const debtShape = {
   sortOrder: z.number().optional(),
 };
 
+export const FIXED_DEBT_NEEDS_PAYMENT =
+  "Fixed-payment debt with interest needs a non-zero monthly payment.";
+
 function refineDebt(
   val: z.infer<z.ZodObject<typeof debtShape>>,
   ctx: z.RefinementCtx
-) {
+): void {
   refineRecurrence(val, ctx);
+  // A fixed payment of zero on a debt that accrues interest grows forever in
+  // the projection, and a percent rule is the only other way it gets paid.
+  if (
+    val.paymentType === "fixed" &&
+    parseFloat(val.monthlyPayment) === 0 &&
+    parseFloat(val.monthlyInterestRate) > 0
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["monthlyPayment"],
+      message: FIXED_DEBT_NEEDS_PAYMENT,
+    });
+  }
 }
 
 export const planDebtSchema = z.object(debtShape).superRefine(refineDebt);
 export const updatePlanDebtSchema = z
-  .object({ id: z.string().uuid(), ...debtShape })
+  .object({ id: idSchema, ...debtShape })
   .superRefine(refineDebt);
 
 // Per-month override for a recurring line. monthYear should be the FIRST of the
 // targeted month ("2026-08-01") — the service normalises and persists it as is.
 export const lineOverrideSchema = z
   .object({
-    parentSide: z.enum(["income", "expense", "debt"]),
-    parentId: z.string().uuid(),
+    parentSide: z.enum(OVERRIDE_SIDES),
+    parentId: idSchema,
     monthYear: isoDate,
-    action: z.enum(["skip", "reschedule", "amount"]),
+    action: z.enum(OVERRIDE_ACTIONS),
     date: isoDate.nullable().optional(),
     monthlyAmount: decimal.nullable().optional(),
   })
   .superRefine((val, ctx) => {
     if (val.action === "reschedule" && !val.date) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["date"],
         message: "Reschedule overrides require a target date",
       });
     }
     if (val.action === "amount" && (val.monthlyAmount == null)) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["monthlyAmount"],
         message: "Amount overrides require an amount",
       });
@@ -250,21 +272,31 @@ export const lineOverrideSchema = z
   });
 
 export const deleteLineOverrideSchema = z.object({
-  parentSide: z.enum(["income", "expense", "debt"]),
-  parentId: z.string().uuid(),
+  parentSide: z.enum(OVERRIDE_SIDES),
+  parentId: idSchema,
   monthYear: isoDate,
 });
 
-export type LineOverrideInput = z.infer<typeof lineOverrideSchema>;
-export type DeleteLineOverrideInput = z.infer<typeof deleteLineOverrideSchema>;
+export type RecurrenceTypeData = z.infer<typeof recurrenceTypeSchema>;
+export type LineOverrideData = z.infer<typeof lineOverrideSchema>;
+export type DeleteLineOverrideData = z.infer<typeof deleteLineOverrideSchema>;
 
-export type CreateFinancePlanInput = z.infer<typeof createFinancePlanSchema>;
-export type UpdateFinancePlanInput = z.infer<typeof updateFinancePlanSchema>;
-export type PlanColorInput = z.infer<typeof planColorSchema>;
-export type PlanIncomeInput = z.infer<typeof planIncomeSchema>;
-export type UpdatePlanIncomeInput = z.infer<typeof updatePlanIncomeSchema>;
-export type PlanExpenseInput = z.infer<typeof planExpenseSchema>;
-export type UpdatePlanExpenseInput = z.infer<typeof updatePlanExpenseSchema>;
-export type PlanDebtInput = z.infer<typeof planDebtSchema>;
-export type UpdatePlanDebtInput = z.infer<typeof updatePlanDebtSchema>;
-export type RecurrenceType = z.infer<typeof recurrenceType>;
+/** What a caller may send: every defaulted field is optional here. */
+export type CreateFinancePlanInput = z.input<typeof createFinancePlanSchema>;
+export type CreateFinancePlanData = z.infer<typeof createFinancePlanSchema>;
+export type UpdateFinancePlanInput = z.input<typeof updateFinancePlanSchema>;
+export type UpdateFinancePlanData = z.infer<typeof updateFinancePlanSchema>;
+export type CloneFinancePlanData = z.infer<typeof cloneFinancePlanSchema>;
+export type PlanColorData = z.infer<typeof planColorSchema>;
+export type PlanIncomeInput = z.input<typeof planIncomeSchema>;
+export type PlanIncomeData = z.infer<typeof planIncomeSchema>;
+export type UpdatePlanIncomeInput = z.input<typeof updatePlanIncomeSchema>;
+export type UpdatePlanIncomeData = z.infer<typeof updatePlanIncomeSchema>;
+export type PlanExpenseInput = z.input<typeof planExpenseSchema>;
+export type PlanExpenseData = z.infer<typeof planExpenseSchema>;
+export type UpdatePlanExpenseInput = z.input<typeof updatePlanExpenseSchema>;
+export type UpdatePlanExpenseData = z.infer<typeof updatePlanExpenseSchema>;
+export type PlanDebtInput = z.input<typeof planDebtSchema>;
+export type PlanDebtData = z.infer<typeof planDebtSchema>;
+export type UpdatePlanDebtInput = z.input<typeof updatePlanDebtSchema>;
+export type UpdatePlanDebtData = z.infer<typeof updatePlanDebtSchema>;

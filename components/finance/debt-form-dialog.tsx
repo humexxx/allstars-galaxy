@@ -4,7 +4,6 @@ import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -17,16 +16,28 @@ import {
   RadioGroup,
   RadioGroupItem,
 } from "@/components/ui/radio-group";
-import { Eyebrow, Text } from "@/components/ui/typography";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
+import { Eyebrow } from "@/components/ui/typography";
 
-import type { DebtPaymentType } from "@/types/finance";
+import { FIXED_DEBT_NEEDS_PAYMENT } from "@/schemas/finance";
+import type { DebtPaymentType, RecurrenceType } from "@/types/finance";
 
 import { RecurrenceFields } from "./line-form-dialog";
 
-export type RecurrenceType =
-  | "monthly_day"
-  | "monthly_weekday"
-  | "every_n_months";
+// The server's rules (`moneySchema` / the rate regex), checked here so the
+// field that is wrong says so instead of the whole save failing as "Invalid
+// input".
+const MONEY = /^\d+(\.\d{1,2})?$/;
+const RATE = /^\d+(\.\d{1,6})?$/;
+const MONEY_ERROR = "Use a positive number with up to 2 decimals.";
 
 export type DebtFormValues = {
   name: string;
@@ -37,7 +48,7 @@ export type DebtFormValues = {
   minPaymentPercent: string;
   minPaymentFloor: string;
   dayOfMonth: number | null;
-  // B1/B2 — UI lands with B5. Default monthly_day preserves prior behaviour.
+  // Default monthly_day preserves prior behaviour.
   recurrenceType: RecurrenceType;
   weekOfMonth: number | null;
   dayOfWeek: number | null;
@@ -49,6 +60,8 @@ type DebtFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: Partial<DebtFormValues> & { id?: string };
+  /** Rejects when the save failed; the caller has already said so, and the
+   *  dialog stays open with the input intact. */
   onSubmit: (values: DebtFormValues) => Promise<void>;
 };
 
@@ -120,7 +133,26 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
   const [submitting, setSubmitting] = useState(false);
 
   const isPercent = paymentType === "percent_of_balance";
-  const canSubmit = name.trim().length > 0;
+  const invalid = (value: string, rule: RegExp): boolean =>
+    value.trim().length > 0 && !rule.test(value.trim());
+  const errors = {
+    balance: invalid(balance, MONEY) ? MONEY_ERROR : null,
+    rate: invalid(rate, RATE) ? "Use a positive decimal, e.g. 0.02." : null,
+    payment: invalid(payment, MONEY)
+      ? MONEY_ERROR
+      : // A fixed payment of zero on a debt that accrues interest never pays
+        // it off; the server refuses it with this same message.
+        !isPercent && !(parseFloat(payment) > 0) && parseFloat(rate) > 0
+        ? FIXED_DEBT_NEEDS_PAYMENT
+        : null,
+    minPercent: invalid(minPercent, RATE) ? "Use a positive decimal, e.g. 0.02." : null,
+    minFloor: invalid(minFloor, MONEY) ? MONEY_ERROR : null,
+  };
+  const relevantErrors = isPercent
+    ? [errors.balance, errors.rate, errors.minPercent, errors.minFloor]
+    : [errors.balance, errors.rate, errors.payment];
+  const canSubmit =
+    name.trim().length > 0 && relevantErrors.every((e) => e === null);
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -144,6 +176,8 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
         recurrenceStart,
       });
       onCancel();
+    } catch {
+      // Already reported by the caller; stay open so nothing typed is lost.
     } finally {
       setSubmitting(false);
     }
@@ -159,45 +193,41 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
         </DialogDescription>
       </DialogHeader>
 
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor={nameInputId}>Name</Label>
+      <div className="flex flex-col gap-4">
+        <Field className="gap-2">
+          <FieldLabel htmlFor={nameInputId}>Name</FieldLabel>
           <Input
             id={nameInputId}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Tarjeta de crédito"
           />
+        </Field>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <MoneyField
+            id={balanceInputId}
+            label="Balance"
+            value={balance}
+            onChange={setBalance}
+            placeholder="0.00"
+            error={errors.balance}
+          />
+          <MoneyField
+            id={rateInputId}
+            label="Monthly interest rate"
+            value={rate}
+            onChange={setRate}
+            placeholder="0.02"
+            error={errors.rate}
+            description="Decimal (0.02 = 2% per month)."
+          />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor={balanceInputId}>Balance</Label>
-            <Input
-              id={balanceInputId}
-              value={balance}
-              onChange={(e) => setBalance(e.target.value)}
-              inputMode="decimal"
-              placeholder="0.00"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={rateInputId}>Monthly interest rate</Label>
-            <Input
-              id={rateInputId}
-              value={rate}
-              onChange={(e) => setRate(e.target.value)}
-              inputMode="decimal"
-              placeholder="0.02"
-            />
-            <Text variant="small">
-              Decimal (0.02 = 2% per month).
-            </Text>
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label>Payment type</Label>
+        <FieldSet>
+          <FieldLegend variant="label" className="mb-2">
+            Payment type
+          </FieldLegend>
           <RadioGroup
             value={paymentType}
             onValueChange={(v) => setPaymentType(v as DebtPaymentType)}
@@ -212,48 +242,40 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
               % of balance
             </label>
           </RadioGroup>
-        </div>
+        </FieldSet>
 
         {isPercent ? (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor={percentInputId}>Min % of balance</Label>
-              <Input
-                id={percentInputId}
-                value={minPercent}
-                onChange={(e) => setMinPercent(e.target.value)}
-                inputMode="decimal"
-                placeholder="0.02"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={floorInputId}>Minimum floor</Label>
-              <Input
-                id={floorInputId}
-                value={minFloor}
-                onChange={(e) => setMinFloor(e.target.value)}
-                inputMode="decimal"
-                placeholder="25.00"
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            <Label htmlFor={paymentInputId}>Monthly payment</Label>
-            <Input
-              id={paymentInputId}
-              value={payment}
-              onChange={(e) => setPayment(e.target.value)}
-              inputMode="decimal"
-              placeholder="0.00"
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MoneyField
+              id={percentInputId}
+              label="Min % of balance"
+              value={minPercent}
+              onChange={setMinPercent}
+              placeholder="0.02"
+              error={errors.minPercent}
+            />
+            <MoneyField
+              id={floorInputId}
+              label="Minimum floor"
+              value={minFloor}
+              onChange={setMinFloor}
+              placeholder="25.00"
+              error={errors.minFloor}
             />
           </div>
+        ) : (
+          <MoneyField
+            id={paymentInputId}
+            label="Monthly payment"
+            value={payment}
+            onChange={setPayment}
+            placeholder="0.00"
+            error={errors.payment}
+          />
         )}
 
-        <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-          <Eyebrow as="div" className="tracking-wide">
-            Schedule
-          </Eyebrow>
+        <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3">
+          <Eyebrow as="div">Schedule</Eyebrow>
           <RecurrenceFields
             recurrenceType={recurrenceType}
             setRecurrenceType={setRecurrenceType}
@@ -274,13 +296,50 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
       </div>
 
       <DialogFooter>
-        <Button variant="ghost" onClick={onCancel} disabled={submitting}>
+        <Button variant="outline" onClick={onCancel} disabled={submitting}>
           Cancel
         </Button>
         <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
-          {isEdit ? "Save" : "Add"}
+          {submitting && <Spinner />}
+          {submitting ? "Saving…" : isEdit ? "Save" : "Add"}
         </Button>
       </DialogFooter>
     </>
+  );
+}
+
+function MoneyField({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+  error,
+  description,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  error: string | null;
+  description?: string;
+}) {
+  const errorId = `${id}-error`;
+  return (
+    <Field className="gap-2" data-invalid={error ? true : undefined}>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        inputMode="decimal"
+        placeholder={placeholder}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+      />
+      {description && !error && <FieldDescription>{description}</FieldDescription>}
+      {error && <FieldError id={errorId}>{error}</FieldError>}
+    </Field>
   );
 }

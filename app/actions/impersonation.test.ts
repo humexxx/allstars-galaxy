@@ -25,22 +25,10 @@ vi.mock("@/lib/services/auth-server", () => ({
   requireAdminCached: vi.fn(),
 }));
 
-// The action imports `db` and `users` and queries via `select().from().where()`.
-// We model the chain as thenable so `await db.select()...where()` resolves to
-// the array we control per-test.
-const selectMock = vi.fn();
-vi.mock("@/db", () => ({
-  db: {
-    select: (...args: unknown[]) => selectMock(...args),
-  },
-}));
-
-vi.mock("@/db/schema", () => ({
-  users: {},
-}));
-
-vi.mock("drizzle-orm", () => ({
-  eq: vi.fn((a: unknown, b: unknown) => ({ __eq: [a, b] })),
+const getImpersonationTarget = vi.fn();
+vi.mock("@/lib/services/impersonation", () => ({
+  IMPERSONATION_COOKIE: "cg_impersonating",
+  getImpersonationTarget: (...args: unknown[]) => getImpersonationTarget(...args),
 }));
 
 import { revalidatePath } from "next/cache";
@@ -57,18 +45,10 @@ const ADMIN_ID = "00000000-0000-4000-8000-0000000000aa";
 const TARGET_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_ADMIN_ID = "22222222-2222-4222-8222-222222222222";
 
-function buildSelectChain(rows: Array<{ id: string; role: "admin" | "user" }>) {
-  // db.select(cols).from(t).where(c) → Promise<rows>
-  // Implemented as a thenable on the `.where()` return.
-  const thenable = {
-    then: (resolve: (v: typeof rows) => void) => resolve(rows),
-  };
-  const fromChain = {
-    where: vi.fn(() => thenable),
-  };
-  selectMock.mockReturnValueOnce({
-    from: vi.fn(() => fromChain),
-  });
+function givenTarget(target: { id: string; role: "admin" | "user" } | null) {
+  getImpersonationTarget.mockResolvedValueOnce(
+    target && { ...target, email: null, fullName: null },
+  );
 }
 
 beforeEach(() => {
@@ -79,12 +59,12 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
-  selectMock.mockReset();
+  getImpersonationTarget.mockReset();
 });
 
 describe("startImpersonationAction", () => {
   it("sets the impersonation cookie, revalidates layout, and redirects to /portal (happy path)", async () => {
-    buildSelectChain([{ id: TARGET_ID, role: "user" }]);
+    givenTarget({ id: TARGET_ID, role: "user" });
 
     const formData = new FormData();
     formData.set("userId", TARGET_ID);
@@ -117,7 +97,7 @@ describe("startImpersonationAction", () => {
       "Invalid user id",
     );
 
-    expect(selectMock).not.toHaveBeenCalled();
+    expect(getImpersonationTarget).not.toHaveBeenCalled();
     expect(cookieSet).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
     expect(redirect).not.toHaveBeenCalled();
@@ -143,13 +123,13 @@ describe("startImpersonationAction", () => {
       "You cannot impersonate yourself",
     );
 
-    expect(selectMock).not.toHaveBeenCalled();
+    expect(getImpersonationTarget).not.toHaveBeenCalled();
     expect(cookieSet).not.toHaveBeenCalled();
     expect(redirect).not.toHaveBeenCalled();
   });
 
   it("throws 'User not found' when the target id has no matching row", async () => {
-    buildSelectChain([]);
+    givenTarget(null);
 
     const formData = new FormData();
     formData.set("userId", TARGET_ID);
@@ -163,7 +143,7 @@ describe("startImpersonationAction", () => {
   });
 
   it("refuses to impersonate another admin", async () => {
-    buildSelectChain([{ id: OTHER_ADMIN_ID, role: "admin" }]);
+    givenTarget({ id: OTHER_ADMIN_ID, role: "admin" });
 
     const formData = new FormData();
     formData.set("userId", OTHER_ADMIN_ID);
@@ -188,7 +168,7 @@ describe("startImpersonationAction", () => {
       "Forbidden: Admin access required",
     );
 
-    expect(selectMock).not.toHaveBeenCalled();
+    expect(getImpersonationTarget).not.toHaveBeenCalled();
     expect(cookieSet).not.toHaveBeenCalled();
     expect(redirect).not.toHaveBeenCalled();
   });

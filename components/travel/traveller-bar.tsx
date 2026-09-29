@@ -166,15 +166,15 @@ export function TravellerBar({
             size="sm"
             variant="ghost"
             aria-label="Manage travellers"
-            className="h-8 gap-1 bg-black/60 px-2 text-white/90 ring-1 ring-white/20 hover:bg-black/75 hover:text-white"
+            className="bg-black/60 px-2 text-white/90 ring-1 ring-white/20 hover:bg-black/75 hover:text-white"
             onClick={onManage}
           >
             {travellers.length === 0 ? (
               <>
-                <Plus className="size-3.5" /> Add travellers
+                <Plus /> Add travellers
               </>
             ) : (
-              <Users className="size-3.5" />
+              <Users />
             )}
           </Button>
         </TooltipTrigger>

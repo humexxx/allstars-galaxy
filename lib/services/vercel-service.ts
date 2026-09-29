@@ -25,10 +25,7 @@
 import "server-only";
 
 import { env } from "@/lib/env";
-import type {
-  AppListing,
-  AppProvider,
-} from "@/app/portal/more-apps/apps-data";
+import type { AppListing, AppProvider } from "@/types/apps";
 import { upstreamSignal } from "./upstream";
 
 type VercelDeployment = {
@@ -113,7 +110,9 @@ async function fetchVercelUser(
     const id = json.user?.id;
     const username = json.user?.username;
     return id && username ? { id, username } : null;
-  } catch {
+  } catch (error) {
+    // Best-effort: without the user the listing falls back to team slugs.
+    console.error("[vercel-service] Error fetching user:", error);
     return null;
   }
 }
@@ -131,7 +130,8 @@ async function fetchTeamSlug(
     if (!res.ok) return null;
     const json = (await res.json()) as VercelTeamResponse;
     return json.slug ?? null;
-  } catch {
+  } catch (error) {
+    console.error(`[vercel-service] Error fetching team ${teamId}:`, error);
     return null;
   }
 }

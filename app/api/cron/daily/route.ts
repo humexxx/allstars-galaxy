@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isCronAuthorized } from "@/lib/cron-auth";
-import { db } from "@/db";
-import { appState } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { getAppStateValue, setAppState } from "@/lib/services/app-state-service";
 import {
   applyMonthlyInterest,
   interestAppliedThisMonth,
@@ -11,30 +9,24 @@ import {
 } from "@/lib/services/interest-service";
 import { createDailySnapshots } from "@/lib/services/snapshot-service";
 import { createDailyFinanceSnapshots } from "@/lib/services/finance-snapshot-service";
-import { createAutomatedTasksForAllRoadPaths } from "@/lib/services/task-automation-service";
+import {
+  createAutomatedTasksForAllUsers,
+  type AutomatedTasksRun,
+} from "@/lib/services/task-automation-service";
 import { refreshF1News } from "@/lib/services/rapidapi-f1-news-service";
 
-async function updateAppState(key: string, value: string, error: string | null = null) {
-  const existingState = await db.query.appState.findFirst({
-    where: eq(appState.key, key),
-  });
+// Interest, two snapshot passes, a per-user task loop and an upstream fetch
+// run back to back; the platform default would cut that off. (Hobby caps a
+// function at 60 s.)
+export const maxDuration = 300;
 
-  if (existingState) {
-    await db
-      .update(appState)
-      .set({
-        value,
-        error,
-        updatedAt: new Date(),
-      })
-      .where(eq(appState.key, key));
-  } else {
-    await db.insert(appState).values({
-      key,
-      value,
-      error,
-    });
-  }
+type InterestRun = { applied: boolean; result: Awaited<ReturnType<typeof applyMonthlyInterest>> | null };
+type SnapshotRun = Awaited<ReturnType<typeof createDailySnapshots>>;
+type FinanceSnapshotRun = Awaited<ReturnType<typeof createDailyFinanceSnapshots>>;
+type F1NewsRun = Awaited<ReturnType<typeof refreshF1News>>;
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error";
 }
 
 /**
@@ -46,21 +38,19 @@ async function updateAppState(key: string, value: string, error: string | null =
  * With no record yet, only the 1st counts as the first month's run.
  */
 async function shouldRunMonthlyInterest(today: Date): Promise<boolean> {
-  const lastInterestRun = await db.query.appState.findFirst({
-    where: eq(appState.key, LAST_INTEREST_RUN_KEY),
-  });
+  const lastInterestRun = await getAppStateValue(LAST_INTEREST_RUN_KEY);
 
-  if (!lastInterestRun?.value) {
+  if (!lastInterestRun) {
     return today.getUTCDate() === 1;
   }
 
-  return !interestAppliedThisMonth(lastInterestRun.value, today);
+  return !interestAppliedThisMonth(lastInterestRun, today);
 }
 
-async function processMonthlyInterest(today: Date) {
+async function processMonthlyInterest(today: Date): Promise<InterestRun> {
   try {
     const shouldApply = await shouldRunMonthlyInterest(today);
-    
+
     if (!shouldApply) {
       return { applied: false, result: null };
     }
@@ -71,68 +61,49 @@ async function processMonthlyInterest(today: Date) {
     return { applied: true, result };
   } catch (error) {
     console.error("Failed to process monthly interest:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     // A separate key: stamping last_interest_run on failure made the next run
     // believe the month was done and skip it.
-    await updateAppState("last_interest_error", today.toISOString(), errorMessage);
+    await setAppState("last_interest_error", today.toISOString(), messageOf(error));
     throw error;
   }
 }
 
-async function processDailySnapshots(today: Date) {
+async function processDailySnapshots(today: Date): Promise<SnapshotRun> {
   try {
     const result = await createDailySnapshots();
-    await updateAppState("last_snapshot_run", today.toISOString());
-    
+    await setAppState("last_snapshot_run", today.toISOString());
     return result;
   } catch (error) {
     console.error("Failed to create daily snapshots:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    await updateAppState("last_snapshot_run", today.toISOString(), errorMessage);
+    await setAppState("last_snapshot_run", today.toISOString(), messageOf(error));
     throw error;
   }
 }
 
-async function processFinancePlanSnapshots(today: Date) {
+async function processFinancePlanSnapshots(today: Date): Promise<FinanceSnapshotRun> {
   try {
     const result = await createDailyFinanceSnapshots(today);
-    await updateAppState("last_finance_snapshots_run", today.toISOString());
+    await setAppState("last_finance_snapshots_run", today.toISOString());
     return result;
   } catch (error) {
     console.error("Failed to capture finance plan snapshots:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    await updateAppState("last_finance_snapshots_run", today.toISOString(), errorMessage);
+    await setAppState("last_finance_snapshots_run", today.toISOString(), messageOf(error));
     throw error;
   }
 }
 
-async function processAutomatedTasks(today: Date) {
+async function processAutomatedTasks(today: Date): Promise<AutomatedTasksRun> {
   try {
-    const allUsers = await db.query.users.findMany();
-    const taskCreationResults = [];
-    
-    for (const user of allUsers) {
-      try {
-        const tasks = await createAutomatedTasksForAllRoadPaths(user.id);
-        if (tasks.length > 0) {
-          taskCreationResults.push({
-            userId: user.id,
-            tasksCreated: tasks.length,
-          });
-        }
-      } catch (error) {
-        console.error(`Failed to create automated tasks for user ${user.id}:`, error);
-        // Continue with other users even if one fails
-      }
-    }
-
-    await updateAppState("last_task_automation_run", today.toISOString());
-    
-    return taskCreationResults;
+    const run = await createAutomatedTasksForAllUsers();
+    await setAppState(
+      "last_task_automation_run",
+      today.toISOString(),
+      run.failedUserIds.length > 0 ? `Failed for ${run.failedUserIds.length} user(s)` : null
+    );
+    return run;
   } catch (error) {
     console.error("Failed to process automated tasks:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    await updateAppState("last_task_automation_run", today.toISOString(), errorMessage);
+    await setAppState("last_task_automation_run", today.toISOString(), messageOf(error));
     throw error;
   }
 }
@@ -144,120 +115,81 @@ async function processAutomatedTasks(today: Date) {
  * its own 08:00 UTC schedule. It lives here now so one app owns the RapidAPI
  * quota and the archive.
  */
-async function processF1News(today: Date) {
+async function processF1News(today: Date): Promise<F1NewsRun> {
   try {
     const result = await refreshF1News();
-    await updateAppState("last_f1_news_run", today.toISOString());
+    await setAppState("last_f1_news_run", today.toISOString());
     return result;
   } catch (error) {
     console.error("Failed to refresh F1 news:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    await updateAppState("last_f1_news_run", today.toISOString(), errorMessage);
+    await setAppState("last_f1_news_run", today.toISOString(), messageOf(error));
     throw error;
   }
 }
 
-export async function GET(request: NextRequest) {
+/**
+ * Run one independent step. A failure is recorded by name only: the message
+ * is already in the log and in app_state, and the response carries no driver
+ * or constraint text.
+ */
+async function step<T>(
+  operation: string,
+  run: () => Promise<T>,
+  errors: string[]
+): Promise<T | undefined> {
+  try {
+    return await run();
+  } catch {
+    errors.push(operation);
+    return undefined;
+  }
+}
+
+export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     if (!isCronAuthorized(request.headers.get("authorization"))) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const today = new Date();
-    const results: {
-      interest?: { applied: boolean; result: unknown };
-      snapshots?: unknown;
-      financeSnapshots?: { date: Date; totalPlans: number; snapshotsCreated: number; errors: string[] };
-      tasks?: Array<{ userId: string; tasksCreated: number }>;
-      f1News?: { fetched: number; stored: number };
-      errors: Array<{ operation: string; error: string }>;
-    } = {
-      errors: [],
-    };
+    const failed: string[] = [];
 
-    // Process monthly interest (independent operation)
-    try {
-      results.interest = await processMonthlyInterest(today);
-    } catch (error) {
-      results.errors.push({
-        operation: "monthly_interest",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-
-    // Process portfolio daily snapshots (independent operation)
-    try {
-      results.snapshots = await processDailySnapshots(today);
-    } catch (error) {
-      results.errors.push({
-        operation: "daily_snapshots",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-
-    // Process finance plan daily snapshots (independent operation)
-    try {
-      results.financeSnapshots = await processFinancePlanSnapshots(today);
-    } catch (error) {
-      results.errors.push({
-        operation: "finance_plan_snapshots",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-
-    // Process automated tasks (independent operation)
-    try {
-      results.tasks = await processAutomatedTasks(today);
-    } catch (error) {
-      results.errors.push({
-        operation: "automated_tasks",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-
-    // Refresh F1 news (independent operation)
-    try {
-      results.f1News = await processF1News(today);
-    } catch (error) {
-      results.errors.push({
-        operation: "f1_news",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
+    const interest = await step("monthly_interest", () => processMonthlyInterest(today), failed);
+    const snapshots = await step("daily_snapshots", () => processDailySnapshots(today), failed);
+    const financeSnapshots = await step(
+      "finance_plan_snapshots",
+      () => processFinancePlanSnapshots(today),
+      failed
+    );
+    const tasks = await step("automated_tasks", () => processAutomatedTasks(today), failed);
+    const f1News = await step("f1_news", () => processF1News(today), failed);
 
     return NextResponse.json({
-      success: results.errors.length === 0,
+      success: failed.length === 0,
       date: today.toISOString(),
-      interestApplied: results.interest?.applied ?? false,
-      interestResult: results.interest?.result,
-      snapshotsCreated: (results.snapshots as { snapshotsCreated?: number })?.snapshotsCreated ?? 0,
-      financePlanSnapshots: results.financeSnapshots
-        ? {
-            totalPlans: results.financeSnapshots.totalPlans,
-            snapshotsCreated: results.financeSnapshots.snapshotsCreated,
-            errors: results.financeSnapshots.errors,
-          }
-        : { totalPlans: 0, snapshotsCreated: 0, errors: [] },
-      taskCreationResults: results.tasks ?? [],
-      f1News: results.f1News ?? { fetched: 0, stored: 0 },
-      errors: results.errors,
+      interestApplied: interest?.applied ?? false,
+      interestResult: interest?.result,
+      snapshotsCreated: snapshots?.snapshotsCreated ?? 0,
+      financePlanSnapshots: {
+        totalPlans: financeSnapshots?.totalPlans ?? 0,
+        snapshotsCreated: financeSnapshots?.snapshotsCreated ?? 0,
+        // A count, not the strings: those are built from raw error messages.
+        failed: financeSnapshots?.errors.length ?? 0,
+      },
+      taskCreationResults: tasks?.created ?? [],
+      taskAutomationFailures: tasks?.failedUserIds.length ?? 0,
+      f1News: f1News ?? { fetched: 0, stored: 0 },
+      failedOperations: failed,
     });
   } catch (error) {
     console.error("Cron job error:", error);
 
-    // Log error to app_state
     try {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      await updateAppState("last_cron_error", new Date().toISOString(), errorMessage);
+      await setAppState("last_cron_error", new Date().toISOString(), messageOf(error));
     } catch (logError) {
       console.error("Failed to log error:", logError);
     }
 
-    // The message is logged above and stored in app_state; the response
-    // carries no driver or constraint text.
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

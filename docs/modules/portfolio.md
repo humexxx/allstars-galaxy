@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active (page redesigned to mirror plan-editor layout)
-> **Last reviewed:** 2026-09-11
+> **Last reviewed:** 2026-09-29
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -10,13 +10,15 @@ metadata. Interest math is shared with [Finance](./finance.md).
 
 ## Routes
 - `/portal/portfolio` — main portfolio view
-- `/portal/investment-methods` — investment method catalog
+- `/portal/investment-methods` — `permanentRedirect` to `/portal/portfolio` (the catalog lives in its Methods tab)
 
 ## Server actions — `/app/actions/`
 - `transactions.ts` — `createTransactionAction` (replaces the legacy `/api/transactions` route)
-- `portfolio-snapshots.ts` — create manual snapshots of portfolio value
+- `portfolio-snapshots.ts` — create manual snapshots of portfolio value (`ActionResult<{ snapshotsCreated }>`)
 - `admin-transactions.ts` — admin-only approve/reject of transactions (see [Admin](./admin.md))
-- `allocations.ts` — `setAllocationsAction`, `repriceContributionsAction`, `createPriceAssetAction`, `setManualPriceAction`, `updateMethodAction`; gated on **owning the method**, not merely on being an admin
+- `allocations.ts` — `setAllocationsAction`, `repriceContributionsAction`, `createPriceAssetAction`, `setManualPriceAction`, `updateMethodAction`; gated on **owning the method**, not merely on being an admin. `setManualPriceAction` prices only `manual` assets, and only for a real (non-impersonating) admin or a caller who owns every method allocating the asset
+
+Every action returns `ActionResult<X>` (see `app/actions/AGENTS.md`).
 
 ## Services — `/lib/services/`
 - `portfolio-service.ts` — portfolio state and composition
@@ -24,22 +26,27 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `snapshot-service.ts` — snapshot persistence/queries
 - `interest-service.ts` — ROI math (shared with [Finance](./finance.md))
 - `chart-service.ts` — chart data shaping (shared utility)
-- `price-service.ts` — quote storage + provider dispatch (`refreshPrices`, `getLatestPrices`, `listPriceAssets`)
+- `price-service.ts` — quote storage + provider dispatch (`refreshPrices`, `getLatestPrices`, `listPriceAssets`, `getPriceAsset`, `createPriceAsset`, `insertManualQuote`)
 - `price-providers/` — one module per source: `massive.ts`, `coingecko.ts`, shared `types.ts`
-- `margin-service.ts` — `getMarginOverview(ownerUserId)`; positions are derived, never stored
+- `margin-service.ts` — margin maths over derived positions (never stored); its shapes live in `types/margin.ts`
+- `investment-method-service.ts` — `listAllInvestmentMethods`, `isMethodOwner`, `ownsAnyMethod`, `isAssetOnlyInOwnMethods`, `updateInvestmentMethod` (owner-scoped WHERE, one transaction returning `{ before, after }`) — the queries `allocations.ts` and the portfolio page used to run against `db` directly
 - `allocation-service.ts` — policy CRUD, `backfillTransactionAllocations`, `backfillAllOwners`, `getDerivedHoldings`
 
 ## Schemas — `/schemas/`
-- `transaction.ts`
-- `snapshot.ts`
-- `allocations.ts` — allocation policy, price-asset creation, manual quotes
+- `transaction.ts` — `CreateTransactionData`; `amount` is `moneySchema`
+- `snapshot.ts` — `snapshotSourceSchema`
+- `allocations.ts` — `SetAllocationsData`, `SetManualPriceData`, `UpdateMethodData`, `CreatePriceAssetInput` (`z.input`, the symbol is upper-cased) / `CreatePriceAssetData`
 
 ## Types — `/types/`
-- `portfolio.ts`
-- `snapshot.ts`
+- `portfolio.ts` — incl. `AssetOption`, `TransactionAllocationView`, `TransactionTableRow`
+- `transaction.ts` — `Transaction` (`$inferSelect`), `TransactionStatus` / `TransactionType` (defined once)
+- `chart.ts` — `ChartDataPoint`, `TimeRange`
+- `margin.ts` — `MarginOverview`, `InvestorBreakdown`, `MarginHistoryInput`, `MethodAllocationSummary`, `ManagedOverview`
+
+Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `lib/finance/managed-capital.ts`, `allocation-chart.tsx`, `portfolio-assets-table.tsx`, and the unused service functions `getTransactionCurrentValue`, `getManagedContributions`, `getManagedPerformanceSeries`, `getMarginOverview`, `getMarginHistory`, `getInvestorBreakdown`, `getMethodAllocations`, `backfillHistoricalQuotes`.
 
 ## Components
-- `components/portal/portfolio-client.tsx` — page shell: plan-style header (Heading h3 + muted Text), 4-card KPI grid (Total value with eye toggle, All-time profit, Cost basis, Active positions), Overview / Transactions / Methods / Managed tabs. Registers `Show charts`, `Hide values`, and admin `Manual snapshot` / `Clear manual snapshots` into the global dev drawer via `useRegisterDevTool` from `components/dev-tools/`.
+- `components/portal/portfolio-client.tsx` — page shell: `PageHeader size="compact"` (Default badge, three actions), 4-card KPI grid (Total value with eye toggle, All-time profit, Cost basis, Active positions), Overview / Transactions / Methods / Managed tabs. Registers `Show charts`, `Hide values`, and admin `Manual snapshot` / `Clear manual snapshots` into the global dev drawer via `useRegisterDevTool` from `components/dev-tools/`.
 - `components/portfolio/investment-methods-view.tsx` — `/portal/investment-methods` view: plan-style header, 4-card KPI grid (Methods, Authors, Avg monthly ROI, Best monthly ROI), inline Risk-profile breakdown bar, grouped-by-author method cards with risk-tinted badges. Registers a `Show disabled methods` toggle in the dev drawer that hot-reveals methods normally filtered out.
 - `components/portfolio/` — supporting pieces: transactions table, performance chart (lazy-loaded), add-transaction dialog, manual-snapshot dialog, asset/allocation views. *Removed in the redesign:* `portfolio-header.tsx`, `stats-cards.tsx` (their concerns moved into `portfolio-client.tsx` and the dev drawer).
 

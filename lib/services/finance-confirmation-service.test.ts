@@ -30,11 +30,6 @@ vi.mock("@/db", () => ({
 
 // Dependencies pulled in by the service. We stub them at the import boundary
 // so we never execute the real projection / snapshot machinery.
-const getPlanWithLinesMock = vi.fn();
-vi.mock("./finance-plan-service", () => ({
-  getPlanWithLines: (...args: unknown[]) => getPlanWithLinesMock(...args),
-}));
-
 const getProjectedStateForMonthMock = vi.fn();
 const createConfirmationSnapshotMock = vi.fn();
 vi.mock("./finance-snapshot-service", () => ({
@@ -48,7 +43,6 @@ import {
   autoConfirmSkippedPeriods,
   getConfirmationStatus,
   getLatestConfirmation,
-  getPlanForConfirmation,
   saveConfirmation,
 } from "./finance-confirmation-service";
 import type {
@@ -177,7 +171,6 @@ afterEach(() => {
   deleteImpl.mockReset();
   txInsertImpl.mockReset();
   txDeleteImpl.mockReset();
-  getPlanWithLinesMock.mockReset();
   getProjectedStateForMonthMock.mockReset();
   createConfirmationSnapshotMock.mockReset();
   vi.useRealTimers();
@@ -701,22 +694,3 @@ describe("autoConfirmSkippedPeriods", () => {
 
 // ---------- getPlanForConfirmation ----------
 
-describe("getPlanForConfirmation", () => {
-  it("delegates to getPlanWithLines with the same args", async () => {
-    const plan = buildPlan();
-    getPlanWithLinesMock.mockResolvedValueOnce(plan);
-
-    const result = await getPlanForConfirmation(PLAN_ID, USER_ID);
-
-    expect(result).toBe(plan);
-    expect(getPlanWithLinesMock).toHaveBeenCalledWith(PLAN_ID, USER_ID);
-  });
-
-  it("returns null when the underlying lookup misses", async () => {
-    getPlanWithLinesMock.mockResolvedValueOnce(null);
-
-    const result = await getPlanForConfirmation(PLAN_ID, USER_ID);
-
-    expect(result).toBeNull();
-  });
-});

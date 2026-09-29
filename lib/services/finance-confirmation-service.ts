@@ -16,7 +16,6 @@ import {
   periodStartFor,
 } from "@/lib/finance/period";
 
-import { getPlanWithLines } from "./finance-plan-service";
 import { ensureOwnedRow } from "./ownership";
 import type { ConfirmationData } from "@/schemas/finance-confirmations";
 import {
@@ -327,13 +326,3 @@ export async function autoConfirmSkippedPeriods(
   return { confirmationsCreated };
 }
 
-/**
- * Convenience export so callers don't have to re-import getPlanWithLines just
- * to get a confirmation-prompt-ready plan.
- */
-export async function getPlanForConfirmation(
-  planId: string,
-  userId: string
-): Promise<FinancePlanWithLines | null> {
-  return getPlanWithLines(planId, userId);
-}

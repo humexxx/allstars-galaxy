@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
 import { PageHeaderSkeleton } from "@/components/skeletons/page-header-skeleton"
 
 /**
@@ -15,11 +16,11 @@ export function PageSkeleton({
   cardHeight?: string
 }) {
   return (
-    <section className="space-y-6" aria-hidden="true">
+    <section className="flex flex-col gap-6" aria-hidden="true">
       <PageHeaderSkeleton />
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: cards }).map((_, i) => (
-          <Skeleton key={i} className={`${cardHeight} w-full`} />
+          <Skeleton key={i} className={cn(cardHeight, "w-full")} />
         ))}
       </div>
       <Skeleton className="h-64 w-full" />

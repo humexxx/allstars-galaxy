@@ -53,7 +53,7 @@ export function FootballView({ leagues }: FootballViewProps) {
     // and an uncontrolled Tabs keeps its old value when the active trigger
     // unmounts — switching UCL→La Liga stranded the view on a blank "knockout"
     // tab. Remounting re-resolves defaultTab for the new league.
-    <Tabs key={leagueId} defaultValue={defaultTab} className="space-y-6">
+    <Tabs key={leagueId} defaultValue={defaultTab} className="gap-6">
       <SportShell
         emoji="⚽"
         title={league.league.name}
@@ -63,7 +63,7 @@ export function FootballView({ leagues }: FootballViewProps) {
             value={leagueId}
             onValueChange={(v) => setLeagueId(v as FootballLeagueId)}
           >
-            <SelectTrigger className="w-56">
+            <SelectTrigger className="w-56" aria-label="League">
               <SelectValue placeholder="League" />
             </SelectTrigger>
             <SelectContent>
@@ -92,7 +92,7 @@ export function FootballView({ leagues }: FootballViewProps) {
           </TabsList>
         }
       >
-        <TabsContent value="overview" className="space-y-6">
+        <TabsContent value="overview">
           <OverviewLayout
             matches={
               <MatchesGrid
@@ -103,7 +103,7 @@ export function FootballView({ leagues }: FootballViewProps) {
             }
             standings={
               <Card>
-                <CardContent className="p-0">
+                <CardContent className="px-0">
                   <StandingsTable
                     standings={league.standings.slice(0, 6)}
                     teams={teamsMap}
@@ -127,7 +127,7 @@ export function FootballView({ leagues }: FootballViewProps) {
             <EmptyState title="No standings available yet" />
           ) : (
             <Card>
-              <CardContent className="p-0">
+              <CardContent className="px-0">
                 <StandingsTable standings={league.standings} teams={teamsMap} />
               </CardContent>
             </Card>
@@ -157,11 +157,11 @@ function OverviewLayout({
 }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-      <section className="space-y-3">
+      <section className="flex min-w-0 flex-col gap-3">
         <Eyebrow>Matches</Eyebrow>
         {matches}
       </section>
-      <section className="space-y-3">
+      <section className="flex min-w-0 flex-col gap-3">
         <Eyebrow>Table</Eyebrow>
         {standings}
       </section>
@@ -186,10 +186,10 @@ function MatchesGrid({
   }, {});
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {Object.entries(grouped).map(([label, group]) => (
-        <div key={label} className="space-y-2">
-          <Eyebrow className="text-2xs">{label}</Eyebrow>
+        <div key={label} className="flex flex-col gap-2">
+          <Eyebrow size="sm">{label}</Eyebrow>
           <div className="grid gap-2 sm:grid-cols-2">
             {group.map((match) => (
               <ScoreCard key={match.id} match={match} teams={teamsMap} />

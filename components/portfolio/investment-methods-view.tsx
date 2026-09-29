@@ -1,18 +1,26 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { EyeOff, Pencil } from "lucide-react";
+import { EyeOff, Layers, Pencil } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { maskValue } from "@/components/ui/stat-card";
-import { formatCurrency } from "@/lib/utils/format";
+import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import { useRegisterDevTool } from "@/components/dev-tools/dev-tools-context";
 
+import type { MethodAllocationSummary } from "@/types/margin";
 import type { InvestmentMethod } from "@/types/portfolio";
 
 export type MethodCapital = {
@@ -30,7 +38,7 @@ type InvestmentMethodsViewProps = {
    *  these carry the internal allocation. */
   ownedMethodIds?: string[];
   /** Allocation per owned method — never populated for anyone else. */
-  allocations?: { methodId: string; allocations: { assetId: string; symbol: string; percent: number }[] }[];
+  allocations?: MethodAllocationSummary[];
   onEditMethod?: (method: InvestmentMethod) => void;
   /** Money sitting in each method. Only supplied for methods you run — a
    *  client browsing the catalogue has no business seeing other people's
@@ -41,22 +49,13 @@ type InvestmentMethodsViewProps = {
 
 type RiskTone = "low" | "medium" | "high";
 
-const RISK_BADGE: Record<RiskTone, { label: string; className: string }> = {
-  low: {
-    label: "Low risk",
-    className:
-      "bg-success/15 text-success border-success/30",
-  },
-  medium: {
-    label: "Medium risk",
-    className:
-      "bg-warning/15 text-warning border-warning/30",
-  },
-  high: {
-    label: "High risk",
-    className:
-      "bg-destructive/15 text-destructive border-destructive/30",
-  },
+const RISK_BADGE: Record<
+  RiskTone,
+  { label: string; variant: "success" | "warning" | "destructive" }
+> = {
+  low: { label: "Low risk", variant: "success" },
+  medium: { label: "Medium risk", variant: "warning" },
+  high: { label: "High risk", variant: "destructive" },
 };
 
 function normaliseRisk(level: string): RiskTone {
@@ -112,10 +111,10 @@ export function InvestmentMethodsView({
   );
 
   return (
-    <section className="space-y-6">
-      <div className="space-y-1">
-        <Heading level="h3" className="font-semibold">
-          Investment Methods
+    <section className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <Heading level="h3" as="h2">
+          Investment methods
         </Heading>
         <Text variant="muted">
           {isOwnerView
@@ -126,6 +125,7 @@ export function InvestmentMethodsView({
 
       {methods.length === 0 ? (
         <EmptyState
+          icon={Layers}
           title="No investment methods yet"
           description={
             isOwnerView
@@ -134,8 +134,7 @@ export function InvestmentMethodsView({
           }
         />
       ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {sortedMethods.map((method) => (
               <MethodCard
                 key={method.id}
@@ -152,8 +151,7 @@ export function InvestmentMethodsView({
                 }
               />
             ))}
-          </div>
-        </>
+        </div>
       )}
     </section>
   );
@@ -178,47 +176,37 @@ function MethodCard({
   const badge = RISK_BADGE[risk];
   const roi = parseFloat(method.monthlyRoi);
   return (
-    <Card
-      className={cn(
-        "transition-shadow hover:shadow-md",
-        !method.enabled && "opacity-60"
-      )}
-    >
-      <CardHeader className="pb-2">
-        <div className="space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Badge variant="outline" className={cn("shrink-0", badge.className)}>
-                {badge.label}
-              </Badge>
-              {!method.enabled && (
-                <Badge variant="secondary" className="shrink-0 gap-1">
-                  <EyeOff className="h-3 w-3" /> Closed
-                </Badge>
-              )}
-            </div>
-            {onEdit && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="size-8"
-                aria-label={`Edit ${method.name}`}
-                onClick={onEdit}
-              >
-                <Pencil className="size-3.5" />
-              </Button>
-            )}
-          </div>
-          <CardTitle className="line-clamp-1">{method.name}</CardTitle>
-          {method.description && (
-            <Text variant="small" className="line-clamp-2">
-              {method.description}
-            </Text>
+    <Card className={cn(!method.enabled && "opacity-60")}>
+      <CardHeader>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant={badge.variant}>{badge.label}</Badge>
+          {!method.enabled && (
+            <Badge variant="secondary">
+              <EyeOff aria-hidden /> Closed
+            </Badge>
           )}
         </div>
+        {onEdit && (
+          <CardAction>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label={`Edit ${method.name}`}
+              onClick={onEdit}
+            >
+              <Pencil />
+            </Button>
+          </CardAction>
+        )}
+        <CardTitle as="h3" className="line-clamp-1">
+          {method.name}
+        </CardTitle>
+        {method.description && (
+          <CardDescription className="line-clamp-2">{method.description}</CardDescription>
+        )}
         {/* Internal, and only ever rendered for the person who runs it. */}
         {onEdit && (
-          <Text className="text-2xs text-muted-foreground">
+          <Text variant="small" className="text-2xs">
             {allocation.length === 0
               ? "No allocation set"
               : `Invests in ${allocation.map((a) => `${a.percent}% ${a.symbol}`).join(" · ")}`}
@@ -227,29 +215,29 @@ function MethodCard({
       </CardHeader>
       <CardContent className="mt-auto">
         <div className="flex items-baseline justify-between border-t pt-3">
-          <div className="space-y-0.5">
-            <Eyebrow>Monthly ROI</Eyebrow>
+          <div className="flex flex-col gap-0.5">
+            <Eyebrow as="div">Monthly ROI</Eyebrow>
             <Mono
               className={cn(
-                "block text-2xl font-semibold",
+                "text-xl font-semibold tabular-nums sm:text-2xl",
                 roi >= 0 ? "text-success" : "text-destructive"
               )}
             >
-              {Number.isFinite(roi) ? `${roi.toFixed(2)}%` : "—"}
+              {Number.isFinite(roi) ? formatPercent(roi) : "—"}
             </Mono>
           </div>
 
           {/* What is actually sitting in this method. Only present for methods
               this user runs; a client browsing has no business seeing it. */}
           {capital && (
-            <div className="space-y-0.5 text-right">
-              <Eyebrow>Invested</Eyebrow>
-              <Mono className="block text-2xl font-semibold tabular-nums">
+            <div className="flex flex-col gap-0.5 text-right">
+              <Eyebrow as="div">Invested</Eyebrow>
+              <Mono className="text-xl font-semibold tabular-nums sm:text-2xl">
                 {hideValues
                   ? maskValue(formatCurrency(capital.invested))
                   : formatCurrency(capital.invested)}
               </Mono>
-              <Text className="text-2xs text-muted-foreground">
+              <Text variant="small" className="text-2xs">
                 {capital.investorCount === 0
                   ? "nobody yet"
                   : `${capital.investorCount} ${
@@ -262,7 +250,6 @@ function MethodCard({
               </Text>
             </div>
           )}
-
         </div>
       </CardContent>
     </Card>

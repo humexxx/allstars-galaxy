@@ -19,8 +19,6 @@ export type TripItemCategory = (typeof tripItemCategoryEnum.enumValues)[number];
 
 export type TripPriceUnit = (typeof tripPriceUnitEnum.enumValues)[number];
 
-export type TripPhotoSource = "upload" | "url";
-
 /** A stop on a multi-day activity — one port of a cruise's itinerary. */
 export type TripItemStop = {
   id: string;
@@ -70,6 +68,16 @@ export type TripWithRelations = Trip & {
   shares: TripShare[];
   contributions: TripContribution[];
 };
+
+/**
+ * What the month calendar reads. The planner passes its whole trip; the
+ * public page builds one from the share view, which has no member list to
+ * give and must not carry the owner's id into a page anybody can open.
+ */
+export type CalendarTrip = Pick<
+  TripWithRelations,
+  "id" | "startDate" | "endDate" | "currency" | "items" | "members"
+>;
 
 // Aggregated view returned by the public share lookup. Carries only what the
 // public renderer needs — never expose the full share token list of a trip,

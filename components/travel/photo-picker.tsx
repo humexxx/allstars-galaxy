@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Loader2, Upload, X } from "lucide-react";
+import Image from "next/image";
+import { Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,10 +14,11 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Text } from "@/components/ui/typography";
 import { createClient } from "@/lib/supabase";
-import { cn } from "@/lib/utils";
 
 /**
  * Bucket assumed to exist with these Supabase policies:
@@ -149,18 +151,23 @@ export function PhotoPicker({
             them onto three lines as though they were three steps. */}
         <InputGroup>
           <InputGroupAddon>
-            <InputGroupButton
-              type="button"
-              size="icon-xs"
-              disabled={disabled || busy}
-              onClick={() => fileRef.current?.click()}
-              aria-label="Upload an image"
-              title="Upload an image"
-            >
-              {busy ? <Loader2 className="animate-spin" /> : <Upload />}
-            </InputGroupButton>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <InputGroupButton
+                  type="button"
+                  size="icon-xs"
+                  disabled={disabled || busy}
+                  onClick={() => fileRef.current?.click()}
+                  aria-label="Upload an image"
+                >
+                  {busy ? <Spinner /> : <Upload />}
+                </InputGroupButton>
+              </TooltipTrigger>
+              <TooltipContent>Upload an image</TooltipContent>
+            </Tooltip>
           </InputGroupAddon>
           <InputGroupInput
+            aria-label="Image URL"
             placeholder="Paste an image URL"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
@@ -187,39 +194,42 @@ export function PhotoPicker({
   }
 
   return (
-    <div className="flex flex-col gap-2 ">
+    <div className="flex flex-col gap-2">
       {previewUrl && (
-        <div className="relative w-full overflow-hidden rounded-md border">
-          <div
-            className="aspect-[16/9] w-full"
-            style={{
-              backgroundImage: `url(${previewUrl})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-            }}
+        <div className="relative aspect-video w-full overflow-hidden rounded-md border bg-muted">
+          <Image
+            src={previewUrl}
+            alt="Cover photo preview"
+            fill
+            sizes="(max-width: 768px) 100vw, 400px"
+            className="object-cover"
+            // Covers may be external URLs — see trip-detail.tsx.
+            unoptimized
           />
           {onClear && (
             <Button
               type="button"
-              size="icon"
+              size="icon-sm"
               variant="secondary"
-              className={cn("absolute right-2 top-2 size-7")}
+              className="absolute right-2 top-2"
               onClick={onClear}
-              aria-label="Remove photo"
+              aria-label="Remove cover photo"
             >
-              <X className="size-3.5" />
+              <X />
             </Button>
           )}
         </div>
       )}
 
-      <Tabs defaultValue="upload" className="flex flex-col gap-3 ">
-        <TabsList className="h-8">
+      <Tabs defaultValue="upload" className="flex flex-col gap-3">
+        {/* The list's own height is set on \`group-data-horizontal/tabs\`, so a
+            plain \`h-8\` loses to it; override it on the same selector. */}
+        <TabsList className="group-data-horizontal/tabs:h-8">
           <TabsTrigger value="upload" className="text-xs">Upload</TabsTrigger>
           <TabsTrigger value="url" className="text-xs">Paste URL</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="upload" className="flex flex-col gap-2 ">
+        <TabsContent value="upload" className="flex flex-col gap-2">
           <input
             ref={fileRef}
             type="file"
@@ -239,22 +249,25 @@ export function PhotoPicker({
           >
             {busy ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" /> Uploading…
+                <Spinner /> Uploading…
               </>
             ) : (
               <>
-                <Upload className="mr-2 size-4" /> Choose image
+                <Upload /> Choose image
               </>
             )}
           </Button>
           <Text variant="small">JPG, PNG, WebP up to 10 MB.</Text>
         </TabsContent>
 
-        <TabsContent value="url" className="flex flex-col gap-2 ">
+        <TabsContent value="url" className="flex flex-col gap-2">
           <Label htmlFor="photo-url" className="sr-only">Image URL</Label>
           <div className="flex gap-2">
             <Input
               id="photo-url"
+              // Beside a button: \`w-full\` would claim the whole row and push
+              // the button out of the dialog.
+              className="min-w-0 flex-1"
               placeholder="https://…"
               value={url}
               onChange={(e) => setUrl(e.target.value)}

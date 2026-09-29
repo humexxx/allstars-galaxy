@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
-import { Heading, Mono, Text } from "@/components/ui/typography";
+import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 
 // Hero — radial spotlight + grid background + faux product card under the
 // copy. Same visual structure as trim-success, adapted to Allstars Galaxy
@@ -61,7 +61,7 @@ export function LandingHero() {
             className="inline-flex h-11 items-center justify-center rounded-full bg-foreground px-6 text-sm font-medium text-background transition hover:bg-foreground/90"
           >
             Get started
-            <ArrowRight className="ml-1 h-4 w-4" />
+            <ArrowRight className="ml-1 size-4" />
           </Link>
           <a
             href="#modules"
@@ -83,8 +83,8 @@ export function LandingHero() {
           <div className="rounded-lg border bg-muted p-6 sm:p-8">
             <div className="mb-6 flex items-center justify-between border-b pb-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="h-2 w-2 rounded-full bg-red-400" />
-                <span className="h-2 w-2 rounded-full bg-yellow-400" />
+                <span className="h-2 w-2 rounded-full bg-destructive" />
+                <span className="h-2 w-2 rounded-full bg-warning" />
                 <span className="h-2 w-2 rounded-full bg-success" />
                 <Mono className="ml-3 text-muted-foreground">
                   allstars-galaxy.app/portfolio
@@ -109,10 +109,10 @@ export function LandingHero() {
                   key={kpi.label}
                   className="rounded-lg border bg-card p-4"
                 >
-                  <div className="text-xs text-muted-foreground">{kpi.label}</div>
-                  <div className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+                  <Eyebrow as="div" size="sm">{kpi.label}</Eyebrow>
+                  <Mono as="div" className="mt-1 text-2xl font-semibold">
                     {kpi.value}
-                  </div>
+                  </Mono>
                   <div className="mt-1 text-xs text-success">
                     {kpi.delta}
                   </div>

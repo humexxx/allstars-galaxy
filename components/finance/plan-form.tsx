@@ -10,8 +10,19 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+  FieldTitle,
+} from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
@@ -21,23 +32,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Mono, Text } from "@/components/ui/typography";
 
 import { createPlanAction, updatePlanAction } from "@/app/actions/finance-plans";
+import { cn } from "@/lib/utils";
 import {
   createFinancePlanSchema,
-  type CreateFinancePlanInput,
+  type CreateFinancePlanData,
 } from "@/schemas/finance";
-import type { DebtStrategy, FinancePlan } from "@/types/finance";
-
-export type InvestmentMethodOption = {
-  id: string;
-  name: string;
-  monthlyRoi: string;
-  enabled: boolean;
-};
+import type {
+  DebtStrategy,
+  FinancePlan,
+  InvestmentMethodOption,
+} from "@/types/finance";
 
 type PlanFormProps = {
   plan?: FinancePlan;
@@ -89,7 +104,7 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
     initialSurplusPct > 0 ? initialSurplusPct : DEFAULT_NEW_SURPLUS
   );
   const [strategy, setStrategy] = useState<DebtStrategy>(
-    (plan?.debtStrategy as DebtStrategy) ?? "avalanche"
+    plan?.debtStrategy ?? "avalanche"
   );
 
   // Auto-invest after the surplus → debts step. Same UX pattern as the
@@ -110,7 +125,7 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<PlanFormValues, unknown, CreateFinancePlanInput>({
+  } = useForm<PlanFormValues, unknown, CreateFinancePlanData>({
     resolver: zodResolver(createFinancePlanSchema),
     defaultValues: {
       name: plan?.name ?? "",
@@ -127,7 +142,7 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
     },
   });
 
-  const onSubmit = async (data: CreateFinancePlanInput): Promise<void> => {
+  const onSubmit = async (data: CreateFinancePlanData): Promise<void> => {
     const surplusValue = accelerate ? (surplusPct / 100).toFixed(4) : "0";
     const investValue = autoInvest && investMethodId ? (investPct / 100).toFixed(4) : "0";
     const payload = {
@@ -148,60 +163,67 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
 
     if (result.success) {
       toast.success(plan ? "Plan saved" : "Plan created");
-      router.push(`/portal/plans/${result.data!.id}`);
-      router.refresh();
+      // The action revalidated the plans segment; the push alone lands on
+      // fresh data.
+      router.push(`/portal/plans/${result.data.id}`);
     } else {
       toast.error(result.error);
     }
   };
 
+  /** Wires one registered field to its error the way screen readers expect. */
+  const invalid = (message: string | undefined, id: string) =>
+    message
+      ? { "aria-invalid": true, "aria-describedby": `${id}-error` }
+      : {};
+
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>{plan ? "Plan settings" : "New plan"}</CardTitle>
+          <CardTitle as="h2">{plan ? "Plan settings" : "New plan"}</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} id="plan-form" className="space-y-4">
+          <form onSubmit={handleSubmit(onSubmit)} id="plan-form" className="flex flex-col gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="plan-name">Name</Label>
+              <Field className="gap-2 sm:col-span-2" data-invalid={!!errors.name || undefined}>
+                <FieldLabel htmlFor="plan-name">Name</FieldLabel>
                 <Input
                   id="plan-name"
                   placeholder="Base scenario"
                   required
+                  {...invalid(errors.name?.message, "plan-name")}
                   {...register("name")}
                 />
-                {errors.name && (
-                  <p className="text-sm text-destructive">{errors.name.message}</p>
-                )}
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="plan-description">Description</Label>
+                <FieldError id="plan-name-error" errors={[errors.name]} />
+              </Field>
+              <Field
+                className="gap-2 sm:col-span-2"
+                data-invalid={!!errors.description || undefined}
+              >
+                <FieldLabel htmlFor="plan-description">Description</FieldLabel>
                 <Textarea
                   id="plan-description"
                   placeholder="Notes about this scenario"
                   rows={2}
+                  {...invalid(errors.description?.message, "plan-description")}
                   {...register("description")}
                 />
-                {errors.description && (
-                  <p className="text-sm text-destructive">{errors.description.message}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="plan-start">Start month</Label>
+                <FieldError id="plan-description-error" errors={[errors.description]} />
+              </Field>
+              <Field className="gap-2" data-invalid={!!errors.startMonth || undefined}>
+                <FieldLabel htmlFor="plan-start">Start month</FieldLabel>
                 <Input
                   id="plan-start"
                   type="month"
                   required
+                  {...invalid(errors.startMonth?.message, "plan-start")}
                   {...register("startMonth")}
                 />
-                {errors.startMonth && (
-                  <p className="text-sm text-destructive">{errors.startMonth.message}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="plan-months">Months ahead</Label>
+                <FieldError id="plan-start-error" errors={[errors.startMonth]} />
+              </Field>
+              <Field className="gap-2" data-invalid={!!errors.monthsAhead || undefined}>
+                <FieldLabel htmlFor="plan-months">Months ahead</FieldLabel>
                 <Input
                   id="plan-months"
                   type="number"
@@ -209,100 +231,110 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
                   max={120}
                   step={1}
                   required
+                  {...invalid(errors.monthsAhead?.message, "plan-months")}
                   {...register("monthsAhead", { valueAsNumber: true })}
                 />
-                {errors.monthsAhead && (
-                  <p className="text-sm text-destructive">{errors.monthsAhead.message}</p>
-                )}
-                <Text variant="small">
+                <FieldError id="plan-months-error" errors={[errors.monthsAhead]} />
+                <FieldDescription>
                   Minimum 12 months · default 120 (10 years).
-                </Text>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="plan-savings">Initial savings</Label>
+                </FieldDescription>
+              </Field>
+              <Field className="gap-2" data-invalid={!!errors.initialSavings || undefined}>
+                <FieldLabel htmlFor="plan-savings">Initial savings</FieldLabel>
                 <Input
                   id="plan-savings"
                   inputMode="decimal"
+                  {...invalid(errors.initialSavings?.message, "plan-savings")}
                   {...register("initialSavings", {
                     setValueAs: (v: string) => (v === "" ? "0" : v),
                   })}
                 />
-                {errors.initialSavings && (
-                  <p className="text-sm text-destructive">{errors.initialSavings.message}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="plan-rate">Monthly savings rate</Label>
+                <FieldError id="plan-savings-error" errors={[errors.initialSavings]} />
+              </Field>
+              <Field
+                className="gap-2"
+                data-invalid={!!errors.monthlySavingsRate || undefined}
+              >
+                <FieldLabel htmlFor="plan-rate">Monthly savings rate</FieldLabel>
                 <Input
                   id="plan-rate"
                   inputMode="decimal"
                   placeholder="0.007"
+                  {...invalid(errors.monthlySavingsRate?.message, "plan-rate")}
                   {...register("monthlySavingsRate", {
                     setValueAs: (v: string) => (v === "" ? "0" : v),
                   })}
                 />
-                {errors.monthlySavingsRate && (
-                  <p className="text-sm text-destructive">{errors.monthlySavingsRate.message}</p>
-                )}
-                <Text variant="small">
+                <FieldError id="plan-rate-error" errors={[errors.monthlySavingsRate]} />
+                <FieldDescription>
                   Decimal monthly rate. 0.007 ≈ 0.70% per month.
-                </Text>
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Chart color</Label>
-                <div className="flex flex-wrap gap-2">
-                  {COLORS.map((c) => (
-                    <button
+                </FieldDescription>
+              </Field>
+              <Field className="gap-2 sm:col-span-2">
+                <FieldTitle id="plan-color-label">Chart color</FieldTitle>
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  value={color}
+                  onValueChange={(v) => v && setColor(v)}
+                  aria-labelledby="plan-color-label"
+                  className="gap-2"
+                >
+                  {COLORS.map((c, i) => (
+                    <ToggleGroupItem
                       key={c}
-                      type="button"
-                      aria-label={`Use color ${c}`}
-                      onClick={() => setColor(c)}
-                      className={`h-7 w-7 rounded-full border-2 ${
-                        color === c ? "border-foreground" : "border-transparent"
-                      }`}
+                      value={c}
+                      aria-label={`Colour ${i + 1}`}
+                      className="size-7 min-w-0 flex-none rounded-full border-2 border-transparent p-0 shadow-none data-[state=on]:border-foreground"
                       style={{ backgroundColor: c }}
                     />
                   ))}
-                </div>
-              </div>
-              <div className="flex items-center justify-between rounded-md border p-3 sm:col-span-2">
-                <div>
-                  <Label htmlFor="plan-include-portfolio" className="cursor-pointer">
+                </ToggleGroup>
+              </Field>
+              <Field
+                orientation="horizontal"
+                className="justify-between rounded-lg border p-3 sm:col-span-2"
+              >
+                <FieldContent>
+                  <FieldLabel htmlFor="plan-include-portfolio" className="cursor-pointer">
                     Include current portfolio in net worth
-                  </Label>
-                  <Text variant="small">
+                  </FieldLabel>
+                  <FieldDescription>
                     Adds your live portfolio value to the projection&apos;s net worth line.
-                  </Text>
-                </div>
+                  </FieldDescription>
+                </FieldContent>
                 <Switch
                   id="plan-include-portfolio"
                   checked={includePortfolio}
                   onCheckedChange={setIncludePortfolio}
                 />
-              </div>
+              </Field>
 
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="plan-confirmation-day">Monthly confirmation day</Label>
+              <Field
+                className="gap-2 sm:col-span-2"
+                data-invalid={!!errors.confirmationDayOfMonth || undefined}
+              >
+                <FieldLabel htmlFor="plan-confirmation-day">Monthly confirmation day</FieldLabel>
                 <Input
                   id="plan-confirmation-day"
                   type="number"
                   min={0}
                   max={28}
                   step={1}
+                  {...invalid(errors.confirmationDayOfMonth?.message, "plan-confirmation-day")}
                   {...register("confirmationDayOfMonth", {
                     setValueAs: (v: string) => (v === "" ? 0 : Number(v)),
                   })}
                 />
-                {errors.confirmationDayOfMonth && (
-                  <p className="text-sm text-destructive">
-                    {errors.confirmationDayOfMonth.message}
-                  </p>
-                )}
-                <Text variant="small">
+                <FieldError
+                  id="plan-confirmation-day-error"
+                  errors={[errors.confirmationDayOfMonth]}
+                />
+                <FieldDescription>
                   Day of the month (1–28) when a dialog will ask you to confirm your
                   real balances. Set to <strong>0</strong> to disable.
-                </Text>
-              </div>
+                </FieldDescription>
+              </Field>
             </div>
           </form>
         </CardContent>
@@ -310,37 +342,44 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
 
       <Card>
         <CardHeader>
-          <CardTitle>Debt acceleration</CardTitle>
-          <Text variant="muted">
+          <CardTitle as="h2">Debt acceleration</CardTitle>
+          <CardDescription>
             When your monthly cash flow is positive, route part of the surplus into
             extra debt principal. Avalanche almost always pays less interest, but
             snowball is easier to stick with.
-          </Text>
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between rounded-md border p-3">
-            <div>
-              <Label htmlFor="plan-accelerate" className="cursor-pointer">
+        <CardContent className="flex flex-col gap-6">
+          <Field orientation="horizontal" className="justify-between rounded-lg border p-3">
+            <FieldContent>
+              <FieldLabel htmlFor="plan-accelerate" className="cursor-pointer">
                 Apply surplus to debts
-              </Label>
-              <Text variant="small">
+              </FieldLabel>
+              <FieldDescription>
                 Off → all surplus goes to savings. On → split surplus between extra debt
                 payments and savings using the slider below.
-              </Text>
-            </div>
+              </FieldDescription>
+            </FieldContent>
             <Switch
               id="plan-accelerate"
               checked={accelerate}
               onCheckedChange={setAccelerate}
             />
-          </div>
+          </Field>
 
-          <div className={accelerate ? "space-y-6" : "space-y-6 opacity-50 pointer-events-none"}>
-            <div className="space-y-3">
+          {/* `inert` rather than pointer-events: a dimmed section must also be
+              out of the tab order, or the keyboard can still drive it. */}
+          <div
+            inert={!accelerate}
+            className={cn("flex flex-col gap-6", !accelerate && "opacity-50")}
+          >
+            <div className="flex flex-col gap-3">
               <div className="flex items-end justify-between">
-                <Label>Surplus aggressiveness</Label>
+                <FieldTitle>Surplus aggressiveness</FieldTitle>
                 <div className="flex items-baseline gap-2">
-                  <Mono className="text-xl font-semibold tracking-tight">{surplusPct}%</Mono>
+                  <Mono className="text-xl font-semibold tabular-nums sm:text-2xl">
+                    {surplusPct}%
+                  </Mono>
                   <Text variant="small" as="span">{percentLabel(surplusPct)}</Text>
                 </div>
               </div>
@@ -352,7 +391,7 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
                 onValueChange={(v) => setSurplusPct(v[0])}
                 aria-label="Surplus to debts percentage"
               />
-              <div className="flex justify-between text-xs text-muted-foreground">
+              <div className="flex justify-between">
                 <Text variant="small" as="span">30% · keeps savings growing</Text>
                 <Text variant="small" as="span">100% · all-in on debt</Text>
               </div>
@@ -361,8 +400,10 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
               </Text>
             </div>
 
-            <div className="space-y-3">
-              <Label>Payoff method</Label>
+            <FieldSet className="gap-3">
+              <FieldLegend variant="label" className="mb-3">
+                Payoff method
+              </FieldLegend>
               <RadioGroup
                 value={strategy}
                 onValueChange={(v) => setStrategy(v as DebtStrategy)}
@@ -370,7 +411,7 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
               >
                 <label
                   htmlFor="strategy-avalanche"
-                  className="flex cursor-pointer items-start gap-3 rounded-md border p-3"
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
                 >
                   <RadioGroupItem id="strategy-avalanche" value="avalanche" className="mt-0.5" />
                   <div>
@@ -382,7 +423,7 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
                 </label>
                 <label
                   htmlFor="strategy-snowball"
-                  className="flex cursor-pointer items-start gap-3 rounded-md border p-3"
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
                 >
                   <RadioGroupItem id="strategy-snowball" value="snowball" className="mt-0.5" />
                   <div>
@@ -393,49 +434,48 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
                   </div>
                 </label>
               </RadioGroup>
-            </div>
+            </FieldSet>
           </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Auto-invest</CardTitle>
-          <Text variant="muted">
+          <CardTitle as="h2">Auto-invest</CardTitle>
+          <CardDescription>
             After surplus → debts runs, route part of what&apos;s left into a compounding
             investments bucket modelled against an investment method&apos;s monthly ROI.
             The investments balance grows every month and counts toward your net worth.
-          </Text>
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between rounded-md border p-3">
-            <div>
-              <Label htmlFor="plan-autoinvest" className="cursor-pointer">
+        <CardContent className="flex flex-col gap-6">
+          <Field orientation="horizontal" className="justify-between rounded-lg border p-3">
+            <FieldContent>
+              <FieldLabel htmlFor="plan-autoinvest" className="cursor-pointer">
                 Auto-invest the remainder
-              </Label>
-              <Text variant="small">
+              </FieldLabel>
+              <FieldDescription>
                 Off → all the remainder stays as savings. On → split between
                 investments and savings using the slider.
-              </Text>
-            </div>
+              </FieldDescription>
+            </FieldContent>
             <Switch
               id="plan-autoinvest"
               checked={autoInvest}
               onCheckedChange={setAutoInvest}
             />
-          </div>
+          </Field>
 
           <div
-            className={
-              autoInvest
-                ? "space-y-6"
-                : "space-y-6 pointer-events-none opacity-50"
-            }
+            inert={!autoInvest}
+            className={cn("flex flex-col gap-6", !autoInvest && "opacity-50")}
           >
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               <div className="flex items-end justify-between">
-                <Label>Share of remainder → investments</Label>
-                <Mono className="text-xl font-semibold tracking-tight">{investPct}%</Mono>
+                <FieldTitle>Share of remainder → investments</FieldTitle>
+                <Mono className="text-xl font-semibold tabular-nums sm:text-2xl">
+                  {investPct}%
+                </Mono>
               </div>
               <Slider
                 value={[investPct]}
@@ -445,14 +485,14 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
                 onValueChange={(v) => setInvestPct(v[0])}
                 aria-label="Auto-invest percentage"
               />
-              <div className="flex justify-between text-xs text-muted-foreground">
+              <div className="flex justify-between">
                 <Text variant="small" as="span">10% · most stays as savings</Text>
                 <Text variant="small" as="span">100% · all remainder invested</Text>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="plan-invest-method">Investment method</Label>
+            <Field className="gap-2">
+              <FieldLabel htmlFor="plan-invest-method">Investment method</FieldLabel>
               <Select value={investMethodId} onValueChange={setInvestMethodId}>
                 <SelectTrigger id="plan-invest-method">
                   <SelectValue placeholder="Pick a method" />
@@ -472,37 +512,43 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
                   ))}
                 </SelectContent>
               </Select>
-              <Text variant="small">
+              <FieldDescription>
                 Disabled methods can be used here as hypothetical scenarios. They are
                 hidden from your real portfolio.
-              </Text>
-            </div>
+              </FieldDescription>
+            </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="plan-init-investments">Initial investments balance</Label>
+            <Field
+              className="gap-2"
+              data-invalid={!!errors.initialInvestments || undefined}
+            >
+              <FieldLabel htmlFor="plan-init-investments">Initial investments balance</FieldLabel>
               <Input
                 id="plan-init-investments"
                 inputMode="decimal"
+                {...invalid(errors.initialInvestments?.message, "plan-init-investments")}
                 {...register("initialInvestments", {
                   setValueAs: (v: string) => (v === "" ? "0" : v),
                 })}
               />
-              {errors.initialInvestments && (
-                <p className="text-sm text-destructive">{errors.initialInvestments.message}</p>
-              )}
-              <Text variant="small">
+              <FieldError
+                id="plan-init-investments-error"
+                errors={[errors.initialInvestments]}
+              />
+              <FieldDescription>
                 Opening balance for the investments bucket at the start month.
-              </Text>
-            </div>
+              </FieldDescription>
+            </Field>
           </div>
         </CardContent>
       </Card>
 
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="ghost" onClick={() => router.back()}>
+        <Button type="button" variant="outline" onClick={() => router.back()}>
           Cancel
         </Button>
         <Button type="submit" form="plan-form" disabled={isSubmitting}>
+          {isSubmitting && <Spinner />}
           {isSubmitting ? "Saving…" : plan ? "Save changes" : "Create plan"}
         </Button>
       </div>

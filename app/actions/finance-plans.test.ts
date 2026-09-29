@@ -106,7 +106,7 @@ describe("createPlanAction", () => {
     expect(result).toEqual({ success: true, data: plan });
     expect(createPlan).toHaveBeenCalledWith(USER_ID, expect.objectContaining({ name: "My Plan" }));
     expect(logImpersonatedMutation).toHaveBeenCalled();
-    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans");
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });
 
   it("returns Invalid input and skips the service when name is missing", async () => {
@@ -149,8 +149,8 @@ describe("updatePlanAction", () => {
     expect(result).toEqual({ success: true, data: plan });
     expect(updatePlan).toHaveBeenCalledWith(USER_ID, expect.objectContaining({ id: PLAN_ID }));
     expect(logImpersonatedMutation).toHaveBeenCalled();
-    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans");
-    expect(revalidatePath).toHaveBeenCalledWith(`/portal/plans/${PLAN_ID}`);
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
+    expect(revalidatePath).toHaveBeenCalledWith("/portal");
   });
 
   it("returns Invalid input when id is not a UUID", async () => {
@@ -173,7 +173,7 @@ describe("deletePlanAction", () => {
     expect(result).toEqual({ success: true });
     expect(deletePlan).toHaveBeenCalledWith(USER_ID, PLAN_ID);
     expect(logImpersonatedMutation).toHaveBeenCalled();
-    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans");
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });
 
   it("returns Invalid id and skips the service when planId is not a UUID", async () => {
@@ -197,7 +197,7 @@ describe("clonePlanAction", () => {
     expect(result).toEqual({ success: true, data: plan });
     expect(clonePlan).toHaveBeenCalledWith(USER_ID, PLAN_ID, "Clone");
     expect(logImpersonatedMutation).toHaveBeenCalled();
-    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans");
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });
 
   it("rejects invalid id", async () => {
@@ -240,7 +240,7 @@ describe("addPlanDebtAction", () => {
     expect(result).toEqual({ success: true, data: row });
     expect(addDebt).toHaveBeenCalledWith(USER_ID, PLAN_ID, expect.objectContaining({ name: "Car Loan" }));
     expect(logImpersonatedMutation).toHaveBeenCalled();
-    expect(revalidatePath).toHaveBeenCalledWith(`/portal/plans/${PLAN_ID}`);
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });
 
   it("rejects fixed-payment debt with interest>0 and payment=0", async () => {
@@ -300,7 +300,7 @@ describe("updatePlanDebtAction", () => {
     expect(result).toEqual({ success: true, data: row });
     expect(updateDebt).toHaveBeenCalledWith(USER_ID, PLAN_ID, expect.objectContaining({ id: ROW_ID }));
     expect(logImpersonatedMutation).toHaveBeenCalled();
-    expect(revalidatePath).toHaveBeenCalledWith(`/portal/plans/${PLAN_ID}`);
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });
 
   it("rejects fixed-payment debt with interest>0 and payment=0", async () => {
@@ -313,6 +313,16 @@ describe("updatePlanDebtAction", () => {
       error: "Fixed-payment debt with interest needs a non-zero monthly payment.",
     });
     expect(updateDebt).not.toHaveBeenCalled();
+  });
+
+  it("returns Action failed when the debt is not on this plan", async () => {
+    vi.mocked(updateDebt).mockRejectedValueOnce(new Error("Debt not found on this plan"));
+
+    const result = await updatePlanDebtAction(PLAN_ID, validDebt as never);
+
+    expect(result).toEqual({ success: false, error: "Action failed" });
+    expect(logImpersonatedMutation).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("allows percent_of_balance debt with payment=0", async () => {
@@ -335,7 +345,7 @@ describe("updatePlanDebtAction", () => {
 // ---------- addPlanIncomeAction ----------
 
 describe("addPlanIncomeAction", () => {
-  it("adds income and revalidates /portal/plans/<id>", async () => {
+  it("adds income and revalidates the plans segment + dashboard", async () => {
     const row = { id: ROW_ID };
     vi.mocked(addIncome).mockResolvedValueOnce(row as never);
 
@@ -352,8 +362,10 @@ describe("addPlanIncomeAction", () => {
     expect(result).toEqual({ success: true, data: row });
     expect(addIncome).toHaveBeenCalledWith(USER_ID, PLAN_ID, expect.objectContaining({ name: "Salary" }));
     expect(logImpersonatedMutation).toHaveBeenCalled();
-    expect(revalidatePath).toHaveBeenCalledWith(`/portal/plans/${PLAN_ID}`);
-    expect(revalidatePath).toHaveBeenCalledTimes(1);
+    // Lines move every projection: the list, compare, editor and dashboard.
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
+    expect(revalidatePath).toHaveBeenCalledWith("/portal");
+    expect(revalidatePath).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -367,7 +379,7 @@ describe("deletePlanIncomeAction", () => {
 
     expect(result).toEqual({ success: true });
     expect(deleteIncome).toHaveBeenCalledWith(USER_ID, PLAN_ID, ROW_ID);
-    expect(revalidatePath).toHaveBeenCalledWith(`/portal/plans/${PLAN_ID}`);
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });
 
   it("rejects when planId is not a UUID", async () => {
@@ -388,7 +400,7 @@ describe("deletePlanIncomeAction", () => {
 // ---------- upsertLineOverrideAction ----------
 
 describe("upsertLineOverrideAction", () => {
-  it("upserts on happy path and revalidates the plan path", async () => {
+  it("upserts on happy path and revalidates the plans segment", async () => {
     vi.mocked(upsertLineOverride).mockResolvedValueOnce(undefined as never);
 
     const input = {
@@ -407,7 +419,7 @@ describe("upsertLineOverrideAction", () => {
       expect.objectContaining({ parentId: ROW_ID, action: "skip" })
     );
     expect(logImpersonatedMutation).toHaveBeenCalled();
-    expect(revalidatePath).toHaveBeenCalledWith(`/portal/plans/${PLAN_ID}`);
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });
 });
 
@@ -432,6 +444,6 @@ describe("deleteLineOverrideAction", () => {
       expect.objectContaining({ parentId: ROW_ID })
     );
     expect(logImpersonatedMutation).toHaveBeenCalled();
-    expect(revalidatePath).toHaveBeenCalledWith(`/portal/plans/${PLAN_ID}`);
+    expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });
 });

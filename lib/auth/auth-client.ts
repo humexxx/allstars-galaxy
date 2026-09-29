@@ -1,22 +1,12 @@
+/**
+ * Browser-side auth calls (Supabase browser client + `location`). Lives outside
+ * lib/services because everything there is `server-only`.
+ */
 
 import { createClient } from "@/lib/supabase"
 import type { AuthResponse } from "@supabase/supabase-js";
 
 export class AuthService {
-  static async signInWithEmail(email: string): Promise<void> {
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${location.origin}/auth/callback`,
-      },
-    })
-    
-    if (error) {
-       throw error
-    }
-  }
-
   static async signInWithGoogle(next?: string | null): Promise<void> {
     const supabase = createClient()
     const callback = `${location.origin}/auth/callback${
@@ -33,9 +23,6 @@ export class AuthService {
       throw error
     }
   }
-  
-  // Note: The user requested "login with email", usually implies magic link or password.
-  // The provided login form has a password field, so I should use signInWithPassword.
   
   static async loginWithPassword(email: string, password: string): Promise<AuthResponse['data']> {
     const supabase = createClient()
@@ -79,30 +66,26 @@ export class AuthService {
     return data
   }
   
-  // "local" scope keeps the sign-out to this browser; see signOutAction in
-  // app/actions/auth.ts for why we don't take Supabase's "global" default.
-  static async signOut(): Promise<void> {
-    const supabase = createClient()
-    const { error } = await supabase.auth.signOut({ scope: "local" })
-    if (error) {
-        throw error
-    }
-  }
-
   static async resetPasswordForEmail(email: string): Promise<void> {
     const supabase = createClient()
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${location.origin}/auth/callback?next=/portal/profile/update-password`,
+      redirectTo: `${location.origin}/auth/callback?next=/update-password`,
     })
     
     if (error) {
       throw error
     }
   }
-}
 
-export async function signOut(): Promise<void> {
-  const supabase = createClient();
-  await supabase.auth.signOut({ scope: "local" });
+  /** Sets a new password for the signed-in user — the landing step of the
+   *  reset email, which signs the user in through /auth/callback first. */
+  static async updatePassword(password: string): Promise<void> {
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({ password })
+
+    if (error) {
+      throw error
+    }
+  }
 }
 

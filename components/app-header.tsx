@@ -16,6 +16,7 @@ import { NavUser } from "./nav-user";
 import { stopImpersonationAction } from "@/app/actions/impersonation";
 import type { UserRole } from "@/types/user";
 import { cn } from "@/lib/utils";
+import { useTimeZoneCookie } from "@/hooks/use-time-zone-cookie";
 
 type ImpersonatedUser = {
   id: string;
@@ -47,6 +48,9 @@ export function AppHeader({
   isImpersonating: isImpersonatingProp,
 }: AppHeaderProps) {
   const [isStopping, startStop] = useTransition();
+  // Tells the server the reader's time zone, so "today" (the finance period,
+  // the dashboard's "now" figures) follows their calendar, not UTC's.
+  useTimeZoneCookie();
   const isImpersonating = isImpersonatingProp ?? impersonatedUser !== null;
 
   const userData = {

@@ -52,8 +52,19 @@ import {
 import { PlanColorPicker } from "./plan-color-picker";
 import { runAction } from "@/lib/actions/run";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/utils/format";
-import type { FinancePlan, PlanSummary, Projection } from "@/types/finance";
+import { formatCurrency, moneySign } from "@/lib/utils/format";
+import {
+  formatDebtFree,
+  summaryDebtFree,
+  type PlanTimeline,
+} from "@/lib/finance/chart-series";
+import type { FinancePlan, PlanSummary } from "@/types/finance";
+
+const END_LABEL = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
 // Same rationale as plan-editor / compare-view: defer recharts to a lazy chunk
 // so the list page's first paint stays light.
@@ -103,11 +114,15 @@ const NEGATIVE = "text-destructive";
 export function PlansWorkspace({
   plans,
   summaries,
-  projections,
+  timelines,
+  today,
 }: {
   plans: FinancePlan[];
   summaries: Record<string, PlanSummary>;
-  projections: Projection[];
+  /** Each plan's timeline (real past + calibrated future), keyed by plan id. */
+  timelines: Record<string, PlanTimeline>;
+  /** The reader's calendar day — the chart's today boundary. */
+  today: Date;
 }) {
   const [isPending, startTransition] = useTransition();
   // Deleting a row unmounts the menu that opened the dialog, so focus would
@@ -136,13 +151,9 @@ export function PlansWorkspace({
   }
   const [metric, setMetric] = useState<Metric>("netWorth");
   const [range, setRange] = useState<string>(DEFAULT_RANGE);
-  // "Full plan" still windows (so past stays solid and future dashed) — it just
-  // uses the longest projection as the horizon.
-  const longestProjection = useMemo(
-    () => Math.max(1, ...projections.map((p) => p.months.length)),
-    [projections]
-  );
-  const months = Number(range) || longestProjection;
+  // "Full plan" draws every month any plan covers; the others window around
+  // today (PAST_MONTHS before it).
+  const months = Number(range) || undefined;
   // Two sources of emphasis: pointing at a rail row (transient) and pinning one
   // via its colour swatch (sticky, and the only route on touch, where there is
   // no hover). A pin always wins over a hover.
@@ -152,8 +163,11 @@ export function PlansWorkspace({
   const focusedPlan = plans.find((p) => p.id === focusedId) ?? null;
 
   const filtered = useMemo(
-    () => projections.filter((p) => selected.has(p.plan.id)),
-    [projections, selected]
+    () =>
+      plans
+        .filter((p) => selected.has(p.id) && timelines[p.id])
+        .map((p) => ({ plan: p, timeline: timelines[p.id] })),
+    [plans, timelines, selected]
   );
 
   const toggle = (id: string) => {
@@ -267,7 +281,8 @@ export function PlansWorkspace({
               />
             ) : (
               <ComparePlansChart
-                projections={filtered}
+                series={filtered}
+                today={today}
                 metric={metric}
                 heightClass={CHART_HEIGHT}
                 focusedPlanId={focusedId}
@@ -338,23 +353,32 @@ export function PlansWorkspace({
                           <span className="inline-flex items-center gap-1">
                             NW
                             <Mono
-                              className={s.endingNetWorth >= 0 ? POSITIVE : NEGATIVE}
+                              className={moneySign(s.endingNetWorth) >= 0 ? POSITIVE : NEGATIVE}
                             >
                               {formatCurrency(s.endingNetWorth)}
                             </Mono>
+                            {/* Dated: each plan ends on its own horizon. */}
+                            {s.endDate && <span>at {END_LABEL.format(s.endDate)}</span>}
                           </span>
                           <span aria-hidden="true">·</span>
-                          {s.monthsToDebtFree !== null ? (
-                            <span className={POSITIVE}>
-                              {s.monthsToDebtFree === 0
-                                ? "Debt-free"
-                                : `Debt-free in ${s.monthsToDebtFree} mo`}
-                            </span>
-                          ) : s.endingDebt <= 0.01 ? (
-                            <span>No debt</span>
-                          ) : (
-                            <span className={NEGATIVE}>Debt beyond horizon</span>
-                          )}
+                          {(() => {
+                            const status = summaryDebtFree(s);
+                            return (
+                              <span
+                                className={
+                                  status.kind === "beyond-horizon"
+                                    ? NEGATIVE
+                                    : status.kind === "no-debt"
+                                      ? undefined
+                                      : POSITIVE
+                                }
+                              >
+                                {status.kind === "beyond-horizon"
+                                  ? "Debt beyond horizon"
+                                  : formatDebtFree(status)}
+                              </span>
+                            );
+                          })()}
                         </div>
                       )}
                     </Link>

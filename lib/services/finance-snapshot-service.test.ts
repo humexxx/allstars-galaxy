@@ -29,10 +29,23 @@ const getAutoInvestRateMock = vi.fn();
 const projectPlanMock = vi.fn();
 vi.mock("./finance-plan-service", () => ({
   getPlanWithLines: (...args: unknown[]) => getPlanWithLinesMock(...args),
-  getPortfolioValueForUser: (...args: unknown[]) =>
-    getPortfolioValueForUserMock(...args),
-  getAutoInvestRate: (...args: unknown[]) => getAutoInvestRateMock(...args),
-  getPortfolioWeightedMonthlyRoi: vi.fn(async () => 0),
+  getMainPlan: vi.fn(async () => null),
+  // Mirrors the real helper: portfolio lookups only when the plan includes it.
+  projectionOptionsFor: async (
+    plan: { includePortfolio: boolean; overrides: unknown; asOf?: Date | null },
+    userId: string
+  ) => ({
+    portfolioValue: plan.includePortfolio ? await getPortfolioValueForUserMock(userId) : 0,
+    portfolioMonthlyGrowthRate: 0,
+    autoInvestRate: await getAutoInvestRateMock(plan),
+    overrides: plan.overrides,
+    asOf: plan.asOf ?? null,
+  }),
+}));
+
+// The engine is swapped for a stub so each test controls the months it sees.
+vi.mock("@/lib/finance/projection", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/finance/projection")>()),
   projectPlan: (...args: unknown[]) => projectPlanMock(...args),
 }));
 
@@ -46,6 +59,7 @@ vi.mock("./finance-confirmation-service", () => ({
 }));
 
 import {
+  calibratePlan,
   createConfirmationSnapshot,
   createDailyFinanceSnapshots,
   getProjectedStateForMonth,
@@ -115,6 +129,7 @@ function buildProjectionMonth(
     totalDebt: 0,
     portfolioValue: 0,
     netWorth: 17000,
+    preAsOfCashFlow: 0,
     debts: [],
     ...overrides,
   };
@@ -264,6 +279,7 @@ describe("createConfirmationSnapshot", () => {
               scheduledPayment: 0,
               extraPayment: 0,
               interestAccrued: 0,
+              payments: [],
             },
             {
               debtId: "d2",
@@ -272,6 +288,7 @@ describe("createConfirmationSnapshot", () => {
               scheduledPayment: 0,
               extraPayment: 0,
               interestAccrued: 0,
+              payments: [],
             },
           ],
         }),
@@ -603,17 +620,35 @@ describe("getProjectedStateForMonth", () => {
     ];
     projectPlanMock.mockReturnValueOnce({ months });
 
-    // Target = April 2026 = offset 3 → clamped to last period (idx 2). The
-    // pre-fill returns that period's OPENING = the previous period's close
-    // (idx 1 → 200), not its close (300).
+    // Target = March 2026 = offset 2 → its OPENING = the Feb close (idx 1).
+    const result = await getProjectedStateForMonth(
+      plan,
+      USER_ID,
+      new Date(Date.UTC(2026, 2, 15))
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.savings).toBe(200);
+  });
+
+  it("F20: past the horizon it returns the LAST close, not the second to last", async () => {
+    const plan = buildPlan({ startMonth: new Date(Date.UTC(2026, 0, 1)) });
+    getLatestConfirmationMock.mockResolvedValueOnce(null);
+    projectPlanMock.mockReturnValueOnce({
+      months: [
+        buildProjectionMonth({ monthOffset: 0, savings: 100 }),
+        buildProjectionMonth({ monthOffset: 1, savings: 200 }),
+        buildProjectionMonth({ monthOffset: 2, savings: 300 }),
+      ],
+    });
+    // April = offset 3, one past the 3-period horizon: it used to return 200
+    // (the second-to-last close) and stay frozen there forever.
     const result = await getProjectedStateForMonth(
       plan,
       USER_ID,
       new Date(Date.UTC(2026, 3, 15))
     );
-
-    expect(result).not.toBeNull();
-    expect(result?.savings).toBe(200);
+    expect(result?.savings).toBe(300);
   });
 
   it("returns null when projection yields no months", async () => {
@@ -777,5 +812,96 @@ describe("getProjectedStateForMonth", () => {
     );
 
     expect(result?.savings).toBe(100);
+  });
+});
+
+// ---------- calibratePlan (pure) ----------
+
+describe("calibratePlan", () => {
+  const actualEngine = () =>
+    vi.importActual<typeof import("@/lib/finance/projection")>("@/lib/finance/projection");
+  const conf = (o: Partial<ConfirmationWithDebts>): ConfirmationWithDebts =>
+    ({
+      id: "c",
+      planId: PLAN_ID,
+      confirmationMonth: "2026-09-12",
+      confirmedSavings: "8000",
+      confirmedInvestments: "0",
+      notes: null,
+      source: "user",
+      confirmedAt: new Date(),
+      debtConfirmations: [],
+      ...o,
+    }) as unknown as ConfirmationWithDebts;
+  const quarterly = {
+    id: "ins",
+    name: "Insurance",
+    monthlyAmount: "600",
+    kind: "recurring",
+    dayOfMonth: 10,
+    date: null,
+    recurrenceType: "every_n_months",
+    weekOfMonth: null,
+    dayOfWeek: null,
+    intervalMonths: 3,
+    recurrenceStart: null,
+  } as unknown as FinancePlanWithLines["expenses"][number];
+
+  it("F3: pins an every-N-months line to the ORIGINAL start month", async () => {
+    const { projectPlan } = await actualEngine();
+    const plan = buildPlan({ monthsAhead: 24, expenses: [quarterly] });
+    const cal = calibratePlan(plan, conf({}));
+    expect(cal.expenses[0].recurrenceStart).toBe("2026-01-01");
+    const pr = projectPlan(cal, cal.incomes, cal.expenses, cal.debts, { asOf: cal.asOf });
+    const hits = pr.months.filter((m) => m.expenses > 0).map((m) => m.date.toISOString().slice(0, 7));
+    // Jan / Apr / Jul / Oct cadence, exactly what the calendar shows — not
+    // Sep / Dec / Mar as when it followed the confirmation month.
+    expect(hits.slice(0, 3)).toEqual(["2026-10", "2027-01", "2027-04"]);
+  });
+
+  it("F9: keeps the plan's own end date instead of sliding a horizon forward", () => {
+    // 24 periods from Jan 2026 end with Dec 2027; confirmed in Sep 2026.
+    const cal = calibratePlan(buildPlan({ monthsAhead: 24 }), conf({}));
+    expect(cal.startMonth).toEqual(new Date(Date.UTC(2026, 8, 1)));
+    expect(cal.monthsAhead).toBe(16); // Sep 2026 … Dec 2027
+  });
+
+  it("F2: a user confirmation is as of its day; an auto row is an opening", () => {
+    const user = calibratePlan(buildPlan(), conf({}));
+    expect(user.asOf).toEqual(new Date(Date.UTC(2026, 8, 12)));
+    expect(user.initialSavings).toBe("8000");
+    const auto = calibratePlan(buildPlan(), conf({ confirmationMonth: "2026-09-01", source: "auto" }));
+    expect(auto.asOf).toEqual(new Date(Date.UTC(2026, 7, 31))); // nothing in Sep applied yet
+  });
+
+  it("F26: a row keyed under an OLD anchor still calibrates the period containing it", () => {
+    const cal = calibratePlan(
+      buildPlan({ confirmationDayOfMonth: 15 }),
+      conf({ confirmationMonth: "2026-05-01" })
+    );
+    expect(cal.startMonth).toEqual(new Date(Date.UTC(2026, 3, 15)));
+    expect(cal.asOf).toEqual(new Date(Date.UTC(2026, 4, 1)));
+  });
+
+  it("with no confirmation: as of the creation day in the reader's zone, or a base plan's", () => {
+    // Created 2026-09-29 23:30 UTC = Sep 30 in Madrid.
+    const plan = buildPlan({ createdAt: new Date(Date.UTC(2026, 8, 29, 23, 30)) } as never);
+    expect(calibratePlan(plan, null, { timeZone: "Europe/Madrid" }).asOf).toEqual(
+      new Date(Date.UTC(2026, 8, 30))
+    );
+    expect(calibratePlan(plan, null).asOf).toEqual(new Date(Date.UTC(2026, 8, 29)));
+    const fallback = new Date(Date.UTC(2026, 0, 3));
+    expect(calibratePlan(plan, null, { asOfFallback: fallback }).asOf).toEqual(fallback);
+  });
+});
+
+describe("F20: no forecast recorded as history", () => {
+  it("the cron writes no snapshot for a plan with confirmations off", async () => {
+    selectImpl.mockReturnValueOnce(makeSelectChain([{ id: PLAN_ID, userId: USER_ID }]));
+    getPlanWithLinesMock.mockResolvedValueOnce(buildPlan({ confirmationDayOfMonth: 0 }));
+    const result = await createDailyFinanceSnapshots(new Date(Date.UTC(2026, 4, 10)));
+    expect(result.snapshotsCreated).toBe(0);
+    expect(insertImpl).not.toHaveBeenCalled();
+    expect(projectPlanMock).not.toHaveBeenCalled();
   });
 });

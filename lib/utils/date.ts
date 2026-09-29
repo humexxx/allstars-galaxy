@@ -106,3 +106,54 @@ export function formatDayRange(start: DateInput, end?: DateInput | null): string
   }
   return `${SHORT_DAY.format(s)} – ${SHORT_DAY.format(e)}, ${e.getFullYear()}`;
 }
+
+// ---------- "today" in the user's time zone ----------
+//
+// The server renders in UTC, so `new Date()` there is the wrong calendar day
+// for anyone whose midnight isn't Greenwich's: a reader in Madrid at 00:30 on
+// Oct 1 was still shown September. The browser reports its IANA zone in a
+// cookie (`TIME_ZONE_COOKIE`, written by `useTimeZoneCookie`) and the server
+// resolves "today" in that zone. The result is a CALENDAR DAY encoded as UTC
+// midnight — the same shape the finance period helpers expect.
+
+/** Cookie the portal shell writes with the browser's IANA time zone. */
+export const TIME_ZONE_COOKIE = "tz";
+
+/** True for a zone `Intl` accepts, e.g. "Europe/Madrid". */
+export function isValidTimeZone(value: string | null | undefined): value is string {
+  if (!value) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The calendar day `instant` falls on in `timeZone`, as UTC midnight of that
+ * day. An unknown or missing zone falls back to UTC.
+ */
+export function calendarDayInTimeZone(
+  instant: Date,
+  timeZone?: string | null
+): Date {
+  const zone = isValidTimeZone(timeZone) ? timeZone : "UTC";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(instant);
+  const get = (type: Intl.DateTimeFormatPartTypes): number =>
+    Number(parts.find((p) => p.type === type)?.value);
+  return new Date(Date.UTC(get("year"), get("month") - 1, get("day")));
+}
+
+/** Today in `timeZone`, as UTC midnight of that calendar day. */
+export function todayInTimeZone(
+  timeZone?: string | null,
+  now: Date = new Date()
+): Date {
+  return calendarDayInTimeZone(now, timeZone);
+}

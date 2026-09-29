@@ -13,6 +13,12 @@ vi.mock("@/lib/services/finance-confirmation-service", () => ({
   saveConfirmation: vi.fn(),
 }));
 
+// The reader's calendar day comes from the tz cookie (F25).
+const READER_TODAY = new Date(Date.UTC(2026, 9, 1));
+vi.mock("@/lib/utils/request-today", () => ({
+  getRequestToday: vi.fn(async () => READER_TODAY),
+}));
+
 import { revalidatePath } from "next/cache";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { saveConfirmation } from "@/lib/services/finance-confirmation-service";
@@ -62,6 +68,8 @@ describe("saveConfirmationAction", () => {
         confirmedInvestments: "250.50",
         notes: "April actuals reconciled",
       }),
+      // Saved against the reader's own calendar day, not the server's UTC one.
+      READER_TODAY,
     );
     expect(revalidatePath).toHaveBeenCalledWith(`/portal/plans/${PLAN_ID}`);
     // The dashboard hosts the prompt and the calibrated card.
@@ -84,6 +92,7 @@ describe("saveConfirmationAction", () => {
     expect(saveConfirmation).toHaveBeenCalledWith(
       USER_ID,
       expect.objectContaining({ planId: PLAN_ID, notes: null }),
+      READER_TODAY,
     );
     expect(revalidatePath).toHaveBeenCalledWith(`/portal/plans/${PLAN_ID}`);
   });
@@ -174,6 +183,7 @@ describe("saveConfirmationAction", () => {
     expect(saveConfirmation).toHaveBeenCalledWith(
       IMPERSONATED,
       expect.objectContaining({ planId: PLAN_ID }),
+      READER_TODAY,
     );
   });
 

@@ -27,7 +27,11 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Eyebrow } from "@/components/ui/typography";
 
-import { FIXED_DEBT_NEEDS_PAYMENT } from "@/schemas/finance";
+import {
+  FIXED_DEBT_NEEDS_PAYMENT,
+  MONTHLY_RATE_TOO_HIGH,
+  SHARE_TOO_HIGH,
+} from "@/schemas/finance";
 import type { DebtPaymentType, RecurrenceType } from "@/types/finance";
 
 import { RecurrenceFields } from "./line-form-dialog";
@@ -137,7 +141,11 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
     value.trim().length > 0 && !rule.test(value.trim());
   const errors = {
     balance: invalid(balance, MONEY) ? MONEY_ERROR : null,
-    rate: invalid(rate, RATE) ? "Use a positive decimal, e.g. 0.02." : null,
+    rate: invalid(rate, RATE)
+      ? "Use a positive decimal, e.g. 0.02."
+      : parseFloat(rate) > 1
+        ? MONTHLY_RATE_TOO_HIGH
+        : null,
     payment: invalid(payment, MONEY)
       ? MONEY_ERROR
       : // A fixed payment of zero on a debt that accrues interest never pays
@@ -145,7 +153,11 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
         !isPercent && !(parseFloat(payment) > 0) && parseFloat(rate) > 0
         ? FIXED_DEBT_NEEDS_PAYMENT
         : null,
-    minPercent: invalid(minPercent, RATE) ? "Use a positive decimal, e.g. 0.02." : null,
+    minPercent: invalid(minPercent, RATE)
+      ? "Use a positive decimal, e.g. 0.02."
+      : parseFloat(minPercent) > 1
+        ? SHARE_TOO_HIGH
+        : null,
     minFloor: invalid(minFloor, MONEY) ? MONEY_ERROR : null,
   };
   const relevantErrors = isPercent

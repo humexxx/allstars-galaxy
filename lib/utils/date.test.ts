@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calendarDayInTimeZone,
+  isValidTimeZone,
+  todayInTimeZone,
   formatDay,
   formatDayRange,
   formatMonth,
@@ -46,5 +49,26 @@ describe("formatCurrencyCompact", () => {
     expect(formatCurrencyCompact(1_250)).toBe("$1.3k");
     expect(formatCurrencyCompact(1_500_000)).toBe("$1.5M");
     expect(formatCurrencyCompact(-2_000)).toBe("-$2k");
+  });
+});
+
+describe("today in the reader's time zone (F25)", () => {
+  // 2026-09-30 22:30 UTC — still Sep 30 in London's UTC, already Oct 1 in Madrid.
+  const instant = new Date(Date.UTC(2026, 8, 30, 22, 30));
+
+  it("resolves the calendar day in the given zone, as UTC midnight", () => {
+    expect(todayInTimeZone("Europe/Madrid", instant)).toEqual(new Date(Date.UTC(2026, 9, 1)));
+    expect(todayInTimeZone("America/Mexico_City", instant)).toEqual(new Date(Date.UTC(2026, 8, 30)));
+  });
+
+  it("falls back to UTC for a missing or unknown zone", () => {
+    expect(todayInTimeZone(null, instant)).toEqual(new Date(Date.UTC(2026, 8, 30)));
+    expect(todayInTimeZone("Not/AZone", instant)).toEqual(new Date(Date.UTC(2026, 8, 30)));
+    expect(isValidTimeZone("Europe/Madrid")).toBe(true);
+    expect(isValidTimeZone("Not/AZone")).toBe(false);
+  });
+
+  it("reads a stored instant (a plan's createdAt) as the reader's day", () => {
+    expect(calendarDayInTimeZone(instant, "Asia/Tokyo")).toEqual(new Date(Date.UTC(2026, 9, 1)));
   });
 });

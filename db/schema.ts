@@ -724,7 +724,10 @@ export const financePlanConfirmations = pgTable(
     planId: uuid("plan_id")
       .notNull()
       .references(() => financePlans.id, { onDelete: "cascade" }),
-    // Anchor to the FIRST day of the confirmed month (always UTC midnight).
+    // The calendar day the balances describe: the reader's local day a user
+    // confirmed on, or the period start an auto row records the opening of.
+    // The name predates that (rows used to be keyed by month); a confirmation
+    // counts for whichever accounting period contains this day.
     confirmationMonth: date("confirmation_month").notNull(),
     confirmedSavings: numeric("confirmed_savings", { precision: 20, scale: 2 }).notNull(),
     confirmedInvestments: numeric("confirmed_investments", { precision: 20, scale: 2 })

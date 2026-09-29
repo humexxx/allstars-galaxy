@@ -19,8 +19,9 @@ import {
 } from "@/components/ui/tooltip";
 import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/utils/format";
-import type { Projection, ProjectionMonth } from "@/types/finance";
+import { formatCurrency, moneySign } from "@/lib/utils/format";
+import { densify } from "@/lib/finance/table-rows";
+import type { Projection } from "@/types/finance";
 
 // Anchor formatting in UTC because the projection generates dates at UTC
 // midnight. Local-timezone formatting would shift a month for users in
@@ -39,19 +40,6 @@ type ProjectionTableProps = {
   /** Index of the first row to show — the forecast window's start. */
   startIndex?: number;
 };
-
-/** Keep months 1-12 + year-end milestones, identical to the chart densifier. */
-function densify(months: ProjectionMonth[]): ProjectionMonth[] {
-  if (months.length <= 24) return months;
-  const kept: ProjectionMonth[] = [];
-  for (let i = 0; i < months.length; i++) {
-    if (i < 12 || (i + 1) % 12 === 0) kept.push(months[i]);
-  }
-  if (kept[kept.length - 1] !== months[months.length - 1]) {
-    kept.push(months[months.length - 1]);
-  }
-  return kept;
-}
 
 // How many extra months a single "Load more" click reveals beyond the
 // initial window. Kept at a clean year so the table grows in human-sized
@@ -180,7 +168,7 @@ export function ProjectionTable({
           <span>
             {showAll
               ? `Showing all ${visibleMonths.length} months`
-              : `Showing the first 12 months + each year-end (${rows.length} of ${visibleMonths.length})`}
+              : `Showing the first 12 months + each December (${rows.length} of ${visibleMonths.length})`}
           </span>
           <Button
             type="button"
@@ -206,7 +194,21 @@ export function ProjectionTable({
                 <TableHead className="w-20">Month</TableHead>
                 <TableHead className="text-right">Income</TableHead>
                 <TableHead className="text-right">Expenses</TableHead>
-                <TableHead className="text-right">Debt pmt</TableHead>
+                <TableHead className="text-right">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        tabIndex={0}
+                        className="cursor-help rounded-sm underline decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        Debt pmt
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Scheduled minimums plus any extra paid from the surplus
+                    </TooltipContent>
+                  </Tooltip>
+                </TableHead>
                 <TableHead className="text-right">
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -222,6 +224,7 @@ export function ProjectionTable({
                     </TooltipContent>
                   </Tooltip>
                 </TableHead>
+                <TableHead className="text-right">Savings</TableHead>
                 {hasInvestments && <TableHead className="text-right">Investments</TableHead>}
                 <TableHead className="text-right">Total debt</TableHead>
                 <TableHead className="text-right">Net worth</TableHead>
@@ -240,7 +243,9 @@ export function ProjectionTable({
                     <Mono>{formatCurrency(m.expenses)}</Mono>
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground">
-                    <Mono>{formatCurrency(m.scheduledDebtPayments)}</Mono>
+                    {/* Minimums AND extra, so income − expenses − debt pmt −
+                        invested + interest reconciles to the savings column. */}
+                    <Mono>{formatCurrency(m.debtPayments)}</Mono>
                   </TableCell>
                   <TableCell className="text-right">
                     {(() => {
@@ -249,7 +254,7 @@ export function ProjectionTable({
                       // more than debts cost; negative (red) when debts dominate.
                       const net =
                         m.investmentsInterest + m.savingsInterest - m.totalInterestAccrued;
-                      if (Math.abs(net) < 0.005) {
+                      if (moneySign(net) === 0) {
                         return <span className="text-muted-foreground">—</span>;
                       }
                       const isPositive = net > 0;
@@ -272,6 +277,14 @@ export function ProjectionTable({
                       );
                     })()}
                   </TableCell>
+                  <TableCell
+                    className={cn(
+                      "text-right font-mono tabular-nums",
+                      moneySign(m.savings) < 0 && "text-destructive"
+                    )}
+                  >
+                    {formatCurrency(m.savings)}
+                  </TableCell>
                   {hasInvestments && (
                     <TableCell className="text-right font-mono tabular-nums text-primary">
                       {formatCurrency(m.investments)}
@@ -283,7 +296,7 @@ export function ProjectionTable({
                   <TableCell
                     className={cn(
                       "text-right font-mono font-semibold tabular-nums",
-                      m.netWorth >= 0 ? "text-success" : "text-destructive"
+                      moneySign(m.netWorth) >= 0 ? "text-success" : "text-destructive"
                     )}
                   >
                     {formatCurrency(m.netWorth)}

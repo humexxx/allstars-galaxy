@@ -23,24 +23,17 @@ import { cn } from "@/lib/utils";
 
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
 import { formatDay } from "@/lib/utils/date";
-import { formatCurrency, formatSignedCurrency } from "@/lib/utils/format";
+import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
 import {
-  getAutoInvestRate,
   getMainPlan,
   getPlanWithLines,
-  getPortfolioValueForUser,
   listUserPlans,
-  projectPlan,
 } from "@/lib/services/finance-plan-service";
-import { buildCalibratedPlan } from "@/lib/services/finance-snapshot-service";
-import { periodIndexForDate } from "@/lib/finance/period";
-
-// UTC-anchored — projection.months[i].date is generated at UTC midnight; local
-// formatting would shift a month for users in negative-offset timezones.
-const MONTH_FMT = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  timeZone: "UTC",
-});
+import { loadCalibratedView } from "@/lib/services/finance-snapshot-service";
+import { buildDashboardFigures } from "@/lib/finance/dashboard";
+import { formatDebtFree } from "@/lib/finance/chart-series";
+import { getRequestTimeZone } from "@/lib/utils/request-today";
+import { todayInTimeZone } from "@/lib/utils/date";
 
 type DashboardFinanceCardProps = {
   userId: string;
@@ -81,65 +74,38 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   const full = await getPlanWithLines(featured.id, userId);
   if (!full) return null;
 
-  // Calibrate from the latest confirmation so the card reflects the user's real
-  // numbers (the [id] page does the same). Raw plan would ignore confirmations.
-  const baseline = await buildCalibratedPlan(full);
-
-  const [portfolioValue, autoInvestRate] = await Promise.all([
-    baseline.includePortfolio
-      ? getPortfolioValueForUser(userId)
-      : Promise.resolve(0),
-    getAutoInvestRate(baseline),
-  ]);
-  const projection = projectPlan(
-    baseline,
-    baseline.incomes,
-    baseline.expenses,
-    baseline.debts,
-    { portfolioValue, autoInvestRate, overrides: baseline.overrides }
+  // Exactly what the plan page shows: the calibrated plan (portfolio growth
+  // included), with "now" as the day-aware position in the reader's zone.
+  const timeZone = await getRequestTimeZone();
+  const now = todayInTimeZone(timeZone);
+  const view = await loadCalibratedView(full, userId, now, { timeZone });
+  const fig = buildDashboardFigures(
+    view.projection,
+    view.today,
+    full.confirmationDayOfMonth,
+    now
   );
-
-  // Locate the accounting period that contains today (not months[0], the plan
-  // START period) so the "now" figures and the 12-period preview track reality.
-  const lastIdx = Math.max(0, projection.months.length - 1);
-  const todayIdx = Math.min(
-    Math.max(
-      0,
-      periodIndexForDate(baseline.startMonth, baseline.confirmationDayOfMonth, new Date())
-    ),
-    lastIdx
-  );
-  const todayMonth = projection.months[todayIdx];
-
-  const points = projection.months.slice(todayIdx, todayIdx + 12).map((m) => ({
-    month: MONTH_FMT.format(m.date),
-    netWorth: Math.round(m.netWorth),
-  }));
-
-  const currentNetWorth = todayMonth?.netWorth ?? 0;
-  const endNetWorth =
-    projection.months[Math.min(todayIdx + 12, lastIdx)]?.netWorth ??
-    currentNetWorth;
-  const delta = endNetWorth - currentNetWorth;
-  const totalDebt = todayMonth?.totalDebt ?? 0;
+  const points = fig.points;
+  const delta = fig.delta;
 
   const kpis: Array<{ label: string; value: string; tone?: KpiTone }> = [
-    { label: "Savings now", value: formatCurrency(todayMonth?.savings ?? 0) },
-    { label: "Investments", value: formatCurrency(todayMonth?.investments ?? 0), tone: "primary" },
-    { label: "Debt now", value: formatCurrency(totalDebt) },
     {
-      label: "Debt-free in",
+      label: fig.status === "before-start" ? "Savings at start" : "Savings now",
+      value: formatCurrency(fig.savings),
+    },
+    { label: "Investments", value: formatCurrency(fig.investments), tone: "primary" },
+    { label: "Debt now", value: formatCurrency(fig.totalDebt) },
+    {
+      label: "Debt-free",
       value:
-        projection.monthsToDebtFree !== null
-          ? `${Math.max(0, projection.monthsToDebtFree - todayIdx)} mo`
-          : full.debts.length === 0
+        full.debts.length === 0 && fig.debtFree.kind === "no-debt"
           ? "—"
-          : ">range",
+          : formatDebtFree(fig.debtFree).replace(/^Debt-free in /, "in "),
     },
     {
       label: "Net worth",
-      value: formatCurrency(currentNetWorth),
-      tone: currentNetWorth >= 0 ? "positive" : "negative",
+      value: formatCurrency(fig.netWorth),
+      tone: moneySign(fig.netWorth) >= 0 ? "positive" : "negative",
     },
   ];
 
@@ -154,9 +120,9 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
             the button it squeezed the plan name to a few characters on phones. */}
         <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 tabular-nums">
           <span>12-month projection · updated {formatDay(featured.updatedAt)}</span>
-          <Badge variant={delta >= 0 ? "success" : "destructive"} className="font-mono tabular-nums">
-            {delta >= 0 ? <TrendingUp /> : <TrendingDown />}
-            {formatSignedCurrency(delta)} · 12 mo
+          <Badge variant={moneySign(delta) >= 0 ? "success" : "destructive"} className="font-mono tabular-nums">
+            {moneySign(delta) >= 0 ? <TrendingUp /> : <TrendingDown />}
+            {formatSignedCurrency(delta)} · {fig.deltaPeriods} mo
           </Badge>
         </CardDescription>
         <CardAction>

@@ -1,6 +1,10 @@
 "use client";
 
-import { debtFreeMonthsFromNow } from "@/lib/finance/chart-series";
+import {
+  formatDebtFree,
+  summaryDebtFree,
+  type PlanTimeline,
+} from "@/lib/finance/chart-series";
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 
@@ -20,8 +24,8 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow, Heading, Mono } from "@/components/ui/typography";
 
-import { formatCurrency } from "@/lib/utils/format";
-import type { Projection } from "@/types/finance";
+import { formatCurrency, moneySign } from "@/lib/utils/format";
+import type { FinancePlan, PlanSummary, Projection } from "@/types/finance";
 
 // Same rationale as plan-editor: defer recharts to a lazy chunk.
 const ComparePlansChart = dynamic(
@@ -34,17 +38,35 @@ const ComparePlansChart = dynamic(
 
 type Metric = "netWorth" | "totalDebt";
 
+/** One plan on the compare page, projected like its own page does it. */
+export type ComparePlanEntry = {
+  plan: FinancePlan;
+  projection: Projection;
+  timeline: PlanTimeline;
+  summary: PlanSummary;
+};
+
+const END_LABEL = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
 type CompareViewProps = {
-  projections: Projection[];
+  plans: ComparePlanEntry[];
+  /** The reader's calendar day — the chart's today boundary. */
+  today: Date;
   /** When false, hide the per-plan "Ending state" cards — used when the host
    *  page (e.g. the plans list) already shows those numbers on each plan card. */
   showEndingState?: boolean;
 };
 
 export function CompareView({
-  projections,
+  plans: entries,
+  today,
   showEndingState = true,
 }: CompareViewProps) {
+  const projections = entries.map((e) => e.projection);
   const [selected, setSelected] = useState<Set<string>>(
     new Set(projections.map((p) => p.plan.id))
   );
@@ -67,8 +89,11 @@ export function CompareView({
   const [metric, setMetric] = useState<Metric>("netWorth");
 
   const filtered = useMemo(
-    () => projections.filter((p) => selected.has(p.plan.id)),
-    [projections, selected]
+    () =>
+      entries
+        .filter((e) => selected.has(e.plan.id))
+        .map((e) => ({ plan: e.plan, timeline: e.timeline })),
+    [entries, selected]
   );
 
   const toggle = (id: string) => {
@@ -137,7 +162,7 @@ export function CompareView({
               description="Select at least one plan above."
             />
           ) : (
-            <ComparePlansChart projections={filtered} metric={metric} />
+            <ComparePlansChart series={filtered} metric={metric} today={today} />
           )}
         </CardContent>
       </Card>
@@ -149,8 +174,8 @@ export function CompareView({
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {projections.map((p) => (
-                <EndingStateTile key={p.plan.id} projection={p} />
+              {entries.map((e) => (
+                <EndingStateTile key={e.plan.id} entry={e} />
               ))}
             </div>
           </CardContent>
@@ -160,8 +185,9 @@ export function CompareView({
   );
 }
 
-function EndingStateTile({ projection: p }: { projection: Projection }) {
-  const debtFreeIn = debtFreeMonthsFromNow(p);
+function EndingStateTile({ entry }: { entry: ComparePlanEntry }) {
+  const { projection: p, summary } = entry;
+  const debtFree = summaryDebtFree(summary);
   return (
     <div
       className="rounded-lg border p-4"
@@ -169,12 +195,17 @@ function EndingStateTile({ projection: p }: { projection: Projection }) {
     >
       <div className="flex items-center justify-between gap-2">
         <Heading level="h6" as="h3">{p.plan.name}</Heading>
-        {debtFreeIn !== null && (
-          <Badge variant="outline">
-            {debtFreeIn === 0 ? "Debt-free" : `Debt-free in ${debtFreeIn} mo`}
-          </Badge>
+        {debtFree.kind !== "beyond-horizon" && (
+          <Badge variant="outline">{formatDebtFree(debtFree)}</Badge>
         )}
       </div>
+      {/* Dated: plans end at different times, so an undated "ending" figure
+          compared different months side by side. */}
+      {summary.endDate && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          At {END_LABEL.format(summary.endDate)}
+        </p>
+      )}
       <dl className="mt-3 flex flex-col gap-1 text-sm">
         <div className="flex justify-between">
           <dt className="text-muted-foreground">Savings</dt>
@@ -187,7 +218,11 @@ function EndingStateTile({ projection: p }: { projection: Projection }) {
         <div className="flex justify-between border-t pt-1 font-semibold">
           <dt>Net worth</dt>
           <dd>
-            <Mono className={p.endingNetWorth >= 0 ? "text-success" : "text-destructive"}>
+            <Mono
+              className={
+                moneySign(p.endingNetWorth) >= 0 ? "text-success" : "text-destructive"
+              }
+            >
               {formatCurrency(p.endingNetWorth)}
             </Mono>
           </dd>

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -11,45 +12,133 @@ import {
 import type { FinanceSnapshotSource } from "@/schemas/finance-snapshot";
 
 import {
-  getAutoInvestRate,
+  getMainPlan,
   getPlanWithLines,
-  getPortfolioValueForUser,
-  getPortfolioWeightedMonthlyRoi,
-  projectPlan,
+  projectionOptionsFor,
 } from "./finance-plan-service";
 import {
   autoConfirmSkippedPeriods,
   getLatestConfirmation,
 } from "./finance-confirmation-service";
 import { ensureOwnedRow } from "./ownership";
-import { periodStartFor } from "@/lib/finance/period";
+import {
+  iteratePeriods,
+  periodIndexForDate,
+  periodStartFor,
+} from "@/lib/finance/period";
+import {
+  deriveFinanceMood,
+  projectPlan,
+  projectStateAt,
+  type ProjectOptions,
+} from "@/lib/finance/projection";
+import { isoDay, monthKeyOf, parseIsoDay } from "@/lib/finance/schedule";
+import { calendarDayInTimeZone } from "@/lib/utils/date";
+import {
+  alignTimelineToday,
+  buildPlanTimeline,
+  debtFreeMonthsFromNow,
+  type PlanTimeline,
+} from "@/lib/finance/chart-series";
 import type {
+  ConfirmationWithDebts,
+  FinanceMood,
   FinancePlanWithLines,
+  PlanSummary,
+  Projection,
   ProjectionMonth,
+  TodayState,
 } from "@/types/finance";
 
-// ---------- helpers ----------
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-/** Whole months between `start` and `target`, signed. Both inputs are
- *  expected to be period-anchor dates (same day-of-month, possibly clamped),
- *  so the calendar-month diff equals the period offset. */
-function monthsBetween(start: Date, target: Date): number {
-  return (
-    (target.getUTCFullYear() - start.getUTCFullYear()) * 12 +
-    (target.getUTCMonth() - start.getUTCMonth())
+// ---------- calibration ----------
+
+export type CalibrationOptions = {
+  /** Reader's IANA zone — the plan's creation day is read in it. */
+  timeZone?: string | null;
+  /**
+   * For a plan with no confirmation: the day its opening balances were read
+   * on. Defaults to the plan's creation day; a scenario passes its base
+   * plan's, so an unchanged scenario and its base open identically.
+   */
+  asOfFallback?: Date | null;
+};
+
+/**
+ * The day a confirmation describes (UTC midnight). A user confirmation is
+ * stored under the calendar day it was made on; an auto confirmation under
+ * the period start whose OPENING it records. Rows saved before that change
+ * carry their period start either way.
+ */
+export function confirmationDay(row: { confirmationMonth: string }): Date {
+  return parseIsoDay(row.confirmationMonth) ?? new Date(row.confirmationMonth);
+}
+
+function withPinnedRecurrence<T extends { recurrenceType: string; recurrenceStart: string | null }>(
+  lines: T[],
+  anchorIso: string
+): T[] {
+  return lines.map((l) =>
+    l.recurrenceType === "every_n_months" && !l.recurrenceStart
+      ? { ...l, recurrenceStart: anchorIso }
+      : l
   );
 }
 
 /**
- * Apply the latest confirmation (if any) as the new baseline so projections
- * recalibrate from the user's most recent real-world numbers instead of
- * always extrapolating from the original startMonth.
+ * Pure calibration — see `buildCalibratedPlan`. Exported for tests.
+ *
+ * - Every-N-months lines without a "First month" are pinned to the ORIGINAL
+ *   start month, so moving `startMonth` to the confirmation doesn't move
+ *   their cycle (it used to follow the confirmation month and land a
+ *   quarterly bill in every confirmed period).
+ * - The end date stays the plan's own: `monthsAhead` is recomputed so the
+ *   last period is the one the plan always ended on, rather than sliding a
+ *   whole horizon forward with every confirmation.
+ * - `asOf` = the confirmed day (user) or the day before the recorded period
+ *   start (auto — an opening, nothing in that period happened yet); with no
+ *   confirmation, the fallback or the plan's creation day.
  */
-export async function buildCalibratedPlan(
-  plan: FinancePlanWithLines
-): Promise<FinancePlanWithLines> {
-  const latest = await getLatestConfirmation(plan.id);
-  if (!latest) return plan;
+export function calibratePlan(
+  plan: FinancePlanWithLines,
+  latest: ConfirmationWithDebts | null,
+  options: CalibrationOptions = {}
+): FinancePlanWithLines {
+  const anchor = plan.confirmationDayOfMonth > 0 ? plan.confirmationDayOfMonth : 1;
+  const originalStart = new Date(plan.startMonth);
+  const startKey = monthKeyOf(originalStart);
+  const anchorIso = isoDay(
+    new Date(Date.UTC(Math.floor(startKey / 12), startKey % 12, 1))
+  );
+  const pinned = {
+    incomes: withPinnedRecurrence(plan.incomes, anchorIso),
+    expenses: withPinnedRecurrence(plan.expenses, anchorIso),
+  };
+
+  if (!latest) {
+    const created = plan.createdAt ? new Date(plan.createdAt) : null;
+    const asOf =
+      options.asOfFallback ??
+      (created && !Number.isNaN(created.getTime())
+        ? calendarDayInTimeZone(created, options.timeZone)
+        : null);
+    return {
+      ...plan,
+      ...pinned,
+      debts: withPinnedRecurrence(plan.debts, anchorIso),
+      asOf,
+      baselineSource: "plan",
+    };
+  }
+
+  const day = confirmationDay(latest);
+  const startMonth = periodStartFor(day, anchor);
+  const originalPeriods = iteratePeriods(originalStart, anchor, Math.max(1, plan.monthsAhead));
+  const originalLast = originalPeriods[originalPeriods.length - 1].start;
+  const monthsAhead = Math.max(1, periodIndexForDate(startMonth, anchor, originalLast) + 1);
+  const asOf =
+    latest.source === "auto" ? new Date(day.getTime() - MS_PER_DAY) : day;
 
   const debtBalanceById = new Map(
     latest.debtConfirmations.map((d) => [d.debtId, d.confirmedBalance])
@@ -57,30 +146,80 @@ export async function buildCalibratedPlan(
 
   return {
     ...plan,
-    startMonth: new Date(latest.confirmationMonth),
+    ...pinned,
+    startMonth,
+    monthsAhead,
     initialSavings: latest.confirmedSavings,
     initialInvestments: latest.confirmedInvestments,
-    debts: plan.debts.map((d) => ({
+    debts: withPinnedRecurrence(plan.debts, anchorIso).map((d) => ({
       ...d,
       initialBalance: debtBalanceById.get(d.id) ?? d.initialBalance,
     })),
+    asOf,
+    baselineSource: "confirmation",
   };
 }
 
 /**
- * Snapshot of the projected position for the calendar date. Uses the
- * calibrated plan so confirmations are reflected immediately.
+ * The plan every projection surface uses: its latest confirmation (if any)
+ * as the opening balances, on the day they were read — see `calibratePlan`.
+ * The plan page, the plans list, the compare page, the dashboard and the
+ * mascot all project THIS, so they agree on every figure.
+ */
+export async function buildCalibratedPlan(
+  plan: FinancePlanWithLines,
+  options: CalibrationOptions = {}
+): Promise<FinancePlanWithLines> {
+  const latest = await getLatestConfirmation(plan.id);
+  return calibratePlan(plan, latest, options);
+}
+
+/** A calibrated plan with everything the pages render from it. */
+export type CalibratedView = {
+  baseline: FinancePlanWithLines;
+  options: ProjectOptions;
+  projection: Projection;
+  /** Where the plan stands today (null only for a plan with no periods). */
+  today: TodayState | null;
+};
+
+/** Calibrates, projects and resolves today's position in one go. */
+export async function loadCalibratedView(
+  plan: FinancePlanWithLines,
+  userId: string,
+  today: Date,
+  options: CalibrationOptions = {}
+): Promise<CalibratedView> {
+  const baseline = await buildCalibratedPlan(plan, options);
+  const projectOptions = await projectionOptionsFor(baseline, userId);
+  const projection = projectPlan(
+    baseline,
+    baseline.incomes,
+    baseline.expenses,
+    baseline.debts,
+    projectOptions
+  );
+  const todayState = projectStateAt(
+    baseline,
+    baseline.incomes,
+    baseline.expenses,
+    baseline.debts,
+    projectOptions,
+    today
+  );
+  return { baseline, options: projectOptions, projection, today: todayState };
+}
+
+/**
+ * Projected position for a calendar date, from the calibrated plan.
  *
- * `boundary` selects which edge of the resolved period to return:
- *   - `"close"` (default): the period's END state — what we project the user
- *     will have at period close. Forecast-only consumers.
- *   - `"open"`: the period's OPENING state (= previous period's close, or the
- *     calibrated initials for period 0). Used by BOTH the confirmation pre-fill
- *     AND every snapshot: the opening is the last confirmed baseline held flat,
- *     so neither surface ever records projected paydown/interest as if it were
- *     real. Pre-filling/snapshotting the close instead made a blind "Save" jump
- *     the baseline a whole period forward and wrote forecast numbers into the
- *     chart's "real past" line.
+ * `boundary`:
+ *   - `"close"` (default): the END of the period containing `targetDate`.
+ *   - `"open"`: its OPENING (= the previous period's close, or the calibrated
+ *     opening balances for the first period). Snapshots and the auto
+ *     roll-forward record this, so a snapshot never contains projected
+ *     paydown for a period nobody confirmed.
+ * Past the horizon both return the LAST period's close.
  */
 async function computeStateAt(
   plan: FinancePlanWithLines,
@@ -89,38 +228,20 @@ async function computeStateAt(
   boundary: "open" | "close" = "close"
 ): Promise<{ state: ProjectionMonth | null; calibrated: FinancePlanWithLines }> {
   const calibrated = await buildCalibratedPlan(plan);
-
-  const [portfolioValue, portfolioMonthlyGrowthRate, autoInvestRate] = await Promise.all([
-    calibrated.includePortfolio
-      ? getPortfolioValueForUser(userId)
-      : Promise.resolve(0),
-    // Same growth the chart's forecast applies, so a snapshot and the dashed
-    // line agree on what the portfolio is worth in a given period.
-    calibrated.includePortfolio
-      ? getPortfolioWeightedMonthlyRoi(userId)
-      : Promise.resolve(0),
-    getAutoInvestRate(calibrated),
-  ]);
-
+  const options = await projectionOptionsFor(calibrated, userId);
   const projection = projectPlan(
     calibrated,
     calibrated.incomes,
     calibrated.expenses,
     calibrated.debts,
-    {
-      portfolioValue,
-      portfolioMonthlyGrowthRate,
-      autoInvestRate,
-      overrides: calibrated.overrides,
-    }
+    options
   );
 
   if (projection.months.length === 0) {
     return { state: null, calibrated };
   }
 
-  // The opening state of the very first period = the calibrated initials
-  // (savings / investments / per-debt balances at start_month).
+  const portfolioValue = Math.max(0, options.portfolioValue ?? 0);
   const initialsState = (): ProjectionMonth => {
     const totalDebt = calibrated.debts.reduce(
       (s, d) => s + parseFloat(d.initialBalance),
@@ -148,6 +269,7 @@ async function computeStateAt(
       // confirmation-day snapshot drop a cliff the size of the portfolio.
       portfolioValue,
       netWorth: savings + investments + portfolioValue - totalDebt,
+      preAsOfCashFlow: 0,
       debts: calibrated.debts.map((d) => ({
         debtId: d.id,
         name: d.name,
@@ -155,33 +277,30 @@ async function computeStateAt(
         scheduledPayment: 0,
         extraPayment: 0,
         interestAccrued: 0,
+        payments: [],
       })),
     };
   };
 
-  // Both ends normalised to their period anchors so the month diff is the
-  // period diff. Day-1 anchors collapse to first-of-month, which is the
-  // historical (calendar-month) behaviour.
   const anchorDay =
-    calibrated.confirmationDayOfMonth > 0
-      ? calibrated.confirmationDayOfMonth
-      : 1;
-  const startAnchor = periodStartFor(calibrated.startMonth, anchorDay);
-  const targetAnchor = periodStartFor(targetDate, anchorDay);
-  const offset = monthsBetween(startAnchor, targetAnchor);
+    calibrated.confirmationDayOfMonth > 0 ? calibrated.confirmationDayOfMonth : 1;
+  const offset = periodIndexForDate(calibrated.startMonth, anchorDay, targetDate);
   if (offset < 0) {
     return { calibrated, state: initialsState() };
   }
-  const idx = Math.min(offset, projection.months.length - 1);
+  const lastIdx = projection.months.length - 1;
+  if (offset > lastIdx) {
+    // Past the horizon: nothing moves any more — the last close, for both
+    // edges (it used to return the second-to-last period, frozen forever).
+    return { calibrated, state: projection.months[lastIdx] };
+  }
   if (boundary === "open") {
-    // Opening of period `idx` = close of the previous period, or the initials
-    // when `idx` is the first period.
     return {
       calibrated,
-      state: idx > 0 ? projection.months[idx - 1] : initialsState(),
+      state: offset > 0 ? projection.months[offset - 1] : initialsState(),
     };
   }
-  return { state: projection.months[idx] ?? null, calibrated };
+  return { state: projection.months[offset], calibrated };
 }
 
 // ---------- public API (mirrors snapshot-service.ts) ----------
@@ -265,6 +384,14 @@ async function createSnapshotForPlan(
 ): Promise<{ created: boolean }> {
   const plan = await getPlanWithLines(planId, userId);
   if (!plan) return { created: false };
+
+  // With confirmations off there is nothing real to record: every "open"
+  // state would be the plan's own forecast, and the chart draws snapshots as
+  // the solid REAL past. So the cron writes none for such plans; manual and
+  // confirmation snapshots are explicit user events and still go through.
+  if (source === "system_cron" && plan.confirmationDayOfMonth === 0) {
+    return { created: false };
+  }
 
   // Idempotency: if the cron is re-run on a day where we already wrote a
   // system_cron snapshot, skip. Other sources always create a fresh row.
@@ -409,19 +536,113 @@ export async function getRecentMonthlySnapshots(
 // ---------- exposed for confirmation flow ----------
 
 /**
- * Public view of the calibrated "current period" projection state for a
- * plan, used by the confirmation dialog to pre-fill the form. `targetDate`
- * is expected to be the period anchor — typically passed straight through
- * from `periodStartFor(today, confirmationDayOfMonth)`.
+ * The calibrated OPENING of the period containing `targetDate` (the previous
+ * period's close, or the calibrated balances for the first period). The auto
+ * roll-forward records this for every skipped period.
  */
 export async function getProjectedStateForMonth(
   plan: FinancePlanWithLines,
   userId: string,
   targetDate: Date
 ): Promise<ProjectionMonth | null> {
-  // "open" → the period's opening balances (what the user holds on the anchor
-  // day they're confirming), which is exactly what the confirmation stores as
-  // the new baseline. See `computeStateAt`'s `boundary` doc.
   const { state } = await computeStateAt(plan, userId, targetDate, "open");
   return state;
+}
+
+/**
+ * Where the calibrated plan stands on `day` — what the confirmation dialog
+ * pre-fills. A confirmation records the balances ON the day it is made, so
+ * pre-filling the projected position for that same day makes a blind "Save"
+ * a no-op instead of moving the baseline.
+ */
+export async function getProjectedStateOnDay(
+  plan: FinancePlanWithLines,
+  userId: string,
+  day: Date
+): Promise<TodayState | null> {
+  const calibrated = await buildCalibratedPlan(plan);
+  const options = await projectionOptionsFor(calibrated, userId);
+  return projectStateAt(
+    calibrated,
+    calibrated.incomes,
+    calibrated.expenses,
+    calibrated.debts,
+    options,
+    day
+  );
+}
+
+/**
+ * Mood of the user's main plan, from the same calibrated projection every
+ * other surface shows (it used to read the raw plan, so a user whose
+ * confirmed reality was underwater still got a "thriving" mascot). Cached per
+ * request; `getPlanWithLines` is cached too.
+ */
+export const getFinanceMood = cache(async function getFinanceMood(
+  userId: string
+): Promise<FinanceMood> {
+  const main = await getMainPlan(userId);
+  if (!main) return "idle";
+  const full = await getPlanWithLines(main.id, userId);
+  if (!full) return "idle";
+  const calibrated = await buildCalibratedPlan(full);
+  const options = await projectionOptionsFor(calibrated, userId);
+  return deriveFinanceMood(
+    projectPlan(calibrated, calibrated.incomes, calibrated.expenses, calibrated.debts, options)
+  );
+});
+
+/** One plan as the list / compare surfaces show it. */
+export type PlanOverview = {
+  plan: FinancePlanWithLines;
+  projection: Projection;
+  today: TodayState | null;
+  timeline: PlanTimeline;
+  summary: PlanSummary;
+};
+
+/**
+ * Every plan calibrated, projected and put on a timeline the same way the
+ * plan page does it — so the rail, the comparison chart and the plan page
+ * agree on each figure. A scenario opens on its base plan's as-of day.
+ */
+export async function loadPlanOverviews(
+  plans: FinancePlanWithLines[],
+  userId: string,
+  today: Date,
+  timeZone: string | null,
+  historyMonths: number = 6
+): Promise<PlanOverview[]> {
+  const byId = new Map(plans.map((p) => [p.id, p]));
+  return Promise.all(
+    plans.map(async (plan) => {
+      const base = plan.basedOnPlanId ? byId.get(plan.basedOnPlanId) : undefined;
+      const asOfFallback = base ? calibratePlan(base, null, { timeZone }).asOf ?? null : null;
+      const [view, history] = await Promise.all([
+        loadCalibratedView(plan, userId, today, { timeZone, asOfFallback }),
+        getRecentMonthlySnapshots(plan.id, userId, historyMonths, today, plan.confirmationDayOfMonth),
+      ]);
+      const anchor = plan.confirmationDayOfMonth;
+      const timeline = alignTimelineToday(
+        buildPlanTimeline(
+          history,
+          view.projection,
+          today,
+          anchor,
+          view.baseline.baselineSource === "plan" ? view.projection : null
+        ),
+        view.today,
+        anchor
+      );
+      const summary: PlanSummary = {
+        monthsToDebtFree: debtFreeMonthsFromNow(view.projection, today),
+        debtFreeDate: view.projection.debtFreeDate,
+        hadDebt: view.projection.hadDebt,
+        endingNetWorth: view.projection.endingNetWorth,
+        endingDebt: view.projection.endingDebt,
+        endDate: view.projection.months.at(-1)?.date ?? null,
+      };
+      return { plan, projection: view.projection, today: view.today, timeline, summary };
+    })
+  );
 }

@@ -250,6 +250,10 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
                   })}
                 />
                 <FieldError id="plan-savings-error" errors={[errors.initialSavings]} />
+                <FieldDescription>
+                  Your balance on the day you create the plan — anything already
+                  paid in or out this period is in it, so it isn&apos;t counted again.
+                </FieldDescription>
               </Field>
               <Field
                 className="gap-2"

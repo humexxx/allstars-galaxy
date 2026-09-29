@@ -7,13 +7,13 @@ import { PageHeader } from "@/components/portal/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PlansWorkspace } from "@/components/finance/plans-workspace";
 import type { PlanSummary } from "@/types/finance";
+import type { PlanTimeline } from "@/lib/finance/chart-series";
 
-import { debtFreeMonthsFromNow } from "@/lib/finance/chart-series";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
-import {
-  listUserPlansWithLines,
-  projectPlanWithPortfolio,
-} from "@/lib/services/finance-plan-service";
+import { listUserPlansWithLines } from "@/lib/services/finance-plan-service";
+import { loadPlanOverviews } from "@/lib/services/finance-snapshot-service";
+import { getRequestTimeZone } from "@/lib/utils/request-today";
+import { todayInTimeZone } from "@/lib/utils/date";
 
 export const metadata: Metadata = {
   title: "Plans",
@@ -26,23 +26,17 @@ export default async function FinancePlansPage() {
   const ctx = await requireEffectiveContext();
   const plans = await listUserPlansWithLines(ctx.effectiveUserId);
 
-  // Project every plan so each card can surface its outcome (debt-free date +
-  // projected net worth) and the plans can be stacked in one comparison chart.
-  // Personal-finance plans are few, so the per-plan projection cost is fine.
-  const projections = await Promise.all(
-    plans.map((p) => projectPlanWithPortfolio(p, ctx.effectiveUserId))
-  );
-
+  // Every plan calibrated and projected exactly as its own page does it
+  // (latest confirmation, fixed end date, the reader's today), so the rail's
+  // figures and the chart match what the plan page shows.
+  const timeZone = await getRequestTimeZone();
+  const today = todayInTimeZone(timeZone);
+  const overviews = await loadPlanOverviews(plans, ctx.effectiveUserId, today, timeZone);
   const summaries: Record<string, PlanSummary> = Object.fromEntries(
-    projections.map((proj) => [
-      proj.plan.id,
-      {
-        monthsToDebtFree: debtFreeMonthsFromNow(proj),
-        endingNetWorth: proj.endingNetWorth,
-        endingDebt: proj.endingDebt,
-        endDate: proj.months.at(-1)?.date ?? null,
-      },
-    ])
+    overviews.map((o) => [o.plan.id, o.summary])
+  );
+  const timelines: Record<string, PlanTimeline> = Object.fromEntries(
+    overviews.map((o) => [o.plan.id, o.timeline])
   );
 
   return (
@@ -82,7 +76,8 @@ export default async function FinancePlansPage() {
         <PlansWorkspace
           plans={plans}
           summaries={summaries}
-          projections={projections}
+          timelines={timelines}
+          today={today}
         />
       )}
     </section>

@@ -17,6 +17,19 @@ const rate = z
   .string()
   .regex(/^\d+(\.\d{1,6})?$/, "Must be a non-negative numeric rate");
 
+// Monthly rates are DECIMALS (the UI says so: "0.02 = 2% per month"). Typing
+// an APR or a percentage ("24" for 24%) meant 2,400% a month and a projection
+// that exploded; anything above 1 (100% a month) is refused with a message
+// that says how to write it.
+export const MONTHLY_RATE_TOO_HIGH =
+  "Monthly rate is a decimal: 0.02 means 2% per month. Values above 1 (100% a month) aren't valid — divide an annual % by 1200.";
+const monthlyRate = rate.refine((v) => parseFloat(v) <= 1, MONTHLY_RATE_TOO_HIGH);
+
+// A share of something (0..1) — surplus to debts, auto-invest, minimum
+// payment percent.
+export const SHARE_TOO_HIGH = "Use a decimal between 0 and 1 (0.03 means 3%).";
+const share = rate.refine((v) => parseFloat(v) <= 1, SHARE_TOO_HIGH);
+
 const isoDate = isoDateSchema;
 
 const lineKind = z.enum(["recurring", "one_time"]);
@@ -82,11 +95,11 @@ export const createFinancePlanSchema = z.object({
   startMonth: z.coerce.date(),
   monthsAhead: z.number().int().min(12).max(120),
   initialSavings: decimal.default("0"),
-  monthlySavingsRate: rate.default("0"),
+  monthlySavingsRate: monthlyRate.default("0"),
   includePortfolio: z.boolean().default(false),
-  surplusToDebtsPercent: rate.default("0"),
+  surplusToDebtsPercent: share.default("0"),
   debtStrategy: z.enum(DEBT_STRATEGIES).default("avalanche"),
-  autoInvestPercent: rate.default("0"),
+  autoInvestPercent: share.default("0"),
   autoInvestMethodId: idSchema.nullable().optional(),
   initialInvestments: decimal.default("0"),
   // 0 = disabled monthly confirmation. Otherwise day of month 1..28.
@@ -203,10 +216,10 @@ export const updatePlanExpenseSchema = z
 const debtShape = {
   name: z.string().min(1).max(120),
   initialBalance: decimal.default("0"),
-  monthlyInterestRate: rate.default("0"),
+  monthlyInterestRate: monthlyRate.default("0"),
   monthlyPayment: decimal.default("0"),
   paymentType: z.enum(DEBT_PAYMENT_TYPES).default("fixed"),
-  minPaymentPercent: rate.default("0"),
+  minPaymentPercent: share.default("0"),
   minPaymentFloor: decimal.default("0"),
   // Day of the month the minimum payment is due. Null = treated as day 1 by
   // the calendar / projection — preserves behaviour for legacy debts.

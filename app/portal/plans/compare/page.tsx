@@ -8,10 +8,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { CompareView } from "@/components/finance/compare-view";
 
 import { requireEffectiveContext } from "@/lib/services/impersonation";
-import {
-  listUserPlansWithLines,
-  projectPlanWithPortfolio,
-} from "@/lib/services/finance-plan-service";
+import { listUserPlansWithLines } from "@/lib/services/finance-plan-service";
+import { loadPlanOverviews } from "@/lib/services/finance-snapshot-service";
+import { getRequestTimeZone } from "@/lib/utils/request-today";
+import { todayInTimeZone } from "@/lib/utils/date";
 
 export const metadata: Metadata = {
   title: "Compare plans",
@@ -48,9 +48,11 @@ export default async function ComparePlansPage() {
     );
   }
 
-  const projections = await Promise.all(
-    plans.map((p) => projectPlanWithPortfolio(p, ctx.effectiveUserId))
-  );
+  // Calibrated like every other surface (latest confirmation, fixed end
+  // date, the reader's today) — the compare page used to show the raw plans.
+  const timeZone = await getRequestTimeZone();
+  const today = todayInTimeZone(timeZone);
+  const overviews = await loadPlanOverviews(plans, ctx.effectiveUserId, today, timeZone);
 
   return (
     <section className="flex flex-col gap-6">
@@ -59,7 +61,15 @@ export default async function ComparePlansPage() {
         title="Compare plans"
         description="See every plan’s projection in the same chart."
       />
-      <CompareView projections={projections} />
+      <CompareView
+        plans={overviews.map((o) => ({
+          plan: o.plan,
+          projection: o.projection,
+          timeline: o.timeline,
+          summary: o.summary,
+        }))}
+        today={today}
+      />
     </section>
   );
 }

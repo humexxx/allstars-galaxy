@@ -10,7 +10,11 @@ import {
   YAxis,
 } from "recharts";
 
-import { computeProjectionWindow } from "@/lib/finance/chart-series";
+import {
+  buildCompareRows,
+  milestoneCrossings,
+  type PlanTimeline,
+} from "@/lib/finance/chart-series";
 import { DEFAULT_FINANCE_MILESTONES } from "@/lib/finance/milestones";
 
 import {
@@ -27,7 +31,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatCurrencyCompact } from "@/lib/utils/format";
 import type { ChartConfig } from "@/types/chart";
-import type { Projection } from "@/types/finance";
+import type { FinancePlan } from "@/types/finance";
 
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
@@ -382,35 +386,18 @@ export const ProjectionChart = memo(function ProjectionChart({
       };
     });
 
-    // Linear-interpolate the exact x where the trajectory hits each milestone.
-    // Lets us place the marker between two months when the cross happens
-    // mid-segment, so distinct milestones don't pile up on the same month.
-    // The tooltip captures "how far from today" so users can read the
-    // distance to (or since) the milestone without doing the math.
-    const cross: { x: number; milestone: number; tooltip: string }[] = [];
-    for (const m of milestones) {
-      for (let i = 1; i < rows.length; i++) {
-        const prev = rows[i - 1].rawValue;
-        const curr = rows[i].rawValue;
-        if (
-          (prev < m && curr >= m) ||
-          (prev > m && curr <= m) ||
-          // Starting exactly on the milestone (0 is the common case) counts.
-          (i === 1 && prev === m)
-        ) {
-          const span = curr - prev;
-          const t = span === 0 ? 0 : (m - prev) / span;
-          const x = i - 1 + Math.max(0, Math.min(1, t));
-          const monthsFromToday = x - pastCount;
-          cross.push({
-            x,
-            milestone: m,
-            tooltip: `${formatMoneyTick(m)} — ${formatTimeGap(monthsFromToday)}`,
-          });
-          break;
-        }
-      }
-    }
+    // Where the trajectory crosses each milestone (first crossing), with
+    // the distance from today counted in CALENDAR months between the points'
+    // dates — the x position alone miscounts when the recorded past has gaps.
+    const cross = milestoneCrossings(
+      points.map((p, i) => ({ date: p.date, value: rows[i].rawValue })),
+      pastCount,
+      milestones
+    ).map((c) => ({
+      x: c.x,
+      milestone: c.milestone,
+      tooltip: `${formatMoneyTick(c.milestone)} — ${formatTimeGap(c.monthsFromToday)}`,
+    }));
 
     return { data: rows, crossings: cross };
   }, [points, pastCount, ghostValues, portfolioValues, milestones]);
@@ -679,7 +666,7 @@ function renderTodayDot(color: string, boundary: number, dimmed: boolean) {
 function ComparePlansTooltip(props: {
   active?: boolean;
   payload?: Array<{ payload: Record<string, string | number | null> }>;
-  seriesByPlan: Array<{ proj: Projection; key: string }>;
+  seriesByPlan: Array<{ plan: ComparePlan; key: string }>;
 }) {
   const { active, payload, seriesByPlan } = props;
   if (!active || !payload?.length) return null;
@@ -690,14 +677,14 @@ function ComparePlansTooltip(props: {
     <div className="grid min-w-40 gap-1.5 rounded-lg border border-border/50 bg-popover px-2.5 py-1.5 text-xs shadow-xl">
       <div className="font-medium">{String(row.month ?? "")}</div>
       <div className="grid gap-1">
-        {seriesByPlan.map(({ proj, key }) => {
+        {seriesByPlan.map(({ plan, key }) => {
           const value = row[`${key}Past`] ?? row[`${key}Future`];
           if (value == null) return null;
           return (
             <TooltipRow
               key={key}
-              swatch={proj.plan.color}
-              label={proj.plan.name}
+              swatch={plan.color}
+              label={plan.name}
               value={formatMoneyFull(Number(value))}
               valueClass={Number(value) < 0 ? "text-destructive" : undefined}
             />
@@ -708,9 +695,20 @@ function ComparePlansTooltip(props: {
   );
 }
 
+/** What the comparison chart needs to know about a plan. */
+type ComparePlan = Pick<FinancePlan, "id" | "name" | "color">;
+
+/** One plan's line: its timeline (real past + calibrated future). */
+export type CompareChartSeries = {
+  plan: ComparePlan;
+  timeline: PlanTimeline;
+};
+
 type CompareChartProps = {
-  projections: Projection[];
+  series: CompareChartSeries[];
   metric: "netWorth" | "totalDebt";
+  /** The reader's calendar day — marks the solid/dashed boundary. */
+  today: Date;
   /** Tailwind height class(es) for the chart container. Defaults to `h-96`. */
   heightClass?: string;
   /** Tailwind class(es) applied to the legend wrapper — pass e.g.
@@ -720,15 +718,16 @@ type CompareChartProps = {
   /** Plan to emphasize: its line thickens while every other one fades back.
    *  Null (the default) draws all lines equally. */
   focusedPlanId?: string | null;
-  /** How many periods to plot. Omit to draw the whole projection. */
+  /** How many months to plot. Omit to draw every month any plan covers. */
   months?: number;
-  /** How many of those periods sit before today. Ignored without `months`. */
+  /** How many of those months sit before today. Ignored without `months`. */
   pastMonths?: number;
 };
 
 export function ComparePlansChart({
-  projections,
+  series,
   metric,
+  today,
   heightClass = "h-96",
   legendClassName,
   focusedPlanId = null,
@@ -737,55 +736,37 @@ export function ComparePlansChart({
 }: CompareChartProps) {
   // Every derived table below is O(periods × plans) and the parents re-render
   // on each focus change and metric switch, so it is computed once per input.
-  // The single-plan chart above does the same for its series.
   const { seriesByPlan, boundary, data, compareConfig, yAxisWidth } = useMemo(() => {
-    if (projections.length === 0) {
+    if (series.length === 0) {
       return { seriesByPlan: [], boundary: -1, data: [], compareConfig: {}, yAxisWidth: 32 };
     }
-    // Map each plan to a stable, CSS-safe series key (series0, series1, …) to avoid
-    // building CSS custom properties from raw UUIDs.
-    const seriesByPlan = projections.map((proj, i) => ({
-      proj,
-      key: `series${i}`,
-    }));
+    // Stable, CSS-safe series keys (series0, series1, …) rather than raw UUIDs.
+    const seriesByPlan = series.map((s, i) => ({ plan: s.plan, key: `series${i}` }));
 
-    const maxMonths = Math.max(...projections.map((p) => p.months.length));
+    // Rows are CALENDAR MONTHS and every plan contributes the point whose
+    // period starts in that month (see `buildCompareRows`). They used to be
+    // joined by array index, which drew a plan that started five months later
+    // five months early, and took the window and "today" from the first plan.
+    const { rows, boundary } = buildCompareRows(
+      series.map((s, i) => ({ key: `series${i}`, timeline: s.timeline })),
+      metric,
+      today,
+      months,
+      pastMonths
+    );
 
-    // Window the plot around today. Rows are indexed (not calendar-joined), so
-    // the boundary is derived from the first projection's dates — the same basis
-    // the row labels already use.
-    // The plans' own anchor day, not 1: with anchor 15 on the 10th, day-1
-    // bucketing put "today" one period ahead and painted a forecast period solid.
-    const anchorDay = projections[0].plan.confirmationDayOfMonth > 0
-      ? projections[0].plan.confirmationDayOfMonth
-      : 1;
-    const window = months
-      ? computeProjectionWindow(projections[0], months, new Date(), anchorDay, pastMonths)
-      : { startIndex: 0, count: maxMonths, pastCount: 0, todayIndex: 0 };
-    const boundary = months ? window.pastCount : -1;
-
-    const data = Array.from({ length: window.count }, (_, i) => {
-      const srcIdx = window.startIndex + i;
+    const data = rows.map((r, i) => {
       const row: Record<string, string | number | null> = {
-        month: projections[0].months[srcIdx]
-          ? MONTH_FORMATTER.format(projections[0].months[srcIdx].date)
-          : `M+${srcIdx + 1}`,
-        // Carried so the dot renderer can spot today's row from the payload
-        // rather than trusting Recharts' per-series index (the past series is
-        // null-padded, so the two don't line up).
+        month: MONTH_FORMATTER.format(r.month),
+        // Carried so the dot renderer can spot today's row from the payload.
         idx: i,
       };
-      for (const { proj, key } of seriesByPlan) {
-        const m = proj.months[srcIdx];
-        // Past the end of a shorter plan there is no value — null leaves the
-        // line where it stopped instead of dropping it to $0 along the axis.
-        const value = m ? Number(m[metric].toFixed(2)) : null;
-        // The boundary row carries BOTH keys so the solid and dashed segments
-        // meet instead of leaving a gap at today.
+      for (const { key } of seriesByPlan) {
+        // Null where a plan has no point (before it starts, after it ends):
+        // the line stops instead of dropping to $0.
+        const value = r.values[key] ?? null;
+        // The boundary row carries BOTH keys so solid and dashed meet.
         row[`${key}Past`] = boundary < 0 || i <= boundary ? value : null;
-        // Without a window there is no "today" to split on, so everything is one
-        // solid line and the dashed series stays empty (rendering both would lay
-        // a dashed line straight over the solid one).
         row[`${key}Future`] = boundary >= 0 && i >= boundary ? value : null;
       }
       return row;
@@ -794,8 +775,8 @@ export function ComparePlansChart({
     // Keyed by the real dataKeys: ChartLegendContent resolves labels through
     // `item.dataKey`, so a bare `series0` entry would leave the legend swatches
     // unlabelled now that each plan draws `series0Past` + `series0Future`.
-    const compareConfig: ChartConfig = seriesByPlan.reduce((acc, { proj, key }) => {
-      const entry = { label: proj.plan.name, color: proj.plan.color };
+    const compareConfig: ChartConfig = seriesByPlan.reduce((acc, { plan, key }) => {
+      const entry = { label: plan.name, color: plan.color };
       acc[`${key}Past`] = entry;
       acc[`${key}Future`] = entry;
       return acc;
@@ -817,9 +798,9 @@ export function ComparePlansChart({
     const yAxisWidth = Math.max(32, widestTick.length * 8 + 10);
 
     return { seriesByPlan, boundary, data, compareConfig, yAxisWidth };
-  }, [projections, metric, months, pastMonths]);
+  }, [series, metric, today, months, pastMonths]);
 
-  if (projections.length === 0) return null;
+  if (series.length === 0) return null;
 
   return (
     <ChartContainer config={compareConfig} className={cn(heightClass, "w-full")}>
@@ -853,11 +834,11 @@ export function ComparePlansChart({
             render order, which we re-sort so the focused line paints on top —
             so the legend would reshuffle every time the pointer moved. */}
         <ChartLegend
-          payload={seriesByPlan.map(({ proj, key }) => ({
+          payload={seriesByPlan.map(({ plan, key }) => ({
             dataKey: `${key}Past`,
-            value: proj.plan.name,
+            value: plan.name,
             type: "line" as const,
-            color: proj.plan.color,
+            color: plan.color,
           }))}
           content={<ChartLegendContent className={legendClassName} />}
         />
@@ -866,12 +847,12 @@ export function ComparePlansChart({
         {[...seriesByPlan]
           .sort(
             (a, b) =>
-              Number(a.proj.plan.id === focusedPlanId) -
-              Number(b.proj.plan.id === focusedPlanId)
+              Number(a.plan.id === focusedPlanId) -
+              Number(b.plan.id === focusedPlanId)
           )
-          .flatMap(({ proj, key }) => {
+          .flatMap(({ plan, key }) => {
             const dimmed =
-              focusedPlanId !== null && proj.plan.id !== focusedPlanId;
+              focusedPlanId !== null && plan.id !== focusedPlanId;
             const shared = {
               type: "monotone" as const,
               strokeWidth: dimmed ? 1.5 : focusedPlanId ? 3 : 2,

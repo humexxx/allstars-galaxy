@@ -108,30 +108,26 @@ import {
 } from "@/app/actions/finance-plans";
 import type { ActionResult } from "@/lib/actions/safe";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/utils/format";
+import { formatCurrency, moneySign } from "@/lib/utils/format";
+import { periodIndexForDate, periodRangeFor } from "@/lib/finance/period";
 import {
-  isDateInPeriod,
-  monthsInPeriod,
-  periodIndexForDate,
-  periodRangeFor,
-} from "@/lib/finance/period";
-import {
+  alignTodayPoint,
   buildChartSeries,
-  computeProjectionWindow,
+  describeDebtFree,
+  formatDebtFree,
   mapGhostValues,
   mapPortfolioValues,
-  type ChartPoint,
   type PlanHistoryPoint,
 } from "@/lib/finance/chart-series";
+import { planOccurrences } from "@/lib/finance/schedule";
+import { compareScenario } from "@/lib/finance/scenario";
 import type {
   DebtStrategy,
-  FinancePlanLineOverride,
   FinancePlanWithLines,
   InvestmentMethodOption,
   Projection,
-  ProjectionMonth,
-  RecurrenceType,
   StrategyComparison,
+  TodayState,
 } from "@/types/finance";
 
 /** Figures for one accounting period, previewed in the sidebar while hovering
@@ -198,43 +194,45 @@ function settle(promise: Promise<void>): void {
 type GhostPlan = {
   name: string;
   color: string;
-  /** The base plan's calibrated lines — lets today's ghost point be day-aware. */
-  plan?: FinancePlanWithLines;
+  /** The base plan projected from its plan as written (see page.tsx). */
   projection: Projection;
+  /** The base plan's day-aware position today, for the ghost's today point. */
+  today: TodayState | null;
 };
 
 type PlanEditorProps = {
   plan: FinancePlanWithLines;
-  /** Plan calibrated from the latest confirmation — drives the projection and
-   *  the "today" seed. Equals `plan` when there are no confirmations. The raw
-   *  `plan` is what the line/debt editors mutate. */
+  /** Plan calibrated from the latest confirmation (on its day) — drives every
+   *  figure. The raw `plan` is what the line/debt editors mutate. */
   baseline: FinancePlanWithLines;
   projection: Projection;
-  /** Raw (un-calibrated) projection — re-simulates the chart's past when there
-   *  are no real snapshots, so confirming the current period doesn't blank the
-   *  chart history. Equals `projection` when there are no confirmations. */
+  /** The plan as written — flows for hovered periods before the calibration
+   *  start. Equals `projection` while the plan has no confirmation. */
   pastProjection: Projection;
-  /** Real monthly snapshots for the chart's past (newest-last). */
+  /** The plan's own forecast as the chart's past, only while it has never been
+   *  confirmed; null once real confirmed values exist. */
+  simulatedPast: Projection | null;
+  /** Where the plan stands today — THE "today" figure (KPI, chart dot,
+   *  sidebar debt, confirmation pre-fill). */
+  today: TodayState | null;
+  /** Real snapshots for the chart's past (oldest first). */
   history: PlanHistoryPoint[];
   comparison: StrategyComparison | null;
   investmentMethods: InvestmentMethodOption[];
-  /** Base plan's calibrated projection when this plan is a scenario. */
+  /** Base plan overlay when this plan is a scenario. */
   ghost?: GhostPlan | null;
-  /** Recorded portfolio value history — the past segment of the chart's
-   *  portfolio series when the plan includes the portfolio. */
+  /** This scenario projected on the same footing as `ghost.projection`. */
+  scenarioBasis?: Projection | null;
+  /** Recorded portfolio value history — the past of the portfolio series. */
   portfolioHistory?: { date: Date; value: number }[];
-  /** Live portfolio value (0 when the plan excludes the portfolio). */
-  portfolioValue?: number;
   /** Net-worth milestones from the user's global preference. */
   milestones?: readonly number[];
   title: string;
   description: string;
   /** When set, renders the header's back link to here. */
   backHref?: string;
-  /** The server's clock for this render. "Today" — the current period, the
-   *  KPIs, the chart's today point — is derived from it rather than from
-   *  `new Date()` on each side, which rendered a different day on the client
-   *  than the server did around midnight. */
+  /** The reader's calendar day (UTC midnight), resolved on the server in their
+   *  time zone. Everything "today" derives from it. */
   now: Date;
 };
 
@@ -243,10 +241,13 @@ export function PlanEditor({
   baseline,
   projection,
   pastProjection,
+  simulatedPast,
+  today: todayState,
   history,
   comparison,
   investmentMethods,
   ghost = null,
+  scenarioBasis = null,
   portfolioHistory = [],
   milestones,
   title,
@@ -279,73 +280,53 @@ export function PlanEditor({
       });
     });
 
-  // "Today" snapshot — locate the projection row for the accounting period that
-  // actually CONTAINS today. Using months[0] (the plan/calibration START period)
-  // went stale as time passed or when the last confirmation was old, so the
-  // cards/gauge could show start-of-plan figures labelled "now". The projection
-  // is built from `baseline`, so index relative to its startMonth + anchor day.
+  // The accounting period that contains today — the one the sidebar's cycle
+  // figures describe. `today.periodIndex` is resolved by the engine (clamped
+  // into the horizon: the first period for a plan that hasn't started, the
+  // last for one that ended).
   const currentPeriodIdx = Math.min(
     Math.max(
       0,
-      periodIndexForDate(
-        baseline.startMonth,
-        baseline.confirmationDayOfMonth,
-        now
-      )
+      todayState?.periodIndex ??
+        periodIndexForDate(baseline.startMonth, baseline.confirmationDayOfMonth, now)
     ),
     Math.max(0, projection.months.length - 1)
   );
-  const today = projection.months[currentPeriodIdx];
-  // What the confirmation dialog pre-fills: the OPENING of the current period
-  // (= the previous period's close, or the calibrated initials for the first
-  // period). That is exactly what saveConfirmation stores as the new baseline;
-  // pre-filling the close made a blind Save jump the baseline a whole period.
-  const periodOpening =
-    currentPeriodIdx > 0
-      ? (() => {
-          const prev = projection.months[currentPeriodIdx - 1];
-          return {
-            savings: prev.savings,
-            investments: prev.investments,
-            debts: prev.debts.map((d) => ({
-              debtId: d.debtId,
-              name: d.name,
-              balance: d.balance,
-            })),
-          };
-        })()
-      : {
-          savings: parseFloat(baseline.initialSavings),
-          investments: parseFloat(baseline.initialInvestments),
-          debts: baseline.debts.map((d) => ({
-            debtId: d.id,
-            name: d.name,
-            balance: parseFloat(d.initialBalance),
-          })),
-        };
-  const income = today?.income ?? 0;
-  const livingExpenses = today?.expenses ?? 0;
-  const minDebtPayments = today?.scheduledDebtPayments ?? 0;
-  const extraDebtPayments = today?.extraDebtPayments ?? 0;
-  // Fixed monthly outflow: living + debt minimums. These are non-negotiable —
-  // they hit the bank whether or not we accelerate debt or invest. This is the
-  // value behind both the "Living expenses" card and the gauge numerator.
+  const current = projection.months[currentPeriodIdx];
+  // Pre-fill for the confirmation dialog: the projected position ON today.
+  // A confirmation records the balances on the day it's made, so saving the
+  // pre-fill unchanged leaves the forecast exactly where it was.
+  const confirmationPrefill = {
+    savings: todayState?.savings ?? parseFloat(baseline.initialSavings),
+    investments: todayState?.investments ?? parseFloat(baseline.initialInvestments),
+    debts:
+      todayState?.debts ??
+      baseline.debts.map((d) => ({
+        debtId: d.id,
+        name: d.name,
+        balance: parseFloat(d.initialBalance),
+      })),
+  };
+  // Cycle figures: the WHOLE current period's flows (occurrences dated before
+  // the as-of day are included here even though the confirmed balance
+  // already holds them — this is the period's budget, not what's left of it).
+  const income = current?.income ?? 0;
+  const livingExpenses = current?.expenses ?? 0;
+  const minDebtPayments = current?.scheduledDebtPayments ?? 0;
+  const extraDebtPayments = current?.extraDebtPayments ?? 0;
+  // Fixed outflow: living + debt minimums — the gauge numerator.
   const fixedOutflow = livingExpenses + minDebtPayments;
-  // Surplus = what's left after fixed obligations. This equals the projection's
-  // monthly `cashFlow` field by construction (income − expenses − minimums).
   const surplus = income - fixedOutflow;
-  // Surplus routing: extras come straight from the projection; the wealth
-  // bucket (= investments + savings contributions) is whatever survives.
-  const investmentsContribution = Math.max(0, today?.investmentsContribution ?? 0);
+  const investmentsContribution = Math.max(0, current?.investmentsContribution ?? 0);
   const toWealth = surplus - extraDebtPayments;
   const savingsContribution = Math.max(0, toWealth - investmentsContribution);
 
-  const totalDebt = today?.totalDebt ?? 0;
+  // Debt NOW (day-aware, the same figure as the chart's today dot), not the
+  // projected close of the period.
+  const totalDebt = todayState?.totalDebt ?? current?.totalDebt ?? 0;
 
   // Chart-hover preview: while the pointer is over a chart point, the sidebar
-  // cards show THAT period's figures (with a backdrop + period chip so it reads
-  // as "not the present"); on leave they snap back to the current period.
-  // Health/surplus are pure functions of these inputs, so nothing is stored.
+  // cards show THAT period's figures; on leave they snap back.
   const [hoverFigures, setHoverFigures] = useState<PeriodFigures | null>(null);
   const isPreview = hoverFigures !== null;
   const dIncome = hoverFigures?.income ?? income;
@@ -355,17 +336,12 @@ export function PlanEditor({
   const dSurplus = dIncome - dFixedOutflow;
   const dTotalDebt = hoverFigures?.totalDebt ?? totalDebt;
 
-  // Current accounting PERIOD. With an anchor day (confirmationDayOfMonth) the
-  // period runs anchor→anchor and straddles two calendar months — e.g. day 5
-  // ⇒ Apr 5 – May 4 — so every "what's active / when does it land" question
-  // below is answered against THIS window, not a single calendar month. Day 0/1
-  // falls back to the plain calendar month.
+  // Current accounting PERIOD (anchor→anchor, e.g. day 5 ⇒ Apr 5 – May 4).
   const anchorDay = plan.confirmationDayOfMonth;
   const effectiveAnchorDay = anchorDay > 0 ? anchorDay : 1;
   const isPeriodMode = anchorDay > 1;
-  const currentMonthDate = today?.date ?? new Date(plan.startMonth);
+  const currentMonthDate = current?.date ?? new Date(plan.startMonth);
   const currentPeriod = periodRangeFor(currentMonthDate, effectiveAnchorDay);
-  const planStartMonthDate = new Date(plan.startMonth);
 
   const fmtPeriodDay = (d: Date): string =>
     new Intl.DateTimeFormat("en-US", {
@@ -379,82 +355,38 @@ export function PlanEditor({
   const incomeLabel = isPeriodMode ? "Period income" : "Monthly income";
   const expensesLabel = isPeriodMode ? "Period expenses" : "Living expenses";
 
-  // The exact date a line lands on within the current period, or null when it
-  // doesn't hit this period. Walks the 1–2 calendar months the period touches,
-  // so an anchor-day window (e.g. a paycheque on the 2nd that belongs to the
-  // Apr 5 – May 4 period as May 2) resolves correctly instead of being judged
-  // against only the period's start month.
-  const lineHitDateInPeriod = (
-    line:
-      | FinancePlanWithLines["incomes"][number]
-      | FinancePlanWithLines["expenses"][number]
-  ): Date | null => {
-    if (line.kind === "one_time") {
-      const d = readDateParts(line.date);
-      if (!d) return null;
-      const dt = new Date(Date.UTC(d.year, d.month, d.day));
-      return isDateInPeriod(dt, currentPeriod) ? dt : null;
-    }
-    // Recurring: incomes carry a [startDate, endDate] window; expenses don't,
-    // so we read it defensively from the line type.
-    const startISO = "startDate" in line ? line.startDate : null;
-    const endISO = "endDate" in line ? line.endDate : null;
-    for (const { year, monthIdx } of monthsInPeriod(currentPeriod)) {
-      const hitDay = recurringHitDayInMonth(line, year, monthIdx, planStartMonthDate);
-      if (hitDay === null) continue;
-      const dt = new Date(Date.UTC(year, monthIdx, hitDay));
-      if (!isDateInPeriod(dt, currentPeriod)) continue;
-      if (!hitDayWithinWindow(year, monthIdx, hitDay, startISO, endISO)) continue;
-      return dt;
-    }
-    return null;
-  };
-
-  // Pair each active line with its hit date and sort chronologically — this
-  // drives both the breakdown dialogs' order and their per-line date hint.
-  const datedSorted = <L,>(
-    lines: readonly L[],
-    dateOf: (line: L) => Date | null
-  ): { line: L; date: Date }[] =>
-    lines
-      .map((line) => ({ line, date: dateOf(line) }))
-      .filter((r): r is { line: L; date: Date } => r.date !== null)
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-  const activeIncomeRows = datedSorted(plan.incomes, lineHitDateInPeriod);
-  const activeExpenseRows = datedSorted(plan.expenses, lineHitDateInPeriod);
-
-  // Debt payment day within the period (monthly debts hit once per period).
-  const debtHitDateInPeriod = (debtId: string): Date | null => {
-    const debt = plan.debts.find((d) => d.id === debtId);
-    if (!debt) return null;
-    for (const { year, monthIdx } of monthsInPeriod(currentPeriod)) {
-      const hitDay = recurringHitDayInMonth(debt, year, monthIdx, planStartMonthDate);
-      if (hitDay === null) continue;
-      const dt = new Date(Date.UTC(year, monthIdx, hitDay));
-      if (isDateInPeriod(dt, currentPeriod)) return dt;
-    }
-    return null;
-  };
-
-  // Debt-line lookups: scheduled payment-this-period (sorted by payment date)
-  // for the expenses breakdown, current balance for the total-debt breakdown.
-  const debtPaymentRows = (today?.debts ?? [])
-    .map((d) => ({
-      name: d.name,
-      amount: d.scheduledPayment,
-      date: debtHitDateInPeriod(d.debtId),
-    }))
-    .sort((a, b) => {
-      if (a.date && b.date) return a.date.getTime() - b.date.getTime();
-      if (a.date) return -1;
-      if (b.date) return 1;
-      return 0;
-    });
-  const debtBalanceLines = (today?.debts ?? []).map((d) => ({
+  // Breakdown lines: the SAME occurrences the engine counted for this period
+  // (overrides applied — skipped lines are gone, amounts swapped, moved dates
+  // honoured, a line hitting twice listed twice), so each list adds up to the
+  // figure above it.
+  const periodOccurrences = planOccurrences(
+    baseline,
+    currentPeriod.start,
+    currentPeriod.end
+  );
+  const occurrenceItems = (side: "income" | "expense") =>
+    periodOccurrences
+      .filter((o) => o.side === side)
+      .map((o) => ({
+        name: o.name,
+        amount: o.amount ?? 0,
+        hint: o.moved ? `${fmtPeriodDay(o.date)} · moved` : fmtPeriodDay(o.date),
+      }));
+  const incomeItems = occurrenceItems("income");
+  const expenseItems = occurrenceItems("expense");
+  // Debt minimums: each payment the engine made this period, on its day, at
+  // the amount actually paid (capped at the balance).
+  const debtPaymentItems = (current?.debts ?? [])
+    .flatMap((d) => d.payments.map((p) => ({ name: d.name, amount: p.amount, date: p.date })))
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .map((p) => ({ name: p.name, amount: p.amount, hint: fmtPeriodDay(p.date) }));
+  const debtBalanceLines = (todayState?.debts ?? current?.debts ?? []).map((d) => ({
     name: d.name,
     balance: d.balance,
   }));
+  const debtFreeLabel = formatDebtFree(
+    describeDebtFree(projection, effectiveAnchorDay, now)
+  );
 
   // Label for the confirmation dialog header. Period mode shows the window
   // (e.g. "Apr 5 – May 4"); calendar mode shows month + year.
@@ -611,6 +543,8 @@ export function PlanEditor({
         <ProjectionPanel
           projection={projection}
           pastProjection={pastProjection}
+          simulatedPast={simulatedPast}
+          today={todayState}
           baseline={baseline}
           history={history}
           ghost={ghost}
@@ -624,6 +558,7 @@ export function PlanEditor({
           calendar={
             <PlanCalendar
               plan={plan}
+              projections={[projection, pastProjection]}
               onAddIncome={(input) =>
                 wrap(() => addPlanIncomeAction(plan.id, input))
               }
@@ -695,11 +630,7 @@ export function PlanEditor({
                     description="Every income landing in the current period."
                     breakdown={
                       <BreakdownList
-                        items={activeIncomeRows.map((r) => ({
-                          name: r.line.name,
-                          amount: Number(r.line.monthlyAmount),
-                          hint: fmtPeriodDay(r.date),
-                        }))}
+                        items={incomeItems}
                         emptyLabel="No income sources yet"
                         total={income}
                       />
@@ -712,22 +643,8 @@ export function PlanEditor({
                     breakdown={
                       <BreakdownList
                         groups={[
-                          {
-                            heading: "Expenses",
-                            items: activeExpenseRows.map((r) => ({
-                              name: r.line.name,
-                              amount: Number(r.line.monthlyAmount),
-                              hint: fmtPeriodDay(r.date),
-                            })),
-                          },
-                          {
-                            heading: "Debt minimums",
-                            items: debtPaymentRows.map((d) => ({
-                              name: d.name,
-                              amount: d.amount,
-                              hint: d.date ? fmtPeriodDay(d.date) : undefined,
-                            })),
-                          },
+                          { heading: "Expenses", items: expenseItems },
+                          { heading: "Debt minimums", items: debtPaymentItems },
                         ]}
                         emptyLabel="No fixed obligations yet"
                         total={fixedOutflow}
@@ -737,15 +654,9 @@ export function PlanEditor({
                   <StatRow
                     label="Total debt"
                     value={dTotalDebt}
-                    description="What each debt stands at this period."
-                    tone={dTotalDebt > 0 ? "negative" : undefined}
-                    hint={
-                      plan.debts.length === 0
-                        ? undefined
-                        : projection.monthsToDebtFree !== null
-                        ? `Debt-free in ${projection.monthsToDebtFree} mo`
-                        : "Beyond horizon"
-                    }
+                    description="What each debt stands at today."
+                    tone={moneySign(dTotalDebt) > 0 ? "negative" : undefined}
+                    hint={plan.debts.length === 0 ? undefined : debtFreeLabel}
                     breakdown={
                       <BreakdownList
                         items={debtBalanceLines.map((d) => ({
@@ -761,8 +672,8 @@ export function PlanEditor({
                     label="Surplus"
                     value={dSurplus}
                     description="Income less fixed obligations, and where the rest goes."
-                    tone={dSurplus >= 0 ? "positive" : "negative"}
-                    hint={dSurplus < 0 ? "Spends more than it earns" : undefined}
+                    tone={moneySign(dSurplus) >= 0 ? "positive" : "negative"}
+                    hint={moneySign(dSurplus) < 0 ? "Spends more than it earns" : undefined}
                     breakdown={
                       <SurplusBreakdown
                         income={income}
@@ -779,8 +690,13 @@ export function PlanEditor({
               </CardContent>
             </Card>
             </div>
-            {ghost && (
-              <ScenarioDeltaCard ghost={ghost} projection={projection} />
+            {ghost && scenarioBasis && (
+              <ScenarioDeltaCard
+                ghost={ghost}
+                scenario={scenarioBasis}
+                anchorDay={effectiveAnchorDay}
+                today={now}
+              />
             )}
             {debtComparison && (
               <Card className="min-h-0">
@@ -798,6 +714,9 @@ export function PlanEditor({
                     currentStrategy={currentStrategy}
                     onChange={handleChangeStrategy}
                     pending={isPending}
+                    hadDebt={projection.hadDebt}
+                    anchorDay={effectiveAnchorDay}
+                    today={now}
                   />
                 </CardContent>
               </Card>
@@ -922,7 +841,7 @@ export function PlanEditor({
           planId={plan.id}
           planName={plan.name}
           monthLabel={confirmDialogLabel}
-          projected={periodOpening}
+          projected={confirmationPrefill}
           debts={plan.debts}
         />
       )}
@@ -993,24 +912,26 @@ function MainPlanToggle({
 }
 
 /**
- * Sidebar card for scenario plans: names the base plan and shows the
- * horizon-independent deltas — ending net worth and months-to-debt-free —
- * between this scenario and its base. Green when the scenario wins.
+ * Sidebar card for scenario plans: scenario vs base on ONE footing — both
+ * projected from their plans as written, compared at the same period (the
+ * earlier end date), debt-free compared as dates. Green when the scenario wins.
  */
 function ScenarioDeltaCard({
   ghost,
-  projection,
+  scenario,
+  anchorDay,
+  today,
 }: {
   ghost: GhostPlan;
-  projection: Projection;
+  scenario: Projection;
+  anchorDay: number;
+  today: Date;
 }) {
-  const netWorthDelta = projection.endingNetWorth - ghost.projection.endingNetWorth;
-  const scenarioDebtFree = projection.monthsToDebtFree;
-  const baseDebtFree = ghost.projection.monthsToDebtFree;
-  const debtFreeDelta =
-    scenarioDebtFree !== null && baseDebtFree !== null
-      ? scenarioDebtFree - baseDebtFree
-      : null;
+  const cmp = compareScenario(scenario, ghost.projection, anchorDay);
+  const netWorthDelta = cmp.netWorthDelta;
+  const debtFreeDelta = cmp.debtFreeDeltaMonths;
+  const atLabel = cmp.at ? FORMATTER.format(cmp.at) : null;
+  const scenarioDebtFree = formatDebtFree(describeDebtFree(scenario, anchorDay, today));
   return (
     <Card>
       <CardHeader>
@@ -1023,29 +944,37 @@ function ScenarioDeltaCard({
           <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="truncate">{ghost.name}</span>
         </Text>
-        <div className="flex items-center justify-between gap-3 border-t py-2">
-          <Text variant="small" as="span">Ending net worth</Text>
-          <Mono
-            className={cn(
-              "text-sm font-semibold",
-              netWorthDelta >= 0 ? "text-success" : "text-destructive"
-            )}
-          >
-            {netWorthDelta >= 0 ? "+" : "−"}
-            {formatCurrency(Math.abs(netWorthDelta))}
-          </Mono>
-        </div>
+        {netWorthDelta !== null && (
+          <div className="flex items-center justify-between gap-3 border-t py-2">
+            <Text variant="small" as="span">
+              Net worth{atLabel ? ` · ${atLabel}` : ""}
+            </Text>
+            <Mono
+              className={cn(
+                "text-sm font-semibold",
+                moneySign(netWorthDelta) >= 0 ? "text-success" : "text-destructive"
+              )}
+            >
+              {moneySign(netWorthDelta) === 0
+                ? "same"
+                : `${netWorthDelta > 0 ? "+" : "−"}${formatCurrency(Math.abs(netWorthDelta))}`}
+            </Mono>
+          </div>
+        )}
         {debtFreeDelta !== null && (
           <div className="flex items-center justify-between gap-3 border-t py-2">
-            <Text variant="small" as="span">Debt-free</Text>
+            <Text variant="small" as="span">
+              Debt-free
+            </Text>
             <Mono
               className={cn(
                 "text-sm font-semibold",
                 debtFreeDelta <= 0 ? "text-success" : "text-destructive"
               )}
+              title={scenarioDebtFree}
             >
               {debtFreeDelta === 0
-                ? "same"
+                ? "same month"
                 : `${Math.abs(debtFreeDelta)} mo ${debtFreeDelta < 0 ? "sooner" : "later"}`}
             </Mono>
           </div>
@@ -1057,12 +986,13 @@ function ScenarioDeltaCard({
 
 type ProjectionPanelProps = {
   projection: Projection;
-  /** Raw (un-calibrated) projection for re-simulating the chart's past when
-   *  there are no real snapshots. See PlanEditorProps. */
+  /** The plan as written — hover flows before the calibration start. */
   pastProjection: Projection;
-  /** Confirmation-calibrated plan — drives the projection and the "today"
-   *  partial-month seed (its startMonth/initials match `projection`). The Today
-   *  KPI uses it to back out income / expense that hasn't hit yet this month. */
+  /** The plan's own forecast as the past, only while never confirmed. */
+  simulatedPast: Projection | null;
+  /** Where the plan stands today (see PlanEditorProps). */
+  today: TodayState | null;
+  /** Confirmation-calibrated plan behind `projection`. */
   baseline: FinancePlanWithLines;
   /** Real monthly snapshots for the chart's past (newest-last). */
   history: PlanHistoryPoint[];
@@ -1224,308 +1154,11 @@ function useSwitcherSwipe(view: PlanView, goView: (next: PlanView) => void) {
   return { onTouchStart, onTouchEnd };
 }
 
-// Day-of-month a recurring line lands on in (year, monthIdx). Mirrors the
-// calendar's resolver so the Today snapshot can ask "did this entry hit
-// already?" using the exact same dates the user sees on their calendar.
-function nthWeekdayOfMonth(
-  year: number,
-  monthIdx: number,
-  weekOfMonth: number,
-  dayOfWeek: number
-): number {
-  const firstDow = new Date(year, monthIdx, 1).getDay();
-  const firstOccurrence = 1 + ((dayOfWeek - firstDow + 7) % 7);
-  let target = firstOccurrence + (weekOfMonth - 1) * 7;
-  const lastDay = new Date(year, monthIdx + 1, 0).getDate();
-  if (target > lastDay) target -= 7;
-  return target;
-}
-
-function recurringHitDayInMonth(
-  row: {
-    recurrenceType: RecurrenceType;
-    dayOfMonth: number | null;
-    weekOfMonth: number | null;
-    dayOfWeek: number | null;
-    intervalMonths: number | null;
-    recurrenceStart: string | null;
-  },
-  year: number,
-  monthIdx: number,
-  planStartMonth: Date
-): number | null {
-  if (
-    row.recurrenceType === "monthly_weekday" &&
-    row.weekOfMonth != null &&
-    row.dayOfWeek != null
-  ) {
-    return nthWeekdayOfMonth(year, monthIdx, row.weekOfMonth, row.dayOfWeek);
-  }
-  if (row.recurrenceType === "every_n_months") {
-    if (!row.intervalMonths || row.intervalMonths < 1) return null;
-    const start = row.recurrenceStart;
-    const anchor = start
-      ? (() => {
-          const [y, m] = start.split("-").map((p) => parseInt(p, 10));
-          return Number.isFinite(y) && Number.isFinite(m) ? y * 12 + (m - 1) : null;
-        })()
-      : planStartMonth.getUTCFullYear() * 12 + planStartMonth.getUTCMonth();
-    if (anchor === null) return null;
-    const mk = year * 12 + monthIdx;
-    if (mk < anchor || (mk - anchor) % row.intervalMonths !== 0) return null;
-  }
-  const lastDay = new Date(year, monthIdx + 1, 0).getDate();
-  return Math.min(row.dayOfMonth ?? 1, lastDay);
-}
-
-// Reads "YYYY-MM-DD" date strings (the form DB returns from `date` columns)
-// into a {y, m, d} triplet at UTC.
-function readDateParts(
-  iso: string | null
-): { year: number; month: number; day: number } | null {
-  if (!iso) return null;
-  const [y, m, d] = iso.split("-").map((p) => parseInt(p, 10));
-  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
-  return { year: y, month: m - 1, day: d };
-}
-
-type TodaySnapshot = {
-  netWorth: number;
-  totalDebt: number;
-  investments: number;
-  monthDate: Date;
-};
-
-/**
- * Puts the day-aware "today" figures onto the chart's today point.
- *
- * `buildChartSeries` draws today from `projection.months[today]`, which is the
- * period's CLOSE — every flow of the period already applied. The Today KPI is
- * `computeTodaySnapshot`, the position as of this morning. Both were labelled
- * "today" and disagreed by a paycheque, so the dot (and its tooltip) now carry
- * the KPI's numbers and the dashed forecast sets off from where the reader
- * actually stands. No-op when today falls outside the projection.
- */
-function alignTodayPoint(
-  series: { points: ChartPoint[]; pastCount: number },
-  snapshot: TodaySnapshot | null,
-  anchorDay: number
-): { points: ChartPoint[]; pastCount: number } {
-  if (!snapshot) return series;
-  const point = series.points[series.pastCount];
-  if (
-    !point ||
-    periodIndexForDate(point.date, anchorDay > 0 ? anchorDay : 1, snapshot.monthDate) !== 0
-  ) {
-    return series;
-  }
-  const points = series.points.slice();
-  points[series.pastCount] = {
-    ...point,
-    netWorth: snapshot.netWorth,
-    totalDebt: snapshot.totalDebt,
-    investments: snapshot.investments,
-  };
-  return { points, pastCount: series.pastCount };
-}
-
-// Day-precise window check: is the hit date (year, monthIdx, day) on/after
-// startISO and on/before endISO? Either bound is optional. Lives at module
-// level so the breakdown filter and the partial-month walker share semantics
-// with the server-side projection's `dateWithinWindow`.
-function hitDayWithinWindow(
-  year: number,
-  monthIdx: number,
-  hitDay: number,
-  startISO: string | null,
-  endISO: string | null
-): boolean {
-  const hitMs = Date.UTC(year, monthIdx, hitDay);
-  const s = readDateParts(startISO);
-  if (s && Date.UTC(s.year, s.month, s.day) > hitMs) return false;
-  const e = readDateParts(endISO);
-  if (e && Date.UTC(e.year, e.month, e.day) < hitMs) return false;
-  return true;
-}
-
-/**
- * Computes today's net worth as a *partial-period* snapshot built from
- * scratch — NOT from the projection's end-of-period aggregate. This matches
- * the user's mental model: "what does my bank/debt look like right now,
- * given what has actually hit so far this period?".
- *
- * Period-aware: the accounting period that contains today is located via
- * `periodIndexForDate` and spans 1–2 calendar months (anchored on the plan's
- * confirmation day). We walk EACH touched month and apply only the hits that
- * fall inside the period AND on/before today — so a day-15 anchor with today on
- * the 6th correctly settles the part of the period that already elapsed in the
- * previous calendar month.
- *
- * Algorithm:
- *   1. Seed savings/investments/per-debt balances from the previous period's
- *      close (= this period's opening). For period 0, use the plan's initials.
- *   2. Walk every income/expense line; if a hit lands in the period and ≤ today,
- *      apply it as cash in/out of savings.
- *   3. For each debt, if its scheduled payment has hit in the period by today,
- *      subtract the scheduled payment from savings and swap the debt balance
- *      for the projection's end-of-period value (captures interest + extra).
- *      Payments still ahead leave the balance at period-opening.
- *   4. Net worth = savings + investments + portfolio − total debt.
- *
- * Trade-offs: extra payments only happen at period-end (after surplus routing)
- * so subtracting them from savings mid-period would be wrong; instead they stay
- * in the debt balance via the end-of-period swap. Mid-period interest accrual
- * is approximated by trusting the projection's end-of-period balance once the
- * payment has hit; before that, the opening balance carries no interest (mild
- * under-statement for high-rate debts early in a period, accepted to keep the
- * snapshot O(lines) instead of a full re-walk).
- */
-function computeTodaySnapshot(
-  plan: FinancePlanWithLines,
-  projection: Projection,
-  anchorDay: number,
-  now: Date
-): TodaySnapshot | null {
-  const planStart = new Date(plan.startMonth);
-  const monthOffset = periodIndexForDate(planStart, anchorDay, now);
-
-  if (monthOffset < 0 || monthOffset >= projection.months.length) return null;
-
-  const currentMonth = projection.months[monthOffset];
-  // The accounting period that contains today (1–2 calendar months).
-  const period = periodRangeFor(now, anchorDay > 0 ? anchorDay : 1);
-  const periodStartMs = period.start.getTime();
-  const periodEndMs = period.end.getTime();
-  const nowMs = Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate()
-  );
-  const touchedMonths = monthsInPeriod(period);
-
-  // A hit on (year, monthIdx, day) counts when it lands inside the current
-  // period AND has already occurred (on/before today).
-  const hitIsLive = (year: number, monthIdx: number, day: number): boolean => {
-    const ms = Date.UTC(year, monthIdx, day);
-    return ms >= periodStartMs && ms <= periodEndMs && ms <= nowMs;
-  };
-
-  // Seed from the previous period's close (= this period's opening). For the
-  // first period, fall back to the plan's initial figures.
-  const prevMonth = monthOffset > 0 ? projection.months[monthOffset - 1] : null;
-  let savings = prevMonth ? prevMonth.savings : parseFloat(plan.initialSavings);
-  const investments = prevMonth
-    ? prevMonth.investments
-    : parseFloat(plan.initialInvestments);
-  const debtBalances = new Map<string, number>();
-  if (prevMonth) {
-    for (const d of prevMonth.debts) debtBalances.set(d.debtId, d.balance);
-  } else {
-    for (const d of plan.debts) {
-      debtBalances.set(d.id, parseFloat(d.initialBalance));
-    }
-  }
-
-  // Per-month overrides, indexed the way projectPlan indexes them. Without
-  // this the Today KPI (and the chart's today dot, which copies it) still
-  // charged a rent the user had skipped for this month.
-  const overrideIndex = new Map<string, FinancePlanLineOverride>();
-  for (const o of plan.overrides ?? []) {
-    const [y, mo] = o.monthYear.slice(0, 10).split("-").map(Number);
-    if (!y || !mo) continue;
-    overrideIndex.set(`${o.parentSide}:${o.parentId}:${y * 12 + (mo - 1)}`, o);
-  }
-  const overriddenAmount = (
-    side: "income" | "expense",
-    id: string,
-    year: number,
-    monthIdx: number,
-    base: number
-  ): number | null => {
-    const ov = overrideIndex.get(`${side}:${id}:${year * 12 + monthIdx}`);
-    if (!ov) return base;
-    if (ov.action === "skip") return null;
-    if (ov.action === "amount" && ov.monthlyAmount !== null) {
-      return Math.max(0, Number(ov.monthlyAmount));
-    }
-    return base;
-  };
-
-  // ---- Income / expense cashflow ------------------------------------------
-  for (const inc of plan.incomes) {
-    if (inc.kind === "one_time") {
-      const d = readDateParts(inc.date);
-      if (d && hitIsLive(d.year, d.month, d.day)) {
-        savings += Number(inc.monthlyAmount);
-      }
-      continue;
-    }
-    for (const cm of touchedMonths) {
-      const hitDay = recurringHitDayInMonth(inc, cm.year, cm.monthIdx, planStart);
-      if (hitDay === null || !hitIsLive(cm.year, cm.monthIdx, hitDay)) continue;
-      if (
-        !hitDayWithinWindow(cm.year, cm.monthIdx, hitDay, inc.startDate, inc.endDate)
-      ) {
-        continue;
-      }
-      const amount = overriddenAmount("income", inc.id, cm.year, cm.monthIdx, Number(inc.monthlyAmount));
-      if (amount === null) continue;
-      savings += amount;
-    }
-  }
-  for (const exp of plan.expenses) {
-    if (exp.kind === "one_time") {
-      const d = readDateParts(exp.date);
-      if (d && hitIsLive(d.year, d.month, d.day)) {
-        savings -= Number(exp.monthlyAmount);
-      }
-      continue;
-    }
-    // Expenses don't carry a start/end window in the schema; the hit check is
-    // sufficient.
-    for (const cm of touchedMonths) {
-      const hitDay = recurringHitDayInMonth(exp, cm.year, cm.monthIdx, planStart);
-      if (hitDay === null || !hitIsLive(cm.year, cm.monthIdx, hitDay)) continue;
-      const amount = overriddenAmount("expense", exp.id, cm.year, cm.monthIdx, Number(exp.monthlyAmount));
-      if (amount === null) continue;
-      savings -= amount;
-    }
-  }
-
-  // ---- Debt payments that have hit so far this period ----------------------
-  for (const debt of plan.debts) {
-    const eomDebt = currentMonth.debts.find((d) => d.debtId === debt.id);
-    if (!eomDebt) continue;
-    let hit = false;
-    for (const cm of touchedMonths) {
-      const hitDay = recurringHitDayInMonth(debt, cm.year, cm.monthIdx, planStart);
-      if (hitDay !== null && hitIsLive(cm.year, cm.monthIdx, hitDay)) {
-        hit = true;
-        break;
-      }
-    }
-    if (!hit) continue;
-    // Scheduled payment already left the bank this period. Extra payments
-    // happen at period-end (after surplus routing) so we don't deduct them
-    // here — but we trust the projection's end-of-period balance for accuracy
-    // (captures interest + extra).
-    savings -= eomDebt.scheduledPayment;
-    debtBalances.set(debt.id, eomDebt.balance);
-  }
-
-  const totalDebt = Array.from(debtBalances.values()).reduce(
-    (sum, b) => sum + Math.max(0, b),
-    0
-  );
-  const portfolioValue = currentMonth.portfolioValue ?? 0;
-
-  return {
-    netWorth: savings + investments + portfolioValue - totalDebt,
-    totalDebt,
-    investments,
-    monthDate: currentMonth.date,
-  };
-}
+const TODAY_LABEL = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
 
 /**
  * Projection chart with a header that surfaces the headline number — how much
@@ -1536,6 +1169,8 @@ function computeTodaySnapshot(
 function ProjectionPanel({
   projection,
   pastProjection,
+  simulatedPast,
+  today: todayState,
   baseline,
   history,
   calendar,
@@ -1574,40 +1209,17 @@ function ProjectionPanel({
   // period that actually contains today, not a raw calendar-month bucket.
   const anchorDay = baseline.confirmationDayOfMonth;
 
-  // Window with the active horizon: ~25% past + 75% future. Edges shift when
-  // the plan started recently so we never look past data we don't have. Used
-  // for the KPIs + the monthly-breakdown table (both are forecast views).
-  //
-  // Everything below is memoised: hovering the chart re-renders the editor on
-  // every point, and without it the series (and every figure derived from it)
-  // was rebuilt each time, handing the chart new props mid-hover.
-  const window = useMemo(
-    () => computeProjectionWindow(projection, horizonMonths, now, anchorDay),
-    [projection, horizonMonths, now, anchorDay]
-  );
-
-  // Day-aware "today" net worth: strips income/expense from the period-end
-  // value when they haven't actually hit yet (e.g. paycheque on day 30 when
-  // today is day 25). Null when we're outside the projection range.
-  // Refined against the CALIBRATED baseline — its startMonth + initials match
-  // the projection we're refining, so period indexing and the period-0 seed
-  // line up with confirmed reality.
-  const todaySnapshot = useMemo(
-    () => computeTodaySnapshot(baseline, projection, anchorDay, now),
-    [baseline, projection, anchorDay, now]
-  );
-
-  // Chart series: real snapshots for the past, calibrated projection for the
-  // future. Falls back to the projection-only window when there's no history.
-  // Today's point carries the same figures as the Today KPI.
+  // Chart series: real snapshots (as period closes) for the past, the
+  // calibrated projection from today's period on; today's point carries the
+  // day-aware position. The End KPI and the table read this same series.
   const chartSeries = useMemo(
     () =>
       alignTodayPoint(
-        buildChartSeries(history, projection, horizonMonths, now, anchorDay, pastProjection),
-        todaySnapshot,
+        buildChartSeries(history, projection, horizonMonths, now, anchorDay, simulatedPast),
+        todayState,
         anchorDay
       ),
-    [history, projection, horizonMonths, now, anchorDay, pastProjection, todaySnapshot]
+    [history, projection, horizonMonths, now, anchorDay, simulatedPast, todayState]
   );
 
   // Scenario ghost: the base plan's net worth aligned to this chart's points
@@ -1617,15 +1229,13 @@ function ProjectionPanel({
   const ghostValues = useMemo<(number | null)[] | undefined>(() => {
     if (!ghost || !showGhost) return undefined;
     const values = mapGhostValues(chartSeries.points, ghost.projection, anchorDay);
-    // The main series' today point is the day-aware snapshot (see
-    // `alignTodayPoint`); the ghost has to be read the same way or the two
-    // plans show a spurious delta at today equal to the flows still to come.
-    if (ghost.plan && values[chartSeries.pastCount] != null) {
-      const snap = computeTodaySnapshot(ghost.plan, ghost.projection, anchorDay, now);
-      if (snap) values[chartSeries.pastCount] = snap.netWorth;
+    // The main series' today point is the day-aware position; the ghost is
+    // read the same way, or the two show a spurious delta at today.
+    if (ghost.today?.status === "in-range" && values[chartSeries.pastCount] != null) {
+      values[chartSeries.pastCount] = ghost.today.netWorth;
     }
     return values;
-  }, [ghost, showGhost, chartSeries.points, chartSeries.pastCount, anchorDay, now]);
+  }, [ghost, showGhost, chartSeries.points, chartSeries.pastCount, anchorDay]);
 
   // Portfolio series: recorded snapshots for the past, the projection's
   // (growing) portfolioValue for the future. Only when the plan includes it.
@@ -1691,21 +1301,6 @@ function ProjectionPanel({
     [onHoverFigures, chartSeries.pastCount, pointFigures]
   );
 
-  // Full projection month behind each chart point, resolved by accounting
-  // PERIOD (not calendar month) for the same reason as `pointFigures`.
-  const monthByPoint = useMemo<(ProjectionMonth | null)[]>(() => {
-    const effAnchor = anchorDay > 0 ? anchorDay : 1;
-    return chartSeries.points.map((p) => {
-      const inSamePeriod = (m: { date: Date }) =>
-        periodIndexForDate(m.date, effAnchor, p.date) === 0;
-      return (
-        projection.months.find(inSamePeriod) ??
-        pastProjection.months.find(inSamePeriod) ??
-        null
-      );
-    });
-  }, [chartSeries.points, projection, pastProjection, anchorDay]);
-
   const [comparedIdx, setComparedIdx] = useState<number | null>(null);
 
   // Clicking today means "record what actually happened", not "preview" — so it
@@ -1721,33 +1316,50 @@ function ProjectionPanel({
     },
     [chartSeries.pastCount, onConfirmToday]
   );
-  const todayMonthIdx = window.startIndex + window.pastCount;
-  const todayMonth = projection.months[todayMonthIdx];
-  // "Next period" forecast — the projection for the period right after today.
-  // Falls back to undefined when we're already at the last period of the plan
-  // (the KPI is hidden in that case).
-  const nextMonth = projection.months[todayMonthIdx + 1];
-  const futureMonth =
-    projection.months[window.startIndex + window.count - 1] ?? todayMonth;
-  // Falls back to the period close when today sits outside the projection.
-  const today = todaySnapshot?.netWorth ?? todayMonth?.netWorth ?? 0;
-  const next = nextMonth?.netWorth;
-  const future = futureMonth?.netWorth ?? today;
+  const effAnchor = anchorDay > 0 ? anchorDay : 1;
+  const todayPoint = chartSeries.points[chartSeries.pastCount];
+  const nextPoint = chartSeries.points[chartSeries.pastCount + 1];
+  // End = the chart's last point, so the header, the chart and the table end
+  // on the same period.
+  const endPoint = chartSeries.points[chartSeries.points.length - 1];
+  const today = todayState?.netWorth ?? todayPoint?.netWorth ?? 0;
+  const next = nextPoint?.netWorth;
+  const future = endPoint?.netWorth ?? today;
+  const todayCaption =
+    todayState?.status === "before-start"
+      ? `Starts ${FORMATTER.format(todayState.periodStart)}`
+      : todayState?.status === "after-end"
+        ? `Ended ${FORMATTER.format(todayState.periodStart)}`
+        : `Today ${TODAY_LABEL.format(now)}`;
 
-  // Horizon-end delta vs the base plan (scenario only) — matched by period so
-  // a different base startMonth still compares the same calendar window.
+  // Horizon-end delta vs the base plan (scenario only) — matched by period.
   const ghostFuture =
-    ghost && futureMonth
+    ghost && endPoint
       ? ghost.projection.months.find(
-          (m) =>
-            periodIndexForDate(
-              m.date,
-              anchorDay > 0 ? anchorDay : 1,
-              futureMonth.date
-            ) === 0
+          (m) => periodIndexForDate(m.date, effAnchor, endPoint.date) === 0
         )?.netWorth ?? null
       : null;
   const endDelta = ghostFuture !== null ? future - ghostFuture : null;
+
+  // Table rows: the projection periods the chart window covers.
+  const tableRange = useMemo(() => {
+    const first = chartSeries.points[0];
+    const last = chartSeries.points[chartSeries.points.length - 1];
+    if (!first || !last) return { startIndex: 0, count: 0 };
+    const startIndex = projection.months.findIndex(
+      (m) => periodIndexForDate(first.date, effAnchor, m.date) >= 0
+    );
+    if (startIndex < 0) return { startIndex: 0, count: 0 };
+    let endIndex = startIndex;
+    for (let i = startIndex; i < projection.months.length; i++) {
+      if (periodIndexForDate(last.date, effAnchor, projection.months[i].date) <= 0) {
+        endIndex = i;
+      }
+    }
+    return { startIndex, count: endIndex - startIndex + 1 };
+  }, [chartSeries.points, projection, effAnchor]);
+
+  const comparedPoint = comparedIdx !== null ? chartSeries.points[comparedIdx] : null;
 
   // Forecast header (Today / Next / End KPIs + horizon picker) — shared by the
   // Graph and Table views (both are horizon-driven forecast views). It sits in
@@ -1757,28 +1369,28 @@ function ProjectionPanel({
       <div className="flex flex-wrap items-end gap-x-6 gap-y-1">
         <div>
           <Eyebrow size="sm" as="p">
-            Today {todayMonth ? FORMATTER.format(todayMonth.date) : ""}
+            {todayCaption}
           </Eyebrow>
           <Mono
             as="p"
             className={cn(
               "text-xl font-semibold tabular-nums sm:text-2xl",
-              today >= 0 ? "text-success" : "text-destructive"
+              moneySign(today) >= 0 ? "text-success" : "text-destructive"
             )}
           >
             {formatCurrency(today)}
           </Mono>
         </div>
-        {nextMonth && next !== undefined && (
+        {nextPoint && next !== undefined && (
           <div>
             <Eyebrow size="sm" as="p">
-              Next {FORMATTER.format(nextMonth.date)}
+              Next {FORMATTER.format(nextPoint.date)}
             </Eyebrow>
             <Mono
               as="p"
               className={cn(
                 "text-sm font-semibold",
-                next >= 0 ? "text-success" : "text-destructive"
+                moneySign(next) >= 0 ? "text-success" : "text-destructive"
               )}
             >
               {formatCurrency(next)}
@@ -1787,13 +1399,13 @@ function ProjectionPanel({
         )}
         <div>
           <Eyebrow size="sm" as="p">
-            End {futureMonth ? FORMATTER.format(futureMonth.date) : ""}
+            End {endPoint ? FORMATTER.format(endPoint.date) : ""}
           </Eyebrow>
           <Mono
             as="p"
             className={cn(
               "text-sm font-semibold",
-              future >= 0 ? "text-success" : "text-destructive"
+              moneySign(future) >= 0 ? "text-success" : "text-destructive"
             )}
           >
             {formatCurrency(future)}
@@ -1804,10 +1416,10 @@ function ProjectionPanel({
               as="p"
               className={cn(
                 "text-2xs",
-                endDelta >= 0 ? "text-success" : "text-destructive"
+                moneySign(endDelta) >= 0 ? "text-success" : "text-destructive"
               )}
             >
-              {endDelta >= 0 ? "+" : "−"}
+              {moneySign(endDelta) >= 0 ? "+" : "−"}
               {formatCurrency(Math.abs(endDelta))} vs base
             </Text>
           )}
@@ -1922,8 +1534,8 @@ function ProjectionPanel({
                   ) : (
                     <ProjectionTable
                       projection={projection}
-                      monthsToShow={window.count}
-                      startIndex={window.startIndex}
+                      monthsToShow={tableRange.count}
+                      startIndex={tableRange.startIndex}
                     />
                   )}
                 </CardContent>
@@ -1946,20 +1558,11 @@ function ProjectionPanel({
         onOpenChange={(next) => {
           if (!next) setComparedIdx(null);
         }}
-        todayLabel={
-          chartSeries.points[chartSeries.pastCount]
-            ? HOVER_PERIOD_LABEL.format(
-                chartSeries.points[chartSeries.pastCount].date
-              )
-            : "Today"
-        }
-        todayMonth={monthByPoint[chartSeries.pastCount] ?? null}
-        targetLabel={
-          comparedIdx !== null && chartSeries.points[comparedIdx]
-            ? HOVER_PERIOD_LABEL.format(chartSeries.points[comparedIdx].date)
-            : ""
-        }
-        targetMonth={comparedIdx !== null ? monthByPoint[comparedIdx] : null}
+        anchorDay={effAnchor}
+        todayLabel={todayCaption}
+        todayPoint={todayPoint ?? null}
+        targetLabel={comparedPoint ? HOVER_PERIOD_LABEL.format(comparedPoint.date) : ""}
+        targetPoint={comparedPoint}
       />
     </div>
   );
@@ -1970,11 +1573,17 @@ function StrategyPicker({
   currentStrategy,
   onChange,
   pending,
+  hadDebt,
+  anchorDay,
+  today,
 }: {
   comparison: StrategyComparison;
   currentStrategy: DebtStrategy;
   onChange: (next: DebtStrategy) => Promise<void>;
   pending: boolean;
+  hadDebt: boolean;
+  anchorDay: number;
+  today: Date;
 }) {
   const rows: { key: DebtStrategy; data: StrategyComparison["avalanche"] }[] = [
     { key: "avalanche", data: comparison.avalanche },
@@ -1986,59 +1595,68 @@ function StrategyPicker({
     comparison.snowball.totalInterestPaid,
     comparison.none.totalInterestPaid
   );
+  // Every row is run with the plan's own surplus-to-debts share, so it
+  // describes what selecting it would actually do.
+  const surplusPct = Math.round(comparison.surplusToDebtsPercent * 100);
 
   return (
-    // Not `disabled` while saving: that would disable the radio that has just
-    // taken focus and drop the keyboard to <body>. Input is ignored instead.
-    <RadioGroup
-      value={currentStrategy}
-      onValueChange={(v) => {
-        if (!pending) settle(onChange(v as DebtStrategy));
-      }}
-      aria-labelledby="debt-strategy-heading"
-      aria-busy={pending}
-      className="gap-1.5"
-    >
-      {rows.map(({ key, data }) => {
-        // What this option costs against the cheapest one — the number that
-        // actually decides it, so it sits on the row instead of behind a click.
-        const costVsBest = data.totalInterestPaid - minInterest;
-        const isCheapest = costVsBest < 0.5;
-        const id = `debt-strategy-${key}`;
-        return (
-          <label
-            key={key}
-            htmlFor={id}
-            className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-2 transition hover:border-foreground/60 hover:bg-muted/30 has-data-checked:border-foreground has-data-checked:bg-muted/40"
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <RadioGroupItem id={id} value={key} />
-              <span className="truncate text-xs font-medium">
-                {STRATEGY_LABEL[key]}
-              </span>
-              {isCheapest && (
-                <Zap className="size-3 shrink-0 text-warning" aria-hidden="true" />
-              )}
-            </span>
-            <span className="flex shrink-0 flex-col items-end leading-tight">
-              <Mono className="text-2xs text-muted-foreground">
-                {data.monthsToDebtFree !== null
-                  ? `${data.monthsToDebtFree} mo`
-                  : "beyond horizon"}
-              </Mono>
-              <Mono
-                className={cn(
-                  "text-2xs",
-                  isCheapest ? "text-success" : "text-muted-foreground"
+    <div className="flex flex-col gap-2">
+      <Text variant="small" as="p" className="text-2xs">
+        {surplusPct === 0
+          ? "0% of surplus goes to debt, so the strategies only decide where a paid-off debt's minimum rolls over. Turn on “Apply surplus to debts” in Settings to accelerate."
+          : `With ${surplusPct}% of each period's surplus going to debt, plus paid-off minimums rolled over.`}
+      </Text>
+      {/* Not `disabled` while saving: that would disable the radio that has
+          just taken focus and drop the keyboard to <body>. */}
+      <RadioGroup
+        value={currentStrategy}
+        onValueChange={(v) => {
+          if (!pending) settle(onChange(v as DebtStrategy));
+        }}
+        aria-labelledby="debt-strategy-heading"
+        aria-busy={pending}
+        className="gap-1.5"
+      >
+        {rows.map(({ key, data }) => {
+          // What this option costs against the cheapest one — the number that
+          // actually decides it, so it sits on the row instead of behind a click.
+          const costVsBest = data.totalInterestPaid - minInterest;
+          const isCheapest = costVsBest < 0.5;
+          const id = `debt-strategy-${key}`;
+          const debtFree = formatDebtFree(
+            describeDebtFree({ hadDebt, debtFreeDate: data.debtFreeDate }, anchorDay, today)
+          );
+          return (
+            <label
+              key={key}
+              htmlFor={id}
+              className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-2 transition hover:border-foreground/60 hover:bg-muted/30 has-data-checked:border-foreground has-data-checked:bg-muted/40"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <RadioGroupItem id={id} value={key} />
+                <span className="truncate text-xs font-medium">
+                  {STRATEGY_LABEL[key]}
+                </span>
+                {isCheapest && (
+                  <Zap className="size-3 shrink-0 text-warning" aria-hidden="true" />
                 )}
-              >
-                {isCheapest ? "cheapest" : `+${formatCurrency(costVsBest)}`}
-              </Mono>
-            </span>
-          </label>
-        );
-      })}
-    </RadioGroup>
+              </span>
+              <span className="flex shrink-0 flex-col items-end leading-tight">
+                <Mono className="text-2xs text-muted-foreground">{debtFree}</Mono>
+                <Mono
+                  className={cn(
+                    "text-2xs",
+                    isCheapest ? "text-success" : "text-muted-foreground"
+                  )}
+                >
+                  {isCheapest ? "cheapest" : `+${formatCurrency(costVsBest)}`}
+                </Mono>
+              </span>
+            </label>
+          );
+        })}
+      </RadioGroup>
+    </div>
   );
 }
 
@@ -2219,11 +1837,11 @@ function SurplusBreakdown({
       </ul>
       <div className="flex items-baseline justify-between gap-4 border-t pt-2 font-semibold">
         <span>= Surplus</span>
-        <Mono className={surplus >= 0 ? "text-success" : "text-destructive"}>
+        <Mono className={moneySign(surplus) >= 0 ? "text-success" : "text-destructive"}>
           {formatCurrency(surplus)}
         </Mono>
       </div>
-      {surplus > 0 && (
+      {moneySign(surplus) > 0 && (
         <ul className="flex flex-col gap-1.5 border-t pt-2 text-muted-foreground">
           <li className="flex items-baseline justify-between gap-4">
             <span>→ Extra debt</span>

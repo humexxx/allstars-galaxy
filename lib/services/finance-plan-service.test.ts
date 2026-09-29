@@ -20,6 +20,7 @@ vi.mock("./ownership", () => ({
 
 import { db } from "@/db";
 import {
+  cloneOverrides,
   compareDebtStrategies,
   deriveFinanceMood,
   projectPlan,
@@ -850,5 +851,49 @@ describe("line updates on a line from another plan", () => {
     await expect(
       updateIncome("user-1", "plan-1", { ...line, recurrenceType: "monthly_day" } as never)
     ).resolves.toBe(row);
+  });
+});
+
+describe("cloneOverrides (F6)", () => {
+  it("re-points every override at the clone's lines and drops dangling ones", () => {
+    const idMap = new Map([
+      ["income:inc-old", "inc-new"],
+      ["expense:rent-old", "rent-new"],
+    ]);
+    const rows = cloneOverrides(
+      [
+        buildOverride({ parentSide: "income", parentId: "inc-old", action: "skip", monthYear: "2026-03-01" }),
+        buildOverride({
+          parentSide: "expense",
+          parentId: "rent-old",
+          action: "reschedule",
+          monthYear: "2026-04-01",
+          date: "2026-04-03",
+        }),
+        buildOverride({ parentSide: "debt", parentId: "gone", action: "skip" }),
+      ],
+      "clone-plan",
+      idMap
+    );
+    expect(rows).toEqual([
+      {
+        planId: "clone-plan",
+        parentSide: "income",
+        parentId: "inc-new",
+        monthYear: "2026-03-01",
+        action: "skip",
+        date: null,
+        monthlyAmount: null,
+      },
+      {
+        planId: "clone-plan",
+        parentSide: "expense",
+        parentId: "rent-new",
+        monthYear: "2026-04-01",
+        action: "reschedule",
+        date: "2026-04-03",
+        monthlyAmount: null,
+      },
+    ]);
   });
 });

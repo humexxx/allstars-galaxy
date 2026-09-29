@@ -31,10 +31,12 @@ vi.mock("@/db", () => ({
 // Dependencies pulled in by the service. We stub them at the import boundary
 // so we never execute the real projection / snapshot machinery.
 const getProjectedStateForMonthMock = vi.fn();
+const getProjectedStateOnDayMock = vi.fn();
 const createConfirmationSnapshotMock = vi.fn();
 vi.mock("./finance-snapshot-service", () => ({
   getProjectedStateForMonth: (...args: unknown[]) =>
     getProjectedStateForMonthMock(...args),
+  getProjectedStateOnDay: (...args: unknown[]) => getProjectedStateOnDayMock(...args),
   createConfirmationSnapshot: (...args: unknown[]) =>
     createConfirmationSnapshotMock(...args),
 }));
@@ -50,6 +52,7 @@ import type {
   FinancePlanDebtConfirmation,
   FinancePlanWithLines,
   ProjectionMonth,
+  TodayState,
 } from "@/types/finance";
 
 const PLAN_ID = "11111111-1111-1111-1111-111111111111";
@@ -106,6 +109,22 @@ function buildProjectionMonth(): ProjectionMonth {
     investmentsInterest: 0,
     totalDebt: 0,
     portfolioValue: 0,
+    netWorth: 17000,
+    preAsOfCashFlow: 0,
+    debts: [],
+  };
+}
+
+function buildTodayState(): TodayState {
+  return {
+    status: "in-range",
+    date: new Date(Date.UTC(2026, 4, 12)),
+    periodIndex: 4,
+    periodStart: new Date(Date.UTC(2026, 4, 1)),
+    savings: 12000,
+    investments: 5000,
+    portfolioValue: 0,
+    totalDebt: 0,
     netWorth: 17000,
     debts: [],
   };
@@ -172,6 +191,7 @@ afterEach(() => {
   txInsertImpl.mockReset();
   txDeleteImpl.mockReset();
   getProjectedStateForMonthMock.mockReset();
+  getProjectedStateOnDayMock.mockReset();
   createConfirmationSnapshotMock.mockReset();
   vi.useRealTimers();
 });
@@ -222,7 +242,7 @@ describe("getLatestConfirmation", () => {
 
 describe("getConfirmationStatus", () => {
   beforeEach(() => {
-    getProjectedStateForMonthMock.mockResolvedValue(buildProjectionMonth());
+    getProjectedStateOnDayMock.mockResolvedValue(buildTodayState());
   });
 
   it("returns isDue=false immediately when confirmationDayOfMonth=0 (disabled)", async () => {
@@ -230,7 +250,7 @@ describe("getConfirmationStatus", () => {
     vi.setSystemTime(new Date(Date.UTC(2026, 4, 15)));
     const plan = buildPlan({ confirmationDayOfMonth: 0 });
 
-    const status = await getConfirmationStatus(plan, USER_ID);
+    const status = await getConfirmationStatus(plan, USER_ID, new Date());
 
     expect(status.isDue).toBe(false);
     expect(status.projectedState).toBeNull();
@@ -238,7 +258,7 @@ describe("getConfirmationStatus", () => {
     expect(status.monthAnchor).toBe("2026-05-01");
     // No DB or projection call when the feature is off.
     expect(selectImpl).not.toHaveBeenCalled();
-    expect(getProjectedStateForMonthMock).not.toHaveBeenCalled();
+    expect(getProjectedStateOnDayMock).not.toHaveBeenCalled();
   });
 
   it("flags isDue=true on the configured day when no confirmation exists yet", async () => {
@@ -249,13 +269,16 @@ describe("getConfirmationStatus", () => {
     const chain = makeSelectChain([]);
     selectImpl.mockReturnValueOnce(chain);
 
-    const status = await getConfirmationStatus(plan, USER_ID);
+    const status = await getConfirmationStatus(plan, USER_ID, new Date());
 
     expect(status.isDue).toBe(true);
     expect(status.existingConfirmation).toBeNull();
     expect(status.monthAnchor).toBe("2026-05-01");
     expect(status.projectedState).not.toBeNull();
-    expect(getProjectedStateForMonthMock).toHaveBeenCalledOnce();
+    // Pre-fill = the projected position ON today (what a confirmation
+    // records), so a blind Save doesn't move the baseline.
+    expect(getProjectedStateOnDayMock).toHaveBeenCalledOnce();
+    expect(getProjectedStateOnDayMock.mock.calls[0][2]).toEqual(new Date(Date.UTC(2026, 4, 1)));
   });
 
   it("keeps firing on days AFTER the configured day until a confirmation exists", async () => {
@@ -270,7 +293,7 @@ describe("getConfirmationStatus", () => {
     const chain = makeSelectChain([]);
     selectImpl.mockReturnValueOnce(chain);
 
-    const status = await getConfirmationStatus(plan, USER_ID);
+    const status = await getConfirmationStatus(plan, USER_ID, new Date());
 
     expect(status.isDue).toBe(true);
   });
@@ -286,7 +309,7 @@ describe("getConfirmationStatus", () => {
     const chain = makeSelectChain([]);
     selectImpl.mockReturnValueOnce(chain);
 
-    const status = await getConfirmationStatus(plan, USER_ID);
+    const status = await getConfirmationStatus(plan, USER_ID, new Date());
 
     expect(status.isDue).toBe(true);
   });
@@ -300,7 +323,7 @@ describe("getConfirmationStatus", () => {
     const chain = makeSelectChain([existing]);
     selectImpl.mockReturnValueOnce(chain);
 
-    const status = await getConfirmationStatus(plan, USER_ID);
+    const status = await getConfirmationStatus(plan, USER_ID, new Date());
 
     expect(status.isDue).toBe(false);
     expect(status.existingConfirmation).not.toBeNull();
@@ -319,7 +342,7 @@ describe("getConfirmationStatus", () => {
     const chain = makeSelectChain([]);
     selectImpl.mockReturnValueOnce(chain);
 
-    const status = await getConfirmationStatus(plan, USER_ID);
+    const status = await getConfirmationStatus(plan, USER_ID, new Date());
 
     expect(status.monthAnchor).toBe("2026-04-25");
     expect(status.isDue).toBe(true);
@@ -343,6 +366,29 @@ describe("getConfirmationStatus", () => {
     );
 
     expect(status.monthAnchor).toBe("2026-03-15");
+    expect(status.isDue).toBe(true);
+  });
+
+  it("F26: a confirmation saved under an OLD anchor day still counts for its period", async () => {
+    // Confirmed on May 1 while the anchor was day 1; the anchor is now 15.
+    // May 1 lies in the Apr 15 – May 14 period, so on May 10 nothing is due
+    // (the exact-key match used to miss it and prompt again beside it).
+    const plan = buildPlan({ confirmationDayOfMonth: 15 });
+    selectImpl.mockReturnValueOnce(
+      makeSelectChain([buildConfirmation({ confirmationMonth: "2026-05-01" })])
+    );
+    const status = await getConfirmationStatus(plan, USER_ID, new Date(Date.UTC(2026, 4, 10)));
+    expect(status.monthAnchor).toBe("2026-04-15");
+    expect(status.isDue).toBe(false);
+    expect(status.existingConfirmation?.confirmationMonth).toBe("2026-05-01");
+  });
+
+  it("a confirmation from an earlier period doesn't count for this one", async () => {
+    const plan = buildPlan({ confirmationDayOfMonth: 15 });
+    selectImpl.mockReturnValueOnce(
+      makeSelectChain([buildConfirmation({ confirmationMonth: "2026-04-14" })])
+    );
+    const status = await getConfirmationStatus(plan, USER_ID, new Date(Date.UTC(2026, 4, 10)));
     expect(status.isDue).toBe(true);
   });
 });
@@ -449,9 +495,11 @@ describe("saveConfirmation", () => {
     // Confirmation upsert called with normalised payload + month anchor.
     expect(txInsertImpl).toHaveBeenCalledTimes(2);
     const valuesArg = insertConfChain.values.mock.calls[0][0];
+    // Keyed by the DAY the balances were read on (the plan's new as-of day),
+    // not the period start: anything dated on/before May 12 is in them.
     expect(valuesArg).toMatchObject({
       planId: PLAN_ID,
-      confirmationMonth: "2026-05-01",
+      confirmationMonth: "2026-05-12",
       confirmedSavings: "5000.00",
       confirmedInvestments: "2500.00",
       notes: "May check-in",
@@ -473,11 +521,11 @@ describe("saveConfirmation", () => {
     });
 
     // Snapshot side-effect ran after the txn (and didn't throw).
-    expect(createConfirmationSnapshotMock).toHaveBeenCalledWith(
-      PLAN_ID,
-      USER_ID,
-      today
-    );
+    // Stamped at "now" (later than the start of today), so it outranks any
+    // cron snapshot written earlier the same day.
+    expect(createConfirmationSnapshotMock).toHaveBeenCalledOnce();
+    const [, , stamp] = createConfirmationSnapshotMock.mock.calls[0];
+    expect(stamp.getTime()).toBeGreaterThanOrEqual(today.getTime());
   });
 
   it("updates the existing confirmation via onConflictDoUpdate", async () => {
@@ -643,6 +691,7 @@ describe("autoConfirmSkippedPeriods", () => {
           scheduledPayment: 0,
           extraPayment: 0,
           interestAccrued: 0,
+          payments: [],
         },
       ],
     });
@@ -689,6 +738,34 @@ describe("autoConfirmSkippedPeriods", () => {
       USER_ID,
       new Date(Date.UTC(2026, 4, 1))
     );
+  });
+});
+
+describe("autoConfirmSkippedPeriods — anchor changes (F26)", () => {
+  it("doesn't write an auto row into a period that already holds a confirmation", async () => {
+    // Anchor now 15. Rows: a user confirmation on Apr 20 (latest by date is
+    // the old-anchor auto row "2026-06-01", in the May 15 – Jun 14 period).
+    // Today Jul 20 → current period Jul 15; closed after the baseline: Jun 15.
+    const plan = buildPlan({ confirmationDayOfMonth: 15 });
+    selectImpl
+      .mockReturnValueOnce(makeSelectChain([{ month: "2026-04-20" }, { month: "2026-06-01" }]))
+      .mockReturnValueOnce(
+        makeSelectChain([buildConfirmation({ confirmationMonth: "2026-06-01", source: "auto" } as never)])
+      )
+      .mockReturnValueOnce(makeSelectChain([]));
+    getProjectedStateForMonthMock.mockResolvedValue({ ...buildProjectionMonth(), debts: [] });
+    const insertAuto: Record<string, ReturnType<typeof vi.fn>> = {};
+    insertAuto.values = vi.fn().mockReturnValue(insertAuto);
+    insertAuto.onConflictDoNothing = vi.fn().mockReturnValue(insertAuto);
+    insertAuto.returning = vi.fn().mockResolvedValue([buildConfirmation({ id: "a" })]);
+    txInsertImpl.mockReturnValue(insertAuto);
+    createConfirmationSnapshotMock.mockResolvedValue(undefined);
+
+    const result = await autoConfirmSkippedPeriods(plan, USER_ID, new Date(Date.UTC(2026, 6, 20)));
+
+    // Only Jun 15 is written — May 15 – Jun 14 already has the Jun 1 row.
+    expect(result).toEqual({ confirmationsCreated: 1 });
+    expect(insertAuto.values.mock.calls.map((c) => c[0].confirmationMonth)).toEqual(["2026-06-15"]);
   });
 });
 

@@ -11,38 +11,37 @@ import {
 } from "@/db/schema";
 
 import {
+  isDateInPeriod,
   nextPeriodStart,
-  periodAnchorIso,
+  periodRangeFor,
   periodStartFor,
 } from "@/lib/finance/period";
+import { isoDay, parseIsoDay } from "@/lib/finance/schedule";
 
 import { ensureOwnedRow } from "./ownership";
 import type { ConfirmationData } from "@/schemas/finance-confirmations";
 import {
   createConfirmationSnapshot,
   getProjectedStateForMonth,
+  getProjectedStateOnDay,
 } from "./finance-snapshot-service";
 import type {
   ConfirmationWithDebts,
   FinancePlanConfirmation,
   FinancePlanWithLines,
-  ProjectionMonth,
+  TodayState,
 } from "@/types/finance";
 
 // ---------- helpers ----------
 
-function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
+/** Effective anchor day: 0 (confirmations off) behaves like calendar months. */
+function anchorOf(day: number): number {
+  return day > 0 ? day : 1;
 }
 
-/**
- * Resolves the bucket the confirmation belongs to. With the period-anchored
- * model, the bucket key is the start date of the period containing `today`.
- * confirmationDayOfMonth=0 (feature disabled) falls back to day=1, which is
- * equivalent to bucketing by calendar month — what the engine did before.
- */
-function periodAnchorFor(today: Date, day: number): Date {
-  return periodStartFor(today, day > 0 ? day : 1);
+/** The calendar day a confirmation row describes (UTC midnight). */
+function rowDay(row: { confirmationMonth: string }): Date {
+  return parseIsoDay(row.confirmationMonth) ?? new Date(row.confirmationMonth);
 }
 
 async function ensurePlanOwnership(
@@ -62,8 +61,12 @@ async function ensurePlanOwnership(
 // ---------- public API ----------
 
 /**
- * Latest user confirmation for a plan plus its per-debt balances. Used by the
- * snapshot service to recalibrate projections from real numbers.
+ * The confirmation that sets the plan's baseline — the one describing the
+ * LATEST day — plus its per-debt balances.
+ *
+ * `confirmationMonth` holds that day: the calendar day a user confirmed on,
+ * or the period start an auto row records the opening of. Ordering by it is
+ * ordering by the day the balances describe.
  */
 export async function getLatestConfirmation(
   planId: string
@@ -72,7 +75,10 @@ export async function getLatestConfirmation(
     .select()
     .from(financePlanConfirmations)
     .where(eq(financePlanConfirmations.planId, planId))
-    .orderBy(desc(financePlanConfirmations.confirmationMonth))
+    .orderBy(
+      desc(financePlanConfirmations.confirmationMonth),
+      desc(financePlanConfirmations.confirmedAt)
+    )
     .limit(1);
 
   if (!latest) return null;
@@ -86,8 +92,12 @@ export async function getLatestConfirmation(
 }
 
 /**
- * Read whether today is the day to prompt the user for a monthly confirmation,
- * and what numbers the dialog should pre-fill from the projection.
+ * Whether the plan still needs a confirmation for the period containing
+ * `today` (the reader's calendar day), and what the dialog should pre-fill.
+ *
+ * A confirmation counts for the period that CONTAINS its day, not by an exact
+ * key match — so rows saved under an older anchor day keep counting after the
+ * anchor changes, instead of the prompt re-firing beside them.
  */
 export async function getConfirmationStatus(
   plan: FinancePlanWithLines,
@@ -96,63 +106,58 @@ export async function getConfirmationStatus(
 ): Promise<{
   isDue: boolean;
   monthAnchor: string;
-  projectedState: ProjectionMonth | null;
+  projectedState: TodayState | null;
   existingConfirmation: FinancePlanConfirmation | null;
 }> {
+  const period = periodRangeFor(today, anchorOf(plan.confirmationDayOfMonth));
   if (plan.confirmationDayOfMonth === 0) {
     return {
       isDue: false,
-      monthAnchor: periodAnchorIso(today, 1),
+      monthAnchor: isoDay(period.start),
       projectedState: null,
       existingConfirmation: null,
     };
   }
 
-  // The bucket key is the start of the period containing today, anchored on
-  // the plan's confirmation day. By construction, every day in a period
-  // satisfies "today >= anchor", so the only practical guard is whether a
-  // confirmation row already exists for this period — once it does, the
-  // dialog stops; otherwise it keeps prompting every day. The per-day
-  // localStorage dismiss in confirmation-prompt.tsx handles within-day
-  // re-shows.
-  const monthAnchor = periodAnchorFor(today, plan.confirmationDayOfMonth);
-
-  const [existing] = await db
+  const rows = await db
     .select()
     .from(financePlanConfirmations)
-    .where(
-      and(
-        eq(financePlanConfirmations.planId, plan.id),
-        eq(financePlanConfirmations.confirmationMonth, isoDate(monthAnchor))
-      )
-    );
+    .where(eq(financePlanConfirmations.planId, plan.id));
+  const existing =
+    rows
+      .filter((r) => isDateInPeriod(rowDay(r), period))
+      .sort((a, b) => rowDay(b).getTime() - rowDay(a).getTime())[0] ?? null;
 
-  const projectedState = await getProjectedStateForMonth(plan, userId, monthAnchor);
+  // Pre-fill = the projected position ON today: that is what a confirmation
+  // records, so saving the pre-fill unchanged doesn't move anything.
+  const projectedState = await getProjectedStateOnDay(plan, userId, today);
 
   return {
     isDue: !existing,
-    monthAnchor: isoDate(monthAnchor),
+    monthAnchor: isoDay(period.start),
     projectedState,
-    existingConfirmation: existing ?? null,
+    existingConfirmation: existing,
   };
 }
 
 /**
- * Save (upsert) a user confirmation for the current month and write a paired
- * snapshot tagged `confirmation` so the audit timeline has both events.
+ * Save (upsert) a confirmation of the balances ON `today` — the reader's
+ * calendar day — and write a paired snapshot tagged `confirmation`.
+ *
+ * The row is keyed by that day, which is also the plan's new as-of day:
+ * anything dated on/before it is in the confirmed balances, anything after
+ * it is still to come. Confirming again the same day replaces the row.
  */
 export async function saveConfirmation(
   userId: string,
   input: ConfirmationData,
   today: Date = new Date()
 ): Promise<FinancePlanConfirmation> {
-  const { confirmationDayOfMonth } = await ensurePlanOwnership(
-    input.planId,
-    userId
+  await ensurePlanOwnership(input.planId, userId);
+
+  const day = isoDay(
+    new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
   );
-
-  const monthAnchor = isoDate(periodAnchorFor(today, confirmationDayOfMonth));
-
   // Debt ids are caller-supplied. A balance recorded against another plan's
   // debt would feed that plan's calibration, so every id must be this plan's.
   if (input.debtBalances.length > 0) {
@@ -169,7 +174,7 @@ export async function saveConfirmation(
       .insert(financePlanConfirmations)
       .values({
         planId: input.planId,
-        confirmationMonth: monthAnchor,
+        confirmationMonth: day,
         confirmedSavings: input.confirmedSavings,
         confirmedInvestments: input.confirmedInvestments,
         notes: input.notes ?? null,
@@ -212,7 +217,14 @@ export async function saveConfirmation(
   // Snapshot is written outside the txn so a failure here doesn't roll back
   // the confirmation itself — the next cron run will heal the missing snapshot.
   try {
-    await createConfirmationSnapshot(input.planId, userId, today);
+    // Stamped now (or the start of the reader's day, if that is later — a
+    // reader ahead of UTC just after midnight) so it outranks any cron
+    // snapshot already written today.
+    await createConfirmationSnapshot(
+      input.planId,
+      userId,
+      new Date(Math.max(Date.now(), today.getTime()))
+    );
   } catch (err) {
     console.error("createConfirmationSnapshot after saveConfirmation failed:", err);
   }
@@ -222,20 +234,18 @@ export async function saveConfirmation(
 
 /**
  * Roll the baseline forward through any CLOSED period the user left
- * unconfirmed. Designed to run from the daily cron before snapshots.
+ * unconfirmed. Runs from the daily cron before snapshots.
  *
- * Rule (matches the product intent "don't advance debts automatically unless a
- * whole period was skipped"):
  *   - The CURRENT period is never auto-confirmed — the user is still prompted.
- *   - Every period strictly between the latest confirmation (or the plan start
- *     when there is none) and the current period is fully closed. For each one
- *     that has no confirmation yet, create a `source: "auto"` confirmation
- *     recording that period's projected OPENING (= the prior period's close),
- *     chaining the baseline forward one period at a time.
+ *   - Every period strictly between the latest confirmation's period (or the
+ *     plan start when there is none) and the current period is closed. Each
+ *     one with no confirmation DATED INSIDE IT gets a `source: "auto"` row
+ *     recording its projected OPENING, keyed by its period start, chaining the
+ *     baseline forward one period at a time.
  *
- * Auto rows are best-estimates: the UI can flag them, and `getConfirmationStatus`
- * still prompts for the current period so the user can supply real numbers.
- * No-op when the feature is disabled (`confirmationDayOfMonth === 0`).
+ * Periods are matched by containment, so rows saved under an older anchor day
+ * still count and no duplicate is written beside them.
+ * No-op when confirmations are off (`confirmationDayOfMonth === 0`).
  */
 export async function autoConfirmSkippedPeriods(
   plan: FinancePlanWithLines,
@@ -247,28 +257,29 @@ export async function autoConfirmSkippedPeriods(
 
   const currStart = periodStartFor(today, anchor);
 
-  // Period months already confirmed (any source) for this plan.
+  // Period starts (under the CURRENT anchor) that already hold a confirmation
+  // of any source.
   const existing = await db
     .select({ month: financePlanConfirmations.confirmationMonth })
     .from(financePlanConfirmations)
     .where(eq(financePlanConfirmations.planId, plan.id));
-  const confirmedMonths = new Set(existing.map((r) => r.month));
+  const confirmedPeriods = new Set(
+    existing.map((r) => isoDay(periodStartFor(rowDay({ confirmationMonth: r.month }), anchor)))
+  );
 
   const latest = await getLatestConfirmation(plan.id);
   const baselineStart = latest
-    ? periodStartFor(new Date(latest.confirmationMonth), anchor)
+    ? periodStartFor(rowDay(latest), anchor)
     : periodStartFor(new Date(plan.startMonth), anchor);
 
   let confirmationsCreated = 0;
-  // Walk forward from the period AFTER the baseline up to (but not including)
-  // the current period — those are the closed periods.
   let cursor = nextPeriodStart(baselineStart, anchor);
   // Hard cap so a misconfigured/very-old plan can't spin forever.
   let guard = 0;
   while (cursor.getTime() < currStart.getTime() && guard < 600) {
     guard += 1;
-    const monthKey = isoDate(cursor);
-    if (!confirmedMonths.has(monthKey)) {
+    const monthKey = isoDay(cursor);
+    if (!confirmedPeriods.has(monthKey)) {
       // Projected opening of this skipped period, calibrated from the latest
       // confirmation so far (which includes any auto rows we just wrote).
       const opening = await getProjectedStateForMonth(plan, userId, cursor);
@@ -309,7 +320,7 @@ export async function autoConfirmSkippedPeriods(
         });
 
         if (inserted) {
-          confirmedMonths.add(monthKey);
+          confirmedPeriods.add(monthKey);
           confirmationsCreated += 1;
           // Audit snapshot tagged `confirmation`, mirroring saveConfirmation.
           try {
@@ -325,4 +336,3 @@ export async function autoConfirmSkippedPeriods(
 
   return { confirmationsCreated };
 }
-

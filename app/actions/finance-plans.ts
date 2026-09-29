@@ -31,6 +31,8 @@ import {
   cloneFinancePlanSchema,
   createFinancePlanSchema,
   FIXED_DEBT_NEEDS_PAYMENT,
+  MONTHLY_RATE_TOO_HIGH,
+  SHARE_TOO_HIGH,
   deleteLineOverrideSchema,
   lineOverrideSchema,
   planDebtSchema,
@@ -72,11 +74,17 @@ function revalidatePlans(): void {
   revalidatePath("/portal");
 }
 
+// Validation messages worth showing verbatim: they say how to fix the input.
+const EXPLAINED_ERRORS = [FIXED_DEBT_NEEDS_PAYMENT, MONTHLY_RATE_TOO_HIGH, SHARE_TOO_HIGH];
+
+/** An explained validation error (never-payable debt, absurd rate), else the generic one. */
+function explainedError(issues: { message: string }[]): string {
+  return issues.find((i) => EXPLAINED_ERRORS.includes(i.message))?.message ?? "Invalid input";
+}
+
 /** A debt the projection could never pay off gets its own message. */
 function debtError(issues: { message: string }[]): string {
-  return issues.some((i) => i.message === FIXED_DEBT_NEEDS_PAYMENT)
-    ? FIXED_DEBT_NEEDS_PAYMENT
-    : "Invalid input";
+  return explainedError(issues);
 }
 
 // ---------- plans ----------
@@ -88,7 +96,7 @@ export async function createPlanAction(
     const ctx = await requireEffectiveContext();
     const parsed = createFinancePlanSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false, error: "Invalid input" };
+      return { success: false, error: explainedError(parsed.error.issues) };
     }
     const plan = await createPlan(ctx.effectiveUserId, parsed.data);
     await logImpersonatedMutation({
@@ -109,7 +117,7 @@ export async function updatePlanAction(
     const ctx = await requireEffectiveContext();
     const parsed = updateFinancePlanSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false, error: "Invalid input" };
+      return { success: false, error: explainedError(parsed.error.issues) };
     }
     const plan = await updatePlan(ctx.effectiveUserId, parsed.data);
     await logImpersonatedMutation({

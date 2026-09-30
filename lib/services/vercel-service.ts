@@ -22,11 +22,11 @@
  * - https://vercel.com/docs/rest-api/reference/endpoints/user/get-the-user
  * - https://vercel.com/docs/rest-api/reference/endpoints/teams/get-a-team
  */
+import "server-only";
+
 import { env } from "@/lib/env";
-import type {
-  AppListing,
-  AppProvider,
-} from "@/app/portal/more-apps/apps-data";
+import type { AppListing, AppProvider } from "@/types/apps";
+import { upstreamSignal } from "./upstream";
 
 type VercelDeployment = {
   id?: string;
@@ -68,6 +68,7 @@ export async function listVercelProjects(): Promise<AppListing[]> {
     // Fetch projects + user info in parallel.
     const [projectsRes, user] = await Promise.all([
       fetch(`${VERCEL_API_BASE}/v9/projects?limit=100`, {
+        signal: upstreamSignal(),
         headers: { Authorization: `Bearer ${token}` },
         next: { revalidate: 600 }, // 10 min
       }),
@@ -100,6 +101,7 @@ async function fetchVercelUser(
 ): Promise<{ id: string; username: string } | null> {
   try {
     const res = await fetch(`${VERCEL_API_BASE}/v2/user`, {
+      signal: upstreamSignal(),
       headers: { Authorization: `Bearer ${token}` },
       next: { revalidate: 86_400 }, // 24h
     });
@@ -108,7 +110,9 @@ async function fetchVercelUser(
     const id = json.user?.id;
     const username = json.user?.username;
     return id && username ? { id, username } : null;
-  } catch {
+  } catch (error) {
+    // Best-effort: without the user the listing falls back to team slugs.
+    console.error("[vercel-service] Error fetching user:", error);
     return null;
   }
 }
@@ -119,13 +123,15 @@ async function fetchTeamSlug(
 ): Promise<string | null> {
   try {
     const res = await fetch(`${VERCEL_API_BASE}/v2/teams/${teamId}`, {
+      signal: upstreamSignal(),
       headers: { Authorization: `Bearer ${token}` },
       next: { revalidate: 86_400 }, // 24h
     });
     if (!res.ok) return null;
     const json = (await res.json()) as VercelTeamResponse;
     return json.slug ?? null;
-  } catch {
+  } catch (error) {
+    console.error(`[vercel-service] Error fetching team ${teamId}:`, error);
     return null;
   }
 }

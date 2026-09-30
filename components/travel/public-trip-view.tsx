@@ -1,6 +1,5 @@
 import Image from "next/image";
-import { format } from "date-fns";
-import { CalendarDays, ExternalLink, MapPin } from "lucide-react";
+import { CalendarDays, ClipboardList, ExternalLink, MapPin } from "lucide-react";
 
 import {
   Card,
@@ -9,10 +8,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Progress } from "@/components/ui/progress";
 import { Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import type { PublicTripView } from "@/types/travel";
+import { formatShortDay } from "@/lib/utils/date";
+import type { CalendarTrip, PublicTripView } from "@/types/travel";
 
 import {
   dayGroupLabel,
@@ -89,20 +90,22 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
       ? Math.min(100, (scope.paid / scope.owedLow) * 100)
       : 0;
   /**
-   * What the calendar needs, shaped the way the planner shapes it.
+   * What the calendar needs, and nothing more.
    *
-   * The public view has no members and no shares to hand it, and it must not
-   * — so it gets a trip with those emptied and the scope's own per-item
-   * figures as the viewer.
+   * Picked field by field rather than spread from the trip: this lands in the
+   * RSC payload of a page anybody with the link can open, and a spread carried
+   * the owner's auth id along with it. The member lists stay empty for the
+   * same reason the service strips them — the scope's own per-item figures
+   * arrive as the viewer instead.
    */
-  const asTrip = {
-    ...trip,
-    items,
-    photos,
+  const calendarTrip: CalendarTrip = {
+    id: trip.id,
+    startDate: trip.startDate,
+    endDate: trip.endDate,
+    currency: trip.currency,
     members: [],
-    shares: [],
-    contributions: [],
-  } as unknown as import("@/types/travel").TripWithRelations;
+    items: items.map((item) => ({ ...item, payerIds: [], attendeeIds: [] })),
+  };
 
   const publicViewer = scope
     ? {
@@ -130,7 +133,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
         <div
           // Same floor as the planner's banner: at 21/9 a 390px phone leaves
           // 167px and the pill lands on top of the title.
-          className="relative min-h-72 w-full bg-muted sm:aspect-[21/9] sm:min-h-0"
+          className="relative min-h-72 w-full bg-muted sm:aspect-21/9 sm:min-h-0"
           style={trip.coverPhotoUrl ? undefined : { backgroundColor: trip.color }}
         >
           {trip.coverPhotoUrl && (
@@ -165,7 +168,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <Heading level="h1" className="text-2xl text-white sm:text-4xl">
+              <Heading level="hero" className="text-white">
                 {trip.title}
               </Heading>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
@@ -188,7 +191,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
   const list = (
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle as="h2" className="flex items-center gap-2">
                 Itinerary
                 {items.length > 0 && (
                   <Badge variant="secondary" className="text-2xs font-normal">
@@ -204,7 +207,11 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
             </CardHeader>
             <CardContent className="flex flex-col gap-6">
               {groupKeys.length === 0 && (
-                <Text variant="muted">Nothing planned yet.</Text>
+                <EmptyState
+                  icon={ClipboardList}
+                  title="Nothing planned yet"
+                  description="Items appear here as the trip takes shape."
+                />
               )}
 
               {groupKeys.map((key) => {
@@ -263,7 +270,11 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                                 {(item.fromCode || item.toCode) && (
                                   <Mono className="text-2xs font-medium">
                                     {item.fromCode ?? "?"}
-                                    <span className="mx-1">
+                                    <span
+                                      className="mx-1"
+                                      role="img"
+                                      aria-label={item.roundTrip ? "round trip to" : "to"}
+                                    >
                                       {item.roundTrip ? "⇄" : "→"}
                                     </span>
                                     {item.toCode ?? "?"}
@@ -274,10 +285,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                                   item.endsOn !== item.scheduledOn && (
                                     <span>
                                       {item.roundTrip ? "back " : "through "}
-                                      {format(
-                                        new Date(`${item.endsOn}T00:00:00`),
-                                        "d MMM"
-                                      )}
+                                      {formatShortDay(item.endsOn)}
                                     </span>
                                   )}
                                 {item.link && (
@@ -291,7 +299,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                                   </a>
                                 )}
                               </div>
-                              {item.notes && (
+                              {showPrices && item.notes && (
                                 <Text variant="small">{item.notes}</Text>
                               )}
                               {item.stops.length > 0 && (
@@ -299,14 +307,14 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                               )}
                               {item.photos.length > 0 && (
                                 <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 pt-1">
-                                  {item.photos.map((photo) => (
+                                  {item.photos.map((photo, i) => (
                                     <div
                                       key={photo.id}
                                       className="relative aspect-square w-20 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
                                     >
                                       <Image
                                         src={photo.url}
-                                        alt={photo.caption ?? ""}
+                                        alt={photo.caption ?? `${item.title} photo ${i + 1}`}
                                         fill
                                         sizes="80px"
                                         className="object-cover"
@@ -346,21 +354,21 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
           {showPrices && scope && (
             <Card>
               <CardHeader>
-                <CardTitle>Your share</CardTitle>
+                <CardTitle as="h2">Your share</CardTitle>
               </CardHeader>
               {/* The same shape the planner's Payments card uses: the figure
                   paid, what it is against, and a bar — a number on its own
                   does not say whether it is nearly there or barely started. */}
               <CardContent className="flex flex-col gap-1.5">
                 <div className="flex items-baseline justify-between gap-2">
-                  <Mono className="text-2xl font-semibold tabular-nums">
+                  <Mono className="text-xl font-semibold tabular-nums sm:text-2xl">
                     {formatTripMoney(scope.paid, trip.currency)}
                   </Mono>
                   <Mono className="shrink-0 text-xs text-muted-foreground">
                     of {moneyRange(scope.owedLow, scope.owedHigh, trip.currency)}
                   </Mono>
                 </div>
-                <Progress value={pct} className="h-1.5" />
+                <Progress value={pct} aria-label="Paid so far" />
                 <Text className="text-2xs text-muted-foreground">
                   {left.low > 0 ? (
                     <>
@@ -381,13 +389,13 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
           {photos.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Gallery</CardTitle>
+                <CardTitle as="h2">Gallery</CardTitle>
               </CardHeader>
               <CardContent>
                 {/* One scrolling row, like the planner's: a grid grew a line
                     for every three photos and pushed the page down. */}
                 <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1">
-                  {photos.map((photo) => (
+                  {photos.map((photo, i) => (
                     <div
                       key={photo.id}
                       className={cn(
@@ -397,7 +405,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                     >
                       <Image
                         src={photo.url}
-                        alt={photo.caption ?? "Trip photo"}
+                        alt={photo.caption ?? `${trip.title} photo ${i + 1}`}
                         fill
                         sizes="112px"
                         className="object-cover"
@@ -417,8 +425,9 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
       banner={banner}
       list={list}
       aside={aside}
-      trip={asTrip}
+      trip={calendarTrip}
       viewer={publicViewer}
+      showPrices={showPrices}
     />
   );
 }

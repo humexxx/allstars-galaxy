@@ -1,5 +1,7 @@
 import { toast } from "sonner";
 
+import type { ActionResult } from "./safe";
+
 /**
  * The client half of the `{ success, error }` envelope in `safe.ts`.
  *
@@ -10,10 +12,10 @@ import { toast } from "sonner";
  *
  * Returns whether the action succeeded so the caller can decide what to close.
  */
-export async function runAction<T>(
-  call: Promise<{ success: boolean; data?: T; error?: string }>,
+export async function runAction<T = void>(
+  call: Promise<ActionResult<T>>,
   messages: { success?: string; failure: string }
-): Promise<{ ok: boolean; data?: T }> {
+): Promise<{ ok: true; data: T | undefined } | { ok: false }> {
   try {
     const result = await call;
     if (!result.success) {
@@ -21,7 +23,7 @@ export async function runAction<T>(
       return { ok: false };
     }
     if (messages.success) toast.success(messages.success);
-    return { ok: true, data: result.data };
+    return { ok: true, data: "data" in result ? (result.data as T) : undefined };
   } catch {
     toast.error(messages.failure);
     return { ok: false };

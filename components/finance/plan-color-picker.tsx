@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import { Text } from "@/components/ui/typography";
 import { setPlanColorAction } from "@/app/actions/finance-plans";
 import type { FinancePlan } from "@/types/finance";
@@ -37,20 +38,18 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 export function PlanColorPicker({
   plan,
   pinned,
-  onChanged,
 }: {
   plan: FinancePlan;
   /** Draws the pinned-highlight ring; the pin itself lives in the row menu. */
   pinned: boolean;
-  onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [isSaving, startSave] = useTransition();
   // Optimistic overlay: the swatch and the chart line repaint on click rather
   // than after the round-trip. Derived (not an effect syncing state to props)
   // so the React Compiler lint stays happy. Only cleared on failure — on
-  // success the refresh makes `plan.color` the same value anyway, and this
-  // component is the only writer.
+  // success the action's revalidation makes `plan.color` the same value
+  // anyway, and this component is the only writer.
   const [pending, setPending] = useState<string | null>(null);
   const colour = pending ?? plan.color;
 
@@ -58,9 +57,7 @@ export function PlanColorPicker({
     setPending(next);
     startSave(async () => {
       const result = await setPlanColorAction({ id: plan.id, color: next });
-      if (result.success) {
-        onChanged();
-      } else {
+      if (!result.success) {
         setPending(null);
         toast.error(result.error);
       }
@@ -92,16 +89,20 @@ export function PlanColorPicker({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-3">
         <div className="grid gap-3">
-          <Text variant="small" className="text-muted-foreground">
+          <Text variant="small" id={`plan-colour-${plan.id}`}>
             Line colour
           </Text>
-          <div className="flex items-center gap-2">
-            {PRESETS.map((preset) => (
+          <div
+            role="group"
+            aria-labelledby={`plan-colour-${plan.id}`}
+            className="flex items-center gap-2"
+          >
+            {PRESETS.map((preset, i) => (
               <button
                 key={preset}
                 type="button"
                 onClick={() => save(preset)}
-                aria-label={`Use ${preset}`}
+                aria-label={`Colour ${i + 1}`}
                 aria-pressed={colour === preset}
                 className="flex size-7 items-center justify-center rounded-full transition-transform hover:scale-110"
                 style={{ backgroundColor: preset }}
@@ -113,7 +114,8 @@ export function PlanColorPicker({
             ))}
           </div>
 
-          <label className="flex items-center gap-2 border-t pt-3">
+          <Separator />
+          <label className="flex items-center gap-2">
             <input
               type="color"
               // A native colour input always emits #rrggbb, which is exactly

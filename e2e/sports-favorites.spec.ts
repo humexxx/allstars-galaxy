@@ -69,11 +69,11 @@ test.describe("Sports favorites", () => {
 
     // Serialise the two toggles — each click fires an async server action and
     // we don't want to navigate before they both commit. The pending loader
-    // is a per-row spinner with `.animate-spin`; we wait for it to clear.
+    // is a per-row `Spinner` (role="status"); we wait for it to clear.
     await sheet.getByRole("switch", { name: /Toggle Football as favorite/i }).click();
-    await expect(sheet.locator(".animate-spin")).toHaveCount(0);
+    await expect(sheet.getByRole("status", { name: "Loading" })).toHaveCount(0);
     await sheet.getByRole("switch", { name: /Toggle Formula 1 as favorite/i }).click();
-    await expect(sheet.locator(".animate-spin")).toHaveCount(0);
+    await expect(sheet.getByRole("status", { name: "Loading" })).toHaveCount(0);
     await sheet.getByRole("button", { name: "Done" }).click();
 
     await page.goto("/portal");
@@ -90,9 +90,9 @@ test.describe("Sports favorites", () => {
 
     // F1's own card: the championship's top three, either table.
     await expect(page.getByRole("heading", { name: "Formula 1" })).toBeVisible();
-    const drivers = page.getByRole("tab", { name: "Drivers" });
+    const drivers = page.getByRole("radio", { name: "Drivers" });
     await expect(drivers).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Constructors" })).toBeVisible();
+    await expect(page.getByRole("radio", { name: "Constructors" })).toBeVisible();
     // Three rows, each ending in a points figure.
     await expect(page.getByText("pts").first()).toBeVisible();
   });
@@ -105,7 +105,7 @@ test.describe("Sports favorites", () => {
     await page.getByRole("button", { name: /Manage favorites/i }).click();
     const sheet = page.getByRole("dialog", { name: /Favorite sports/i });
     await sheet.getByRole("switch", { name: /Toggle NBA as favorite/i }).click();
-    await expect(sheet.locator(".animate-spin")).toHaveCount(0);
+    await expect(sheet.getByRole("status", { name: "Loading" })).toHaveCount(0);
     await sheet.getByRole("button", { name: "Done" }).click();
     await expect(page.getByRole("button", { name: /Manage favorites/i })).toContainText("1");
 
@@ -120,7 +120,7 @@ test.describe("Sports favorites", () => {
     // server action committed. Wait for the row spinner to clear (same reason
     // as the two-toggle test above) — otherwise /portal can be rendered from
     // the pre-delete state and still show the sport as followed.
-    await expect(sheet2.locator(".animate-spin")).toHaveCount(0);
+    await expect(sheet2.getByRole("status", { name: "Loading" })).toHaveCount(0);
     await sheet2.getByRole("button", { name: "Done" }).click();
 
     // Dashboard back to CTA.

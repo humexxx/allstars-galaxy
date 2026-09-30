@@ -145,6 +145,52 @@ computed height, not a spacing step.
   `space-y-*` and is fine to leave until it is touched — a half-converted
   file is worse than a consistent old one.
 
+## Surfaces & radius (the iOS look)
+
+- **One radius token.** `--radius` is 14px, so `rounded-md` (buttons, fields,
+  menu items) is 12px, `rounded-lg` (menus, tab tracks) 14px, `rounded-xl`
+  (cards) 18px and `rounded-2xl` (dialogs, bottom sheets) 22px. Never write a
+  pixel radius; pick the step that names the surface.
+- **Grouped surfaces.** The page is the cool grey `--background`
+  (systemGroupedBackground); cards, fields, dialogs and menus are the white
+  `--card` / `--popover`. Anything that must read as "on top of the page" uses
+  those, not `bg-background` — inside a card `bg-background` paints grey.
+- **Press feedback.** `Button` dims and shrinks a touch on `:active`; do not add
+  a second hover-only affordance on top of it.
+- **Control height is 40px** (`h-10`) for `Button`, `Input`, `SelectTrigger`
+  and `InputGroup` alike, so a field and the button beside it line up. `sm`
+  (32px) is for toolbars and table rows. Skeletons for a form row are `h-10`.
+- **Segmented controls are one component.** A switch between views of the
+  same thing (range, unit, list/calendar) is `ToggleGroup` — its default
+  variant is the same grey track and white chip as `TabsList`, `h-10`
+  (`size="sm"` → `h-8`). `Tabs` only when each option owns a `TabsContent`
+  panel; a `TabsList` with no panels points `aria-controls` at nothing. Chip
+  filters are `ToggleGroup type="multiple" variant="outline"`.
+- **Empty and status surfaces.** "Nothing here yet" inside a card or list is
+  `EmptyState` (dashed); a whole-page empty or not-found state is
+  `EmptyState variant="card"`. An inline message — form error, sample-data
+  notice, success confirmation — is `Alert` with the matching variant, not a
+  hand-tinted `div`.
+- **Icons inside controls carry no size or margin.** `Button`,
+  `DropdownMenuItem`, `Badge` and `TabsTrigger` size their icons and gap them
+  from the label; `mr-2 h-4 w-4` on the icon only fights that. Icon-only row
+  actions are `size="icon-sm"`.
+- **Dialogs are sheets on a phone.** Below `sm`, `DialogContent` pins to the
+  bottom edge with a grabber and slides up; from `sm` it is the centred card.
+  Nothing to opt into — but do not fight it with `top-*` overrides, and do not
+  add `max-h-[..vh] overflow-y-auto`: `DialogContent` already caps its height
+  and scrolls.
+- **System colours.** `--primary` is system blue, `--destructive` system red,
+  `--success` system green (the on-state of `Switch`), `--warning` system
+  orange. Status text and tints use these tokens (`text-success`,
+  `bg-destructive/10`, `border-warning/30`), never raw `emerald-*` / `rose-*` /
+  `amber-*` steps — the tokens already carry their dark-mode value. The light
+  steps sit deeper than Apple's swatches on purpose: they are read as small
+  text on white far more than as fills, and systemGreen itself is 2.3:1 there. The chart
+  palette is separate and validated; it does not follow these. Tints are
+  always `/10` fills and `/30` borders (`dark:bg-X/20`), which is what the
+  `success` / `warning` / `info` `Badge` and `Alert` variants use.
+
 ## Adding a new step
 
 Don't. Use the nearest existing scale step. If a recurring need is real (e.g. a

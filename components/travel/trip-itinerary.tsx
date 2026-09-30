@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { useMemo, useState } from "react";
-import { format } from "date-fns";
 import {
   ListOrdered,
   ExternalLink,
@@ -17,13 +16,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-} from "@/components/ui/select";
 import { Heading, Mono, Text } from "@/components/ui/typography";
 import { EmptyState } from "@/components/ui/empty-state";
 
-import {
-} from "@/app/actions/travel";
 import type {
   TripItemWithStops,
   TripWithRelations,
@@ -37,9 +32,8 @@ import {
 } from "@/lib/travel/format";
 import { ActivityVideo } from "@/components/travel/activity-video";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
-import {
-} from "@/lib/travel/item-fields";
 import { itemCost, unitSuffix } from "@/lib/travel/pricing";
+import { formatShortDay } from "@/lib/utils/date";
 import { CategoryIcon, categoryMeta } from "@/components/travel/category";
 import { ItemForm } from "@/components/travel/item-form";
 import { readerCost, viewerItems, type ItineraryViewer } from "@/lib/travel/viewer";
@@ -124,7 +118,10 @@ export function TripItinerary({
         {/* On a phone the whose-share badge goes under the heading rather
             than beside it: inline, a name like "Alejandra's share" pushed the
             row against Add item with nowhere left to go. */}
-        <CardTitle className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
+        <CardTitle
+          as="h2"
+          className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2"
+        >
           <span className="flex items-center gap-2">
             Itinerary
             {/* The count belongs with the thing it counts, not in the banner. */}
@@ -144,22 +141,21 @@ export function TripItinerary({
         </CardTitle>
         <CardAction>
           <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
-            <Plus className="mr-1 size-3.5" /> Add item
+            <Plus /> Add item
           </Button>
         </CardAction>
       </CardHeader>
-      <CardContent className="flex flex-col gap-6 ">
+      <CardContent className="flex flex-col gap-6">
         {groups.length === 0 && (
           <EmptyState
             icon={ListOrdered}
             title="Nothing planned yet"
             description="Add lodging, transport, activities — anything with a link or a price."
-            className="border-dashed"
           />
         )}
 
         {groups.map((group) => (
-          <section key={group.key} className="flex flex-col gap-2 ">
+          <section key={group.key} className="flex flex-col gap-2">
             {/* Nothing is reserved at the right of a row any more — the row
                 itself is the control — so the subtotal and the prices it adds
                 up share one edge with no spacer to keep in step. */}
@@ -192,7 +188,7 @@ export function TripItinerary({
           work, and having one expand the card while the other opened a
           dialog made them look like different things. */}
       <Dialog open={adding} onOpenChange={setAdding}>
-        <DialogContent className="max-h-[90vh] sm:max-w-2xl overflow-y-auto">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add to the itinerary</DialogTitle>
             <DialogDescription>
@@ -270,7 +266,7 @@ function ItemRow({
             onClick={() => setEditing(true)}
             // No hover state of its own: the row already lights up, and a
             // second one on the title reads as a link to somewhere else.
-            className="min-w-0 cursor-pointer truncate text-left font-medium outline-none focus-visible:underline"
+            className="min-w-0 cursor-pointer truncate rounded-sm text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {item.title}
           </button>
@@ -314,14 +310,20 @@ function ItemRow({
             <Mono className="text-2xs font-medium">
               {item.fromCode ?? "?"}
               {/* A double arrow says "and back" faster than the words do. */}
-              <span className="mx-1">{item.roundTrip ? "⇄" : "→"}</span>
+              <span
+                className="mx-1"
+                role="img"
+                aria-label={item.roundTrip ? "round trip to" : "to"}
+              >
+                {item.roundTrip ? "⇄" : "→"}
+              </span>
               {item.toCode ?? "?"}
             </Mono>
           )}
           {item.endsOn && item.scheduledOn && item.endsOn !== item.scheduledOn && (
             <span>
               {item.roundTrip ? "back " : "through "}
-              {format(new Date(`${item.endsOn}T00:00:00`), "d MMM")}
+              {formatShortDay(item.endsOn)}
             </span>
           )}
           {item.link && (
@@ -343,14 +345,14 @@ function ItemRow({
         )}
         {item.photos.length > 0 && (
           <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 pt-1">
-            {item.photos.map((photo) => (
+            {item.photos.map((photo, i) => (
               <div
                 key={photo.id}
                 className="relative aspect-square w-20 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
               >
                 <Image
                   src={photo.url}
-                  alt={photo.caption ?? ""}
+                  alt={photo.caption ?? `${item.title} photo ${i + 1}`}
                   fill
                   sizes="80px"
                   className="object-cover"
@@ -372,7 +374,7 @@ function ItemRow({
         opening it inline pushed every item below it off the screen, and the
         row you were editing left the viewport with them. */}
     <Dialog open={editing} onOpenChange={setEditing}>
-      <DialogContent className="max-h-[90vh] sm:max-w-2xl overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{item.title}</DialogTitle>
           <DialogDescription>

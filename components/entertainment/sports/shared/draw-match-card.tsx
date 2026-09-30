@@ -1,5 +1,6 @@
 import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
+import { formatWeekdayDay } from "@/lib/utils/date";
 import type { BracketMatch, Team } from "@/types/sports";
 
 /**
@@ -16,19 +17,12 @@ import type { BracketMatch, Team } from "@/types/sports";
  * shape is built.
  */
 /**
- * A calendar day, read as a calendar day.
- *
- * `new Date("2025-09-05")` is UTC midnight, and anybody west of Greenwich then
- * renders it as the 4th. A match is played on a date, not at an instant.
+ * A calendar day, read as a calendar day: a match is played on a date, not at
+ * an instant, so only the `YYYY-MM-DD` part is used (`toDay` reads it local).
  */
 function formatDay(day: string): string {
-  const [y, m, d] = day.slice(0, 10).split("-").map(Number);
-  if (!y || !m || !d) return day;
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+  if (!/^\d{4}-\d{2}-\d{2}/.test(day)) return day;
+  return formatWeekdayDay(day.slice(0, 10));
 }
 
 export function DrawMatchCard({

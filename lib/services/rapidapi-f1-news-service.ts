@@ -1,9 +1,13 @@
 import "server-only";
 
+import { cache } from "react";
 import { desc, eq, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db";
-import { f1News, type F1NewsImage } from "@/db/schema";
+import { f1News } from "@/db/schema";
+import type { F1NewsArticle } from "@/types/sports";
+
+import { upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://f1-motorsport-data.p.rapidapi.com";
 const HOST = "f1-motorsport-data.p.rapidapi.com";
@@ -26,15 +30,6 @@ type RapidArticle = {
   images?: RapidImage[];
 };
 
-export type F1NewsArticle = {
-  id: string;
-  headline: string;
-  description: string | null;
-  link: string | null;
-  images: F1NewsImage[];
-  firstSeenAt: Date;
-};
-
 function articlesFrom(payload: unknown): RapidArticle[] {
   if (Array.isArray(payload)) return payload as RapidArticle[];
   const data = (payload as { data?: unknown })?.data;
@@ -55,6 +50,7 @@ export async function refreshF1News(): Promise<{ fetched: number; stored: number
   if (!key) throw new Error("RAPIDAPI_KEY is not configured");
 
   const res = await fetch(`${BASE_URL}/news?limit=${FEED_LIMIT}`, {
+    signal: upstreamSignal(),
     headers: { "X-RapidAPI-Host": HOST, "X-RapidAPI-Key": key },
     cache: "no-store",
   });
@@ -81,9 +77,13 @@ export async function refreshF1News(): Promise<{ fetched: number; stored: number
 
   if (rows.length === 0) return { fetched: articles.length, stored: 0 };
 
+  // ON CONFLICT DO UPDATE cannot touch the same row twice in one statement:
+  // a repeated id in the provider's window failed the whole refresh.
+  const unique = [...new Map(rows.map((r) => [r.articleId, r])).values()];
+
   await db
     .insert(f1News)
-    .values(rows)
+    .values(unique)
     .onConflictDoUpdate({
       target: f1News.articleId,
       set: {
@@ -99,7 +99,10 @@ export async function refreshF1News(): Promise<{ fetched: number; stored: number
 }
 
 /** One article by the provider's id, for its own page. */
-export async function getF1Article(articleId: string): Promise<F1NewsArticle | null> {
+/** Request-cached: `generateMetadata` and the page body share one read. */
+export const getF1Article = cache(async function getF1Article(
+  articleId: string
+): Promise<F1NewsArticle | null> {
   const [row] = await db
     .select()
     .from(f1News)
@@ -114,7 +117,7 @@ export async function getF1Article(articleId: string): Promise<F1NewsArticle | n
     images: row.images ?? [],
     firstSeenAt: row.firstSeenAt,
   };
-}
+});
 
 /** The rest of the wire, for the bottom of an article's page. */
 export async function getOtherF1News(
@@ -125,7 +128,7 @@ export async function getOtherF1News(
     .select()
     .from(f1News)
     .where(ne(f1News.articleId, excludeArticleId))
-    .orderBy(desc(f1News.firstSeenAt))
+    .orderBy(desc(f1News.firstSeenAt), desc(f1News.articleId))
     .limit(limit);
 
   return rows.map((r) => ({
@@ -148,7 +151,7 @@ export async function getF1News(limit = 12): Promise<F1NewsArticle[]> {
   const rows = await db
     .select()
     .from(f1News)
-    .orderBy(desc(f1News.firstSeenAt))
+    .orderBy(desc(f1News.firstSeenAt), desc(f1News.articleId))
     .limit(limit);
 
   return rows.map((r) => ({

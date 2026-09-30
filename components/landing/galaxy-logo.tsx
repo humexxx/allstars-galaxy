@@ -2,32 +2,17 @@ import { cn } from "@/lib/utils";
 
 type GalaxyLogoProps = {
   className?: string;
-  /**
-   * `theme` follows the app theme (background/foreground tokens).
-   * `light` is white-bg friendly, `dark` is black-bg friendly. The landing uses the
-   * explicit variants so it stays consistent regardless of the user's theme.
-   */
-  variant?: "theme" | "light" | "dark";
 };
 
 // Shooting-star mark. Mirrors the favicon at app/icon.svg so the brand reads
-// the same in the browser tab and inside the product.
-export function GalaxyLogo({
-  className,
-  variant = "theme",
-}: GalaxyLogoProps): React.ReactElement {
-  const variantClass =
-    variant === "light"
-      ? "bg-neutral-900 text-white"
-      : variant === "dark"
-      ? "bg-white text-neutral-900"
-      : "bg-foreground text-background";
-
+// the same in the browser tab and inside the product. Painted with the
+// foreground/background tokens: the old fixed black tile stayed black in dark
+// mode, where it vanished into the page.
+export function GalaxyLogo({ className }: GalaxyLogoProps): React.ReactElement {
   return (
     <span
       className={cn(
-        "grid size-8 place-items-center rounded-md",
-        variantClass,
+        "grid size-8 place-items-center rounded-md bg-foreground text-background",
         className
       )}
       aria-hidden="true"

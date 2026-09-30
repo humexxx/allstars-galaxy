@@ -14,23 +14,7 @@
  * to a path like `/apps/<slug>.png` to use a manual asset from /public.
  */
 
-export type AppProvider = "vercel" | "firebase" | "other";
-
-export type AppListing = {
-  slug: string;
-  name: string;
-  description: string;
-  url: string | null;
-  provider: AppProvider;
-  screenshot: string | null;
-  updatedAt: string | null;
-  status: "live" | "coming-soon";
-  // Direct link to the provider's console/dashboard for this project.
-  // Populated automatically for Vercel apps (via API) and Firebase apps
-  // (derived from the *.web.app / *.firebaseapp.com URL). Leave undefined
-  // for manual apps to fall back to URL-based derivation.
-  consoleUrl?: string | null;
-};
+import type { AppListing } from "@/types/apps";
 
 // Apps NOT on Vercel — edit freely. Vercel apps are auto-discovered.
 export const MANUAL_APPS: AppListing[] = [

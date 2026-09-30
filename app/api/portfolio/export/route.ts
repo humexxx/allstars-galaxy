@@ -86,7 +86,7 @@ const COLUMNS: { header: string; get: (r: Row) => unknown; sum?: boolean }[] = [
   { header: "Notes", get: (r) => r.notes },
 ];
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   const ctx = await requireEffectiveContext();
 
   const [portfolio, investorTx, assets] = await Promise.all([
@@ -171,7 +171,8 @@ export async function GET() {
           risk: "",
           amount: null,
           fee: null,
-          total: t.total,
+          // Signed so the totals line nets withdrawals instead of adding them.
+          total: t.type === "withdrawal" ? `-${t.total}` : t.total,
           contributed: t.initialValue,
           owed: t.currentValue,
           notes: null,

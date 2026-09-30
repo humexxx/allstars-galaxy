@@ -24,7 +24,6 @@ export function DashboardFinanceMiniChart({ data }: { data: MiniPoint[] }) {
           dataKey="month"
           tickLine={false}
           axisLine={false}
-          tick={{ fontSize: 11 }}
           minTickGap={20}
         />
         <YAxis hide />

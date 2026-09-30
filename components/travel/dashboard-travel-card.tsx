@@ -4,9 +4,18 @@ import { ArrowRight, CalendarDays, ListChecks, MapPin, Plane, Plus } from "lucid
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
+import { formatDayRange, toDay } from "@/lib/utils/date";
 import { getDashboardTravelSummary } from "@/lib/services/travel-service";
+import { formatTripMoney } from "@/lib/travel/format";
 import type { DashboardTravelFeaturedTrip, DashboardTravelTripState } from "@/types/travel";
 
 const TRAVEL_PATH = "/portal/entertainment/travel-planner";
@@ -23,19 +32,19 @@ export async function DashboardTravelCard({ userId }: DashboardTravelCardProps) 
     return (
       <Card className="col-span-full">
         <CardHeader>
-          <Heading level="h5" as="h2" className="flex items-center gap-2">
+          <CardTitle as="h2" className="flex items-center gap-2">
             <Plane className="size-5" />
             Travel Planner
-          </Heading>
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Text variant="muted" className="text-sm">
+          <Text variant="muted">
             Plan your next trip — dates, lodging, transport and a shareable link, all
             in one place.
           </Text>
           <Button asChild>
             <Link href={NEW_TRAVEL_PATH}>
-              <Plus className="mr-1 size-4" /> New trip
+              <Plus /> New trip
             </Link>
           </Button>
         </CardContent>
@@ -49,22 +58,18 @@ export async function DashboardTravelCard({ userId }: DashboardTravelCardProps) 
   return (
     <Card className="col-span-full">
       <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <Heading level="h5" as="h2" className="flex items-center gap-2">
-              <Plane className="size-5" />
-              Travel Planner
-            </Heading>
-            <Text variant="muted" className="mt-1 text-sm">
-              {subtitle}
-            </Text>
-          </div>
+        <CardTitle as="h2" className="flex items-center gap-2">
+          <Plane className="size-5" />
+          Travel Planner
+        </CardTitle>
+        <CardDescription>{subtitle}</CardDescription>
+        <CardAction>
           <Button variant="outline" size="sm" asChild>
             <Link href={TRAVEL_PATH}>
-              Open <ArrowRight className="ml-1 size-3" />
+              Open <ArrowRight />
             </Link>
           </Button>
-        </div>
+        </CardAction>
       </CardHeader>
       <CardContent>
         <FeaturedTripCard trip={featured} />
@@ -77,11 +82,11 @@ function FeaturedTripCard({ trip }: { trip: DashboardTravelFeaturedTrip }) {
   return (
     <Link
       href={`${TRAVEL_PATH}/${trip.id}`}
-      className="group block overflow-hidden rounded-lg border bg-card transition-shadow hover:shadow-md"
+      className="group block overflow-hidden rounded-lg border bg-card transition-colors hover:bg-muted/40"
     >
       <div className="grid sm:grid-cols-[200px_1fr]">
         <div
-          className="relative aspect-[16/9] sm:aspect-auto sm:h-full sm:min-h-[140px]"
+          className="relative aspect-video sm:aspect-auto sm:h-full sm:min-h-35"
           style={trip.coverPhotoUrl ? undefined : { backgroundColor: trip.color }}
         >
           {trip.coverPhotoUrl ? (
@@ -118,17 +123,17 @@ function FeaturedTripCard({ trip }: { trip: DashboardTravelFeaturedTrip }) {
             )}
             <span className="inline-flex items-center gap-1.5">
               <CalendarDays className="size-3.5" />
-              <Mono className="text-xs">{formatDateRange(trip.startDate, trip.endDate)}</Mono>
+              <Mono>{formatDayRange(trip.startDate, trip.endDate)}</Mono>
             </span>
             <span className="inline-flex items-center gap-1.5">
               <ListChecks className="size-3.5" />
-              <Mono className="text-xs">
+              <Mono>
                 {trip.itemCount} {trip.itemCount === 1 ? "item" : "items"}
               </Mono>
             </span>
             {trip.totalEstimate > 0 && (
-              <Mono className="text-xs font-medium text-foreground">
-                {formatMoney(trip.totalEstimate, trip.currency)}
+              <Mono className="font-medium text-foreground">
+                {formatTripMoney(trip.totalEstimate, trip.currency)}
               </Mono>
             )}
           </div>
@@ -139,61 +144,21 @@ function FeaturedTripCard({ trip }: { trip: DashboardTravelFeaturedTrip }) {
 }
 
 /**
- * Three hand-rolled pills became three Badge variants.
- *
- * They were raw emerald and sky, which is a colour asserting a meaning the
- * theme has no say in — a state indicator has to move with the palette, and
- * these carried their own `dark:` overrides to prove it. The variants say the
- * same thing in the theme's own terms: the trip you are on now is the one
- * worth pointing at, the next one is secondary, a finished one is an outline.
+ * The Badge status variants rather than a colour chosen per card: happening
+ * now is success, next is info, finished is a neutral outline.
  */
 const STATE_BADGE: Record<
   DashboardTravelTripState,
-  { label: string; variant: "default" | "secondary" | "outline" }
+  { label: string; variant: "success" | "info" | "outline" }
 > = {
-  in_progress: { label: "In progress", variant: "default" },
-  upcoming: { label: "Upcoming", variant: "secondary" },
+  in_progress: { label: "In progress", variant: "success" },
+  upcoming: { label: "Upcoming", variant: "info" },
   past: { label: "Past", variant: "outline" },
 };
 
 function StateBadge({ state }: { state: DashboardTravelTripState }) {
   const { label, variant } = STATE_BADGE[state];
-  return (
-    <Badge variant={variant} className="text-2xs font-medium">
-      {label}
-    </Badge>
-  );
-}
-
-function parseTripDate(value: string): Date {
-  const [y, m, d] = value.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function formatDateRange(start: string, end: string | null): string {
-  const fmt = (d: Date) =>
-    d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const s = parseTripDate(start);
-  if (!end || start === end) return fmt(s);
-  const e = parseTripDate(end);
-  const sameMonth = s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth();
-  if (sameMonth) {
-    return `${s.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${fmt(e)}`;
-  }
-  return `${fmt(s)} – ${fmt(e)}`;
-}
-
-function formatMoney(value: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(value);
-  } catch {
-    return `${currency} ${value.toFixed(2)}`;
-  }
+  return <Badge variant={variant}>{label}</Badge>;
 }
 
 function relativeLabel(trip: DashboardTravelFeaturedTrip): string {
@@ -201,21 +166,21 @@ function relativeLabel(trip: DashboardTravelFeaturedTrip): string {
   today.setHours(0, 0, 0, 0);
   if (trip.state === "in_progress") {
     const endStr = trip.endDate ?? trip.startDate;
-    const end = parseTripDate(endStr);
+    const end = toDay(endStr);
     const days = Math.round((end.getTime() - today.getTime()) / 86_400_000);
     if (days === 0) return "Ends today";
     if (days === 1) return "Ends tomorrow";
     return `Ends in ${days} days`;
   }
   if (trip.state === "upcoming") {
-    const start = parseTripDate(trip.startDate);
+    const start = toDay(trip.startDate);
     const days = Math.round((start.getTime() - today.getTime()) / 86_400_000);
     if (days === 0) return "Starts today";
     if (days === 1) return "Tomorrow";
     if (days <= 30) return `In ${days} days`;
     return `In ${Math.round(days / 30)} mo`;
   }
-  const end = parseTripDate(trip.endDate ?? trip.startDate);
+  const end = toDay(trip.endDate ?? trip.startDate);
   const days = Math.round((today.getTime() - end.getTime()) / 86_400_000);
   if (days === 1) return "Yesterday";
   if (days <= 30) return `${days} days ago`;

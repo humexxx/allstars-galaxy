@@ -34,7 +34,7 @@ export function ActivityVideo({
       <iframe
         src={video.embedUrl}
         title={`${title} — video`}
-        className={video.aspect === "portrait" ? "aspect-[9/14] w-full" : "aspect-video w-full"}
+        className={video.aspect === "portrait" ? "aspect-9/14 w-full" : "aspect-video w-full"}
         allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         // Third-party frame: allow it to play and go fullscreen, nothing else.
         sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"

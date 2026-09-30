@@ -202,7 +202,9 @@ describe("moving an item", () => {
     const grip = bar.querySelector("[draggable]")!;
 
     expect(bar.getAttribute("draggable")).toBeNull();
-    expect(grip.getAttribute("aria-label")).toBe("Drag to move");
+    // Pointer-only, so hidden from assistive tech (an aria-label on a role-less
+    // span is ignored anyway); the keyboard path is the bar's edit dialog.
+    expect(grip.getAttribute("aria-hidden")).toBe("true");
     expect(grip.className).toContain("cursor-grab");
   });
 });

@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 
 import { Mono } from "@/components/ui/typography";
+import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
+
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 type FinancialHealthDonutProps = {
   /** Fixed monthly obligations: living expenses + scheduled debt payments. */
@@ -31,16 +34,16 @@ function statusFor(ratio: number, hasIncome: boolean): Status {
   if (!hasIncome)
     return { label: "No income", tone: "muted", stroke: "currentColor" };
   if (ratio < GREEN_THRESHOLD)
-    return { label: "Healthy", tone: "positive", stroke: "#16a34a" };
+    return { label: "Healthy", tone: "positive", stroke: "var(--success)" };
   if (ratio < YELLOW_THRESHOLD)
-    return { label: "Caution", tone: "warning", stroke: "#f59e0b" };
-  return { label: "Stretched", tone: "negative", stroke: "#dc2626" };
+    return { label: "Caution", tone: "warning", stroke: "var(--warning)" };
+  return { label: "Stretched", tone: "negative", stroke: "var(--destructive)" };
 }
 
 const TONE_TEXT: Record<Status["tone"], string> = {
-  positive: "text-emerald-600 dark:text-emerald-400",
-  warning: "text-amber-600 dark:text-amber-400",
-  negative: "text-rose-600 dark:text-rose-400",
+  positive: "text-success",
+  warning: "text-warning",
+  negative: "text-destructive",
   muted: "text-muted-foreground",
 };
 
@@ -55,9 +58,12 @@ export function FinancialHealthDonut({
   const status = statusFor(targetRatio, hasIncome);
 
   // Animated ratio for the ring fill + percentage label. Same easeOutQuint
-  // we use everywhere else so the page feels unified on first paint.
-  const [displayedRatio, setDisplayedRatio] = useState(0);
+  // we use everywhere else so the page feels unified on first paint. With
+  // reduced motion the ring is simply drawn at its value.
+  const reducedMotion = usePrefersReducedMotion();
+  const [animatedRatio, setDisplayedRatio] = useState(0);
   useEffect(() => {
+    if (reducedMotion) return;
     let cancelled = false;
     let startRatio: number | null = null;
     const startTime = performance.now();
@@ -78,11 +84,15 @@ export function FinancialHealthDonut({
       cancelled = true;
       cancelAnimationFrame(raf);
     };
-  }, [targetRatio]);
+  }, [targetRatio, reducedMotion]);
+  const displayedRatio = reducedMotion ? targetRatio : animatedRatio;
 
   const displayedPercent = hasIncome
     ? `${Math.round(displayedRatio * 100)}%`
     : "—";
+  // The name is built from the target, not the count-up: a screen reader
+  // would otherwise announce whatever frame it happened to read.
+  const targetPercent = hasIncome ? `${Math.round(targetRatio * 100)}%` : "no income";
 
   // Geometry: a full circle. We use SVG stroke-dasharray to fill the ring
   // proportionally to the displayed ratio. r and stroke scale off `size` so
@@ -106,7 +116,7 @@ export function FinancialHealthDonut({
           width={size}
           height={size}
           role="img"
-          aria-label={`${status.label}, ${displayedPercent} obligations to income`}
+          aria-label={`${status.label}, ${targetPercent} obligations to income`}
           // Rotate so the ring fills clockwise starting from 12 o'clock.
           style={{ transform: "rotate(-90deg)" }}
         >
@@ -133,13 +143,20 @@ export function FinancialHealthDonut({
             strokeDashoffset={dashOffset}
           />
         </svg>
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
+        >
           <span
-            className={`font-mono ${percentClass} font-bold leading-none tabular-nums ${TONE_TEXT[status.tone]}`}
+            className={cn(
+              "font-mono font-bold leading-none tabular-nums",
+              percentClass,
+              TONE_TEXT[status.tone]
+            )}
           >
             {displayedPercent}
           </span>
-          <span className={`text-2xs font-medium ${TONE_TEXT[status.tone]}`}>
+          <span className={cn("text-2xs font-medium", TONE_TEXT[status.tone])}>
             {status.label}
           </span>
         </div>

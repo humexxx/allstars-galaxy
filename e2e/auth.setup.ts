@@ -16,7 +16,7 @@ setup("authenticate test user", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByRole("button", { name: "Login", exact: true }).click();
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
 
   // Landing on /portal proves the session cookie was set and middleware accepts it.
   await page.waitForURL("**/portal**", { timeout: 15_000 });

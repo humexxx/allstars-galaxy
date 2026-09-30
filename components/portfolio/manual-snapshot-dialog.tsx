@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { format } from "date-fns";
+import { toast } from "sonner";
+
 import {
   Dialog,
   DialogContent,
@@ -10,13 +13,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -26,15 +25,15 @@ import {
 } from "@/components/ui/select";
 import {
   Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
   FieldGroup,
   FieldLabel,
-  FieldDescription,
 } from "@/components/ui/field";
 import { createManualSnapshotAction } from "@/app/actions/portfolio-snapshots";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { format } from "date-fns";
-import { Calendar as CalendarIcon } from "lucide-react";
+import { runAction } from "@/lib/actions/run";
+import { toDay } from "@/lib/utils/date";
 import type { SnapshotSource } from "@/schemas/snapshot";
 
 interface ManualSnapshotDialogProps {
@@ -42,129 +41,104 @@ interface ManualSnapshotDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const todayIso = (): string => format(new Date(), "yyyy-MM-dd");
+
 export function ManualSnapshotDialog({
   open,
   onOpenChange,
 }: ManualSnapshotDialogProps) {
-  const [date, setDate] = useState<Date>(new Date());
+  const [date, setDate] = useState(todayIso);
   const [applyInterest, setApplyInterest] = useState(false);
   const [source, setSource] = useState<SnapshotSource>("manual");
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
 
-  const handleSubmit = async () => {
-    try {
-      setIsLoading(true);
+  // A snapshot records what the book was worth on a day; a future day has
+  // no value yet to record.
+  const isFuture = date > todayIso();
 
-      const result = await createManualSnapshotAction({
-        date,
-        applyInterest,
-        source,
-      });
-
-      toast.success(
-        `${result.snapshotsCreated} snapshot(s) created successfully.`
-      );
-
-      // Reset form
-      setDate(new Date());
-      setApplyInterest(false);
-      setSource("manual");
-
-      onOpenChange(false);
-      router.refresh();
-    } catch {
-      toast.error("Error creating snapshot");
-    } finally {
-      setIsLoading(false);
-    }
+  const reset = (): void => {
+    setDate(todayIso());
+    setApplyInterest(false);
+    setSource("manual");
   };
 
-  const handleClose = (open: boolean) => {
-    if (!open && !isLoading) {
-      // Reset form when closing
-      setDate(new Date());
-      setApplyInterest(false);
-      setSource("manual");
-    }
-    onOpenChange(open);
+  const handleSubmit = async (): Promise<void> => {
+    setIsLoading(true);
+    const result = await runAction(
+      createManualSnapshotAction({ date: toDay(date), applyInterest, source }),
+      { failure: "Failed to create snapshot" }
+    );
+    setIsLoading(false);
+    if (!result.ok || !result.data) return;
+
+    const created = result.data.snapshotsCreated;
+    toast.success(created === 1 ? "1 snapshot created" : `${created} snapshots created`);
+    reset();
+    onOpenChange(false);
+  };
+
+  const handleClose = (next: boolean): void => {
+    if (isLoading) return;
+    if (!next) reset();
+    onOpenChange(next);
   };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create Manual Snapshot</DialogTitle>
+          <DialogTitle>Create manual snapshot</DialogTitle>
           <DialogDescription>
-            Create a snapshot of your portfolio&apos;s current value with custom
-            settings.
+            Record every portfolio&apos;s value on a given day.
           </DialogDescription>
         </DialogHeader>
 
         <FieldGroup>
-          <Field>
-            <FieldLabel>Snapshot Date</FieldLabel>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-left font-normal"
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {format(date, "MMM d, yyyy")}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={(d) => d && setDate(d)}
-                  autoFocus
-                  disabled={(date) => {
-                    if (isLoading) return true;
-                    return date > new Date();
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
-            <FieldDescription>
-              The date for this snapshot record
-            </FieldDescription>
+          <Field data-invalid={isFuture}>
+            <FieldLabel htmlFor="snapshot-date">Snapshot date</FieldLabel>
+            <DateField
+              id="snapshot-date"
+              value={date}
+              onChange={(day) => day && setDate(day)}
+              disabled={isLoading}
+              aria-invalid={isFuture}
+            />
+            {isFuture ? (
+              <FieldError>The snapshot date can&apos;t be in the future</FieldError>
+            ) : (
+              <FieldDescription>The date for this snapshot record</FieldDescription>
+            )}
           </Field>
 
           <Field>
-            <FieldLabel htmlFor="source">Snapshot Type</FieldLabel>
+            <FieldLabel htmlFor="source">Snapshot type</FieldLabel>
             <Select
               value={source}
               onValueChange={(value) => setSource(value as SnapshotSource)}
               disabled={isLoading}
             >
-              <SelectTrigger>
+              <SelectTrigger id="source">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="manual">Manual</SelectItem>
-                <SelectItem value="admin_enforce">
-                  Admin Enforce (Protected)
-                </SelectItem>
+                <SelectItem value="admin_enforce">Admin enforce (protected)</SelectItem>
               </SelectContent>
             </Select>
             <FieldDescription>
-              Admin Enforce snapshots won&apos;t be deleted when clearing manual
+              Admin enforce snapshots aren&apos;t deleted when clearing manual
               snapshots
             </FieldDescription>
           </Field>
 
           <Field orientation="horizontal">
-            <div className="space-y-1">
-              <FieldLabel htmlFor="apply-interest">
-                Apply monthly interest
-              </FieldLabel>
+            <FieldContent>
+              <FieldLabel htmlFor="apply-interest">Apply monthly interest</FieldLabel>
               <FieldDescription>
                 Calculate and apply compound interest to all active investments
                 before creating the snapshot
               </FieldDescription>
-            </div>
+            </FieldContent>
             <Switch
               id="apply-interest"
               checked={applyInterest}
@@ -178,13 +152,14 @@ export function ManualSnapshotDialog({
           <Button
             type="button"
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={() => handleClose(false)}
             disabled={isLoading}
           >
             Cancel
           </Button>
-          <Button type="button" onClick={handleSubmit} disabled={isLoading}>
-            {isLoading ? "Creating..." : "Create Snapshot"}
+          <Button type="button" onClick={handleSubmit} disabled={isLoading || isFuture}>
+            {isLoading && <Spinner />}
+            {isLoading ? "Creating…" : "Create snapshot"}
           </Button>
         </DialogFooter>
       </DialogContent>

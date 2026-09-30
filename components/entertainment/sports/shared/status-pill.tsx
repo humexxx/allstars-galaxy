@@ -1,22 +1,31 @@
-import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
-/** Uppercase status pill for event cards (races, tournaments). */
-export function StatusPill({
-  status,
-}: {
-  status: "completed" | "upcoming" | "live";
-}) {
+type EventStatus = "completed" | "upcoming" | "live";
+
+const VARIANT = {
+  completed: "secondary",
+  upcoming: "info",
+  live: "success",
+} as const satisfies Record<EventStatus, string>;
+
+const LABEL: Record<EventStatus, string> = {
+  completed: "Completed",
+  upcoming: "Upcoming",
+  live: "Live",
+};
+
+/**
+ * The one status badge for sports events (races, tournaments, dashboard
+ * highlights). `label` renames the state where the card says it differently
+ * ("Result" for a finished match).
+ */
+export function StatusPill({ status, label }: { status: EventStatus; label?: string }) {
   return (
-    <span
-      className={cn(
-        "rounded-full px-2 py-0.5 text-2xs font-medium uppercase tracking-wide",
-        status === "completed" && "bg-muted text-muted-foreground",
-        status === "upcoming" && "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-        status === "live" &&
-          "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+    <Badge variant={VARIANT[status]}>
+      {status === "live" && (
+        <span aria-hidden className="size-1.5 rounded-full bg-current motion-safe:animate-pulse" />
       )}
-    >
-      {status}
-    </span>
+      {label ?? LABEL[status]}
+    </Badge>
   );
 }

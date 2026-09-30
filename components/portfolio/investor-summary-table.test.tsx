@@ -30,7 +30,7 @@ describe("InvestorSummaryTable", () => {
 
     expect(screen.getByText("-76.5%")).toBeInTheDocument();   // P/L
     expect(screen.getByText("-67.8%")).toBeInTheDocument();   // worth now
-    expect(screen.getByText("+8.62%")).toBeInTheDocument();   // owed has grown
+    expect(screen.getByText("+8.6%")).toBeInTheDocument();   // owed has grown
   });
 
   it("masks the amounts but keeps the shares", () => {

@@ -209,6 +209,26 @@ export async function requireThing(id: string, userId: string): Promise<Thing> {
 }
 ```
 
+## Outbound HTTP
+
+Every `fetch` to a third-party API passes `signal: upstreamSignal()` from
+[`upstream.ts`](./upstream.ts) (8s). The `unstable_cache` wrappers only protect
+the steady state; on a cache miss a provider that never answers would hold the
+render for the whole function timeout. The abort lands in the same `try/catch`
+that already falls back to mock or empty data.
+
+```typescript
+const res = await fetch(url, {
+  signal: upstreamSignal(),
+  next: { revalidate: REVALIDATE_SECONDS },
+});
+```
+
+Read-only getters that several components resolve during one render
+(`getUserPortfolio`, `getMainPlan`, `getUserPreferences`, …) are wrapped in
+React's `cache()` so the second call is free. Never wrap a getter that an action
+re-reads after mutating in the same request — it would see the stale row.
+
 ## Security Guidelines
 
 ### Always Verify Ownership

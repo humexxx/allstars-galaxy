@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Heading, Text } from "@/components/ui/typography";
 import {
   Select,
@@ -24,12 +24,11 @@ import {
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
 
-import type { DebtPaymentType, FinancePlanDebt } from "@/types/finance";
-
-type RecurrenceType =
-  | "monthly_day"
-  | "monthly_weekday"
-  | "every_n_months";
+import type {
+  DebtPaymentType,
+  FinancePlanDebt,
+  RecurrenceType,
+} from "@/types/finance";
 
 type DebtInput = {
   name: string;
@@ -42,6 +41,7 @@ type DebtInput = {
   // B1/B2 — pass through. The inline debt editor doesn't expose these yet;
   // they survive round-trips via the parent that supplies them.
   recurrenceType: RecurrenceType;
+  dayOfMonth: number | null;
   weekOfMonth: number | null;
   dayOfWeek: number | null;
   intervalMonths: number | null;
@@ -50,6 +50,7 @@ type DebtInput = {
 
 type PlanDebtEditorProps = {
   debts: FinancePlanDebt[];
+  /** These reject on failure, having already reported it. */
   onAdd: (input: DebtInput) => Promise<void>;
   onUpdate: (id: string, input: DebtInput) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -64,6 +65,7 @@ const EMPTY_DRAFT: DebtInput = {
   minPaymentPercent: "",
   minPaymentFloor: "",
   recurrenceType: "monthly_day",
+  dayOfMonth: null,
   weekOfMonth: null,
   dayOfWeek: null,
   intervalMonths: null,
@@ -73,6 +75,9 @@ const EMPTY_DRAFT: DebtInput = {
 export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEditorProps) {
   const [draft, setDraft] = useState<DebtInput>(EMPTY_DRAFT);
   const [isPending, startTransition] = useTransition();
+  // A deleted row takes its focused button with it; focus lands on the new
+  // debt's name instead of on <body>.
+  const draftNameRef = useRef<HTMLInputElement>(null);
 
   const handleAdd = () => {
     if (!draft.name.trim()) return;
@@ -87,6 +92,7 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
           minPaymentPercent: draft.minPaymentPercent || "0",
           minPaymentFloor: draft.minPaymentFloor || "0",
           recurrenceType: draft.recurrenceType,
+          dayOfMonth: draft.dayOfMonth,
           weekOfMonth: draft.weekOfMonth,
           dayOfWeek: draft.dayOfWeek,
           intervalMonths: draft.intervalMonths,
@@ -94,7 +100,7 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
         });
         setDraft(EMPTY_DRAFT);
       } catch {
-        toast.error("Failed to add debt");
+        // Already reported by the caller; the draft stays for another try.
       }
     });
   };
@@ -102,9 +108,9 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
   const isPercent = draft.paymentType === "percent_of_balance";
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       <div>
-        <Heading level="h5" as="h3">Debts</Heading>
+        <Heading level="h5" as="h2">Debts</Heading>
         <Text variant="small">
           Use <strong>Fixed</strong> for loans with a constant monthly payment, and{" "}
           <strong>% of balance</strong> for credit cards (the minimum shrinks as the
@@ -115,7 +121,7 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
       {debts.length === 0 ? (
         <EmptyState title="No debts tracked yet" />
       ) : (
-        <div className="rounded-md border">
+        <div className="rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -129,16 +135,23 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
             </TableHeader>
             <TableBody>
               {debts.map((debt) => (
-                <DebtRow key={debt.id} debt={debt} onUpdate={onUpdate} onDelete={onDelete} />
+                <DebtRow
+                  key={debt.id}
+                  debt={debt}
+                  onUpdate={onUpdate}
+                  onDelete={onDelete}
+                  onDeleted={() => draftNameRef.current?.focus()}
+                />
               ))}
             </TableBody>
           </Table>
         </div>
       )}
 
-      <div className="space-y-3 rounded-md border border-dashed p-3">
-        <div className="flex flex-wrap items-end gap-2">
+      <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed p-3">
+        <div className="flex w-full flex-wrap items-end gap-2">
           <Input
+            ref={draftNameRef}
             placeholder="Name (e.g. BAC card)"
             value={draft.name}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -167,7 +180,7 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
               setDraft({ ...draft, paymentType: v as DebtPaymentType })
             }
           >
-            <SelectTrigger className="max-w-50">
+            <SelectTrigger className="max-w-50" aria-label="New debt payment type">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -178,7 +191,7 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
         </div>
 
         {isPercent ? (
-          <div className="flex flex-wrap items-end gap-2">
+          <div className="flex w-full flex-wrap items-end gap-2">
             <Input
               placeholder="% (0.02 = 2%)"
               inputMode="decimal"
@@ -195,12 +208,12 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
               className="max-w-40"
               aria-label="Minimum payment floor"
             />
-            <span className="text-xs text-muted-foreground">
+            <Text variant="small" as="span">
               Each month: <strong>max(balance × %, floor)</strong>
-            </span>
+            </Text>
           </div>
         ) : (
-          <div className="flex flex-wrap items-end gap-2">
+          <div className="flex w-full flex-wrap items-end gap-2">
             <Input
               placeholder="Fixed monthly payment"
               inputMode="decimal"
@@ -217,7 +230,7 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
           disabled={isPending || draft.name.trim().length === 0}
           size="sm"
         >
-          <Plus className="mr-1 h-4 w-4" />
+          {isPending ? <Spinner /> : <Plus />}
           Add debt
         </Button>
       </div>
@@ -229,21 +242,37 @@ function DebtRow({
   debt,
   onUpdate,
   onDelete,
+  onDeleted,
 }: {
   debt: FinancePlanDebt;
   onUpdate: PlanDebtEditorProps["onUpdate"];
   onDelete: PlanDebtEditorProps["onDelete"];
+  onDeleted: () => void;
 }) {
   const [name, setName] = useState(debt.name);
   const [balance, setBalance] = useState(debt.initialBalance);
   const [rate, setRate] = useState(debt.monthlyInterestRate);
   const [payment, setPayment] = useState(debt.monthlyPayment);
-  const [paymentType, setPaymentType] = useState<DebtPaymentType>(
-    debt.paymentType as DebtPaymentType
-  );
+  const [paymentType, setPaymentType] = useState<DebtPaymentType>(debt.paymentType);
   const [minPercent, setMinPercent] = useState(debt.minPaymentPercent);
   const [minFloor, setMinFloor] = useState(debt.minPaymentFloor);
   const [isPending, startTransition] = useTransition();
+
+  // The same debt can be edited from the calendar's dialog. Without this the
+  // fields kept their mount-time values and the next blur here wrote them
+  // back over that edit. Only fields the server actually changed are reset,
+  // so a revalidation landing mid-edit leaves the one being typed in alone.
+  const [synced, setSynced] = useState(debt);
+  if (synced !== debt) {
+    setSynced(debt);
+    if (debt.name !== synced.name) setName(debt.name);
+    if (debt.initialBalance !== synced.initialBalance) setBalance(debt.initialBalance);
+    if (debt.monthlyInterestRate !== synced.monthlyInterestRate) setRate(debt.monthlyInterestRate);
+    if (debt.monthlyPayment !== synced.monthlyPayment) setPayment(debt.monthlyPayment);
+    if (debt.paymentType !== synced.paymentType) setPaymentType(debt.paymentType);
+    if (debt.minPaymentPercent !== synced.minPaymentPercent) setMinPercent(debt.minPaymentPercent);
+    if (debt.minPaymentFloor !== synced.minPaymentFloor) setMinFloor(debt.minPaymentFloor);
+  }
 
   const commit = (overrides: Partial<DebtInput> = {}) => {
     const next: DebtInput = {
@@ -256,36 +285,40 @@ function DebtRow({
       minPaymentFloor: overrides.minPaymentFloor ?? (minFloor.trim() || "0"),
       // Preserve the recurrence-model fields the row was loaded with — this
       // editor doesn't surface them, but inline edits should not blow them
-      // away. dayOfMonth stays nullable for legacy rows.
-      recurrenceType:
-        overrides.recurrenceType ?? (debt.recurrenceType as RecurrenceType),
-      weekOfMonth:
-        overrides.weekOfMonth !== undefined
-          ? overrides.weekOfMonth
-          : debt.weekOfMonth,
-      dayOfWeek:
-        overrides.dayOfWeek !== undefined
-          ? overrides.dayOfWeek
-          : debt.dayOfWeek,
-      intervalMonths:
-        overrides.intervalMonths !== undefined
-          ? overrides.intervalMonths
-          : debt.intervalMonths,
-      recurrenceStart:
-        overrides.recurrenceStart !== undefined
-          ? overrides.recurrenceStart
-          : debt.recurrenceStart,
+      // away. The service writes `dayOfMonth ?? null`, so leaving it out of
+      // the payload reset every payment day to the 1st on a blur.
+      dayOfMonth: debt.dayOfMonth,
+      recurrenceType: debt.recurrenceType,
+      weekOfMonth: debt.weekOfMonth,
+      dayOfWeek: debt.dayOfWeek,
+      intervalMonths: debt.intervalMonths,
+      recurrenceStart: debt.recurrenceStart,
     };
+    // Every field commits on blur, so tabbing across a row would otherwise
+    // write it five times without changing anything.
+    const unchanged =
+      next.name === debt.name &&
+      next.initialBalance === debt.initialBalance &&
+      next.monthlyInterestRate === debt.monthlyInterestRate &&
+      next.monthlyPayment === debt.monthlyPayment &&
+      next.paymentType === debt.paymentType &&
+      next.minPaymentPercent === debt.minPaymentPercent &&
+      next.minPaymentFloor === debt.minPaymentFloor;
+    if (unchanged) return;
     startTransition(async () => {
       try {
         await onUpdate(debt.id, next);
       } catch {
-        toast.error("Failed to save");
+        // Already reported by the caller.
       }
     });
   };
 
   const isPercent = paymentType === "percent_of_balance";
+  // readOnly rather than disabled while saving: the blur that starts a save
+  // has just moved focus to the next field, and disabling it would drop focus
+  // to <body>.
+  const busy = { readOnly: isPending, "aria-busy": isPending } as const;
 
   return (
     <TableRow>
@@ -294,8 +327,9 @@ function DebtRow({
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={() => commit()}
-          disabled={isPending}
+          {...busy}
           className="h-8"
+          aria-label={`${debt.name} name`}
         />
       </TableCell>
       <TableCell>
@@ -304,8 +338,9 @@ function DebtRow({
           onChange={(e) => setBalance(e.target.value)}
           onBlur={() => commit()}
           inputMode="decimal"
-          disabled={isPending}
+          {...busy}
           className="h-8"
+          aria-label={`${debt.name} balance`}
         />
       </TableCell>
       <TableCell>
@@ -314,8 +349,9 @@ function DebtRow({
           onChange={(e) => setRate(e.target.value)}
           onBlur={() => commit()}
           inputMode="decimal"
-          disabled={isPending}
+          {...busy}
           className="h-8"
+          aria-label={`${debt.name} monthly rate`}
         />
       </TableCell>
       <TableCell>
@@ -326,20 +362,20 @@ function DebtRow({
               onChange={(e) => setMinPercent(e.target.value)}
               onBlur={() => commit()}
               inputMode="decimal"
-              disabled={isPending}
+              {...busy}
               className="h-8"
               placeholder="%"
-              title="Min % of balance"
+              aria-label={`${debt.name} minimum % of balance`}
             />
             <Input
               value={minFloor}
               onChange={(e) => setMinFloor(e.target.value)}
               onBlur={() => commit()}
               inputMode="decimal"
-              disabled={isPending}
+              {...busy}
               className="h-8"
               placeholder="floor"
-              title="Minimum dollar amount"
+              aria-label={`${debt.name} minimum dollar amount`}
             />
           </div>
         ) : (
@@ -348,8 +384,9 @@ function DebtRow({
             onChange={(e) => setPayment(e.target.value)}
             onBlur={() => commit()}
             inputMode="decimal"
-            disabled={isPending}
+            {...busy}
             className="h-8"
+            aria-label={`${debt.name} monthly payment`}
           />
         )}
       </TableCell>
@@ -357,13 +394,13 @@ function DebtRow({
         <Select
           value={paymentType}
           onValueChange={(v) => {
+            if (isPending) return;
             const t = v as DebtPaymentType;
             setPaymentType(t);
             commit({ paymentType: t });
           }}
-          disabled={isPending}
         >
-          <SelectTrigger className="h-8">
+          <SelectTrigger size="sm" aria-label={`${debt.name} payment type`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -375,21 +412,22 @@ function DebtRow({
       <TableCell className="text-right">
         <Button
           variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-destructive"
+          size="icon-sm"
+          className="text-destructive"
           onClick={() =>
             startTransition(async () => {
               try {
                 await onDelete(debt.id);
+                onDeleted();
               } catch {
-                toast.error("Failed to delete");
+                // Already reported by the caller.
               }
             })
           }
           disabled={isPending}
           aria-label={`Delete ${debt.name}`}
         >
-          <Trash2 className="h-4 w-4" />
+          {isPending ? <Spinner /> : <Trash2 />}
         </Button>
       </TableCell>
     </TableRow>

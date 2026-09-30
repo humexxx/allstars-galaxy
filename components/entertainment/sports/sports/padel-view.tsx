@@ -14,7 +14,7 @@ export function PadelView({ data }: PadelViewProps) {
     <RacquetView
       // From the registry, so this cannot drift back to the tennis ball the
       // tab strip no longer uses.
-      emoji={SPORTS_BY_ID.get("padel")!.emoji}
+      emoji={SPORTS_BY_ID.get("padel")?.emoji ?? "🏓"}
       title="Padel"
       // Premier Padel, not World Padel Tour: WPT was absorbed into Premier
       // Padel in 2024, and padelapi.org — what this reads — covers Premier

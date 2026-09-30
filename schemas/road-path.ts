@@ -1,6 +1,8 @@
 import { z } from "zod";
 
-export const roadPathFrequencyEnum = z.enum(["daily", "every_other_day", "weekly", "biweekly", "monthly"]);
+import { idSchema } from "@/schemas/common";
+
+export const roadPathFrequencySchema = z.enum(["daily", "every_other_day", "weekly", "biweekly", "monthly"]);
 
 export const createRoadPathSchema = z.object({
   title: z.string().min(1, "Title is required").max(200, "Title too long"),
@@ -10,7 +12,7 @@ export const createRoadPathSchema = z.object({
   startDate: z.union([z.string(), z.date()]).transform((val) => val instanceof Date ? val : new Date(val)),
   targetDate: z.union([z.string(), z.date()]).transform((val) => val instanceof Date ? val : new Date(val)).nullable().optional(),
   autoCreateTasks: z.boolean().optional(),
-  taskFrequency: roadPathFrequencyEnum.nullable().optional(),
+  taskFrequency: roadPathFrequencySchema.nullable().optional(),
   createFirstTask: z.boolean().optional(),
 }).refine(
   (data) => {
@@ -29,7 +31,7 @@ export type CreateRoadPathInput = z.input<typeof createRoadPathSchema>;
 export type CreateRoadPathData = z.output<typeof createRoadPathSchema>;
 
 export const updateRoadPathSchema = z.object({
-  id: z.uuid(),
+  id: idSchema,
   title: z.string().min(1, "Title is required").max(200, "Title too long").optional(),
   description: z.string().max(2000, "Description too long").nullable().optional(),
   targetValue: z.number().positive().nullable().optional(),
@@ -37,14 +39,14 @@ export const updateRoadPathSchema = z.object({
   unit: z.string().max(50, "Unit too long").nullable().optional(),
   targetDate: z.union([z.string(), z.date()]).transform((val) => val instanceof Date ? val : new Date(val)).nullable().optional(),
   autoCreateTasks: z.boolean().optional(),
-  taskFrequency: roadPathFrequencyEnum.nullable().optional(),
+  taskFrequency: roadPathFrequencySchema.nullable().optional(),
   completedAt: z.union([z.string(), z.date()]).transform((val) => val instanceof Date ? val : new Date(val)).nullable().optional(),
 });
 
 export type UpdateRoadPathData = z.output<typeof updateRoadPathSchema>;
 
 export const createRoadPathMilestoneSchema = z.object({
-  roadPathId: z.string().uuid(),
+  roadPathId: idSchema,
   title: z.string().min(1, "Title is required").max(200, "Title too long"),
   description: z.string().max(2000, "Description too long").nullable().optional(),
   targetValue: z.number().positive().nullable().optional(),
@@ -57,7 +59,7 @@ export const createRoadPathMilestoneSchema = z.object({
 export type CreateRoadPathMilestoneData = z.infer<typeof createRoadPathMilestoneSchema>;
 
 export const updateRoadPathMilestoneSchema = z.object({
-  id: z.uuid(),
+  id: idSchema,
   title: z.string().min(1, "Title is required").max(200, "Title too long").optional(),
   description: z.string().max(2000, "Description too long").nullable().optional(),
   targetValue: z.number().positive().nullable().optional(),
@@ -65,10 +67,13 @@ export const updateRoadPathMilestoneSchema = z.object({
   completedAt: z.union([z.string(), z.date()]).transform((val) => val instanceof Date ? val : new Date(val)).nullable().optional(),
 });
 
-export type UpdateRoadPathMilestoneData = z.infer<typeof updateRoadPathMilestoneSchema>;
+// `completedAt` is transformed, so the action takes the input shape and the
+// service the parsed one.
+export type UpdateRoadPathMilestoneInput = z.input<typeof updateRoadPathMilestoneSchema>;
+export type UpdateRoadPathMilestoneData = z.output<typeof updateRoadPathMilestoneSchema>;
 
 export const createRoadPathProgressSchema = z.object({
-  roadPathId: z.string().uuid(),
+  roadPathId: idSchema,
   value: z.number().min(0),
   notes: z.string().max(500, "Notes too long").nullable().optional(),
   date: z.union([z.string(), z.date()]).transform((val) => val instanceof Date ? val : new Date(val)).optional(),

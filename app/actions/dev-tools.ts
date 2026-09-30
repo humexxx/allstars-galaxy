@@ -3,12 +3,12 @@
 import { revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import { requireAdmin } from "@/lib/services/auth-server";
+import { requireAdminCached } from "@/lib/services/auth-server";
 import { createDailyFinanceSnapshots } from "@/lib/services/finance-snapshot-service";
 import { createDailySnapshots } from "@/lib/services/snapshot-service";
 
 type RunDailySnapshotsResult = {
-  finance: { created: number; total: number; errors: string[] };
+  finance: { created: number; total: number; failed: number };
   portfolio: { created: number; total: number };
 };
 
@@ -26,13 +26,20 @@ export async function runDailySnapshotsAction(): Promise<
   ActionResult<RunDailySnapshotsResult>
 > {
   return safe("dev-tools:run-daily-snapshots", async () => {
-    await requireAdmin();
+    await requireAdminCached();
 
     const today = new Date();
     const finance = await createDailyFinanceSnapshots(today);
     const portfolio = await createDailySnapshots();
 
+    // The per-plan errors carry plan ids and raw Postgres text: they belong in
+    // the server log, and the browser gets only how many failed.
+    if (finance.errors.length > 0) {
+      console.error("[dev-tools:run-daily-snapshots] finance errors:", finance.errors);
+    }
+
     revalidatePath("/portal/portfolio");
+    revalidatePath("/portal/plans", "layout");
 
     return {
       success: true,
@@ -41,7 +48,7 @@ export async function runDailySnapshotsAction(): Promise<
         finance: {
           created: finance.snapshotsCreated,
           total: finance.totalPlans,
-          errors: finance.errors,
+          failed: finance.errors.length,
         },
         portfolio: {
           created: portfolio.snapshotsCreated,

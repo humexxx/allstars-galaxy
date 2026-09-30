@@ -1,16 +1,12 @@
 import "server-only";
 
+import { cache } from "react";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { userPreferences } from "@/db/schema";
 import { DEFAULT_FINANCE_MILESTONES } from "@/lib/finance/milestones";
-
-export type UserPreferences = {
-  showContextAvatar: boolean;
-  /** Net-worth milestones annotated on the projection charts. */
-  financeMilestones: number[];
-};
+import type { UserPreferences } from "@/types/preferences";
 
 // Defaults live here (not in the DB) so a user without a row — i.e. anyone
 // who never touched settings — gets them without a backfill.
@@ -19,7 +15,11 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   financeMilestones: [...DEFAULT_FINANCE_MILESTONES],
 };
 
-export async function getUserPreferences(
+/**
+ * Request-cached: the plans layout and the plan page both read it during one
+ * render.
+ */
+export const getUserPreferences = cache(async function getUserPreferences(
   userId: string
 ): Promise<UserPreferences> {
   const row = await db.query.userPreferences.findFirst({
@@ -32,7 +32,7 @@ export async function getUserPreferences(
     // so only null falls back.
     financeMilestones: row.financeMilestones ?? [...DEFAULT_FINANCE_MILESTONES],
   };
-}
+});
 
 export async function setFinanceMilestones(
   userId: string,

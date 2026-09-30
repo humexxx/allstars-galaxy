@@ -44,6 +44,18 @@ jobs:
       - name: Unit + integration tests
         run: pnpm test
 
+      # The one check lint, tsc and vitest cannot make: server/client boundary
+      # violations and module-scope env throws only surface in `next build`.
+      # Placeholder values — the build never opens a connection.
+      - name: Production build
+        run: pnpm build
+        env:
+          SKIP_ENV_VALIDATION: "1"
+          NEXT_TELEMETRY_DISABLED: "1"
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: placeholder
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:6543/postgres
+
       # E2E (Playwright) runs against a Supabase test user and a live Next.js
       # dev server — out of scope for this CI job. Add a separate workflow with
       # the appropriate env (TEST_USER_EMAIL/PASSWORD, DATABASE_URL) when ready.

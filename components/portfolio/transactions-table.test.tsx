@@ -2,9 +2,11 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { TransactionsTable, type TransactionRow } from "./transactions-table";
+import type { TransactionTableRow } from "@/types/portfolio";
 
-const ROW: TransactionRow = {
+import { TransactionsTable } from "./transactions-table";
+
+const ROW: TransactionTableRow = {
   id: "t1",
   date: "2025-08-31T00:00:00.000Z",
   methodName: "Safe Investment",

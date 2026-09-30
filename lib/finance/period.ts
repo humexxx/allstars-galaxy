@@ -70,20 +70,6 @@ export function periodRangeFor(date: Date, day: number): Period {
 }
 
 /**
- * Period at offset `index` from the period containing `from`. index=0 is the
- * current period; index=1 is the next; etc.
- */
-export function periodAtIndex(from: Date, day: number, index: number): Period {
-  let start = periodStartFor(from, day);
-  for (let i = 0; i < index; i++) {
-    start = nextPeriodStart(start, day);
-  }
-  const nextStart = nextPeriodStart(start, day);
-  const end = new Date(nextStart.getTime() - MS_PER_DAY);
-  return { start, end };
-}
-
-/**
  * `count` consecutive periods starting with the one containing `from`.
  */
 export function iteratePeriods(from: Date, day: number, count: number): Period[] {

@@ -1,7 +1,7 @@
 import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
-import type { F1NewsArticle } from "@/lib/services/rapidapi-f1-news-service";
 import type {
   F1Data,
+  F1NewsArticle,
   FootballLeagueData,
   LolData,
   NbaData,

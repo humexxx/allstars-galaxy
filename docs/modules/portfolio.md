@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active (page redesigned to mirror plan-editor layout)
-> **Last reviewed:** 2026-08-15
+> **Last reviewed:** 2026-09-29
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -10,13 +10,15 @@ metadata. Interest math is shared with [Finance](./finance.md).
 
 ## Routes
 - `/portal/portfolio` — main portfolio view
-- `/portal/investment-methods` — investment method catalog
+- `/portal/investment-methods` — `permanentRedirect` to `/portal/portfolio` (the catalog lives in its Methods tab)
 
 ## Server actions — `/app/actions/`
 - `transactions.ts` — `createTransactionAction` (replaces the legacy `/api/transactions` route)
-- `portfolio-snapshots.ts` — create manual snapshots of portfolio value
+- `portfolio-snapshots.ts` — create manual snapshots of portfolio value (`ActionResult<{ snapshotsCreated }>`)
 - `admin-transactions.ts` — admin-only approve/reject of transactions (see [Admin](./admin.md))
-- `allocations.ts` — `setAllocationsAction`, `repriceContributionsAction`, `createPriceAssetAction`, `setManualPriceAction`, `updateMethodAction`; gated on **owning the method**, not merely on being an admin
+- `allocations.ts` — `setAllocationsAction`, `repriceContributionsAction`, `createPriceAssetAction`, `setManualPriceAction`, `updateMethodAction`; gated on **owning the method**, not merely on being an admin. `setManualPriceAction` prices only `manual` assets, and only for a real (non-impersonating) admin or a caller who owns every method allocating the asset
+
+Every action returns `ActionResult<X>` (see `app/actions/AGENTS.md`).
 
 ## Services — `/lib/services/`
 - `portfolio-service.ts` — portfolio state and composition
@@ -24,22 +26,27 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `snapshot-service.ts` — snapshot persistence/queries
 - `interest-service.ts` — ROI math (shared with [Finance](./finance.md))
 - `chart-service.ts` — chart data shaping (shared utility)
-- `price-service.ts` — quote storage + provider dispatch (`refreshPrices`, `getLatestPrices`, `listPriceAssets`)
+- `price-service.ts` — quote storage + provider dispatch (`refreshPrices`, `getLatestPrices`, `listPriceAssets`, `getPriceAsset`, `createPriceAsset`, `insertManualQuote`)
 - `price-providers/` — one module per source: `massive.ts`, `coingecko.ts`, shared `types.ts`
-- `margin-service.ts` — `getMarginOverview(ownerUserId)`; positions are derived, never stored
+- `margin-service.ts` — margin maths over derived positions (never stored); its shapes live in `types/margin.ts`
+- `investment-method-service.ts` — `listAllInvestmentMethods`, `isMethodOwner`, `ownsAnyMethod`, `isAssetOnlyInOwnMethods`, `updateInvestmentMethod` (owner-scoped WHERE, one transaction returning `{ before, after }`) — the queries `allocations.ts` and the portfolio page used to run against `db` directly
 - `allocation-service.ts` — policy CRUD, `backfillTransactionAllocations`, `backfillAllOwners`, `getDerivedHoldings`
 
 ## Schemas — `/schemas/`
-- `transaction.ts`
-- `snapshot.ts`
-- `allocations.ts` — allocation policy, price-asset creation, manual quotes
+- `transaction.ts` — `CreateTransactionData`; `amount` is `moneySchema`
+- `snapshot.ts` — `snapshotSourceSchema`
+- `allocations.ts` — `SetAllocationsData`, `SetManualPriceData`, `UpdateMethodData`, `CreatePriceAssetInput` (`z.input`, the symbol is upper-cased) / `CreatePriceAssetData`
 
 ## Types — `/types/`
-- `portfolio.ts`
-- `snapshot.ts`
+- `portfolio.ts` — incl. `AssetOption`, `TransactionAllocationView`, `TransactionTableRow`
+- `transaction.ts` — `Transaction` (`$inferSelect`), `TransactionStatus` / `TransactionType` (defined once)
+- `chart.ts` — `ChartDataPoint`, `TimeRange`
+- `margin.ts` — `MarginOverview`, `InvestorBreakdown`, `MarginHistoryInput`, `MethodAllocationSummary`, `ManagedOverview`
+
+Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `lib/finance/managed-capital.ts`, `allocation-chart.tsx`, `portfolio-assets-table.tsx`, and the unused service functions `getTransactionCurrentValue`, `getManagedContributions`, `getManagedPerformanceSeries`, `getMarginOverview`, `getMarginHistory`, `getInvestorBreakdown`, `getMethodAllocations`, `backfillHistoricalQuotes`.
 
 ## Components
-- `components/portal/portfolio-client.tsx` — page shell: plan-style header (Heading h3 + muted Text), 4-card KPI grid (Total value with eye toggle, All-time profit, Cost basis, Active positions), Overview / Transactions / Methods / Managed tabs. Registers `Show charts`, `Hide values`, and admin `Manual snapshot` / `Clear manual snapshots` into the global dev drawer via `useRegisterDevTool` from `components/dev-tools/`.
+- `components/portal/portfolio-client.tsx` — page shell: `PageHeader size="compact"` (Default badge, three actions), 4-card KPI grid (Total value with eye toggle, All-time profit, Cost basis, Active positions), Overview / Transactions / Methods / Managed tabs. Registers `Show charts`, `Hide values`, and admin `Manual snapshot` / `Clear manual snapshots` into the global dev drawer via `useRegisterDevTool` from `components/dev-tools/`.
 - `components/portfolio/investment-methods-view.tsx` — `/portal/investment-methods` view: plan-style header, 4-card KPI grid (Methods, Authors, Avg monthly ROI, Best monthly ROI), inline Risk-profile breakdown bar, grouped-by-author method cards with risk-tinted badges. Registers a `Show disabled methods` toggle in the dev drawer that hot-reveals methods normally filtered out.
 - `components/portfolio/` — supporting pieces: transactions table, performance chart (lazy-loaded), add-transaction dialog, manual-snapshot dialog, asset/allocation views. *Removed in the redesign:* `portfolio-header.tsx`, `stats-cards.tsx` (their concerns moved into `portfolio-client.tsx` and the dev drawer).
 
@@ -47,14 +54,19 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `portfolios` — user's portfolio account
 - `transactions` — buy/withdrawal transactions with approval workflow
 - `portfolio_snapshots` — historical portfolio value
-- `investment_methods` — investment vehicles with risk/ROI metadata
+- `investment_methods` — investment vehicles with risk/ROI metadata; `owner_user_id` indexed, `updated_at` set by `updateMethodAction`
 - `price_assets` — catalogue of quotable assets (`symbol`, `external_id`, `source`)
-- `price_quotes` — append-only price history, one row per fetch
+- `price_quotes` — append-only price history, one row per fetch; `(asset_id, fetched_at desc)` index serves the `DISTINCT ON` latest-price read
 - `method_allocations` — the policy: what share of incoming money goes to which asset
 - `transaction_allocations` — what each contribution actually bought, at that day's price (immutable)
 - `app_state` — global key-value (cron state, etc.) — also touched by other modules
 
 ## Notes
+- **Logic audit (2026-09-11).** Monthly interest is idempotent per calendar month: the cron consults `last_interest_run` on every day (the 1st included), a failure writes `last_interest_error` instead, and the admin's manual "apply interest" marks the run too (`markInterestApplied`). Approve/reject only move a `pending` row (re-approval used to reset accrued value). `PortfolioStats.totalWithdrawn` and `getPortfolioAssets` add approved withdrawals back into profit. `getDerivedHoldings` keeps `closed` buys' units; `backfillTransactionAllocations` and `setMethodAllocations` require a policy that totals 100%. The performance chart no longer fabricates a $0 origin. Daily snapshots skip a portfolio already snapshotted today; `COUNT(*)` is cast to int. The investor summary joins on `investorId`; the admin filter ignores a non-UUID user id; the CSV signs withdrawals.
+- **Owner-only panels load on demand.** `MarginChart` and `InvestorBreakdown`
+  are `next/dynamic` in `portfolio-client.tsx`, so an investor's bundle does not
+  carry the owner dashboard. `getUserPortfolio` / `getPortfolioStats` /
+  `getPortfolioAssets` are request-cached — every plan projection asks for them.
 - **Methods have an owner.** `investment_methods.owner_user_id` (nullable, FK
   SET NULL) is the admin who runs the method; other users invest through them.
   NULL keeps the old global-catalogue behaviour, and is now also the only case

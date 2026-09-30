@@ -1,7 +1,7 @@
 # Admin
 
 > **Status:** Active
-> **Last reviewed:** 2026-07-02
+> **Last reviewed:** 2026-09-29
 
 ## Overview
 Admin-only operations: user management, transaction approval queue, and
@@ -12,10 +12,10 @@ impersonation (with audit trail).
 - `/portal/admin/transactions` — transaction approval queue
 
 ## Server actions — `/app/actions/`
-- `admin-users.ts` — update user roles (throws on validation / self-demote)
+- `admin-users.ts` — update user roles; returns `{ success: false, error }` for invalid input, a self-demote or an unknown user
 - `admin-transactions.ts` — approve/reject transactions (delegates to `transaction-service`)
 - `portfolio-snapshots.ts` — admin-only manual snapshot tools (delegates to `snapshot-service`)
-- `impersonation.ts` — start/stop admin impersonation (writes to audit log)
+- `impersonation.ts` — start/stop admin impersonation (writes to audit log); these two redirect, so they are the only actions that may throw
 
 ## Services — `/lib/services/`
 - `admin-service.ts` — user/transaction queries and mutations
@@ -27,7 +27,7 @@ impersonation (with audit trail).
 ## Schemas — `/schemas/`
 - `user.ts`
 - `transaction.ts`
-- `admin.ts` — `updateUserRoleSchema`, `adminTransactionIdSchema`
+- `admin.ts` — `updateUserRoleSchema`, `adminTransactionIdSchema`, `adminTransactionFiltersSchema` (the transactions page's search params)
 - `impersonation.ts` — `impersonationSchema`
 
 ## Types — `/types/`
@@ -43,7 +43,9 @@ impersonation (with audit trail).
 
 ## Notes
 - Conventional Commits scope: *(no dedicated scope — use `auth` for role changes, `portfolio` for transaction approvals, or add `admin` to [`commitlint.config.mjs`](../../commitlint.config.mjs))*
-- All actions in this module **must** use `adminAction` from `@/lib/services/auth-server` (not `authenticatedAction`).
+- All actions in this module open with `requireAdmin()` from `@/lib/services/auth-server`.
 - Impersonation must always write to `impersonation_logs` — never bypass.
-- Admin actions throw on error (caught by `app/portal/admin/error.tsx`, falling back to `app/portal/error.tsx`); they do **not** return `{ success: false, error }`.
-- `app/portal/admin/loading.tsx` provides a table skeleton; `app/portal/admin/error.tsx` is the module error boundary.
+- Admin actions return `ActionResult` like every other action: a thrown message is hidden by Next.js in production, so "You cannot demote yourself" never reached the admin. The UI calls them through `runAction`, and both confirm dialogs stay open with a pending label until the action settles.
+- `app/portal/admin/loading.tsx` and `admin/transactions/loading.tsx` draw their page (search / filter row + table card, via `components/admin/admin-table-skeleton.tsx`); `app/portal/admin/error.tsx` is the module error boundary.
+- The role-change dialog's copy is driven by `ROLE_META[nextRole]`, so promoting to provider no longer reads "Demote to user?".
+- **The users table sets any of the three roles** (`USER_ROLES` from `types/user.ts` drives the menu). It used to toggle admin↔user only, which made `provider` unreachable and demoted a provider to admin by accident.

@@ -8,6 +8,7 @@ import type {
   RacquetTournament,
   Team,
 } from "@/types/sports";
+import { upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/tennis";
 export const REVALIDATE_SECONDS = 300;
@@ -184,6 +185,8 @@ function drawFrom(event: EspnEvent, slug: string): EspnDraw | null {
   if (rounds.length === 0) return null;
 
   const completed = event.status?.type?.completed === true;
+  const startsAt = event.date ? new Date(event.date).getTime() : NaN;
+  const notStarted = !Number.isNaN(startsAt) && startsAt > Date.now();
   return {
     tournament: {
       id: `espn-${event.id}-${slug}`,
@@ -191,7 +194,7 @@ function drawFrom(event: EspnEvent, slug: string): EspnDraw | null {
       location: event.venue?.address?.city ?? event.venue?.fullName ?? "—",
       startDate: (event.date ?? "").slice(0, 10),
       endDate: (event.endDate ?? event.date ?? "").slice(0, 10),
-      status: completed ? "completed" : "live",
+      status: completed ? "completed" : notStarted ? "upcoming" : "live",
       bracket: rounds,
     },
     players: [...players.values()],
@@ -200,6 +203,7 @@ function drawFrom(event: EspnEvent, slug: string): EspnDraw | null {
 
 async function fetchScoreboard(tour: "atp" | "wta"): Promise<EspnScoreboard> {
   const res = await fetch(`${BASE_URL}/${tour}/scoreboard`, {
+    signal: upstreamSignal(),
     next: { revalidate: REVALIDATE_SECONDS },
   });
   if (!res.ok) throw new Error(`espn tennis ${res.status} for ${tour}`);

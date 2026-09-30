@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { BoardColumn as BoardColumnType, BoardTask } from "@/types";
 import type { CreateBoardTaskData } from "@/schemas/board";
 import { TaskDialog } from "./task-dialog";
@@ -61,6 +62,11 @@ export function BoardColumn({
   const [draftName, setDraftName] = useState(column.name);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
+  const startRename = (): void => {
+    setDraftName(column.name);
+    setRenaming(true);
+  };
+
   const commitRename = async (): Promise<void> => {
     const name = draftName.trim();
     setRenaming(false);
@@ -94,23 +100,26 @@ export function BoardColumn({
                   setRenaming(false);
                 }
               }}
-              className="h-7 w-40 text-sm"
+              className="h-8 w-40"
               aria-label="Column name"
             />
           ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setDraftName(column.name);
-                setRenaming(true);
-              }}
-              className="cursor-pointer truncate text-left outline-none focus-visible:underline"
-              title="Rename column"
-            >
-              <Heading level="h6" as="h3">{column.name}</Heading>
-            </button>
+            <Heading level="h6" as="h2" className="min-w-0">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={startRename}
+                    className="block max-w-full cursor-pointer truncate rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  >
+                    {column.name}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Rename column</TooltipContent>
+              </Tooltip>
+            </Heading>
           )}
-          <Badge variant="secondary" className="h-5 rounded-full px-2 text-2xs font-medium">
+          <Badge variant="secondary" className="tabular-nums">
             {tasks.length}
           </Badge>
         </div>
@@ -122,36 +131,29 @@ export function BoardColumn({
           >
             <Button
               variant="ghost"
-              size="icon"
-              className="size-7 text-muted-foreground hover:text-foreground"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-foreground"
+              aria-label={`Add task to ${column.name}`}
             >
-              <Plus className="size-4" />
-              <span className="sr-only">Add task</span>
+              <Plus />
             </Button>
           </TaskDialog>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
-                size="icon"
-                className="size-7 text-muted-foreground hover:text-foreground"
+                size="icon-sm"
+                className="text-muted-foreground hover:text-foreground"
+                aria-label={`Options for ${column.name}`}
               >
-                <MoreHorizontal className="size-4" />
-                <span className="sr-only">Column options</span>
+                <MoreHorizontal />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={startRename}>Rename column</DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => {
-                  setDraftName(column.name);
-                  setRenaming(true);
-                }}
-              >
-                Rename column
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setConfirmingDelete(true)}
-                className="text-destructive"
+                variant="destructive"
+                onSelect={() => setConfirmingDelete(true)}
               >
                 Delete column
               </DropdownMenuItem>
@@ -194,8 +196,8 @@ export function BoardColumn({
 
       <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
         <AlertDialogContent>
-          <AlertDialogTitle>Delete “{column.name}”?</AlertDialogTitle>
           <AlertDialogHeader>
+            <AlertDialogTitle>Delete “{column.name}”?</AlertDialogTitle>
             <AlertDialogDescription>
               {tasks.length > 0
                 ? `Its ${tasks.length} ${tasks.length === 1 ? "task goes" : "tasks go"} with it. This cannot be undone.`
@@ -204,9 +206,12 @@ export function BoardColumn({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep it</AlertDialogCancel>
+            {/* Closing on click is right here: the delete is optimistic, so
+                the column (and this dialog) leaves the board at once and a
+                failure puts it back with a toast. */}
             <AlertDialogAction
-              onClick={() => onDeleteColumn(column.id)}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              variant="destructive"
+              onClick={() => void onDeleteColumn(column.id)}
             >
               Delete
             </AlertDialogAction>

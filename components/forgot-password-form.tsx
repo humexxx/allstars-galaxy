@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button"
 import {
   Field,
   FieldGroup,
+  FieldError,
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Heading, Text } from "@/components/ui/typography"
-import { AuthService } from "@/lib/services/auth-service"
+import { AuthService } from "@/lib/auth/auth-client"
 import { forgotPasswordSchema, type ForgotPasswordData } from "@/schemas/auth"
 import { useState } from "react"
 import { useForm } from "react-hook-form"
@@ -52,44 +54,42 @@ export function ForgotPasswordForm({
     >
       <FieldGroup>
         <div className="flex flex-col items-center gap-1 text-center">
-          <Heading level="h3" as="h1">Reset Password</Heading>
+          <Heading level="h3" as="h1">Reset password</Heading>
           <Text variant="muted" className="text-balance">
             Enter your email to receive a password reset link
           </Text>
         </div>
         
         {error && (
-          <div
-            className="text-destructive text-sm text-center p-2 bg-destructive/10 rounded"
-            role="alert"
-            aria-live="polite"
-          >
-            {error}
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         {success && (
-          <div className="rounded border border-emerald-500/30 bg-emerald-500/10 p-2 text-center text-sm text-emerald-700 dark:text-emerald-300" aria-live="polite">
-            Check your email for the password reset link.
-          </div>
+          <Alert variant="success">
+            <AlertDescription>
+              Check your email for the password reset link.
+            </AlertDescription>
+          </Alert>
         )}
 
-        <Field>
+        <Field data-invalid={!!errors.email}>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" type="email" placeholder="m@example.com" autoComplete="email" {...register("email")} />
-          {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+          <Input id="email" type="email" placeholder="m@example.com" autoComplete="email" aria-invalid={!!errors.email} {...register("email")} />
+          <FieldError errors={[errors.email]} />
         </Field>
 
         <Field>
           <Button type="submit" disabled={isSubmitting || success} className="w-full">
-            {isSubmitting ? "Sending..." : "Send Reset Link"}
+            {isSubmitting ? "Sending…" : "Send reset link"}
           </Button>
         </Field>
 
         <div className="text-center text-sm">
           Remember your password?{" "}
           <Link href="/login" className="underline underline-offset-4">
-            Login
+            Log in
           </Link>
         </div>
       </FieldGroup>

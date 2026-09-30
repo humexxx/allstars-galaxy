@@ -16,7 +16,7 @@ export function LandingCta() {
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(50% 60% at 50% 100%, rgba(99,102,241,0.10) 0%, rgba(255,255,255,0) 70%)",
+            "radial-gradient(50% 60% at 50% 100%, color-mix(in oklch, var(--primary) 14%, transparent) 0%, transparent 70%)",
         }}
       />
       <div className="relative mx-auto max-w-3xl px-6 py-28 text-center">

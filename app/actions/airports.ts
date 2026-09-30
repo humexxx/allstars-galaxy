@@ -1,7 +1,9 @@
 "use server";
 
+import { safe, type ActionResult } from "@/lib/actions/safe";
 import { searchAirports } from "@/lib/travel/airports";
 import type { Airport } from "@/lib/travel/airports";
+import { airportQuerySchema } from "@/schemas/travel";
 
 /**
  * Airport lookup, run on the server.
@@ -11,8 +13,14 @@ import type { Airport } from "@/lib/travel/airports";
  * at zero bytes and keeps every airport findable, rather than bundling a
  * "top 200" list that fails the moment somebody flies somewhere small.
  *
- * No auth gate: this is a public reference table, not anybody's data.
+ * No auth gate: this is a public reference table, not anybody's data. It is
+ * still a public endpoint, so the query is bounded before it is scanned — a
+ * malformed one simply finds nothing.
  */
-export async function searchAirportsAction(query: string): Promise<Airport[]> {
-  return searchAirports(query, 8);
+export async function searchAirportsAction(query: string): Promise<ActionResult<Airport[]>> {
+  return safe("airports", async () => {
+    const parsed = airportQuerySchema.safeParse(query);
+    if (!parsed.success) return { success: true, data: [] };
+    return { success: true, data: searchAirports(parsed.data, 8) };
+  });
 }

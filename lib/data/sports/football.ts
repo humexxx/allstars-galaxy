@@ -187,8 +187,6 @@ export const FOOTBALL_LEAGUE_IDS: FootballLeagueId[] = [
   "serie-a",
 ];
 
-export const FOOTBALL_TEAMS: Team[] = TEAMS;
-
 export function getFootballLeague(id: FootballLeagueId): FootballLeagueData {
   return LEAGUES[id];
 }

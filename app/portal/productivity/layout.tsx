@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 
-import { PortalPageContainer } from "@/components/portal/page-container";
-
-/** Every route under /portal/productivity reads at the default width. */
+/**
+ * No container here: the board and the road paths want different widths, so
+ * each child segment declares its own `PortalPageContainer`.
+ */
 export default function ProductivityLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  return <PortalPageContainer>{children}</PortalPageContainer>;
+  return <>{children}</>;
 }

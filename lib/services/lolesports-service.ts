@@ -17,6 +17,7 @@ import type {
   MatchStatus,
   Team,
 } from "@/types/sports";
+import { upstreamSignal } from "./upstream";
 
 // Lolesports' public-but-unofficial endpoint. The x-api-key value is the same
 // one their own site (lolesports.com) ships in its frontend — it's a
@@ -113,6 +114,7 @@ type LolesportsStandingsEntry = { stages: LolesportsStage[] };
 async function fetchLolesports<T>(path: string): Promise<T> {
   const url = `${LOLESPORTS_BASE_URL}${path}${path.includes("?") ? "&" : "?"}hl=en-US`;
   const res = await fetch(url, {
+    signal: upstreamSignal(),
     headers: { "x-api-key": LOLESPORTS_API_KEY },
     next: { revalidate: REVALIDATE_SECONDS },
   });
@@ -249,7 +251,10 @@ const ROUND_IDS_FROM_END: BracketRoundId[] = [
 function buildLolBracket(
   sections: Array<{ name: string | null; matches: LolesportsStandingsMatch[] }>,
 ): BracketRound[] {
-  const named = sections.filter((s) => s.name && s.matches.length > 0);
+  const named = sections.filter(
+    (s): s is { name: string; matches: LolesportsStandingsMatch[] } =>
+      Boolean(s.name) && s.matches.length > 0,
+  );
   if (named.length === 0) {
     return partitionBracketByTbd(sections.flatMap((s) => s.matches));
   }
@@ -259,7 +264,7 @@ function buildLolBracket(
       ROUND_IDS_FROM_END[Math.min(fromEnd, ROUND_IDS_FROM_END.length - 1)];
     return {
       id,
-      label: s.name!,
+      label: s.name,
       matches: s.matches.map((m, i) => toBracketMatch(m, `${idx}-${i}`)),
     };
   });
@@ -300,12 +305,16 @@ function toBracketMatch(
   const awayReal = away && away.code !== "TBD";
   const homeWins = home?.result?.gameWins ?? null;
   const awayWins = away?.result?.gameWins ?? null;
-  const hasScore = homeWins !== null && awayWins !== null && (homeWins > 0 || awayWins > 0);
+  const scored =
+    homeWins !== null && awayWins !== null && (homeWins > 0 || awayWins > 0)
+      ? { home: homeWins, away: awayWins }
+      : null;
+  const hasScore = scored !== null;
   const winnerCode =
-    hasScore && home && away
-      ? homeWins! > awayWins!
+    scored && home && away
+      ? scored.home > scored.away
         ? home.code
-        : awayWins! > homeWins!
+        : scored.away > scored.home
           ? away.code
           : null
       : null;

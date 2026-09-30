@@ -1,7 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import Link from "next/link";
+import { Calendar, MoreHorizontal } from "lucide-react";
+
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,25 +23,23 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Heading, Mono, Text } from "@/components/ui/typography";
 import { Button } from "@/components/ui/button";
-import { Calendar, MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
+import { Spinner } from "@/components/ui/spinner";
+import { Mono, Text } from "@/components/ui/typography";
 import { deleteRoadPathAction } from "@/app/actions/road-path";
 import { runAction } from "@/lib/actions/run";
+import { formatDay } from "@/lib/utils/date";
 import type { RoadPath } from "@/types";
-import { format } from "date-fns";
 
 type RoadPathCardProps = {
   roadPath: RoadPath;
-  onClick: () => void;
-  onRefresh: () => void;
 };
 
 const FREQUENCY_LABELS: Record<string, string> = {
@@ -42,16 +50,19 @@ const FREQUENCY_LABELS: Record<string, string> = {
   monthly: "Monthly",
 };
 
-export function RoadPathCard({ roadPath, onClick, onRefresh }: RoadPathCardProps) {
+export function RoadPathCard({ roadPath }: RoadPathCardProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  const handleDelete = async () => {
+  const handleDelete = async (): Promise<void> => {
+    setDeleting(true);
     const { ok } = await runAction(deleteRoadPathAction(roadPath.id), {
       success: "Road path deleted",
       failure: "Failed to delete road path",
     });
-    setConfirmingDelete(false);
-    if (ok) onRefresh();
+    setDeleting(false);
+    // The action revalidates the list, so a success takes this card with it.
+    if (ok) setConfirmingDelete(false);
   };
 
   const target = roadPath.targetValue ? parseFloat(roadPath.targetValue) : null;
@@ -62,70 +73,73 @@ export function RoadPathCard({ roadPath, onClick, onRefresh }: RoadPathCardProps
 
   return (
     <>
-      <Card
-        className="cursor-pointer transition-colors hover:border-primary"
-        onClick={onClick}
-      >
+      {/* The title is the link; its ::after stretches over the whole card so
+          the card is one big hit area that the keyboard can also reach. */}
+      <Card className="relative transition-shadow hover:shadow-md hover:ring-foreground/15">
         <CardHeader>
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <Heading level="h4" as="h3">{roadPath.title}</Heading>
-              {roadPath.description && (
-                <Text variant="muted" className="mt-1 line-clamp-2">
-                  {roadPath.description}
-                </Text>
-              )}
-            </div>
+          <CardTitle as="h2">
+            <Link
+              href={`?path=${roadPath.id}`}
+              scroll={false}
+              className="rounded-sm outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring/50"
+            >
+              {roadPath.title}
+            </Link>
+          </CardTitle>
+          {roadPath.description && (
+            <CardDescription className="line-clamp-2">{roadPath.description}</CardDescription>
+          )}
+          <CardAction className="relative z-10">
             <DropdownMenu>
-              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">Road path options</span>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Options for ${roadPath.title}`}
+                >
+                  <MoreHorizontal />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setConfirmingDelete(true);
-                  }}
-                  className="text-destructive"
+                  variant="destructive"
+                  onSelect={() => setConfirmingDelete(true)}
                 >
                   Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
+          </CardAction>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="flex flex-col gap-3">
           {/* How far along, which is the whole reason for a road path and was
               the one thing the card did not say. */}
           {percent !== null ? (
-            <div className="space-y-1.5">
-              <Progress value={percent} />
+            <div className="flex flex-col gap-1.5">
+              <Progress value={percent} aria-label={`${roadPath.title} progress`} />
               <div className="flex items-baseline justify-between">
-                <Text variant="small" className="text-muted-foreground">
+                <Text variant="small">
                   <Mono>{current}</Mono> / <Mono>{target}</Mono> {roadPath.unit}
                 </Text>
                 <Mono className="text-sm font-medium">{Math.round(percent)}%</Mono>
               </div>
             </div>
           ) : current > 0 ? (
-            <Text variant="small" className="text-muted-foreground">
+            <Text variant="small">
               <Mono>{current}</Mono> {roadPath.unit} so far
             </Text>
           ) : (
-            <Text variant="small" className="text-muted-foreground">
-              Nothing logged yet
-            </Text>
+            <Text variant="small">Nothing logged yet</Text>
           )}
 
           {(roadPath.targetDate || roadPath.taskFrequency) && (
             <div className="flex flex-wrap items-center gap-2">
               {roadPath.targetDate && (
                 <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <Calendar className="h-4 w-4" />
-                  <Mono>{format(new Date(roadPath.targetDate), "MMM d, yyyy")}</Mono>
+                  <Calendar className="size-4" aria-hidden="true" />
+                  {/* A timestamp: server (UTC) and browser can land on
+                      different days near midnight. */}
+                  <Mono suppressHydrationWarning>{formatDay(roadPath.targetDate)}</Mono>
                 </span>
               )}
               {roadPath.taskFrequency && (
@@ -148,12 +162,19 @@ export function RoadPathCard({ roadPath, onClick, onRefresh }: RoadPathCardProps
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>Keep it</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              variant="destructive"
+              disabled={deleting}
+              onClick={(e) => {
+                // Stay open until the delete settles, so the pending state
+                // and any failure show in the dialog that asked for it.
+                e.preventDefault();
+                void handleDelete();
+              }}
             >
-              Delete
+              {deleting && <Spinner />}
+              {deleting ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

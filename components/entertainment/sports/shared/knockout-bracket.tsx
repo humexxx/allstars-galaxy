@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isBracketDrawn } from "@/lib/sports/bracket";
 import { cn } from "@/lib/utils";
 import type { BracketMatch, BracketRound, Team } from "@/types/sports";
@@ -52,14 +54,12 @@ function initialWindowStart(rounds: BracketRound[]): number {
 export function KnockoutBracket({ rounds, teams, className, renderMatch }: KnockoutBracketProps) {
   if (rounds.length === 0 || !isBracketDrawn(rounds)) {
     return (
-      <div
-        className={cn(
-          "rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground",
-          className,
-        )}
-      >
-        The bracket is not drawn yet — nobody has qualified into it.
-      </div>
+      <EmptyState
+        icon={Trophy}
+        title="The bracket is not drawn yet"
+        description="Nobody has qualified into it."
+        className={className}
+      />
     );
   }
 
@@ -143,61 +143,59 @@ function MobileBracket({
   const slots =
     canPair && next ? orderPairs(active.matches, next.matches) : null;
 
-  return (
-    <div className={cn("space-y-3", className)}>
-      <div
-        role="tablist"
-        aria-label="Knockout rounds"
-        className="relative -mx-1 flex gap-1 overflow-x-auto px-1"
-      >
-        {rounds.map((round, i) => (
-          <button
-            key={round.id}
-            type="button"
-            role="tab"
-            aria-selected={i === idx}
-            onClick={() => setActiveIdx(i)}
-            className={cn(
-              "shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-              i === idx
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {round.label}
-          </button>
-        ))}
-      </div>
-
-      {slots && next ? (
-        <div className="space-y-4">
-          {next.matches.map((nextMatch, k) => {
-            const top = slots[k * 2];
-            const bottom = slots[k * 2 + 1];
-            return (
-              <div key={nextMatch.id} className="flex items-stretch">
-                <div className="flex min-w-0 flex-1 flex-col justify-around gap-3">
-                  {top && <Tie match={top} teams={teams} render={renderMatch} />}
-                  {bottom && <Tie match={bottom} teams={teams} render={renderMatch} />}
-                </div>
-                <PairConnector />
-                <div className="flex min-w-0 flex-1 items-center">
-                  <div className="w-full">
-                    <Tie match={nextMatch} teams={teams} render={renderMatch} />
-                  </div>
+  const panel =
+    slots && next ? (
+      <div className="flex flex-col gap-4">
+        {next.matches.map((nextMatch, k) => {
+          const top = slots[k * 2];
+          const bottom = slots[k * 2 + 1];
+          return (
+            <div key={nextMatch.id} className="flex items-stretch">
+              <div className="flex min-w-0 flex-1 flex-col justify-around gap-3">
+                {top && <Tie match={top} teams={teams} render={renderMatch} />}
+                {bottom && <Tie match={bottom} teams={teams} render={renderMatch} />}
+              </div>
+              <PairConnector />
+              <div className="flex min-w-0 flex-1 items-center">
+                <div className="w-full">
+                  <Tie match={nextMatch} teams={teams} render={renderMatch} />
                 </div>
               </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {active.matches.map((match) => (
-            <Tie key={match.id} match={match} teams={teams} render={renderMatch} />
-          ))}
-        </div>
-      )}
-    </div>
+            </div>
+          );
+        })}
+      </div>
+    ) : (
+      <div className="flex flex-col gap-3">
+        {active.matches.map((match) => (
+          <Tie key={match.id} match={match} teams={teams} render={renderMatch} />
+        ))}
+      </div>
+    );
+
+  return (
+    <Tabs
+      value={String(idx)}
+      onValueChange={(v) => setActiveIdx(Number(v))}
+      className={cn("gap-3", className)}
+    >
+      <TabsList
+        variant="line"
+        aria-label="Knockout rounds"
+        className="w-full justify-start overflow-x-auto"
+      >
+        {rounds.map((round, i) => (
+          <TabsTrigger key={round.id} value={String(i)} className="flex-none px-3">
+            {round.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+      {rounds.map((round, i) => (
+        <TabsContent key={round.id} value={String(i)}>
+          {i === idx ? panel : null}
+        </TabsContent>
+      ))}
+    </Tabs>
   );
 }
 
@@ -232,7 +230,7 @@ function DesktopBracket({ rounds, teams, className, renderMatch }: KnockoutBrack
   const visibleRounds = rounds.slice(start, start + VISIBLE_COUNT);
 
   return (
-    <div className={cn("space-y-3", className)}>
+    <div className={cn("flex flex-col gap-3", className)}>
       <div className="flex items-center justify-between gap-2">
         {maxStart > 0 ? (
           <Button
@@ -242,7 +240,7 @@ function DesktopBracket({ rounds, teams, className, renderMatch }: KnockoutBrack
             onClick={() => setWindowStart((s) => Math.max(0, s - 1))}
             aria-label="Previous round"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft />
           </Button>
         ) : null}
         <div
@@ -267,7 +265,7 @@ function DesktopBracket({ rounds, teams, className, renderMatch }: KnockoutBrack
             onClick={() => setWindowStart((s) => Math.min(maxStart, s + 1))}
             aria-label="Next round"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight />
           </Button>
         ) : null}
       </div>

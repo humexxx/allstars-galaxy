@@ -1,263 +1,205 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+
+import { safe, type ActionResult } from "@/lib/actions/safe";
 import {
   requireEffectiveContext,
   logImpersonatedMutation,
 } from "@/lib/services/impersonation";
 import {
-  getUserRoadPaths,
   getRoadPath,
   createRoadPath,
-  updateRoadPath,
   deleteRoadPath,
-  getRoadPathMilestones,
   createRoadPathMilestone,
   updateRoadPathMilestone,
   deleteRoadPathMilestone,
   getNextMilestoneOrder,
-  getRoadPathProgress,
   createRoadPathProgress,
   deleteRoadPathProgress,
-  calculateRoadPathStats,
 } from "@/lib/services/road-path-service";
 import { createAutomatedTasksForRoadPath } from "@/lib/services/task-automation-service";
+import { idSchema } from "@/schemas/common";
 import {
   createRoadPathSchema,
-  updateRoadPathSchema,
   createRoadPathMilestoneSchema,
   updateRoadPathMilestoneSchema,
   createRoadPathProgressSchema,
   type CreateRoadPathInput,
-  type UpdateRoadPathData,
   type CreateRoadPathMilestoneData,
-  type UpdateRoadPathMilestoneData,
+  type UpdateRoadPathMilestoneInput,
   type CreateRoadPathProgressInput,
 } from "@/schemas/road-path";
+import type { RoadPath, RoadPathMilestone, RoadPathProgress } from "@/types";
 
+// The segment has no page of its own; the layout scope reaches /road-paths
+// and /board, which is where road-path edits show up.
 const PATH = "/portal/productivity";
 
-export async function getUserRoadPathsAction() {
-  const ctx = await requireEffectiveContext();
-  const paths = await getUserRoadPaths(ctx.effectiveUserId);
-  return { success: true, data: paths };
-}
-
-export async function getRoadPathAction(roadPathId: string) {
-  const ctx = await requireEffectiveContext();
-  const path = await getRoadPath(roadPathId, ctx.effectiveUserId);
-  if (!path) throw new Error("Road path not found");
-  return { success: true, data: path };
-}
-
-export async function createRoadPathAction(data: CreateRoadPathInput) {
-  const ctx = await requireEffectiveContext();
-  const parsed = createRoadPathSchema.safeParse(data);
-  if (!parsed.success) {
-    return { success: false as const, error: "Invalid input" };
-  }
-  const { createFirstTask, ...roadPathData } = parsed.data;
-  const validated = parsed.data;
-
-  const path = await createRoadPath(ctx.effectiveUserId, {
-    ...roadPathData,
-    autoCreateTasks: validated.autoCreateTasks ?? false,
-  });
-
-  if (createFirstTask && path.autoCreateTasks && path.taskFrequency) {
-    try {
-      await createAutomatedTasksForRoadPath(ctx.effectiveUserId, path.id);
-    } catch (error) {
-      console.error("Failed to create first task:", error);
+export async function createRoadPathAction(
+  data: CreateRoadPathInput
+): Promise<ActionResult<RoadPath>> {
+  return safe("road-path", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = createRoadPathSchema.safeParse(data);
+    if (!parsed.success) {
+      return { success: false, error: "Invalid input" };
     }
-  }
+    const { createFirstTask, ...roadPathData } = parsed.data;
 
-  await logImpersonatedMutation({
-    action: "roadPath.create",
-    entityTable: "road_paths",
-    entityId: path.id,
+    const path = await createRoadPath(ctx.effectiveUserId, {
+      ...roadPathData,
+      autoCreateTasks: roadPathData.autoCreateTasks ?? false,
+    });
+
+    // The path is saved either way; a failed first task is worth saying, not
+    // worth failing the whole create over.
+    let message: string | undefined;
+    if (createFirstTask && path.autoCreateTasks && path.taskFrequency) {
+      try {
+        await createAutomatedTasksForRoadPath(ctx.effectiveUserId, path.id);
+      } catch (error) {
+        console.error("Failed to create first task:", error);
+        message = "Road path created, but its first task could not be added";
+      }
+    }
+
+    await logImpersonatedMutation({
+      action: "roadPath.create",
+      entityTable: "road_paths",
+      entityId: path.id,
+    });
+    revalidatePath(PATH, "layout");
+    return { success: true, data: path, message };
   });
-  revalidatePath(PATH);
-  return { success: true, data: path };
 }
 
-export async function updateRoadPathAction(data: UpdateRoadPathData) {
-  const ctx = await requireEffectiveContext();
-  const parsed = updateRoadPathSchema.safeParse(data);
-  if (!parsed.success) {
-    return { success: false as const, error: "Invalid input" };
-  }
-  const { id, ...updateData } = parsed.data;
+export async function deleteRoadPathAction(roadPathId: string): Promise<ActionResult> {
+  return safe("road-path", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = idSchema.safeParse(roadPathId);
+    if (!parsed.success) return { success: false, error: "Invalid road path" };
 
-  const before = ctx.isImpersonating
-    ? await getRoadPath(id, ctx.effectiveUserId)
-    : undefined;
+    const before = ctx.isImpersonating
+      ? await getRoadPath(parsed.data, ctx.effectiveUserId)
+      : undefined;
 
-  const path = await updateRoadPath(id, ctx.effectiveUserId, updateData);
-  if (!path) throw new Error("Road path not found");
+    await deleteRoadPath(parsed.data, ctx.effectiveUserId);
 
-  await logImpersonatedMutation({
-    action: "roadPath.update",
-    entityTable: "road_paths",
-    entityId: path.id,
-    before,
-    after: path,
+    await logImpersonatedMutation({
+      action: "roadPath.delete",
+      entityTable: "road_paths",
+      entityId: parsed.data,
+      before,
+    });
+    revalidatePath(PATH, "layout");
+    return { success: true };
   });
-  revalidatePath(PATH);
-  return { success: true, data: path };
 }
 
-export async function deleteRoadPathAction(roadPathId: string) {
-  const ctx = await requireEffectiveContext();
+export async function createRoadPathMilestoneAction(
+  data: CreateRoadPathMilestoneData
+): Promise<ActionResult<RoadPathMilestone>> {
+  return safe("road-path", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = createRoadPathMilestoneSchema.safeParse(data);
+    if (!parsed.success) {
+      return { success: false, error: "Invalid input" };
+    }
+    const milestone = await createRoadPathMilestone(ctx.effectiveUserId, {
+      ...parsed.data,
+      order:
+        parsed.data.order ??
+        (await getNextMilestoneOrder(parsed.data.roadPathId, ctx.effectiveUserId)),
+    });
 
-  const before = ctx.isImpersonating
-    ? await getRoadPath(roadPathId, ctx.effectiveUserId)
-    : undefined;
-
-  await deleteRoadPath(roadPathId, ctx.effectiveUserId);
-
-  await logImpersonatedMutation({
-    action: "roadPath.delete",
-    entityTable: "road_paths",
-    entityId: roadPathId,
-    before,
+    await logImpersonatedMutation({
+      action: "roadPathMilestone.create",
+      entityTable: "road_path_milestones",
+      entityId: milestone.id,
+    });
+    revalidatePath(PATH, "layout");
+    return { success: true, data: milestone };
   });
-  revalidatePath(PATH);
-  return { success: true };
 }
 
-export async function getRoadPathMilestonesAction(roadPathId: string) {
-  const ctx = await requireEffectiveContext();
-  const milestones = await getRoadPathMilestones(roadPathId, ctx.effectiveUserId);
-  return { success: true, data: milestones };
-}
+export async function updateRoadPathMilestoneAction(
+  data: UpdateRoadPathMilestoneInput
+): Promise<ActionResult<RoadPathMilestone>> {
+  return safe("road-path", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = updateRoadPathMilestoneSchema.safeParse(data);
+    if (!parsed.success) {
+      return { success: false, error: "Invalid input" };
+    }
+    const { id, ...updateData } = parsed.data;
 
-export async function createRoadPathMilestoneAction(data: CreateRoadPathMilestoneData) {
-  const ctx = await requireEffectiveContext();
-  const parsed = createRoadPathMilestoneSchema.safeParse(data);
-  if (!parsed.success) {
-    return { success: false as const, error: "Invalid input" };
-  }
-  const milestone = await createRoadPathMilestone(ctx.effectiveUserId, {
-    ...parsed.data,
-    order:
-      parsed.data.order ??
-      (await getNextMilestoneOrder(parsed.data.roadPathId, ctx.effectiveUserId)),
+    const milestone = await updateRoadPathMilestone(id, ctx.effectiveUserId, updateData);
+    if (!milestone) return { success: false, error: "Milestone not found" };
+
+    await logImpersonatedMutation({
+      action: "roadPathMilestone.update",
+      entityTable: "road_path_milestones",
+      entityId: milestone.id,
+    });
+    revalidatePath(PATH, "layout");
+    return { success: true, data: milestone };
   });
+}
 
-  await logImpersonatedMutation({
-    action: "roadPathMilestone.create",
-    entityTable: "road_path_milestones",
-    entityId: milestone.id,
+export async function deleteRoadPathMilestoneAction(milestoneId: string): Promise<ActionResult> {
+  return safe("road-path", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = idSchema.safeParse(milestoneId);
+    if (!parsed.success) return { success: false, error: "Invalid milestone" };
+
+    await deleteRoadPathMilestone(parsed.data, ctx.effectiveUserId);
+
+    await logImpersonatedMutation({
+      action: "roadPathMilestone.delete",
+      entityTable: "road_path_milestones",
+      entityId: parsed.data,
+    });
+    revalidatePath(PATH, "layout");
+    return { success: true };
   });
-  revalidatePath(PATH);
-  return { success: true, data: milestone };
 }
 
-export async function updateRoadPathMilestoneAction(data: UpdateRoadPathMilestoneData) {
-  const ctx = await requireEffectiveContext();
-  const parsed = updateRoadPathMilestoneSchema.safeParse(data);
-  if (!parsed.success) {
-    return { success: false as const, error: "Invalid input" };
-  }
-  const { id, ...updateData } = parsed.data;
+export async function createRoadPathProgressAction(
+  data: CreateRoadPathProgressInput
+): Promise<ActionResult<RoadPathProgress>> {
+  return safe("road-path", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = createRoadPathProgressSchema.safeParse(data);
+    if (!parsed.success) {
+      return { success: false, error: "Invalid input" };
+    }
+    const progress = await createRoadPathProgress(ctx.effectiveUserId, parsed.data);
 
-  const milestone = await updateRoadPathMilestone(id, ctx.effectiveUserId, updateData);
-  if (!milestone) throw new Error("Milestone not found");
-
-  await logImpersonatedMutation({
-    action: "roadPathMilestone.update",
-    entityTable: "road_path_milestones",
-    entityId: milestone.id,
+    await logImpersonatedMutation({
+      action: "roadPathProgress.create",
+      entityTable: "road_path_progress",
+      entityId: progress.id,
+    });
+    revalidatePath(PATH, "layout");
+    return { success: true, data: progress };
   });
-  revalidatePath(PATH);
-  return { success: true, data: milestone };
 }
 
-export async function deleteRoadPathMilestoneAction(milestoneId: string) {
-  const ctx = await requireEffectiveContext();
-  await deleteRoadPathMilestone(milestoneId, ctx.effectiveUserId);
+export async function deleteRoadPathProgressAction(progressId: string): Promise<ActionResult> {
+  return safe("road-path", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = idSchema.safeParse(progressId);
+    if (!parsed.success) return { success: false, error: "Invalid progress entry" };
 
-  await logImpersonatedMutation({
-    action: "roadPathMilestone.delete",
-    entityTable: "road_path_milestones",
-    entityId: milestoneId,
+    await deleteRoadPathProgress(parsed.data, ctx.effectiveUserId);
+
+    await logImpersonatedMutation({
+      action: "roadPathProgress.delete",
+      entityTable: "road_path_progress",
+      entityId: parsed.data,
+    });
+    revalidatePath(PATH, "layout");
+    return { success: true };
   });
-  revalidatePath(PATH);
-  return { success: true };
-}
-
-export async function getNextMilestoneOrderAction(roadPathId: string) {
-  const ctx = await requireEffectiveContext();
-  const order = await getNextMilestoneOrder(roadPathId, ctx.effectiveUserId);
-  return { success: true, data: order };
-}
-
-export async function getRoadPathProgressAction(
-  roadPathId: string,
-  startDate?: Date,
-  endDate?: Date
-) {
-  const ctx = await requireEffectiveContext();
-  const progress = await getRoadPathProgress(
-    roadPathId,
-    ctx.effectiveUserId,
-    startDate,
-    endDate
-  );
-  return { success: true, data: progress };
-}
-
-export async function getRoadPathDetailAction(roadPathId: string) {
-  const ctx = await requireEffectiveContext();
-  // The path itself travels with its stats. Without it the detail read
-  // `currentValue` off the snapshot it was opened with, so logging progress
-  // moved the percentage while the figure under it stayed where it was.
-  const [roadPath, milestones, progress, stats] = await Promise.all([
-    getRoadPath(roadPathId, ctx.effectiveUserId),
-    getRoadPathMilestones(roadPathId, ctx.effectiveUserId),
-    getRoadPathProgress(roadPathId, ctx.effectiveUserId),
-    calculateRoadPathStats(roadPathId, ctx.effectiveUserId),
-  ]);
-  if (!roadPath) {
-    return { success: false as const, error: "Road path not found" };
-  }
-
-  return { success: true as const, data: { roadPath, milestones, progress, stats } };
-}
-
-export async function createRoadPathProgressAction(data: CreateRoadPathProgressInput) {
-  const ctx = await requireEffectiveContext();
-  const parsed = createRoadPathProgressSchema.safeParse(data);
-  if (!parsed.success) {
-    return { success: false as const, error: "Invalid input" };
-  }
-  const progress = await createRoadPathProgress(ctx.effectiveUserId, parsed.data);
-
-  await logImpersonatedMutation({
-    action: "roadPathProgress.create",
-    entityTable: "road_path_progress",
-    entityId: progress.id,
-  });
-  revalidatePath(PATH);
-  return { success: true, data: progress };
-}
-
-export async function deleteRoadPathProgressAction(progressId: string) {
-  const ctx = await requireEffectiveContext();
-  await deleteRoadPathProgress(progressId, ctx.effectiveUserId);
-
-  await logImpersonatedMutation({
-    action: "roadPathProgress.delete",
-    entityTable: "road_path_progress",
-    entityId: progressId,
-  });
-  revalidatePath(PATH);
-  return { success: true };
-}
-
-export async function calculateRoadPathStatsAction(roadPathId: string) {
-  const ctx = await requireEffectiveContext();
-  const stats = await calculateRoadPathStats(roadPathId, ctx.effectiveUserId);
-  return { success: true, data: stats };
 }

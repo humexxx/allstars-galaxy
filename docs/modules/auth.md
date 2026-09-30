@@ -1,17 +1,22 @@
 # Auth
 
 > **Status:** Active
-> **Last reviewed:** 2026-07-05
+> **Last reviewed:** 2026-09-29
 
 ## Overview
 Supabase-backed authentication: email/password login, signup, password reset,
-and SSR-friendly session management. Server-side action wrappers
-(`authenticatedAction`, `adminAction`) enforce auth on every mutation.
+and SSR-friendly session management. Every server action opens with one of the
+gates in `lib/services/auth-server.ts` / `lib/services/impersonation.ts`.
 
 ## Routes
 - `/login`
 - `/signup`
 - `/forgot-password`
+- `/update-password` — where the reset email lands (through `/auth/callback`,
+  which signs the user in) to choose the new password. Without a session it
+  sends the user back to `/forgot-password`. The reset link used to point at
+  `/portal/profile/update-password`, a route that never existed, so a reset
+  could not be completed.
 - `/auth/callback` — OAuth / email confirmation callback. Surfaces failures
   instead of bouncing silently: provider `error`/`error_description` params, a
   missing `code`, and `exchangeCodeForSession` errors all redirect to
@@ -22,13 +27,18 @@ and SSR-friendly session management. Server-side action wrappers
 ## Server actions — `/app/actions/`
 - `auth.ts` — `signOutAction` (server-side sign-out + redirect to `/login`). Login / signup / password reset still use the Supabase client directly because they depend on `window.location.origin` for redirect URLs.
 
-## Services — `/lib/services/`
-- `auth-service.ts` — Supabase client setup
-- `auth-server.ts` — `authenticatedAction`, `adminAction` wrappers (used by every mutation in the app)
+## Services
+- `lib/auth/auth-client.ts` — `AuthService`, the **browser** calls (password
+  and Google sign-in, sign-up, reset email, `updatePassword`). It lives outside
+  `lib/services` because everything there is `server-only`.
+- `lib/services/auth-server.ts` — `requireAuth[Cached]`, `requireAdmin[Cached]`,
+  `requireProvider`, `requireAdminOrRedirect` (redirects only on an
+  unauthorized/forbidden error; a database failure is rethrown, not disguised
+  as a bounce to the dashboard).
 
 ## Schemas — `/schemas/`
 - `user.ts`
-- `auth.ts` — `loginSchema`, `signupSchema`, `forgotPasswordSchema` (+ `Data` types) backing the RHF auth forms
+- `auth.ts` — `loginSchema`, `signupSchema`, `forgotPasswordSchema`, `updatePasswordSchema` (+ `Data` types) backing the RHF auth forms. New passwords need 8+ characters — the sign-up form already said so while the schema accepted one.
 
 ## Types — `/types/`
 - `user.ts`
@@ -37,6 +47,10 @@ and SSR-friendly session management. Server-side action wrappers
 - `components/login-form.tsx`
 - `components/signup-form.tsx`
 - `components/forgot-password-form.tsx`
+- `components/update-password-form.tsx`
+
+All four use `Alert` for form-level errors and `Field` + `FieldError` with
+`aria-invalid` for field errors.
 
 ## DB tables
 - `auth.users` (Supabase managed) — referenced by `users` via FK
@@ -48,8 +62,11 @@ and SSR-friendly session management. Server-side action wrappers
   is NOT in the role — that is `investment_methods.owner_user_id`, and every
   ownership check reads it. Restating ownership in the role would give two
   sources of truth that can disagree.
-- `UserRole` in [`types/user.ts`](../../types/user.ts) is the single definition.
-  The union was previously spelled out by hand in ten files, which is how a new
+- `UserRole` in [`types/user.ts`](../../types/user.ts) is the single definition,
+  derived from the `USER_ROLES` tuple there; `schemas/user.ts`'s `userRoleEnum`
+  is `z.enum(USER_ROLES)` and re-exports the type rather than redefining it (a
+  second two-value copy there is what had made `provider` unreachable). The
+  union was previously spelled out by hand in ten files, which is how a new
   role ends up half-added; `nav-config`'s `Role` is now an alias of it.
 - **Impersonation refuses admin targets in both directions.** The action blocks
   starting one, and `loadEffectiveContext` re-checks on every read — a role can
@@ -57,6 +74,7 @@ and SSR-friendly session management. Server-side action wrappers
   would leave the cookie granting admin-as-admin access for the rest of its
   30-minute life.
 - Conventional Commits scope: `auth`
+- **The OAuth callback validates `next`** the way the login form does (a path on this origin, no `//`); `${origin}${next}` with `next=@evil.com` used to leave the app. The proxy also bounces a signed-in user off `/forgot-password` and matches `/portal` exactly. The login page renders the sign-up hand-off `?message=`.
 - **Every** server action across the app must wrap its handler in
   `authenticatedAction` or `adminAction`. If you add a new module, follow this
   pattern.

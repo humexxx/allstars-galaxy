@@ -1,7 +1,13 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import type * as React from "react";
+
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from "@/components/ui/input-group";
 
 /**
  * The symbol a currency is written with, from the currency itself.
@@ -34,50 +40,42 @@ export function currencySymbol(currency: string): string {
  * express "exactly 1900" without fighting the user's aim.
  */
 export function MoneyInput({
-  id,
   value,
   onChange,
   currency,
-  placeholder,
   className,
-}: {
-  id: string;
+  ...props
+}: Omit<React.ComponentProps<"input">, "value" | "onChange" | "type" | "inputMode"> & {
   value: string;
   onChange: (value: string) => void;
   currency: string;
-  placeholder?: string;
-  className?: string;
-}) {
+}): React.JSX.Element {
   const symbol = currencySymbol(currency);
 
   return (
-    <div className="relative">
-      <span
-        aria-hidden
-        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground"
-      >
-        {symbol}
-      </span>
-      <Input
-        id={id}
+    <InputGroup className={className}>
+      <InputGroupAddon>
+        <InputGroupText>{symbol}</InputGroupText>
+      </InputGroupAddon>
+      <InputGroupInput
+        {...props}
         inputMode="decimal"
         value={value}
-        placeholder={placeholder}
         onChange={(e) => {
           // Keep digits and a single dot. Typing a comma or a stray symbol is
           // a slip, not an instruction, and rejecting the whole keystroke
           // makes the field feel broken.
-          const cleaned = e.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1");
+          // Everything after the first dot is the fraction, capped at two
+          // digits. The old regex dropped only one extra dot per pass and
+          // concatenated the rest ("1.2.3" → 1.23, a 10× slip on paste).
+          const raw = e.target.value.replace(/[^\d.]/g, "");
+          const [head, ...rest] = raw.split(".");
+          const cleaned = rest.length > 0 ? `${head}.${rest.join("").slice(0, 2)}` : head;
           onChange(cleaned);
         }}
-        className={cn(
-          // Room for the symbol, and figures aligned so a column of prices
-          // compares at a glance.
-          "pl-7 text-right tabular-nums",
-          symbol.length > 1 && "pl-12",
-          className
-        )}
+        // Figures aligned so a column of prices compares at a glance.
+        className="text-right tabular-nums"
       />
-    </div>
+    </InputGroup>
   );
 }

@@ -4,15 +4,22 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useMemo, useState } from "react";
 import { subDays } from "date-fns";
 
-import { Button } from "@/components/ui/button";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import type { ChartConfig } from "@/types/chart";
+import { formatDay, formatShortDay } from "@/lib/utils/date";
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+  formatPercent,
+  formatSignedPercent,
+} from "@/lib/utils/format";
+import type { ChartConfig, ChartDataPoint } from "@/types/chart";
 
 const chartConfig = {
   value: {
-    label: "Portfolio Value",
+    label: "Portfolio value",
     color: "var(--chart-1)",
   },
 } satisfies ChartConfig;
@@ -21,10 +28,7 @@ const RANGES = ["1M", "3M", "YTD", "1Y", "All"] as const;
 type Range = (typeof RANGES)[number];
 
 type PerformanceChartProps = {
-  data: Array<{
-    date: string;
-    value: number;
-  }>;
+  data: ChartDataPoint[];
 };
 
 export function PerformanceChart({
@@ -52,58 +56,40 @@ export function PerformanceChart({
   const positive = delta >= 0;
 
   return (
-    <section className="space-y-3">
+    <section className="flex flex-col gap-3">
       {/* Inline legend strip — no card chrome, sits on page bg. */}
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           <Heading level="h5" as="h2" className="text-muted-foreground">
             Performance
           </Heading>
           <div className="flex items-baseline gap-2">
-            <Mono className="text-2xl font-semibold tabular-nums sm:text-3xl">
-              {hideValues
-                ? `${positive ? "+" : "−"}${Math.abs(deltaPct).toFixed(1)}%`
-                : `$${last.toLocaleString(undefined, {
-                    maximumFractionDigits: 2,
-                  })}`}
+            <Mono className="text-xl font-semibold tabular-nums sm:text-2xl">
+              {hideValues ? formatSignedPercent(deltaPct, 1) : formatCurrency(last)}
             </Mono>
             {filteredData.length > 1 && (
-              <Mono
-                className={cn(
-                  "text-sm",
-                  positive
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-rose-600 dark:text-rose-400"
-                )}
-              >
+              <Mono className={cn("text-sm", positive ? "text-success" : "text-destructive")}>
                 {positive ? "↑" : "↓"}{" "}
                 {hideValues
                   ? "over this range"
-                  : `$${Math.abs(delta).toLocaleString(undefined, {
-                      maximumFractionDigits: 0,
-                    })} (${Math.abs(deltaPct).toFixed(1)}%)`}
+                  : `${formatCurrency(Math.abs(delta))} (${formatPercent(Math.abs(deltaPct), 1)})`}
               </Mono>
             )}
           </div>
         </div>
-        <div
-          role="group"
+        <ToggleGroup
+          type="single"
+          size="sm"
           aria-label="Time range"
-          className="flex items-center gap-1"
+          value={timeRange}
+          onValueChange={(v) => v && setTimeRange(v as Range)}
         >
           {RANGES.map((r) => (
-            <Button
-              key={r}
-              variant="ghost"
-              size="sm"
-              data-active={timeRange === r}
-              className="h-7 rounded-full px-2.5 font-mono text-xs tabular-nums text-muted-foreground data-[active=true]:bg-foreground/5 data-[active=true]:text-foreground"
-              onClick={() => setTimeRange(r)}
-            >
+            <ToggleGroupItem key={r} value={r} className="font-mono tabular-nums">
               {r}
-            </Button>
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
       </div>
 
       {/* Chart body — no card, no border. The page background carries it. */}
@@ -125,14 +111,7 @@ export function PerformanceChart({
             axisLine={false}
             tickMargin={8}
             minTickGap={48}
-            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-            tickFormatter={(value) => {
-              const date = new Date(value);
-              return date.toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              });
-            }}
+            tickFormatter={(value: string) => formatShortDay(value)}
           />
           <YAxis
             orientation="right"
@@ -140,13 +119,12 @@ export function PerformanceChart({
             axisLine={false}
             tickMargin={4}
             width={56}
-            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
             tickFormatter={(value: number) =>
               hideValues
                 ? first === 0
                   ? ""
-                  : `${(((value - first) / first) * 100).toFixed(0)}%`
-                : `$${value.toLocaleString()}`
+                  : formatPercent(((value - first) / first) * 100, 0)
+                : formatCurrencyCompact(value)
             }
             domain={["auto", "auto"]}
           />
@@ -160,19 +138,10 @@ export function PerformanceChart({
                   hideValues
                     ? first === 0
                       ? "—"
-                      : `${((((value as number) - first) / first) * 100).toFixed(1)}% vs start`
-                    : `$${(value as number).toLocaleString(undefined, {
-                        maximumFractionDigits: 2,
-                      })}`
+                      : `${formatSignedPercent((((value as number) - first) / first) * 100, 1)} vs start`
+                    : formatCurrency(value as number)
                 }
-                labelFormatter={(value) => {
-                  const date = new Date(value);
-                  return date.toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  });
-                }}
+                labelFormatter={(value: string) => formatDay(value)}
               />
             }
           />
@@ -189,14 +158,7 @@ export function PerformanceChart({
       </ChartContainer>
 
       {filteredData[0] && (
-        <Text variant="small" className="text-muted-foreground">
-          {new Date(filteredData[0].date).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })}{" "}
-          — today
-        </Text>
+        <Text variant="small">{formatDay(filteredData[0].date)} — today</Text>
       )}
     </section>
   );

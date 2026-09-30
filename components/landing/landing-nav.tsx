@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight, Menu, X } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+
 import { GalaxyLogo } from "./galaxy-logo";
 
 const NAV_LINKS = [
@@ -25,7 +27,7 @@ export function LandingNav() {
             href="/"
             className="flex items-center gap-2 text-base font-semibold tracking-tight"
           >
-            <GalaxyLogo variant="light" className="size-6" />
+            <GalaxyLogo className="size-6" />
             Allstars Galaxy
           </Link>
           <nav className="hidden items-center gap-6 md:flex">
@@ -57,15 +59,17 @@ export function LandingNav() {
           </Link>
         </div>
 
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           aria-label={open ? "Close menu" : "Open menu"}
           aria-expanded={open}
-          className="grid size-9 place-items-center rounded-full text-foreground hover:bg-muted md:hidden"
+          className="rounded-full md:hidden"
           onClick={() => setOpen((v) => !v)}
         >
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
-        </button>
+        </Button>
       </div>
 
       {open && (

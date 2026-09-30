@@ -67,15 +67,17 @@ feel oversized. **Tailwind class** is the exact string in `headingVariants`.
 | Level     | Size (mobile → desktop) | Tailwind class                                  | Weight | Default tag | Use it for                          |
 | --------- | ----------------------- | ----------------------------------------------- | ------ | ----------- | ----------------------------------- |
 | `display` | 36 → 48 → 60 px         | `text-4xl sm:text-5xl lg:text-6xl`              | 700    | `h1`        | Landing hero only                   |
-| `h1`      | 30 → 36 px              | `text-3xl sm:text-4xl`                          | 600    | `h1`        | Page titles                         |
+| `hero`    | 24 → 36 px              | `text-2xl font-bold sm:text-4xl`                | 700    | `h1`        | Detail-page titles that are long names (a trip, an article) |
+| `h1`      | 30 → 36 px              | `text-3xl sm:text-4xl`                          | 700    | `h1`        | Page titles (iOS large-title weight) |
 | `h2`      | 24 → 30 px              | `text-2xl sm:text-3xl`                          | 500    | `h2`        | Major section headings              |
 | `h3`      | 20 → 24 px              | `text-xl sm:text-2xl`                           | 500    | `h3`        | Subsection headings, plan titles    |
 | `h4`      | 18 → 20 px              | `text-lg sm:text-xl`                            | 500    | `h4`        | Card titles                         |
 | `h5`      | 16 → 18 px              | `text-base sm:text-lg`                          | 500    | `h5`        | Small card titles, dialog titles    |
 | `h6`      | 14 → 16 px              | `text-sm sm:text-base`                          | 500    | `h6`        | List-item headings, table captions  |
 
-Weights track the shadcn docs scale (hero `font-bold`, page title `font-semibold`,
-sub-levels `font-medium`) — deliberately lighter than a typical bold heading ramp.
+Weights: hero and page title `font-bold` (the iOS large-title weight),
+sub-levels `font-medium` — deliberately lighter than a typical bold heading ramp
+below the title.
 
 All levels carry `tracking-tight`. When you need a number/stat to read like a
 heading (KPI hero values), don't use `<Heading>` — apply the same mobile-first
@@ -127,6 +129,21 @@ Small uppercase labels above section headings (e.g., the "FINANCE",
 ```
 
 Equivalent classes: `text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground`.
+
+`<Eyebrow>` is also the **KPI label** everywhere (stat cards, dashboard tiles).
+Dense rails (standings, landing mock tiles) use `size="sm"` (10px) — never a
+`className="text-2xs"` override. The figure under it is `<Mono>` with
+`text-xl font-semibold sm:text-2xl` (`Mono` already sets `tabular-nums`).
+
+### Page headers — use `<PageHeader>`
+
+Every portal page opens with `PageHeader` (`components/portal/page-header.tsx`):
+`title`, `description`, `eyebrow`, `badge`, `meta`, `actions`, and `back`
+(`{ href, label }` or `{ onClick, label }`) — a ghost "‹ Label" button above
+the title, never an absolutely positioned arrow that overflows on a phone.
+`size="compact"` renders the title at `h3` (still an `<h1>`) for dense data
+surfaces — the plan editor and the portfolio. Its `loading.tsx` counterpart is
+`PageHeaderSkeleton` with the same props, so the swap does not shift the page.
 
 ### Code, IDs, and numerics — use `<Code>` / `<Mono>`
 

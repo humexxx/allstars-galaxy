@@ -1,26 +1,23 @@
 import type { portfolios, investmentMethods } from "@/db/schema";
 
+import type { TransactionStatus, TransactionType } from "./transaction";
+
 export type Portfolio = typeof portfolios.$inferSelect;
 export type InvestmentMethod = typeof investmentMethods.$inferSelect;
 
-/**
- * A method plus the display name of whoever runs it.
- *
- * The name is joined from `users` rather than stored on the method: there used
- * to be a free-text `author` column that could disagree with the owner, and
- * the catalogue then credited a method to someone who did not run it.
- * Null when the method predates ownership and has nobody attached.
- */
-export type InvestmentMethodWithOwner = InvestmentMethod & {
-  ownerName: string | null;
+/** A priceable asset as the allocation picker lists it. */
+export type AssetOption = {
+  id: string;
+  symbol: string;
+  name: string;
+  source: string;
 };
-
-export type TransactionStatus = "pending" | "approved" | "rejected" | "closed";
-export type TransactionType = "buy" | "withdrawal";
 
 export interface PortfolioStats {
   totalValue: number;
   costBasis: number;
+  /** Approved withdrawals — money already taken out, still part of the return. */
+  totalWithdrawn: number;
   allTimeProfit: number;
   allTimeProfitPercentage: number;
   totalInvestmentMethods: number;
@@ -73,3 +70,36 @@ export interface MethodInvestors {
   totalInvested: number;
   totalHolding: number;
 }
+
+/** What one transaction bought, with today's price for valuing it. */
+export type TransactionAllocationView = {
+  symbol: string;
+  quantity: number;
+  invested: number;
+  priceAtPurchase: number;
+  /** Latest price, null when the asset has never been quoted. */
+  price: number | null;
+};
+
+/**
+ * One normalised row shape for every transaction table.
+ *
+ * The owner's own history and their investors' movements used to be two
+ * components with different columns, which made the same fact look like two
+ * different things depending on whose row it was.
+ */
+export type TransactionTableRow = {
+  id: string;
+  /** ISO timestamp. */
+  date: string;
+  methodName: string;
+  /** Only set on rows belonging to somebody else. */
+  investorId?: string;
+  investorName?: string | null;
+  type: TransactionType;
+  status: TransactionStatus;
+  total: string;
+  initialValue: string | null;
+  currentValue: string | null;
+  allocations: TransactionAllocationView[];
+};

@@ -10,9 +10,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Mono, Text } from "@/components/ui/typography";
-import { formatCurrency } from "@/lib/utils/format";
+import { formatCurrency, moneySign } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
-import type { ProjectionMonth } from "@/types/finance";
+import type { ChartPoint } from "@/lib/finance/chart-series";
+import { periodIndexForDate } from "@/lib/finance/period";
 
 /**
  * "How would things look then?" — the projected balance sheet for a period the
@@ -26,57 +27,62 @@ import type { ProjectionMonth } from "@/types/finance";
  * numeric columns crammed against the right edge made the "today" reference
  * unreadable and gave the headline figure no room. Each block now leads with
  * the projected value, with the from-value and the delta as a second tier.
+ *
+ * Both sides are CHART POINTS, so the dialog shows exactly what the reader
+ * clicked: today's day-aware position (not the period's projected close) and,
+ * for a past period, the recorded figures on the solid line.
  */
 type Row = {
   label: string;
   /** How to read a rise: net worth up is good, debt up is not. */
   polarity: "more-is-better" | "less-is-better";
-  read: (m: ProjectionMonth) => number;
+  read: (p: ChartPoint) => number | undefined;
 };
 
 const ROWS: Row[] = [
-  { label: "Net worth", polarity: "more-is-better", read: (m) => m.netWorth },
-  { label: "Savings", polarity: "more-is-better", read: (m) => m.savings },
-  {
-    label: "Investments",
-    polarity: "more-is-better",
-    read: (m) => m.investments,
-  },
-  { label: "Total debt", polarity: "less-is-better", read: (m) => m.totalDebt },
+  { label: "Net worth", polarity: "more-is-better", read: (p) => p.netWorth },
+  { label: "Savings", polarity: "more-is-better", read: (p) => p.savings },
+  { label: "Investments", polarity: "more-is-better", read: (p) => p.investments },
+  { label: "Total debt", polarity: "less-is-better", read: (p) => p.totalDebt },
 ];
 
-const BETTER = "text-emerald-700 dark:text-emerald-300";
-const WORSE = "text-rose-700 dark:text-rose-300";
+const BETTER = "text-success";
+const WORSE = "text-destructive";
 
 export function PeriodCompareDialog({
   open,
   onOpenChange,
+  anchorDay,
   todayLabel,
-  todayMonth,
+  todayPoint: todayMonth,
   targetLabel,
-  targetMonth,
+  targetPoint: targetMonth,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The plan's anchor day — distances are counted in its periods. */
+  anchorDay: number;
   todayLabel: string;
-  todayMonth: ProjectionMonth | null;
+  todayPoint: ChartPoint | null;
   targetLabel: string;
-  targetMonth: ProjectionMonth | null;
+  targetPoint: ChartPoint | null;
 }) {
+  // Counted between the two points' dates. (It used to subtract row offsets
+  // from two different projections, and called a period 2 back "in 6".)
   const monthsApart =
     todayMonth && targetMonth
-      ? targetMonth.monthOffset - todayMonth.monthOffset
+      ? periodIndexForDate(todayMonth.date, anchorDay, targetMonth.date)
       : 0;
   const distance = Math.abs(monthsApart);
   const periodWord = distance === 1 ? "period" : "periods";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-muted-foreground">{todayLabel}</span>
-            <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+            <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span>{targetLabel}</span>
           </DialogTitle>
           <DialogDescription>
@@ -91,10 +97,13 @@ export function PeriodCompareDialog({
         {todayMonth && targetMonth && (
           <div className="grid gap-2">
             {ROWS.map((row) => {
-              const now = row.read(todayMonth);
-              const then = row.read(targetMonth);
+              const nowValue = row.read(todayMonth);
+              const thenValue = row.read(targetMonth);
+              if (nowValue === undefined || thenValue === undefined) return null;
+              const now = nowValue;
+              const then = thenValue;
               const delta = then - now;
-              const flat = Math.abs(delta) < 0.01;
+              const flat = moneySign(delta) === 0;
               const better =
                 row.polarity === "more-is-better" ? delta > 0 : delta < 0;
               // Direction is carried by an icon as well as colour — a delta
@@ -112,16 +121,14 @@ export function PeriodCompareDialog({
                   className="rounded-lg border bg-muted/20 px-3 py-2.5"
                 >
                   <div className="flex items-baseline justify-between gap-3">
-                    <Text variant="small" className="text-muted-foreground">
-                      {row.label}
-                    </Text>
+                    <Text variant="small">{row.label}</Text>
                     <Mono className="text-base font-semibold tabular-nums sm:text-lg">
                       {formatCurrency(then)}
                     </Mono>
                   </div>
 
                   <div className="mt-1 flex items-center justify-between gap-3">
-                    <Text variant="small" className="text-muted-foreground">
+                    <Text variant="small">
                       from{" "}
                       <Mono className="tabular-nums">{formatCurrency(now)}</Mono>
                     </Text>

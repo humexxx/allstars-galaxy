@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+
+import { safe, type ActionResult } from "@/lib/actions/safe";
 import {
   requireEffectiveContext,
   logImpersonatedMutation,
@@ -10,52 +12,59 @@ import {
   createAutomatedTasksForAllRoadPaths,
 } from "@/lib/services/task-automation-service";
 import { createAutomatedTaskSchema } from "@/schemas/task-automation";
+import type { BoardTask } from "@/types";
 
-export async function createAutomatedTaskAction(roadPathId: string) {
-  const ctx = await requireEffectiveContext();
-  const parsed = createAutomatedTaskSchema.safeParse({ roadPathId });
-  if (!parsed.success) {
-    return { success: false as const, error: "Invalid roadPathId" };
-  }
+export async function createAutomatedTaskAction(
+  roadPathId: string
+): Promise<ActionResult<BoardTask | null>> {
+  return safe("task-automation", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = createAutomatedTaskSchema.safeParse({ roadPathId });
+    if (!parsed.success) {
+      return { success: false, error: "Invalid roadPathId" };
+    }
 
-  const task = await createAutomatedTasksForRoadPath(
-    ctx.effectiveUserId,
-    parsed.data.roadPathId,
-  );
+    const task = await createAutomatedTasksForRoadPath(
+      ctx.effectiveUserId,
+      parsed.data.roadPathId,
+    );
 
-  if (task) {
-    await logImpersonatedMutation({
-      action: "boardTask.createAutomated",
-      entityTable: "board_tasks",
-      entityId: task.id,
-    });
-  }
-  revalidatePath("/portal/productivity");
+    if (task) {
+      await logImpersonatedMutation({
+        action: "boardTask.createAutomated",
+        entityTable: "board_tasks",
+        entityId: task.id,
+      });
+    }
+    revalidatePath("/portal/productivity", "layout");
 
-  return {
-    success: true as const,
-    data: task,
-    message: task ? "Task created successfully" : "No task needed at this time",
-  };
+    return {
+      success: true,
+      data: task,
+      message: task ? "Task created" : "No task needed at this time",
+    };
+  });
 }
 
-export async function createAutomatedTasksForAllAction() {
-  const ctx = await requireEffectiveContext();
+export async function createAutomatedTasksForAllAction(): Promise<ActionResult<BoardTask[]>> {
+  return safe("task-automation", async () => {
+    const ctx = await requireEffectiveContext();
 
-  const tasks = await createAutomatedTasksForAllRoadPaths(ctx.effectiveUserId);
+    const tasks = await createAutomatedTasksForAllRoadPaths(ctx.effectiveUserId);
 
-  for (const task of tasks) {
-    await logImpersonatedMutation({
-      action: "boardTask.createAutomated",
-      entityTable: "board_tasks",
-      entityId: task.id,
-    });
-  }
-  revalidatePath("/portal/productivity");
+    for (const task of tasks) {
+      await logImpersonatedMutation({
+        action: "boardTask.createAutomated",
+        entityTable: "board_tasks",
+        entityId: task.id,
+      });
+    }
+    revalidatePath("/portal/productivity", "layout");
 
-  return {
-    success: true,
-    data: tasks,
-    message: `${tasks.length} task(s) created`,
-  };
+    return {
+      success: true,
+      data: tasks,
+      message: `${tasks.length} ${tasks.length === 1 ? "task" : "tasks"} created`,
+    };
+  });
 }

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -96,11 +97,16 @@ export function AddTransactionDialog({
       <Dialog open={open && !showSelector && selectedMethod !== null} onOpenChange={handleClose}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add Transaction</DialogTitle>
+            <DialogTitle>Add transaction</DialogTitle>
+            <DialogDescription>
+              {isAdmin
+                ? "Admin entries are approved as soon as they are saved."
+                : "It stays pending until an admin approves it."}
+            </DialogDescription>
           </DialogHeader>
           {selectedMethod && (
             <TransactionForm
-              key={open ? 'open' : 'closed'}
+              key={open ? "open" : "closed"}
               selectedMethod={selectedMethod}
               onChangeMethod={handleChangeMethod}
               onSubmit={handleSubmit}

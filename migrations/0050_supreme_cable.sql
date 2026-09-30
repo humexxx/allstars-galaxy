@@ -1,0 +1,2 @@
+ALTER TABLE "investment_methods" ADD COLUMN "updated_at" timestamp with time zone DEFAULT now() NOT NULL;--> statement-breakpoint
+CREATE INDEX "investment_methods_owner_user_id_idx" ON "investment_methods" USING btree ("owner_user_id");

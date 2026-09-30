@@ -3,7 +3,9 @@
  * because the roles were spelled out by hand in ten files, which is how a
  * new role ends up half-added.
  */
-export type UserRole = "admin" | "provider" | "user";
+export const USER_ROLES = ["admin", "provider", "user"] as const;
+
+export type UserRole = (typeof USER_ROLES)[number];
 
 export interface User {
   id: string
@@ -12,10 +14,6 @@ export interface User {
   role: UserRole
   createdAt: Date
   updatedAt: Date
-}
-
-export interface AuthUser {
-  name: string
 }
 
 export type UserListItem = {

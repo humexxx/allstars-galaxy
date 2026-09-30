@@ -19,6 +19,7 @@ import type {
   StandingBand,
   Team,
 } from "@/types/sports";
+import { upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://api.football-data.org/v4";
 // 5 minutes: short enough that live scores are near-current when the user
@@ -282,6 +283,7 @@ async function fetchFd<T>(path: string): Promise<T> {
   const token = process.env.FOOTBALL_DATA_API_KEY;
   if (!token) throw new Error("FOOTBALL_DATA_API_KEY not configured");
   const res = await fetch(`${BASE_URL}${path}`, {
+    signal: upstreamSignal(),
     headers: { "X-Auth-Token": token },
     next: { revalidate: REVALIDATE_SECONDS },
   });

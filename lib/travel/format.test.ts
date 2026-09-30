@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dayGroupLabel, moneyRange, runsUntil } from "./format";
+import { dayGroupLabel, formatDateRange, moneyRange, runsUntil } from "./format";
 
 describe("moneyRange", () => {
   it("collapses to one figure when the ends agree", () => {
@@ -70,5 +70,19 @@ describe("runsUntil", () => {
 
   it("returns nothing when nothing spans", () => {
     expect(runsUntil([item({ category: "food" })])).toBeNull();
+  });
+});
+
+describe("formatDateRange", () => {
+  it("names the weekdays within one year", () => {
+    expect(formatDateRange("2026-09-03", "2026-09-10")).toBe("Thu, Sep 3 – Thu, Sep 10, 2026");
+  });
+
+  it("is a single day when the trip has no end", () => {
+    expect(formatDateRange("2026-09-03", null)).toBe("Thu, Sep 3, 2026");
+  });
+
+  it("keeps both years across new year", () => {
+    expect(formatDateRange("2026-12-30", "2027-01-02")).toBe("Dec 30, 2026 – Jan 2, 2027");
   });
 });

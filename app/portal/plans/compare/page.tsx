@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { GitCompareArrows } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/portal/page-header";
@@ -8,11 +8,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { CompareView } from "@/components/finance/compare-view";
 
 import { requireEffectiveContext } from "@/lib/services/impersonation";
-import {
-  getPlanWithLines,
-  listUserPlans,
-  projectPlanWithPortfolio,
-} from "@/lib/services/finance-plan-service";
+import { listUserPlansWithLines } from "@/lib/services/finance-plan-service";
+import { loadPlanOverviews } from "@/lib/services/finance-snapshot-service";
+import { getRequestTimeZone } from "@/lib/utils/request-today";
+import { todayInTimeZone } from "@/lib/utils/date";
 
 export const metadata: Metadata = {
   title: "Compare plans",
@@ -20,19 +19,23 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+const BACK = { href: "/portal/plans", label: "Plans" };
+
 export default async function ComparePlansPage() {
   const ctx = await requireEffectiveContext();
-  const plans = await listUserPlans(ctx.effectiveUserId);
+  const plans = await listUserPlansWithLines(ctx.effectiveUserId);
 
   if (plans.length < 2) {
     return (
-      <section className="space-y-6">
+      <section className="flex flex-col gap-6">
         <PageHeader
+          back={BACK}
           title="Compare plans"
           description="Stack scenarios side by side."
         />
         <EmptyState
           variant="card"
+          icon={GitCompareArrows}
           title="Need at least two plans"
           description="Create another plan to start comparing scenarios."
           action={
@@ -45,28 +48,28 @@ export default async function ComparePlansPage() {
     );
   }
 
-  const projections = await Promise.all(
-    plans.map(async (p) => {
-      const full = await getPlanWithLines(p.id, ctx.effectiveUserId);
-      // full is guaranteed since we just listed plans owned by the user.
-      return projectPlanWithPortfolio(full!, ctx.effectiveUserId);
-    })
-  );
+  // Calibrated like every other surface (latest confirmation, fixed end
+  // date, the reader's today) — the compare page used to show the raw plans.
+  const timeZone = await getRequestTimeZone();
+  const today = todayInTimeZone(timeZone);
+  const overviews = await loadPlanOverviews(plans, ctx.effectiveUserId, today, timeZone);
 
   return (
-    <section className="space-y-6">
-      <div>
-        <Button variant="ghost" size="sm" asChild className="-ml-2">
-          <Link href="/portal/plans">
-            <ArrowLeft className="mr-1 h-4 w-4" /> Back to plans
-          </Link>
-        </Button>
-      </div>
+    <section className="flex flex-col gap-6">
       <PageHeader
+        back={BACK}
         title="Compare plans"
-        description="See every plan&apos;s projection in the same chart."
+        description="See every plan’s projection in the same chart."
       />
-      <CompareView projections={projections} />
+      <CompareView
+        plans={overviews.map((o) => ({
+          plan: o.plan,
+          projection: o.projection,
+          timeline: o.timeline,
+          summary: o.summary,
+        }))}
+        today={today}
+      />
     </section>
   );
 }

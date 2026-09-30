@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { ClipboardCheck } from "lucide-react";
 
 import {
@@ -14,12 +12,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Mono, Text } from "@/components/ui/typography";
 
 import { saveConfirmationAction } from "@/app/actions/finance-confirmations";
+import { runAction } from "@/lib/actions/run";
 import { formatCurrency } from "@/lib/utils/format";
 import type { FinancePlanDebt } from "@/types/finance";
 
@@ -46,7 +52,6 @@ export function ConfirmationDialog({
   projected,
   debts,
 }: ConfirmationDialogProps) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   const [savings, setSavings] = useState<string>(projected.savings.toFixed(2));
@@ -65,23 +70,25 @@ export function ConfirmationDialog({
 
   const handleSubmit = () => {
     startTransition(async () => {
-      const result = await saveConfirmationAction({
-        planId,
-        confirmedSavings: savings || "0",
-        confirmedInvestments: investments || "0",
-        notes: notes.trim() || null,
-        debtBalances: debts.map((d) => ({
-          debtId: d.id,
-          confirmedBalance: debtBalances[d.id] || "0",
-        })),
-      });
-      if (result.success) {
-        toast.success("Confirmation saved — the projection will recalibrate from here.");
-        onOpenChange(false);
-        router.refresh();
-      } else {
-        toast.error(result.error);
-      }
+      // The action revalidates the plan and the dashboard, so the recalibrated
+      // projection arrives with its response.
+      const result = await runAction(
+        saveConfirmationAction({
+          planId,
+          confirmedSavings: savings || "0",
+          confirmedInvestments: investments || "0",
+          notes: notes.trim() || null,
+          debtBalances: debts.map((d) => ({
+            debtId: d.id,
+            confirmedBalance: debtBalances[d.id] || "0",
+          })),
+        }),
+        {
+          success: "Confirmation saved — the projection will recalibrate from here.",
+          failure: "Failed to save the confirmation",
+        }
+      );
+      if (result.ok) onOpenChange(false);
     });
   };
 
@@ -90,7 +97,7 @@ export function ConfirmationDialog({
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ClipboardCheck className="h-5 w-5" />
+            <ClipboardCheck className="size-5 shrink-0" aria-hidden="true" />
             Confirm your {monthLabel} balances
           </DialogTitle>
           <DialogDescription>
@@ -100,42 +107,44 @@ export function ConfirmationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="flex flex-col gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="conf-savings">Savings</Label>
+            <Field className="gap-2">
+              <FieldLabel htmlFor="conf-savings">Savings</FieldLabel>
               <Input
                 id="conf-savings"
                 inputMode="decimal"
                 value={savings}
                 onChange={(e) => setSavings(e.target.value)}
               />
-              <Text variant="small">
+              <FieldDescription>
                 Projected: <Mono>{formatCurrency(projected.savings)}</Mono>
-              </Text>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="conf-investments">Investments</Label>
+              </FieldDescription>
+            </Field>
+            <Field className="gap-2">
+              <FieldLabel htmlFor="conf-investments">Investments</FieldLabel>
               <Input
                 id="conf-investments"
                 inputMode="decimal"
                 value={investments}
                 onChange={(e) => setInvestments(e.target.value)}
               />
-              <Text variant="small">
+              <FieldDescription>
                 Projected: <Mono>{formatCurrency(projected.investments)}</Mono>
-              </Text>
-            </div>
+              </FieldDescription>
+            </Field>
           </div>
 
           {debts.length > 0 && (
-            <div className="space-y-2">
-              <Label>Debt balances</Label>
-              <div className="space-y-2 rounded-md border p-3">
+            <FieldSet className="gap-2">
+              <FieldLegend variant="label" className="mb-2">
+                Debt balances
+              </FieldLegend>
+              <div className="flex flex-col gap-3 rounded-lg border p-3">
                 {debts.map((d) => {
                   const projectedDebt = projected.debts.find((p) => p.debtId === d.id);
                   return (
-                    <div key={d.id} className="grid grid-cols-2 items-center gap-3">
+                    <div key={d.id} className="grid items-center gap-2 sm:grid-cols-2 sm:gap-3">
                       <div>
                         <Text variant="body" weight="medium">{d.name}</Text>
                         <Text variant="small">
@@ -154,11 +163,11 @@ export function ConfirmationDialog({
                   );
                 })}
               </div>
-            </div>
+            </FieldSet>
           )}
 
-          <div className="space-y-1">
-            <Label htmlFor="conf-notes">Notes (optional)</Label>
+          <Field className="gap-2">
+            <FieldLabel htmlFor="conf-notes">Notes (optional)</FieldLabel>
             <Textarea
               id="conf-notes"
               value={notes}
@@ -166,19 +175,20 @@ export function ConfirmationDialog({
               rows={2}
               placeholder="Anything unusual this month?"
             />
-          </div>
+          </Field>
         </div>
 
         <DialogFooter>
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isPending}
           >
             Skip for now
           </Button>
           <Button onClick={handleSubmit} disabled={isPending}>
+            {isPending && <Spinner />}
             {isPending ? "Saving…" : "Save confirmation"}
           </Button>
         </DialogFooter>

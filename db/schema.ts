@@ -89,28 +89,35 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-export const investmentMethods = pgTable("investment_methods", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  description: text("description"),
-  // Who runs this method. Other users invest through them, so this is what
-  // "who is invested in MY methods" is keyed on, and it is ALSO the display
-  // credit — there used to be a free-text `author` column beside it, which
-  // could name someone who did not run the method. One relation, one answer.
-  // Nullable: a method without an owner is the old global-catalogue behaviour.
-  // SET NULL rather than cascade — deleting an admin must never delete a
-  // method other people hold money in.
-  ownerUserId: uuid("owner_user_id").references(() => users.id, {
-    onDelete: "set null",
-  }),
-  riskLevel: riskLevelEnum("risk_level").notNull(),
-  monthlyRoi: numeric("monthly_roi", { precision: 7, scale: 4 }).notNull(),
-  // Disabled methods are hidden from portfolio transaction selectors but still
-  // appear in finance plan auto-invest pickers (so they can be modelled as
-  // hypothetical scenarios without being actively used).
-  enabled: boolean("enabled").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+export const investmentMethods = pgTable(
+  "investment_methods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
+    // Who runs this method. Other users invest through them, so this is what
+    // "who is invested in MY methods" is keyed on, and it is ALSO the display
+    // credit — there used to be a free-text `author` column beside it, which
+    // could name someone who did not run the method. One relation, one answer.
+    // Nullable: a method without an owner is the old global-catalogue behaviour.
+    // SET NULL rather than cascade — deleting an admin must never delete a
+    // method other people hold money in.
+    ownerUserId: uuid("owner_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    riskLevel: riskLevelEnum("risk_level").notNull(),
+    monthlyRoi: numeric("monthly_roi", { precision: 7, scale: 4 }).notNull(),
+    // Disabled methods are hidden from portfolio transaction selectors but still
+    // appear in finance plan auto-invest pickers (so they can be modelled as
+    // hypothetical scenarios without being actively used).
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  // "Whose methods" is the hot filter for margin, portfolio and allocation
+  // reads; every other user-keyed column already carries one.
+  (t) => [index("investment_methods_owner_user_id_idx").on(t.ownerUserId)]
+);
 
 /**
  * Where an admin actually deploys the capital raised by a method, and what it
@@ -152,6 +159,8 @@ export const priceQuotes = pgTable(
   (t) => [
     index("price_quotes_asset_id_idx").on(t.assetId),
     index("price_quotes_fetched_at_idx").on(t.fetchedAt),
+    // Serves the "newest quote per asset" DISTINCT ON in price-service.
+    index("price_quotes_asset_id_fetched_at_idx").on(t.assetId, t.fetchedAt.desc()),
   ]
 );
 
@@ -462,7 +471,8 @@ export const financePlans = pgTable(
     // Integer count of projected months. Minimum 12 (1 year), default 120 (10
     // years). The UI shows the first 12 months monthly and yearly snapshots after.
     monthsAhead: integer("months_ahead").notNull().default(120),
-    // Opening balance for the savings line at start_month.
+    // Opening balance for the savings line, as of `balances_as_of`. May be
+    // negative (an overdraft is carried, not clipped).
     initialSavings: numeric("initial_savings", { precision: 20, scale: 2 })
       .notNull()
       .default("0"),
@@ -513,6 +523,13 @@ export const financePlans = pgTable(
       (): AnyPgColumn => financePlans.id,
       { onDelete: "set null" }
     ),
+    // Calendar day (the reader's, not UTC's) the opening balances — initial
+    // savings / investments and the debts' opening balances — were last set
+    // on. Anything dated on/before it is already in those balances, so the
+    // projection doesn't apply it again. Null on rows from before the column
+    // existed: the projection then falls back to the creation day. A newer
+    // confirmation always wins.
+    balancesAsOf: date("balances_as_of"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -527,7 +544,9 @@ export const financePlans = pgTable(
       .on(t.userId)
       .where(sql`${t.isMain} = TRUE`),
     check("finance_plans_months_ahead_chk", sql`${t.monthsAhead} >= 1 AND ${t.monthsAhead} <= 120`),
-    check("finance_plans_initial_savings_chk", sql`${t.initialSavings} >= 0`),
+    // No >= 0 check on initial_savings: opening balances are restated as of
+    // the day they are edited, and a plan in deficit restates an overdraft
+    // (the same reason finance_plan_confirmations lost its savings check).
     check("finance_plans_initial_investments_chk", sql`${t.initialInvestments} >= 0`),
     check("finance_plans_savings_rate_chk", sql`${t.monthlySavingsRate} >= 0`),
     check("finance_plans_surplus_chk", sql`${t.surplusToDebtsPercent} >= 0 AND ${t.surplusToDebtsPercent} <= 1`),
@@ -715,7 +734,10 @@ export const financePlanConfirmations = pgTable(
     planId: uuid("plan_id")
       .notNull()
       .references(() => financePlans.id, { onDelete: "cascade" }),
-    // Anchor to the FIRST day of the confirmed month (always UTC midnight).
+    // The calendar day the balances describe: the reader's local day a user
+    // confirmed on, or the period start an auto row records the opening of.
+    // The name predates that (rows used to be keyed by month); a confirmation
+    // counts for whichever accounting period contains this day.
     confirmationMonth: date("confirmation_month").notNull(),
     confirmedSavings: numeric("confirmed_savings", { precision: 20, scale: 2 }).notNull(),
     confirmedInvestments: numeric("confirmed_investments", { precision: 20, scale: 2 })
@@ -729,7 +751,8 @@ export const financePlanConfirmations = pgTable(
   (t) => [
     uniqueIndex("finance_plan_confirmations_plan_month_uniq").on(t.planId, t.confirmationMonth),
     index("finance_plan_confirmations_plan_id_idx").on(t.planId),
-    check("finance_plan_confirmations_savings_chk", sql`${t.confirmedSavings} >= 0`),
+    // No >= 0 check on confirmed_savings: a deficit is carried as negative
+    // savings, and the auto-confirm cron records it as such.
     check("finance_plan_confirmations_investments_chk", sql`${t.confirmedInvestments} >= 0`),
   ]
 );

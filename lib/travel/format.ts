@@ -1,5 +1,7 @@
 import { format } from "date-fns";
 
+import { formatDay, formatWeekdayDay, formatWeekdayDayYear, toDay } from "@/lib/utils/date";
+
 import { spansDays } from "./item-fields";
 import type { TripItemCategory } from "@/types/travel";
 
@@ -15,19 +17,23 @@ import type { TripItemCategory } from "@/types/travel";
 /** Parse a date-only `YYYY-MM-DD` column value in LOCAL time. `new Date(str)`
  *  would parse as UTC midnight and shift a day in negative-offset timezones. */
 export function parseTripDate(value: string): Date {
-  const [y, m, d] = value.split("-").map(Number);
-  return new Date(y, m - 1, d);
+  return toDay(value);
 }
 
+/**
+ * The trip's own dates, with weekdays: "Thu, Sep 3 – Thu, Sep 10, 2026".
+ *
+ * Deliberately richer than the app-wide `formatDayRange` — on a trip's banner
+ * which day of the week it starts is the first thing a traveller checks.
+ * Built from the shared date helpers so the pieces read like every other day
+ * in the app.
+ */
 export function formatDateRange(start: string, end: string | null): string {
-  const s = parseTripDate(start);
-  if (!end || start === end) return format(s, "EEE, MMM d, yyyy");
-  const e = parseTripDate(end);
-  const sameYear = s.getFullYear() === e.getFullYear();
-  if (sameYear) {
-    return `${format(s, "EEE, MMM d")} – ${format(e, "EEE, MMM d, yyyy")}`;
+  if (!end || start === end) return formatWeekdayDayYear(start);
+  if (start.slice(0, 4) === end.slice(0, 4)) {
+    return `${formatWeekdayDay(start)} – ${formatWeekdayDayYear(end)}`;
   }
-  return `${format(s, "MMM d, yyyy")} – ${format(e, "MMM d, yyyy")}`;
+  return `${formatDay(start)} – ${formatDay(end)}`;
 }
 
 /** Inclusive day count of the trip (Aug 12 → Aug 14 = 3). */
@@ -35,12 +41,6 @@ export function tripDays(start: string, end: string | null): number {
   const s = parseTripDate(start);
   const e = end ? parseTripDate(end) : s;
   return Math.round((e.getTime() - s.getTime()) / 86_400_000) + 1;
-}
-
-/** "1 day" / "5 days" — pluralized duration for stat cards. */
-export function tripDurationLabel(start: string, end: string | null): string {
-  const days = tripDays(start, end);
-  return `${days} day${days === 1 ? "" : "s"}`;
 }
 
 export function formatTripMoney(value: number, currency: string): string {

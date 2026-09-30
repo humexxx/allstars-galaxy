@@ -1,25 +1,29 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import type { Projection } from "@/types/finance";
+import type { Projection, TodayState } from "@/types/finance";
+import { idSchema } from "@/schemas/common";
 
 import { PlanEditor } from "@/components/finance/plan-editor";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
+import { listInvestmentMethods } from "@/lib/services/investment-method-service";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { getUserPreferences } from "@/lib/services/user-preferences-service";
 import {
   compareDebtStrategies,
-  getAutoInvestRate,
   getPlanWithLines,
-  getPortfolioValueForUser,
-  listInvestmentMethods,
-  projectPlanWithPortfolio,
+  projectPlan,
+  projectStateAt,
+  projectionOptionsFor,
 } from "@/lib/services/finance-plan-service";
 import {
-  buildCalibratedPlan,
+  calibratePlan,
   getRecentMonthlySnapshots,
+  loadCalibratedView,
 } from "@/lib/services/finance-snapshot-service";
 import { getUserPortfolio } from "@/lib/services/portfolio-service";
+import { getRequestTimeZone } from "@/lib/utils/request-today";
+import { todayInTimeZone } from "@/lib/utils/date";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +33,8 @@ type PageProps = {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
+  // A non-uuid would reach Postgres as a cast error and a 500.
+  if (!idSchema.safeParse(id).success) return { title: "Plan" };
   const ctx = await requireEffectiveContext();
   const plan = await getPlanWithLines(id, ctx.effectiveUserId);
   return {
@@ -38,53 +44,75 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function PlanDetailPage({ params }: PageProps) {
   const { id } = await params;
+  if (!idSchema.safeParse(id).success) notFound();
   const ctx = await requireEffectiveContext();
   const plan = await getPlanWithLines(id, ctx.effectiveUserId);
   if (!plan) notFound();
 
-  // Calibrate from the latest confirmation so the projection (and the chart's
-  // forward line) starts from the user's most recent real numbers instead of
-  // the original plan baseline. Returns the plan unchanged when there are no
-  // confirmations. The raw `plan` is still what the editor mutates.
-  const baseline = await buildCalibratedPlan(plan);
+  // One "today" for the whole render, in the READER'S time zone (the tz
+  // cookie): the current period, the KPIs and the chart all derive from it.
+  const timeZone = await getRequestTimeZone();
+  const now = todayInTimeZone(timeZone);
 
-  // Milestones are a global user preference, not plan data — edited in Settings.
-  const preferences = await getUserPreferences(ctx.effectiveUserId);
+  // A scenario opens on its base plan's as-of day, so an unchanged scenario
+  // and its base project identically (see `compareScenario`).
+  const basePlan = plan.basedOnPlanId
+    ? await getPlanWithLines(plan.basedOnPlanId, ctx.effectiveUserId)
+    : null;
+  const baseRaw = basePlan ? calibratePlan(basePlan, null, { timeZone }) : null;
+  const calibration = { timeZone, asOfFallback: baseRaw?.asOf ?? null };
 
-  const [portfolioValue, autoInvestRate, investmentMethods, history] =
-    await Promise.all([
-      baseline.includePortfolio
-        ? getPortfolioValueForUser(ctx.effectiveUserId)
-        : Promise.resolve(0),
-      getAutoInvestRate(baseline),
-      listInvestmentMethods({ includeDisabled: true }),
-      // Real recorded history for the chart's past (today → backwards). 36
-      // months covers the largest horizon's ~25% past budget; empty for fresh
-      // plans, which fall back to the projected past.
-      getRecentMonthlySnapshots(
-        plan.id,
-        ctx.effectiveUserId,
-        36,
-        new Date(),
-        plan.confirmationDayOfMonth
-      ),
-    ]);
+  // The calibrated plan (latest confirmation as the opening, on its day) is
+  // what every figure on the page projects; the raw `plan` is what the line
+  // and debt editors mutate.
+  const [view, preferences, investmentMethods, history] = await Promise.all([
+    loadCalibratedView(plan, ctx.effectiveUserId, now, calibration),
+    getUserPreferences(ctx.effectiveUserId),
+    listInvestmentMethods({ includeDisabled: true }),
+    // Real recorded history for the chart's past. 36 months covers the
+    // largest horizon's ~25% past budget.
+    getRecentMonthlySnapshots(
+      plan.id,
+      ctx.effectiveUserId,
+      36,
+      now,
+      plan.confirmationDayOfMonth
+    ),
+  ]);
+  const { baseline, projection, options, today } = view;
 
-  // Scenario plans overlay their base plan's projection as a ghost line so the
-  // delta is visible directly on the chart. Calibrated the same way as the
-  // scenario itself; null when the plan is standalone or the base was deleted.
-  let ghost: { name: string; color: string; projection: Projection } | null = null;
-  if (plan.basedOnPlanId) {
-    const basePlan = await getPlanWithLines(plan.basedOnPlanId, ctx.effectiveUserId);
-    if (basePlan) {
-      const baseBaseline = await buildCalibratedPlan(basePlan);
-      ghost = {
-        name: basePlan.name,
-        color: basePlan.color,
-        projection: await projectPlanWithPortfolio(baseBaseline, ctx.effectiveUserId),
-      };
-    }
+  // The plan as written (no confirmation applied): the hover fallback for
+  // periods before the calibration start, the chart's past while the plan has
+  // never been confirmed, and the scenario comparison basis.
+  const rawPlan = calibratePlan(plan, null, calibration);
+  const rawOptions = await projectionOptionsFor(rawPlan, ctx.effectiveUserId);
+  const pastProjection =
+    baseline.baselineSource === "plan"
+      ? projection
+      : projectPlan(rawPlan, rawPlan.incomes, rawPlan.expenses, rawPlan.debts, rawOptions);
+
+  // Scenario overlay: the base plan projected from its plan as written, the
+  // same footing as `pastProjection` for this plan (confirmations are not
+  // copied into a scenario, so comparing a calibrated base with an
+  // uncalibrated scenario showed deltas for an unchanged clone).
+  let ghost: {
+    name: string;
+    color: string;
+    projection: Projection;
+    today: TodayState | null;
+  } | null = null;
+  if (basePlan && baseRaw) {
+    const baseOptions = await projectionOptionsFor(baseRaw, ctx.effectiveUserId);
+    ghost = {
+      name: basePlan.name,
+      color: basePlan.color,
+      projection: projectPlan(baseRaw, baseRaw.incomes, baseRaw.expenses, baseRaw.debts, baseOptions),
+      today: projectStateAt(baseRaw, baseRaw.incomes, baseRaw.expenses, baseRaw.debts, baseOptions, now),
+    };
   }
+  const scenarioBasis = ghost
+    ? projectPlan(rawPlan, rawPlan.incomes, rawPlan.expenses, rawPlan.debts, rawOptions)
+    : null;
 
   // Recorded portfolio history feeds the chart's past segment of the portfolio
   // series when the plan includes the portfolio.
@@ -97,16 +125,8 @@ export default async function PlanDetailPage({ params }: PageProps) {
     }
   }
 
-  const projection = await projectPlanWithPortfolio(baseline, ctx.effectiveUserId);
-  // Raw (un-calibrated) projection — spans back to the plan's start. The chart
-  // uses it to re-simulate the past when there are no real snapshots yet, so
-  // confirming the current period (which calibrates `projection` to start at
-  // today) doesn't blank the chart's history. Same object when no confirmation.
-  const pastProjection =
-    baseline === plan
-      ? projection
-      : await projectPlanWithPortfolio(plan, ctx.effectiveUserId);
-  // Strategy comparison only meaningful when there's something to compare.
+  // Strategy comparison, with exactly the options the chart beside it used
+  // (portfolio growth included) and the plan's own surplus-to-debts share.
   const comparison =
     baseline.debts.length > 0
       ? compareDebtStrategies(
@@ -114,23 +134,26 @@ export default async function PlanDetailPage({ params }: PageProps) {
           baseline.incomes,
           baseline.expenses,
           baseline.debts,
-          { portfolioValue, autoInvestRate }
+          options
         )
       : null;
 
   return (
-    <section className="space-y-4">
+    <section className="flex flex-col gap-6">
       <PlanEditor
+        now={now}
         plan={plan}
         baseline={baseline}
         projection={projection}
         pastProjection={pastProjection}
+        simulatedPast={baseline.baselineSource === "plan" ? projection : null}
+        today={today}
         history={history}
         comparison={comparison}
         investmentMethods={investmentMethods}
         ghost={ghost}
+        scenarioBasis={scenarioBasis}
         portfolioHistory={portfolioHistory}
-        portfolioValue={portfolioValue}
         milestones={preferences.financeMilestones}
         title={plan.name}
         description={

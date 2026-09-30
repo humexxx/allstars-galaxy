@@ -265,7 +265,17 @@ describe("initializeDefaultColumns", () => {
 // ---------- createBoardTask ----------
 
 describe("createBoardTask", () => {
+  it("refuses a column the user does not own", async () => {
+    columnsFindFirst.mockResolvedValueOnce(undefined);
+
+    await expect(
+      createBoardTask(USER_ID, { columnId: COLUMN_ID, title: "Sneaky", order: 0 })
+    ).rejects.toThrow("Column not found");
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+
   it("inserts with userId + data merged and returns the created row", async () => {
+    columnsFindFirst.mockResolvedValueOnce({ id: COLUMN_ID });
     const created = makeTask({ title: "Write tests", order: 5 });
     returningMock.mockResolvedValueOnce([created]);
 
@@ -304,13 +314,25 @@ describe("updateBoardTask", () => {
 // ---------- deleteBoardTask ----------
 
 describe("deleteBoardTask", () => {
-  it("issues a delete scoped by (id, userId)", async () => {
-    deleteWhereMock.mockResolvedValueOnce(undefined);
+  it("deletes scoped by (id, userId) and closes the order gap below it", async () => {
+    deleteWhereMock.mockReturnValueOnce({
+      returning: () => Promise.resolve([{ columnId: COLUMN_ID, order: 1 }]),
+    });
 
     await deleteBoardTask(TASK_ID, USER_ID);
 
     expect(deleteMock).toHaveBeenCalledOnce();
     expect(deleteWhereMock).toHaveBeenCalledOnce();
+    // Tasks after the deleted one shift down so `order` stays contiguous.
+    expect(updateMock).toHaveBeenCalledOnce();
+  });
+
+  it("does nothing more when the task did not exist", async () => {
+    deleteWhereMock.mockReturnValueOnce({ returning: () => Promise.resolve([]) });
+
+    await deleteBoardTask(TASK_ID, USER_ID);
+
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });
 
@@ -392,6 +414,8 @@ describe("reorderTask", () => {
     tasksFindFirst
       .mockResolvedValueOnce(original)
       .mockResolvedValueOnce(finalState);
+    // The destination column has to be the user's own.
+    columnsFindFirst.mockResolvedValueOnce({ id: COLUMN_ID_2 });
 
     const result = await reorderTask(
       TASK_ID,

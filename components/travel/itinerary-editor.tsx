@@ -1,18 +1,22 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Mono, Text } from "@/components/ui/typography";
+import { DateField } from "@/components/ui/date-field";
+import { FieldDescription, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
+import { Mono } from "@/components/ui/typography";
 import { setTripItemStopsAction } from "@/app/actions/travel";
 import type { TripItemStop } from "@/types/travel";
 
 type Draft = {
+  /** Stable React key: an index key moved focus and input state onto the
+   *  next row whenever one above it was removed. */
+  key: string;
   dayNumber: string;
   stopOn: string;
   place: string;
@@ -20,6 +24,7 @@ type Draft = {
 };
 
 const blank = (day: number): Draft => ({
+  key: crypto.randomUUID(),
   dayNumber: String(day),
   stopOn: "",
   place: "",
@@ -44,11 +49,11 @@ export function ItineraryEditor({
   stops: TripItemStop[];
   onDone: () => void;
 }) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [rows, setRows] = useState<Draft[]>(() =>
     stops.length > 0
       ? stops.map((s) => ({
+          key: s.id,
           dayNumber: String(s.dayNumber),
           stopOn: s.stopOn ?? "",
           place: s.place,
@@ -68,7 +73,7 @@ export function ItineraryEditor({
         stops: filled.map((r, i) => ({
           // Renumber on save: deleting day 3 of eight should not leave a gap
           // the reader has to explain to themselves.
-          dayNumber: Number(r.dayNumber) || i + 1,
+          dayNumber: i + 1,
           stopOn: r.stopOn || null,
           place: r.place.trim(),
           note: r.note.trim() || null,
@@ -76,7 +81,6 @@ export function ItineraryEditor({
       });
       if (res.success) {
         toast.success(filled.length ? "Itinerary saved" : "Itinerary cleared");
-        router.refresh();
         onDone();
       } else {
         toast.error(res.error);
@@ -85,17 +89,20 @@ export function ItineraryEditor({
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3">
-      <div className="flex flex-col gap-1 ">
-        <Label className="text-xs">Itinerary</Label>
-        <Text className="text-2xs text-muted-foreground">
-          One row per day. Leave a place blank to drop that row.
-        </Text>
-      </div>
+    // The frame is a div around the fieldset, not the fieldset itself: a
+    // bordered fieldset draws its legend across the top border.
+    <div className="rounded-lg border bg-muted/20 p-3">
+    <FieldSet className="gap-3">
+      <FieldLegend variant="label" className="mb-1 text-xs">
+        Itinerary
+      </FieldLegend>
+      <FieldDescription className="text-xs">
+        One row per day. Leave a place blank to drop that row.
+      </FieldDescription>
 
-      <div className="flex flex-col gap-2 ">
+      <div className="flex flex-col gap-2">
         {rows.map((row, i) => (
-          <div key={i} className="grid gap-2 sm:grid-cols-[3rem_9rem_1fr_1fr_2rem]">
+          <div key={row.key} className="grid gap-2 sm:grid-cols-[3rem_11rem_1fr_1fr_2rem]">
             <Input
               aria-label={`Day number for row ${i + 1}`}
               inputMode="numeric"
@@ -103,12 +110,19 @@ export function ItineraryEditor({
               onChange={(e) => update(i, { dayNumber: e.target.value })}
               className="text-center tabular-nums"
             />
-            <Input
-              aria-label={`Date for row ${i + 1}`}
-              type="date"
-              value={row.stopOn}
-              onChange={(e) => update(i, { stopOn: e.target.value })}
-            />
+            <div>
+              {/* DateField names itself through a label, not aria-label. */}
+              <label htmlFor={`stop-date-${row.key}`} className="sr-only">
+                Date for row {i + 1}
+              </label>
+              <DateField
+                id={`stop-date-${row.key}`}
+                value={row.stopOn}
+                onChange={(day) => update(i, { stopOn: day })}
+                placeholder="Date"
+                clearable
+              />
+            </div>
             <Input
               aria-label={`Place for row ${i + 1}`}
               value={row.place}
@@ -123,14 +137,14 @@ export function ItineraryEditor({
             />
             <Button
               type="button"
-              size="icon"
+              size="icon-sm"
               variant="ghost"
-              className="size-9 text-destructive"
+              className="self-center text-destructive"
               aria-label={`Remove row ${i + 1}`}
               disabled={rows.length === 1}
-              onClick={() => setRows((prev) => prev.filter((_, j) => j !== i))}
+              onClick={() => setRows((prev) => prev.filter((r) => r.key !== row.key))}
             >
-              <Trash2 className="size-4" />
+              <Trash2 />
             </Button>
           </div>
         ))}
@@ -142,23 +156,29 @@ export function ItineraryEditor({
           size="sm"
           variant="ghost"
           onClick={() =>
-            setRows((prev) => [...prev, blank(prev.length + 1)])
+            setRows((prev) =>
+              // After the highest day present, not `length + 1`: deleting
+              // day 2 of four and adding one produced a second "day 4".
+              [...prev, blank(Math.max(0, ...prev.map((r) => Number(r.dayNumber) || 0)) + 1)]
+            )
           }
         >
-          <Plus className="size-4" /> Add day
+          <Plus /> Add day
         </Button>
         <div className="flex items-center gap-2">
           <Mono className="text-2xs text-muted-foreground">
             {rows.filter((r) => r.place.trim()).length} stops
           </Mono>
-          <Button type="button" size="sm" variant="ghost" onClick={onDone}>
+          <Button type="button" size="sm" variant="outline" onClick={onDone}>
             Cancel
           </Button>
           <Button type="button" size="sm" onClick={save} disabled={isPending}>
+            {isPending && <Spinner />}
             {isPending ? "Saving…" : "Save itinerary"}
           </Button>
         </div>
       </div>
+    </FieldSet>
     </div>
   );
 }

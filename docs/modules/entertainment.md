@@ -1,7 +1,7 @@
 # Entertainment
 
 > **Status:** In progress (travel shipped + dashboard card; sports UI shipped, favourites end-to-end on DB; LoL, F1, football, World Cup, padel and tennis wired to free live providers)
-> **Last reviewed:** 2026-08-31
+> **Last reviewed:** 2026-09-29
 
 ## Overview
 Two sub-modules: Travel Planner (trips, items, photos, public sharing) and
@@ -15,7 +15,7 @@ NBA and NFL still use mocks.
 - `/portal/entertainment/travel-planner` — list of trips (authenticated)
 - `/portal/entertainment/travel-planner/new` — create trip
 - `/portal/entertainment/travel-planner/[id]` — trip detail + editor
-- `/trips/[token]` — **public** shared trip view (top-level, no auth)
+- `/trips/[token]` — **public** shared trip view (top-level, no auth); `loading.tsx` paints the shell before the trip resolves
 - `/portal/entertainment/sports` — sports hub with tabs per sport + manage-favourites sheet
 
 ## Server actions — `/app/actions/`
@@ -23,8 +23,12 @@ NBA and NFL still use mocks.
   `addTripContributionAction` / `updateTripContributionAction` /
   `deleteTripContributionAction` for the payment log and
   `setTripItemStopsAction` for a cruise's ports. `createTripShareAction`
-  takes a `memberId` to scope a link to one traveller
-- `sports.ts` — `setSportFavoriteAction` toggles a sport favourite for the current user
+  takes a `memberId` to scope a link to one traveller. Every action returns
+  `ActionResult<X>`; trip, item and member mutations also revalidate `/portal`
+  (the dashboard travel card) through `revalidateTrip()`
+- `airports.ts` — `searchAirportsAction` → `ActionResult<Airport[]>`; the query
+  is checked with `airportQuerySchema` and a bad one returns no results
+- `sports.ts` — `setSportFavoriteAction` toggles a sport favourite for the current user (`ActionResult`)
 
 ## Services — `/lib/services/`
 - `travel-service.ts` — trip / item / photo / member / share CRUD,
@@ -32,7 +36,9 @@ NBA and NFL still use mocks.
   `buildScope` (one traveller's own view of a shared link) and
   `getDashboardTravelSummary` (featured trip with state badge + counts for the
   dashboard card). `ensureMemberBelongsToTrip` guards anything that names a
-  member: the foreign key proves the row exists, not which trip it is on
+  member: the foreign key proves the row exists, not which trip it is on.
+  `updateTrip` / `deleteTrip` scope the WHERE by owner and `updateTrip` throws
+  when no row matched
 - `sports-service.ts` — favourites CRUD + `getDashboardSportsSummary` that materialises one highlight per favourited sport (LoL via `getLolData()`, F1 via `getF1Data()`, football via `getFootballData()`, World Cup via `getWorldCupData()` — featured knockout match + latest result, padel via `getPadelData()`, rest from mock fixtures)
 - `lolesports-service.ts` — `getLolData()` fetches LEC/LCS/LCK/LPL from Lolesports' unofficial API (`esports-api.lolesports.com`), maps to `LolData` including playoff `BracketRound[]` (**one round per standings SECTION**, labelled with the section's own name — `buildLolBracket`; the old TBD-count heuristic remains only as fallback for unnamed sections, because TBD counting collapsed rounds into one column as ties resolved), picks the currently-active tournament (never the future split), maps regular-season stages (`regular_season`, `groups`, `group_stage`) into standings. A completed event missing `result` renders "—", never a fake 0–0. Cached 30 min via `unstable_cache`, falls back to `LOL_DATA` mock on any error
 - `jolpica-f1-service.ts` — `getF1Data()` fetches current-season races, driver + constructor standings and results from Jolpica-F1 (`api.jolpi.ca/ergast/f1`, Ergast-compatible drop-in), maps to `F1Data` with derived race status and podium tallies, cached 30 min, falls back to `F1_DATA` mock on any error
@@ -42,24 +48,33 @@ NBA and NFL still use mocks.
 - `thesportsdb-tennis-service.ts` — `getTennisData()` fetches the next + last event per tour for ATP (id 4464) and WTA (id 4517) from TheSportsDB free public API (no key), derives a `RacquetTournament` per tournament (groups events by extracted tournament-name prefix), keeps `TENNIS_DATA` mock rankings since TheSportsDB has none. Cached 30 min, falls back to `TENNIS_DATA` mock on any error
 
 ## Schemas — `/schemas/`
-- `travel.ts` — `createTripSchema`, `updateTripSchema`, `tripItemSchema` +
-  `tripItemSchemaChecked` / `updateTripItemSchema` (both carry the
-  `endsAfterStart` refinement — a backwards range makes the calendar compute a
-  negative span), `tripPhotoSchema`, `createTripShareSchema`,
-  `tripContributionSchema` / `updateTripContributionSchema`,
-  `setItemStopsSchema`, `setTripMembersSchema`
-- `sports.ts` — `sportIdSchema`, `setSportFavoriteSchema`
+- `travel.ts` — `createTripSchema`, `updateTripSchema`, `tripItemBaseSchema` →
+  `tripItemSchema` / `updateTripItemSchema` (both carry the `endsAfterStart`
+  refinement — a backwards range makes the calendar compute a negative span),
+  `tripPhotoSchema`, `createTripShareSchema`, `tripContributionSchema` /
+  `updateTripContributionSchema`, `setItemStopsSchema`, `setTripMembersSchema`,
+  `airportQuerySchema`, `tripChildIdsSchema`. Types are `…Data`; an `…Input`
+  (`z.input`) exists only where the schema defaults or coerces
+  (`CreateTripInput`, `UpdateTripInput`, `TripItemInput`, `UpdateTripItemInput`,
+  `TripPhotoInput`, `CreateTripShareInput`), and that is what the actions take
+- `sports.ts` — `sportIdSchema` (`z.enum(SPORT_IDS)`), `setSportFavoriteSchema` / `SetSportFavoriteData`
 
 ## Types — `/types/`
 - `travel.ts` — `Trip`, `TripItem`, `TripPhoto`, `TripShare`,
   `TripContribution`, `TripMemberView`, `TripItemStop`, `TripItemWithStops`,
   `TripWithRelations`, `PublicTripView` + `PublicTripScope`, plus
   `DashboardTravelSummary` / `DashboardTravelFeaturedTrip` /
-  `DashboardTravelTripState`
-- `sports.ts` — full domain shapes for matches, standings, brackets, F1/NBA/NFL/LoL specifics, plus `UserSportsPreference` and `DashboardSportHighlight`. `SportId` includes `worldcup`; `FootballLeagueId` includes `world-cup`; `FootballLeagueData.groups?: FootballGroupStandings[]` carries per-group cup tables
+  `DashboardTravelTripState`, and `CalendarTrip` (what the month view needs,
+  shared by the owner and public pages)
+- `sports.ts` — `SPORT_IDS` (the one list `SportId` derives from), `F1StandingRow` / `F1DashboardStandings`, `F1NewsArticle`, and the full domain shapes for matches, standings, brackets, F1/NBA/NFL/LoL specifics, plus `UserSportsPreference` and `DashboardSportHighlight`. `SportId` includes `worldcup`; `FootballLeagueId` includes `world-cup`; `FootballLeagueData.groups?: FootballGroupStandings[]` carries per-group cup tables
 
 ## Components
-- `components/travel/` — trip list/detail, item editors, photo gallery, share panel
+- `components/travel/` — trip list/detail, item editors, photo gallery, share panel.
+  List/Calendar switches are `ToggleGroup` (they own no tab panels); dates are
+  picked with `DateField`; the airport picker is `Popover` + `Command`; the
+  trip form takes `onCancel` / `onSaved` so the edit dialog closes on both
+- `app/portal/entertainment/travel-planner/{,new/,[id]/}loading.tsx` — one
+  skeleton per page shape; a non-uuid `[id]` is a `notFound()`
 - `components/travel/trip-calendar.tsx` — the month view behind the List /
   Calendar tabs; bars laid over the day grid by `lib/travel/calendar.ts`
 - `components/travel/trip-payments.tsx` — the payment log, per traveller
@@ -111,6 +126,12 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **Logic audit (2026-09-11).** Travel: `TripCalendar` takes `showPrices` and the public calendar tab honours the link's setting; removing a traveller revokes their scoped share links (the FK would have widened them to the whole trip); `defaultShares` scales fixed shares up when they total under 100 with nobody flexible; a per-person item whose named payers are a subset of its attendees charges the payers for the other seats; the dashboard estimate uses `tripCost` with the party size; a hidden end date is not saved; stops renumber on save and "Add day" continues from the highest day; the public payload omits the owner's user id and shows item notes only on priced links. Sports: F1 picks a live race first and derives `live` from the race time; NBA live games carry scores and "recent" means finals; an ESPN tennis event that has not started is `upcoming`; F1 news dedupes a batch by article id and orders with a tiebreaker; date-only strings are read as calendar days; the dashboard card counts followed sports.
+- **`setTripMembers` scopes every member update to the trip.** A member id
+  borrowed from somebody else's trip used to be overwritten and re-parented.
+- **Sports feeds carry an 8s abort signal** (`lib/services/upstream.ts`); a hung
+  provider falls through to the mock fallback instead of holding the render.
+  `listUserFavoriteSportIds` is request-cached — the dashboard asks three times.
 - **The trip page has two views**, switched by `Tabs` next to *All trips*: the
   list answers *what is the plan*, the calendar answers *what does the month
   look like*. `TripCalendar` draws a whole month with arrows either side and a

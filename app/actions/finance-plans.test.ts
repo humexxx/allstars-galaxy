@@ -9,7 +9,16 @@ vi.mock("@/lib/services/impersonation", () => ({
   logImpersonatedMutation: vi.fn(),
 }));
 
+vi.mock("@/lib/services/finance-snapshot-service", () => ({
+  restateOpeningBalances: vi.fn(async () => null),
+}));
+
+vi.mock("@/lib/utils/request-today", () => ({
+  getRequestTimeZone: vi.fn(async () => "UTC"),
+}));
+
 vi.mock("@/lib/services/finance-plan-service", () => ({
+  getPlanWithLines: vi.fn(async () => null),
   createPlan: vi.fn(),
   updatePlan: vi.fn(),
   deletePlan: vi.fn(),
@@ -28,6 +37,7 @@ vi.mock("@/lib/services/finance-plan-service", () => ({
 }));
 
 import { revalidatePath } from "next/cache";
+import { restateOpeningBalances } from "@/lib/services/finance-snapshot-service";
 import {
   logImpersonatedMutation,
   requireEffectiveContext,
@@ -38,6 +48,7 @@ import {
   clonePlan,
   createPlan,
   deleteIncome,
+  getPlanWithLines,
   deleteLineOverride,
   deletePlan,
   updateDebt,
@@ -104,7 +115,11 @@ describe("createPlanAction", () => {
     const result = await createPlanAction(validInput as never);
 
     expect(result).toEqual({ success: true, data: plan });
-    expect(createPlan).toHaveBeenCalledWith(USER_ID, expect.objectContaining({ name: "My Plan" }));
+    expect(createPlan).toHaveBeenCalledWith(
+      USER_ID,
+      expect.objectContaining({ name: "My Plan" }),
+      expect.any(Date)
+    );
     expect(logImpersonatedMutation).toHaveBeenCalled();
     expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });
@@ -147,10 +162,35 @@ describe("updatePlanAction", () => {
     const result = await updatePlanAction(validInput as never);
 
     expect(result).toEqual({ success: true, data: plan });
-    expect(updatePlan).toHaveBeenCalledWith(USER_ID, expect.objectContaining({ id: PLAN_ID }));
+    expect(updatePlan).toHaveBeenCalledWith(USER_ID, expect.objectContaining({ id: PLAN_ID }), null);
     expect(logImpersonatedMutation).toHaveBeenCalled();
     expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
     expect(revalidatePath).toHaveBeenCalledWith("/portal");
+  });
+
+  it("restates the opening balances when the form changes them", async () => {
+    const stored = { id: PLAN_ID, initialSavings: "0", initialInvestments: "0", debts: [] };
+    const restatement = {
+      initialSavings: "500.00",
+      initialInvestments: "0.00",
+      debtBalances: {},
+      balancesAsOf: "2026-09-30",
+      syncConfirmationId: null,
+    };
+    vi.mocked(getPlanWithLines).mockResolvedValueOnce(stored as never);
+    vi.mocked(restateOpeningBalances).mockResolvedValueOnce(restatement);
+    vi.mocked(updatePlan).mockResolvedValueOnce({ id: PLAN_ID } as never);
+
+    await updatePlanAction({ ...validInput, initialSavings: "500" } as never);
+
+    expect(restateOpeningBalances).toHaveBeenCalledWith(
+      stored,
+      USER_ID,
+      expect.any(Date),
+      { savings: "500", investments: "0" },
+      "UTC"
+    );
+    expect(updatePlan).toHaveBeenCalledWith(USER_ID, expect.anything(), restatement);
   });
 
   it("returns Invalid input when id is not a UUID", async () => {
@@ -238,7 +278,12 @@ describe("addPlanDebtAction", () => {
     const result = await addPlanDebtAction(PLAN_ID, validDebt as never);
 
     expect(result).toEqual({ success: true, data: row });
-    expect(addDebt).toHaveBeenCalledWith(USER_ID, PLAN_ID, expect.objectContaining({ name: "Car Loan" }));
+    expect(addDebt).toHaveBeenCalledWith(
+      USER_ID,
+      PLAN_ID,
+      expect.objectContaining({ name: "Car Loan" }),
+      null
+    );
     expect(logImpersonatedMutation).toHaveBeenCalled();
     expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });
@@ -298,7 +343,12 @@ describe("updatePlanDebtAction", () => {
     const result = await updatePlanDebtAction(PLAN_ID, validDebt as never);
 
     expect(result).toEqual({ success: true, data: row });
-    expect(updateDebt).toHaveBeenCalledWith(USER_ID, PLAN_ID, expect.objectContaining({ id: ROW_ID }));
+    expect(updateDebt).toHaveBeenCalledWith(
+      USER_ID,
+      PLAN_ID,
+      expect.objectContaining({ id: ROW_ID }),
+      null
+    );
     expect(logImpersonatedMutation).toHaveBeenCalled();
     expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });

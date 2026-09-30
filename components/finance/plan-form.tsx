@@ -251,8 +251,9 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
                 />
                 <FieldError id="plan-savings-error" errors={[errors.initialSavings]} />
                 <FieldDescription>
-                  Your balance on the day you create the plan — anything already
-                  paid in or out this period is in it, so it isn&apos;t counted again.
+                  {plan
+                    ? "Your balance today. Changing it restates the plan's opening balances as of today: the others roll forward to where the plan has them now, and nothing already paid in or out is counted again."
+                    : "Your balance on the day you create the plan — anything already paid in or out this period is in it, so it isn't counted again."}
                 </FieldDescription>
               </Field>
               <Field

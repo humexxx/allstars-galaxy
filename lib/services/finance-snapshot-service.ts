@@ -15,7 +15,13 @@ import {
   getMainPlan,
   getPlanWithLines,
   projectionOptionsFor,
+  type PlanRestatement,
 } from "./finance-plan-service";
+import {
+  changesOpeningBalances,
+  restateOpeningSet,
+  type OpeningBalanceEdits,
+} from "@/lib/finance/opening-balances";
 import {
   autoConfirmSkippedPeriods,
   getLatestConfirmation,
@@ -33,7 +39,7 @@ import {
   type ProjectOptions,
 } from "@/lib/finance/projection";
 import { isoDay, monthKeyOf, parseIsoDay } from "@/lib/finance/schedule";
-import { calendarDayInTimeZone } from "@/lib/utils/date";
+import { calendarDayInTimeZone, earliestCalendarDay } from "@/lib/utils/date";
 import {
   alignTimelineToday,
   buildPlanTimeline,
@@ -116,7 +122,43 @@ export function calibratePlan(
     expenses: withPinnedRecurrence(plan.expenses, anchorIso),
   };
 
-  if (!latest) {
+  // The plan keeps its own END date whatever period it is rebased to.
+  const originalPeriods = iteratePeriods(originalStart, anchor, Math.max(1, plan.monthsAhead));
+  const originalFirst = originalPeriods[0].start;
+  const originalLast = originalPeriods[originalPeriods.length - 1].start;
+  const monthsAheadFrom = (start: Date): number =>
+    Math.max(1, periodIndexForDate(start, anchor, originalLast) + 1);
+
+  // Which statement of the opening balances is newest: the latest
+  // confirmation, or the plan's own (`balances_as_of`, re-dated whenever an
+  // opening balance is edited). A tie goes to the confirmation — restating on
+  // a day that already has one updates that confirmation too, so both agree.
+  const statedDay = parseIsoDay(plan.balancesAsOf ?? null);
+  const confirmationWins =
+    latest !== null &&
+    (statedDay === null || confirmationDay(latest).getTime() >= statedDay.getTime());
+
+  if (!confirmationWins) {
+    if (statedDay) {
+      // Balances stated on a day after the plan's first period: the plan
+      // starts from them, in the period that contains that day (like a
+      // confirmation), so nothing before it is replayed. Stated on or before
+      // the first period: the plan starts where it always did and the engine
+      // skips what the balances already hold.
+      const statedPeriod = periodStartFor(statedDay, anchor);
+      const rebase = statedPeriod.getTime() > originalFirst.getTime();
+      return {
+        ...plan,
+        ...pinned,
+        ...(rebase ? { startMonth: statedPeriod, monthsAhead: monthsAheadFrom(statedPeriod) } : {}),
+        debts: withPinnedRecurrence(plan.debts, anchorIso),
+        asOf: statedDay,
+        baselineSource: "plan",
+      };
+    }
+    // Rows from before `balances_as_of` existed: the creation day, which the
+    // engine only honours inside the first period (a backdated legacy plan
+    // keeps meaning "balances at the start").
     const created = plan.createdAt ? new Date(plan.createdAt) : null;
     const asOf =
       options.asOfFallback ??
@@ -132,16 +174,16 @@ export function calibratePlan(
     };
   }
 
-  const day = confirmationDay(latest);
+  // Past this point the confirmation is the baseline.
+  const confirmation = latest as ConfirmationWithDebts;
+  const day = confirmationDay(confirmation);
   const startMonth = periodStartFor(day, anchor);
-  const originalPeriods = iteratePeriods(originalStart, anchor, Math.max(1, plan.monthsAhead));
-  const originalLast = originalPeriods[originalPeriods.length - 1].start;
-  const monthsAhead = Math.max(1, periodIndexForDate(startMonth, anchor, originalLast) + 1);
+  const monthsAhead = monthsAheadFrom(startMonth);
   const asOf =
-    latest.source === "auto" ? new Date(day.getTime() - MS_PER_DAY) : day;
+    confirmation.source === "auto" ? new Date(day.getTime() - MS_PER_DAY) : day;
 
   const debtBalanceById = new Map(
-    latest.debtConfirmations.map((d) => [d.debtId, d.confirmedBalance])
+    confirmation.debtConfirmations.map((d) => [d.debtId, d.confirmedBalance])
   );
 
   return {
@@ -149,8 +191,8 @@ export function calibratePlan(
     ...pinned,
     startMonth,
     monthsAhead,
-    initialSavings: latest.confirmedSavings,
-    initialInvestments: latest.confirmedInvestments,
+    initialSavings: confirmation.confirmedSavings,
+    initialInvestments: confirmation.confirmedInvestments,
     debts: withPinnedRecurrence(plan.debts, anchorIso).map((d) => ({
       ...d,
       initialBalance: debtBalanceById.get(d.id) ?? d.initialBalance,
@@ -393,12 +435,22 @@ async function createSnapshotForPlan(
     return { created: false };
   }
 
+  // The cron runs once for every user, and no user's time zone is stored.
+  // Its "today" — which decides whether a period has closed, which period's
+  // opening the snapshot records, and where the horizon clamps — is therefore
+  // the EARLIEST calendar day on Earth (UTC−12): a period counts as closed
+  // only once it has closed everywhere, so nobody gets a period auto-confirmed
+  // (or a projected close recorded as history) while it is still open where
+  // they live. The cost is a lag of up to a day for zones ahead of UTC−12.
+  // Manual / confirmation snapshots keep the instant they were given.
+  const day = source === "system_cron" ? earliestCalendarDay(date) : date;
+
   // Idempotency: if the cron is re-run on a day where we already wrote a
   // system_cron snapshot, skip. Other sources always create a fresh row.
   if (source === "system_cron") {
-    const dayStart = new Date(date);
+    const dayStart = new Date(day);
     dayStart.setUTCHours(0, 0, 0, 0);
-    const dayEnd = new Date(date);
+    const dayEnd = new Date(day);
     dayEnd.setUTCHours(23, 59, 59, 999);
     const [existing] = await db
       .select({ id: financePlanSnapshots.id })
@@ -418,7 +470,7 @@ async function createSnapshotForPlan(
     // unconfirmed so today's snapshot reflects the rolled opening (and the
     // skipped periods get an auditable auto-confirmation). Cron-only — manual /
     // confirmation snapshots must not trigger silent baseline rolls.
-    await autoConfirmSkippedPeriods(plan, userId, date);
+    await autoConfirmSkippedPeriods(plan, userId, day);
   }
 
   // "open" → the period's OPENING balances (last confirmed baseline held flat),
@@ -427,14 +479,14 @@ async function createSnapshotForPlan(
   // historical record when the user confirms (or the cron auto-confirms a
   // skipped period). Pre-"open" this used the projected close, which silently
   // recorded forecast numbers as if they were real.
-  const { state } = await computeStateAt(plan, userId, date, "open");
+  const { state } = await computeStateAt(plan, userId, day, "open");
   if (!state) return { created: false };
 
   const [row] = await db
     .insert(financePlanSnapshots)
     .values({
       planId,
-      date,
+      date: day,
       savings: state.savings.toFixed(2),
       investments: state.investments.toFixed(2),
       totalDebt: state.totalDebt.toFixed(2),
@@ -645,4 +697,52 @@ export async function loadPlanOverviews(
       return { plan, projection: view.projection, today: view.today, timeline, summary };
     })
   );
+}
+
+/**
+ * The restatement an edit of opening balances implies, or null when the edit
+ * changes none of them (a no-op save must not re-date anything). Edited
+ * figures keep their new values; the others move to where the CURRENT
+ * calibrated plan (latest confirmation or plan statement) projects them on
+ * `today` — see `lib/finance/opening-balances.ts`. A confirmation made on
+ * `today` is flagged for syncing, so the two statements of the day agree.
+ */
+export async function restateOpeningBalances(
+  plan: FinancePlanWithLines,
+  userId: string,
+  today: Date,
+  edits: OpeningBalanceEdits,
+  timeZone?: string | null
+): Promise<PlanRestatement | null> {
+  if (!changesOpeningBalances(plan, edits)) return null;
+  const latest = await getLatestConfirmation(plan.id);
+  const baseline = calibratePlan(plan, latest, { timeZone });
+  const options = await projectionOptionsFor(baseline, userId);
+  const state: TodayState = projectStateAt(
+    baseline,
+    baseline.incomes,
+    baseline.expenses,
+    baseline.debts,
+    options,
+    today
+  ) ?? {
+    status: "before-start",
+    date: today,
+    periodIndex: 0,
+    periodStart: today,
+    savings: parseFloat(baseline.initialSavings),
+    investments: parseFloat(baseline.initialInvestments),
+    portfolioValue: 0,
+    totalDebt: 0,
+    netWorth: 0,
+    debts: baseline.debts.map((d) => ({
+      debtId: d.id,
+      name: d.name,
+      balance: parseFloat(d.initialBalance),
+    })),
+  };
+  const set = restateOpeningSet(plan, state, edits, today);
+  const syncConfirmationId =
+    latest && isoDay(confirmationDay(latest)) === set.balancesAsOf ? latest.id : null;
+  return { ...set, syncConfirmationId };
 }

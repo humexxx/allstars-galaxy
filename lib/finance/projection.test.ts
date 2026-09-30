@@ -373,3 +373,36 @@ describe("payments record", () => {
     ]);
   });
 });
+
+describe("period 0 never starts before the plan's start date (anchor > 1)", () => {
+  // A January plan anchored on the 15th: period 0 runs Dec 15 – Jan 14, but
+  // the plan starts on Jan 1, so nothing dated Dec 15–31 is applied.
+  const p = plan({ startMonth: U(2026, 1), monthsAhead: 3, confirmationDayOfMonth: 15, initialSavings: "1000" });
+  const incomes = [
+    inc({ monthlyAmount: "500", dayOfMonth: 20 }), // Dec 20 (before start), Jan 20, Feb 20
+    inc({ monthlyAmount: "100", dayOfMonth: 5 }), // Jan 5 (after start), Feb 5, Mar 5
+  ];
+
+  it("applies no Dec 15–31 flows, whatever the as-of", () => {
+    for (const asOf of [null, U(2025, 11, 1), U(2025, 12, 16), U(2026, 9, 29)]) {
+      const first = projectPlan(p, incomes, [], [], { asOf }).months[0];
+      expect(first.date).toEqual(U(2025, 12, 15));
+      expect(first.preAsOfCashFlow).toBe(500);
+      expect(first.savings).toBe(1100); // 1,000 + Jan 5's 100, never Dec 20's 500
+    }
+  });
+
+  it("still honours an as-of inside the plan's part of period 0", () => {
+    const first = projectPlan(p, incomes, [], [], { asOf: U(2026, 1, 10) }).months[0];
+    expect(first.savings).toBe(1000); // Jan 5 is already in the balance too
+  });
+
+  it("today's position before the start date is the opening, flagged before-start", () => {
+    const s = projectStateAt(p, incomes, [], [], {}, U(2025, 12, 25))!;
+    expect(s.status).toBe("before-start");
+    expect(s.savings).toBe(1000);
+    const jan = projectStateAt(p, incomes, [], [], {}, U(2026, 1, 6))!;
+    expect(jan.status).toBe("in-range");
+    expect(jan.savings).toBe(1100);
+  });
+});

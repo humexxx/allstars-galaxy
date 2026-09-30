@@ -188,9 +188,30 @@ export type ScheduleSource = {
   overrides?: readonly FinancePlanLineOverride[] | null;
 };
 
-// A reschedule can move an occurrence out of its own month. Walking this many
-// months either side of the range picks up the ones moved INTO it.
-const RESCHEDULE_MARGIN_MONTHS = 2;
+// A reschedule can move an occurrence out of its own month — to any day up to
+// this many months either side of it. The resolver walks that many months
+// either side of the range to pick up the ones moved INTO it, so a move any
+// further would be lost; `rescheduleWithinReach` is the rule the calendar
+// and the override schema enforce.
+export const RESCHEDULE_MARGIN_MONTHS = 2;
+
+/** A month key (see `monthKeyOf`) as "YYYY-MM-01" — the overrides' `monthYear`. */
+export function monthYearOfKey(key: number): string {
+  const year = Math.floor(key / 12);
+  return isoDay(new Date(Date.UTC(year, key - year * 12, 1)));
+}
+
+/**
+ * True when the occurrence the cadence put in `monthYear` may be moved to
+ * `date` ("YYYY-MM-DD"): any day of its own month, or of the
+ * `RESCHEDULE_MARGIN_MONTHS` months either side of it.
+ */
+export function rescheduleWithinReach(monthYear: string, date: string): boolean {
+  const month = parseIsoDay(monthYear);
+  const target = parseIsoDay(date);
+  if (!month || !target) return false;
+  return Math.abs(monthKeyOf(target) - monthKeyOf(month)) <= RESCHEDULE_MARGIN_MONTHS;
+}
 
 function nonNegative(value: string | number | null | undefined): number {
   const n = typeof value === "number" ? value : parseFloat(value ?? "0");

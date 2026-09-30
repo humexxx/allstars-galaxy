@@ -157,3 +157,16 @@ export function todayInTimeZone(
 ): Date {
   return calendarDayInTimeZone(now, timeZone);
 }
+
+/**
+ * The earliest calendar day anywhere on Earth at `instant` (the day in
+ * UTC−12, `Etc/GMT+12` — the POSIX sign is inverted), as UTC midnight.
+ *
+ * For server code that decides a day boundary without knowing whose day it
+ * is (the daily cron runs for every user and stores no time zone): a day
+ * before this one has ended everywhere, so a period that ends before it is
+ * closed for every user, whatever zone they live in.
+ */
+export function earliestCalendarDay(instant: Date = new Date()): Date {
+  return calendarDayInTimeZone(instant, "Etc/GMT+12");
+}

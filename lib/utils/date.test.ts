@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   calendarDayInTimeZone,
+  earliestCalendarDay,
   isValidTimeZone,
   todayInTimeZone,
   formatDay,
@@ -70,5 +71,24 @@ describe("today in the reader's time zone (F25)", () => {
 
   it("reads a stored instant (a plan's createdAt) as the reader's day", () => {
     expect(calendarDayInTimeZone(instant, "Asia/Tokyo")).toEqual(new Date(Date.UTC(2026, 9, 1)));
+  });
+});
+
+describe("earliestCalendarDay", () => {
+  const U = (y: number, m: number, d: number, h = 0): Date => new Date(Date.UTC(y, m - 1, d, h));
+
+  it("is the day in UTC−12: behind UTC until noon UTC", () => {
+    expect(earliestCalendarDay(U(2026, 10, 1, 0))).toEqual(U(2026, 9, 30));
+    expect(earliestCalendarDay(U(2026, 10, 1, 11))).toEqual(U(2026, 9, 30));
+    expect(earliestCalendarDay(U(2026, 10, 1, 12))).toEqual(U(2026, 10, 1));
+  });
+
+  it("is never later than the day in any real zone", () => {
+    const instant = U(2026, 10, 1, 3);
+    for (const zone of ["Pacific/Pago_Pago", "America/Los_Angeles", "UTC", "Pacific/Kiritimati"]) {
+      expect(earliestCalendarDay(instant).getTime()).toBeLessThanOrEqual(
+        calendarDayInTimeZone(instant, zone).getTime()
+      );
+    }
   });
 });

@@ -53,6 +53,8 @@ import {
 } from "./period";
 import { dayIndexInPeriod, planOccurrences, type Occurrence } from "./schedule";
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 // Debts at or below this are paid off — the same threshold everywhere so
 // ordering, payoff detection and "No debt" agree.
 export const DEBT_PAID_EPS = 0.01;
@@ -124,6 +126,27 @@ function orderDebtsByStrategy(debts: DebtState[], strategy: DebtStrategy): DebtS
 function strategyOf(plan: FinancePlan): DebtStrategy {
   const raw = plan.debtStrategy as string;
   return raw === "avalanche" || raw === "snowball" || raw === "none" ? raw : "avalanche";
+}
+
+/** UTC midnight of the 1st of the plan's start month — the plan's start date. */
+export function planStartDate(plan: Pick<FinancePlan, "startMonth">): Date {
+  const d = new Date(plan.startMonth);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+}
+
+/**
+ * Last day already "in" the opening balances inside period 0, or null when
+ * period 0 starts clean: max(as-of day, start date − 1 day), used only when
+ * it falls inside period 0. An as-of day AFTER period 0 (a legacy backdated
+ * plan) is ignored; `buildCalibratedPlan` rebases a plan whose balances were
+ * restated later, so the as-of day lands in period 0.
+ */
+function openingFloor(plan: FinancePlan, asOf: Date | null, first: Period): Date | null {
+  const dayBeforeStart = new Date(planStartDate(plan).getTime() - MS_PER_DAY);
+  const candidates = [dayBeforeStart];
+  if (asOf && asOf.getTime() <= first.end.getTime()) candidates.push(asOf);
+  const floor = new Date(Math.max(...candidates.map((d) => d.getTime())));
+  return isDateInPeriod(floor, first) ? floor : null;
 }
 
 function asOfOf(plan: FinancePlan, options: ProjectOptions): Date | null {
@@ -231,8 +254,14 @@ function runEngine(
     if (idx >= 0 && idx < periods.length) buckets[idx].push(o);
   }
 
-  const rawAsOf = asOfOf(plan, options);
-  const asOf = rawAsOf && isDateInPeriod(rawAsOf, first) ? rawAsOf : null;
+  // The floor inside period 0: nothing dated on/before it is applied, and
+  // rates accrue only after it. It is the later of the as-of day (when it
+  // falls inside period 0) and the day before the plan's start date — with an
+  // anchor day > 1, period 0 begins before the start month (a January plan
+  // with anchor 15 opens on Dec 15), and flows before the start never belong
+  // to the plan, even when the as-of day is earlier (a plan created before it
+  // starts) or unknown.
+  const floor = openingFloor(plan, asOfOf(plan, options), first);
 
   const months: ProjectionMonth[] = [];
   let monthsToDebtFree: number | null = null;
@@ -245,7 +274,7 @@ function runEngine(
     const period = periods[m];
     const D = periodLengthDays(period);
     // Days already reflected in the opening balances (as-of period only).
-    const elapsed = m === 0 && asOf ? dayIndexInPeriod(asOf, period.start) : 0;
+    const elapsed = m === 0 && floor ? dayIndexInPeriod(floor, period.start) : 0;
     const isStop = stopAt !== null && isDateInPeriod(stopAt, period);
     // Last day this pass simulates: today for the partial pass, else the end.
     const until = isStop ? dayIndexInPeriod(stopAt!, period.start) : D;
@@ -501,7 +530,9 @@ export function projectStateAt(
   const first = periods[0];
   const last = periods[periods.length - 1];
 
-  if (day.getTime() < first.start.getTime()) {
+  // Before the plan starts (its first period, or its start date when an
+  // anchor day > 1 opens period 0 earlier): the opening figures.
+  if (day.getTime() < Math.max(first.start.getTime(), planStartDate(plan).getTime())) {
     const debtRows = debts.map((d) => ({
       debtId: d.id,
       name: d.name,

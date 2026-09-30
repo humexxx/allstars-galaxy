@@ -64,6 +64,7 @@ import {
   createDailyFinanceSnapshots,
   getProjectedStateForMonth,
   getRecentMonthlySnapshots,
+  restateOpeningBalances,
 } from "./finance-snapshot-service";
 import type {
   ConfirmationWithDebts,
@@ -453,6 +454,33 @@ describe("createDailyFinanceSnapshots", () => {
     expect(result.errors[0]).toContain("kaboom");
 
     errSpy.mockRestore();
+  });
+
+  it("decides period boundaries on the earliest calendar day on Earth (UTC−12)", async () => {
+    const { periodStartFor } = await import("@/lib/finance/period");
+    const run = async (instant: Date): Promise<{ day: Date; stored: Date }> => {
+      selectImpl.mockReturnValueOnce(makeSelectChain([{ id: PLAN_ID, userId: USER_ID }]));
+      selectImpl.mockReturnValueOnce(makeSelectChain([]));
+      getPlanWithLinesMock.mockResolvedValueOnce(buildPlan());
+      projectPlanMock.mockReturnValueOnce({ months: [buildProjectionMonth()] });
+      const insert = makeInsertChain();
+      insertImpl.mockReturnValueOnce(insert);
+      await createDailyFinanceSnapshots(instant);
+      const day = autoConfirmSkippedPeriodsMock.mock.calls.at(-1)![2] as Date;
+      return { day, stored: insert.values.mock.calls[0][0].date as Date };
+    };
+
+    // Midnight UTC on Oct 1 is still Sep 30 noon in UTC−12: September is open
+    // there, so it is not closed (nor auto-confirmed) for anybody yet.
+    const midnight = await run(new Date(Date.UTC(2026, 9, 1, 0, 0)));
+    expect(midnight.day).toEqual(new Date(Date.UTC(2026, 8, 30)));
+    expect(periodStartFor(midnight.day, 1)).toEqual(new Date(Date.UTC(2026, 8, 1)));
+    expect(midnight.stored).toEqual(midnight.day);
+
+    // By noon UTC, Oct 1 has begun everywhere: September has closed.
+    const noon = await run(new Date(Date.UTC(2026, 9, 1, 12, 0)));
+    expect(noon.day).toEqual(new Date(Date.UTC(2026, 9, 1)));
+    expect(periodStartFor(noon.day, 1)).toEqual(new Date(Date.UTC(2026, 9, 1)));
   });
 
   it("defaults `today` to current time when omitted", async () => {
@@ -892,6 +920,130 @@ describe("calibratePlan", () => {
     expect(calibratePlan(plan, null).asOf).toEqual(new Date(Date.UTC(2026, 8, 29)));
     const fallback = new Date(Date.UTC(2026, 0, 3));
     expect(calibratePlan(plan, null, { asOfFallback: fallback }).asOf).toEqual(fallback);
+  });
+});
+
+describe("balances_as_of: opening balances re-dated on edit", () => {
+  const actualEngine = () =>
+    vi.importActual<typeof import("@/lib/finance/projection")>("@/lib/finance/projection");
+  const conf = (day: string): ConfirmationWithDebts =>
+    ({
+      id: "conf-1",
+      planId: PLAN_ID,
+      confirmationMonth: day,
+      confirmedSavings: "8000",
+      confirmedInvestments: "0",
+      notes: null,
+      source: "user",
+      confirmedAt: new Date(),
+      debtConfirmations: [],
+    }) as unknown as ConfirmationWithDebts;
+  const salary = {
+    id: "sal",
+    name: "Salary",
+    monthlyAmount: "1000",
+    kind: "recurring",
+    dayOfMonth: 10,
+    date: null,
+    recurrenceType: "monthly_day",
+    weekOfMonth: null,
+    dayOfWeek: null,
+    intervalMonths: null,
+    recurrenceStart: null,
+    startDate: null,
+    endDate: null,
+  } as unknown as FinancePlanWithLines["incomes"][number];
+
+  it("a plan statement newer than the latest confirmation wins, from the period it falls in", () => {
+    const plan = buildPlan({ monthsAhead: 24, balancesAsOf: "2026-09-20" } as never);
+    const cal = calibratePlan(plan, conf("2026-09-12"));
+    expect(cal.baselineSource).toBe("plan");
+    expect(cal.asOf).toEqual(new Date(Date.UTC(2026, 8, 20)));
+    expect(cal.initialSavings).toBe("1000");
+    expect(cal.startMonth).toEqual(new Date(Date.UTC(2026, 8, 1)));
+    expect(cal.monthsAhead).toBe(16); // the end date (Dec 2027) is kept
+  });
+
+  it("a confirmation on the same day or later wins", () => {
+    const tie = calibratePlan(buildPlan({ balancesAsOf: "2026-09-12" } as never), conf("2026-09-12"));
+    expect(tie.baselineSource).toBe("confirmation");
+    expect(tie.initialSavings).toBe("8000");
+    const older = calibratePlan(buildPlan({ balancesAsOf: "2026-08-02" } as never), conf("2026-09-12"));
+    expect(older.baselineSource).toBe("confirmation");
+  });
+
+  it("the stated day, not the creation day, is the as-of of an unconfirmed plan", () => {
+    const plan = buildPlan({
+      createdAt: new Date(Date.UTC(2026, 0, 3)),
+      balancesAsOf: "2026-01-20",
+    } as never);
+    const cal = calibratePlan(plan, null);
+    expect(cal.asOf).toEqual(new Date(Date.UTC(2026, 0, 20)));
+    expect(cal.startMonth).toEqual(new Date(Date.UTC(2026, 0, 1))); // still period 0: no rebase
+  });
+
+  it("the projection does not replay flows dated on/before the new as-of", async () => {
+    const { projectPlan } = await actualEngine();
+    const run = (balancesAsOf: string): number[] => {
+      const cal = calibratePlan(
+        buildPlan({ monthsAhead: 12, incomes: [salary], balancesAsOf } as never),
+        null
+      );
+      const pr = projectPlan(cal, cal.incomes, cal.expenses, cal.debts, { asOf: cal.asOf });
+      const first = pr.months[0];
+      return [first.preAsOfCashFlow, first.savings];
+    };
+    // Stated Sep 20: September's salary (the 10th) is already in the
+    // balances — it is reported for the period but not applied again.
+    expect(run("2026-09-20")).toEqual([1000, 1000]);
+    // Stated Sep 5: the salary on the 10th is still to come.
+    expect(run("2026-09-05")).toEqual([0, 2000]);
+  });
+
+  it("restateOpeningBalances: a no-op edit restates nothing (so nothing is re-dated)", async () => {
+    const plan = buildPlan({ incomes: [salary] });
+    const r = await restateOpeningBalances(
+      plan,
+      USER_ID,
+      new Date(Date.UTC(2026, 8, 30)),
+      { savings: "1000.00", investments: "500" }
+    );
+    expect(r).toBeNull();
+    expect(getLatestConfirmationMock).not.toHaveBeenCalled();
+  });
+
+  it("restateOpeningBalances: an edit re-dates the whole set to today and rolls the rest forward", async () => {
+    getLatestConfirmationMock.mockResolvedValueOnce(null);
+    getAutoInvestRateMock.mockResolvedValue(0);
+    const plan = buildPlan({
+      incomes: [salary],
+      balancesAsOf: "2026-01-01",
+      createdAt: new Date(Date.UTC(2026, 0, 1)),
+    } as never);
+    const r = await restateOpeningBalances(
+      plan,
+      USER_ID,
+      new Date(Date.UTC(2026, 8, 30)),
+      { investments: "900" }
+    );
+    expect(r?.balancesAsOf).toBe("2026-09-30");
+    expect(r?.initialInvestments).toBe("900.00");
+    // Savings roll forward: 1000 + nine salaries (Jan 10 … Sep 10).
+    expect(r?.initialSavings).toBe("10000.00");
+    expect(r?.syncConfirmationId).toBeNull();
+  });
+
+  it("restateOpeningBalances: a confirmation made the same day is synced", async () => {
+    getLatestConfirmationMock.mockResolvedValueOnce(conf("2026-09-30"));
+    getAutoInvestRateMock.mockResolvedValue(0);
+    const r = await restateOpeningBalances(
+      buildPlan(),
+      USER_ID,
+      new Date(Date.UTC(2026, 8, 30)),
+      { savings: "7000" }
+    );
+    expect(r?.initialSavings).toBe("7000.00");
+    expect(r?.syncConfirmationId).toBe("conf-1");
   });
 });
 

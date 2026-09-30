@@ -18,6 +18,7 @@ import {
   deleteIncome,
   deleteLineOverride,
   deletePlan,
+  getPlanWithLines,
   setMainPlan,
   setPlanColor,
   updateDebt,
@@ -25,7 +26,12 @@ import {
   updateIncome,
   updatePlan,
   upsertLineOverride,
+  type PlanRestatement,
 } from "@/lib/services/finance-plan-service";
+import { restateOpeningBalances } from "@/lib/services/finance-snapshot-service";
+import type { OpeningBalanceEdits } from "@/lib/finance/opening-balances";
+import { getRequestTimeZone } from "@/lib/utils/request-today";
+import { todayInTimeZone } from "@/lib/utils/date";
 import { idSchema } from "@/schemas/common";
 import {
   cloneFinancePlanSchema,
@@ -87,6 +93,23 @@ function debtError(issues: { message: string }[]): string {
   return explainedError(issues);
 }
 
+/**
+ * The restatement an edit of opening balances implies (null when it changes
+ * none): the whole set is re-dated to the reader's today. See
+ * `lib/finance/opening-balances.ts`. A plan that isn't the caller's yields
+ * null here; the service's own ownership check then refuses the write.
+ */
+async function restatementFor(
+  userId: string,
+  planId: string,
+  edits: OpeningBalanceEdits
+): Promise<PlanRestatement | null> {
+  const plan = await getPlanWithLines(planId, userId);
+  if (!plan) return null;
+  const timeZone = await getRequestTimeZone();
+  return restateOpeningBalances(plan, userId, todayInTimeZone(timeZone), edits, timeZone);
+}
+
 // ---------- plans ----------
 
 export async function createPlanAction(
@@ -98,7 +121,9 @@ export async function createPlanAction(
     if (!parsed.success) {
       return { success: false, error: explainedError(parsed.error.issues) };
     }
-    const plan = await createPlan(ctx.effectiveUserId, parsed.data);
+    // The balances typed into the form are as of the reader's today.
+    const timeZone = await getRequestTimeZone();
+    const plan = await createPlan(ctx.effectiveUserId, parsed.data, todayInTimeZone(timeZone));
     await logImpersonatedMutation({
       action: "financePlan.create",
       entityTable: "finance_plans",
@@ -119,7 +144,11 @@ export async function updatePlanAction(
     if (!parsed.success) {
       return { success: false, error: explainedError(parsed.error.issues) };
     }
-    const plan = await updatePlan(ctx.effectiveUserId, parsed.data);
+    const restatement = await restatementFor(ctx.effectiveUserId, parsed.data.id, {
+      savings: parsed.data.initialSavings,
+      investments: parsed.data.initialInvestments,
+    });
+    const plan = await updatePlan(ctx.effectiveUserId, parsed.data, restatement);
     await logImpersonatedMutation({
       action: "financePlan.update",
       entityTable: "finance_plans",
@@ -376,7 +405,10 @@ export async function addPlanDebtAction(
     if (!parsed.success) {
       return { success: false, error: debtError(parsed.error.issues) };
     }
-    const row = await addDebt(ctx.effectiveUserId, idParsed.data, parsed.data);
+    const restatement = await restatementFor(ctx.effectiveUserId, idParsed.data, {
+      addedDebtBalance: parsed.data.initialBalance,
+    });
+    const row = await addDebt(ctx.effectiveUserId, idParsed.data, parsed.data, restatement);
     await logImpersonatedMutation({
       action: "financePlanDebt.create",
       entityTable: "finance_plan_debts",
@@ -399,7 +431,10 @@ export async function updatePlanDebtAction(
     if (!parsed.success) {
       return { success: false, error: debtError(parsed.error.issues) };
     }
-    const row = await updateDebt(ctx.effectiveUserId, idParsed.data, parsed.data);
+    const restatement = await restatementFor(ctx.effectiveUserId, idParsed.data, {
+      debts: { [parsed.data.id]: parsed.data.initialBalance },
+    });
+    const row = await updateDebt(ctx.effectiveUserId, idParsed.data, parsed.data, restatement);
     await logImpersonatedMutation({
       action: "financePlanDebt.update",
       entityTable: "finance_plan_debts",

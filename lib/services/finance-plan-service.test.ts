@@ -25,6 +25,7 @@ import {
   deriveFinanceMood,
   projectPlan,
   updateDebt,
+  updatePlan,
   updateExpense,
   updateIncome,
 } from "./finance-plan-service";
@@ -894,6 +895,93 @@ describe("cloneOverrides (F6)", () => {
         date: "2026-04-03",
         monthlyAmount: null,
       },
+    ]);
+  });
+});
+
+describe("updatePlan — opening-balance restatement (balances_as_of)", () => {
+  type Call = { op: string; table: unknown; values?: Record<string, unknown> };
+
+  // A recorder standing in for both `db` and the transaction handle.
+  function recorder(calls: Call[]): Record<string, unknown> {
+    const chain = (op: string, table: unknown): Record<string, unknown> => {
+      const call: Call = { op, table };
+      calls.push(call);
+      const c: Record<string, unknown> = {
+        set: (values: Record<string, unknown>) => {
+          call.values = values;
+          return c;
+        },
+        values: (values: Record<string, unknown>) => {
+          call.values = values as Record<string, unknown>;
+          return Promise.resolve();
+        },
+        where: () => c,
+        returning: () => Promise.resolve([{ id: "plan-1" }]),
+        then: (resolve: (v: unknown) => void) => resolve(undefined),
+      };
+      return c;
+    };
+    return {
+      update: (table: unknown) => chain("update", table),
+      insert: (table: unknown) => chain("insert", table),
+      delete: (table: unknown) => chain("delete", table),
+    };
+  }
+
+  const data = {
+    id: "plan-1",
+    name: "P",
+    startMonth: new Date(Date.UTC(2026, 0, 1)),
+    monthsAhead: 12,
+    initialSavings: "999",
+    monthlySavingsRate: "0",
+    includePortfolio: false,
+    surplusToDebtsPercent: "0",
+    debtStrategy: "avalanche",
+    autoInvestPercent: "0",
+    initialInvestments: "0",
+    confirmationDayOfMonth: 1,
+    color: "var(--chart-1)",
+  } as never;
+
+  it("a no-op edit (no restatement) writes the form values and never touches balances_as_of", async () => {
+    const calls: Call[] = [];
+    vi.mocked(db.update).mockImplementationOnce(
+      (recorder(calls).update as (t: unknown) => never)
+    );
+    await updatePlan("user-1", data, null);
+    expect(db.transaction).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].values).not.toHaveProperty("balancesAsOf");
+    expect(calls[0].values?.initialSavings).toBe("999");
+  });
+
+  it("an edit that restates re-dates the set, writes every debt and syncs a same-day confirmation", async () => {
+    const calls: Call[] = [];
+    vi.mocked(db.transaction).mockImplementationOnce((async (
+      fn: (tx: unknown) => Promise<unknown>
+    ) => fn(recorder(calls))) as never);
+    await updatePlan("user-1", data, {
+      initialSavings: "500.00",
+      initialInvestments: "120.00",
+      debtBalances: { "debt-1": "800.00" },
+      balancesAsOf: "2026-09-30",
+      syncConfirmationId: "conf-1",
+    });
+    const planWrites = calls.filter((c) => c.values && "balancesAsOf" in c.values);
+    expect(planWrites.length).toBeGreaterThan(0);
+    expect(planWrites.every((c) => c.values?.balancesAsOf === "2026-09-30")).toBe(true);
+    // The restated savings win over the raw form value.
+    expect(calls[0].values?.initialSavings).toBe("500.00");
+    expect(calls.some((c) => c.values?.initialBalance === "800.00")).toBe(true);
+    expect(calls.some((c) => c.values?.confirmedSavings === "500.00")).toBe(true);
+    const debtRows = calls.find((c) => c.op === "insert")?.values as unknown as {
+      debtId: string;
+      confirmedBalance: string;
+    }[];
+    expect(debtRows).toEqual([
+      { confirmationId: "conf-1", debtId: "debt-1", confirmedBalance: "800.00" },
     ]);
   });
 });

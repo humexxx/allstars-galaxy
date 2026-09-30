@@ -5,6 +5,8 @@ import { cache } from "react";
 import { db } from "@/db";
 import {
   financePlans,
+  financePlanConfirmations,
+  financePlanDebtConfirmations,
   financePlanIncomes,
   financePlanExpenses,
   financePlanDebts,
@@ -35,6 +37,8 @@ import type {
 } from "@/schemas/finance";
 
 import { projectPlan, type ProjectOptions } from "@/lib/finance/projection";
+import type { OpeningRestatement } from "@/lib/finance/opening-balances";
+import { isoDay } from "@/lib/finance/schedule";
 
 import { getUserPortfolio, getPortfolioStats, getPortfolioAssets } from "./portfolio-service";
 import { ensureOwnedRow } from "./ownership";
@@ -156,9 +160,14 @@ export const listUserPlansWithLines = cache(async function listUserPlansWithLine
   }));
 });
 
+/**
+ * `today` is the reader's calendar day: the opening balances typed into the
+ * form are as of it (`balances_as_of`).
+ */
 export async function createPlan(
   userId: string,
-  data: CreateFinancePlanData
+  data: CreateFinancePlanData,
+  today?: Date
 ): Promise<FinancePlan> {
   return db.transaction(async (tx) => {
     // Auto-set as main when the user has no plans yet. Keeps the
@@ -189,6 +198,7 @@ export async function createPlan(
         initialInvestments: data.initialInvestments,
         confirmationDayOfMonth: data.confirmationDayOfMonth,
         color: data.color,
+        balancesAsOf: today ? isoDay(today) : null,
         isMain: shouldBeMain,
       })
       .returning();
@@ -196,9 +206,83 @@ export async function createPlan(
   });
 }
 
+/**
+ * A plan's opening balances restated as of one day — see
+ * `lib/finance/opening-balances.ts`. `syncConfirmationId` names a
+ * confirmation made on that same day, which is updated to match so the two
+ * statements of that day agree.
+ */
+export type PlanRestatement = OpeningRestatement & { syncConfirmationId: string | null };
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Writes a restatement's debt balances, re-dates the plan and syncs a
+ * same-day confirmation. `extraDebts` are debts created in the same
+ * transaction (not yet in `debtBalances`).
+ */
+async function writeRestatement(
+  tx: Tx,
+  planId: string,
+  r: PlanRestatement,
+  extraDebts: { id: string; balance: string }[] = []
+): Promise<void> {
+  await tx
+    .update(financePlans)
+    .set({
+      initialSavings: r.initialSavings,
+      initialInvestments: r.initialInvestments,
+      balancesAsOf: r.balancesAsOf,
+      updatedAt: new Date(),
+    })
+    .where(eq(financePlans.id, planId));
+  for (const [debtId, balance] of Object.entries(r.debtBalances)) {
+    await tx
+      .update(financePlanDebts)
+      .set({ initialBalance: balance })
+      .where(and(eq(financePlanDebts.id, debtId), eq(financePlanDebts.planId, planId)));
+  }
+  if (r.syncConfirmationId) {
+    await tx
+      .update(financePlanConfirmations)
+      .set({
+        confirmedSavings: r.initialSavings,
+        confirmedInvestments: r.initialInvestments,
+        confirmedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(financePlanConfirmations.id, r.syncConfirmationId),
+          eq(financePlanConfirmations.planId, planId)
+        )
+      );
+    await tx
+      .delete(financePlanDebtConfirmations)
+      .where(eq(financePlanDebtConfirmations.confirmationId, r.syncConfirmationId));
+    const rows = [
+      ...Object.entries(r.debtBalances).map(([debtId, balance]) => ({ debtId, balance })),
+      ...extraDebts.map((d) => ({ debtId: d.id, balance: d.balance })),
+    ];
+    if (rows.length > 0) {
+      await tx.insert(financePlanDebtConfirmations).values(
+        rows.map((row) => ({
+          confirmationId: r.syncConfirmationId!,
+          debtId: row.debtId,
+          confirmedBalance: row.balance,
+        }))
+      );
+    }
+  }
+}
+
+/**
+ * `restatement` (from `restateOpeningBalances`) is passed when the edit
+ * changes an opening balance: the whole set is then restated as of that day.
+ */
 export async function updatePlan(
   userId: string,
-  data: UpdateFinancePlanData
+  data: UpdateFinancePlanData,
+  restatement?: PlanRestatement | null
 ): Promise<FinancePlan> {
   await ensureOwnership(data.id, userId);
   if (data.basedOnPlanId != null) {
@@ -208,29 +292,40 @@ export async function updatePlan(
     // The base plan must exist and belong to the same user.
     await ensureOwnership(data.basedOnPlanId, userId);
   }
-  const [plan] = await db
-    .update(financePlans)
-    .set({
-      name: data.name,
-      description: data.description ?? null,
-      startMonth: data.startMonth,
-      monthsAhead: data.monthsAhead,
-      initialSavings: data.initialSavings,
-      monthlySavingsRate: data.monthlySavingsRate,
-      includePortfolio: data.includePortfolio,
-      surplusToDebtsPercent: data.surplusToDebtsPercent,
-      debtStrategy: data.debtStrategy,
-      autoInvestPercent: data.autoInvestPercent,
-      autoInvestMethodId: data.autoInvestMethodId ?? null,
-      initialInvestments: data.initialInvestments,
-      confirmationDayOfMonth: data.confirmationDayOfMonth,
-      color: data.color,
-      // undefined leaves the link untouched; null explicitly detaches.
-      basedOnPlanId: data.basedOnPlanId,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(financePlans.id, data.id), eq(financePlans.userId, userId)))
-    .returning();
+  const run = async (exec: typeof db | Tx): Promise<FinancePlan | undefined> => {
+    const [plan] = await exec
+      .update(financePlans)
+      .set({
+        name: data.name,
+        description: data.description ?? null,
+        startMonth: data.startMonth,
+        monthsAhead: data.monthsAhead,
+        initialSavings: restatement?.initialSavings ?? data.initialSavings,
+        monthlySavingsRate: data.monthlySavingsRate,
+        includePortfolio: data.includePortfolio,
+        surplusToDebtsPercent: data.surplusToDebtsPercent,
+        debtStrategy: data.debtStrategy,
+        autoInvestPercent: data.autoInvestPercent,
+        autoInvestMethodId: data.autoInvestMethodId ?? null,
+        initialInvestments: restatement?.initialInvestments ?? data.initialInvestments,
+        confirmationDayOfMonth: data.confirmationDayOfMonth,
+        color: data.color,
+        // undefined leaves the link untouched; null explicitly detaches.
+        basedOnPlanId: data.basedOnPlanId,
+        ...(restatement ? { balancesAsOf: restatement.balancesAsOf } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(financePlans.id, data.id), eq(financePlans.userId, userId)))
+      .returning();
+    return plan;
+  };
+  const plan = restatement
+    ? await db.transaction(async (tx) => {
+        const updated = await run(tx);
+        if (updated) await writeRestatement(tx, data.id, restatement);
+        return updated;
+      })
+    : await run(db);
   // Ownership was checked above, so a miss means the plan was deleted since.
   if (!plan) throw new Error("Plan not found");
   return plan;
@@ -356,6 +451,9 @@ export async function clonePlan(
         // day 1 and its periods drift out of alignment with the source plan.
         confirmationDayOfMonth: source.confirmationDayOfMonth,
         color: source.color,
+        // Same balances, stated on the same day — the clone opens exactly
+        // where its source does.
+        balancesAsOf: source.balancesAsOf,
         basedOnPlanId: options.asScenario ? source.id : null,
       })
       .returning();
@@ -648,10 +746,30 @@ export async function deleteExpense(
 export async function addDebt(
   userId: string,
   planId: string,
-  data: PlanDebtData
+  data: PlanDebtData,
+  restatement?: PlanRestatement | null
 ): Promise<FinancePlanDebt> {
   await ensureOwnership(planId, userId);
-  const [row] = await db
+  if (restatement) {
+    // The new debt's balance is as of today like the rest of the set.
+    return db.transaction(async (tx) => {
+      const [row] = await insertDebt(tx, planId, data);
+      await writeRestatement(tx, planId, restatement, [
+        { id: row.id, balance: data.initialBalance },
+      ]);
+      return row;
+    });
+  }
+  const [row] = await insertDebt(db, planId, data);
+  return row;
+}
+
+function insertDebt(
+  exec: typeof db | Tx,
+  planId: string,
+  data: PlanDebtData
+): Promise<FinancePlanDebt[]> {
+  return exec
     .insert(financePlanDebts)
     .values({
       planId,
@@ -671,35 +789,45 @@ export async function addDebt(
       sortOrder: data.sortOrder ?? 0,
     })
     .returning();
-  return row;
 }
 
 export async function updateDebt(
   userId: string,
   planId: string,
-  data: UpdatePlanDebtData
+  data: UpdatePlanDebtData,
+  restatement?: PlanRestatement | null
 ): Promise<FinancePlanDebt> {
   await ensureOwnership(planId, userId);
-  const [row] = await db
-    .update(financePlanDebts)
-    .set({
-      name: data.name,
-      initialBalance: data.initialBalance,
-      monthlyInterestRate: data.monthlyInterestRate,
-      monthlyPayment: data.monthlyPayment,
-      paymentType: data.paymentType,
-      minPaymentPercent: data.minPaymentPercent,
-      minPaymentFloor: data.minPaymentFloor,
-      dayOfMonth: data.dayOfMonth ?? null,
-      recurrenceType: data.recurrenceType,
-      weekOfMonth: data.weekOfMonth ?? null,
-      dayOfWeek: data.dayOfWeek ?? null,
-      intervalMonths: data.intervalMonths ?? null,
-      recurrenceStart: data.recurrenceStart ?? null,
-      sortOrder: data.sortOrder,
-    })
-    .where(and(eq(financePlanDebts.id, data.id), eq(financePlanDebts.planId, planId)))
-    .returning();
+  const run = async (exec: typeof db | Tx): Promise<FinancePlanDebt | undefined> => {
+    const [row] = await exec
+      .update(financePlanDebts)
+      .set({
+        name: data.name,
+        initialBalance: data.initialBalance,
+        monthlyInterestRate: data.monthlyInterestRate,
+        monthlyPayment: data.monthlyPayment,
+        paymentType: data.paymentType,
+        minPaymentPercent: data.minPaymentPercent,
+        minPaymentFloor: data.minPaymentFloor,
+        dayOfMonth: data.dayOfMonth ?? null,
+        recurrenceType: data.recurrenceType,
+        weekOfMonth: data.weekOfMonth ?? null,
+        dayOfWeek: data.dayOfWeek ?? null,
+        intervalMonths: data.intervalMonths ?? null,
+        recurrenceStart: data.recurrenceStart ?? null,
+        sortOrder: data.sortOrder,
+      })
+      .where(and(eq(financePlanDebts.id, data.id), eq(financePlanDebts.planId, planId)))
+      .returning();
+    return row;
+  };
+  const row = restatement
+    ? await db.transaction(async (tx) => {
+        const updated = await run(tx);
+        if (updated) await writeRestatement(tx, planId, restatement);
+        return updated;
+      })
+    : await run(db);
   // The plan is the user's, but the line id is the caller's: one from another
   // plan matches nothing.
   if (!row) throw new Error("Debt not found on this plan");

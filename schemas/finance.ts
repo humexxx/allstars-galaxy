@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { idSchema, isoDateSchema, moneySchema } from "@/schemas/common";
+import { RESCHEDULE_MARGIN_MONTHS, rescheduleWithinReach } from "@/lib/finance/schedule";
 import {
   DEBT_PAYMENT_TYPES,
   DEBT_STRATEGIES,
@@ -94,7 +95,12 @@ export const createFinancePlanSchema = z.object({
   description: z.string().max(1000).optional().nullable(),
   startMonth: z.coerce.date(),
   monthsAhead: z.number().int().min(12).max(120),
-  initialSavings: decimal.default("0"),
+  // May be negative: the balance on the day it is stated can be an overdraft
+  // (deficits are carried, and a restatement can roll one forward).
+  initialSavings: z
+    .string()
+    .regex(/^-?\d+(\.\d{1,2})?$/, "Must be a number with up to 2 decimals")
+    .default("0"),
   monthlySavingsRate: monthlyRate.default("0"),
   includePortfolio: z.boolean().default(false),
   surplusToDebtsPercent: share.default("0"),
@@ -273,6 +279,15 @@ export const lineOverrideSchema = z
         code: "custom",
         path: ["date"],
         message: "Reschedule overrides require a target date",
+      });
+    }
+    // Any day may be the target, in another month too — up to the reach the
+    // occurrence resolver looks either side of a range (see schedule.ts).
+    if (val.action === "reschedule" && val.date && !rescheduleWithinReach(val.monthYear, val.date)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["date"],
+        message: `A single occurrence can move at most ${RESCHEDULE_MARGIN_MONTHS} months from its own month`,
       });
     }
     if (val.action === "amount" && (val.monthlyAmount == null)) {

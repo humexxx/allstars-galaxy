@@ -61,7 +61,13 @@ import {
   periodRangeFor,
   type Period,
 } from "@/lib/finance/period";
-import { isoDay, planOccurrences } from "@/lib/finance/schedule";
+import {
+  isoDay,
+  monthYearOfKey,
+  planOccurrences,
+  RESCHEDULE_MARGIN_MONTHS,
+  rescheduleWithinReach,
+} from "@/lib/finance/schedule";
 import {
   debtChipAmount,
   projectedDebtPayments,
@@ -111,7 +117,13 @@ type PlanCalendarProps = {
   }) => Promise<void>;
 };
 
-type DayEntry =
+/**
+ * One chip. `cadenceMonth` ("YYYY-MM-01") is the month the cadence put the
+ * occurrence in — the key its overrides live under. A chip moved into another
+ * month still belongs to its cadence month, so skipping, clearing or moving
+ * it again must write THAT month's override, not the one it is shown in.
+ */
+export type DayEntry = { cadenceMonth: string } & (
   | {
       id: string;
       side: "income";
@@ -135,7 +147,8 @@ type DayEntry =
       amount: number;
       kind: "recurring";
       source: FinancePlanDebt;
-    };
+    }
+);
 
 function parseISODate(value: string | null | undefined): Date | null {
   if (!value) return null;
@@ -158,7 +171,7 @@ function toUtcDay(d: Date): Date {
 // day, from the SAME occurrence resolver the projection uses (overrides,
 // moves across months and periods, every-N-month cycles, weekday rules) —
 // so a chip sits on the day, and at the amount, the projection counts it.
-function buildDayMap(
+export function buildDayMap(
   days: Date[],
   source: Pick<
     FinancePlanWithLines,
@@ -189,10 +202,12 @@ function buildDayMap(
   const debts = new Map(source.debts.map((d) => [d.id, d]));
   for (const o of occurrences) {
     const key = isoDay(o.date);
+    const cadenceMonth = monthYearOfKey(o.monthKey);
     if (o.side === "income") {
       const inc = incomes.get(o.lineId);
       if (!inc) continue;
       push(key, {
+        cadenceMonth,
         id: inc.id,
         side: "income",
         name: inc.name,
@@ -204,6 +219,7 @@ function buildDayMap(
       const exp = expenses.get(o.lineId);
       if (!exp) continue;
       push(key, {
+        cadenceMonth,
         id: exp.id,
         side: "expense",
         name: exp.name,
@@ -217,6 +233,7 @@ function buildDayMap(
       const amount = o.amount ?? debtChipAmount(debt, o.date, debtPayments);
       if (amount === null) continue;
       push(key, {
+        cadenceMonth,
         id: debt.id,
         side: "debt",
         name: debt.name,
@@ -238,12 +255,24 @@ type DialogState =
 
 // Tiny payload we put on the native dataTransfer when dragging an entry's
 // grip handle. sourceDate is the ISO key of the cell the chip was dragged
-// FROM — needed to detect intra-month drops and to decide whether the
-// "Just this month" override option is available.
+// FROM; cadenceMonth is the month its override is keyed under (see
+// DayEntry) — a "Just this month" move writes that month's override, and may
+// land on any day within reach of it (`rescheduleWithinReach`).
 const DND_MIME = "application/x-allstars-finance-entry";
 /** One shared empty list, so an empty day's memoised cell sees the same prop. */
 const NO_ENTRIES: DayEntry[] = [];
-type DragPayload = { id: string; side: EntrySide; sourceDate: string };
+type DragPayload = {
+  id: string;
+  side: EntrySide;
+  sourceDate: string;
+  /** Absent only on a drag started from a page loaded before it existed. */
+  cadenceMonth?: string;
+};
+
+/** The cadence month a drag belongs to ("YYYY-MM-01"). */
+function cadenceMonthOf(payload: DragPayload): string {
+  return payload.cadenceMonth ?? `${payload.sourceDate.slice(0, 7)}-01`;
+}
 
 // useOptimistic updates — each kind describes a local mutation we apply to the
 // plan snapshot the second the user acts, before the server confirms. When
@@ -690,18 +719,18 @@ export function PlanCalendar({
     ]
   );
 
-  // Skip this month — writes a skip override for the chip's month. Used by
+  // Skip this month — writes a skip override for the chip's CADENCE month
+  // (the one it belongs to, even when it was moved into another). Used by
   // the per-chip "⋯" menu so users can pause a recurring entry without
   // touching the schedule.
   const handleSkipMonth = useCallback(
     (
       side: "income" | "expense" | "debt",
       parentId: string,
-      dayKey: string
+      monthYear: string
     ) => {
-      const d = parseISODate(dayKey);
+      const d = parseISODate(monthYear);
       if (!d) return;
-      const monthYear = toISODate(new Date(d.getFullYear(), d.getMonth(), 1));
       // useOptimistic only persists the update while a transition is in
       // flight, so we wrap the server call here. If the server rejects, the
       // optimistic patch is dropped automatically and the toast surfaces.
@@ -729,17 +758,17 @@ export function PlanCalendar({
     [addOptimistic, onUpsertOverride]
   );
 
-  // Remove any per-month override for the chip's month — used to "undo" a
-  // skip / amount / reschedule and restore the natural cadence.
+  // Remove the override of the chip's cadence month — used to "undo" a
+  // skip / amount / reschedule and restore the natural cadence (a chip moved
+  // into another month goes back to its own).
   const handleResetMonth = useCallback(
     (
       side: "income" | "expense" | "debt",
       parentId: string,
-      dayKey: string
+      monthYear: string
     ) => {
-      const d = parseISODate(dayKey);
+      const d = parseISODate(monthYear);
       if (!d) return;
-      const monthYear = toISODate(new Date(d.getFullYear(), d.getMonth(), 1));
       startOptimisticTransition(async () => {
         addOptimistic({
           kind: "delete-override",
@@ -758,24 +787,24 @@ export function PlanCalendar({
     [addOptimistic, onDeleteOverride]
   );
 
-  // "Just this month" path — writes a reschedule override pinned to the source
-  // month so the parent's recurring cadence stays untouched. Restricted to
-  // intra-month drops (the override stores monthYear of the source).
+  // "Just this month" path — writes a reschedule override keyed by the
+  // occurrence's cadence month, so the parent's recurring cadence stays
+  // untouched. The target may be any day, in another month too: overrides are
+  // keyed by the month the cadence put the occurrence in, never by where it
+  // lands, so moving March's payment to April 2 leaves April's own payment
+  // (its own key) alone. Only a move beyond the resolver's reach is refused.
   const applyJustThisMonth = useCallback(
-    (sourceKey: string, targetKey: string, payload: DragPayload) => {
-      const source = parseISODate(sourceKey);
+    (targetKey: string, payload: DragPayload) => {
+      const monthYear = cadenceMonthOf(payload);
+      const month = parseISODate(monthYear);
       const target = parseISODate(targetKey);
-      if (!source || !target) return;
-      if (
-        source.getFullYear() !== target.getFullYear() ||
-        source.getMonth() !== target.getMonth()
-      ) {
-        toast.error("Just-this-month moves must stay within the same month");
+      if (!month || !target) return;
+      if (!rescheduleWithinReach(monthYear, targetKey)) {
+        toast.error(
+          `A single occurrence can move at most ${RESCHEDULE_MARGIN_MONTHS} months from its own month`
+        );
         return;
       }
-      const monthYear = toISODate(
-        new Date(source.getFullYear(), source.getMonth(), 1)
-      );
       startOptimisticTransition(async () => {
         addOptimistic({
           kind: "upsert-override",
@@ -794,7 +823,7 @@ export function PlanCalendar({
             date: targetKey,
           });
           toast.success(
-            `Moved to ${formatDay(target)} for ${formatMonthLong(source)} only`
+            `${formatMonthLong(month)}'s occurrence moved to ${formatDay(target)}`
           );
         } catch {
           // Reported by the caller; the optimistic move reverts on its own.
@@ -846,11 +875,11 @@ export function PlanCalendar({
     []
   );
   const skipMonthFor = useCallback(
-    (entry: DayEntry, key: string) => handleSkipMonth(entry.side, entry.id, key),
+    (entry: DayEntry) => handleSkipMonth(entry.side, entry.id, entry.cadenceMonth),
     [handleSkipMonth]
   );
   const resetMonthFor = useCallback(
-    (entry: DayEntry, key: string) => handleResetMonth(entry.side, entry.id, key),
+    (entry: DayEntry) => handleResetMonth(entry.side, entry.id, entry.cadenceMonth),
     [handleResetMonth]
   );
   const dropOn = useCallback(
@@ -1126,11 +1155,7 @@ export function PlanCalendar({
           if (!pendingDrop) return;
           const drop = pendingDrop;
           setPendingDrop(null);
-          void applyJustThisMonth(
-            drop.payload.sourceDate,
-            drop.targetKey,
-            drop.payload
-          );
+          void applyJustThisMonth(drop.targetKey, drop.payload);
         }}
         onEditDetails={() => {
           // Drop the pending drag and route the user straight to the parent
@@ -1158,8 +1183,9 @@ export function PlanCalendar({
 // Prompt the user when a recurring entry is dragged: change the schedule for
 // every month going forward, override just this month, or punt to the full
 // edit dialog for everything else (amount-only override, recurrence-model
-// changes, etc.). Cross-month drops disable the "Just this month" option
-// since overrides are scoped to the source month.
+// changes, etc.). "Just this month" moves only the dragged occurrence — to any
+// day, in another month too — and is disabled only beyond the resolver's
+// reach (`rescheduleWithinReach`).
 function MoveRecurringPrompt({
   pending,
   onCancel,
@@ -1175,11 +1201,10 @@ function MoveRecurringPrompt({
 }) {
   const sourceDate = pending ? parseISODate(pending.payload.sourceDate) : null;
   const targetDate = pending ? parseISODate(pending.targetKey) : null;
-  const sameMonth =
-    !!sourceDate &&
-    !!targetDate &&
-    sourceDate.getFullYear() === targetDate.getFullYear() &&
-    sourceDate.getMonth() === targetDate.getMonth();
+  const cadenceMonth = pending ? cadenceMonthOf(pending.payload) : null;
+  const cadenceDate = cadenceMonth ? parseISODate(cadenceMonth) : null;
+  const withinReach =
+    !!pending && !!cadenceMonth && rescheduleWithinReach(cadenceMonth, pending.targetKey);
 
   return (
     <AlertDialog
@@ -1196,6 +1221,13 @@ function MoveRecurringPrompt({
                 <strong>{formatDay(targetDate)}</strong>. Pick the simplest
                 action below, or open <em>Edit details</em> to tweak amount,
                 recurrence type and start/end window.
+                {cadenceDate && (
+                  <>
+                    {" "}
+                    <em>Just this month</em> moves only{" "}
+                    {formatMonthLong(cadenceDate)}&apos;s occurrence.
+                  </>
+                )}
               </>
             ) : (
               "Pick an action, or open Edit details for the full form."
@@ -1207,7 +1239,7 @@ function MoveRecurringPrompt({
           <AlertDialogAction variant="outline" onClick={onEditDetails}>
             Edit details…
           </AlertDialogAction>
-          {sameMonth ? (
+          {withinReach ? (
             <AlertDialogAction variant="secondary" onClick={onJustThisMonth}>
               Just this month
             </AlertDialogAction>
@@ -1222,7 +1254,10 @@ function MoveRecurringPrompt({
                   </AlertDialogAction>
                 </span>
               </TooltipTrigger>
-              <TooltipContent>Cross-month overrides aren&apos;t supported yet</TooltipContent>
+              <TooltipContent>
+                A single occurrence can move at most {RESCHEDULE_MARGIN_MONTHS} months from its
+                own month
+              </TooltipContent>
             </Tooltip>
           )}
           <AlertDialogAction onClick={onMoveAll}>Move all</AlertDialogAction>
@@ -1544,6 +1579,7 @@ function EntryChip({
       id: entry.id,
       side: entry.side,
       sourceDate: dayKey,
+      cadenceMonth: entry.cadenceMonth,
     };
     e.dataTransfer.setData(DND_MIME, JSON.stringify(payload));
     e.dataTransfer.effectAllowed = "move";

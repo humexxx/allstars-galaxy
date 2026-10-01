@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/portal/page-header";
 import { PlanForm } from "@/components/finance/plan-form";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { listInvestmentMethods } from "@/lib/services/investment-method-service";
+import { getRequestToday } from "@/lib/utils/request-today";
 
 export const metadata: Metadata = {
   title: "New plan",
@@ -14,14 +15,17 @@ export const dynamic = "force-dynamic";
 export default async function NewPlanPage() {
   await requireEffectiveContext();
   // Auto-invest picker can use disabled methods as hypothetical scenarios.
-  const investmentMethods = await listInvestmentMethods({ includeDisabled: true });
+  const [investmentMethods, today] = await Promise.all([
+    listInvestmentMethods({ includeDisabled: true }),
+    getRequestToday(),
+  ]);
   return (
     <section className="flex flex-col gap-6">
       <PageHeader
         title="New plan"
         description="Set the basics, then add income, expenses and debts on the next screen."
       />
-      <PlanForm investmentMethods={investmentMethods} />
+      <PlanForm investmentMethods={investmentMethods} today={today} />
     </section>
   );
 }

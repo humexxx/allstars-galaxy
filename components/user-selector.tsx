@@ -33,6 +33,9 @@ type UserSelectorProps = {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** Label of a first entry that clears the selection (value ""), for use as
+   *  a filter — e.g. "All users". Omitted, a choice cannot be undone. */
+  clearLabel?: string;
 };
 
 export function UserSelector({
@@ -43,6 +46,7 @@ export function UserSelector({
   placeholder = "Select user…",
   disabled = false,
   className,
+  clearLabel,
 }: UserSelectorProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -71,12 +75,27 @@ export function UserSelector({
           <ChevronsUpDown className="shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-(--radix-popover-trigger-width) min-w-80 p-0">
+      {/* Never wider than the space Radix measured: `min-w-80` alone ran past a phone's
+          gutter when the trigger sat in a narrow column. */}
+      <PopoverContent className="w-(--radix-popover-trigger-width) min-w-72 max-w-(--radix-popover-content-available-width) p-0">
         <Command>
           <CommandInput placeholder="Search users…" />
           <CommandList>
             <CommandEmpty>No user found.</CommandEmpty>
             <CommandGroup>
+              {clearLabel && (
+                <CommandItem
+                  value="__all__"
+                  keywords={[clearLabel]}
+                  onSelect={() => {
+                    onValueChange("");
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={cn(value === "" ? "opacity-100" : "opacity-0")} />
+                  {clearLabel}
+                </CommandItem>
+              )}
               {users.map((user) => (
                 <CommandItem
                   key={user.id}
@@ -96,10 +115,10 @@ export function UserSelector({
                       value === user.id ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  <div className="flex flex-col">
-                    <span>{user.fullName || user.email}</span>
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate">{user.fullName || user.email}</span>
                     {user.fullName && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="truncate text-xs text-muted-foreground">
                         {user.email}
                       </span>
                     )}

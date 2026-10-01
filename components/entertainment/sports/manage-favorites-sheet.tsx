@@ -24,6 +24,22 @@ import type { SportId } from "@/types/sports";
 
 import { setSportFavoriteAction } from "@/app/actions/sports";
 
+/**
+ * What following a sport gets you. The row used to repeat the sport's short
+ * label under its name — "Football / Football", "NBA / NBA" — which said
+ * nothing twice.
+ */
+const COVERAGE: Record<SportId, string> = {
+  football: "Champions League, Premier League, La Liga, Serie A",
+  worldcup: "Knockout bracket, fixtures and group tables",
+  padel: "Premier Padel rankings and tournaments",
+  f1: "Drivers, constructors, races and news",
+  nba: "Scores and conference standings",
+  tennis: "ATP and WTA rankings and draws",
+  nfl: "Scores, standings and playoffs",
+  lol: "LEC, LCS, LCK and LPL",
+};
+
 type ManageFavoritesSheetProps = {
   favoriteSportIds: SportId[];
 };
@@ -119,7 +135,7 @@ export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetP
                       {sport.label}
                     </Text>
                     <Text variant="small" as="div">
-                      {sport.shortLabel}
+                      {COVERAGE[sport.id]}
                     </Text>
                   </div>
                   <div className="flex items-center gap-2">

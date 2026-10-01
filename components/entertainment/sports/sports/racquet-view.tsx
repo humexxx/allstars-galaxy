@@ -28,7 +28,7 @@ import { DrawMatchCard } from "../shared/draw-match-card";
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { SportShell } from "../shared/sport-shell";
 import { StatusPill } from "../shared/status-pill";
-import { SportsTh } from "../shared/table-primitives";
+import { SportsTh, TableCard } from "../shared/table-primitives";
 
 type TourTab = { value: string; label: string; data: RacquetData };
 
@@ -155,12 +155,11 @@ function RankingsTable({ data }: { data: RacquetData }) {
   }
 
   return (
-    <Card>
-      <CardContent className="px-0">
+    <TableCard>
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <SportsTh className="w-12">
+              <SportsTh className="w-12 pl-3">
                 Rank
               </SportsTh>
               <SportsTh>
@@ -179,7 +178,7 @@ function RankingsTable({ data }: { data: RacquetData }) {
           <TableBody>
             {data.rankings.map((p, idx) => (
               <TableRow key={`${p.position}-${p.name}-${idx}`}>
-                <TableCell className="text-sm tabular-nums text-muted-foreground">
+                <TableCell className="pl-3 text-sm tabular-nums text-muted-foreground">
                   {p.position}
                 </TableCell>
                 <TableCell>
@@ -200,8 +199,7 @@ function RankingsTable({ data }: { data: RacquetData }) {
             ))}
           </TableBody>
         </Table>
-      </CardContent>
-    </Card>
+    </TableCard>
   );
 }
 
@@ -235,7 +233,7 @@ function TournamentsList({ data }: { data: RacquetData }) {
   }
 
   return (
-    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-2 @xl:grid-cols-2 @4xl:grid-cols-3">
       {data.tournaments.map((t) => (
         <Card key={t.id} size="sm">
           <CardContent className="flex flex-col gap-2">

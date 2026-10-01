@@ -24,9 +24,9 @@ export function PageHeaderSkeleton({
   back = false,
 }: PageHeaderSkeletonProps) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="@container/page-header flex flex-col gap-2">
       {back && <Skeleton className="h-8 w-28" />}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 @2xl/page-header:flex-row @2xl/page-header:items-start @2xl/page-header:justify-between">
         <div className="flex flex-col gap-1">
           <Skeleton
             className={cn(

@@ -35,6 +35,8 @@ export interface PortfolioTransaction {
   date: Date;
   status: TransactionStatus;
   notes: string | null;
+  /** The buy a withdrawal was taken from; null on buys. */
+  sourceTransactionId: string | null;
   investmentMethod: InvestmentMethod;
 }
 
@@ -101,5 +103,10 @@ export type TransactionTableRow = {
   total: string;
   initialValue: string | null;
   currentValue: string | null;
+  /** Cash already withdrawn from this buy. Its `currentValue` is net of it,
+   *  so growth must add it back or a withdrawal reads as a loss. */
+  withdrawn?: number;
+  /** Empty for a method the viewer does not run: where a client's money is
+   *  deployed is the owner's private half of the deal. */
   allocations: TransactionAllocationView[];
 };

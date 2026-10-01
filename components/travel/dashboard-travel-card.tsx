@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, CalendarDays, ListChecks, MapPin, Plane, Plus } from "lucide-react";
 
@@ -13,10 +12,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
-import { formatDayRange, toDay } from "@/lib/utils/date";
+import { formatDayRange } from "@/lib/utils/date";
 import { getDashboardTravelSummary } from "@/lib/services/travel-service";
 import { formatTripMoney } from "@/lib/travel/format";
+import { daysBetween } from "@/lib/travel/calendar";
+import { getRequestTodayIso } from "@/lib/utils/request-today";
 import type { DashboardTravelFeaturedTrip, DashboardTravelTripState } from "@/types/travel";
+
+import { TripPhoto } from "./trip-photo";
 
 const TRAVEL_PATH = "/portal/entertainment/travel-planner";
 const NEW_TRAVEL_PATH = `${TRAVEL_PATH}/new`;
@@ -26,7 +29,8 @@ type DashboardTravelCardProps = {
 };
 
 export async function DashboardTravelCard({ userId }: DashboardTravelCardProps) {
-  const summary = await getDashboardTravelSummary(userId);
+  const today = await getRequestTodayIso();
+  const summary = await getDashboardTravelSummary(userId, today);
 
   if (!summary.featured) {
     return (
@@ -72,13 +76,19 @@ export async function DashboardTravelCard({ userId }: DashboardTravelCardProps) 
         </CardAction>
       </CardHeader>
       <CardContent>
-        <FeaturedTripCard trip={featured} />
+        <FeaturedTripCard trip={featured} today={today} />
       </CardContent>
     </Card>
   );
 }
 
-function FeaturedTripCard({ trip }: { trip: DashboardTravelFeaturedTrip }) {
+function FeaturedTripCard({
+  trip,
+  today,
+}: {
+  trip: DashboardTravelFeaturedTrip;
+  today: string;
+}) {
   return (
     <Link
       href={`${TRAVEL_PATH}/${trip.id}`}
@@ -87,16 +97,16 @@ function FeaturedTripCard({ trip }: { trip: DashboardTravelFeaturedTrip }) {
       <div className="grid sm:grid-cols-[200px_1fr]">
         <div
           className="relative aspect-video sm:aspect-auto sm:h-full sm:min-h-35"
-          style={trip.coverPhotoUrl ? undefined : { backgroundColor: trip.color }}
+          // The trip colour under the photo too: it is what shows if the
+          // cover link has died.
+          style={{ backgroundColor: trip.color }}
         >
           {trip.coverPhotoUrl ? (
-            <Image
+            <TripPhoto
               src={trip.coverPhotoUrl}
               alt={`${trip.title} cover photo`}
-              fill
               sizes="(max-width: 640px) 100vw, 200px"
-              className="object-cover"
-              unoptimized
+              fallback="none"
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-white/70">
@@ -107,7 +117,7 @@ function FeaturedTripCard({ trip }: { trip: DashboardTravelFeaturedTrip }) {
         <div className="flex flex-col gap-2 p-4">
           <div className="flex flex-wrap items-center gap-2">
             <StateBadge state={trip.state} />
-            <Eyebrow>{relativeLabel(trip)}</Eyebrow>
+            <Eyebrow>{relativeLabel(trip, today)}</Eyebrow>
           </div>
           <div className="flex items-start justify-between gap-2">
             <Heading level="h6" as="h3" className="line-clamp-1">
@@ -161,27 +171,22 @@ function StateBadge({ state }: { state: DashboardTravelTripState }) {
   return <Badge variant={variant}>{label}</Badge>;
 }
 
-function relativeLabel(trip: DashboardTravelFeaturedTrip): string {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+/** "Ends in 3 days", "In 2 mo", "Yesterday" — counted on the reader's calendar. */
+function relativeLabel(trip: DashboardTravelFeaturedTrip, today: string): string {
   if (trip.state === "in_progress") {
-    const endStr = trip.endDate ?? trip.startDate;
-    const end = toDay(endStr);
-    const days = Math.round((end.getTime() - today.getTime()) / 86_400_000);
+    const days = daysBetween(today, trip.endDate ?? trip.startDate);
     if (days === 0) return "Ends today";
     if (days === 1) return "Ends tomorrow";
     return `Ends in ${days} days`;
   }
   if (trip.state === "upcoming") {
-    const start = toDay(trip.startDate);
-    const days = Math.round((start.getTime() - today.getTime()) / 86_400_000);
+    const days = daysBetween(today, trip.startDate);
     if (days === 0) return "Starts today";
     if (days === 1) return "Tomorrow";
     if (days <= 30) return `In ${days} days`;
     return `In ${Math.round(days / 30)} mo`;
   }
-  const end = toDay(trip.endDate ?? trip.startDate);
-  const days = Math.round((today.getTime() - end.getTime()) / 86_400_000);
+  const days = daysBetween(trip.endDate ?? trip.startDate, today);
   if (days === 1) return "Yesterday";
   if (days <= 30) return `${days} days ago`;
   return `${Math.round(days / 30)} mo ago`;

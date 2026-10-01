@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { CalendarDays, ClipboardList, ExternalLink, MapPin } from "lucide-react";
 
 import {
@@ -22,13 +21,14 @@ import {
   moneyRange,
   runsUntil,
 } from "@/lib/travel/format";
-import { itemCost, tripCost, unitSuffix } from "@/lib/travel/pricing";
+import { itemCost, unitSuffix } from "@/lib/travel/pricing";
 // One category table, not a second copy that drifts: this page once labelled
 // flights and cruises "Other" because they were missing from its own list.
 import { CategoryIcon, categoryMeta } from "@/components/travel/category";
 import { PublicTripViews } from "@/components/travel/public-trip-views";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
 import { ActivityVideo } from "@/components/travel/activity-video";
+import { TripPhoto } from "@/components/travel/trip-photo";
 
 const NO_DATE_KEY = "__no_date__";
 
@@ -57,18 +57,20 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
   const scopedLines = scope ? new Map(scope.lines.map((l) => [l.itemId, l])) : null;
   const lineCost = (item: (typeof items)[number]) => {
     if (scopedLines) return scopedLines.get(item.id) ?? { low: 0, high: 0 };
-    // Units applied, so a nightly rate is not reported as one night and a
-    // per-person fare not as one traveller.
-    const c = itemCost(item, 1);
-    return { low: c.low, high: c.high };
+    // Costed by the service, with the party it is for: re-costing here with
+    // a party of one reported a train for four as one fare.
+    return { low: item.cost.low, high: item.cost.high };
   };
 
   const estimate = scope
     ? { low: scope.owedLow, high: scope.owedHigh }
-    : (() => {
-        const t = tripCost(items, 1);
-        return { low: t.low, high: t.high };
-      })();
+    : items.reduce(
+        (acc, item) =>
+          item.price === null
+            ? acc
+            : { low: acc.low + item.cost.low, high: acc.high + item.cost.high },
+        { low: 0, high: 0 }
+      );
 
   const groups = new Map<string, typeof items>();
   for (const item of items) {
@@ -107,6 +109,11 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
     items: items.map((item) => ({ ...item, payerIds: [], attendeeIds: [] })),
   };
 
+  /** The bars' prices on a whole-trip link, from the same figures as the list. */
+  const calendarCosts = scope
+    ? undefined
+    : new Map(items.map((item) => [item.id, { low: item.cost.low, high: item.cost.high }]));
+
   const publicViewer = scope
     ? {
         // The service has already narrowed `items` to this traveller's, and
@@ -133,23 +140,32 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
         <div
           // Same floor as the planner's banner: at 21/9 a 390px phone leaves
           // 167px and the pill lands on top of the title.
-          className="relative min-h-72 w-full bg-muted sm:aspect-21/9 sm:min-h-0"
-          style={trip.coverPhotoUrl ? undefined : { backgroundColor: trip.color }}
+          className="relative flex min-h-72 w-full flex-col bg-muted sm:aspect-21/9 sm:min-h-auto"
+          // The trip colour under the photo too: it is what shows if the
+          // cover link has died.
+          style={{ backgroundColor: trip.color }}
         >
           {trip.coverPhotoUrl && (
-            <Image
+            <TripPhoto
               src={trip.coverPhotoUrl}
               alt={`${trip.title} cover photo`}
-              fill
               priority
               sizes="(max-width: 1024px) 100vw, 1024px"
-              className="object-cover"
-              // Covers may be external URLs — see `tripPhotoSourceEnum`.
-              unoptimized
+              fallback="none"
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-          <div className="absolute inset-0 flex flex-col justify-between gap-4 p-4 text-white sm:p-6">
+          {/* Deeper through the middle than it was (/20): a long name runs
+              two or three lines up into the photo, and over a snowfield its
+              top line was white on pale grey. The controls up top carry
+              their own solid surfaces, so the top can stay clear. */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+          {/* In flow, not `absolute inset-0`: pinned over a box of fixed
+              height, a long name ("Islandia, Finlandia & Tomorrowland
+              Winter: the long way round") pushed the dates out of the bottom
+              of the banner on a phone, and the 21/9 box clipped it at
+              tablet width. The ratio and the floor are minimums now — the
+              banner grows when its words need it. */}
+          <div className="relative flex flex-1 flex-col justify-between gap-4 p-4 text-white sm:p-6">
             <div className="flex items-start justify-between gap-2">
               {showPrices ? (
                 // Solid, not translucent: the photograph underneath is unknown
@@ -168,17 +184,17 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <Heading level="hero" className="text-white">
+              <Heading level="hero" className="text-white text-shadow-sm">
                 {trip.title}
               </Heading>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
                 {trip.destination && (
                   <span className="inline-flex items-center gap-1.5">
-                    <MapPin className="size-4" /> {trip.destination}
+                    <MapPin className="size-4 shrink-0" /> {trip.destination}
                   </span>
                 )}
                 <span className="inline-flex items-center gap-1.5">
-                  <CalendarDays className="size-4" />
+                  <CalendarDays className="size-4 shrink-0" />
                   <Mono>{formatDateRange(trip.startDate, trip.endDate)}</Mono>
                 </span>
               </div>
@@ -247,25 +263,32 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                         return (
                           <li key={item.id} className="flex items-start gap-3 px-2 py-3">
                             <CategoryIcon category={item.category} />
-                            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                              <div className="flex items-baseline justify-between gap-2">
-                                <Text weight="medium" className="truncate">
-                                  {item.title}
-                                </Text>
-                                {showPrices && item.price && (
-                                  <span className="shrink-0 text-right">
-                                    <Mono className="block whitespace-nowrap text-xs font-medium">
-                                      {moneyRange(cost.low, cost.high, trip.currency)}
+                            {/* The planner's row, minus the button: the price
+                                spans the title and its category line so a
+                                two-line figure never pushes the category away,
+                                and the title wraps rather than truncating. */}
+                            <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-0.5">
+                              <Text weight="medium" className="col-span-2 row-start-1 line-clamp-2 break-words sm:col-span-1">
+                                {item.title}
+                              </Text>
+                              {showPrices && item.price && (
+                                <span className="col-start-2 row-start-2 text-right sm:row-span-2 sm:row-start-1">
+                                  <Mono className="block whitespace-nowrap text-xs font-medium">
+                                    {moneyRange(cost.low, cost.high, trip.currency)}
+                                  </Mono>
+                                  {scope ? (
+                                    // A share leads, and the booking price
+                                    // stays in view under it — as on the
+                                    // planner with a traveller selected.
+                                    <Mono className="block whitespace-nowrap text-2xs text-muted-foreground">
+                                      of {moneyRange(item.cost.low, item.cost.high, trip.currency)}
                                     </Mono>
-                                    {!scope && item.priceUnit !== "total" && (
-                                      <Mono className="block whitespace-nowrap text-2xs text-muted-foreground">
-                                        {unitSuffix(item.priceUnit)}
-                                      </Mono>
-                                    )}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                                  ) : (
+                                    <UnitArithmetic item={item} currency={trip.currency} />
+                                  )}
+                                </span>
+                              )}
+                              <div className="col-start-1 row-start-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                                 <span>{meta.label}</span>
                                 {(item.fromCode || item.toCode) && (
                                   <Mono className="text-2xs font-medium">
@@ -299,6 +322,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                                   </a>
                                 )}
                               </div>
+                              <div className="col-span-2 flex min-w-0 flex-col gap-0.5 empty:hidden">
                               {showPrices && item.notes && (
                                 <Text variant="small">{item.notes}</Text>
                               )}
@@ -312,13 +336,10 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                                       key={photo.id}
                                       className="relative aspect-square w-20 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
                                     >
-                                      <Image
+                                      <TripPhoto
                                         src={photo.url}
                                         alt={photo.caption ?? `${item.title} photo ${i + 1}`}
-                                        fill
                                         sizes="80px"
-                                        className="object-cover"
-                                        unoptimized
                                       />
                                     </div>
                                   ))}
@@ -337,6 +358,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                                   />
                                 </div>
                               )}
+                              </div>
                             </div>
                           </li>
                         );
@@ -360,7 +382,9 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                   paid, what it is against, and a bar — a number on its own
                   does not say whether it is nearly there or barely started. */}
               <CardContent className="flex flex-col gap-1.5">
-                <div className="flex items-baseline justify-between gap-2">
+                {/* Wraps: in the narrow aside at 1024px the "of $8,747 ~ $9,977"
+                    beside the paid figure ran off the card's edge and was cut. */}
+                <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
                   <Mono className="text-xl font-semibold tabular-nums sm:text-2xl">
                     {formatTripMoney(scope.paid, trip.currency)}
                   </Mono>
@@ -369,7 +393,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                   </Mono>
                 </div>
                 <Progress value={pct} aria-label="Paid so far" />
-                <Text className="text-2xs text-muted-foreground">
+                <Text className="text-pretty text-2xs text-muted-foreground">
                   {left.low > 0 ? (
                     <>
                       {formatTripMoney(left.low, trip.currency)} still to go
@@ -403,13 +427,10 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                         "overflow-hidden rounded-md border bg-muted"
                       )}
                     >
-                      <Image
+                      <TripPhoto
                         src={photo.url}
                         alt={photo.caption ?? `${trip.title} photo ${i + 1}`}
-                        fill
                         sizes="112px"
-                        className="object-cover"
-                        unoptimized
                       />
                     </div>
                   ))}
@@ -427,7 +448,38 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
       aside={aside}
       trip={calendarTrip}
       viewer={publicViewer}
+      costs={calendarCosts}
       showPrices={showPrices}
     />
+  );
+}
+
+/**
+ * "$180 / night × 5" under a figure that is five nights of it.
+ *
+ * The page used to print the bare unit — "$900" over "/ night" — which reads
+ * as a $900 nightly rate. The planner shows its working; so does this.
+ */
+function UnitArithmetic({
+  item,
+  currency,
+}: {
+  item: PublicTripView["items"][number];
+  currency: string;
+}) {
+  if (item.priceUnit === "total") return null;
+  // Unit prices do not depend on the party; only `times` does, and that came
+  // from the server.
+  const unit = itemCost(item, 1);
+  const unitLabel =
+    unit.unitHigh !== null && unit.unitHigh > (unit.unitLow ?? 0)
+      ? `${formatTripMoney(unit.unitLow ?? 0, currency)}~${formatTripMoney(unit.unitHigh, currency)}`
+      : formatTripMoney(unit.unitLow ?? 0, currency);
+  return (
+    <Mono className="block whitespace-nowrap text-2xs text-muted-foreground">
+      {item.cost.times > 1
+        ? `${unitLabel} ${unitSuffix(item.priceUnit)} × ${item.cost.times}`
+        : unitSuffix(item.priceUnit)}
+    </Mono>
   );
 }

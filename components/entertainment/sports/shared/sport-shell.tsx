@@ -35,18 +35,21 @@ export function SportShell({
   className,
 }: SportShellProps) {
   return (
-    <div className={cn("flex flex-col gap-6", className)}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex items-center gap-3">
+    // The header goes side by side only once the column can hold both: with
+    // the sidebar open, a viewport `sm:` put a 224px league picker beside the
+    // title and wrapped "UEFA Champions League" onto three lines.
+    <div className={cn("@container flex flex-col gap-6", className)}>
+      <div className="flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           {emoji && (
             <span
               aria-hidden
-              className="grid size-12 place-items-center rounded-xl bg-muted/60 text-2xl ring-1 ring-foreground/10"
+              className="grid size-12 shrink-0 place-items-center rounded-xl bg-muted/60 text-2xl ring-1 ring-foreground/10"
             >
               {emoji}
             </span>
           )}
-          <div className="flex flex-col gap-1">
+          <div className="flex min-w-0 flex-col gap-1">
             <Heading level="h3" as="h2">
               {title}
             </Heading>

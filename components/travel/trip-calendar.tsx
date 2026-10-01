@@ -114,10 +114,16 @@ export function TripCalendar({
   viewer = null,
   readOnly = false,
   showPrices = true,
+  costs,
 }: {
   trip: CalendarTrip;
   partySize?: number;
   viewer?: ItineraryViewer | null;
+  /**
+   * Item costs worked out elsewhere — the public page's, which the server
+   * costs with the attendee lists it will not send. Wins over `viewer`.
+   */
+  costs?: Map<string, { low: number; high: number }>;
   /** A share link created without prices must not print them on the bars. */
   showPrices?: boolean;
   /**
@@ -180,11 +186,11 @@ export function TripCalendar({
     if (!showPrices) return map;
     for (const item of trip.items) {
       if (item.price === null) continue;
-      const c = readerCost(item, partySize, viewer);
+      const c = costs?.get(item.id) ?? readerCost(item, partySize, viewer);
       if (c.high > 0) map.set(item.id, moneyRange(c.low, c.high, trip.currency));
     }
     return map;
-  }, [trip.items, partySize, viewer, trip.currency, showPrices]);
+  }, [trip.items, partySize, viewer, trip.currency, showPrices, costs]);
 
   // Snapshotted once, not read during render: this component is rendered on
   // the server too, and a server in UTC against a reader six hours behind

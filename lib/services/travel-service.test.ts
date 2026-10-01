@@ -556,8 +556,67 @@ describe("getPublicTripByToken", () => {
     // No `payerIds` / `attendeeIds`: those are trip_members UUIDs and a public
     // link is unauthenticated. The service narrows and splits with them, then
     // drops them before the payload crosses the boundary.
-    expect(out?.items).toEqual(items.map((i) => ({ ...i, stops: [], photos: [] })));
+    // Each item arrives costed for the party (here unpriced: zero, once).
+    expect(out?.items).toEqual(
+      items.map((i) => ({
+        ...i,
+        stops: [],
+        photos: [],
+        cost: { low: 0, high: 0, times: 1 },
+      }))
+    );
     expect(out?.photos).toEqual(photos);
+  });
+
+  it("costs per-person items for the people on them before dropping the lists", async () => {
+    // The page used to re-cost every item with a party of one: a train for
+    // four read as one fare, and the trip total came out thousands short of
+    // the planner's. Only the server knows the party and the attendees.
+    const share = {
+      id: "s-1",
+      tripId: TRIP_ID,
+      token: "tok",
+      revokedAt: null,
+      expiresAt: null,
+      memberId: null,
+      createdAt: new Date(),
+    };
+    const base = { tripId: TRIP_ID, priceMax: null, scheduledOn: null, endsOn: null };
+    const items = [
+      { ...base, id: "train", title: "Train", price: "95", priceUnit: "per_person" },
+      { ...base, id: "hike", title: "Hike", price: "120", priceUnit: "per_person" },
+      {
+        ...base,
+        id: "hotel",
+        title: "Hotel",
+        price: "180",
+        priceMax: "200",
+        priceUnit: "per_night",
+        scheduledOn: "2026-11-02",
+        endsOn: "2026-11-07",
+      },
+    ];
+    vi.mocked(db.$count).mockResolvedValueOnce(4);
+
+    queueSelect([share]);
+    queueSelect([tripFixture()]);
+    queueSelect(items);
+    queueSelect([]); // photos
+    queueSelect([]); // stops
+    queueSelect([]); // payers
+    queueSelect([
+      { itemId: "hike", memberId: "m-1" },
+      { itemId: "hike", memberId: "m-2" },
+    ]); // attendees
+
+    const out = await getPublicTripByToken("tok");
+    const costOf = (id: string) => out?.items.find((i) => i.id === id)?.cost;
+
+    expect(costOf("train")).toEqual({ low: 380, high: 380, times: 4 });
+    expect(costOf("hike")).toEqual({ low: 240, high: 240, times: 2 });
+    expect(costOf("hotel")).toEqual({ low: 900, high: 1000, times: 5 });
+    // And the lists still never leave.
+    expect(out?.items.some((i) => "attendeeIds" in i)).toBe(false);
   });
 
   it("hands a scoped link one traveller's figures and nobody else's", async () => {
@@ -737,6 +796,29 @@ describe("getDashboardTravelSummary", () => {
     expect(out.featured?.totalEstimate).toBeCloseTo(150);
 
     vi.useRealTimers();
+  });
+
+  it("prices a per-person item by its own attendees, on the reader's day", async () => {
+    // A guided hike for two of four travellers is two tickets. Without the
+    // attendee lists the card multiplied by the whole party and charged four.
+    vi.mocked(db.$count).mockResolvedValueOnce(4);
+    const trip = tripFixture({ id: "t-1", startDate: "2026-10-01", endDate: "2026-10-05" });
+    queueSelect([trip]);
+    queueSelect([
+      { id: "hike", price: "120", priceMax: null, priceUnit: "per_person", scheduledOn: null, endsOn: null },
+      { id: "train", price: "95", priceMax: null, priceUnit: "per_person", scheduledOn: null, endsOn: null },
+    ]);
+    queueSelect([
+      { itemId: "hike", memberId: "m-1" },
+      { itemId: "hike", memberId: "m-2" },
+    ]);
+
+    // Sep 30 for the reader, whatever the server's clock says: the trip has
+    // not started yet.
+    const out = await getDashboardTravelSummary(USER_ID, "2026-09-30");
+
+    expect(out.featured?.state).toBe("upcoming");
+    expect(out.featured?.totalEstimate).toBe(120 * 2 + 95 * 4);
   });
 
   it("falls back to the next upcoming trip when nothing is in progress", async () => {

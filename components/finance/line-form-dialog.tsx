@@ -579,8 +579,9 @@ export function RecurrenceFields({
             placeholder="1"
           />
           <FieldDescription>
-            When in the month this {noun} hits (1–31). Day 31 clamps to the
-            last day of months that don&apos;t have it.
+            {/* One string: the JSX transform dropped the space after {noun}
+                when the sentence ran onto a second line ("incomehits"). */}
+            {`When in the month this ${noun} hits (1–31). Day 31 clamps to the last day of months that don't have it.`}
           </FieldDescription>
         </Field>
       )}

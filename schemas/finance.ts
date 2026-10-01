@@ -88,13 +88,21 @@ function refineRecurrence<T extends RecurrenceShape>(val: T, ctx: z.RefinementCt
   }
 }
 
-export const planNameSchema = z.string().trim().min(1).max(120);
+export const planNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Give the plan a name.")
+  .max(120, "Keep the name to 120 characters.");
 
 export const createFinancePlanSchema = z.object({
   name: planNameSchema,
   description: z.string().max(1000).optional().nullable(),
   startMonth: z.coerce.date(),
-  monthsAhead: z.number().int().min(12).max(120),
+  monthsAhead: z
+    .number({ error: "Enter a number of months (12–120)." })
+    .int("Whole months only.")
+    .min(12, "At least 12 months.")
+    .max(120, "At most 120 months (10 years)."),
   // May be negative: the balance on the day it is stated can be an overdraft
   // (deficits are carried, and a restatement can roll one forward).
   initialSavings: z
@@ -109,7 +117,12 @@ export const createFinancePlanSchema = z.object({
   autoInvestMethodId: idSchema.nullable().optional(),
   initialInvestments: decimal.default("0"),
   // 0 = disabled monthly confirmation. Otherwise day of month 1..28.
-  confirmationDayOfMonth: z.number().int().min(0).max(28).default(1),
+  confirmationDayOfMonth: z
+    .number({ error: "Enter a day from 1 to 28, or 0 to turn it off." })
+    .int("Enter a day from 1 to 28, or 0 to turn it off.")
+    .min(0, "Enter a day from 1 to 28, or 0 to turn it off.")
+    .max(28, "Enter a day from 1 to 28, or 0 to turn it off.")
+    .default(1),
   color: z.string().min(1).max(60).default("var(--chart-1)"),
 });
 

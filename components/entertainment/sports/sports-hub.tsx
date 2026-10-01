@@ -27,12 +27,15 @@ type SportsHubProps = {
   favoriteSportIds?: SportId[];
   /** Exactly the sport being shown — the page fetches one, not all eight. */
   payload: SportPayload;
+  /** `?tab=` — lets a link open a view on a given tab (F1's news). */
+  initialTab?: string;
 };
 
 export function SportsHub({
   activeSport,
   favoriteSportIds = [],
   payload,
+  initialTab,
 }: SportsHubProps) {
   const favSet = useMemo(() => new Set(favoriteSportIds), [favoriteSportIds]);
 
@@ -51,7 +54,7 @@ export function SportsHub({
     <div className="flex flex-col gap-6">
       <SportSelector active={activeSport} favSet={favSet} sports={orderedSports} />
       {SAMPLE_DATA_SPORTS.has(activeSport) && <SampleDataNotice />}
-      <SportContent payload={payload} />
+      <SportContent payload={payload} initialTab={initialTab} />
     </div>
   );
 }
@@ -149,14 +152,20 @@ function SportMark({ emoji }: { emoji: string }) {
   );
 }
 
-function SportContent({ payload }: { payload: SportPayload }) {
+function SportContent({
+  payload,
+  initialTab,
+}: {
+  payload: SportPayload;
+  initialTab?: string;
+}) {
   switch (payload.sport) {
     case "football":
       return <FootballView leagues={payload.leagues} />;
     case "worldcup":
       return <WorldCupView data={payload.data} />;
     case "f1":
-      return <F1View data={payload.data} news={payload.news} />;
+      return <F1View data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "nba":
       return <NbaView data={payload.data} />;
     case "tennis":

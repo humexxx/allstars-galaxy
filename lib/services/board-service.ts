@@ -68,6 +68,15 @@ export async function updateBoardColumn(
   return column ?? null;
 }
 
+/** How many columns the user's board has. */
+export async function countBoardColumns(userId: string): Promise<number> {
+  const rows = await db
+    .select({ id: boardColumns.id })
+    .from(boardColumns)
+    .where(eq(boardColumns.userId, userId));
+  return rows.length;
+}
+
 export async function deleteBoardColumn(columnId: string, userId: string): Promise<void> {
   await db
     .delete(boardColumns)

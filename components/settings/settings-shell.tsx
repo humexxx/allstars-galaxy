@@ -55,19 +55,20 @@ export function SettingsShell({ preferences }: { preferences: UserPreferences })
   return (
     // Real tabs: the rail switches a panel in place, it does not navigate, so
     // `aria-current="page"` was the wrong thing to say. A vertical rail from
-    // sm up (System Settings); a horizontal scroll rail on phones, where a
-    // fixed sidebar would eat half the screen.
+    // lg up (System Settings); a horizontal scroll rail below that. From `md`
+    // the app sidebar already takes 256px, and a second 208px rail beside it
+    // left the pane a 220px column with its descriptions six lines deep.
     <Tabs
       value={activeId}
       onValueChange={setActiveId}
       orientation="vertical"
-      className="flex-col gap-4 sm:flex-row sm:items-start sm:gap-6"
+      className="flex-col gap-4 lg:flex-row lg:items-start lg:gap-6"
     >
       {/* `relative` is load-bearing on the scroller — see the responsive-ui
           skill. */}
       <TabsList
         aria-label="Settings categories"
-        className="relative h-auto! w-full flex-row! justify-start gap-1.5 overflow-x-auto bg-transparent p-0 pb-1 sm:w-52 sm:shrink-0 sm:flex-col! sm:overflow-visible sm:pb-0"
+        className="relative h-auto! w-full flex-row! justify-start gap-1.5 overflow-x-auto bg-transparent p-0 pb-1 lg:w-52 lg:shrink-0 lg:flex-col! lg:overflow-visible lg:pb-0"
       >
         {CATEGORIES.map((c) => {
           const Icon = c.icon;
@@ -75,7 +76,7 @@ export function SettingsShell({ preferences }: { preferences: UserPreferences })
             <TabsTrigger
               key={c.id}
               value={c.id}
-              className="h-auto w-auto! flex-none justify-start gap-2.5 rounded-lg px-2.5 py-2 text-left font-medium data-active:font-medium sm:w-full!"
+              className="h-auto w-auto! flex-none justify-start gap-2.5 rounded-lg px-2.5 py-2 text-left font-medium data-active:font-medium lg:w-full!"
             >
               <span
                 className={cn(
@@ -92,7 +93,7 @@ export function SettingsShell({ preferences }: { preferences: UserPreferences })
       </TabsList>
 
       {CATEGORIES.map((c) => (
-        <TabsContent key={c.id} value={c.id} className="w-full min-w-0 sm:flex-1">
+        <TabsContent key={c.id} value={c.id} className="w-full min-w-0 lg:flex-1">
           <Card>
             <CardHeader>
               <CardTitle as="h2">{c.label}</CardTitle>

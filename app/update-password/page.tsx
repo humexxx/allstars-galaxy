@@ -1,5 +1,6 @@
-import Image from "next/image"
 import Link from "next/link"
+
+import { AuthAside } from "@/components/auth-aside"
 import { redirect } from "next/navigation"
 import type { Metadata } from "next"
 
@@ -36,15 +37,7 @@ export default async function UpdatePasswordPage() {
           </div>
         </div>
       </section>
-      <aside className="bg-muted relative hidden lg:block" aria-hidden="true">
-        <Image
-          src="/images/placeholder.svg"
-          alt=""
-          fill
-          className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
-          sizes="50vw"
-        />
-      </aside>
+      <AuthAside />
     </main>
   )
 }

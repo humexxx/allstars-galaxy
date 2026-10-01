@@ -12,6 +12,7 @@ import {
 
 import {
   buildCompareRows,
+  calendarTicks,
   milestoneCrossings,
   type PlanTimeline,
 } from "@/lib/finance/chart-series";
@@ -29,7 +30,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { formatCurrency, formatCurrencyCompact } from "@/lib/utils/format";
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+  formatSignedCurrency,
+} from "@/lib/utils/format";
 import type { ChartConfig } from "@/types/chart";
 import type { FinancePlan } from "@/types/finance";
 
@@ -53,6 +58,23 @@ const config = {
 
 // Axis ticks and milestone labels: "$350k", "$1.5M".
 const formatMoneyTick = formatCurrencyCompact;
+
+/**
+ * Y-axis gutter sized to the widest tick it will draw. A fixed 40px clipped
+ * the "$" off "$28.5k" on phones, and a fixed width that always fits wastes
+ * plot area on a 375px card. Recharts' ticks are "nice" numbers just beyond
+ * the data, which can be one glyph longer than the data's own label ("$95k"
+ * vs a "$100k" tick), hence the extra glyph. ~7px per Geist glyph at text-xs
+ * plus the 8px tick margin.
+ */
+export function yAxisWidthFor(values: readonly (number | null | undefined)[]): number {
+  let widest = 1;
+  for (const v of values) {
+    if (v == null || !Number.isFinite(v)) continue;
+    widest = Math.max(widest, formatMoneyTick(v).length);
+  }
+  return Math.max(32, (widest + 1) * 7 + 8);
+}
 
 // Friendly distance-from-today string for milestone tooltips. Whole months
 // only — fractional months feel awkward in a casual hover tip.
@@ -154,6 +176,8 @@ function TooltipRow({
 type ChartRow = {
   idx: number;
   monthLabel: string;
+  /** Tooltip title — the month, or the today label on today's point. */
+  tooltipLabel: string;
   pastValue: number | null;
   futureValue: number | null;
   rawValue: number;
@@ -191,7 +215,7 @@ function PointTooltip(props: {
 
   return (
     <div className="grid min-w-40 gap-1.5 rounded-lg border border-border/50 bg-popover px-2.5 py-1.5 text-xs shadow-xl">
-      <div className="font-medium">{row.monthLabel}</div>
+      <div className="font-medium">{row.tooltipLabel}</div>
       <div className="grid gap-1">
         <TooltipRow
           swatch={lineColor}
@@ -226,7 +250,7 @@ function PointTooltip(props: {
           <TooltipRow
             swatch="var(--muted-foreground)"
             label={ghostLabel ?? "Base plan"}
-            value={`${formatMoneyFull(ghost)} (${delta >= 0 ? "+" : "−"}${formatMoneyFull(Math.abs(delta))})`}
+            value={`${formatMoneyFull(ghost)} (${formatSignedCurrency(delta)})`}
             valueClass={delta >= 0 ? "text-success" : "text-destructive"}
           />
         )}
@@ -318,6 +342,13 @@ type ProjectionChartProps = {
   /** Net-worth milestones to annotate, from the user's global preference.
    *  Every one that the trajectory crosses gets a labelled reference line. */
   milestones?: readonly number[];
+  /** Tooltip title for today's point ("Today · Sep 30"). That point holds the
+   *  position ON today, not the period's close the Table lists under the same
+   *  month, so it must not be titled with the bare month. */
+  todayLabel?: string;
+  /** Pulse the boundary point as "you are here". Off for a plan that hasn't
+   *  started: its first point is a future close, not today. */
+  markToday?: boolean;
 };
 
 /**
@@ -336,6 +367,8 @@ export const ProjectionChart = memo(function ProjectionChart({
   ghostLabel,
   portfolioValues,
   milestones = DEFAULT_FINANCE_MILESTONES,
+  todayLabel,
+  markToday = true,
 }: ProjectionChartProps) {
   // Only notify the parent when the hovered index actually changes — recharts
   // fires onMouseMove continuously, and re-setting parent state every frame
@@ -366,9 +399,11 @@ export const ProjectionChart = memo(function ProjectionChart({
       // Portfolio rides its own line, split past/future like net worth, with
       // the same boundary overlap so the series stays continuous.
       const portfolio = portfolioValues?.[i] ?? null;
+      const monthLabel = MONTH_FORMATTER.format(p.date);
       return {
         idx: i,
-        monthLabel: MONTH_FORMATTER.format(p.date),
+        monthLabel,
+        tooltipLabel: isBoundary && todayLabel ? todayLabel : monthLabel,
         // pastValue and futureValue overlap at the boundary to keep the line
         // visually continuous when one rendered series ends and the other
         // begins.
@@ -400,7 +435,7 @@ export const ProjectionChart = memo(function ProjectionChart({
     }));
 
     return { data: rows, crossings: cross };
-  }, [points, pastCount, ghostValues, portfolioValues, milestones]);
+  }, [points, pastCount, ghostValues, portfolioValues, milestones, todayLabel]);
 
   const xMax = Math.max(0, data.length - 1);
 
@@ -421,7 +456,15 @@ export const ProjectionChart = memo(function ProjectionChart({
 
   const isNarrow = containerWidth !== null && containerWidth < NARROW_CONTAINER;
   const labelWidthPx = isNarrow ? LABEL_WIDTH_NARROW : LABEL_WIDTH;
-  const yAxisWidth = isNarrow ? 40 : 48;
+  const yAxisWidth = useMemo(
+    () =>
+      yAxisWidthFor([
+        ...data.map((r) => r.rawValue),
+        ...(ghostValues ?? []),
+        ...(portfolioValues ?? []),
+      ]),
+    [data, ghostValues, portfolioValues]
+  );
 
   // Every crossing gets a label, all on one row at the same height. There is
   // deliberately no stagger and no drop: the milestone list is user-configured
@@ -435,7 +478,7 @@ export const ProjectionChart = memo(function ProjectionChart({
       const { cx, cy, payload, index } = props;
       const key = `dot-${isFutureSeries ? "f" : "p"}-${index ?? "x"}`;
       if (cx == null || cy == null) return <g key={key} />;
-      const isToday = payload?.idx === pastCount;
+      const isToday = markToday && payload?.idx === pastCount;
       if (isToday) {
         return isFutureSeries ? (
           <g key={key} />
@@ -734,11 +777,32 @@ export function ComparePlansChart({
   months,
   pastMonths = 3,
 }: CompareChartProps) {
+  // Width drives how many month ticks fit (~72px per "May 27" label).
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w) setContainerWidth(w);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   // Every derived table below is O(periods × plans) and the parents re-render
   // on each focus change and metric switch, so it is computed once per input.
-  const { seriesByPlan, boundary, data, compareConfig, yAxisWidth } = useMemo(() => {
+  const { seriesByPlan, boundary, data, compareConfig, yAxisWidth, rowMonths } = useMemo(() => {
     if (series.length === 0) {
-      return { seriesByPlan: [], boundary: -1, data: [], compareConfig: {}, yAxisWidth: 32 };
+      return {
+        seriesByPlan: [],
+        boundary: -1,
+        data: [],
+        compareConfig: {},
+        yAxisWidth: 32,
+        rowMonths: [] as Date[],
+      };
     }
     // Stable, CSS-safe series keys (series0, series1, …) rather than raw UUIDs.
     const seriesByPlan = series.map((s, i) => ({ plan: s.plan, key: `series${i}` }));
@@ -782,27 +846,39 @@ export function ComparePlansChart({
       return acc;
     }, {} as ChartConfig);
 
-    // A fixed axis width reserved room for labels that are rarely that wide — on
-    // a 375px card that cost ~14% of the plot area. Size it to the widest tick we
-    // actually render instead. 8px/glyph is an upper bound for Geist digits at
-    // text-xs (measured: "350k" needs 40px including the 4px tick margin — at
-    // 7px/glyph it clipped by 4px), and the +10 keeps a little headroom.
-    const widestTick = data.reduce((widest, row) => {
-      for (const { key } of seriesByPlan) {
-        const v = row[`${key}Past`] ?? row[`${key}Future`];
-        const label = formatMoneyTick(Number(v) || 0);
-        if (label.length > widest.length) widest = label;
-      }
-      return widest;
-    }, "0");
-    const yAxisWidth = Math.max(32, widestTick.length * 8 + 10);
+    // Sized to the widest tick actually drawn (see `yAxisWidthFor`).
+    const yAxisWidth = yAxisWidthFor(
+      data.flatMap((row) =>
+        seriesByPlan.map(({ key }) => {
+          const v = row[`${key}Past`] ?? row[`${key}Future`];
+          return v == null ? null : Number(v);
+        })
+      )
+    );
 
-    return { seriesByPlan, boundary, data, compareConfig, yAxisWidth };
+    return {
+      seriesByPlan,
+      boundary,
+      data,
+      compareConfig,
+      yAxisWidth,
+      rowMonths: rows.map((r) => r.month),
+    };
   }, [series, metric, today, months, pastMonths]);
+
+  const xTicks = useMemo(
+    () =>
+      calendarTicks(
+        rowMonths,
+        Math.max(2, ((containerWidth ?? 640) - yAxisWidth) / 72)
+      ).map((i) => String(data[i]?.month ?? "")),
+    [rowMonths, containerWidth, yAxisWidth, data]
+  );
 
   if (series.length === 0) return null;
 
   return (
+    <div ref={containerRef} className="min-w-0">
     <ChartContainer config={compareConfig} className={cn(heightClass, "w-full")}>
       {/* No left margin: the YAxis already reserves its own label gutter, so a
           margin on top of it is pure dead space. */}
@@ -816,7 +892,14 @@ export function ComparePlansChart({
             axis). Kept recessive — dashed and low opacity — so it reads as
             background, never competing with the series. */}
         <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.4} />
-        <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} minTickGap={32} />
+        <XAxis
+          dataKey="month"
+          ticks={xTicks}
+          interval={0}
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+        />
         <YAxis
           tickLine={false}
           axisLine={false}
@@ -892,5 +975,6 @@ export function ComparePlansChart({
           })}
       </LineChart>
     </ChartContainer>
+    </div>
   );
 }

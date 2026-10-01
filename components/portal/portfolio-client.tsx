@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import {
   Camera,
   ChartLine,
+  CircleDashed,
   Download,
   Eye,
   EyeOff,
@@ -12,9 +13,11 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -51,6 +54,7 @@ import { EmptyPortfolio } from "@/components/portfolio/empty-portfolio";
 import { ManualSnapshotDialog } from "@/components/portfolio/manual-snapshot-dialog";
 import { TransactionsTable } from "@/components/portfolio/transactions-table";
 import { InvestorSummaryTable } from "@/components/portfolio/investor-summary-table";
+import type { CashFlowPoint } from "@/components/portfolio/performance-series";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -94,6 +98,9 @@ type PortfolioData = {
   stats: PortfolioStats | null;
   transactions: PortfolioTransaction[];
   chartData: ChartDataPoint[];
+  /** Approved cash in (+) and out (-), so the performance chart can tell a
+   *  deposit from a gain. */
+  cashFlows: CashFlowPoint[];
   methods: InvestmentMethod[];
   isAdmin: boolean;
   users?: User[];
@@ -115,6 +122,9 @@ type PortfolioData = {
   marginHistoryInput: MarginHistoryInput;
   /** Per-investor drill-down behind the margin. */
   investorBreakdown: InvestorBreakdownRow[];
+  /** How much of the book is priced: nothing (`unconfigured`), or all but
+   *  `unpriced` contributions. */
+  marginStatus: { unconfigured: boolean; unpriced: number };
   currentUserId: string;
 };
 
@@ -161,18 +171,17 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   const [detailedTransactions, setDetailedTransactions] = useState(false);
 
   const visibleRows = useMemo(() => {
-    const approved = <T extends { status: string }>(list: T[]) =>
-      detailedTransactions ? list : list.filter((t) => t.status === "approved");
+    const own = detailedTransactions
+      ? data.transactionRows
+      : data.transactionRows.filter((t) => t.status === "approved");
     return {
-      own: approved(data.transactionRows),
-      investors: approved(data.investorTransactions),
-      hiddenCount:
-        data.transactionRows.length +
-        data.investorTransactions.length -
-        approved(data.transactionRows).length -
-        approved(data.investorTransactions).length,
+      own,
+      // Only rows this toggle actually hides. Investors are summarised one
+      // line per person whatever the view, so counting their pending rows
+      // here promised "4 hidden" and then revealed one.
+      hiddenCount: data.transactionRows.length - own.length,
     };
-  }, [data.transactionRows, data.investorTransactions, detailedTransactions]);
+  }, [data.transactionRows, detailedTransactions]);
 
   // Capital per method, straight off the investor aggregate the Managed tab
   // already loads. Only methods this user runs appear here, so a client
@@ -181,7 +190,10 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
     () =>
       data.methodInvestors.map((m) => ({
         methodId: m.methodId,
-        invested: m.totalInvested,
+        // Net of withdrawals: the holding beside it already is, so a gross
+        // figure made every withdrawal read as money the method lost.
+        invested:
+          m.totalInvested - m.investors.reduce((sum, i) => sum + i.withdrawn, 0),
         holding: m.totalHolding,
         investorCount: m.investors.length,
       })),
@@ -208,9 +220,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   const ownerKpis = useMemo(() => {
     const h = data.marginHistory;
     const last = h[h.length - 1];
-    if (!last) {
-      return { contributed: 0, deployed: 0, liability: 0, margin: 0, monthlyChange: null };
-    }
+    if (!last) return null;
     return {
       contributed: last.invested,
       deployed: last.deployed,
@@ -247,7 +257,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
       id: "portfolio:show-charts",
       kind: "toggle" as const,
       label: "Show charts",
-      description: "Hide the performance chart on the overview tab.",
+      description: "Show the chart on the overview tab.",
       section: "View",
       checked: showCharts,
       onChange: setShowCharts,
@@ -303,7 +313,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             id: "portfolio:manual-snapshot",
             kind: "action" as const,
             label: "Manual snapshot",
-            description: "Record the portfolio's current value as a snapshot.",
+            description: "Record every portfolio's value on a chosen day.",
             section: "Admin",
             icon: Camera,
             onRun: () => setIsSnapshotDialogOpen(true),
@@ -318,7 +328,8 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             id: "portfolio:clear-snapshots",
             kind: "action" as const,
             label: "Clear manual snapshots",
-            description: "Delete every manually-created snapshot. System ones stay.",
+            description:
+              "Delete every manual snapshot, across all portfolios. System ones stay.",
             section: "Admin",
             icon: Trash2,
             variant: "destructive" as const,
@@ -410,7 +421,11 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
 
   const performanceChart =
     chartSeries.length > 0 ? (
-      <PerformanceChart data={chartSeries} hideValues={hideValues} />
+      <PerformanceChart
+        data={chartSeries}
+        cashFlows={data.cashFlows}
+        hideValues={hideValues}
+      />
     ) : (
       <EmptyState
         icon={ChartLine}
@@ -421,6 +436,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
     );
 
   const hasTransactions = data.transactions.length > 0;
+  const pendingCount = data.transactions.filter((t) => t.status === "pending").length;
   const exportLabel = (
     <>
       <Download /> Export CSV
@@ -497,52 +513,114 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                 is the sum of what they OWE, so showing it as the headline made
                 a badly underwater book read as growth. */}
             {ownsMethods ? (
-              <OwnerKpiGrid kpis={ownerKpis} hideValues={hideValues} />
-            ) : (
-              stats && (
-                <PortfolioKpiGrid
-                  stats={stats}
-                  hideValues={hideValues}
-                  onToggleHideValues={() => setHideValues((v) => !v)}
-                  sparkline={data.chartData}
+              ownerKpis === null ? (
+                // Nothing has moved through the methods yet. Four "$0.00"
+                // cards and a "100%" read like a result; this is a start.
+                <EmptyState
+                  variant="card"
+                  icon={Wallet}
+                  title="No money in your methods yet"
+                  description="Once a contribution to one of your methods is approved — yours or an investor's — what it bought and what you owe appear here."
+                  action={
+                    <Button onClick={() => setIsDialogOpen(true)}>
+                      <Plus /> Add transaction
+                    </Button>
+                  }
                 />
+              ) : (
+                <>
+                  {data.marginStatus.unpriced > 0 && !data.marginStatus.unconfigured && (
+                    <Alert variant="warning">
+                      <CircleDashed />
+                      <AlertDescription>
+                        {data.marginStatus.unpriced === 1
+                          ? "1 approved contribution is not priced yet, so Allocations today and Margin leave it out until the daily price run values it."
+                          : `${data.marginStatus.unpriced} approved contributions are not priced yet, so Allocations today and Margin leave them out until the daily price run values them.`}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  <OwnerKpiGrid
+                    kpis={ownerKpis}
+                    priced={!data.marginStatus.unconfigured}
+                    hideValues={hideValues}
+                  />
+                </>
               )
+            ) : stats && hasSettledMoney(stats) ? (
+              <PortfolioKpiGrid
+                stats={stats}
+                hideValues={hideValues}
+                onToggleHideValues={() => setHideValues((v) => !v)}
+                sparkline={data.chartData}
+              />
+            ) : (
+              <EmptyState
+                variant="card"
+                icon={Wallet}
+                title={
+                  pendingCount > 0 ? "Waiting for approval" : "Your portfolio is empty"
+                }
+                description={
+                  pendingCount > 0
+                    ? `${pendingCount === 1 ? "Your first transaction is" : `${pendingCount} transactions are`} waiting for an admin. Your balance and performance appear once one is approved.`
+                    : "Pick an investment method and add your first transaction."
+                }
+                action={
+                  <Button onClick={() => setIsDialogOpen(true)}>
+                    <Plus /> Add transaction
+                  </Button>
+                }
+              />
             )}
 
             {/* Exactly one chart. Owners get allocations against what is owed —
                 the gap between the two lines is the margin. Everyone else gets
                 the ordinary performance chart. */}
             {ownsMethods ? (
-              <>
-                <Card>
-                  <CardContent>
-                    <MarginChart
-                      input={data.marginHistoryInput}
-                      hideValues={hideValues}
-                    />
-                  </CardContent>
-                </Card>
+              ownerKpis !== null && (
+                <>
+                  {showCharts && (
+                    <Card>
+                      <CardContent>
+                        {data.marginStatus.unconfigured ? (
+                          // With nothing priced, Allocations is a flat zero
+                          // under the owed line — which reads as a total loss.
+                          <EmptyState
+                            icon={ChartLine}
+                            title="Nothing is priced yet"
+                            description="Set where each method's money goes (Methods tab, edit a method). The daily price run then values every contribution at its day's price."
+                          />
+                        ) : (
+                          <MarginChart
+                            input={data.marginHistoryInput}
+                            hideValues={hideValues}
+                          />
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
 
-                {data.investorBreakdown.length > 0 && (
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1">
-                      <Heading level="h5" as="h2" className="text-muted-foreground">
-                        By person
-                      </Heading>
-                      <Text variant="small">
-                        What each investor put in, what it bought, and what the promise
-                        costs you.
-                      </Text>
+                  {data.investorBreakdown.length > 0 && (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-1">
+                        <Heading level="h5" as="h2" className="text-muted-foreground">
+                          By person
+                        </Heading>
+                        <Text variant="small">
+                          What each investor put in, what it bought, and what the
+                          promise costs you.
+                        </Text>
+                      </div>
+                      <InvestorBreakdown
+                        rows={data.investorBreakdown}
+                        hideValues={hideValues}
+                      />
                     </div>
-                    <InvestorBreakdown
-                      rows={data.investorBreakdown}
-                      hideValues={hideValues}
-                    />
-                  </div>
-                )}
-              </>
+                  )}
+                </>
+              )
             ) : (
-              showCharts && performanceChart
+              stats && hasSettledMoney(stats) && showCharts && performanceChart
             )}
           </TabsContent>
 
@@ -574,10 +652,12 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                 </Heading>
               )}
               <Card>
-                <CardContent className="px-0 sm:px-6">
+                <CardContent>
                   <TransactionsTable
                     rows={visibleRows.own}
                     showStatus={detailedTransactions}
+                    showPositions={ownsMethods}
+                    balanceLabel="Balance"
                     hideValues={hideValues}
                   />
                 </CardContent>
@@ -591,12 +671,11 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                     Investors
                   </Heading>
                   <Text variant="small">
-                    Movements other people made in the methods you run, pending ones
-                    included.
+                    One line per person investing in the methods you run.
                   </Text>
                 </div>
                 <Card>
-                  <CardContent className="px-0 sm:px-6">
+                  <CardContent>
                     <InvestorSummaryTable
                       rows={investorSummary}
                       hideValues={hideValues}
@@ -677,9 +756,9 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             <AlertDialogHeader>
               <AlertDialogTitle>Clear manual snapshots</AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently delete every manual snapshot from your
-                portfolio. Snapshots created by the system or through transaction
-                approvals stay intact.
+                This permanently deletes every manual snapshot from every
+                portfolio, not only yours. Snapshots created by the system, by
+                transaction approvals or marked admin enforce stay intact.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -706,6 +785,11 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   );
 }
 
+/** Any approved money at all — otherwise the KPI grid is four zeros. */
+function hasSettledMoney(stats: PortfolioStats): boolean {
+  return stats.costBasis > 0 || stats.totalWithdrawn > 0 || stats.activeTransactions > 0;
+}
+
 function PortfolioKpiGrid({
   stats,
   hideValues,
@@ -728,56 +812,61 @@ function PortfolioKpiGrid({
   );
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <StatCard
-        label="Total value"
-        value={
-          hideValues
-            ? maskValue(formatCurrency(stats.totalValue))
-            : formatCurrency(stats.totalValue)
-        }
-        tone="positive"
-        sublabel="Current market value"
-        chart={<Sparkline data={sparkline} />}
-        action={
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            className="text-muted-foreground"
-            onClick={onToggleHideValues}
-            aria-label={hideValues ? "Show portfolio values" : "Hide portfolio values"}
-            aria-pressed={hideValues}
-          >
-            {hideValues ? <EyeOff /> : <Eye />}
-          </Button>
-        }
-      />
-      <StatCard
-        label="All-time profit"
-        value={
-          hideValues
-            ? formatSignedPercent(stats.allTimeProfitPercentage)
-            : formatSignedCurrency(stats.allTimeProfit)
-        }
-        tone={profitTone}
-        sublabel={hideValues ? "All-time return" : profitSublabel}
-      />
-      <StatCard
-        label="Cost basis"
-        value={
-          hideValues
-            ? maskValue(formatCurrency(stats.costBasis))
-            : formatCurrency(stats.costBasis)
-        }
-        sublabel="Total invested"
-      />
-      <StatCard
-        label="Active positions"
-        value={String(stats.activeTransactions)}
-        sublabel={`${stats.totalInvestmentMethods} method${
-          stats.totalInvestmentMethods === 1 ? "" : "s"
-        }`}
-      />
+    <div className="@container">
+      {/* Columns follow the width the grid actually has, not the viewport: at
+         1024px the sidebar leaves ~670px, and four cards there clipped every
+         figure mid-number. */}
+      <div className="grid gap-4 @md:grid-cols-2 @4xl:grid-cols-4">
+        <StatCard
+          label="Total value"
+          value={
+            hideValues
+              ? maskValue(formatCurrency(stats.totalValue))
+              : formatCurrency(stats.totalValue)
+          }
+          tone="positive"
+          sublabel="Your balance, interest included"
+          chart={<Sparkline data={sparkline} />}
+          action={
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="text-muted-foreground"
+              onClick={onToggleHideValues}
+              aria-label={hideValues ? "Show portfolio values" : "Hide portfolio values"}
+              aria-pressed={hideValues}
+            >
+              {hideValues ? <EyeOff /> : <Eye />}
+            </Button>
+          }
+        />
+        <StatCard
+          label="All-time profit"
+          value={
+            hideValues
+              ? formatSignedPercent(stats.allTimeProfitPercentage)
+              : formatSignedCurrency(stats.allTimeProfit)
+          }
+          tone={profitTone}
+          sublabel={hideValues ? "All-time return" : profitSublabel}
+        />
+        <StatCard
+          label="Cost basis"
+          value={
+            hideValues
+              ? maskValue(formatCurrency(stats.costBasis))
+              : formatCurrency(stats.costBasis)
+          }
+          sublabel="Total invested"
+        />
+        <StatCard
+          label="Active positions"
+          value={String(stats.activeTransactions)}
+          sublabel={`${stats.totalInvestmentMethods} method${
+            stats.totalInvestmentMethods === 1 ? "" : "s"
+          }`}
+        />
+      </div>
     </div>
   );
 }

@@ -14,7 +14,7 @@ export default async function AdminUsersPage() {
   const users = await getAllUsers();
 
   return (
-    <section className="space-y-6">
+    <section className="flex flex-col gap-6">
       <PageHeader
         title="Users"
         description="Filter, promote, and impersonate users to provide support or verify behaviour."

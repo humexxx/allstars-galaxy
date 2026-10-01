@@ -1,5 +1,6 @@
 import type { MethodMargin, totalMargin } from "@/lib/finance/margin";
 import type {
+  CashFlow,
   ContributionUnits,
   LiabilityEntry,
   MarginPoint,
@@ -16,14 +17,20 @@ export type MarginOverview = {
   /** True when nothing has been priced yet — the UI shows an empty state
    *  rather than a pile of zeroes that look like a total loss. */
   unconfigured: boolean;
+  /** Approved contributions in these methods that have no allocation rows
+   *  yet. Their cash is in "Contributed" but not in "Allocations today", so
+   *  the UI has to say the comparison is incomplete. */
+  unpriced: number;
 };
 
 export type InvestorBreakdown = {
   investorId: string;
   name: string;
   isOwn: boolean;
-  /** Cash they put in. */
+  /** Cash they put in, net of what they withdrew. */
   contributed: number;
+  /** Cash they took back out — already netted out of `contributed`. */
+  withdrawn: number;
   /** What they are owed today — their promised return, compounded. */
   owed: number;
   /** What their share of the pooled capital actually bought. */
@@ -50,6 +57,8 @@ export type InvestorBreakdown = {
 export type MarginHistoryInput = {
   contributions: (ContributionUnits & { investorId: string; methodId: string })[];
   liabilities: (LiabilityEntry & { investorId: string; methodId: string })[];
+  /** Cash in and out, from the transactions — priced or not. */
+  cashFlows: (CashFlow & { investorId: string; methodId: string })[];
   /** `assetId|YYYY-MM` -> month-end price, as pairs (a Map is not serialisable). */
   prices: [string, number][];
   today: string;

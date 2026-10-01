@@ -5,9 +5,11 @@ import {
   buildChartSeries,
   buildCompareRows,
   buildPlanTimeline,
+  calendarTicks,
   computeProjectionWindow,
   debtFreeMonthsFromNow,
   describeDebtFree,
+  forecastKpiPoints,
   formatDebtFree,
   historyToClosePoints,
   milestoneCrossings,
@@ -562,5 +564,77 @@ describe("milestoneCrossings (F29)", () => {
     expect(ten.monthsFromToday).toBeCloseTo(-4.5, 5);
     expect(twenty.monthsFromToday).toBe(0);
     expect(fifty.monthsFromToday).toBeCloseTo(0.5, 5);
+  });
+});
+
+describe("calendarTicks — evenly spaced month ticks", () => {
+  const monthsFrom = (y: number, m: number, n: number): Date[] =>
+    Array.from({ length: n }, (_, i) => new Date(Date.UTC(y, m - 1 + i, 1)));
+  const label = (d: Date) => `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`;
+
+  it("never forces the last month in: the steps stay equal (was 'Aug 28, Dec 28')", () => {
+    // The compare page's full range: Jan 2026 – Dec 2028, room for ~12 ticks.
+    const months = monthsFrom(2026, 1, 36);
+    const ticks = calendarTicks(months, 12);
+    const gaps = ticks.slice(1).map((t, i) => t - ticks[i]);
+    expect(new Set(gaps).size).toBe(1);
+    expect(ticks.map((i) => label(months[i]))).toEqual([
+      "2026-1", "2026-4", "2026-7", "2026-10",
+      "2027-1", "2027-4", "2027-7", "2027-10",
+      "2028-1", "2028-4", "2028-7", "2028-10",
+    ]);
+  });
+
+  it("widens the step on a narrow chart, staying on calendar boundaries", () => {
+    const months = monthsFrom(2026, 6, 24); // Jun 2026 – May 2028
+    expect(calendarTicks(months, 4).map((i) => label(months[i]))).toEqual([
+      "2026-7", "2027-1", "2027-7", "2028-1",
+    ]);
+    expect(calendarTicks(months, 2).map((i) => label(months[i]))).toEqual([
+      "2027-1", "2028-1",
+    ]);
+  });
+
+  it("long horizons step in whole years", () => {
+    const months = monthsFrom(2026, 1, 120);
+    const ticks = calendarTicks(months, 6).map((i) => label(months[i]));
+    expect(ticks).toEqual(["2026-1", "2028-1", "2030-1", "2032-1", "2034-1"]);
+  });
+});
+
+describe("forecastKpiPoints — a plan that hasn't started", () => {
+  const D = (y: number, m: number): Date => new Date(Date.UTC(y, m - 1, 1));
+  const points = [
+    { date: D(2027, 3), netWorth: 8689.49 },
+    { date: D(2027, 4), netWorth: 12402.93 },
+    { date: D(2027, 5), netWorth: 16127.74 },
+  ];
+  const opening: TodayState = {
+    status: "before-start",
+    date: D(2026, 9),
+    periodIndex: 0,
+    periodStart: D(2027, 3),
+    savings: 8000,
+    investments: 0,
+    portfolioValue: 0,
+    totalDebt: 3000,
+    netWorth: 5000,
+    debts: [],
+  };
+
+  it("Today is the opening and Next the FIRST close (the Mar close was skipped)", () => {
+    const { todayPoint, nextPoint } = forecastKpiPoints({ points, pastCount: 0 }, opening);
+    expect(todayPoint?.netWorth).toBe(5000);
+    expect(todayPoint?.date).toEqual(D(2027, 3));
+    expect(nextPoint?.netWorth).toBe(8689.49);
+  });
+
+  it("in range: the today point and the close after it", () => {
+    const { todayPoint, nextPoint } = forecastKpiPoints(
+      { points, pastCount: 1 },
+      { ...opening, status: "in-range" }
+    );
+    expect(todayPoint?.netWorth).toBe(12402.93);
+    expect(nextPoint?.netWorth).toBe(16127.74);
   });
 });

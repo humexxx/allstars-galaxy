@@ -8,10 +8,11 @@ export default function MoreAppsLoading() {
   return (
     <PortalPageContainer>
       <PageHeaderSkeleton />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
+      <div className="@container" aria-hidden="true">
+      <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @4xl:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <Card key={i} className="pt-0">
-            <Skeleton className="aspect-video w-full rounded-none" />
+            <Skeleton className="aspect-5/2 w-full rounded-none sm:aspect-video" />
             <CardHeader>
               <Skeleton className="h-6 w-32" />
               <Skeleton className="h-5 w-full" />
@@ -25,6 +26,7 @@ export default function MoreAppsLoading() {
             </CardContent>
           </Card>
         ))}
+      </div>
       </div>
     </PortalPageContainer>
   )

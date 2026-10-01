@@ -107,7 +107,19 @@ export type PublicTripScope = {
  * exists precisely to keep the other travellers out of the payload. The
  * service uses both lists to narrow and to split, then drops them.
  */
-export type PublicTripItem = Omit<TripItemWithStops, "payerIds" | "attendeeIds">;
+export type PublicTripItem = Omit<TripItemWithStops, "payerIds" | "attendeeIds"> & {
+  /**
+   * What the item costs the whole party, worked out on the server where the
+   * party size and the attendee lists are known. The page used to re-cost
+   * items itself with a party of one — a $95-per-person train for four read
+   * $95, the trip total came out thousands short of the planner's, and a
+   * five-night hotel printed its five-night figure over "/ night".
+   */
+  cost: PublicItemCost;
+};
+
+/** An item's cost with its unit applied, and how many times it applied. */
+export type PublicItemCost = { low: number; high: number; times: number };
 
 export type PublicTripView = {
   trip: Trip;

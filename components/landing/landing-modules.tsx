@@ -12,6 +12,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Eyebrow, Heading, Text } from "@/components/ui/typography";
+import { cn } from "@/lib/utils";
 
 type ModuleItem = {
   icon: typeof Wallet;
@@ -25,12 +26,23 @@ type ModuleItem = {
 // from each page's PageHeader / metadata so the landing doesn't drift from
 // what the product actually does:
 //   Portfolio          → app/portal/portfolio/page.tsx
-//   Investment Methods → app/portal/investment-methods/page.tsx
+//   Investment Methods → the Methods tab of /portal/portfolio
 //   Finance Plans      → app/portal/plans/page.tsx
 //   Productivity Board → app/portal/productivity/board/page.tsx
 //   Road Paths         → app/portal/productivity/road-paths/page.tsx
 //   Travel Planner     → app/portal/entertainment/travel-planner/page.tsx
 // Wellness is "Coming soon" in the sidebar, kept as a soft placeholder here.
+/** Column span for the last card, keyed by card count mod 6 (the grid is 2
+ *  columns from `sm` and 3 from `lg`), so the final row is always full. */
+const LAST_ROW_SPAN: Record<number, string> = {
+  0: "",
+  1: "sm:col-span-2 lg:col-span-3",
+  2: "lg:col-span-2",
+  3: "sm:col-span-2 lg:col-span-1",
+  4: "lg:col-span-3",
+  5: "sm:col-span-2 lg:col-span-2",
+};
+
 const MODULES: ModuleItem[] = [
   {
     icon: Wallet,
@@ -105,8 +117,13 @@ export function LandingModules() {
         </div>
 
         <div className="mt-12 grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2 lg:grid-cols-3">
-          {MODULES.map(({ icon: Icon, title, description, href, status }) => {
+          {MODULES.map(({ icon: Icon, title, description, href, status }, index) => {
             const isSoon = status === "soon";
+            // The grid draws its dividers with `gap-px` over a border-coloured
+            // background, so an unfilled last row showed up as a grey slab.
+            // The last card stretches across whatever the row has left.
+            const span =
+              index === MODULES.length - 1 ? LAST_ROW_SPAN[MODULES.length % 6] : "";
             const body = (
               <div
                 className={`group relative h-full bg-card p-6 transition-colors sm:p-8 ${
@@ -137,7 +154,7 @@ export function LandingModules() {
 
             if (isSoon || !href) {
               return (
-                <div key={title} className="bg-card">
+                <div key={title} className={cn("bg-card", span)}>
                   {body}
                 </div>
               );
@@ -147,7 +164,7 @@ export function LandingModules() {
               <Link
                 key={title}
                 href={href}
-                className="bg-card outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                className={cn("bg-card outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset", span)}
               >
                 {body}
               </Link>

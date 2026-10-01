@@ -1,7 +1,7 @@
 # Admin
 
 > **Status:** Active
-> **Last reviewed:** 2026-09-29
+> **Last reviewed:** 2026-10-01
 
 ## Overview
 Admin-only operations: user management, transaction approval queue, and
@@ -49,3 +49,15 @@ impersonation (with audit trail).
 - `app/portal/admin/loading.tsx` and `admin/transactions/loading.tsx` draw their page (search / filter row + table card, via `components/admin/admin-table-skeleton.tsx`); `app/portal/admin/error.tsx` is the module error boundary.
 - The role-change dialog's copy is driven by `ROLE_META[nextRole]`, so promoting to provider no longer reads "Demote to user?".
 - **The users table sets any of the three roles** (`USER_ROLES` from `types/user.ts` drives the menu). It used to toggle admin↔user only, which made `provider` unreachable and demoted a provider to admin by accident.
+- **The approvals queue filters by a user picker** (`UserSelector` with
+  `clearLabel="All users"`), not a free-text user-id box — nobody copies a
+  UUID to filter a list. The page loads `getAllUsers()` for it.
+- **Queue rows name the method** (column and confirm dialog: "Approve this
+  $500.00 withdrawal from Crypto Momentum…"), and an admin's own entry —
+  approved on save with no approver — reads "Auto-approved" instead of a dash.
+- **Phone layouts.** The queue is a list below a 48rem card (labelled Approve
+  / Reject buttons beside the amount); the users table moves the role badge
+  under the name below `sm` and truncates long emails, so the actions menu
+  stays on screen. The role menu closes before its confirm opens
+  (`DropdownMenu modal={false}`, no `preventDefault`) — held open, it stayed
+  painted under the dialog and left the page inert after Cancel.

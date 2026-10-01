@@ -74,3 +74,26 @@ describe("rate bounds", () => {
     expect(createFinancePlanSchema.safeParse({ ...plan, monthlySavingsRate: "0.004" }).success).toBe(true);
   });
 });
+
+describe("createFinancePlanSchema — messages the plan form shows per field", () => {
+  const base = {
+    name: "Plan",
+    startMonth: "2026-09",
+    monthsAhead: 36,
+  };
+  const messageFor = (input: Record<string, unknown>, field: string): string | undefined => {
+    const r = createFinancePlanSchema.safeParse({ ...base, ...input });
+    return r.success ? undefined : r.error.issues.find((i) => i.path[0] === field)?.message;
+  };
+
+  it("says what is wrong instead of zod's 'Too small: expected …'", () => {
+    expect(messageFor({ name: "  " }, "name")).toBe("Give the plan a name.");
+    expect(messageFor({ monthsAhead: 5 }, "monthsAhead")).toBe("At least 12 months.");
+    expect(messageFor({ monthsAhead: Number.NaN }, "monthsAhead")).toBe(
+      "Enter a number of months (12–120)."
+    );
+    expect(messageFor({ confirmationDayOfMonth: 31 }, "confirmationDayOfMonth")).toMatch(
+      /1 to 28/
+    );
+  });
+});

@@ -154,4 +154,33 @@ describe("InvestmentMethodsView", () => {
 
     expect(screen.getByText(/no allocation set/i)).toBeInTheDocument();
   });
+
+  it("does not show an owner somebody else's closed method", () => {
+    // Owning any method used to reveal EVERY disabled method in the catalogue,
+    // including global ones nobody can invest in.
+    const theirsClosed = { ...THEIRS, id: "m4", name: "Retired Fund", enabled: false } as InvestmentMethod;
+
+    render(
+      <InvestmentMethodsView
+        methods={[MINE, theirsClosed]}
+        ownedMethodIds={["m1"]}
+        allocations={[]}
+        onEditMethod={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText("Retired Fund")).not.toBeInTheDocument();
+  });
+
+  it("shows the promised return at the precision it is stored", () => {
+    // 0.012% and 0.007% both printed as "0.01%".
+    const a = { ...MINE, id: "a", name: "A", monthlyRoi: "0.0120" } as InvestmentMethod;
+    const b = { ...MINE, id: "b", name: "B", monthlyRoi: "0.0070" } as InvestmentMethod;
+
+    render(<InvestmentMethodsView methods={[a, b]} />);
+
+    expect(screen.getByText("0.012%")).toBeInTheDocument();
+    expect(screen.getByText("0.007%")).toBeInTheDocument();
+  });
 });
+

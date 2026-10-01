@@ -1,7 +1,7 @@
 # Settings
 
 > **Status:** Active
-> **Last reviewed:** 2026-09-29
+> **Last reviewed:** 2026-10-01
 
 ## Overview
 Personal portal preferences. Today it holds a single appearance toggle — the
@@ -10,8 +10,9 @@ shown after the content of module pages; on Finance it mines for gold.
 
 ## Routes
 - `/portal/settings` — preferences page (appearance toggles); the section rail
-  is `Tabs orientation="vertical"` with real panels. `settings/loading.tsx`
-  draws the rail and one card
+  is `Tabs orientation="vertical"` with real panels, vertical from `lg` (a
+  horizontal scroll rail below — beside the app sidebar a second rail left the
+  pane 220px wide). `settings/loading.tsx` draws the rail and one card
 
 ## Server actions — `/app/actions/`
 - `user-preferences.ts` — `setShowContextAvatarAction` (toggle the module mascot), `ActionResult`

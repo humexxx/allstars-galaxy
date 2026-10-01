@@ -1,7 +1,7 @@
 # Finance
 
 > **Status:** Active
-> **Last reviewed:** 2026-09-30
+> **Last reviewed:** 2026-10-01
 
 ## Overview
 Personal financial planning: users build *plans* (scenarios) with incomes,
@@ -30,11 +30,13 @@ calibrated. Health scoring and scenario comparison are part of this module.
 - `schedule.ts` — `planOccurrences`: every dated occurrence of a plan's lines with overrides applied (skip / amount / reschedule, including moves into another month or period). The engine, the today figure, the sidebar breakdowns and the calendar all read it. `RESCHEDULE_MARGIN_MONTHS` / `rescheduleWithinReach` bound how far one occurrence may move; `monthYearOfKey` turns an occurrence's cadence month into its override key
 - `opening-balances.ts` — `changesOpeningBalances` (does an edit change any opening balance, at cent precision) and `restateOpeningSet` (the set restated as of today)
 - `period.ts` — accounting-period helpers (unchanged)
-- `chart-series.ts` — `buildPlanTimeline` / `buildChartSeries` (real past as period closes + projection), `alignTodayPoint`, `buildCompareRows` (compare chart, joined by calendar month), `milestoneCrossings`, and the one debt-free definition (`debtFreeMonthsFromNow`, `describeDebtFree`, `formatDebtFree`, `summaryDebtFree`)
+- `chart-series.ts` — `buildPlanTimeline` / `buildChartSeries` (real past as period closes + projection), `alignTodayPoint`, `buildCompareRows` (compare chart, joined by calendar month), `calendarTicks` (axis ticks on calendar months), `forecastKpiPoints` (the "Next" KPI; a plan that has not started yet gets its first close, no today marker and no Confirm), `milestoneCrossings`, and the one debt-free definition (`debtFreeMonthsFromNow`, `describeDebtFree`, `formatDebtFree`, `summaryDebtFree`)
 - `scenario.ts` — `compareScenario` (scenario vs base at a shared period; payoff compared as dates)
 - `dashboard.ts` — `buildDashboardFigures` for the dashboard card
 - `debt-payments.ts` — `projectedDebtPayments` / `debtChipAmount`: the calendar's debt chips read the payments the projection made
 - `table-rows.ts` — `densify` (first 12 rows + real Decembers)
+- `amount-input.ts` — parses typed or pasted amounts ("$1,234.50") the way the server schema will, so the confirmation dialog shows per-field errors instead of a bare "Invalid input" toast
+- `recurrence-label.ts` — `describeRecurrence`: the Setup tab's schedule column ("Every 6 months on the 12th"), never "Day 12 · monthly" for a six-monthly line
 - `milestones.ts` — default milestone list
 - Shared, outside the module: `lib/utils/date.ts` (`todayInTimeZone`, `calendarDayInTimeZone`, `earliestCalendarDay`, `TIME_ZONE_COOKIE`), `lib/utils/request-today.ts` (server: `getRequestToday` / `getRequestTimeZone` from the `tz` cookie), `hooks/use-time-zone-cookie.ts` (written by `AppHeader`), `lib/utils/format.ts` (`roundCents`, `moneySign`, `CENTS_EPSILON`)
 
@@ -94,6 +96,24 @@ going up is not an improvement), while clicking **today's** point opens the
 than forecast. `ProjectionChart` exposes this as `onSelectIndex`, resolved from
 the same `activeTooltipIndex` as the hover handler so the whole column is
 clickable rather than the 4px dot.
+
+**Layout notes (render-verified at 390 / 768 / 1024 / 1440, light and dark).**
+- The editor's chart + sidebar split (3/4 + 1/4) starts at `xl`; at `lg` the
+  two cards sit side by side at half width, because at 1024 the quarter-width
+  sidebar was ~155px and clipped its figures. The sidebar is `xl:min-h-160`
+  (it grows rather than clipping) and its first row is **Expenses & debt** —
+  expenses plus debt minimums, deliberately not the Surplus breakdown's
+  "Living expenses".
+- Setup → Debts is a table; add and edit go through `DebtFormDialog` (which
+  has the payment day the inline grid lacked).
+- The calendar switches to compact pills below the `@2xl/cal` container
+  width: tap a pill for the entry's menu, tap a date for the add menu. Drag to
+  move is desktop-only; on a phone, move one occurrence through Edit.
+- The chart's today point is labelled "Today <date>", and the projection table
+  highlights the current period, because the table rows are period closes and
+  the today figure is not.
+- `PlanForm` takes `today` (the reader's, from the server) so a new plan's
+  start month is the reader's month, not the server's UTC one.
 
 The finance mascot ([`context-avatar.tsx`](../../components/portal/context-avatar.tsx))
 is mounted by [`app/portal/plans/layout.tsx`](../../app/portal/plans/layout.tsx)

@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/portal/page-header";
 import { TripForm } from "@/components/travel/trip-form";
 import { FormSkeleton } from "@/components/skeletons/form-skeleton";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { getRequestTodayIso } from "@/lib/utils/request-today";
 
 export const metadata: Metadata = {
   title: "New trip",
@@ -15,6 +16,7 @@ export const dynamic = "force-dynamic";
 
 export default async function NewTripPage() {
   await requireEffectiveContext();
+  const today = await getRequestTodayIso();
   return (
     <section className="flex flex-col gap-6">
       <PageHeader
@@ -27,7 +29,7 @@ export default async function NewTripPage() {
         </CardHeader>
         <CardContent>
           <Suspense fallback={<FormSkeleton rows={4} />}>
-            <TripForm />
+            <TripForm today={today} />
           </Suspense>
         </CardContent>
       </Card>

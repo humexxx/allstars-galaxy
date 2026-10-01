@@ -162,7 +162,14 @@ export function CompareView({
               description="Select at least one plan above."
             />
           ) : (
-            <ComparePlansChart series={filtered} metric={metric} today={today} />
+            <ComparePlansChart
+              series={filtered}
+              metric={metric}
+              today={today}
+              // Wrap whole items: in one squeezed row each long plan name
+              // broke word by word.
+              legendClassName="flex-wrap gap-x-4 gap-y-1"
+            />
           )}
         </CardContent>
       </Card>
@@ -173,10 +180,15 @@ export function CompareView({
             <CardTitle as="h2">Ending state per plan</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Columns by the card's own width: beside the app sidebar a
+                768px screen left two 170px tiles, where "Savings" ran into
+                its figure and "Net worth" broke in two. */}
+            <div className="@container">
+            <div className="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-3">
               {entries.map((e) => (
                 <EndingStateTile key={e.plan.id} entry={e} />
               ))}
+            </div>
             </div>
           </CardContent>
         </Card>
@@ -188,13 +200,16 @@ export function CompareView({
 function EndingStateTile({ entry }: { entry: ComparePlanEntry }) {
   const { projection: p, summary } = entry;
   const debtFree = summaryDebtFree(summary);
+  const endingPortfolio = p.months.at(-1)?.portfolioValue ?? 0;
   return (
     <div
       className="rounded-lg border p-4"
       style={{ borderLeftColor: p.plan.color, borderLeftWidth: 4 }}
     >
-      <div className="flex items-center justify-between gap-2">
-        <Heading level="h6" as="h3">{p.plan.name}</Heading>
+      {/* Wraps: beside a long debt-free badge the plan name broke over two
+          lines on a phone; now the badge drops below it instead. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <Heading level="h6" as="h3" className="min-w-0 break-words">{p.plan.name}</Heading>
         {debtFree.kind !== "beyond-horizon" && (
           <Badge variant="outline">{formatDebtFree(debtFree)}</Badge>
         )}
@@ -207,20 +222,36 @@ function EndingStateTile({ entry }: { entry: ComparePlanEntry }) {
         </p>
       )}
       <dl className="mt-3 flex flex-col gap-1 text-sm">
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-3">
           <dt className="text-muted-foreground">Savings</dt>
           <dd><Mono>{formatCurrency(p.endingSavings)}</Mono></dd>
         </div>
-        <div className="flex justify-between">
+        {/* Investments belong on the sheet: without them Savings − Debt did
+            not add up to the Net worth line under it. */}
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">Investments</dt>
+          <dd><Mono>{formatCurrency(p.endingInvestments)}</Mono></dd>
+        </div>
+        {endingPortfolio > 0 && (
+          <div className="flex justify-between gap-3">
+            <dt className="text-muted-foreground">Portfolio</dt>
+            <dd><Mono>{formatCurrency(endingPortfolio)}</Mono></dd>
+          </div>
+        )}
+        <div className="flex justify-between gap-3">
           <dt className="text-muted-foreground">Debt</dt>
           <dd><Mono>{formatCurrency(p.endingDebt)}</Mono></dd>
         </div>
-        <div className="flex justify-between border-t pt-1 font-semibold">
+        <div className="flex justify-between gap-3 border-t pt-1 font-semibold">
           <dt>Net worth</dt>
           <dd>
             <Mono
               className={
-                moneySign(p.endingNetWorth) >= 0 ? "text-success" : "text-destructive"
+                moneySign(p.endingNetWorth) > 0
+                  ? "text-success"
+                  : moneySign(p.endingNetWorth) < 0
+                    ? "text-destructive"
+                    : undefined
               }
             >
               {formatCurrency(p.endingNetWorth)}

@@ -112,18 +112,20 @@ export function AppHeader({
 
       {/* Flexible spacer pushes utilities to the far right; the impersonation
           banner sits centred when active. */}
-      <div className="flex flex-1 items-center justify-center gap-2">
+      {/* `min-w-0` down the chain so a long name truncates on a phone instead
+          of pushing the header 200–300px past the screen edge. */}
+      <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
         {isImpersonating && (
-          <div className="flex items-center gap-2">
-            <Badge variant="warning">
+          <div className="flex min-w-0 items-center gap-2">
+            <Badge variant="warning" className="shrink-0">
               <UserCog />
-              Impersonating
+              <span className="sr-only sm:not-sr-only">Impersonating</span>
             </Badge>
-            <span className="text-sm font-medium text-foreground">
+            <span className="min-w-0 truncate whitespace-nowrap text-sm font-medium text-foreground">
               {impersonatedDisplayName}
             </span>
             {impersonatedUser?.email && impersonatedUser?.fullName && (
-              <span className="hidden text-xs text-foreground/70 sm:inline">
+              <span className="hidden min-w-0 truncate whitespace-nowrap text-xs text-foreground/70 xl:inline">
                 ({impersonatedUser.email})
               </span>
             )}
@@ -138,10 +140,13 @@ export function AppHeader({
             size="sm"
             onClick={handleStop}
             disabled={isStopping}
+            aria-label={isStopping ? "Stopping impersonation" : "Stop impersonating"}
             className="border-warning/30 text-warning hover:bg-warning/10 hover:text-warning"
           >
             <X />
-            {isStopping ? "Stopping…" : "Stop impersonating"}
+            <span className="hidden lg:inline">
+              {isStopping ? "Stopping…" : "Stop impersonating"}
+            </span>
           </Button>
         )}
         <CommandMenu role={role} isImpersonating={isImpersonating} />

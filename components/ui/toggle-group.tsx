@@ -74,8 +74,13 @@ function ToggleGroupItem({
           variant: context.variant || variant,
           size: context.size || size,
         }),
-        "min-w-0 flex-1 shrink-0 focus:z-10 focus-visible:z-10",
-        (context.variant ?? variant ?? "default") === "default" && "h-full",
+        "shrink-0 focus:z-10 focus-visible:z-10",
+        // Segments share the track evenly but never below their own label
+        // (`min-w-0` clipped "Calendar" beside "List"); chips keep their
+        // natural width so a row of them wraps instead of overlapping.
+        (context.variant ?? variant ?? "default") === "default"
+          ? "h-full min-w-fit flex-1"
+          : "flex-none",
         className
       )}
       {...props}

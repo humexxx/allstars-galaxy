@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Mono, Text } from "@/components/ui/typography";
-import { formatCurrency, moneySign } from "@/lib/utils/format";
+import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import type { ChartPoint } from "@/lib/finance/chart-series";
 import { periodIndexForDate } from "@/lib/finance/period";
@@ -142,7 +142,7 @@ export function PeriodCompareDialog({
                       <Mono className="tabular-nums">
                         {flat
                           ? "no change"
-                          : `${delta > 0 ? "+" : "−"}${formatCurrency(Math.abs(delta))}`}
+                          : formatSignedCurrency(delta)}
                       </Mono>
                     </span>
                   </div>

@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useTransition } from "react";
 
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { UserSelector } from "@/components/user-selector";
 import {
   Select,
   SelectContent,
@@ -16,33 +16,27 @@ import { cn } from "@/lib/utils";
 
 const BASE_PATH = "/portal/admin/transactions";
 
-export function TransactionFilters() {
+type FilterUser = { id: string; fullName: string | null; email: string | null };
+
+/**
+ * The queue's filters, kept in the URL so a filtered view can be shared.
+ *
+ * The user filter is a searchable picker by name or email. It was a free-text
+ * "User ID" box: to use it an admin had to go and copy a UUID from somewhere
+ * else, which nobody does.
+ */
+export function TransactionFilters({ users }: { users: FilterUser[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
   const userId = searchParams.get("userId") ?? "";
-  // Local text state, pushed to the URL after a pause. Pushing every keystroke
-  // disabled the input mid-word (it was `disabled={isPending}`) and the rest
-  // of the typing went nowhere.
-  const [userIdText, setUserIdText] = useState(userId);
-  // Back/forward changes the URL without remounting; follow it.
-  const [prevUserId, setPrevUserId] = useState(userId);
-  if (prevUserId !== userId) {
-    setPrevUserId(userId);
-    setUserIdText(userId);
-  }
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (debounce.current) clearTimeout(debounce.current);
-  }, []);
   const status = searchParams.get("status") ?? "pending";
   const type = searchParams.get("type") ?? "all";
 
   const setParam = (key: "userId" | "status" | "type", value: string): void => {
-    // Read the live URL, not the render's `searchParams`: the debounced user-id
-    // push runs 300ms later and would otherwise undo a status change made in
-    // between.
+    // Read the live URL, not the render's `searchParams`, so two changes made
+    // in quick succession both survive.
     const next = new URLSearchParams(window.location.search);
     if (!value || (key !== "status" && value === "all")) {
       next.delete(key);
@@ -56,31 +50,30 @@ export function TransactionFilters() {
   };
 
   return (
+    // Two columns on a phone for the two short selects: stacked one per row,
+    // three full-width fields pushed the queue itself below the fold.
     <div
       aria-busy={isPending}
       className={cn(
-        "flex flex-col items-end gap-4 sm:flex-row",
+        "grid grid-cols-2 items-end gap-4 sm:flex sm:flex-row",
         isPending ? "opacity-90" : "opacity-100"
       )}
     >
-      <Field className="w-full sm:w-72">
-        <FieldLabel htmlFor="filter-user-id">User ID</FieldLabel>
-        <Input
-          id="filter-user-id"
-          placeholder="Filter by user ID…"
-          value={userIdText}
-          onChange={(e) => {
-            const value = e.target.value;
-            setUserIdText(value);
-            if (debounce.current) clearTimeout(debounce.current);
-            debounce.current = setTimeout(() => setParam("userId", value.trim()), 300);
-          }}
+      <Field className="col-span-2 sm:w-72">
+        <FieldLabel htmlFor="filter-user">User</FieldLabel>
+        <UserSelector
+          id="filter-user"
+          users={users}
+          value={userId}
+          onValueChange={(value) => setParam("userId", value)}
+          placeholder="All users"
+          clearLabel="All users"
         />
       </Field>
 
       {/* Not `disabled` while the navigation runs: disabling the focused
           control drops keyboard focus to the page. */}
-      <Field className="w-full sm:w-50">
+      <Field className="min-w-0 sm:w-50">
         <FieldLabel htmlFor="filter-status">Status</FieldLabel>
         <Select value={status} onValueChange={(value) => setParam("status", value)}>
           <SelectTrigger id="filter-status">
@@ -95,7 +88,7 @@ export function TransactionFilters() {
         </Select>
       </Field>
 
-      <Field className="w-full sm:w-50">
+      <Field className="min-w-0 sm:w-50">
         <FieldLabel htmlFor="filter-type">Type</FieldLabel>
         <Select value={type} onValueChange={(value) => setParam("type", value)}>
           <SelectTrigger id="filter-type">

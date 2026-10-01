@@ -3,7 +3,7 @@ import "server-only";
 import { db } from "@/db";
 import { portfolioSnapshots } from "@/db/schema";
 import { eq, and, gte, asc } from "drizzle-orm";
-import { subDays, subMonths, startOfMonth, getDate } from "date-fns";
+import { subDays } from "date-fns";
 
 import type { ChartDataPoint, TimeRange } from "@/types/chart";
 
@@ -94,23 +94,10 @@ export async function getPortfolioPerformanceData(
         value: lastSnapshot.value,
       });
     }
-  } else {
-    // No snapshots, add two dummy points with value 0
-    // First day of current month (or previous month if today is day 1)
-    const isFirstDayOfMonth = getDate(now) === 1;
-    const dummyStartDate = isFirstDayOfMonth 
-      ? startOfMonth(subMonths(now, 1))
-      : startOfMonth(now);
-
-    chartData.push({
-      date: dummyStartDate.toISOString(),
-      value: 0,
-    });
-    chartData.push({
-      date: now.toISOString(),
-      value: 0,
-    });
   }
+  // No snapshots means no history. Two fabricated $0 points used to stand in,
+  // which drew a flat zero line under a portfolio holding thousands (and gave
+  // the plan editor a $0 past segment); callers render their own empty state.
 
   return chartData;
 }

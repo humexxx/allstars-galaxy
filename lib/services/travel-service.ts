@@ -6,7 +6,7 @@ import { cache } from "react";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm";
 
 import { db } from "@/db";
-import { tripCost } from "@/lib/travel/pricing";
+import { itemCost, tripCost } from "@/lib/travel/pricing";
 
 /** `[{ itemId, memberId }]` → `Map<itemId, memberId[]>`, for payers and attendees alike. */
 function groupByItem(rows: { itemId: string; memberId: string }[]): Map<string, string[]> {
@@ -630,7 +630,7 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
   // and payments do not depend on the items or the photos, so awaiting them
   // afterwards would have cost a second round trip for no ordering reason —
   // and at ~86ms each that is the whole budget of a small page.
-  const [items, photos, stops, payers, attendees, scopeRows] = await Promise.all([
+  const [items, photos, stops, payers, attendees, scopeRows, memberCount] = await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -672,7 +672,11 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
       .innerJoin(tripItems, eq(tripItemAttendees.itemId, tripItems.id))
       .where(eq(tripItems.tripId, trip.id)),
     share.memberId ? loadScopeRows(trip.id, share.memberId) : null,
+    // The party size a per-person price multiplies by. A count, not the
+    // rows: the members themselves never cross to an unauthenticated page.
+    db.$count(tripMembers, eq(tripMembers.tripId, trip.id)),
   ]);
+  const partySize = Math.max(1, Number(memberCount) || 0);
 
   const stopsByItem = new Map<string, typeof stops>();
   for (const stop of stops) {
@@ -716,10 +720,13 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
       ? enriched.filter((i) => itemConcerns(i.attendeeIds, scopedTo))
       : enriched
   ).map((item) => {
+    // Costed while the attendee list is still in hand: a per-person price
+    // multiplies by the people on the item, and that list is about to go.
+    const c = itemCost(item, partySize);
     const { payerIds, attendeeIds, ...rest } = item;
     void payerIds;
     void attendeeIds;
-    return rest;
+    return { ...rest, cost: { low: c.low, high: c.high, times: c.times } };
   });
 
   return {
@@ -835,7 +842,13 @@ function buildScope(
  * folds its items into a count + estimate so the card avoids a second query.
  */
 export async function getDashboardTravelSummary(
-  userId: string
+  userId: string,
+  /**
+   * The reader's today as YYYY-MM-DD (`getRequestTodayIso`). The server's own
+   * clock is UTC, a day ahead of anybody west of Greenwich every evening —
+   * enough to call a trip that ends tonight "past".
+   */
+  readerToday?: string
 ): Promise<DashboardTravelSummary> {
   const all = await db
     .select()
@@ -847,7 +860,7 @@ export async function getDashboardTravelSummary(
     return { totalTrips: 0, upcomingCount: 0, inProgressCount: 0, featured: null };
   }
 
-  const today = todayIso();
+  const today = readerToday ?? todayIso();
   const inProgress = all.filter((t) => tripState(t, today) === "in_progress");
   const upcoming = all.filter((t) => tripState(t, today) === "upcoming");
   const past = all.filter((t) => tripState(t, today) === "past");
@@ -860,9 +873,10 @@ export async function getDashboardTravelSummary(
 
   let featured: DashboardTravelFeaturedTrip | null = null;
   if (pick) {
-    const [items, partySize] = await Promise.all([
+    const [items, partySize, attendees] = await Promise.all([
       db
         .select({
+          id: tripItems.id,
           price: tripItems.price,
           priceMax: tripItems.priceMax,
           priceUnit: tripItems.priceUnit,
@@ -872,10 +886,22 @@ export async function getDashboardTravelSummary(
         .from(tripItems)
         .where(eq(tripItems.tripId, pick.id)),
       db.$count(tripMembers, eq(tripMembers.tripId, pick.id)),
+      // Who each item is for: a per-person price multiplies by its own
+      // attendees, not the whole party — a guided hike for two of four
+      // travellers is two tickets, and the card was charging four.
+      db
+        .select({ itemId: tripItemAttendees.itemId, memberId: tripItemAttendees.memberId })
+        .from(tripItemAttendees)
+        .innerJoin(tripItems, eq(tripItemAttendees.itemId, tripItems.id))
+        .where(eq(tripItems.tripId, pick.id)),
     ]);
+    const attendeesByItem = groupByItem(attendees ?? []);
     // Same maths as the trip page: summing the raw column reported a
     // three-night hotel at one night's price and a per-person fare once.
-    const totalEstimate = tripCost(items, Math.max(1, partySize)).low;
+    const totalEstimate = tripCost(
+      items.map((i) => ({ ...i, attendeeIds: attendeesByItem.get(i.id) ?? [] })),
+      Math.max(1, partySize)
+    ).low;
     featured = {
       ...pick,
       state: tripState(pick, today),

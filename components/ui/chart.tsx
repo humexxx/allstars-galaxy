@@ -226,7 +226,9 @@ function ChartTooltipContent({
                           {itemConfig?.label || item.name}
                         </span>
                       </div>
-                      {item.value && (
+                      {/* `!= null`, not truthiness: a series at exactly 0 is
+                          a value to show, not a missing one. */}
+                      {item.value != null && (
                         <span className="text-foreground font-mono font-medium tabular-nums">
                           {item.value.toLocaleString()}
                         </span>
@@ -264,7 +266,8 @@ function ChartLegendContent({
   return (
     <div
       className={cn(
-        "flex items-center justify-center gap-4",
+        // Wraps whole items; without it long series names broke word by word.
+        "flex flex-wrap items-center justify-center gap-x-4 gap-y-1",
         verticalAlign === "top" ? "pb-3" : "pt-3",
         className
       )}

@@ -48,7 +48,7 @@ export function NflView({ data }: NflViewProps) {
         }
       >
         <TabsContent value="games">
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 @xl:grid-cols-2">
             {data.games.map((g) => (
               <ScoreCard key={g.id} match={g} teams={teamsMap} />
             ))}

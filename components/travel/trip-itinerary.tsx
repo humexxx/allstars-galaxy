@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useMemo, useState } from "react";
 import {
   ListOrdered,
@@ -36,6 +35,7 @@ import { itemCost, unitSuffix } from "@/lib/travel/pricing";
 import { formatShortDay } from "@/lib/utils/date";
 import { CategoryIcon, categoryMeta } from "@/components/travel/category";
 import { ItemForm } from "@/components/travel/item-form";
+import { TripPhoto } from "@/components/travel/trip-photo";
 import { readerCost, viewerItems, type ItineraryViewer } from "@/lib/travel/viewer";
 export type { ItineraryViewer };
 
@@ -167,7 +167,11 @@ export function TripItinerary({
                 </Mono>
               )}
             </div>
-            <ul className="-mx-2 divide-y">
+            {/* No `divide-y`: the rows are rounded (they are targets), and a
+                top border on a rounded box bends up at both ends — every
+                separator read as the bottom edge of a floating card. The
+                hairline is each row's own, inset to the text. */}
+            <ul className="-mx-2 flex flex-col">
               {group.items.map((item) => (
                 <ItemRow
                   key={item.id}
@@ -254,31 +258,37 @@ function ItemRow({
     <li
       // Padded, not just spaced: the row is a target now, and a hover
       // tint that stops at the text reads as a highlight rather than a row.
-      className="group relative flex cursor-pointer items-start gap-3 rounded-md px-2 py-3 transition-colors hover:bg-muted/40"
+      className="group relative flex cursor-pointer items-start gap-3 rounded-md px-2 py-3 transition-colors before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:h-px before:bg-border first:before:hidden hover:bg-muted/40"
       onClick={openEditor}
     >
       <CategoryIcon category={item.category} />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex items-baseline justify-between gap-2">
+      {/* A grid, not a title row with the price inside it: a priced stay
+          prints two lines of figures, and as part of the title's row they
+          pushed the category line a whole line away from the title it
+          describes. From `sm` the price spans the title and category rows;
+          on a phone the title takes the whole width and the price drops
+          beside the category line — beside the title, a 150px "$900~$1,150 /
+          person × 4" left the name 100px and it read "Return flight Os…". */}
+      <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-0.5">
           {/* The keyboard's way in, since a container cannot be the button. */}
           <button
             type="button"
             onClick={() => setEditing(true)}
             // No hover state of its own: the row already lights up, and a
             // second one on the title reads as a link to somewhere else.
-            className="min-w-0 cursor-pointer truncate rounded-sm text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="col-span-2 row-start-1 min-w-0 cursor-pointer rounded-sm text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring sm:col-span-1"
           >
-            {item.title}
+            <span className="line-clamp-2 break-words">{item.title}</span>
           </button>
           {item.price && (
-            <span className="shrink-0 text-right">
+            <span className="col-start-2 row-start-2 text-right sm:row-span-2 sm:row-start-1">
               <Mono className="block whitespace-nowrap text-xs font-medium">
                 {moneyRange(mine.low, mine.high, currency)}
               </Mono>
               {viewer ? (
                 // Their share leads, but the booking price is what you would
                 // actually see on the hotel's site, so it stays in view.
-                <Mono className="block text-2xs text-muted-foreground">
+                <Mono className="block whitespace-nowrap text-2xs text-muted-foreground">
                   of {moneyRange(cost.low, cost.high, currency)}
                 </Mono>
               ) : (
@@ -289,7 +299,10 @@ function ItemRow({
                     <Mono className="block whitespace-nowrap text-2xs text-muted-foreground">
                       {formatTripMoney(cost.unitLow ?? 0, currency)}
                       {cost.unitHigh !== null && cost.unitHigh > (cost.unitLow ?? 0) && (
-                        <>–{formatTripMoney(cost.unitHigh, currency)}</>
+                        // `~`, like every other money range here: a dash
+                        // between two prices reads as a subtraction. Unspaced
+                        // so the line stays as short as the dash made it.
+                        <>~{formatTripMoney(cost.unitHigh, currency)}</>
                       )}{" "}
                       {unitSuffix(item.priceUnit)} × {cost.times}
                     </Mono>
@@ -303,8 +316,7 @@ function ItemRow({
               )}
             </span>
           )}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+        <div className="col-start-1 row-start-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
           <span className="capitalize">{meta.label}</span>
           {(item.fromCode || item.toCode) && (
             <Mono className="text-2xs font-medium">
@@ -337,6 +349,7 @@ function ItemRow({
             </a>
           )}
         </div>
+        <div className="col-span-2 flex min-w-0 flex-col gap-0.5 empty:hidden">
         {item.notes && (
           <Text variant="small" className="line-clamp-2">{item.notes}</Text>
         )}
@@ -350,13 +363,10 @@ function ItemRow({
                 key={photo.id}
                 className="relative aspect-square w-20 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
               >
-                <Image
+                <TripPhoto
                   src={photo.url}
                   alt={photo.caption ?? `${item.title} photo ${i + 1}`}
-                  fill
                   sizes="80px"
-                  className="object-cover"
-                  unoptimized
                 />
               </div>
             ))}
@@ -367,6 +377,7 @@ function ItemRow({
             <ActivityVideo url={item.videoUrl} title={item.title} />
           </div>
         )}
+        </div>
       </div>
     </li>
 

@@ -1,7 +1,7 @@
 # Productivity
 
 > **Status:** Active
-> **Last reviewed:** 2026-09-29
+> **Last reviewed:** 2026-10-01
 
 ## Overview
 Two surfaces: a personal kanban *board* for day-to-day tasks, and *road paths*
@@ -39,6 +39,9 @@ getter actions were deleted — pages read through the services.
 
 ## Components
 `components/productivity/` — board UI, task cards, milestone editors.
+- `zoned-date.ts` — day keys and labels in the reader's zone (`tz` cookie), plus `calendarDayKey` / `formatCalendarDay` for road-path days stored as UTC midnight
+- `board/due-date.ts` — `dueTone` (overdue / today / tomorrow) and `isDoneColumnName`
+- `road-paths/format.ts` — `formatAmount` ("7,250.5"), `parseAmount`
 
 ## DB tables — `db/schema.ts`
 - `board_columns` — kanban columns per user
@@ -98,3 +101,28 @@ getter actions were deleted — pages read through the services.
   mutation rolls back only that change, not a whole-board snapshot.
 - `board/loading.tsx` and `road-paths/loading.tsx` draw their own page;
   `app/portal/productivity/error.tsx` is the module error boundary.
+- **Dates are read in the reader's zone, passed from the server.** The board
+  and road-path pages read the `tz` cookie (`getRequestTimeZone`) and hand the
+  zone — and today's `YYYY-MM-DD` in it — down to the cards. Formatting with the
+  runtime's zone and `suppressHydrationWarning` kept the server's UTC text: a
+  card said "Sep 25" while the task's own edit dialog said Sep 24.
+- **A task's due date is an instant (local noon, from `TaskDialog`); a road
+  path's start/target date is a calendar day stored as UTC midnight** (what
+  `new Date("YYYY-MM-DD")` gives, and what every existing row holds). The two
+  are read differently on purpose — see `zoned-date.ts`.
+- **Overdue / Today / Tomorrow** tint a task's due date; a task in a column
+  whose name reads as finished (`isDoneColumnName`: done, completed, closed…)
+  is never flagged, since nothing on a task records completion.
+- **The only column cannot be deleted.** The page re-creates the default three
+  for a board with none, so deleting the last one brought Todo / Working / Done
+  straight back on the revalidation, and the empty state never stayed.
+- Deleting a task asks first, like deleting a column. The board announces drags
+  by task title and column name (dnd-kit's defaults read the raw ids), and the
+  grip is a column of its own so the title lines up with the text under it.
+- The road-path grid, the detail's stat row / panels and the More-apps grid
+  size by **container** (`@container`, `@xl` / `@3xl` / `@4xl`), not viewport:
+  with the sidebar open a `md:` breakpoint split a 456px column in two or
+  three. A road-path card pins its figures to the bottom (`mt-auto`), clamps a
+  long title to three lines, says "Target …" / "Was due …", and badges a path
+  that has reached its target. The detail's countdown turns into **Past
+  target** once the day has gone (it used to sit at "0 days" for ever).

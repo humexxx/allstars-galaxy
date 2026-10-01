@@ -44,6 +44,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -56,7 +57,12 @@ import {
 import { Eyebrow, Heading, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { formatDay, formatDayRange, formatMonthLong } from "@/lib/utils/date";
-import { formatCurrency } from "@/lib/utils/format";
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+  formatSignedCurrency,
+  moneySign,
+} from "@/lib/utils/format";
 import {
   periodRangeFor,
   type Period,
@@ -896,7 +902,12 @@ export function PlanCalendar({
   );
 
   return (
-    <Card>
+    // A named container: the cells switch between a compact pill (narrow
+    // calendar — a phone, a tablet beside the app sidebar) and the full chip
+    // by the CALENDAR's width, not the viewport's. At 390px a cell is ~45px
+    // wide and the full chip (grip, name, amount, menu) spilled into the
+    // neighbouring days.
+    <Card className="@container/cal">
       <CardHeader className="gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -986,13 +997,17 @@ export function PlanCalendar({
             <span aria-hidden="true" className="inline-block size-2 rounded-full bg-destructive" />
             Debt
           </span>
-          <span className="ml-auto text-2xs italic text-muted-foreground/70">
+          <span className="ml-auto text-2xs italic text-muted-foreground/70 @2xl/cal:hidden">
+            Tap an entry for its options · tap a date to add one
+          </span>
+          <span className="ml-auto hidden text-2xs italic text-muted-foreground/70 @2xl/cal:inline">
             Click an entry to edit · drag the ⋮ handle to move · “+N more” expands a day
           </span>
         </div>
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-3">
+      {/* Narrow: the card's 24px gutters cost a seventh of a cell each. */}
+      <CardContent className="flex flex-col gap-3 px-3 @2xl/cal:px-6">
         <div
           aria-hidden="true"
           className="grid grid-cols-7 gap-1 text-center text-2xs font-semibold uppercase tracking-wide text-muted-foreground"
@@ -1344,7 +1359,7 @@ function SummaryTile({
     direction === "up" ? "up" : direction === "down" ? "down" : "";
 
   const displayValue = signedValue
-    ? `${value >= 0 ? "+" : "−"}${formatCurrency(Math.abs(value))}`
+    ? formatSignedCurrency(value)
     : formatCurrency(value);
   const valueColor = signedValue
     ? value >= 0
@@ -1455,12 +1470,12 @@ const CalendarCell = memo(function CalendarCell({
       }}
       onDrop={handleDrop}
       className={cn(
-        "group relative flex flex-col rounded-md border p-1.5 text-xs transition-[min-height,box-shadow,border-color,background-color] duration-200 ease-out",
+        "group relative flex min-w-0 flex-col rounded-md border p-0.5 text-xs transition-[min-height,box-shadow,border-color,background-color] duration-200 ease-out @2xl/cal:p-1.5",
         muted ? "bg-muted/30 text-muted-foreground/60" : "bg-card",
         isAnchor && !muted && "border-warning/60 bg-warning/10",
         // Ring only: the cell's own border already draws the edge.
         isDragOver && "bg-primary/5 ring-1 ring-primary/50",
-        isExpanded ? "min-h-80" : "min-h-35"
+        isExpanded ? "min-h-80" : "min-h-16 @2xl/cal:min-h-35"
       )}
       data-date={isoKey}
     >
@@ -1468,14 +1483,30 @@ const CalendarCell = memo(function CalendarCell({
         {/* Today's date number lives inside a filled pill (Google / Apple
             calendar pattern) so it pops out from a quick scan. Other days
             stay as flat numerals. Colour is not the only signal: the markers
-            are spelled out for screen readers. */}
+            are spelled out for screen readers.
+            Narrow calendar: there is no room for a separate "+" beside the
+            number, so the number itself opens the add menu. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={`Add entry on ${dayLabel}${isCurrent ? " (today)" : ""}`}
+              aria-current={isCurrent ? "date" : undefined}
+              className={cn(
+                "cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring @2xl/cal:hidden",
+                dayNumberClass(isCurrent)
+              )}
+            >
+              {day.getDate()}
+            </button>
+          </DropdownMenuTrigger>
+          <AddEntryMenuContent isoKey={isoKey} onAdd={onAdd} />
+        </DropdownMenu>
         <span
           aria-current={isCurrent ? "date" : undefined}
-          className={
-            isCurrent
-              ? "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 font-mono text-2xs font-semibold text-primary-foreground"
-              : "px-1 py-0.5 font-mono text-2xs"
-          }
+          // Visibility last: tailwind-merge keeps the later display class, and
+          // today's pill carries its own inline-flex.
+          className={cn(dayNumberClass(isCurrent), "hidden @2xl/cal:inline-flex")}
         >
           {day.getDate()}
           {isCurrent && <span className="sr-only"> (today)</span>}
@@ -1487,21 +1518,12 @@ const CalendarCell = memo(function CalendarCell({
               variant="ghost"
               size="icon-xs"
               aria-label={`Add entry on ${dayLabel}`}
-              className="opacity-60 focus-visible:opacity-100 data-[state=open]:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+              className="hidden opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 @2xl/cal:inline-flex"
             >
               <Plus />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem onSelect={() => onAdd("income", isoKey)}>
-              <span aria-hidden="true" className="inline-block size-2 rounded-full bg-success" />
-              Add income
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onAdd("expense", isoKey)}>
-              <span aria-hidden="true" className="inline-block size-2 rounded-full bg-warning" />
-              Add expense
-            </DropdownMenuItem>
-          </DropdownMenuContent>
+          <AddEntryMenuContent isoKey={isoKey} onAdd={onAdd} />
         </DropdownMenu>
       </div>
 
@@ -1532,7 +1554,8 @@ const CalendarCell = memo(function CalendarCell({
                   onClick={() => onToggleExpand(isoKey)}
                   className="w-full cursor-pointer rounded px-1 text-left text-2xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=delayed-open]:bg-muted data-[state=instant-open]:bg-muted data-[state=delayed-open]:text-foreground data-[state=instant-open]:text-foreground"
                 >
-                  +{extra} more
+                  +{extra}
+                  <span className="hidden @lg/cal:inline"> more</span>
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={10} className="max-w-xs">
@@ -1558,6 +1581,33 @@ const CalendarCell = memo(function CalendarCell({
     </div>
   );
 });
+
+function dayNumberClass(isCurrent: boolean): string {
+  return isCurrent
+    ? "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 font-mono text-2xs font-semibold text-primary-foreground"
+    : "px-1 py-0.5 font-mono text-2xs";
+}
+
+function AddEntryMenuContent({
+  isoKey,
+  onAdd,
+}: {
+  isoKey: string;
+  onAdd: (side: "income" | "expense", key: string) => void;
+}) {
+  return (
+    <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuItem onSelect={() => onAdd("income", isoKey)}>
+        <span aria-hidden="true" className="inline-block size-2 rounded-full bg-success" />
+        Add income
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => onAdd("expense", isoKey)}>
+        <span aria-hidden="true" className="inline-block size-2 rounded-full bg-warning" />
+        Add expense
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  );
+}
 
 function EntryChip({
   entry,
@@ -1585,63 +1635,95 @@ function EntryChip({
     e.dataTransfer.effectAllowed = "move";
   };
 
-  return (
-    <li
-      className={cn(
-        "group/entry flex items-stretch gap-1 rounded text-2xs",
-        chipPalette(entry.side)
+  const menuItems = (
+    <>
+      <DropdownMenuItem onSelect={() => onEdit(entry)}>Edit full entry</DropdownMenuItem>
+      {entry.kind === "recurring" && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => onSkipMonth(entry, dayKey)}>
+            Skip this month
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onResetMonth(entry, dayKey)}>
+            Clear this month&apos;s override
+          </DropdownMenuItem>
+        </>
       )}
-    >
-      {/* Pointer-only affordance: the keyboard path to moving an entry is
-          "Edit full entry", so the grip stays out of the accessibility tree. */}
-      <span
-        draggable
-        onDragStart={handleDragStart}
-        aria-hidden="true"
-        className="flex shrink-0 cursor-grab items-center pl-1 pr-0.5 opacity-50 transition-opacity hover:opacity-100 active:cursor-grabbing"
-      >
-        <GripVertical className="size-3" />
-      </span>
-      <button
-        type="button"
-        onClick={() => onEdit(entry)}
-        className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0 rounded py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-current"
-      >
-        <span className="truncate text-2xs font-medium leading-tight">
-          {entry.name}
-        </span>
-        <span className="font-mono text-2xs tabular-nums leading-tight opacity-90">
-          {formatCurrency(entry.amount)}
-        </span>
-      </button>
+    </>
+  );
+
+  return (
+    <li className={cn("group/entry relative min-w-0 rounded text-2xs", chipPalette(entry.side))}>
+      {/* Narrow calendar: a pill with the compact amount (and the name when
+          it fits) that opens the entry's menu — editing, skipping and
+          clearing all stay one tap away. No grip: there is no room for it,
+          and touch screens don't drag with HTML5 drag-and-drop anyway. */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`More actions for ${entry.name}`}
-            className="self-center text-current opacity-60 hover:bg-transparent hover:text-current hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 sm:opacity-0 sm:group-hover/entry:opacity-60"
+          <button
+            type="button"
+            aria-label={`${entry.name}, ${formatCurrency(entry.amount)}`}
+            className="flex w-full min-w-0 cursor-pointer flex-col rounded px-0.5 py-0.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-current @lg/cal:px-1 @2xl/cal:hidden"
           >
-            <MoreHorizontal />
-          </Button>
+            <span className="hidden truncate font-medium leading-tight @lg/cal:block">
+              {entry.name}
+            </span>
+            <span className="truncate font-mono tabular-nums leading-tight">
+              {formatCurrencyCompact(entry.amount)}
+            </span>
+          </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => onEdit(entry)}>
-            Edit full entry
-          </DropdownMenuItem>
-          {entry.kind === "recurring" && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => onSkipMonth(entry, dayKey)}>
-                Skip this month
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onResetMonth(entry, dayKey)}>
-                Clear this month&apos;s override
-              </DropdownMenuItem>
-            </>
-          )}
+        <DropdownMenuContent align="start" className="max-w-64">
+          <DropdownMenuLabel className="flex flex-col">
+            <span className="truncate">{entry.name}</span>
+            <Mono className="text-xs font-normal text-muted-foreground">
+              {formatCurrency(entry.amount)}
+            </Mono>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {menuItems}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <div className="hidden items-stretch gap-1 @2xl/cal:flex">
+        {/* Pointer-only affordance: the keyboard path to moving an entry is
+            "Edit full entry", so the grip stays out of the accessibility tree. */}
+        <span
+          draggable
+          onDragStart={handleDragStart}
+          aria-hidden="true"
+          className="flex shrink-0 cursor-grab items-center pl-1 pr-0.5 opacity-50 transition-opacity hover:opacity-100 active:cursor-grabbing"
+        >
+          <GripVertical className="size-3" />
+        </span>
+        <button
+          type="button"
+          onClick={() => onEdit(entry)}
+          className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0 rounded py-1 pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-current"
+        >
+          <span className="truncate text-2xs font-medium leading-tight">
+            {entry.name}
+          </span>
+          <span className="font-mono text-2xs tabular-nums leading-tight opacity-90">
+            {formatCurrency(entry.amount)}
+          </span>
+        </button>
+        {/* Floats over the chip's right edge instead of reserving a column:
+            the reserved 24px cut every name to a few letters ("Groceri…"). */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`More actions for ${entry.name}`}
+              className="absolute top-1/2 right-0.5 -translate-y-1/2 bg-card text-current opacity-0 shadow-xs hover:bg-card hover:text-current focus-visible:opacity-100 group-hover/entry:opacity-100 data-[state=open]:opacity-100"
+            >
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">{menuItems}</DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </li>
   );
 }
@@ -1702,16 +1784,15 @@ function HiddenEntriesTooltipBody({ allEntries }: { allEntries: DayEntry[] }) {
           <TotalRow label="Income" amount={totals.income} sign="+" color="text-success" />
         )}
         {totals.expense > 0 && (
-          <TotalRow label="Expense" amount={totals.expense} sign="−" color="text-warning" />
+          <TotalRow label="Expense" amount={totals.expense} sign="-" color="text-warning" />
         )}
         {totals.debt > 0 && (
-          <TotalRow label="Debt" amount={totals.debt} sign="−" color="text-destructive" />
+          <TotalRow label="Debt" amount={totals.debt} sign="-" color="text-destructive" />
         )}
         <div className="flex items-baseline justify-between gap-3 border-t border-background/20 pt-1 font-semibold">
           <span>Net</span>
-          <Mono className={net >= 0 ? "text-success" : "text-destructive"}>
-            {net >= 0 ? "+" : "−"}
-            {formatCurrency(Math.abs(net))}
+          <Mono className={moneySign(net) >= 0 ? "text-success" : "text-destructive"}>
+            {formatSignedCurrency(net)}
           </Mono>
         </div>
       </div>
@@ -1729,7 +1810,9 @@ function TotalRow({
 }: {
   label: string;
   amount: number;
-  sign: "+" | "−";
+  // ASCII "-", the sign `formatCurrency` prints, so every figure in the
+  // module carries the same glyph.
+  sign: "+" | "-";
   color: string;
 }) {
   return (

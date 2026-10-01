@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active (page redesigned to mirror plan-editor layout)
-> **Last reviewed:** 2026-09-29
+> **Last reviewed:** 2026-10-01
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -10,7 +10,7 @@ metadata. Interest math is shared with [Finance](./finance.md).
 
 ## Routes
 - `/portal/portfolio` — main portfolio view
-- `/portal/investment-methods` — `permanentRedirect` to `/portal/portfolio` (the catalog lives in its Methods tab)
+- `/portal/investment-methods` — 308 to `/portal/portfolio` via `redirects()` in `next.config.ts` (the catalog lives in its Methods tab; a page-level redirect lost its status to the streaming loading.tsx)
 
 ## Server actions — `/app/actions/`
 - `transactions.ts` — `createTransactionAction` (replaces the legacy `/api/transactions` route)
@@ -31,6 +31,7 @@ Every action returns `ActionResult<X>` (see `app/actions/AGENTS.md`).
 - `margin-service.ts` — margin maths over derived positions (never stored); its shapes live in `types/margin.ts`
 - `investment-method-service.ts` — `listAllInvestmentMethods`, `isMethodOwner`, `ownsAnyMethod`, `isAssetOnlyInOwnMethods`, `updateInvestmentMethod` (owner-scoped WHERE, one transaction returning `{ before, after }`) — the queries `allocations.ts` and the portfolio page used to run against `db` directly
 - `allocation-service.ts` — policy CRUD, `backfillTransactionAllocations`, `backfillAllOwners`, `getDerivedHoldings`
+- `margin-service.ts` also exports the pure builders `buildHistoryInput` and `buildInvestors` (unit-tested without a DB)
 
 ## Schemas — `/schemas/`
 - `transaction.ts` — `CreateTransactionData`; `amount` is `moneySchema`
@@ -48,7 +49,10 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
 ## Components
 - `components/portal/portfolio-client.tsx` — page shell: `PageHeader size="compact"` (Default badge, three actions), 4-card KPI grid (Total value with eye toggle, All-time profit, Cost basis, Active positions), Overview / Transactions / Methods / Managed tabs. Registers `Show charts`, `Hide values`, and admin `Manual snapshot` / `Clear manual snapshots` into the global dev drawer via `useRegisterDevTool` from `components/dev-tools/`.
 - `components/portfolio/investment-methods-view.tsx` — `/portal/investment-methods` view: plan-style header, 4-card KPI grid (Methods, Authors, Avg monthly ROI, Best monthly ROI), inline Risk-profile breakdown bar, grouped-by-author method cards with risk-tinted badges. Registers a `Show disabled methods` toggle in the dev drawer that hot-reveals methods normally filtered out.
-- `components/portfolio/` — supporting pieces: transactions table, performance chart (lazy-loaded), add-transaction dialog, manual-snapshot dialog, asset/allocation views. *Removed in the redesign:* `portfolio-header.tsx`, `stats-cards.tsx` (their concerns moved into `portfolio-client.tsx` and the dev drawer).
+- `components/portfolio/` — supporting pieces: transactions table, performance chart (lazy-loaded), add-transaction dialog, manual-snapshot dialog, asset/allocation views.
+- `components/portfolio/figures.ts` — `formatUnits` (2 decimals from one unit up, 4 significant digits below) and `formatRoi` (2–4 decimals, the stored precision).
+- `components/portfolio/performance-series.ts` — `performanceSeries` (the chart's value series, ending at the live total) and `rangeGain` (a range's gain net of deposits and withdrawals). Pure, no `"use client"`, so the server page can call it.
+- `app/api/portfolio/export/csv.ts` — `cell` / `signed`, the CSV quoting helpers (a route file may only export handlers). *Removed in the redesign:* `portfolio-header.tsx`, `stats-cards.tsx` (their concerns moved into `portfolio-client.tsx` and the dev drawer).
 
 ## DB tables — `db/schema.ts`
 - `portfolios` — user's portfolio account
@@ -254,11 +258,47 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
   `/prev` (which resolves the last *trading* day itself, so weekends aren't a
   hole). Assets are ordered stalest-first, and anything past the per-run budget
   is reported in `skipped` rather than dropped silently.
+- **Verification pass (2026-10-01), against a hand calculation of every figure.**
+  Fixed: *Contributed* was summed from the priced allocations, so a book with
+  nothing priced read "$0.00 100%" — it now comes from the transactions
+  (`cashFlows`, net of withdrawals), and an unpriced book shows "—" for
+  Allocations / Margin plus a "Nothing is priced yet" panel instead of a $0
+  line under the owed one. An owner whose methods hold no money, and an
+  investor with nothing approved, get an empty state instead of zero cards.
+  Withdrawals now feed the margin series (`withdrawnLiability`: the money is
+  owed until the month it left; the chart drew March–August ~$1,000 short) and
+  the per-person breakdown (net contributed; the units a withdrawal sold leave
+  the position). The investor summary's last column is **Margin** (worth −
+  owed, as a share of owed — the Margin card's base), not a second "P/L".
+- **Clients never see positions.** The page attaches allocations only to
+  transactions in methods the viewer runs, `TransactionsTable showPositions`
+  drops Bought / Worth now / P/L otherwise, and the CSV drops those columns for
+  someone who runs no method. Before this a client saw the units and P/L their
+  money bought — the owner's private half of the deal.
+- **The performance chart never fabricates zeros.** `getPortfolioPerformanceData`
+  (shared, in `chart-service.ts`) returns two $0 points without snapshots;
+  `performanceSeries` treats an all-zero series as no history, falls back to
+  the approved transactions, and always ends on today's `totalValue`. The
+  headline change is `rangeGain` — deposits are not performance.
+- **Closed buys count.** A buy drained by withdrawals is `closed`;
+  `getPortfolioStats`, `getPortfolioAssets` and `getMethodInvestors` used to
+  drop it while still counting its withdrawals, which turned the cash taken
+  out into profit.
+- **CSV:** plain numbers are never quote-escaped (`'-500.00` is text a
+  spreadsheet cannot sum); own and investor rows both sign withdrawals in
+  Amount and Total; investor rows carry Amount and Fee; the totals line counts
+  transactions, not split rows; "Owed now" is "Balance now".
+- **Tables become lists in narrow containers.** Transactions, investor
+  summary, per-person positions and the admin queue switch on CSS container
+  queries (`@container` + `@3xl:`/`@2xl:`/`@xl:`), not the viewport — at 768 and
+  1024 the sidebar leaves far less than the viewport suggests. The KPI grids
+  do the same (`@md:grid-cols-2 @4xl:grid-cols-4`); four cards at 1024 clipped
+  every figure.
 - Conventional Commits scope: `portfolio` *(not in commitlint allowlist — add it to [`commitlint.config.mjs`](../../commitlint.config.mjs) if you start committing here often, or use `finance` if the change is on shared math)*
 - Daily cron at `/api/cron/daily` writes snapshots and applies monthly compound interest on the 1st.
 - `createDailySnapshots` must use `inArray(...)` for the "latest snapshot per portfolio" lookup — a raw ``sql`... = ANY(${ids})` `` makes Drizzle emit `ANY(($1, $2))` (a row tuple), which Postgres rejects once there's more than one portfolio. That bug silently broke every daily portfolio snapshot from 2026-05-26 until the `inArray` fix.
 - Transactions are created via `createTransactionAction` (server action). The previous `/api/transactions` route handler is gone; cron and webhook routes are the only remaining API routes.
 - `PerformanceChart` and the projection charts in [Finance](./finance.md) are lazy-loaded with `next/dynamic({ ssr: false })` to keep recharts out of the initial portal bundle.
-- `app/portal/portfolio/loading.tsx`, `app/portal/investment-methods/loading.tsx`, and `app/portal/admin/loading.tsx` stream skeletons for the heavy data fetches; `app/portal/portfolio/error.tsx` is the module error boundary.
+- `app/portal/portfolio/loading.tsx` and `app/portal/admin/loading.tsx` stream skeletons for the heavy data fetches; `app/portal/portfolio/error.tsx` is the module error boundary.
 - The KPI grid renders `StatCard` from `components/ui/stat-card.tsx` (shared house primitive: `Eyebrow` label + `Mono` value + tone-colored sublabel).
 - The **Dev Tools drawer** (`components/dev-tools/`, mounted in `app/portal/layout.tsx`) is a portal-wide foundation: any page can call `useRegisterDevTool({ id, kind: "toggle" | "action" | "custom", ... })` and the helper shows up in the right-side `Sheet`. The floating wrench trigger only renders in `process.env.NODE_ENV === "development"` — registrations made by pages mounted in production are silently ignored. Context is split (`useDevToolsCommands` for stable register/unregister, `useDevToolsState` for the changing helpers/open) so consumer effects don't re-fire on every registration.

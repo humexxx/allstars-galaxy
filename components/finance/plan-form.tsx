@@ -44,6 +44,7 @@ import { Mono, Text } from "@/components/ui/typography";
 
 import { createPlanAction, updatePlanAction } from "@/app/actions/finance-plans";
 import { cn } from "@/lib/utils";
+import { formatDay } from "@/lib/utils/date";
 import {
   createFinancePlanSchema,
   type CreateFinancePlanData,
@@ -57,6 +58,10 @@ import type {
 type PlanFormProps = {
   plan?: FinancePlan;
   investmentMethods: InvestmentMethodOption[];
+  /** The reader's calendar day (UTC midnight), resolved on the server in
+   *  their zone: a new plan starts in THEIR month. `new Date()` read in UTC
+   *  started an evening plan in Costa Rica a month late. */
+  today?: Date;
 };
 
 // The month input holds a "YYYY-MM" string; the schema's z.coerce.date()
@@ -87,7 +92,11 @@ function percentLabel(pct: number): string {
   return "Very aggressive";
 }
 
-export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.ReactElement {
+export function PlanForm({
+  plan,
+  investmentMethods,
+  today,
+}: PlanFormProps): React.ReactElement {
   const router = useRouter();
   const [includePortfolio, setIncludePortfolio] = useState(
     plan?.includePortfolio ?? false
@@ -130,7 +139,7 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
     defaultValues: {
       name: plan?.name ?? "",
       description: plan?.description ?? "",
-      startMonth: toMonthInputValue(plan?.startMonth ?? new Date()),
+      startMonth: toMonthInputValue(plan?.startMonth ?? today ?? new Date()),
       // Default 120 (10 years) for new plans matches the schema default and lets the
       // chart densifier kick in (first 12 months monthly, then year-ends after).
       monthsAhead: plan?.monthsAhead ?? 120,
@@ -171,6 +180,11 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
     }
   };
 
+  // The day the opening balances were stated on. The field shows THAT
+  // figure, not today's balance (which the plan page shows), so its hint
+  // must not call it "your balance today".
+  const statedOn = plan ? formatDay(plan.balancesAsOf ?? plan.createdAt) : null;
+
   /** Wires one registered field to its error the way screen readers expect. */
   const invalid = (message: string | undefined, id: string) =>
     message
@@ -181,10 +195,17 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle as="h2">{plan ? "Plan settings" : "New plan"}</CardTitle>
+          <CardTitle as="h2">{plan ? "Plan settings" : "Basics"}</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} id="plan-form" className="flex flex-col gap-4">
+          {/* noValidate: the browser's own bubbles stopped at the first empty
+              field and hid the schema's messages for every other one. */}
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            id="plan-form"
+            noValidate
+            className="flex flex-col gap-4"
+          >
             <div className="grid gap-4 sm:grid-cols-2">
               <Field className="gap-2 sm:col-span-2" data-invalid={!!errors.name || undefined}>
                 <FieldLabel htmlFor="plan-name">Name</FieldLabel>
@@ -252,7 +273,7 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
                 <FieldError id="plan-savings-error" errors={[errors.initialSavings]} />
                 <FieldDescription>
                   {plan
-                    ? "Your balance today. Changing it restates the plan's opening balances as of today: the others roll forward to where the plan has them now, and nothing already paid in or out is counted again."
+                    ? `As stated on ${statedOn}. Enter what you hold today to restate the plan's opening balances as of today: the others roll forward to where the plan has them now, and nothing already paid in or out is counted again.`
                     : "Your balance on the day you create the plan — anything already paid in or out this period is in it, so it isn't counted again."}
                 </FieldDescription>
               </Field>
@@ -541,7 +562,9 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
                 errors={[errors.initialInvestments]}
               />
               <FieldDescription>
-                Opening balance for the investments bucket at the start month.
+                {plan
+                  ? `The investments bucket as stated on ${statedOn}. Changing it restates the opening balances as of today, like Initial savings.`
+                  : "What the investments bucket holds on the day you create the plan."}
               </FieldDescription>
             </Field>
           </div>

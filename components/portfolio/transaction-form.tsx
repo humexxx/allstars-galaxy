@@ -102,7 +102,7 @@ export function TransactionForm({
   };
 
   return (
-    <form onSubmit={handleSubmit(submit)} className="flex flex-col gap-6">
+    <form onSubmit={handleSubmit(submit)} className="flex min-w-0 flex-col gap-6">
       {/* Withdrawals are requested from a holding, not typed in here; the
           segment stays visible so the form reads as the buy half of a pair. */}
       <ToggleGroup
@@ -124,13 +124,15 @@ export function TransactionForm({
         className="flex w-full cursor-pointer items-center justify-between rounded-lg border p-4 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`Change investment method (current: ${selectedMethod.name})`}
       >
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
+        {/* min-w-0 + truncate: a long method name otherwise widens the
+            dialog (a grid) past a phone's edge. */}
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
             <span className="text-sm font-semibold text-primary">
               {selectedMethod.name.substring(0, 2).toUpperCase()}
             </span>
           </div>
-          <span className="font-medium">{selectedMethod.name}</span>
+          <span className="truncate font-medium">{selectedMethod.name}</span>
         </div>
         <ChevronDown aria-hidden className="size-5 text-muted-foreground" />
       </button>

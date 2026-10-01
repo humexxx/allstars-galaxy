@@ -7,7 +7,8 @@ export default function RoadPathsLoading() {
   return (
     <>
       <PageHeaderSkeleton actions={1} descriptionWidth="w-72" />
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
+      <div className="@container" aria-hidden="true">
+      <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @4xl:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => (
           <Card key={i}>
             <CardHeader>
@@ -20,6 +21,7 @@ export default function RoadPathsLoading() {
             </CardContent>
           </Card>
         ))}
+      </div>
       </div>
     </>
   )

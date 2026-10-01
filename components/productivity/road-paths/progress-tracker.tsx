@@ -16,19 +16,23 @@ import {
   deleteRoadPathProgressAction,
 } from "@/app/actions/road-path";
 import { runAction } from "@/lib/actions/run";
-import { formatDay } from "@/lib/utils/date";
 import { createRoadPathProgressSchema, type CreateRoadPathProgressInput } from "@/schemas/road-path";
 import type { RoadPathProgress } from "@/types";
+
+import { formatZonedDay } from "../zoned-date";
+import { formatAmount } from "./format";
 
 type ProgressTrackerProps = {
   roadPathId: string;
   progress: RoadPathProgress[];
   unit: string;
+  /** The reader's IANA zone: an entry's date is a day in it. */
+  timeZone?: string;
 };
 
 // The actions revalidate the page, so the log below re-renders from the
 // server on its own — there is nothing to refresh by hand.
-export function ProgressTracker({ roadPathId, progress, unit }: ProgressTrackerProps) {
+export function ProgressTracker({ roadPathId, progress, unit, timeZone }: ProgressTrackerProps) {
   const [showForm, setShowForm] = useState(false);
   const recordButtonRef = useRef<HTMLButtonElement>(null);
   // No `value`: an empty number field, not a pre-filled zero.
@@ -74,35 +78,37 @@ export function ProgressTracker({ roadPathId, progress, unit }: ProgressTrackerP
         <ul className="flex max-h-75 flex-col gap-2 overflow-y-auto">
           {sortedProgress.map((entry) => {
             const value = parseFloat(entry.value);
-            const day = entry.date ? formatDay(entry.date) : null;
+            const day = entry.date ? formatZonedDay(entry.date, timeZone) : null;
             return (
-              <li key={entry.id} className="flex items-center justify-between gap-2 rounded-lg border p-2">
-                <div>
-                  <Text weight="medium">
-                    <Mono>{value}</Mono> {unit}
+              // Figure and day in a column that never shrinks, the note
+              // beside it taking whatever is left. With the note allowed to
+              // win, a long one squeezed "10 km / Aug 20, 2026" into a
+              // four-line stack.
+              <li key={entry.id} className="flex items-start gap-3 rounded-lg border p-2 pl-3">
+                <div className="flex shrink-0 flex-col">
+                  <Text weight="medium" className="whitespace-nowrap">
+                    <Mono>{formatAmount(value)}</Mono> {unit}
                   </Text>
                   {day && (
-                    <Text variant="small">
-                      {/* A timestamp: server (UTC) and browser can land on
-                          different days near midnight. */}
-                      <Mono suppressHydrationWarning>{day}</Mono>
+                    <Text variant="small" className="whitespace-nowrap">
+                      <Mono>{day}</Mono>
                     </Text>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  {entry.notes && <Text variant="muted">{entry.notes}</Text>}
-                  {/* A mistyped figure moves the whole percentage, so it has to be
-                      removable — the action existed, the button did not. */}
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-destructive"
-                    onClick={() => handleDelete(entry.id)}
-                    aria-label={`Remove the ${value} ${unit} entry`.replace(/\s+/g, " ")}
-                  >
-                    <Trash2 />
-                  </Button>
-                </div>
+                <Text variant="muted" className="min-w-0 flex-1 self-center break-words">
+                  {entry.notes}
+                </Text>
+                {/* A mistyped figure moves the whole percentage, so it has to be
+                    removable — the action existed, the button did not. */}
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0 self-center text-destructive"
+                  onClick={() => handleDelete(entry.id)}
+                  aria-label={`Remove the ${value} ${unit} entry`.replace(/\s+/g, " ")}
+                >
+                  <Trash2 />
+                </Button>
               </li>
             );
           })}
@@ -118,6 +124,7 @@ export function ProgressTracker({ roadPathId, progress, unit }: ProgressTrackerP
             <Input
               id="progress-value"
               type="number"
+              inputMode="decimal"
               step="0.01"
               placeholder={`Current ${unit}`}
               aria-invalid={!!errors.value}

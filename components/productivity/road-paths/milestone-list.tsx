@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Field, FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { Mono } from "@/components/ui/typography";
 import {
   createRoadPathMilestoneAction,
   updateRoadPathMilestoneAction,
@@ -21,14 +22,18 @@ import { runAction } from "@/lib/actions/run";
 import { cn } from "@/lib/utils";
 import type { RoadPathMilestone } from "@/types";
 
+import { formatAmount, parseAmount } from "./format";
+
 type MilestoneListProps = {
   roadPathId: string;
   milestones: RoadPathMilestone[];
+  /** The path's unit, printed after a milestone's target figure. */
+  unit?: string;
 };
 
 // The actions revalidate the page, so the list below re-renders from the
 // server on its own — there is nothing to refresh by hand.
-export function MilestoneList({ roadPathId, milestones }: MilestoneListProps) {
+export function MilestoneList({ roadPathId, milestones, unit = "" }: MilestoneListProps) {
   const [showForm, setShowForm] = useState(false);
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const {
@@ -76,6 +81,7 @@ export function MilestoneList({ roadPathId, milestones }: MilestoneListProps) {
         <ul className="flex flex-col gap-2">
           {milestones.map((milestone) => {
             const done = milestone.completedAt !== null;
+            const target = parseAmount(milestone.targetValue);
             return (
               <li key={milestone.id} className="flex items-center gap-2 rounded-lg border p-2">
                 <Checkbox
@@ -83,9 +89,20 @@ export function MilestoneList({ roadPathId, milestones }: MilestoneListProps) {
                   onCheckedChange={() => handleToggle(milestone)}
                   aria-label={`Mark ${milestone.title} ${done ? "incomplete" : "complete"}`}
                 />
-                <span className={cn("flex-1 text-sm", done && "text-muted-foreground line-through")}>
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 break-words text-sm",
+                    done && "text-muted-foreground line-through"
+                  )}
+                >
                   {milestone.title}
                 </span>
+                {/* The figure the milestone stands for — stored, never shown. */}
+                {target !== null && (
+                  <Mono className="shrink-0 text-xs text-muted-foreground">
+                    {formatAmount(target)} {unit}
+                  </Mono>
+                )}
                 <Button
                   variant="ghost"
                   size="icon-sm"

@@ -298,6 +298,12 @@ function ShareRow({
           <Badge variant="outline" className="shrink-0 text-2xs font-normal">
             {memberName ?? "Whole trip"}
           </Badge>
+          {/* The other half of what a link shows. Two "Anyone with the link ·
+              Whole trip" rows looked identical while one published every
+              price and the other none. */}
+          <Badge variant="secondary" className="shrink-0 text-2xs font-normal">
+            {share.showPrices ? "Prices" : "No prices"}
+          </Badge>
         </span>
         <Button
           type="button"
@@ -314,19 +320,25 @@ function ShareRow({
       {/* One control instead of a box that looks like a field sitting next to
           a button that is not part of it. The link stays selectable, and the
           thing you actually want — copy — is inside it. */}
-      <InputGroup className="h-8">
+      {/* 40px on a phone like every other control, so the copy and QR
+          buttons inside it are something a thumb can hit. */}
+      <InputGroup className="h-10 sm:h-8">
         <InputGroupInput
           readOnly
           value={url}
           aria-label="Share link"
-          className="font-mono text-2xs"
+          // Both steps pinned: `Input` sets `md:text-sm`, which outranked a
+          // bare size from `md` up and printed the link larger on a desktop
+          // than on a phone.
+          className="font-mono text-xs md:text-xs"
         />
         <InputGroupAddon align="inline-end">
           {/* A phone cannot be handed a URL. The code is the way this link
               crosses to a device that is not this one. */}
           <InputGroupButton
             type="button"
-            size="icon-xs"
+            size="icon-sm"
+            className="sm:size-6"
             onClick={() => setShowQr((v) => !v)}
             aria-label={showQr ? "Hide QR code" : "Show QR code"}
             aria-expanded={showQr}
@@ -335,7 +347,8 @@ function ShareRow({
           </InputGroupButton>
           <InputGroupButton
             type="button"
-            size="icon-xs"
+            size="icon-sm"
+            className="sm:size-6"
             onClick={onCopy}
             aria-label={copied ? "Copied" : "Copy link"}
           >

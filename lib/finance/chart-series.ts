@@ -183,6 +183,36 @@ export function alignTodayPoint(
   return { points, pastCount: series.pastCount };
 }
 
+/**
+ * The header's Today and Next points (and the compare dialog's "from").
+ * In range: the today point and the close after it. Before the plan starts
+ * there is no today point on the chart — its first point is the first
+ * period's CLOSE — so Today is the opening position and Next is that first
+ * close (it used to skip to the second close, and the opening KPI sat beside
+ * a chart whose first point showed a different figure under the same month).
+ */
+export function forecastKpiPoints(
+  series: { points: ChartPoint[]; pastCount: number },
+  today: TodayState | null
+): { todayPoint: ChartPoint | undefined; nextPoint: ChartPoint | undefined } {
+  if (today?.status === "before-start") {
+    return {
+      todayPoint: {
+        date: today.periodStart,
+        netWorth: today.netWorth,
+        savings: today.savings,
+        totalDebt: today.totalDebt,
+        investments: today.investments,
+      },
+      nextPoint: series.points[0],
+    };
+  }
+  return {
+    todayPoint: series.points[series.pastCount],
+    nextPoint: series.points[series.pastCount + 1],
+  };
+}
+
 /** `alignTodayPoint` for a whole timeline. */
 export function alignTimelineToday(
   timeline: PlanTimeline,
@@ -411,6 +441,33 @@ export function buildCompareRows(
   }
   const boundary = todayKey >= startKey && todayKey <= endKey ? todayKey - startKey : -1;
   return { rows, boundary };
+}
+
+const TICK_STEPS = [1, 2, 3, 6, 12, 24, 60] as const;
+
+/**
+ * X-axis ticks for month rows, on calendar boundaries: every `step` months
+ * counted from January (so a 6-month step reads Jan / Jul every year), with
+ * the smallest step that keeps the count within `maxTicks`. Recharts' own
+ * thinning forced the last month in, so the final gap was uneven ("Aug 28,
+ * Dec 28" after a run of 3-month steps). Exported for tests.
+ */
+export function calendarTicks(months: readonly Date[], maxTicks: number): number[] {
+  if (months.length === 0) return [];
+  const limit = Math.max(2, Math.floor(maxTicks));
+  for (const step of TICK_STEPS) {
+    const picked: number[] = [];
+    months.forEach((m, i) => {
+      if (m.getUTCMonth() % step === 0 && (step < 12 || m.getUTCMonth() === 0)) picked.push(i);
+    });
+    // A step longer than a year counts whole years from the first January.
+    const ticks =
+      step > 12
+        ? picked.filter((_, k) => k % (step / 12) === 0)
+        : picked;
+    if (ticks.length <= limit && ticks.length > 0) return ticks;
+  }
+  return [0];
 }
 
 // ---------- milestones ----------

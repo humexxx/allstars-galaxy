@@ -124,6 +124,16 @@ Never introduce another font family. The smallest sanctioned size is `text-2xs`
 (10px); never use arbitrary `text-[Npx]`. For spacing, reuse the Tailwind scale —
 never arbitrary `[...]` padding/margin/gap (see SPACING.md).
 
+### Dates
+Format through [`lib/utils/date.ts`](lib/utils/date.ts) (always `en-US`). A
+`YYYY-MM-DD` value is a calendar day and formats the same everywhere. An
+**instant** (a timestamp) formatted in a client component must pass the
+reader's zone — `formatDay(value, useReaderTimeZone())` — or the server (UTC)
+and the browser render different days every evening west of Greenwich and
+hydration fails. Server code gets "today" from `getRequestToday()` /
+`getRequestTodayIso()` (`lib/utils/request-today.ts`, the `tz` cookie), never
+from `new Date()` passed down to a client.
+
 ### Chart colours
 `--chart-1..5` in [`app/globals.css`](app/globals.css) are a **categorical**
 series palette — five distinct hues in a fixed order, encoding *identity* (which

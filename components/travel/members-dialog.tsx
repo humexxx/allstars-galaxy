@@ -14,6 +14,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
@@ -90,6 +96,19 @@ export function MembersDialog({
     0
   );
 
+  /**
+   * What a blank share works out to, shown as its placeholder.
+   *
+   * "Leave a share blank to split the rest equally" asked the reader to do
+   * the division; a dash in the box gave no hint of the answer. Mirrors
+   * `defaultShares`: whatever the fixed shares leave, divided among the named
+   * travellers without one.
+   */
+  const flexible = rows.filter((r) => r.name.trim() && r.sharePercent.trim() === "").length;
+  const equalCut = flexible > 0 ? Math.max(0, 100 - fixedTotal) / flexible : null;
+  const equalCutLabel =
+    equalCut === null ? "—" : String(Math.round(equalCut * 10) / 10);
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-xl">
@@ -101,43 +120,57 @@ export function MembersDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
-          <div className="hidden gap-2 sm:grid sm:grid-cols-[1fr_1fr_5rem_2rem]">
+          <div className="hidden gap-2 sm:grid sm:grid-cols-[1fr_1fr_6rem_2.5rem]">
             {/* Column headings, not field labels: a Label with no control
                 to point at announces as a label for nothing. */}
             <Text variant="small" weight="medium">Name</Text>
             <Text variant="small" weight="medium">Email (optional)</Text>
-            <Text variant="small" weight="medium">Share %</Text>
+            <Text variant="small" weight="medium">Share</Text>
             <span />
           </div>
 
+          {/* On a phone a traveller is two lines — name and remove, then
+              email and share — instead of three full-width boxes and a bin on
+              a fourth, with the column headings gone and nothing left to say
+              which box was which. The placeholders carry the names there. */}
           {rows.map((row, i) => (
-            <div key={row.key} className="grid gap-2 sm:grid-cols-[1fr_1fr_5rem_2rem]">
+            <div
+              key={row.key}
+              className="grid grid-cols-[minmax(0,1fr)_6rem_2.5rem] gap-2 border-b pb-3 last:border-b-0 last:pb-0 sm:grid-cols-[1fr_1fr_6rem_2.5rem] sm:border-b-0 sm:pb-0"
+            >
               <Input
                 aria-label={`Name of traveller ${i + 1}`}
                 value={row.name}
                 onChange={(e) => update(i, { name: e.target.value })}
-                placeholder="Yalena"
+                placeholder="Name"
+                className="col-span-2 sm:col-span-1"
               />
               <Input
                 aria-label={`Email of traveller ${i + 1}`}
                 type="email"
                 value={row.email}
                 onChange={(e) => update(i, { email: e.target.value })}
-                placeholder="optional"
+                placeholder="Email (optional)"
+                className="col-start-1 row-start-2 sm:col-start-2 sm:row-start-1"
               />
-              <Input
-                aria-label={`Share for traveller ${i + 1}`}
-                inputMode="decimal"
-                value={row.sharePercent}
-                onChange={(e) => update(i, { sharePercent: e.target.value })}
-                placeholder="—"
-                className="text-right tabular-nums"
-              />
+              <InputGroup className="col-start-2 row-start-2 sm:col-start-3 sm:row-start-1">
+                <InputGroupInput
+                  aria-label={`Share for traveller ${i + 1}, in percent`}
+                  inputMode="decimal"
+                  value={row.sharePercent}
+                  onChange={(e) => update(i, { sharePercent: e.target.value })}
+                  placeholder={row.name.trim() ? equalCutLabel : "—"}
+                  className="text-right tabular-nums"
+                />
+                <InputGroupAddon align="inline-end">
+                  <InputGroupText>%</InputGroupText>
+                </InputGroupAddon>
+              </InputGroup>
               <Button
                 type="button"
-                size="icon-sm"
+                size="icon"
                 variant="ghost"
-                className="self-center text-destructive"
+                className="col-start-3 row-start-1 self-center text-destructive sm:col-start-4"
                 aria-label={`Remove ${row.name.trim() || `traveller ${i + 1}`}`}
                 disabled={rows.length === 1}
                 onClick={() => setRows((prev) => prev.filter((r) => r.key !== row.key))}

@@ -1,7 +1,7 @@
 # Entertainment
 
 > **Status:** In progress (travel shipped + dashboard card; sports UI shipped, favourites end-to-end on DB; LoL, F1, football, World Cup, padel and tennis wired to free live providers)
-> **Last reviewed:** 2026-09-29
+> **Last reviewed:** 2026-10-01
 
 ## Overview
 Two sub-modules: Travel Planner (trips, items, photos, public sharing) and
@@ -16,7 +16,7 @@ NBA and NFL still use mocks.
 - `/portal/entertainment/travel-planner/new` — create trip
 - `/portal/entertainment/travel-planner/[id]` — trip detail + editor
 - `/trips/[token]` — **public** shared trip view (top-level, no auth); `loading.tsx` paints the shell before the trip resolves
-- `/portal/entertainment/sports` — sports hub with tabs per sport + manage-favourites sheet
+- `/portal/entertainment/sports` — sports hub with tabs per sport + manage-favourites sheet; `?sport=` picks the sport, `?tab=news` opens F1 on its news (the article page's "All news")
 
 ## Server actions — `/app/actions/`
 - `travel.ts` — trip / item / photo / member / share CRUD, plus
@@ -34,11 +34,15 @@ NBA and NFL still use mocks.
 - `travel-service.ts` — trip / item / photo / member / share CRUD,
   `addTripContribution` / `updateTripContribution` / `deleteTripContribution`,
   `buildScope` (one traveller's own view of a shared link) and
-  `getDashboardTravelSummary` (featured trip with state badge + counts for the
-  dashboard card). `ensureMemberBelongsToTrip` guards anything that names a
+  `getDashboardTravelSummary(userId, readerToday)` (featured trip with state
+  badge + counts for the dashboard card; costs per-person items by their
+  attendees, not the whole party). `ensureMemberBelongsToTrip` guards anything that names a
   member: the foreign key proves the row exists, not which trip it is on.
   `updateTrip` / `deleteTrip` scope the WHERE by owner and `updateTrip` throws
-  when no row matched
+  when no row matched. Public share payloads cost every item on the server with
+  the real party size and attendee lists (`PublicTripItem.cost`), so an
+  unscoped link shows the same totals as the planner and a stay reads
+  "$180 / night × 5"
 - `sports-service.ts` — favourites CRUD + `getDashboardSportsSummary` that materialises one highlight per favourited sport (LoL via `getLolData()`, F1 via `getF1Data()`, football via `getFootballData()`, World Cup via `getWorldCupData()` — featured knockout match + latest result, padel via `getPadelData()`, rest from mock fixtures)
 - `lolesports-service.ts` — `getLolData()` fetches LEC/LCS/LCK/LPL from Lolesports' unofficial API (`esports-api.lolesports.com`), maps to `LolData` including playoff `BracketRound[]` (**one round per standings SECTION**, labelled with the section's own name — `buildLolBracket`; the old TBD-count heuristic remains only as fallback for unnamed sections, because TBD counting collapsed rounds into one column as ties resolved), picks the currently-active tournament (never the future split), maps regular-season stages (`regular_season`, `groups`, `group_stage`) into standings. A completed event missing `result` renders "—", never a fake 0–0. Cached 30 min via `unstable_cache`, falls back to `LOL_DATA` mock on any error
 - `jolpica-f1-service.ts` — `getF1Data()` fetches current-season races, driver + constructor standings and results from Jolpica-F1 (`api.jolpi.ca/ergast/f1`, Ergast-compatible drop-in), maps to `F1Data` with derived race status and podium tallies, cached 30 min, falls back to `F1_DATA` mock on any error
@@ -73,6 +77,13 @@ NBA and NFL still use mocks.
   List/Calendar switches are `ToggleGroup` (they own no tab panels); dates are
   picked with `DateField`; the airport picker is `Popover` + `Command`; the
   trip form takes `onCancel` / `onSaved` so the edit dialog closes on both
+- `components/travel/trip-photo.tsx` — every trip/item photo and cover; a
+  dead link shows a muted tile (covers fall back to the trip colour) instead of
+  the browser's broken-image glyph
+- The overview's first tab is **List** (Upcoming and Past as headed sections);
+  in the calendar the whole day cell is the "plan a trip here" link.
+  `relativeDays` counts to the END of a trip under way and from the last day of
+  a past one ("Ends in 3 days", "6 mo ago")
 - `app/portal/entertainment/travel-planner/{,new/,[id]/}loading.tsx` — one
   skeleton per page shape; a non-uuid `[id]` is a `notFound()`
 - `components/travel/trip-calendar.tsx` — the month view behind the List /
@@ -90,6 +101,7 @@ NBA and NFL still use mocks.
 - `components/entertainment/sports/f1-standings-tabs.tsx` — client island inside that card, Drivers ⇄ Constructors over the same three rows. Drivers carry an ESPN headshot + country flag, constructors their team logo in the same circle, filled with `muted` rather than white so it reads as part of the card instead of a lit disc. A team with no logo published falls back to a livery-coloured disc with a 3-letter code, where `readableInk` picks black or white text off the disc's relative luminance so a yellow livery is not white-on-yellow
 - `components/entertainment/sports/sports/world-cup-view.tsx` — 🏆 World Cup tab: Knockout (default) / Matches / per-group standings grid
 - `components/entertainment/sports/shared/knockout-bracket.tsx` — responsive: below `sm` it renders a Google-style mobile bracket (scrollable round tab strip + each pair of ties connected to the next-round tie they feed; `orderPairs` matches feeders to next-round slots by team membership, falling back to positional order for TBD slots; third-place is skipped as a "next" round so SF winners connect to the final); `sm`+ keeps the 3-column sliding window
+- `components/entertainment/sports/shared/match-time.ts` + `time-zone-context.tsx` — kickoff / dateline formatters pinned to the reader's zone (`tz` cookie, passed by the page through `SportsTimeZoneProvider`; `useMatchTime()` in client cards, `matchTimeFormat(tz)` in server ones)
 - `components/entertainment/sports/shared/` — score cards, standings table, knockout bracket, team badge, last-5 form chips, `sport-shell.tsx` (header + body wrapper; every sport view mounts its `Tabs` around the shell and renders the `TabsList` inside the shell's `tabs` slot so the chip strip sits in the header row next to the title, à la Google's sports panels). `leg-score-card.tsx` renders BOTH two-legged ties (UCL: per-leg L1/L2 columns + aggregate) AND single best-of series (LoL/NFL playoffs: one score column from `homeScore`/`awayScore`) — it falls back to the single column when `match.legs` is empty, so bracket scores never disappear
 - `components/entertainment/sports/sports/` — one view per sport (football, f1, nba, tennis, padel, nfl, lol). Each view smart-defaults to its knockout tab when bracket data exists (LoL/NFL playoffs, UCL knockout). `score-card.tsx` shows the match date next to the status for finished games (not just upcoming), à la Google's sports panels
 
@@ -105,6 +117,11 @@ NBA and NFL still use mocks.
 - `trip_item_attendees` — who an item is FOR, when it is not the whole party
 - `trip_item_payers` — who covers one item, when it is not the whole party
 - `user_sports_preferences` — favourited sports per user; UNIQUE(user_id, sport_id) backs the toggle semantics
+
+**"Today" comes from the reader, not the server.** Pages pass
+`getRequestTodayIso()` (`lib/utils/request-today.ts`, from the `tz` cookie) to
+the client components that need it — the new-trip form seeded its start date
+from `new Date()` and hydration-failed every evening west of UTC.
 
 ## Tests
 - `lib/travel/*.test.ts` — Vitest, pure: `calendar` (week packing, lane caps,
@@ -627,3 +644,27 @@ NBA and NFL still use mocks.
 - **Sports table/style primitives**: [`shared/table-primitives.tsx`](../../components/entertainment/sports/shared/table-primitives.tsx) (`SportsTh` standard uppercase header cell + `TableCellNum` numeric cell — replaces ~50 copy-pasted `text-xs uppercase tracking-wide text-muted-foreground` chains and 3 duplicate `TableCellNum`s) and [`shared/status-pill.tsx`](../../components/entertainment/sports/shared/status-pill.tsx) (`StatusPill` completed/upcoming/live — was duplicated in f1-view + racquet-view). New sport views should use these instead of hand-rolling.
 - **Sport views key their `<Tabs>` by the active league/region** (football, lol): an uncontrolled Tabs keeps its old value when the active trigger unmounts, so switching to a league without that tab stranded the view on a blank body. `KnockoutBracket` opens focused on the current round (first with an undecided tie; fully decided → final) and re-focuses when `rounds` changes.
 - `manage-favorites-sheet` tracks in-flight toggles as a `Set<SportId>` (a single pending slot let one toggle's completion clear another's spinner).
+- **Kickoffs print in the reader's zone on the server too.** Score, bracket,
+  LoL and news cards formatted with the runtime's zone and suppressed the
+  hydration warning, so a server-rendered tab kept UTC ("Sun, Jul 5, 8:00 PM")
+  while the same fixture on a tab mounted later read 2:00 PM. The page passes
+  the `tz` cookie's zone down (`SportsTimeZoneProvider`); date-only strings stay
+  calendar days.
+- **Tables sit flush in `TableCard`** (`shared/table-primitives.tsx`): the old
+  `Card` + `CardContent px-0` kept the card's vertical padding as an empty band
+  above the header row. `StandingsTable` drops GF/GA below `sm` and the form
+  below `lg` so **Pts stays on a 390px screen**, and has a `compact` variant
+  (#, club, MP, GD, Pts) for the football overview's side column and World Cup
+  groups, where the full table was clipped before the points.
+- **Sport views lay out by container, not viewport** — `SportShell` is the
+  `@container`; its header, the match grids, the overview split and
+  `KnockoutBracket`'s mobile/desktop switch use `@xl` / `@2xl` / `@4xl`. With the
+  sidebar open, `sm:` put a 224px league picker beside the title (three-line
+  "UEFA Champions League") and a three-column bracket in 456px.
+- A match list grouped under a stage label passes `hideStage` to `ScoreCard`
+  (the label printed twice). The status column is a fixed `min-w-16` with the
+  code over the day for a result and the day over the time for a fixture, the
+  same shape in LoL's card. `TeamBadge` discs grew to 24px (`sm`) — a 3-letter
+  code ran edge to edge in 20px and the curve clipped it.
+- The favourites sheet says what each sport covers instead of repeating its
+  short label ("Football / Football").

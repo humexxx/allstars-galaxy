@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useRef, useTransition } from "react";
 import { Images, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -16,6 +15,7 @@ import {
 import type { TripWithRelations } from "@/types/travel";
 
 import { PhotoPicker } from "./photo-picker";
+import { TripPhoto } from "./trip-photo";
 
 type TripGalleryProps = {
   trip: TripWithRelations;
@@ -84,16 +84,10 @@ export function TripGallery({ trip }: TripGalleryProps) {
                 key={photo.id}
                 className="group relative aspect-square w-28 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
               >
-                <Image
+                <TripPhoto
                   src={photo.url}
                   alt={photo.caption ?? `${trip.title} photo ${i + 1}`}
-                  fill
                   sizes="112px"
-                  className="object-cover"
-                  // Gallery photos may be external URLs (see schema:
-                  // `tripPhotoSourceEnum`). `unoptimized` sidesteps
-                  // `images.remotePatterns` so legacy external URLs render.
-                  unoptimized
                 />
                 <Button
                   type="button"

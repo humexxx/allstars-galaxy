@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { getRoadPathDetail, getUserRoadPaths } from "@/lib/services/road-path-service";
 import { idSchema } from "@/schemas/common";
+import { getRequestTimeZone } from "@/lib/utils/request-today";
+import { dayKey } from "@/components/productivity/zoned-date";
 
 export const metadata: Metadata = {
   title: "Road Paths",
@@ -45,7 +47,10 @@ export default async function RoadPathsPage({
   }
 
   const ctx = await requireEffectiveContext();
-  const roadPaths = await getUserRoadPaths(ctx.effectiveUserId);
+  const [roadPaths, timeZone] = await Promise.all([
+    getUserRoadPaths(ctx.effectiveUserId),
+    getRequestTimeZone(),
+  ]);
 
   return (
     <>
@@ -63,7 +68,7 @@ export default async function RoadPathsPage({
           action={<CreateRoadPathDialog />}
         />
       ) : (
-        <RoadPathsView roadPaths={roadPaths} />
+        <RoadPathsView roadPaths={roadPaths} today={dayKey(new Date(), timeZone)} />
       )}
     </>
   );
@@ -71,9 +76,10 @@ export default async function RoadPathsPage({
 
 async function RoadPathDetailScreen({ id }: { id: string }) {
   const ctx = await requireEffectiveContext();
-  const detail = idSchema.safeParse(id).success
-    ? await getRoadPathDetail(id, ctx.effectiveUserId)
-    : null;
+  const [detail, timeZone] = await Promise.all([
+    idSchema.safeParse(id).success ? getRoadPathDetail(id, ctx.effectiveUserId) : null,
+    getRequestTimeZone(),
+  ]);
 
   // Deleted, or somebody else's link.
   if (!detail) {
@@ -99,7 +105,7 @@ async function RoadPathDetailScreen({ id }: { id: string }) {
         title={detail.roadPath.title}
         description={detail.roadPath.description ?? undefined}
       />
-      <RoadPathDetail detail={detail} />
+      <RoadPathDetail detail={detail} timeZone={timeZone} />
     </>
   );
 }

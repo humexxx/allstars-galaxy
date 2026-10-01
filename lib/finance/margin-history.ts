@@ -27,6 +27,18 @@ export type LiabilityEntry = {
   monthlyRoi: number;
   /** The owner's own money is capital, not debt. */
   isOwn: boolean;
+  /**
+   * Exclusive: the entry stops counting from this month on. Set on the entry
+   * that stands for money later WITHDRAWN — it was owed until the month it
+   * left (see `withdrawnLiability`).
+   */
+  endMonth?: string;
+};
+
+/** Cash in (positive) or out (negative) in the month it moved. */
+export type CashFlow = {
+  month: string;
+  amount: number;
 };
 
 export type MarginPoint = {
@@ -39,7 +51,7 @@ export type MarginPoint = {
   ownPosition: number;
   /** deployed - liability. */
   margin: number;
-  /** Cash contributed to date, the owner's included. */
+  /** Cash contributed to date net of withdrawals, the owner's included. */
   invested: number;
 };
 
@@ -84,19 +96,62 @@ export function discountToMonth(
   return currentValue / Math.pow(1 + monthlyRoi, periods);
 }
 
+/**
+ * The liability entry for money withdrawn from a promised balance.
+ *
+ * A withdrawal lowers the stored `currentValue` of the buy it came out of, so
+ * discounting that value backwards understates every month BEFORE the
+ * withdrawal by exactly the money that left — the chart drew the balance as
+ * if it had never been there. This entry puts it back for those months: the
+ * amount is carried forward to today's terms so the same discounting lands it
+ * on the withdrawn figure in the month it left, and it stops counting from
+ * that month on.
+ */
+export function withdrawnLiability(input: {
+  amount: number;
+  monthlyRoi: number;
+  /** YYYY-MM of the buy the money was withdrawn from. */
+  sourceMonth: string;
+  /** YYYY-MM the withdrawal was approved. */
+  withdrawalMonth: string;
+  today: string;
+  isOwn: boolean;
+}): LiabilityEntry {
+  const periods = Math.max(0, monthsBetween(input.withdrawalMonth, input.today));
+  return {
+    month: input.sourceMonth,
+    endMonth: input.withdrawalMonth,
+    currentValue: input.amount * Math.pow(1 + input.monthlyRoi, periods),
+    monthlyRoi: input.monthlyRoi,
+    isOwn: input.isOwn,
+  };
+}
+
 export function buildMarginHistory(input: {
   contributions: ContributionUnits[];
   liabilities: LiabilityEntry[];
+  /**
+   * Cash that moved, from the TRANSACTIONS rather than from what was priced.
+   * `invested` used to be summed from the priced allocations, so a book whose
+   * contributions had not been priced yet read "Contributed $0.00" with tens
+   * of thousands in it. Omitted, the priced amounts stand in (older callers).
+   */
+  cashFlows?: CashFlow[];
   /** Month-end price, keyed `assetId|YYYY-MM`. */
   prices: Map<string, number>;
   today: string;
 }): MarginPoint[] {
   const { contributions, liabilities, prices, today } = input;
-  if (contributions.length === 0 && liabilities.length === 0) return [];
+  const cashFlows =
+    input.cashFlows ?? contributions.map((c) => ({ month: c.month, amount: c.amount }));
+  if (contributions.length === 0 && liabilities.length === 0 && cashFlows.length === 0) {
+    return [];
+  }
 
   const months = [
     ...contributions.map((c) => c.month),
     ...liabilities.map((l) => l.month),
+    ...cashFlows.map((c) => c.month),
   ].sort();
   const series = monthRange(months[0], today);
 
@@ -112,7 +167,9 @@ export function buildMarginHistory(input: {
     for (const c of contributions) {
       if (c.month > month) continue;
       units.set(c.assetId, (units.get(c.assetId) ?? 0) + c.quantity);
-      invested += c.amount;
+    }
+    for (const c of cashFlows) {
+      if (c.month <= month) invested += c.amount;
     }
 
     let deployed = 0;
@@ -127,6 +184,7 @@ export function buildMarginHistory(input: {
     let ownPosition = 0;
     for (const l of liabilities) {
       if (l.month > month) continue;
+      if (l.endMonth !== undefined && month >= l.endMonth) continue;
       const value = discountToMonth(l.currentValue, l.monthlyRoi, month, today);
       if (l.isOwn) ownPosition += value;
       else liability += value;

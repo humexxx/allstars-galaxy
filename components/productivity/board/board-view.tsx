@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSidebar } from "@/components/ui/sidebar";
 import {
+  type Announcements,
   closestCorners,
   DndContext,
   DragEndEvent,
@@ -47,6 +48,10 @@ import { toast } from "sonner";
 type BoardViewProps = {
   initialColumns: BoardColumnType[];
   initialTasks: BoardTask[];
+  /** The reader's IANA zone (`tz` cookie): due dates are days in it. */
+  timeZone?: string;
+  /** Today in that zone, `YYYY-MM-DD` — from the server so both renders agree. */
+  today?: string;
 };
 
 function buildOptimisticTask(data: CreateBoardTaskData, tempId: string, order: number): BoardTask {
@@ -77,7 +82,12 @@ function buildOptimisticColumn(data: CreateBoardColumnData, tempId: string): Boa
   };
 }
 
-export function BoardView({ initialColumns, initialTasks }: BoardViewProps): React.ReactElement {
+export function BoardView({
+  initialColumns,
+  initialTasks,
+  timeZone,
+  today,
+}: BoardViewProps): React.ReactElement {
   const [columns, setColumns] = useState<BoardColumnType[]>(initialColumns);
   const [tasks, setTasks] = useState<BoardTask[]>(initialTasks);
   const [activeTask, setActiveTask] = useState<BoardTask | null>(null);
@@ -410,6 +420,25 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     setPendingMutations((n) => n - 1);
   };
 
+  // What a screen reader hears while a card is moved. dnd-kit's defaults read
+  // the raw ids: "Draggable item b42386db-… was dropped over droppable area
+  // 88888888-…".
+  const nameOf = (id: string | number | undefined): string => {
+    if (id === undefined) return "nowhere";
+    const task = taskIndex.byId.get(String(id));
+    if (task) return `“${task.title}”`;
+    const column = columns.find((c) => c.id === id);
+    return column ? `the ${column.name} column` : "the board";
+  };
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => `Picked up ${nameOf(active.id)}.`,
+    onDragOver: ({ active, over }) =>
+      over ? `${nameOf(active.id)} is over ${nameOf(over.id)}.` : `${nameOf(active.id)} is no longer over a column.`,
+    onDragEnd: ({ active, over }) =>
+      over ? `Dropped ${nameOf(active.id)} on ${nameOf(over.id)}.` : `Dropped ${nameOf(active.id)}.`,
+    onDragCancel: ({ active }) => `Moving ${nameOf(active.id)} was cancelled.`,
+  };
+
   const nextColumnOrder = columns.length > 0 ? Math.max(...columns.map((c) => c.order)) + 1 : 0;
   const isDraggingTask = activeTask !== null;
 
@@ -439,9 +468,12 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
           <>
             <Tooltip>
               <TooltipTrigger asChild>
+                {/* Expanding collapses the sidebar, which only exists from
+                    `md`: on a phone the button did nothing visible. */}
                 <Button
                   variant="ghost"
                   size="icon"
+                  className="hidden md:inline-flex"
                   onClick={toggleExpanded}
                   aria-label={isExpanded ? "Collapse board" : "Expand board"}
                 >
@@ -481,6 +513,13 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
           // drop target at all.
           collisionDetection={closestCorners}
           sensors={sensors}
+          accessibility={{
+            announcements,
+            screenReaderInstructions: {
+              draggable:
+                "To move this task, press Space. Use the arrow keys to move it within or between columns, Space again to drop it, or Escape to cancel.",
+            },
+          }}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
@@ -509,13 +548,17 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
                   onDeleteTask={handleDeleteTask}
                   onUpdateTask={handleUpdateTask}
                   isDimmed={isDraggingTask && activeTask?.columnId !== column.id}
+                  timeZone={timeZone}
+                  today={today}
                 />
               ))}
             </SortableContext>
           </div>
 
           <DragOverlay>
-            {activeTask ? <BoardTaskCard task={activeTask} isOverlay /> : null}
+            {activeTask ? (
+              <BoardTaskCard task={activeTask} isOverlay timeZone={timeZone} today={today} />
+            ) : null}
           </DragOverlay>
         </DndContext>
       )}

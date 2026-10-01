@@ -17,7 +17,8 @@ import {
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { maskValue } from "@/components/ui/stat-card";
-import { formatCurrency, formatPercent } from "@/lib/utils/format";
+import { formatCurrency } from "@/lib/utils/format";
+import { formatRoi } from "./figures";
 import { useRegisterDevTool } from "@/components/dev-tools/dev-tools-context";
 
 import type { MethodAllocationSummary } from "@/types/margin";
@@ -91,15 +92,18 @@ export function InvestmentMethodsView({
   );
   useRegisterDevTool(showDisabledTool);
 
-  const enabledMethods = useMemo(
-    () => methods.filter((m) => m.enabled),
-    [methods]
-  );
-  // Owners see every method they run, disabled included — those are theirs and
+  // Owners see every method THEY run, disabled included — those are theirs and
   // hiding half of them behind a dev toggle makes the tab lie about what
-  // exists. Clients browsing the catalogue still only see what they can pick.
+  // exists. Somebody else's disabled method is still not theirs to see: it
+  // used to appear too, because owning anything revealed every closed method.
   const isOwnerView = ownedMethodIds.length > 0;
-  const visibleMethods = isOwnerView || showDisabled ? methods : enabledMethods;
+  const visibleMethods = useMemo(
+    () =>
+      showDisabled
+        ? methods
+        : methods.filter((m) => m.enabled || owned.has(m.id)),
+    [methods, owned, showDisabled]
+  );
 
   const sortedMethods = useMemo(
     () =>
@@ -123,7 +127,7 @@ export function InvestmentMethodsView({
         </Text>
       </div>
 
-      {methods.length === 0 ? (
+      {sortedMethods.length === 0 ? (
         <EmptyState
           icon={Layers}
           title="No investment methods yet"
@@ -198,15 +202,17 @@ function MethodCard({
             </Button>
           </CardAction>
         )}
-        <CardTitle as="h3" className="line-clamp-1">
+        <CardTitle as="h3" className="line-clamp-2">
           {method.name}
         </CardTitle>
         {method.description && (
           <CardDescription className="line-clamp-2">{method.description}</CardDescription>
         )}
-        {/* Internal, and only ever rendered for the person who runs it. */}
+        {/* Internal, and only ever rendered for the person who runs it. Spans
+            both header columns: left to auto-placement it landed in the edit
+            button's column, which widened to fit it and truncated the title. */}
         {onEdit && (
-          <Text variant="small" className="text-2xs">
+          <Text variant="small" className="col-span-full text-2xs">
             {allocation.length === 0
               ? "No allocation set"
               : `Invests in ${allocation.map((a) => `${a.percent}% ${a.symbol}`).join(" · ")}`}
@@ -223,7 +229,7 @@ function MethodCard({
                 roi >= 0 ? "text-success" : "text-destructive"
               )}
             >
-              {Number.isFinite(roi) ? formatPercent(roi) : "—"}
+              {Number.isFinite(roi) ? formatRoi(roi) : "—"}
             </Mono>
           </div>
 

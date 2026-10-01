@@ -8,6 +8,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
+import { useReaderTimeZone } from "@/components/reader-time-zone";
 import { formatDay, formatShortDay } from "@/lib/utils/date";
 import {
   formatCurrency,
@@ -16,6 +17,7 @@ import {
   formatSignedPercent,
 } from "@/lib/utils/format";
 import type { ChartConfig, ChartDataPoint } from "@/types/chart";
+import { rangeGain, type CashFlowPoint } from "./performance-series";
 
 const chartConfig = {
   value: {
@@ -29,12 +31,17 @@ type Range = (typeof RANGES)[number];
 
 type PerformanceChartProps = {
   data: ChartDataPoint[];
+  /** Approved cash in (+) and out (-). Without them every deposit inside the
+   *  range counted as performance: a $3,000 top-up read as a 40% gain. */
+  cashFlows?: CashFlowPoint[];
 };
 
 export function PerformanceChart({
   data,
+  cashFlows = [],
   hideValues = false,
 }: PerformanceChartProps & { hideValues?: boolean }) {
+  const timeZone = useReaderTimeZone();
   const [timeRange, setTimeRange] = useState<Range>("All");
 
   const filteredData = useMemo(() => {
@@ -51,8 +58,10 @@ export function PerformanceChart({
 
   const first = filteredData[0]?.value ?? 0;
   const last = filteredData[filteredData.length - 1]?.value ?? 0;
-  const delta = last - first;
-  const deltaPct = first === 0 ? 0 : (delta / first) * 100;
+  const { gain: delta, percent: deltaPct } = useMemo(
+    () => rangeGain(filteredData, cashFlows),
+    [filteredData, cashFlows]
+  );
   const positive = delta >= 0;
 
   return (
@@ -72,7 +81,7 @@ export function PerformanceChart({
                 {positive ? "↑" : "↓"}{" "}
                 {hideValues
                   ? "over this range"
-                  : `${formatCurrency(Math.abs(delta))} (${formatPercent(Math.abs(deltaPct), 1)})`}
+                  : `${formatCurrency(Math.abs(delta))} (${formatPercent(Math.abs(deltaPct), 2)})`}
               </Mono>
             )}
           </div>
@@ -111,7 +120,7 @@ export function PerformanceChart({
             axisLine={false}
             tickMargin={8}
             minTickGap={48}
-            tickFormatter={(value: string) => formatShortDay(value)}
+            tickFormatter={(value: string) => formatShortDay(value, timeZone)}
           />
           <YAxis
             orientation="right"
@@ -141,7 +150,7 @@ export function PerformanceChart({
                       : `${formatSignedPercent((((value as number) - first) / first) * 100, 1)} vs start`
                     : formatCurrency(value as number)
                 }
-                labelFormatter={(value: string) => formatDay(value)}
+                labelFormatter={(value: string) => formatDay(value, timeZone)}
               />
             }
           />
@@ -158,7 +167,10 @@ export function PerformanceChart({
       </ChartContainer>
 
       {filteredData[0] && (
-        <Text variant="small">{formatDay(filteredData[0].date)} — today</Text>
+        <Text variant="small">
+          {formatDay(filteredData[0].date, timeZone)} — today · gain excludes money added or
+          withdrawn
+        </Text>
       )}
     </section>
   );

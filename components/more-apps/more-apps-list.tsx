@@ -98,9 +98,12 @@ export function MoreAppsList({ items }: { items: AppWithScreenshot[] }) {
   const hiddenList = items.filter(({ app }) => hidden.has(app.slug));
 
   return (
-    <div className="flex flex-col gap-6">
+    // Columns by the room the list has, not the viewport: with the sidebar
+    // open, `lg:grid-cols-3` made three 213px cards that clipped their own
+    // badges.
+    <div className="@container flex flex-col gap-6">
       {visible.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 @xl:grid-cols-2 @4xl:grid-cols-3">
           {visible.map(({ app, screenshotUrl }) => (
             <AppCard
               key={app.slug}
@@ -126,7 +129,7 @@ export function MoreAppsList({ items }: { items: AppWithScreenshot[] }) {
               <ChevronRight className="size-4 transition-transform group-data-[state=open]/hidden:rotate-90" />
               Hidden apps ({hiddenList.length})
             </CollapsibleTrigger>
-            <CollapsibleContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <CollapsibleContent className="grid gap-4 @xl:grid-cols-2 @4xl:grid-cols-3">
               {hiddenList.map(({ app, screenshotUrl }) => (
                 <AppCard
                   key={app.slug}

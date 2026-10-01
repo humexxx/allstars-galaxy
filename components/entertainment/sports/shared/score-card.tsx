@@ -1,19 +1,27 @@
+"use client";
+
 import { Circle } from "lucide-react";
 
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import { formatShortDay } from "@/lib/utils/date";
 import type { Match, Team } from "@/types/sports";
 
 import { TeamBadge } from "./team-badge";
+import { useMatchTime } from "./time-zone-context";
 
 type ScoreCardProps = {
   match: Match;
   teams: Map<string, Team>;
+  /**
+   * Leave the stage label off — for a list already grouped under that very
+   * label, where printing it again on every card is the same line twice.
+   */
+  hideStage?: boolean;
   className?: string;
 };
 
-function formatStatus(match: Match): string {
+/** The status code, or null for a fixture (which shows its date instead). */
+function formatStatus(match: Match): string | null {
   switch (match.status) {
     case "ft":
       return "FT";
@@ -24,7 +32,7 @@ function formatStatus(match: Match): string {
     case "live":
       return match.minute ? `${match.minute}'` : "Live";
     case "scheduled":
-      return formatKickoffShort(match.kickoff);
+      return null;
     case "postponed":
       return "PPD";
     case "cancelled":
@@ -32,19 +40,8 @@ function formatStatus(match: Match): string {
   }
 }
 
-// Pinned to en-US like `lib/utils/date`, so the day/month order and clock
-// style do not change per visitor.
-const KICKOFF_TIME = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
-
-function formatKickoffShort(iso: string): string {
-  return formatShortDay(iso);
-}
-
-function formatKickoffTime(iso: string): string {
-  return KICKOFF_TIME.format(new Date(iso));
-}
-
-export function ScoreCard({ match, teams, className }: ScoreCardProps) {
+export function ScoreCard({ match, teams, hideStage = false, className }: ScoreCardProps) {
+  const format = useMatchTime();
   const home = teams.get(match.homeTeamId);
   const away = teams.get(match.awayTeamId);
   if (!home || !away) return null;
@@ -59,6 +56,7 @@ export function ScoreCard({ match, teams, className }: ScoreCardProps) {
     match.awayScore > match.homeScore;
   const isLive = match.status === "live";
   const scheduled = match.status === "scheduled";
+  const status = formatStatus(match);
 
   return (
     <div
@@ -68,7 +66,7 @@ export function ScoreCard({ match, teams, className }: ScoreCardProps) {
       )}
     >
       <div className="flex min-w-0 flex-col gap-1">
-        {match.stageLabel && (
+        {match.stageLabel && !hideStage && (
           <Eyebrow size="sm" className="truncate">
             {match.stageLabel}
           </Eyebrow>
@@ -90,29 +88,27 @@ export function ScoreCard({ match, teams, className }: ScoreCardProps) {
           scheduled={scheduled}
         />
       </div>
-      {/* Kickoffs are instants: the server renders them in UTC and the
-          browser in its own zone, so the text may legitimately differ. */}
-      <div className="flex flex-col items-end justify-center gap-0.5 border-l pl-3 text-right">
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground",
-            isLive && "text-success",
-          )}
-          suppressHydrationWarning
-        >
-          {isLive && <Circle className="size-2 fill-current motion-safe:animate-pulse" aria-hidden />}
-          {formatStatus(match)}
-        </span>
-        {scheduled ? (
-          <Mono className="text-2xs text-muted-foreground" suppressHydrationWarning>
-            {formatKickoffTime(match.kickoff)}
-          </Mono>
-        ) : (
-          !isLive && (
-            <Mono className="text-2xs text-muted-foreground" suppressHydrationWarning>
-              {formatKickoffShort(match.kickoff)}
-            </Mono>
-          )
+      {/* Status code over the day for a result, the day over the kickoff
+          time for a fixture — one shape, so a list of cards reads down one
+          column. A fixed width keeps the divider in the same place on every
+          card of a list. */}
+      <div className="flex min-w-16 flex-col items-end justify-center gap-0.5 border-l pl-3 text-right">
+        {status !== null && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground",
+              isLive && "text-success",
+            )}
+          >
+            {isLive && <Circle className="size-2 fill-current motion-safe:animate-pulse" aria-hidden />}
+            {status}
+          </span>
+        )}
+        {!isLive && (
+          <Mono className="text-2xs text-muted-foreground">{format.shortDay(match.kickoff)}</Mono>
+        )}
+        {scheduled && (
+          <Mono className="text-2xs text-muted-foreground">{format.time(match.kickoff)}</Mono>
         )}
       </div>
     </div>

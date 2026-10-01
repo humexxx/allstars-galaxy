@@ -63,10 +63,13 @@ export function KnockoutBracket({ rounds, teams, className, renderMatch }: Knock
     );
   }
 
+  // Which bracket fits is a question about the room the card has, not the
+  // viewport: from `md` the sidebar takes 256px, and the three-column window
+  // in a 456px column left a tie card no room for the team's code at all.
   return (
-    <div className={className}>
-      <MobileBracket rounds={rounds} teams={teams} renderMatch={renderMatch} className="sm:hidden" />
-      <DesktopBracket rounds={rounds} teams={teams} renderMatch={renderMatch} className="hidden sm:block" />
+    <div className={cn("@container", className)}>
+      <MobileBracket rounds={rounds} teams={teams} renderMatch={renderMatch} className="@xl:hidden" />
+      <DesktopBracket rounds={rounds} teams={teams} renderMatch={renderMatch} className="hidden @xl:block" />
     </div>
   );
 }

@@ -42,9 +42,12 @@ export function PageHeader({
   className,
 }: PageHeaderProps) {
   return (
-    <header className={cn("flex flex-col gap-2", className)}>
+    // Sized by its own width, not the screen's: at 768 the sidebar leaves the
+    // header ~500px, and a screen-width `sm:flex-row` squeezed the title into
+    // a one-word column beside three actions.
+    <header className={cn("@container/page-header flex flex-col gap-2", className)}>
       {back && <PageHeaderBackButton back={back} />}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 @2xl/page-header:flex-row @2xl/page-header:items-start @2xl/page-header:justify-between">
         <div className="flex min-w-0 flex-col gap-1">
           {eyebrow && <Eyebrow as="div">{eyebrow}</Eyebrow>}
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">

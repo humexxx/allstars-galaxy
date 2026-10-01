@@ -30,6 +30,10 @@ const INPUT: MarginHistoryInput = {
     { month: "2025-08", currentValue: 900, monthlyRoi: 0, isOwn: false, investorId: "y", methodId: "m1" },
     { month: "2025-09", currentValue: 900, monthlyRoi: 0, isOwn: true, investorId: "j", methodId: "m1" },
   ],
+  cashFlows: [
+    { month: "2025-08", amount: 800, investorId: "y", methodId: "m1" },
+    { month: "2025-09", amount: 800, investorId: "j", methodId: "m1" },
+  ],
   prices: [
     ["ada|2025-08", 0.8], ["ada|2025-09", 0.7], ["ada|2025-10", 0.6],
     ["ada|2025-11", 0.5], ["ada|2025-12", 0.4],
@@ -72,7 +76,7 @@ describe("MarginChart", () => {
   it("says so when a filter leaves nothing to plot", () => {
     render(
       <MarginChart
-        input={{ ...INPUT, contributions: [], liabilities: [] }}
+        input={{ ...INPUT, contributions: [], liabilities: [], cashFlows: [] }}
       />
     );
 

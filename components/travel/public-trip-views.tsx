@@ -11,7 +11,11 @@ import type { ItineraryViewer } from "@/lib/travel/viewer";
 
 /** Light-on-dark segments: the track sits on a photograph, not on the page. */
 const BANNER_SEGMENT =
-  "text-white/70 hover:text-white data-[state=on]:bg-white data-[state=on]:text-black";
+  // `flex-none`: equal halves gave "Calendar" the width of "List".
+  // The `dark:` step too: the segment's own `dark:data-[state=on]:bg-input/30`
+  // outranks a plain on-state, and in the dark theme the chosen view was dark
+  // text on a dark chip — the switcher looked like it had nothing selected.
+  "flex-none text-white/70 hover:text-white data-[state=on]:bg-white data-[state=on]:text-black dark:data-[state=on]:bg-white";
 
 /**
  * The same two readings the planner offers, on a link that grants neither.
@@ -30,6 +34,7 @@ export function PublicTripViews({
   aside,
   trip,
   viewer,
+  costs,
   showPrices,
 }: {
   banner: ReactNode;
@@ -37,6 +42,8 @@ export function PublicTripViews({
   aside: ReactNode;
   trip: CalendarTrip;
   viewer: ItineraryViewer | null;
+  /** Each item's whole-party cost, from the server, on a whole-trip link. */
+  costs?: Map<string, { low: number; high: number }>;
   showPrices: boolean;
 }) {
   const [view, setView] = useState<"list" | "calendar">("list");
@@ -90,6 +97,7 @@ export function PublicTripViews({
               trip={trip}
               partySize={1}
               viewer={viewer}
+              costs={costs}
               readOnly
               showPrices={showPrices}
             />

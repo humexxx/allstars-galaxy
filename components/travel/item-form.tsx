@@ -118,11 +118,15 @@ function TravellerChips({
           onChange(choseEveryone ? [] : next.filter((id) => id !== EVERYONE));
         }}
       >
-        <ToggleGroupItem value={EVERYONE} className="rounded-full px-3">
+        {/* `flex-none`: the group item is `flex-1 min-w-0` for segmented
+            controls, which in a wrapping row of chips never wraps — every
+            chip shrank to a share of one line and the names printed over
+            each other. A chip is as wide as its name. */}
+        <ToggleGroupItem value={EVERYONE} className="flex-none rounded-full px-3">
           {allLabel}
         </ToggleGroupItem>
         {travellers.map((t) => (
-          <ToggleGroupItem key={t.id} value={t.id} className="rounded-full px-3">
+          <ToggleGroupItem key={t.id} value={t.id} className="flex-none rounded-full px-3">
             {t.name}
           </ToggleGroupItem>
         ))}
@@ -241,7 +245,16 @@ export function ItemForm({
       found.endsOn = "Cannot be before the start day";
     }
     setErrors(found);
-    if (Object.keys(found).length > 0) return;
+    if (Object.keys(found).length > 0) {
+      // Take the reader to it. On a phone the form is a scrolled sheet and
+      // the submit button sits a screen below the title: tapping it showed an
+      // error nobody could see, and the button simply seemed to do nothing.
+      const form = e.currentTarget as HTMLFormElement;
+      requestAnimationFrame(() =>
+        form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+      );
+      return;
+    }
 
     startTransition(async () => {
       const payload = {
@@ -355,7 +368,11 @@ export function ItemForm({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={fields.titlePlaceholder}
-            required
+            // `aria-required`, not `required`: the native bubble fired before
+            // the form's own check and said "Please fill out this field" in
+            // the browser's style, over the field, instead of the message
+            // under it that every other error here uses.
+            aria-required
             autoFocus
             aria-invalid={!!errors.title}
           />

@@ -1,169 +1,154 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// applyMonthlyInterest reads via `db.query.transactions.findMany` and writes
-// via `db.transaction(tx => tx.update(...).set(...).where(...))`. We mock both
-// shapes so the function under test can be exercised in isolation.
+// applyMonthlyInterest claims the month and compounds inside ONE
+// `db.transaction`. The mocked `db` has nothing but `transaction`, so any read
+// or write issued outside it — the old separate `markInterestApplied` — throws.
 
-const findMany = vi.fn();
 const setMock = vi.fn();
 const whereMock = vi.fn();
+const updateReturning = vi.fn();
 const updateMock = vi.fn(() => ({ set: setMock }));
+const returning = vi.fn();
+const onConflictDoUpdate = vi.fn<(config: { setWhere?: unknown }) => { returning: typeof returning }>(
+  () => ({ returning })
+);
+const insertValues = vi.fn<
+  (row: Record<string, unknown>) => { onConflictDoUpdate: typeof onConflictDoUpdate }
+>(() => ({ onConflictDoUpdate }));
+const insertMock = vi.fn<(table: unknown) => { values: typeof insertValues }>(() => ({
+  values: insertValues,
+}));
+
+const tx = {
+  insert: insertMock,
+  update: updateMock,
+};
 
 vi.mock("@/db", () => ({
   db: {
-    query: {
-      transactions: {
-        findMany: (...args: unknown[]) => findMany(...args),
-      },
-    },
-    transaction: (cb: (tx: unknown) => Promise<unknown>) =>
-      cb({ update: updateMock }),
+    transaction: (cb: (t: unknown) => Promise<unknown>) => cb(tx),
   },
 }));
 
-import { applyMonthlyInterest, interestAppliedThisMonth } from "./interest-service";
+import { applyMonthlyInterest, interestMonthOf, LAST_INTEREST_RUN_KEY } from "./interest-service";
+
+beforeEach(() => {
+  // Default chain: update().set().where().returning() resolves; the month
+  // claim succeeds.
+  setMock.mockReturnValue({ where: whereMock });
+  whereMock.mockReturnValue({ returning: updateReturning });
+  updateReturning.mockResolvedValue([]);
+  returning.mockResolvedValue([{ key: LAST_INTEREST_RUN_KEY }]);
+});
 
 afterEach(() => {
   vi.clearAllMocks();
   setMock.mockReset();
   whereMock.mockReset();
-  updateMock.mockClear();
-  // Default chain: update().set() returns an object with .where() that resolves.
-  setMock.mockReturnValue({ where: whereMock });
-  whereMock.mockResolvedValue(undefined);
+  updateReturning.mockReset();
+  returning.mockReset();
 });
 
-function makeTx(overrides: {
-  id?: string;
-  currentValue?: string | null;
-  monthlyRoi?: string | null;
-}) {
-  return {
-    id: overrides.id ?? "tx-1",
-    portfolioId: "p-1",
-    investmentMethodId: "im-1",
-    type: "buy",
-    amount: "1000",
-    fee: "0",
-    total: "1000",
-    initialValue: "1000",
-    currentValue: overrides.currentValue ?? "1000",
-    sourceTransactionId: null,
-    withdrawalTransactionIds: null,
-    date: new Date(),
-    notes: null,
-    status: "approved",
-    approvedAt: null,
-    approvedBy: null,
-    rejectedAt: null,
-    rejectedBy: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    investmentMethod: {
-      id: "im-1",
-      name: "Stub",
-      description: null,
-      author: "x",
-      riskLevel: "Low",
-      monthlyRoi: overrides.monthlyRoi ?? "1.0", // 1% per month
-      enabled: true,
-      createdAt: new Date(),
-    },
-  };
+const OCT_1 = new Date("2026-10-01T06:00:00Z");
+
+function claimCondition(): { sql: string; params: unknown[] } {
+  const { setWhere } = onConflictDoUpdate.mock.calls[0][0];
+  return new PgDialect().sqlToQuery(setWhere as Parameters<PgDialect["sqlToQuery"]>[0]);
 }
 
-describe("applyMonthlyInterest", () => {
-  it("returns { processed: 0, closed: 0 } when nothing is active", async () => {
-    findMany.mockResolvedValueOnce([]);
+function rendered(value: unknown): string {
+  return new PgDialect().sqlToQuery(value as Parameters<PgDialect["sqlToQuery"]>[0]).sql;
+}
 
-    const result = await applyMonthlyInterest();
+describe("applyMonthlyInterest — once per month", () => {
+  it("claims the month before compounding, inside the same transaction", async () => {
+    updateReturning.mockResolvedValueOnce([{ status: "approved" }]);
 
-    expect(result).toEqual({ processed: 0, closed: 0 });
+    const run = await applyMonthlyInterest(OCT_1);
+
+    expect(run).toEqual({ applied: true, month: "2026-10", processed: 1, closed: 0 });
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ key: LAST_INTEREST_RUN_KEY, value: OCT_1.toISOString() })
+    );
+    // The claim is what a concurrent run waits on, so it must come first.
+    expect(insertMock.mock.invocationCallOrder[0]).toBeLessThan(
+      updateMock.mock.invocationCallOrder[0]
+    );
+  });
+
+  it("compounds nothing when the month is already claimed", async () => {
+    returning.mockResolvedValueOnce([]);
+
+    const run = await applyMonthlyInterest(OCT_1);
+
+    expect(run).toEqual({ applied: false, month: "2026-10" });
     expect(updateMock).not.toHaveBeenCalled();
   });
 
-  it("converts monthlyRoi percentage to decimal and updates currentValue", async () => {
-    findMany.mockResolvedValueOnce([
-      makeTx({ id: "tx-a", currentValue: "1000", monthlyRoi: "1.5" }), // 1.5%
-    ]);
+  it("only lets a month later than the one on record claim", async () => {
+    // A manual snapshot on Oct 16 back-dated to Sep 30 claims SEPTEMBER, not
+    // "now" — stamping the current time is what let the two paths disagree.
+    await applyMonthlyInterest(new Date("2026-09-30T21:59:59.999Z"));
 
-    const result = await applyMonthlyInterest();
-
-    expect(result.processed).toBe(1);
-    expect(result.closed).toBe(0);
-    // 1000 * (1 + 0.015) = 1015.00
-    expect(setMock).toHaveBeenCalledTimes(1);
-    const payload = setMock.mock.calls[0][0];
-    expect(payload.currentValue).toBe("1015.00");
-    expect(payload.status).toBe("approved");
+    const { sql, params } = claimCondition();
+    expect(sql).toContain('left("app_state"."value", 7) <');
+    expect(params).toContain("2026-09");
   });
 
-  it("marks transactions whose new value is <= 0 as 'closed'", async () => {
-    // Negative ROI configuration: -200% means newValue = 1000 * -1 = -1000 → closes.
-    findMany.mockResolvedValueOnce([
-      makeTx({ id: "tx-loss", currentValue: "1000", monthlyRoi: "-200" }),
-    ]);
+  it("fails the claim with the compounding: one transaction, nothing committed apart", async () => {
+    updateReturning.mockRejectedValueOnce(new Error("connection reset"));
 
-    const result = await applyMonthlyInterest();
-
-    expect(result.processed).toBe(1);
-    expect(result.closed).toBe(1);
-    expect(setMock.mock.calls[0][0].status).toBe("closed");
-  });
-
-  it("handles a mix of compounding and closing transactions", async () => {
-    findMany.mockResolvedValueOnce([
-      makeTx({ id: "ok", currentValue: "500", monthlyRoi: "2" }),
-      makeTx({ id: "loss", currentValue: "100", monthlyRoi: "-150" }),
-    ]);
-
-    const result = await applyMonthlyInterest();
-
-    expect(result.processed).toBe(2);
-    expect(result.closed).toBe(1);
-
-    const calls = setMock.mock.calls.map((c) => c[0]);
-    const ok = calls.find((c) => c.currentValue === "510.00");
-    const loss = calls.find((c) => c.status === "closed");
-    expect(ok).toBeTruthy();
-    expect(loss).toBeTruthy();
-  });
-
-  it("treats missing investmentMethod / null monthlyRoi as 0% (no growth)", async () => {
-    const tx = makeTx({ id: "tx-null", currentValue: "1234.56" });
-    // @ts-expect-error — intentional malformed fixture
-    tx.investmentMethod = undefined;
-    findMany.mockResolvedValueOnce([tx]);
-
-    await applyMonthlyInterest();
-
-    expect(setMock.mock.calls[0][0].currentValue).toBe("1234.56");
-  });
-
-  it("forwards beforeDate into the query conditions", async () => {
-    findMany.mockResolvedValueOnce([]);
-    const cutoff = new Date("2026-01-01T00:00:00Z");
-    await applyMonthlyInterest(cutoff);
-    // We can't easily introspect Drizzle's `and(...)` predicate, but we can
-    // assert that findMany was called once with an options object whose `where`
-    // is a non-empty value — proving the cutoff branch ran without throwing.
-    expect(findMany).toHaveBeenCalledTimes(1);
-    const opts = findMany.mock.calls[0][0];
-    expect(opts).toBeTruthy();
-    expect(opts.where).toBeTruthy();
+    await expect(applyMonthlyInterest(OCT_1)).rejects.toThrow("connection reset");
+    // Both statements went through the transaction handle; the mocked `db`
+    // has no `insert`, so a claim written outside it would have thrown first.
+    expect(insertMock).toHaveBeenCalledTimes(1);
   });
 });
 
-// ---------- interestAppliedThisMonth ----------
+describe("applyMonthlyInterest — compounding", () => {
+  it("counts what the single UPDATE touched and closed", async () => {
+    updateReturning.mockResolvedValueOnce([
+      { status: "approved" },
+      { status: "closed" },
+      { status: "approved" },
+    ]);
 
-describe("interestAppliedThisMonth", () => {
-  it("is true only when the recorded run falls in today's UTC month", () => {
-    const today = new Date("2026-10-01T00:05:00Z");
-    // The 1st used to bypass this check entirely, so a retry on that day
-    // compounded a second month onto every position.
-    expect(interestAppliedThisMonth("2026-10-01T00:00:10Z", today)).toBe(true);
-    expect(interestAppliedThisMonth("2026-09-30T23:59:00Z", today)).toBe(false);
-    expect(interestAppliedThisMonth(null, today)).toBe(false);
-    expect(interestAppliedThisMonth("not a date", today)).toBe(false);
+    const run = await applyMonthlyInterest(OCT_1);
+
+    expect(run).toEqual({ applied: true, month: "2026-10", processed: 3, closed: 1 });
+    expect(updateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does the arithmetic in the database, from the row's current value", async () => {
+    // Read-then-write let a withdrawal approved in between be overwritten
+    // with a value computed from the old balance. The new value is an SQL
+    // expression over the column itself, rounded as `numeric`.
+    await applyMonthlyInterest(OCT_1);
+
+    const payload = setMock.mock.calls[0][0];
+    const value = rendered(payload.currentValue);
+    expect(value).toContain('round("transactions"."current_value" * (1 + coalesce(');
+    expect(value).toContain('"investment_methods"."monthly_roi"');
+    expect(value).toContain("/ 100), 2)");
+    expect(rendered(payload.status)).toContain("then 'closed'::transaction_status");
+  });
+
+  it("only compounds approved buys still holding value, up to the cutoff", async () => {
+    const cutoff = new Date("2026-01-01T00:00:00Z");
+    await applyMonthlyInterest(cutoff, cutoff);
+
+    const where = rendered(whereMock.mock.calls[0][0]);
+    expect(where).toContain('"transactions"."status" = $');
+    expect(where).toContain('"transactions"."type" = $');
+    expect(where).toContain('"transactions"."current_value" > $');
+    expect(where).toContain('"transactions"."date" <= $');
+  });
+});
+
+describe("interestMonthOf", () => {
+  it("is the UTC calendar month — the cron's clock", () => {
+    expect(interestMonthOf(new Date("2026-10-01T00:00:10Z"))).toBe("2026-10");
+    expect(interestMonthOf(new Date("2026-09-30T23:59:00Z"))).toBe("2026-09");
   });
 });

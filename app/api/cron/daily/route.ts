@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isCronAuthorized } from "@/lib/cron-auth";
 import { getAppStateValue, setAppState } from "@/lib/services/app-state-service";
-import {
-  applyMonthlyInterest,
-  interestAppliedThisMonth,
-  LAST_INTEREST_RUN_KEY,
-  markInterestApplied,
-} from "@/lib/services/interest-service";
+import { applyMonthlyInterest, LAST_INTEREST_RUN_KEY } from "@/lib/services/interest-service";
 import { createDailySnapshots } from "@/lib/services/snapshot-service";
 import { createDailyFinanceSnapshots } from "@/lib/services/finance-snapshot-service";
 import {
@@ -20,7 +15,7 @@ import { refreshF1News } from "@/lib/services/rapidapi-f1-news-service";
 // function at 60 s.)
 export const maxDuration = 300;
 
-type InterestRun = { applied: boolean; result: Awaited<ReturnType<typeof applyMonthlyInterest>> | null };
+type InterestRun = { applied: boolean; result: { processed: number; closed: number } | null };
 type SnapshotRun = Awaited<ReturnType<typeof createDailySnapshots>>;
 type FinanceSnapshotRun = Awaited<ReturnType<typeof createDailyFinanceSnapshots>>;
 type F1NewsRun = Awaited<ReturnType<typeof refreshF1News>>;
@@ -32,33 +27,24 @@ function messageOf(error: unknown): string {
 /**
  * Once per calendar month, whatever day the job happens to run.
  *
- * The record in app_state is consulted on EVERY run, the 1st included: the
- * old "always apply on the 1st" shortcut meant a retry, a manual trigger or a
- * double fire on that day compounded a second month onto every position.
- * With no record yet, only the 1st counts as the first month's run.
+ * `applyMonthlyInterest` claims the month and compounds in one transaction,
+ * so a retry, a manual trigger, a double fire or the admin's manual snapshot
+ * finds the month taken and compounds nothing. With no record yet, only the
+ * 1st starts the first month — a deploy mid-month must not compound on day
+ * one. That read only ever skips; the claim is what guards the month.
  */
-async function shouldRunMonthlyInterest(today: Date): Promise<boolean> {
-  const lastInterestRun = await getAppStateValue(LAST_INTEREST_RUN_KEY);
-
-  if (!lastInterestRun) {
-    return today.getUTCDate() === 1;
-  }
-
-  return !interestAppliedThisMonth(lastInterestRun, today);
-}
-
 async function processMonthlyInterest(today: Date): Promise<InterestRun> {
   try {
-    const shouldApply = await shouldRunMonthlyInterest(today);
-
-    if (!shouldApply) {
+    if (today.getUTCDate() !== 1 && !(await getAppStateValue(LAST_INTEREST_RUN_KEY))) {
       return { applied: false, result: null };
     }
 
-    const result = await applyMonthlyInterest();
-    await markInterestApplied(today);
+    const run = await applyMonthlyInterest(today);
+    if (!run.applied) {
+      return { applied: false, result: null };
+    }
 
-    return { applied: true, result };
+    return { applied: true, result: { processed: run.processed, closed: run.closed } };
   } catch (error) {
     console.error("Failed to process monthly interest:", error);
     // A separate key: stamping last_interest_run on failure made the next run

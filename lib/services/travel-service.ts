@@ -36,6 +36,7 @@ import type {
   DashboardTravelFeaturedTrip,
   DashboardTravelSummary,
   DashboardTravelTripState,
+  PublicItemCost,
   PublicTripScope,
   PublicTripView,
   Trip,
@@ -729,17 +730,47 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
     return { ...rest, cost: { low: c.low, high: c.high, times: c.times } };
   });
 
+  // A link with prices hidden must not CARRY them either. The page only hid
+  // them visually, but the items (price, range, notes, cost) and the scope's
+  // figures were still serialised to the client calendar — readable in the
+  // page source by anyone holding the link.
+  const hidePrices = share.showPrices !== true;
+  const publicItems = hidePrices ? visible.map(withoutPrices) : visible;
+  const publicScope =
+    scope && hidePrices
+      ? {
+          ...scope,
+          lines: scope.lines.map((l) => ({ ...l, low: 0, high: 0 })),
+          owedLow: 0,
+          owedHigh: 0,
+          paid: 0,
+        }
+      : scope;
+
   return {
     trip,
-    items: visible,
+    items: publicItems,
     photos: photos.filter((p) => !p.itemId),
     share,
     // Built from the items already in hand rather than fetched again — and
     // from the enriched ones, or a scoped link would split a festival ticket
     // among people who are not going to it.
-    scope,
+    scope: publicScope,
   };
 });
+
+/** An item as an unpriced link may carry it: no money, no private notes. */
+function withoutPrices<
+  T extends { price: unknown; priceMax: unknown; notes: unknown; cost: PublicItemCost },
+>(item: T): T {
+  return {
+    ...item,
+    price: null,
+    priceMax: null,
+    notes: null,
+    cost: { low: 0, high: 0, times: item.cost.times },
+  };
+}
 
 /**
  * The rows a scoped link needs, fetched alongside everything else.

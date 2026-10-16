@@ -12,10 +12,12 @@ import { timingSafeEqual } from "node:crypto";
 export function isCronAuthorized(authHeader: string | null): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
-  const expected = `Bearer ${secret}`;
-  // Length check first: timingSafeEqual throws on a length mismatch.
-  if (!authHeader || authHeader.length !== expected.length) {
-    return false;
-  }
-  return timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
+  if (!authHeader) return false;
+  const given = Buffer.from(authHeader);
+  const expected = Buffer.from(`Bearer ${secret}`);
+  // Compare BYTE lengths: timingSafeEqual throws on a mismatch, and a
+  // non-ASCII header can have the right character count but more bytes —
+  // that threw a 500 instead of answering 401.
+  if (given.length !== expected.length) return false;
+  return timingSafeEqual(given, expected);
 }

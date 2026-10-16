@@ -13,21 +13,13 @@ import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Heading, Text } from "@/components/ui/typography"
 import { AuthService } from "@/lib/auth/auth-client"
+import { safeNextPath } from "@/lib/auth/safe-next"
 import { loginSchema, type LoginData } from "@/schemas/auth"
 import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-
-// Only honour same-origin paths so a crafted ?next=https://evil.example doesn't
-// turn the form into an open redirect. Anything that doesn't start with a
-// single "/" falls back to the default landing page.
-function safeNext(raw: string | null): string {
-  if (!raw) return "/portal"
-  if (!raw.startsWith("/") || raw.startsWith("//")) return "/portal"
-  return raw
-}
 
 export function LoginForm({
   className,
@@ -50,7 +42,7 @@ export function LoginForm({
   // Sign-up hands off here with ?message= ("check your email"); it was written
   // but never read, so a new account landed on a bare login form.
   const message = searchParams.get("message")
-  const next = safeNext(searchParams.get("next"))
+  const next = safeNextPath(searchParams.get("next")) ?? "/portal"
   const signupHref =
     next === "/portal" ? "/signup" : `/signup?next=${encodeURIComponent(next)}`
 

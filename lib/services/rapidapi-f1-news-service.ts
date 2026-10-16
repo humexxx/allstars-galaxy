@@ -45,9 +45,17 @@ function articlesFrom(payload: unknown): RapidArticle[] {
  * again refreshes its row instead of adding one, and `first_seen_at` keeps the
  * first sighting so the archive stays in order.
  */
-export async function refreshF1News(): Promise<{ fetched: number; stored: number }> {
+export async function refreshF1News(): Promise<{
+  fetched: number;
+  stored: number;
+  /** True when no key is configured: an optional feed, not a failure. */
+  skipped?: boolean;
+}> {
   const key = process.env.RAPIDAPI_KEY;
-  if (!key) throw new Error("RAPIDAPI_KEY is not configured");
+  // Optional by design (see .env.example): without a key there is simply no
+  // refresh and the stored archive keeps reading. Throwing here marked every
+  // daily cron run as failed on any deploy that never set it.
+  if (!key) return { fetched: 0, stored: 0, skipped: true };
 
   const res = await fetch(`${BASE_URL}/news?limit=${FEED_LIMIT}`, {
     signal: upstreamSignal(),

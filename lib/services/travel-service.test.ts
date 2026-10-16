@@ -532,6 +532,7 @@ describe("getPublicTripByToken", () => {
       revokedAt: null,
       expiresAt: null,
       inviteeEmail: null,
+      showPrices: true,
       createdAt: new Date(),
     };
     const trip = tripFixture();
@@ -579,6 +580,7 @@ describe("getPublicTripByToken", () => {
       revokedAt: null,
       expiresAt: null,
       memberId: null,
+      showPrices: true,
       createdAt: new Date(),
     };
     const base = { tripId: TRIP_ID, priceMax: null, scheduledOn: null, endsOn: null };
@@ -663,6 +665,37 @@ describe("getPublicTripByToken", () => {
     // second time. Counting the selects is what keeps a second round trip
     // from creeping back in behind the first.
     expect(dbMock.select).toHaveBeenCalledTimes(9);
+  });
+
+  it("carries no prices or notes on a link that hides prices", async () => {
+    // The page hid them, but the items were serialised to the client
+    // calendar with price, range, notes and cost — readable in the source.
+    queueSelect([
+      { id: "s-1", tripId: TRIP_ID, token: "tok", revokedAt: null, expiresAt: null,
+        inviteeEmail: null, memberId: null, showPrices: false, createdAt: new Date() },
+    ]);
+    queueSelect([tripFixture()]);
+    queueSelect([
+      { id: "hotel", tripId: TRIP_ID, title: "Hotel", price: "180", priceMax: "220",
+        priceUnit: "per_night", notes: "Door code 4412", scheduledOn: "2026-11-02",
+        endsOn: "2026-11-07" },
+    ]);
+    queueSelect([]); // photos
+    queueSelect([]); // stops
+    queueSelect([]); // payers
+    queueSelect([]); // attendees
+
+    const out = await getPublicTripByToken("tok");
+    const payload = JSON.stringify(out?.items);
+    expect(payload).not.toContain("180");
+    expect(payload).not.toContain("220");
+    expect(payload).not.toContain("Door code");
+    expect(out?.items[0]).toMatchObject({
+      price: null,
+      priceMax: null,
+      notes: null,
+      cost: { low: 0, high: 0, times: 5 },
+    });
   });
 
   it("leaves an unscoped link with no traveller attached", async () => {

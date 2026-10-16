@@ -332,6 +332,11 @@ MASSIVE_API_KEY         # Massive, formerly Polygon.io (rebranded early 2026).
 PADEL_API_KEY           # Premier Padel + FIP tournaments, last 6 months of
                         # matches free. 50K req/mo. https://padelapi.org
 
+# F1 news
+RAPIDAPI_KEY            # Refreshes the stored F1 news archive on the daily
+                        # cron. Unset = no refresh (not a cron failure); the
+                        # articles already stored keep reading.
+
 # DORMANT — kept for reference, not used by any service today:
 API_SPORTS_KEY          # Free tier hard-locked to seasons 2022-2024, unusable
                         # for current data. ~$100/mo for the All Sports paid

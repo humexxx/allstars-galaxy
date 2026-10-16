@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase-server"
 import { NEW_ACCOUNT_WINDOW_MS, signupsAllowed } from "@/lib/auth/signups"
+import { safeNextPath } from "@/lib/auth/safe-next"
 import { NextResponse } from "next/server"
 import { type NextRequest } from "next/server"
 
@@ -9,9 +10,7 @@ export async function GET(request: NextRequest) {
   const origin = requestUrl.origin
   // Same rule the login form applies client-side: a path on this origin only.
   // `${origin}${next}` with `next=@evil.com` used to resolve to evil.com.
-  const rawNext = requestUrl.searchParams.get("next")
-  const next =
-    rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/portal"
+  const next = safeNextPath(requestUrl.searchParams.get("next")) ?? "/portal"
 
   const loginWithError = (message: string) =>
     NextResponse.redirect(

@@ -185,7 +185,7 @@ function Code({ className, asChild = false, ...props }: CodeProps) {
     <Comp
       data-slot="code"
       className={cn(
-        "relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold tabular-nums text-foreground",
+        "relative rounded bg-muted px-1.25 py-0.75 font-mono text-sm font-semibold tabular-nums text-foreground",
         className,
       )}
       {...props}

@@ -40,7 +40,7 @@ function ToggleGroup({
           ? "flex-wrap gap-1.5"
           : cn(
               // Same track as TabsList: grey rail, selected segment lifted.
-              "rounded-lg bg-muted p-[3px]",
+              "rounded-lg bg-muted p-0.75",
               size === "sm" ? "h-8" : size === "lg" ? "h-11" : "h-10"
             ),
         className

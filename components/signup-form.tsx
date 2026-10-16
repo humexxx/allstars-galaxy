@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Heading, Text } from "@/components/ui/typography"
 import { AuthService } from "@/lib/auth/auth-client"
+import { safeNextPath } from "@/lib/auth/safe-next"
 import { signupSchema, type SignupData } from "@/schemas/auth"
 import { useState } from "react"
 import { useForm } from "react-hook-form"
@@ -32,8 +33,7 @@ export function SignupForm({
   const prefillEmail = searchParams.get("email") ?? ""
   // Same allow-list as the login form — only same-origin paths survive.
   const nextRaw = searchParams.get("next")
-  const next =
-    nextRaw && nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : null
+  const next = safeNextPath(nextRaw)
   const loginHref = next ? `/login?next=${encodeURIComponent(next)}` : "/login"
 
   const {

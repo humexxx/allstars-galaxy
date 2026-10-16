@@ -94,6 +94,12 @@ export const planNameSchema = z
   .min(1, "Give the plan a name.")
   .max(120, "Keep the name to 120 characters.");
 
+// May be negative: the balance on the day it is stated can be an overdraft
+// (deficits are carried, and a restatement can roll one forward).
+const openingSavings = z
+  .string()
+  .regex(/^-?\d+(\.\d{1,2})?$/, "Must be a number with up to 2 decimals");
+
 export const createFinancePlanSchema = z.object({
   name: planNameSchema,
   description: z.string().max(1000).optional().nullable(),
@@ -103,12 +109,7 @@ export const createFinancePlanSchema = z.object({
     .int("Whole months only.")
     .min(12, "At least 12 months.")
     .max(120, "At most 120 months (10 years)."),
-  // May be negative: the balance on the day it is stated can be an overdraft
-  // (deficits are carried, and a restatement can roll one forward).
-  initialSavings: z
-    .string()
-    .regex(/^-?\d+(\.\d{1,2})?$/, "Must be a number with up to 2 decimals")
-    .default("0"),
+  initialSavings: openingSavings.default("0"),
   monthlySavingsRate: monthlyRate.default("0"),
   includePortfolio: z.boolean().default(false),
   surplusToDebtsPercent: share.default("0"),
@@ -142,6 +143,12 @@ export const planColorSchema = z.object({
 
 export const updateFinancePlanSchema = createFinancePlanSchema.extend({
   id: idSchema,
+  // Sent only when the user changed them (the form shows where the plan
+  // stands today), and never defaulted: a figure left out keeps rolling
+  // forward, where a default "0" would restate it — see
+  // `lib/finance/opening-balances.ts`.
+  initialSavings: openingSavings.optional(),
+  initialInvestments: decimal.optional(),
   // Scenario link. Only settable via update (scenarios are created by cloning);
   // null detaches the scenario from its base plan.
   basedOnPlanId: idSchema.nullable().optional(),

@@ -6,6 +6,7 @@ import {
   createFinancePlanSchema,
   lineOverrideSchema,
   planDebtSchema,
+  updateFinancePlanSchema,
 } from "./finance";
 
 describe("lineOverrideSchema: reschedules may cross months", () => {
@@ -34,6 +35,27 @@ describe("initial savings may be negative (a restated overdraft)", () => {
   it("accepts a negative opening savings figure", () => {
     const plan = { name: "P", startMonth: "2026-09", monthsAhead: 24, initialSavings: "-120.50" };
     expect(createFinancePlanSchema.safeParse(plan).success).toBe(true);
+  });
+});
+
+describe("updating a plan: opening balances are never defaulted", () => {
+  const edit = {
+    id: "11111111-1111-4111-8111-111111111111",
+    name: "P",
+    startMonth: "2026-09",
+    monthsAhead: 24,
+  };
+
+  it("leaves an omitted balance undefined (it rolls forward), where create defaults it to 0", () => {
+    const r = updateFinancePlanSchema.parse(edit);
+    expect(r.initialSavings).toBeUndefined();
+    expect(r.initialInvestments).toBeUndefined();
+    expect(createFinancePlanSchema.parse(edit).initialSavings).toBe("0");
+  });
+
+  it("still validates a balance that is sent", () => {
+    expect(updateFinancePlanSchema.safeParse({ ...edit, initialSavings: "-120.50" }).success).toBe(true);
+    expect(updateFinancePlanSchema.safeParse({ ...edit, initialInvestments: "-1" }).success).toBe(false);
   });
 });
 

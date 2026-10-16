@@ -44,7 +44,6 @@ import { Mono, Text } from "@/components/ui/typography";
 
 import { createPlanAction, updatePlanAction } from "@/app/actions/finance-plans";
 import { cn } from "@/lib/utils";
-import { formatDay } from "@/lib/utils/date";
 import {
   createFinancePlanSchema,
   type CreateFinancePlanData,
@@ -57,6 +56,11 @@ import type {
 
 type PlanFormProps = {
   plan?: FinancePlan;
+  /** Where the (calibrated) plan stands today — what an existing plan's
+   *  balance fields show. The stored opening balances may be long
+   *  superseded by a confirmation, and showing them made "leave it" and
+   *  "it is this again" the same input. */
+  current?: { savings: number; investments: number };
   investmentMethods: InvestmentMethodOption[];
   /** The reader's calendar day (UTC midnight), resolved on the server in
    *  their zone: a new plan starts in THEIR month. `new Date()` read in UTC
@@ -92,8 +96,15 @@ function percentLabel(pct: number): string {
   return "Very aggressive";
 }
 
+/** A balance as the money inputs hold it (2 decimals). */
+function moneyValue(value: number): string {
+  const rounded = Math.round(value * 100) / 100;
+  return (rounded === 0 ? 0 : rounded).toFixed(2);
+}
+
 export function PlanForm({
   plan,
+  current,
   investmentMethods,
   today,
 }: PlanFormProps): React.ReactElement {
@@ -130,6 +141,17 @@ export function PlanForm({
     plan?.autoInvestMethodId ?? investmentMethods[0]?.id ?? ""
   );
 
+  // An existing plan's balance fields hold where it stands TODAY. Frozen at
+  // mount, like the form's own defaults: a figure is an edit when it differs
+  // from what its field was given, even if `current` moves on meanwhile (a
+  // revalidation, midnight) — else an untouched field would go out stale.
+  const [{ shownSavings, shownInvestments }] = useState(() => ({
+    shownSavings: plan ? moneyValue(current?.savings ?? parseFloat(plan.initialSavings)) : "0",
+    shownInvestments: plan
+      ? moneyValue(Math.max(0, current?.investments ?? parseFloat(plan.initialInvestments)))
+      : "0",
+  }));
+
   const {
     register,
     handleSubmit,
@@ -143,9 +165,9 @@ export function PlanForm({
       // Default 120 (10 years) for new plans matches the schema default and lets the
       // chart densifier kick in (first 12 months monthly, then year-ends after).
       monthsAhead: plan?.monthsAhead ?? 120,
-      initialSavings: plan?.initialSavings ?? "0",
+      initialSavings: shownSavings,
       monthlySavingsRate: plan?.monthlySavingsRate ?? "0",
-      initialInvestments: plan?.initialInvestments ?? "0",
+      initialInvestments: shownInvestments,
       // Monthly confirmation prompt: 0 disables, 1..28 sets the trigger day.
       confirmationDayOfMonth: plan?.confirmationDayOfMonth ?? 1,
     },
@@ -166,8 +188,17 @@ export function PlanForm({
       color,
     };
 
+    // An edit sends a balance only when the user changed it: every figure it
+    // sends restates the opening balances as of today, and one left alone
+    // must keep rolling forward rather than be re-stated as what it showed.
+    const { initialSavings, initialInvestments, ...rest } = payload;
     const result = plan
-      ? await updatePlanAction({ id: plan.id, ...payload })
+      ? await updatePlanAction({
+          id: plan.id,
+          ...rest,
+          ...(initialSavings !== shownSavings ? { initialSavings } : {}),
+          ...(initialInvestments !== shownInvestments ? { initialInvestments } : {}),
+        })
       : await createPlanAction(payload);
 
     if (result.success) {
@@ -179,11 +210,6 @@ export function PlanForm({
       toast.error(result.error);
     }
   };
-
-  // The day the opening balances were stated on. The field shows THAT
-  // figure, not today's balance (which the plan page shows), so its hint
-  // must not call it "your balance today".
-  const statedOn = plan ? formatDay(plan.balancesAsOf ?? plan.createdAt) : null;
 
   /** Wires one registered field to its error the way screen readers expect. */
   const invalid = (message: string | undefined, id: string) =>
@@ -261,7 +287,9 @@ export function PlanForm({
                 </FieldDescription>
               </Field>
               <Field className="gap-2" data-invalid={!!errors.initialSavings || undefined}>
-                <FieldLabel htmlFor="plan-savings">Initial savings</FieldLabel>
+                <FieldLabel htmlFor="plan-savings">
+                  {plan ? "Savings today" : "Initial savings"}
+                </FieldLabel>
                 <Input
                   id="plan-savings"
                   inputMode="decimal"
@@ -273,7 +301,7 @@ export function PlanForm({
                 <FieldError id="plan-savings-error" errors={[errors.initialSavings]} />
                 <FieldDescription>
                   {plan
-                    ? `As stated on ${statedOn}. Enter what you hold today to restate the plan's opening balances as of today: the others roll forward to where the plan has them now, and nothing already paid in or out is counted again.`
+                    ? "Where the plan has your savings today. Change it to what you hold to restate the plan's opening balances as of today; figures you leave alone keep rolling forward, and nothing already paid in or out is counted again."
                     : "Your balance on the day you create the plan — anything already paid in or out this period is in it, so it isn't counted again."}
                 </FieldDescription>
               </Field>
@@ -548,7 +576,9 @@ export function PlanForm({
               className="gap-2"
               data-invalid={!!errors.initialInvestments || undefined}
             >
-              <FieldLabel htmlFor="plan-init-investments">Initial investments balance</FieldLabel>
+              <FieldLabel htmlFor="plan-init-investments">
+                {plan ? "Investments today" : "Initial investments balance"}
+              </FieldLabel>
               <Input
                 id="plan-init-investments"
                 inputMode="decimal"
@@ -563,7 +593,7 @@ export function PlanForm({
               />
               <FieldDescription>
                 {plan
-                  ? `The investments bucket as stated on ${statedOn}. Changing it restates the opening balances as of today, like Initial savings.`
+                  ? "Where the plan has the investments bucket today. Changing it restates the opening balances as of today, like Savings today."
                   : "What the investments bucket holds on the day you create the plan."}
               </FieldDescription>
             </Field>

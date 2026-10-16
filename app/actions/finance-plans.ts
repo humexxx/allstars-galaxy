@@ -144,9 +144,13 @@ export async function updatePlanAction(
     if (!parsed.success) {
       return { success: false, error: explainedError(parsed.error.issues) };
     }
+    // Only the balances the form sent are edits — it sends one only when the
+    // user changed it. Passing both made an untouched, stale figure an edit
+    // and re-dated it past the latest confirmation.
+    const { initialSavings, initialInvestments } = parsed.data;
     const restatement = await restatementFor(ctx.effectiveUserId, parsed.data.id, {
-      savings: parsed.data.initialSavings,
-      investments: parsed.data.initialInvestments,
+      ...(initialSavings !== undefined ? { savings: initialSavings } : {}),
+      ...(initialInvestments !== undefined ? { investments: initialInvestments } : {}),
     });
     const plan = await updatePlan(ctx.effectiveUserId, parsed.data, restatement);
     await logImpersonatedMutation({

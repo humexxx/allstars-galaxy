@@ -9,15 +9,22 @@
  * stated as of an older day while being treated as of today — payments made
  * in between would silently vanish (or be replayed) — and on a confirmed plan
  * the stale creation-time savings would suddenly override the confirmation.
+ *
+ * An edit is a figure the user CHANGED from what their form showed — never a
+ * figure the form merely sent back. The plan form shows savings and
+ * investments where the plan stands today and sends them only when changed;
+ * the debt form shows a debt's stored opening balance and always sends it.
+ * Taking an untouched stale figure as an edit re-dated it past the latest
+ * confirmation and wiped that confirmation out of the projection.
  */
 import type { FinancePlanWithLines, TodayState } from "@/types/finance";
 
 import { isoDay } from "./schedule";
 
 export type OpeningBalanceEdits = {
-  /** New initial savings, when the plan form sent one. */
+  /** Savings today, when the user changed them in the plan form. */
   savings?: string;
-  /** New initial investments, when the plan form sent one. */
+  /** Investments today, when the user changed them in the plan form. */
   investments?: string;
   /** New opening balance per EXISTING debt id. */
   debts?: Record<string, string>;
@@ -44,37 +51,73 @@ function money(value: number): string {
   return (r === 0 ? 0 : r).toFixed(2);
 }
 
+/** The debt edits that differ (to the cent) from the stored opening balance. */
+function changedDebts(
+  plan: Pick<FinancePlanWithLines, "debts">,
+  edits: OpeningBalanceEdits
+): Record<string, string> {
+  const changed: Record<string, string> = {};
+  for (const [id, balance] of Object.entries(edits.debts ?? {})) {
+    const debt = plan.debts.find((d) => d.id === id);
+    if (debt && cents(balance) !== cents(debt.initialBalance)) changed[id] = balance;
+  }
+  return changed;
+}
+
 /**
- * True when the edits actually change an opening balance (compared at cent
- * precision against what the plan stores). Saving a form unchanged, or adding
- * a debt with a zero balance, restates nothing and must not re-date anything.
+ * Cheap check, before anything is projected: whether the edits may change an
+ * opening balance. Saving a form unchanged, or adding a debt with a zero
+ * balance, restates nothing and must not re-date anything.
+ *
+ * A debt's balance is compared with its stored opening balance (what the
+ * debt form shows). A savings or investments figure always may: it is
+ * compared with where the plan stands today (what the plan form shows),
+ * which needs the projection — see `effectiveEdits`.
  */
 export function changesOpeningBalances(
-  plan: Pick<FinancePlanWithLines, "initialSavings" | "initialInvestments" | "debts">,
+  plan: Pick<FinancePlanWithLines, "debts">,
   edits: OpeningBalanceEdits
 ): boolean {
-  if (edits.savings !== undefined && cents(edits.savings) !== cents(plan.initialSavings)) {
-    return true;
+  if (edits.savings !== undefined || edits.investments !== undefined) return true;
+  if (Object.keys(changedDebts(plan, edits)).length > 0) return true;
+  return edits.addedDebtBalance !== undefined && cents(edits.addedDebtBalance) !== 0;
+}
+
+/**
+ * The edits that actually change something, or null when none does. A
+ * savings or investments figure equal (to the cent) to where the plan stands
+ * today is dropped: rolling forward gives that same figure, and keeping it
+ * would re-date the set for nothing. A figure equal only to the STORED one
+ * is kept — the stored figure may be long superseded by a confirmation, and
+ * typing it is how the user says it is true again today.
+ */
+export function effectiveEdits(
+  plan: Pick<FinancePlanWithLines, "debts">,
+  projectedToday: Pick<TodayState, "savings" | "investments">,
+  edits: OpeningBalanceEdits
+): OpeningBalanceEdits | null {
+  const changed: OpeningBalanceEdits = {};
+  if (edits.savings !== undefined && cents(edits.savings) !== cents(projectedToday.savings)) {
+    changed.savings = edits.savings;
   }
   if (
     edits.investments !== undefined &&
-    cents(edits.investments) !== cents(plan.initialInvestments)
+    cents(edits.investments) !== cents(Math.max(0, projectedToday.investments))
   ) {
-    return true;
+    changed.investments = edits.investments;
   }
-  for (const [id, balance] of Object.entries(edits.debts ?? {})) {
-    const debt = plan.debts.find((d) => d.id === id);
-    if (debt && cents(balance) !== cents(debt.initialBalance)) return true;
-  }
+  const debts = changedDebts(plan, edits);
+  if (Object.keys(debts).length > 0) changed.debts = debts;
   if (edits.addedDebtBalance !== undefined && cents(edits.addedDebtBalance) !== 0) {
-    return true;
+    changed.addedDebtBalance = edits.addedDebtBalance;
   }
-  return false;
+  return Object.keys(changed).length > 0 ? changed : null;
 }
 
 /**
  * The restated set: edited figures as given, the rest from `projectedToday`
  * (where the calibrated plan stands on `today` — see `projectStateAt`).
+ * `edits` must hold only real edits (`effectiveEdits`).
  */
 export function restateOpeningSet(
   plan: Pick<FinancePlanWithLines, "debts">,

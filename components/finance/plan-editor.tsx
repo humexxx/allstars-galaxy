@@ -294,9 +294,10 @@ export function PlanEditor({
     Math.max(0, projection.months.length - 1)
   );
   const current = projection.months[currentPeriodIdx];
-  // Pre-fill for the confirmation dialog: the projected position ON today.
-  // A confirmation records the balances on the day it's made, so saving the
-  // pre-fill unchanged leaves the forecast exactly where it was.
+  // Pre-fill for the confirmation dialog — and for the Settings form's
+  // balance fields: the projected position ON today. A confirmation records
+  // the balances on the day it's made, so saving the pre-fill unchanged
+  // leaves the forecast exactly where it was.
   const confirmationPrefill = {
     savings: todayState?.savings ?? parseFloat(baseline.initialSavings),
     investments: todayState?.investments ?? parseFloat(baseline.initialInvestments),
@@ -414,21 +415,21 @@ export function PlanEditor({
   const debtComparison = plan.debts.length > 0 ? comparison : null;
   // updateFinancePlanSchema defaults every field, so a partial payload would
   // silently reset the ones left out — every single-field update below must
-  // send the FULL current plan and override just its field.
+  // send the FULL current plan and override just its field. The opening
+  // balances are the exception: they are left out, because any balance sent
+  // is an edit and restates the set as of today.
   const fullPlanPayload = () => ({
     id: plan.id,
     name: plan.name,
     description: plan.description ?? null,
     startMonth: plan.startMonth,
     monthsAhead: plan.monthsAhead,
-    initialSavings: plan.initialSavings,
     monthlySavingsRate: plan.monthlySavingsRate,
     includePortfolio: plan.includePortfolio,
     surplusToDebtsPercent: plan.surplusToDebtsPercent,
     debtStrategy: plan.debtStrategy as DebtStrategy,
     autoInvestPercent: plan.autoInvestPercent,
     autoInvestMethodId: plan.autoInvestMethodId,
-    initialInvestments: plan.initialInvestments,
     confirmationDayOfMonth: plan.confirmationDayOfMonth,
     color: plan.color,
   });
@@ -840,7 +841,11 @@ export function PlanEditor({
             </CardContent>
           </Card>
         )}
-        <PlanForm plan={plan} investmentMethods={investmentMethods} />
+        <PlanForm
+          plan={plan}
+          current={confirmationPrefill}
+          investmentMethods={investmentMethods}
+        />
       </TabsContent>
 
       {/* The confirmation dialog for the CURRENT period. Reached by clicking

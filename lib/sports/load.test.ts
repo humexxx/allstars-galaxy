@@ -2,12 +2,26 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/db", () => ({ db: {} }));
 
+import { getFootballLeague } from "@/lib/data/sports/football";
 import { NFL_DATA } from "@/lib/data/sports/nfl";
 
-import { loadSport } from "./load";
+import { footballLeagueFrom, loadSport } from "./load";
+
+describe("footballLeagueFrom", () => {
+  it("takes a league the picker offers", () => {
+    expect(footballLeagueFrom("serie-a")).toBe("serie-a");
+  });
+
+  it("falls back to the first league for anything else", () => {
+    expect(footballLeagueFrom(undefined)).toBe("uefa-champions-league");
+    expect(footballLeagueFrom("world-cup")).toBe("uefa-champions-league");
+    expect(footballLeagueFrom("nope")).toBe("uefa-champions-league");
+  });
+});
 
 describe("loadSport", () => {
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     vi.stubGlobal(
       "fetch",
@@ -61,5 +75,64 @@ describe("loadSport", () => {
     const payload = await loadSport("nfl");
     expect(payload.sample).toBe(false);
     expect(payload.sport === "nfl" && payload.data.games[0].stageLabel).toBe("Week 6");
+  });
+
+  it("fetches only the league in the URL", async () => {
+    // All four leagues were eight of football-data's ten requests a minute.
+    vi.stubEnv("FOOTBALL_DATA_API_KEY", "test-key");
+    const fetchSpy = vi.fn((url: string) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url.includes("/standings")
+              ? {
+                  season: { startDate: "2026-08-23", endDate: "2027-05-30" },
+                  standings: [
+                    {
+                      type: "TOTAL",
+                      table: [
+                        {
+                          position: 1,
+                          team: { id: 108, name: "Inter", shortName: "Inter", tla: "INT" },
+                          playedGames: 7,
+                          won: 6,
+                          draw: 1,
+                          lost: 0,
+                          goalsFor: 15,
+                          goalsAgainst: 4,
+                          points: 19,
+                        },
+                      ],
+                    },
+                  ],
+                }
+              : { matches: [] }
+          ),
+          { status: 200 }
+        )
+      )
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const payload = await loadSport("football", { league: "serie-a" });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    for (const [url] of fetchSpy.mock.calls) expect(url).toContain("/competitions/SA/");
+    expect(payload).toMatchObject({ sport: "football", sample: false });
+    if (payload.sport !== "football") throw new Error("not football");
+    expect(payload.league.league.id).toBe("serie-a");
+    expect(payload.options.map((o) => o.id)).toEqual([
+      "uefa-champions-league",
+      "la-liga",
+      "premier-league",
+      "serie-a",
+    ]);
+  });
+
+  it("flags a league that is showing its fixture", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const payload = await loadSport("football", { league: "la-liga" });
+    expect(payload.sample).toBe(true);
+    expect(payload.sport === "football" && payload.league).toBe(getFootballLeague("la-liga"));
   });
 });

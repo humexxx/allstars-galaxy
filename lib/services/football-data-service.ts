@@ -877,10 +877,14 @@ function competitionFor(id: FootballLeagueId): CompetitionConfig {
   return competition;
 }
 
+/** What the league picker offers, in its order. Names only: nothing is fetched. */
+export const FOOTBALL_COMPETITIONS: ReadonlyArray<{ id: FootballLeagueId; name: string }> =
+  COMPETITIONS.map((c) => ({ id: c.internalId, name: c.name }));
+
 /**
- * One competition, cached on its own. The dashboard only needs the Champions
- * League, and a league that fails to refresh keeps its last good table rather
- * than taking the other three down with it.
+ * One competition, cached on its own. The page and the dashboard each ask for
+ * the one league they show, and a league that fails to refresh keeps its last
+ * good table rather than taking the others down with it.
  */
 export const getFootballLeagueData = cachedFeed(
   "football-data league",
@@ -889,10 +893,6 @@ export const getFootballLeagueData = cachedFeed(
   ["football-data:league"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:football"] },
 );
-
-export async function getFootballData(): Promise<FootballLeagueData[]> {
-  return Promise.all(COMPETITIONS.map((c) => getFootballLeagueData(c.internalId)));
-}
 
 /** The mappers and the request budget, exported for their tests. */
 export const __testing = {

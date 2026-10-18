@@ -153,7 +153,7 @@ function SportMark({ emoji }: { emoji: string }) {
 function SportContent({ payload }: { payload: SportPayload }) {
   switch (payload.sport) {
     case "football":
-      return <FootballView leagues={payload.leagues} />;
+      return <FootballView league={payload.league} options={payload.options} />;
     case "worldcup":
       return <WorldCupView data={payload.data} />;
     case "f1":

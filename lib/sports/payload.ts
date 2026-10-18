@@ -3,6 +3,7 @@ import type {
   F1Data,
   F1NewsArticle,
   FootballLeagueData,
+  FootballLeagueId,
   LolData,
   NbaData,
   NflData,
@@ -18,7 +19,13 @@ import type {
  * (`load.ts`) is `server-only`.
  */
 export type SportPayload = (
-  | { sport: "football"; leagues: FootballLeagueData[] }
+  | {
+      sport: "football";
+      /** The league on screen — the only one fetched (`?league=`). */
+      league: FootballLeagueData;
+      /** What the picker offers, by name; the other leagues are not loaded. */
+      options: ReadonlyArray<{ id: FootballLeagueId; name: string }>;
+    }
   | { sport: "worldcup"; data: FootballLeagueData }
   | { sport: "f1"; data: F1Data; news: F1NewsArticle[] }
   | { sport: "lol"; data: LolData }

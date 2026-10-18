@@ -8,7 +8,11 @@ import { NFL_DATA } from "@/lib/data/sports/nfl";
 import { PADEL_DATA } from "@/lib/data/sports/padel";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
 import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
-import { getFootballData, getWorldCupData } from "@/lib/services/football-data-service";
+import {
+  FOOTBALL_COMPETITIONS,
+  getFootballLeagueData,
+  getWorldCupData,
+} from "@/lib/services/football-data-service";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
 import { getF1Data } from "@/lib/services/jolpica-f1-service";
@@ -17,7 +21,12 @@ import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
 import { type SportPayload } from "@/lib/sports/payload";
-import type { SportId } from "@/types/sports";
+import type { FootballLeagueId, SportId } from "@/types/sports";
+
+/** A `?league=` value, or the first league on offer when it names none of them. */
+export function footballLeagueFrom(value: string | undefined): FootballLeagueId {
+  return (FOOTBALL_COMPETITIONS.find((c) => c.id === value) ?? FOOTBALL_COMPETITIONS[0]).id;
+}
 
 /**
  * Fetch exactly the sport being shown.
@@ -27,17 +36,25 @@ import type { SportId } from "@/types/sports";
  * on the free tier and this page spent two of them per visit before the user
  * had chosen anything.
  *
+ * Football goes one step further and fetches only the league in the URL: all
+ * four cost eight of those ten requests, for three tables behind a picker.
+ *
  * `sample` is an identity check: a feed hands back the fixture object itself
  * only when it has no live answer to serve, never a copy.
  */
-export async function loadSport(sport: SportId): Promise<SportPayload> {
+export async function loadSport(
+  sport: SportId,
+  params: { league?: string } = {}
+): Promise<SportPayload> {
   switch (sport) {
     case "football": {
-      const leagues = await getFootballData();
+      const id = footballLeagueFrom(params.league);
+      const league = await getFootballLeagueData(id);
       return {
         sport,
-        leagues,
-        sample: leagues.some((l) => l === getFootballLeague(l.league.id)),
+        league,
+        options: FOOTBALL_COMPETITIONS,
+        sample: league === getFootballLeague(id),
       };
     }
     case "worldcup": {

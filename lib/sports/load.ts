@@ -14,7 +14,7 @@ import { getF1Data } from "@/lib/services/jolpica-f1-service";
 import { getF1News } from "@/lib/services/rapidapi-f1-news-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
-import { getTennisData } from "@/lib/services/thesportsdb-tennis-service";
+import { getTennisData } from "@/lib/services/espn-tennis-service";
 import { type SportPayload } from "@/lib/sports/payload";
 import type { SportId } from "@/types/sports";
 

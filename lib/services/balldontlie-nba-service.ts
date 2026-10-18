@@ -1,10 +1,8 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
-
 import { NBA_DATA } from "@/lib/data/sports/nba";
 import type { Match, MatchStatus, NbaData, Team } from "@/types/sports";
-import { upstreamSignal } from "./upstream";
+import { cachedFeed, upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://api.balldontlie.io/v1";
 const REVALIDATE_SECONDS = 300;
@@ -15,8 +13,10 @@ const REVALIDATE_SECONDS = 300;
  * on its own.
  */
 const PAGE_SIZE = 100;
-/** Wide enough to hold last season's finals and next season's opener. */
-const WINDOW_DAYS = 130;
+/** In season: a few nights either side of today, well under one page. */
+const IN_SEASON_DAYS = 4;
+/** Out of season: far enough ahead to reach October's opener. */
+const OFF_SEASON_AHEAD_DAYS = 130;
 
 type BdlTeam = {
   id: number;
@@ -61,6 +61,32 @@ function shift(from: Date, days: number): Date {
   const d = new Date(from);
   d.setDate(d.getDate() + days);
   return d;
+}
+
+/**
+ * The dates to ask for, as one page of at most a hundred games.
+ *
+ * A page is the OLDEST hundred games in the range, so the range has to be
+ * small enough for today to be inside that page. The old ±130 days only
+ * worked out of season: from November its hundred games stopped at the first
+ * fortnight of the season, and the "latest results" froze there with no
+ * fixtures at all. In season the games are nightly, so a few days either side
+ * is plenty. Between the finals (mid-June) and the first week of the new
+ * season the nearest games are months apart, so that range starts at June 1 —
+ * the finals, never a March night — and runs on to the opener.
+ */
+function gameWindow(today: Date): { start: string; end: string } {
+  const month = today.getMonth();
+  const day = today.getDate();
+  const offSeason =
+    (month === 5 && day >= 15) || month === 6 || month === 7 || month === 8 || (month === 9 && day < 28);
+  if (!offSeason) {
+    return { start: iso(shift(today, -IN_SEASON_DAYS)), end: iso(shift(today, IN_SEASON_DAYS)) };
+  }
+  return {
+    start: `${today.getFullYear()}-06-01`,
+    end: iso(shift(today, OFF_SEASON_AHEAD_DAYS)),
+  };
 }
 
 async function fetchBdl<T>(path: string): Promise<T> {
@@ -159,9 +185,8 @@ function recentAndNext(games: BdlGame[]): BdlGame[] {
 
 async function fetchNbaFromApi(today: Date): Promise<NbaData> {
   const season = currentSeason(today);
-  const games = recentAndNext(
-    await gamesIn(iso(shift(today, -WINDOW_DAYS)), iso(shift(today, WINDOW_DAYS)))
-  );
+  const { start, end } = gameWindow(today);
+  const games = recentAndNext(await gamesIn(start, end));
 
   if (games.length === 0) throw new Error("balldontlie returned no games");
 
@@ -194,22 +219,16 @@ async function fetchNbaFromApi(today: Date): Promise<NbaData> {
 }
 
 /**
- * Live NBA games, falling back to the mock fixture on any failure.
- *
- * Same shape as every other sport service: fetch → map → fall back → cache.
+ * Live NBA games, falling back to the mock fixture when there is no last good
+ * answer to serve.
  */
-export const getNbaData = unstable_cache(
-  async (): Promise<NbaData> => {
-    try {
-      return await fetchNbaFromApi(new Date());
-    } catch (error) {
-      console.warn("balldontlie NBA fetch failed, using mock:", error);
-      return NBA_DATA;
-    }
-  },
+export const getNbaData = cachedFeed(
+  "balldontlie NBA",
+  () => fetchNbaFromApi(new Date()),
+  () => NBA_DATA,
   ["nba-data"],
-  { revalidate: REVALIDATE_SECONDS }
+  { revalidate: REVALIDATE_SECONDS, tags: ["sports:nba"] }
 );
 
 /** Pure helpers, exported for their tests — nothing here touches the network. */
-export const __testing = { currentSeason, seasonLabel, recentAndNext, statusFrom };
+export const __testing = { currentSeason, seasonLabel, recentAndNext, statusFrom, gameWindow };

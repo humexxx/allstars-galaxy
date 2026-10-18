@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { __testing } from "./balldontlie-nba-service";
 
-const { currentSeason, seasonLabel, recentAndNext, statusFrom } = __testing;
+const { currentSeason, seasonLabel, recentAndNext, statusFrom, gameWindow } = __testing;
 
 const game = (date: string, final = false) => ({
     id: 1,
@@ -64,5 +64,35 @@ describe("statusFrom", () => {
     expect(statusFrom(game("2026-10-20") as never)).toBe("scheduled");
     expect(statusFrom({ ...game("2026-10-20"), status_state: "in" } as never)).toBe("live");
     expect(statusFrom({ ...game("2026-10-20"), postponed: true } as never)).toBe("postponed");
+  });
+});
+
+describe("gameWindow", () => {
+  it("asks for a few nights either side of today in season", () => {
+    // One page is the OLDEST hundred games in the range. ±130 days in
+    // December would have stopped at the season's first fortnight.
+    expect(gameWindow(new Date(2026, 11, 15, 12))).toEqual({
+      start: "2026-12-11",
+      end: "2026-12-19",
+    });
+  });
+
+  it("starts at the finals out of season, never on a March night", () => {
+    expect(gameWindow(new Date(2026, 6, 1, 12))).toEqual({
+      start: "2026-06-01",
+      end: "2026-11-08",
+    });
+  });
+
+  it("keeps the finals in view until the new season has a week of games", () => {
+    expect(gameWindow(new Date(2026, 9, 18, 12)).start).toBe("2026-06-01");
+    expect(gameWindow(new Date(2026, 9, 28, 12))).toEqual({
+      start: "2026-10-24",
+      end: "2026-11-01",
+    });
+  });
+
+  it("stays narrow while the finals are still being played", () => {
+    expect(gameWindow(new Date(2026, 5, 10, 12)).start).toBe("2026-06-06");
   });
 });

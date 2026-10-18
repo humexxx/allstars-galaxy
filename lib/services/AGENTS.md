@@ -224,6 +224,14 @@ const res = await fetch(url, {
 });
 ```
 
+Provider feeds are wrapped in `cachedFeed(label, fetchLive, fallback, keyParts,
+options)` from the same module, not a hand-rolled `unstable_cache` + try/catch.
+`fetchLive` must **throw** on failure: `unstable_cache` keeps its last good
+entry when a background refresh throws, and `cachedFeed` applies the fallback
+outside the cache, so a mock is never stored. Catching inside the cached
+function cached the mock as if it were data for the whole revalidate window —
+one 429 was five minutes of fixtures.
+
 Read-only getters that several components resolve during one render
 (`getUserPortfolio`, `getMainPlan`, `getUserPreferences`, …) are wrapped in
 React's `cache()` so the second call is free. Never wrap a getter that an action

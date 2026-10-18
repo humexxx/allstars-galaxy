@@ -1,7 +1,5 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
-
 import { F1_DATA } from "@/lib/data/sports/f1";
 import type {
   F1Constructor,
@@ -9,7 +7,7 @@ import type {
   F1Driver,
   F1Race,
 } from "@/types/sports";
-import { upstreamSignal } from "./upstream";
+import { cachedFeed, upstreamSignal } from "./upstream";
 
 const JOLPICA_BASE_URL = "https://api.jolpi.ca/ergast/f1";
 const REVALIDATE_SECONDS = 300;
@@ -359,6 +357,31 @@ function mapRaces(
   });
 }
 
+/**
+ * One race per round with its top three, from one call per podium step.
+ *
+ * Jolpica caps `limit` at 100 rows and a season runs to ~500 results, so the
+ * old `results.json?limit=300` came back with the first five races and nothing
+ * after: every podium from round six on was blank and the podium tallies
+ * stopped in May. `results/{n}` returns one row per race whatever the round.
+ */
+function mergePodiumSteps(steps: JolpicaRace[][]): JolpicaRace[] {
+  const byRound = new Map<string, JolpicaRace>();
+  for (const races of steps) {
+    for (const race of races) {
+      const entry = byRound.get(race.round) ?? { ...race, Results: [] };
+      entry.Results = [...(entry.Results ?? []), ...(race.Results ?? [])];
+      byRound.set(race.round, entry);
+    }
+  }
+  return [...byRound.values()].map((race) => ({
+    ...race,
+    Results: [...(race.Results ?? [])].sort(
+      (a, b) => parseInt(a.position, 10) - parseInt(b.position, 10)
+    ),
+  }));
+}
+
 function tallyPodiums(racesWithResults: JolpicaRace[]): {
   driverPodiums: Map<string, number>;
   constructorPodiums: Map<string, number>;
@@ -382,8 +405,10 @@ function tallyPodiums(racesWithResults: JolpicaRace[]): {
   return { driverPodiums, constructorPodiums, resultsByRound };
 }
 
+const PODIUM_STEPS = [1, 2, 3] as const;
+
 async function fetchF1FromApi(): Promise<F1Data> {
-  const [schedule, driverStandings, constructorStandings, allResults] =
+  const [schedule, driverStandings, constructorStandings, ...podiumSteps] =
     await Promise.all([
       fetchJolpica<JolpicaSeasonRacesResponse>(`/current.json`),
       fetchJolpica<JolpicaDriverStandingsResponse>(
@@ -392,11 +417,13 @@ async function fetchF1FromApi(): Promise<F1Data> {
       fetchJolpica<JolpicaConstructorStandingsResponse>(
         `/current/constructorStandings.json`,
       ),
-      fetchJolpica<JolpicaAllResultsResponse>(
-        `/current/results.json?limit=300`,
-      ).catch(() => ({
-        MRData: { RaceTable: { Races: [] } },
-      })),
+      ...PODIUM_STEPS.map((position) =>
+        fetchJolpica<JolpicaAllResultsResponse>(
+          `/current/results/${position}.json?limit=100`,
+        )
+          .then((res) => res.MRData.RaceTable.Races)
+          .catch((): JolpicaRace[] => []),
+      ),
     ]);
 
   const season = parseInt(schedule.MRData.RaceTable.season, 10);
@@ -409,7 +436,7 @@ async function fetchF1FromApi(): Promise<F1Data> {
     throw new Error("Jolpica returned empty standings");
   }
 
-  const podiums = tallyPodiums(allResults.MRData.RaceTable.Races);
+  const podiums = tallyPodiums(mergePodiumSteps(podiumSteps));
 
   return {
     season,
@@ -422,15 +449,13 @@ async function fetchF1FromApi(): Promise<F1Data> {
   };
 }
 
-export const getF1Data = unstable_cache(
-  async (): Promise<F1Data> => {
-    try {
-      return await fetchF1FromApi();
-    } catch (err) {
-      console.warn("Jolpica unavailable, falling back to mock F1_DATA:", err);
-      return F1_DATA;
-    }
-  },
+export const getF1Data = cachedFeed(
+  "Jolpica F1",
+  fetchF1FromApi,
+  () => F1_DATA,
   ["jolpica:f1-data"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:f1"] },
 );
+
+/** Pure mappers, exported for their tests — nothing here touches the network. */
+export const __testing = { mergePodiumSteps, tallyPodiums, mapRaces };

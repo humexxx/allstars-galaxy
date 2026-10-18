@@ -1,8 +1,6 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
-
-import { getFootballLeague, getFootballLeagues } from "@/lib/data/sports/football";
+import { getFootballLeague } from "@/lib/data/sports/football";
 import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
 import { orderMatchesForDisplay } from "@/lib/sports/match-order";
 import type {
@@ -19,12 +17,12 @@ import type {
   StandingBand,
   Team,
 } from "@/types/sports";
-import { upstreamSignal } from "./upstream";
+import { cachedFeed, upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://api.football-data.org/v4";
 // 5 minutes: short enough that live scores are near-current when the user
-// lands, long enough to stay well inside football-data's free 10 req/min
-// (a full cold refresh is 9 calls: 4 comps × 2 + 1 World Cup).
+// lands. Each competition is its own cache entry (2 calls; the World Cup 1),
+// so a refresh never has to spend the whole minute's budget at once.
 const REVALIDATE_SECONDS = 300;
 // Wide enough to stay populated for competitions between rounds (e.g. UCL
 // knockout, or a domestic league in its off-week). Matches are capped below.
@@ -86,12 +84,16 @@ type FdTeam = {
   crest?: string | null;
 };
 
+type FdGoals = { home: number | null; away: number | null };
+
 type FdScore = {
-  fullTime: { home: number | null; away: number | null };
-  halfTime?: { home: number | null; away: number | null };
+  fullTime: FdGoals;
+  halfTime?: FdGoals;
+  regularTime?: FdGoals;
+  extraTime?: FdGoals;
   /** "REGULAR" | "EXTRA_TIME" | "PENALTY_SHOOTOUT" — how the match was decided. */
   duration?: "REGULAR" | "EXTRA_TIME" | "PENALTY_SHOOTOUT";
-  penalties?: { home: number | null; away: number | null };
+  penalties?: FdGoals | null;
 };
 
 type FdMatch = {
@@ -266,7 +268,41 @@ function mapMatchStatus(s: FdMatch["status"], score?: FdScore): MatchStatus {
   }
 }
 
-function parseForm(form: string | undefined): FormResult[] | undefined {
+type Goals = {
+  home: number | null;
+  away: number | null;
+  penalties?: { home: number; away: number };
+};
+
+/**
+ * The match score, with a shoot-out carried beside it rather than inside it.
+ *
+ * football-data folds the penalties into `fullTime`: Germany 1–1 Paraguay,
+ * 3–4 on penalties, arrives as 4–5. `regularTime + extraTime` is the score the
+ * match actually finished on.
+ */
+function goalsOf(score: FdScore): Goals {
+  const { home, away } = score.fullTime;
+  const pens = score.penalties;
+  if (score.duration !== "PENALTY_SHOOTOUT" || pens?.home == null || pens.away == null) {
+    return { home, away };
+  }
+  const played = score.regularTime;
+  const extra = score.extraTime;
+  return {
+    home:
+      played?.home != null
+        ? played.home + (extra?.home ?? 0)
+        : home === null ? null : home - pens.home,
+    away:
+      played?.away != null
+        ? played.away + (extra?.away ?? 0)
+        : away === null ? null : away - pens.away,
+    penalties: { home: pens.home, away: pens.away },
+  };
+}
+
+function parseForm(form: string | null | undefined): FormResult[] | undefined {
   if (!form) return undefined;
   const tokens = form
     .split(/[,\s]+/)
@@ -279,18 +315,94 @@ function parseForm(form: string | undefined): FormResult[] | undefined {
   });
 }
 
+/**
+ * Last five results per team, most recent first, from the matches already
+ * fetched. The free tier sends `form: null` on every standings row, so the
+ * table's form column never rendered.
+ */
+function formFromMatches(matches: FdMatch[]): Map<string, FormResult[]> {
+  const finished = matches
+    .filter((m) => m.status === "FINISHED")
+    .sort((a, b) => b.utcDate.localeCompare(a.utcDate));
+  const form = new Map<string, FormResult[]>();
+  for (const m of finished) {
+    const home = teamFromFd(m.homeTeam);
+    const away = teamFromFd(m.awayTeam);
+    const { home: hg, away: ag } = goalsOf(m.score);
+    if (!home || !away || hg === null || ag === null) continue;
+    for (const [team, scored, conceded] of [
+      [home, hg, ag],
+      [away, ag, hg],
+    ] as const) {
+      const list = form.get(team.id) ?? [];
+      if (list.length >= 5) continue;
+      list.push(scored > conceded ? "W" : scored < conceded ? "L" : "D");
+      form.set(team.id, list);
+    }
+  }
+  return form;
+}
+
+/**
+ * The free tier allows ten requests a minute per KEY, and the key is shared:
+ * production, previews and every local dev server draw on the same ten. This
+ * process cannot count the others' requests, so it reads the provider's own
+ * counter off each response and stops asking once the minute is spent — a
+ * request sent into a spent minute only earns a 429.
+ */
+const budget = { spentUntil: 0 };
+
+function noteBudget(res: Response, now = Date.now()): void {
+  const left = res.headers.get("x-requests-available-minute");
+  const reset = Number(res.headers.get("x-requestcounter-reset"));
+  if (res.status === 429 || (left !== null && Number(left) <= 0)) {
+    budget.spentUntil = now + (Number.isFinite(reset) && reset > 0 ? reset : 60) * 1000;
+  }
+}
+
+/**
+ * Two requests in flight at most. Firing a whole cold refresh at once meant
+ * eight requests left before the first response could say the minute was
+ * nearly gone; queued, each one checks the budget the last one reported.
+ */
+const MAX_IN_FLIGHT = 2;
+let inFlight = 0;
+const waiting: Array<() => void> = [];
+
+async function acquireSlot(): Promise<void> {
+  if (inFlight < MAX_IN_FLIGHT) {
+    inFlight += 1;
+    return;
+  }
+  await new Promise<void>((resolve) => waiting.push(resolve));
+}
+
+function releaseSlot(): void {
+  const next = waiting.shift();
+  if (next) next();
+  else inFlight -= 1;
+}
+
 async function fetchFd<T>(path: string): Promise<T> {
   const token = process.env.FOOTBALL_DATA_API_KEY;
   if (!token) throw new Error("FOOTBALL_DATA_API_KEY not configured");
-  const res = await fetch(`${BASE_URL}${path}`, {
-    signal: upstreamSignal(),
-    headers: { "X-Auth-Token": token },
-    next: { revalidate: REVALIDATE_SECONDS },
-  });
-  if (!res.ok) {
-    throw new Error(`football-data ${res.status} on ${path}`);
+  await acquireSlot();
+  try {
+    if (Date.now() < budget.spentUntil) {
+      throw new Error(`football-data minute spent, skipped ${path}`);
+    }
+    const res = await fetch(`${BASE_URL}${path}`, {
+      signal: upstreamSignal(),
+      headers: { "X-Auth-Token": token },
+    });
+    noteBudget(res);
+    if (!res.ok) {
+      throw new Error(`football-data ${res.status} on ${path}`);
+    }
+    return (await res.json()) as T;
+  } finally {
+    releaseSlot();
   }
-  return (await res.json()) as T;
 }
 
 function windowDates(): { from: string; to: string } {
@@ -308,6 +420,7 @@ function windowDates(): { from: string; to: string } {
 function mapStandings(
   competition: CompetitionConfig,
   rows: FdTableRow[],
+  formByTeam: Map<string, FormResult[]> = new Map(),
 ): { standings: Standing[]; teams: Team[] } {
   const teamsMap = new Map<string, Team>();
   const total = rows.length;
@@ -326,7 +439,7 @@ function mapStandings(
       goalsFor: row.goalsFor,
       goalsAgainst: row.goalsAgainst,
       points: row.points,
-      form: parseForm(row.form),
+      form: parseForm(row.form) ?? formByTeam.get(team.id),
       band: ZONE_BAND_DEFAULTS[competition.internalId](row.position, total),
     });
   }
@@ -346,12 +459,14 @@ function mapMatches(
     if (!home || !away) continue;
     if (!teamsMap.has(home.id)) teamsMap.set(home.id, home);
     if (!teamsMap.has(away.id)) teamsMap.set(away.id, away);
+    const goals = goalsOf(m.score);
     mapped.push({
       id: `m-${m.id}`,
       homeTeamId: home.id,
       awayTeamId: away.id,
-      homeScore: m.score.fullTime.home,
-      awayScore: m.score.fullTime.away,
+      homeScore: goals.home,
+      awayScore: goals.away,
+      penalties: goals.penalties,
       kickoff: m.utcDate,
       status: mapMatchStatus(m.status, m.score),
       stageLabel: matchStageLabel(m),
@@ -433,7 +548,7 @@ function buildRoundFromStage(
 
     if (tie.legs.length === 1) {
       // Single match (final, or one-legged round).
-      const ft = leg1.score.fullTime;
+      const ft = goalsOf(leg1.score);
       const winner = (leg1.score as FdScoreWithWinner).winner;
       matches.push({
         id: `m-${leg1.id}`,
@@ -449,8 +564,8 @@ function buildRoundFromStage(
     }
 
     // Two legs. Leg 2 swaps home/away, so re-orient to the tie's home team.
-    const l1 = leg1.score.fullTime;
-    const l2 = leg2.score.fullTime;
+    const l1 = goalsOf(leg1.score);
+    const l2 = goalsOf(leg2.score);
     const l2HomeForTie = teamFromFd(leg2.homeTeam)?.id === homeId;
     const leg2HomeGoals = l2HomeForTie ? l2.home : l2.away;
     const leg2AwayGoals = l2HomeForTie ? l2.away : l2.home;
@@ -587,8 +702,7 @@ function buildGroupStandings(
       const homeRow = rowFor(home);
       const awayRow = rowFor(away);
       if (m.status !== "FINISHED") continue;
-      const hg = m.score.fullTime.home;
-      const ag = m.score.fullTime.away;
+      const { home: hg, away: ag } = goalsOf(m.score);
       if (hg === null || ag === null) continue;
       homeRow.played += 1;
       awayRow.played += 1;
@@ -685,18 +799,10 @@ async function fetchWorldCupFromApi(): Promise<FootballLeagueData> {
   };
 }
 
-export const getWorldCupData = unstable_cache(
-  async (): Promise<FootballLeagueData> => {
-    try {
-      return await fetchWorldCupFromApi();
-    } catch (err) {
-      console.warn(
-        "football-data World Cup unavailable, falling back to mock:",
-        err,
-      );
-      return WORLD_CUP_DATA;
-    }
-  },
+export const getWorldCupData = cachedFeed(
+  "football-data World Cup",
+  fetchWorldCupFromApi,
+  () => WORLD_CUP_DATA,
   ["football-data:world-cup"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:worldcup"] },
 );
@@ -712,11 +818,11 @@ async function fetchLeague(
   const matchesPath = competition.hasKnockout
     ? `/competitions/${competition.code}/matches`
     : `/competitions/${competition.code}/matches?dateFrom=${window.from}&dateTo=${window.to}`;
+  // Both or neither: a league cached without its matches looked like a live
+  // table with nothing played, and stayed that way for the whole window.
   const [standingsRes, matchesRes] = await Promise.all([
     fetchFd<FdStandingsResponse>(`/competitions/${competition.code}/standings`),
-    fetchFd<FdMatchesResponse>(matchesPath).catch(
-      () => ({ matches: [] }) as FdMatchesResponse,
-    ),
+    fetchFd<FdMatchesResponse>(matchesPath),
   ]);
 
   const tableBlock =
@@ -736,6 +842,7 @@ async function fetchLeague(
   const { standings, teams: standingsTeams } = mapStandings(
     competition,
     tableBlock.table,
+    formFromMatches(matchesRes.matches),
   );
   const teamsMap = new Map<string, Team>(standingsTeams.map((t) => [t.id, t]));
   const knockout = competition.hasKnockout
@@ -764,35 +871,35 @@ async function fetchLeague(
   };
 }
 
-async function fetchFootballFromApi(): Promise<FootballLeagueData[]> {
-  const results = await Promise.all(
-    COMPETITIONS.map(async (competition) => {
-      try {
-        return await fetchLeague(competition);
-      } catch (err) {
-        console.warn(
-          `football-data fetch failed for ${competition.code}, using mock:`,
-          err,
-        );
-        return getFootballLeague(competition.internalId);
-      }
-    }),
-  );
-  return results;
+function competitionFor(id: FootballLeagueId): CompetitionConfig {
+  const competition = COMPETITIONS.find((c) => c.internalId === id);
+  if (!competition) throw new Error(`football-data: no competition for ${id}`);
+  return competition;
 }
 
-export const getFootballData = unstable_cache(
-  async (): Promise<FootballLeagueData[]> => {
-    try {
-      return await fetchFootballFromApi();
-    } catch (err) {
-      console.warn(
-        "football-data unavailable, falling back to mock football leagues:",
-        err,
-      );
-      return getFootballLeagues();
-    }
-  },
-  ["football-data:leagues"],
+/**
+ * One competition, cached on its own. The dashboard only needs the Champions
+ * League, and a league that fails to refresh keeps its last good table rather
+ * than taking the other three down with it.
+ */
+export const getFootballLeagueData = cachedFeed(
+  "football-data league",
+  (id: FootballLeagueId) => fetchLeague(competitionFor(id)),
+  (id: FootballLeagueId) => getFootballLeague(id),
+  ["football-data:league"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:football"] },
 );
+
+export async function getFootballData(): Promise<FootballLeagueData[]> {
+  return Promise.all(COMPETITIONS.map((c) => getFootballLeagueData(c.internalId)));
+}
+
+/** The mappers and the request budget, exported for their tests. */
+export const __testing = {
+  goalsOf,
+  formFromMatches,
+  mapMatches,
+  buildKnockoutBracket,
+  noteBudget,
+  budget,
+};

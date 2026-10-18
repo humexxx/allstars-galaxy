@@ -215,6 +215,61 @@ describe("getDashboardSportsSummary", () => {
     expect(h.secondary?.value).toMatch(/^.+ · \d+[–-]\d+$/);
   });
 
+  it("reads the NBA highlight from the live feed, not the fixture", async () => {
+    // The view went live on balldontlie while this card kept reading NBA_DATA.
+    mockSelect([
+      { id: "a", userId: USER_ID, sportId: "nba", createdAt: new Date() },
+    ]);
+    const nbaTeam = (id: number, name: string, abbreviation: string) => ({
+      id,
+      full_name: `${name} full`,
+      name,
+      abbreviation,
+      conference: "East",
+    });
+    vi.stubEnv("BALLDONTLIE_API_KEY", "test-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  id: 1,
+                  date: "2026-10-20",
+                  datetime: "2026-10-20T23:00:00Z",
+                  season: 2026,
+                  status: "2026-10-20T23:00:00Z",
+                  status_state: "scheduled",
+                  postseason: false,
+                  postponed: false,
+                  home_team_score: 0,
+                  visitor_team_score: 0,
+                  home_team: nbaTeam(20, "Knicks", "NYK"),
+                  visitor_team: nbaTeam(2, "Celtics", "BOS"),
+                },
+              ],
+            }),
+            { status: 200 }
+          )
+        )
+      )
+    );
+
+    try {
+      const [h] = await getDashboardSportsSummary(USER_ID);
+      expect(h.headline).toBe("Knicks vs Celtics");
+      expect(h.tone).toBe("upcoming");
+    } finally {
+      vi.unstubAllEnvs();
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => Promise.reject(new Error("fetch is disabled in unit tests")))
+      );
+    }
+  });
+
   it("skips unknown sportIds defensively without throwing", async () => {
     mockSelect([
       { id: "a", userId: USER_ID, sportId: "totally-unknown", createdAt: new Date() },

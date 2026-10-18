@@ -328,9 +328,9 @@ API_SPORTS_KEY          # Free tier hard-locked to seasons 2022-2024, unusable
                         # plan if we ever upgrade. https://dashboard.api-sports.io
 ```
 
-F1 (Jolpica), LoL (Lolesports) and TheSportsDB are key-less — nothing to
-configure in `.env`. NFL and tennis stay on mock fixtures (no decent free
-provider with current data).
+F1 (Jolpica, plus ESPN for the dashboard card), LoL (Lolesports) and tennis
+(ESPN) are key-less — nothing to configure in `.env`. Only the NFL stays on a
+mock fixture (no decent free provider with current data).
 
 ## Common Workflows
 

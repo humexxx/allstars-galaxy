@@ -6,7 +6,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { userSportsPreferences } from "@/db/schema";
 import { F1_DATA } from "@/lib/data/sports/f1";
-import { getFootballLeagues } from "@/lib/data/sports/football";
+import { getFootballLeague } from "@/lib/data/sports/football";
 import { LOL_DATA } from "@/lib/data/sports/lol";
 import { NBA_DATA } from "@/lib/data/sports/nba";
 import { NFL_DATA } from "@/lib/data/sports/nfl";
@@ -14,20 +14,22 @@ import { PADEL_DATA } from "@/lib/data/sports/padel";
 import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
 import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
+import { getNbaData } from "@/lib/services/balldontlie-nba-service";
 import {
-  getFootballData,
+  getFootballLeagueData,
   getWorldCupData,
 } from "@/lib/services/football-data-service";
 import { getF1Data } from "@/lib/services/jolpica-f1-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
-import { getTennisData } from "@/lib/services/thesportsdb-tennis-service";
+import { getTennisData } from "@/lib/services/espn-tennis-service";
 import type {
   DashboardSportHighlight,
   F1Data,
   FootballLeagueData,
   LolData,
   Match,
+  NbaData,
   PadelData,
   SportId,
   Team,
@@ -85,13 +87,8 @@ export async function setSportFavorite(
 // ---------- Dashboard summary ----------
 
 /**
- * Build a compact dashboard highlight for each favourite sport. LoL pulls from
- * Lolesports, F1 from Jolpica (both cached); the rest are mock fixtures. When
- * more APIs are wired in, this function stays the single place to swap
- * implementations.
- */
-/**
- * The dashboard's per-sport highlights.
+ * The dashboard's per-sport highlights, one per favourite, each read from the
+ * same cached feed as its view; only the NFL is a fixture.
  *
  * `exclude` is how F1 stays out of this card: it has one of its own that
  * carries the same highlight plus its news, and the same race in two cards
@@ -103,26 +100,31 @@ export async function getDashboardSportsSummary(
 ): Promise<DashboardSportHighlight[]> {
   const all = await listUserFavoriteSportIds(userId);
   const favIds = all.filter((id) => !exclude.includes(id));
-  const [lolData, f1Data, footballLeagues, worldCupData, padelData, tennisData] =
+  // Football reads the Champions League alone — the one league the highlight
+  // shows — so the dashboard spends two of football-data's ten a minute, not
+  // eight.
+  const [lolData, f1Data, uclData, worldCupData, padelData, tennisData, nbaData] =
     await Promise.all([
       favIds.includes("lol") ? getLolData() : Promise.resolve(null),
       favIds.includes("f1") ? getF1Data() : Promise.resolve(null),
       favIds.includes("football")
-        ? getFootballData()
+        ? getFootballLeagueData("uefa-champions-league")
         : Promise.resolve(null),
       favIds.includes("worldcup") ? getWorldCupData() : Promise.resolve(null),
       favIds.includes("padel") ? getPadelData() : Promise.resolve(null),
       favIds.includes("tennis") ? getTennisData() : Promise.resolve(null),
+      favIds.includes("nba") ? getNbaData() : Promise.resolve(null),
     ]);
   return favIds
     .map((id) =>
       buildHighlight(id, {
         lolData,
         f1Data,
-        footballLeagues,
+        uclData,
         worldCupData,
         padelData,
         tennisData,
+        nbaData,
       }),
     )
     .filter((h): h is DashboardSportHighlight => h !== null);
@@ -142,10 +144,11 @@ export async function getF1DashboardHighlight(): Promise<DashboardSportHighlight
 type HighlightContext = {
   lolData: LolData | null;
   f1Data: F1Data | null;
-  footballLeagues: FootballLeagueData[] | null;
+  uclData: FootballLeagueData | null;
   worldCupData: FootballLeagueData | null;
   padelData: PadelData | null;
   tennisData: TennisData | null;
+  nbaData: NbaData | null;
 };
 
 function buildHighlight(
@@ -158,11 +161,11 @@ function buildHighlight(
 
   switch (sportId) {
     case "football":
-      return footballHighlight(base, ctx.footballLeagues);
+      return footballHighlight(base, ctx.uclData);
     case "worldcup":
       return worldCupHighlight(base, ctx.worldCupData ?? WORLD_CUP_DATA);
     case "nba":
-      return nbaHighlight(base);
+      return nbaHighlight(base, ctx.nbaData ?? NBA_DATA);
     case "f1":
       return f1Highlight(base, ctx.f1Data ?? F1_DATA);
     case "nfl":
@@ -180,10 +183,9 @@ type HighlightBase = Pick<DashboardSportHighlight, "sportId" | "emoji" | "label"
 
 function footballHighlight(
   base: HighlightBase,
-  liveLeagues: FootballLeagueData[] | null,
+  liveUcl: FootballLeagueData | null,
 ): DashboardSportHighlight {
-  const leagues = liveLeagues ?? getFootballLeagues();
-  const ucl = leagues.find((l) => l.league.id === "uefa-champions-league") ?? leagues[0];
+  const ucl = liveUcl ?? getFootballLeague("uefa-champions-league");
   const teamsMap = new Map<string, Team>(ucl.teams.map((t) => [t.id, t]));
   const featured = pickFeaturedMatch(ucl.matches);
   const leader = ucl.standings[0];
@@ -229,10 +231,12 @@ function worldCupHighlight(
   };
 }
 
-function nbaHighlight(base: HighlightBase): DashboardSportHighlight {
-  const teamsMap = new Map<string, Team>(NBA_DATA.teams.map((t) => [t.id, t]));
-  const featured = pickFeaturedMatch(NBA_DATA.games);
-  const eastLeader = NBA_DATA.standings.find(
+function nbaHighlight(base: HighlightBase, data: NbaData): DashboardSportHighlight {
+  const teamsMap = new Map<string, Team>(data.teams.map((t) => [t.id, t]));
+  const featured = pickFeaturedMatch(data.games);
+  // Live data has no table (the free tier serves no /standings), so the
+  // secondary line only appears on the fixture.
+  const eastLeader = data.standings.find(
     (s) => s.conference === "east" && s.position === 1
   );
   const eastTeam = eastLeader ? teamsMap.get(eastLeader.teamId) : null;
@@ -248,8 +252,12 @@ function nbaHighlight(base: HighlightBase): DashboardSportHighlight {
     ...base,
     headline: featured
       ? matchHeadline(featured, teamsMap)
-      : `NBA · ${NBA_DATA.season}`,
-    context: featured?.stageLabel ?? `Season ${NBA_DATA.season}`,
+      : `NBA · ${data.season}`,
+    // Out of season the heading's season is the finals', while the next game
+    // is October's opener; its date is what is true of it.
+    context: featured
+      ? (featured.stageLabel ?? formatShortDate(featured.kickoff))
+      : `Season ${data.season}`,
     tone: featured ? matchTone(featured) : "upcoming",
     secondary,
   };
@@ -385,7 +393,7 @@ function lolHighlight(base: HighlightBase, data: LolData): DashboardSportHighlig
           : "result",
     secondary: leaderTeam
       ? {
-          label: `${split.region.toUpperCase()} leader`,
+          label: `${split.name} leader`,
           value: `${leaderTeam.shortName} · ${leader.wins}–${leader.losses}`,
         }
       : undefined,
@@ -417,7 +425,10 @@ function matchHeadline(match: Match, teams: Map<string, Team>): string {
   if (match.status === "scheduled") {
     return `${home} vs ${away}`;
   }
-  return `${home} ${match.homeScore ?? "-"} – ${match.awayScore ?? "-"} ${away}`;
+  const pens = match.penalties
+    ? ` (${match.penalties.home}–${match.penalties.away} pens)`
+    : "";
+  return `${home} ${match.homeScore ?? "-"} – ${match.awayScore ?? "-"} ${away}${pens}`;
 }
 
 function lolMatchHeadline(

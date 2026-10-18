@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { PageHeader } from "@/components/portal/page-header";
 import { PortalPageContainer } from "@/components/portal/page-container";
 import { DashboardCardSkeleton } from "@/components/portal/dashboard-card-skeleton";
 import { DashboardFinanceCard } from "@/components/finance/dashboard-finance-card";
@@ -30,15 +29,14 @@ export default async function PortalPage() {
   return (
     <PortalPageContainer>
       <section className="flex flex-col gap-6">
-        <PageHeader
-          title="Dashboard"
-          description="Snapshots from across your workspace."
-        />
+        {/* The cards are the page: a visible title and tagline only pushed
+            them down. The outline still needs its h1. */}
+        <h1 className="sr-only">Dashboard</h1>
         {/* Two columns, and every card but F1's spans both. F1's takes one, so
             it sits at half the row — one sport among several rather than a
             banner. */}
         <div className="grid auto-rows-min gap-4 md:grid-cols-2">
-          <Suspense fallback={<DashboardCardSkeleton tiles={5} chart />}>
+          <Suspense fallback={<DashboardCardSkeleton rail={5} />}>
             <DashboardFinanceCard userId={userId} />
           </Suspense>
           <Suspense fallback={<DashboardCardSkeleton tiles={3} />}>

@@ -1,7 +1,7 @@
 # Finance
 
 > **Status:** Active
-> **Last reviewed:** 2026-09-30
+> **Last reviewed:** 2026-10-18
 
 ## Overview
 Personal financial planning: users build *plans* (scenarios) with incomes,
@@ -30,7 +30,7 @@ calibrated. Health scoring and scenario comparison are part of this module.
 - `schedule.ts` — `planOccurrences`: every dated occurrence of a plan's lines with overrides applied (skip / amount / reschedule, including moves into another month or period). The engine, the today figure, the sidebar breakdowns and the calendar all read it. `RESCHEDULE_MARGIN_MONTHS` / `rescheduleWithinReach` bound how far one occurrence may move; `monthYearOfKey` turns an occurrence's cadence month into its override key
 - `opening-balances.ts` — `changesOpeningBalances` (does an edit change any opening balance, at cent precision) and `restateOpeningSet` (the set restated as of today)
 - `period.ts` — accounting-period helpers (unchanged)
-- `chart-series.ts` — `buildPlanTimeline` / `buildChartSeries` (real past as period closes + projection), `alignTodayPoint`, `buildCompareRows` (compare chart, joined by calendar month), `milestoneCrossings`, and the one debt-free definition (`debtFreeMonthsFromNow`, `describeDebtFree`, `formatDebtFree`, `summaryDebtFree`)
+- `chart-series.ts` — `buildPlanTimeline` / `buildChartSeries` (real past as period closes + projection), `alignTodayPoint`, `buildCompareRows` (compare chart, joined by calendar month), `milestoneCrossings`, and the one debt-free definition (`debtFreeMonthsFromNow`, `describeDebtFree`, `formatDebtFree`, `formatDebtFreeMonth`, `summaryDebtFree`)
 - `scenario.ts` — `compareScenario` (scenario vs base at a shared period; payoff compared as dates)
 - `dashboard.ts` — `buildDashboardFigures` for the dashboard card
 - `debt-payments.ts` — `projectedDebtPayments` / `debtChipAmount`: the calendar's debt chips read the payments the projection made

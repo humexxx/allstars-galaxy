@@ -144,6 +144,9 @@ the title, never an absolutely positioned arrow that overflows on a phone.
 `size="compact"` renders the title at `h3` (still an `<h1>`) for dense data
 surfaces — the plan editor and the portfolio. Its `loading.tsx` counterpart is
 `PageHeaderSkeleton` with the same props, so the swap does not shift the page.
+The exception is a page whose content already names itself and that has no
+header actions — the dashboard: it drops `PageHeader` and keeps an
+`<h1 className="sr-only">`, so the outline still has its heading.
 
 ### Code, IDs, and numerics — use `<Code>` / `<Mono>`
 

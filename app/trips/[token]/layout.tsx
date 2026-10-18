@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ModeToggle } from "@/components/mode-toggle";
 import { PortalPageContainer } from "@/components/portal/page-container";
 
+import { signupsAllowed } from "@/lib/auth/signups";
 import { getCurrentUser } from "@/lib/services/auth-server";
 import { getPublicTripByToken } from "@/lib/services/travel-service";
 import { ShareCta } from "@/components/travel/share-cta";
@@ -52,6 +53,7 @@ export default async function PublicTripLayout({
               inviteeEmail={view?.share.inviteeEmail ?? null}
               currentUserEmail={currentUser?.email ?? null}
               shareToken={token}
+              signupsOpen={signupsAllowed()}
             />
           </div>
         </div>

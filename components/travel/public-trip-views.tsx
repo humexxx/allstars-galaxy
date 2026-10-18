@@ -4,10 +4,9 @@ import { useState, type ReactNode } from "react";
 import { CalendarDays, List as ListIcon } from "lucide-react";
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { CalendarTrip } from "@/types/travel";
+import type { SharedCalendarTrip } from "@/types/travel";
 
-import { TripCalendar } from "./trip-calendar";
-import type { ItineraryViewer } from "@/lib/travel/viewer";
+import { SharedTripCalendar } from "./trip-calendar";
 
 /** Light-on-dark segments: the track sits on a photograph, not on the page. */
 const BANNER_SEGMENT =
@@ -28,16 +27,14 @@ export function PublicTripViews({
   banner,
   list,
   aside,
-  trip,
-  viewer,
-  showPrices,
+  calendar,
+  viewerName,
 }: {
   banner: ReactNode;
   list: ReactNode;
   aside: ReactNode;
-  trip: CalendarTrip;
-  viewer: ItineraryViewer | null;
-  showPrices: boolean;
+  calendar: SharedCalendarTrip;
+  viewerName: string | null;
 }) {
   const [view, setView] = useState<"list" | "calendar">("list");
 
@@ -86,13 +83,7 @@ export function PublicTripViews({
           {view === "list" ? (
             list
           ) : (
-            <TripCalendar
-              trip={trip}
-              partySize={1}
-              viewer={viewer}
-              readOnly
-              showPrices={showPrices}
-            />
+            <SharedTripCalendar trip={calendar} viewerName={viewerName} />
           )}
         </div>
         <div className="flex min-w-0 flex-col gap-6">{aside}</div>

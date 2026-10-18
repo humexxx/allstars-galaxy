@@ -151,6 +151,46 @@ function tripFixture(overrides: Record<string, unknown> = {}): unknown {
   };
 }
 
+function itemRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: "i-1",
+    tripId: TRIP_ID,
+    title: "Hotel",
+    category: "lodging",
+    link: "https://example.com/booking",
+    videoUrl: null,
+    fromCode: null,
+    toCode: null,
+    roundTrip: false,
+    priceMax: null,
+    priceUnit: "total",
+    price: null,
+    scheduledOn: "2026-06-02",
+    endsOn: null,
+    notes: null,
+    sortOrder: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+function shareRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: "s-1",
+    tripId: TRIP_ID,
+    token: "tok",
+    inviteeEmail: null,
+    memberId: null,
+    expiresAt: null,
+    revokedAt: null,
+    showPrices: false,
+    showMembers: false,
+    createdAt: new Date(),
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   selectQueue.length = 0;
   insertQueue.length = 0;
@@ -525,17 +565,9 @@ describe("deleteTripShare", () => {
 
 describe("getPublicTripByToken", () => {
   it("returns the trip view for a valid, unrevoked, unexpired token", async () => {
-    const share = {
-      id: "s-1",
-      tripId: TRIP_ID,
-      token: "tok",
-      revokedAt: null,
-      expiresAt: null,
-      inviteeEmail: null,
-      createdAt: new Date(),
-    };
+    const share = shareRow();
     const trip = tripFixture();
-    const items = [{ id: "i-1", tripId: TRIP_ID, title: "Hotel" }];
+    const items = [itemRow()];
     const photos = [{ id: "p-1", tripId: TRIP_ID, url: "https://x/y.jpg" }];
 
     queueSelect([share]); // share lookup
@@ -553,11 +585,127 @@ describe("getPublicTripByToken", () => {
     expect(out?.trip).toEqual(trip);
     // Items carry their stops: a cruise's ports are half of what its row
     // says, and a link that hides them shows a booking, not a journey.
-    // No `payerIds` / `attendeeIds`: those are trip_members UUIDs and a public
-    // link is unauthenticated. The service narrows and splits with them, then
-    // drops them before the payload crosses the boundary.
-    expect(out?.items).toEqual(items.map((i) => ({ ...i, stops: [], photos: [] })));
+    // Exactly these fields and no others. No `payerIds` / `attendeeIds`:
+    // those are trip_members UUIDs and a public link is unauthenticated. No
+    // raw prices either — the figure, when a link may show one, is `cost`.
+    expect(out?.items).toEqual([
+      {
+        id: "i-1",
+        title: "Hotel",
+        category: "lodging",
+        link: "https://example.com/booking",
+        videoUrl: null,
+        fromCode: null,
+        toCode: null,
+        roundTrip: false,
+        scheduledOn: "2026-06-02",
+        endsOn: null,
+        stops: [],
+        photos: [],
+        cost: null,
+        priceUnit: null,
+        notes: null,
+      },
+    ]);
     expect(out?.photos).toEqual(photos);
+  });
+
+  it("hands a link without prices no figure, no note and nothing to work one out from", async () => {
+    // `showPrices` once gated only what the page drew. The rows went to the
+    // browser whole, so View Source on a link made "without prices" — the
+    // default for a whole-trip link — still read every price and note.
+    queueSelect([shareRow({ showPrices: false })]);
+    queueSelect([tripFixture()]);
+    queueSelect([
+      itemRow({
+        id: "i-1", title: "SJO ⇄ MCO", category: "flight",
+        price: "613.47", priceMax: "829.31", notes: "Seat 14C, ref QX7RTA",
+      }),
+      itemRow({
+        id: "i-2", title: "Hotel", price: "141.29", priceUnit: "per_night",
+        scheduledOn: "2026-06-02", endsOn: "2026-06-05",
+      }),
+    ]);
+    queueSelect([]); // photos
+    queueSelect([]); // stops
+    queueSelect([{ itemId: "i-1", memberId: "jason" }]); // payers
+    queueSelect([{ itemId: "i-1", memberId: "jason" }]); // attendees
+
+    const out = await getPublicTripByToken("tok");
+
+    expect(out?.items).toHaveLength(2);
+    for (const item of out!.items) {
+      expect(item).not.toHaveProperty("price");
+      expect(item).not.toHaveProperty("priceMax");
+      expect(item).not.toHaveProperty("payerIds");
+      expect(item).not.toHaveProperty("attendeeIds");
+      expect(item.cost).toBeNull();
+      expect(item.priceUnit).toBeNull();
+      expect(item.notes).toBeNull();
+    }
+    expect(out?.scope).toBeNull();
+    // What View Source showed: none of it is anywhere in the view.
+    const payload = JSON.stringify(out);
+    for (const hidden of ["613.47", "829.31", "141.29", "per_night", "QX7RTA", "jason"]) {
+      expect(payload).not.toContain(hidden);
+    }
+  });
+
+  it("gives a traveller's link without prices their items and none of the money", async () => {
+    queueSelect([shareRow({ memberId: "bruno", showPrices: false })]);
+    queueSelect([tripFixture()]);
+    queueSelect([
+      itemRow({ id: "i-1", title: "Jason's flight", price: "613.47" }),
+      itemRow({ id: "i-2", title: "Festival", price: "829.31", notes: "Wristbands at gate B" }),
+    ]);
+    queueSelect([]); // photos
+    queueSelect([]); // stops
+    queueSelect([]); // payers
+    queueSelect([{ itemId: "i-1", memberId: "jason" }]); // attendees
+
+    const out = await getPublicTripByToken("tok");
+
+    // Still his trip: the flight he is not on is not on his page.
+    expect(out?.items.map((i) => i.title)).toEqual(["Festival"]);
+    expect(out?.items[0].cost).toBeNull();
+    expect(out?.items[0].notes).toBeNull();
+    // The scope is a bill, and this link shows none — so it is never built,
+    // and the members and payments behind it are never read.
+    expect(out?.scope).toBeNull();
+    expect(dbMock.select).toHaveBeenCalledTimes(7);
+    expect(JSON.stringify(out)).not.toMatch(/829\.31|Wristbands/);
+  });
+
+  it("prices a whole-trip link item by item, with the unit that explains each figure", async () => {
+    queueSelect([shareRow({ showPrices: true })]);
+    queueSelect([tripFixture()]);
+    queueSelect([
+      itemRow({
+        id: "i-1", title: "SJO ⇄ MCO", category: "flight",
+        price: "600.00", priceMax: "800.00", notes: "Seat 14C",
+      }),
+      itemRow({
+        id: "i-2", title: "Hotel", price: "120.00", priceUnit: "per_night",
+        scheduledOn: "2026-06-02", endsOn: "2026-06-05",
+      }),
+      itemRow({ id: "i-3", title: "Dinner" }),
+    ]);
+    queueSelect([]); // photos
+    queueSelect([]); // stops
+    queueSelect([]); // payers
+    queueSelect([]); // attendees
+
+    const out = await getPublicTripByToken("tok");
+
+    expect(out?.items.map((i) => [i.title, i.cost, i.priceUnit])).toEqual([
+      ["SJO ⇄ MCO", { low: 600, high: 800 }, "total"],
+      // Three nights, not one: the unit is applied before the figure leaves.
+      ["Hotel", { low: 360, high: 360 }, "per_night"],
+      // Unpriced is no figure, not $0.
+      ["Dinner", null, null],
+    ]);
+    expect(out?.items[0].notes).toBe("Seat 14C");
+    expect(out?.scope).toBeNull();
   });
 
   it("hands a scoped link one traveller's figures and nobody else's", async () => {
@@ -593,11 +741,15 @@ describe("getPublicTripByToken", () => {
 
     expect(out?.scope).toEqual({
       memberName: "Bruno Fabián",
-      lines: [{ itemId: "i-1", low: 300, high: 400 }],
       owedLow: 300,
       owedHigh: 400,
       paid: 300,
     });
+    // His half, on the item — and not the fare itself, which is Jason's half
+    // as well.
+    expect(out?.items[0].cost).toEqual({ low: 300, high: 400 });
+    expect(out?.items[0]).not.toHaveProperty("price");
+    expect(JSON.stringify(out?.items)).not.toMatch(/600|800/);
     // Jason is nowhere in what crosses the boundary.
     expect(JSON.stringify(out)).not.toContain("Jason");
     // The scope reuses the items already in hand rather than querying them a

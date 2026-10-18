@@ -70,9 +70,9 @@ export type TripWithRelations = Trip & {
 };
 
 /**
- * What the month calendar reads. The planner passes its whole trip; the
- * public page builds one from the share view, which has no member list to
- * give and must not carry the owner's id into a page anybody can open.
+ * What the planner's month calendar reads: its whole trip, because a bar
+ * there opens the item's editor. A share link draws from
+ * `SharedCalendarTrip` instead.
  */
 export type CalendarTrip = Pick<
   TripWithRelations,
@@ -87,12 +87,11 @@ export type CalendarTrip = Pick<
  *
  * The split is worked out on the server so the browser never receives the
  * other travellers' names, percentages or balances — scoping a link would be
- * pointless if the data it hides still arrived in the payload.
+ * pointless if the data it hides still arrived in the payload. What each item
+ * costs this traveller rides on the item, as `PublicTripItem.cost`.
  */
 export type PublicTripScope = {
   memberName: string;
-  /** What each item costs THIS traveller, keyed by item id. */
-  lines: { itemId: string; low: number; high: number }[];
   owedLow: number;
   owedHigh: number;
   /** What they have handed over so far. */
@@ -100,14 +99,52 @@ export type PublicTripScope = {
 };
 
 /**
- * An item as a public link may see it.
+ * An item as a public link may see it: what the page draws, and nothing else.
  *
- * `payerIds` and `attendeeIds` are deliberately absent: they are raw
- * `trip_members` UUIDs, a public link is unauthenticated, and a scoped one
- * exists precisely to keep the other travellers out of the payload. The
- * service uses both lists to narrow and to split, then drops them.
+ * Built field by field in the service, never spread from the row. The member
+ * lists are raw `trip_members` UUIDs, and the raw prices say more than either
+ * kind of link may: one without prices shows no money at all, and one made
+ * for a single traveller shows what that traveller owes — never what the item
+ * costs, which is everybody else's share as well.
  */
-export type PublicTripItem = Omit<TripItemWithStops, "payerIds" | "attendeeIds">;
+export type PublicTripItem = Pick<
+  TripItemWithStops,
+  | "id"
+  | "title"
+  | "category"
+  | "link"
+  | "videoUrl"
+  | "fromCode"
+  | "toCode"
+  | "roundTrip"
+  | "scheduledOn"
+  | "endsOn"
+  | "stops"
+  | "photos"
+> & {
+  /**
+   * What the item costs whoever holds the link: the item itself, or the
+   * scoped traveller's share of it. Null when the link hides money or nobody
+   * has priced the item.
+   */
+  cost: { low: number; high: number } | null;
+  /** Beside a whole-trip figure only, where "/ night" explains it. */
+  priceUnit: TripPriceUnit | null;
+  /** Hidden along with the money. */
+  notes: string | null;
+};
+
+/**
+ * The month as a share link draws it: the dates, the names and the figure on
+ * each bar. These are a client component's props on a page anybody holding
+ * the link can open, so nothing rides along that the calendar does not draw.
+ */
+export type SharedCalendarTrip = Pick<Trip, "startDate" | "endDate" | "currency"> & {
+  items: Pick<
+    PublicTripItem,
+    "id" | "title" | "category" | "scheduledOn" | "endsOn" | "cost"
+  >[];
+};
 
 export type PublicTripView = {
   trip: Trip;
@@ -115,7 +152,11 @@ export type PublicTripView = {
   items: PublicTripItem[];
   photos: TripPhoto[];
   share: TripShare;
-  /** Null when the link covers the whole trip. */
+  /**
+   * Null when the link covers the whole trip, and on any link that hides
+   * money — the scope is one traveller's bill, so without prices there is
+   * nothing in it to show.
+   */
   scope: PublicTripScope | null;
 };
 

@@ -13,7 +13,11 @@ import { Progress } from "@/components/ui/progress";
 import { Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { formatShortDay } from "@/lib/utils/date";
-import type { CalendarTrip, PublicTripView } from "@/types/travel";
+import type {
+  PublicTripItem,
+  PublicTripView,
+  SharedCalendarTrip,
+} from "@/types/travel";
 
 import {
   dayGroupLabel,
@@ -22,7 +26,7 @@ import {
   moneyRange,
   runsUntil,
 } from "@/lib/travel/format";
-import { itemCost, tripCost, unitSuffix } from "@/lib/travel/pricing";
+import { unitSuffix } from "@/lib/travel/pricing";
 // One category table, not a second copy that drifts: this page once labelled
 // flights and cruises "Other" because they were missing from its own list.
 import { CategoryIcon, categoryMeta } from "@/components/travel/category";
@@ -31,6 +35,17 @@ import { ItemItinerary } from "@/components/travel/item-itinerary";
 import { ActivityVideo } from "@/components/travel/activity-video";
 
 const NO_DATE_KEY = "__no_date__";
+
+/** The items' figures added up; one without a figure adds nothing. */
+function sumCosts(items: PublicTripItem[]): { low: number; high: number } {
+  return items.reduce(
+    (acc, item) =>
+      item.cost
+        ? { low: acc.low + item.cost.low, high: acc.high + item.cost.high }
+        : acc,
+    { low: 0, high: 0 }
+  );
+}
 
 /**
  * The trip as its recipient sees it: the planner's own layout, with nothing
@@ -48,27 +63,15 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
   /**
    * Whether this link may show money at all.
    *
-   * The column has always existed and defaulted to false; the renderer simply
-   * never read it, so every "share my trip" link published the costs anyway.
+   * The service has already acted on it — on a link without prices no item
+   * carries a figure or a note, and there is no scope — so here it only
+   * decides whether the banner has a total to show.
    */
   const showPrices = share.showPrices;
 
-  /** What each item costs whoever holds this link. */
-  const scopedLines = scope ? new Map(scope.lines.map((l) => [l.itemId, l])) : null;
-  const lineCost = (item: (typeof items)[number]) => {
-    if (scopedLines) return scopedLines.get(item.id) ?? { low: 0, high: 0 };
-    // Units applied, so a nightly rate is not reported as one night and a
-    // per-person fare not as one traveller.
-    const c = itemCost(item, 1);
-    return { low: c.low, high: c.high };
-  };
-
   const estimate = scope
     ? { low: scope.owedLow, high: scope.owedHigh }
-    : (() => {
-        const t = tripCost(items, 1);
-        return { low: t.low, high: t.high };
-      })();
+    : sumCosts(items);
 
   const groups = new Map<string, typeof items>();
   for (const item of items) {
@@ -90,33 +93,26 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
       ? Math.min(100, (scope.paid / scope.owedLow) * 100)
       : 0;
   /**
-   * What the calendar needs, and nothing more.
+   * What the calendar draws, and nothing more.
    *
-   * Picked field by field rather than spread from the trip: this lands in the
-   * RSC payload of a page anybody with the link can open, and a spread carried
-   * the owner's auth id along with it. The member lists stay empty for the
-   * same reason the service strips them — the scope's own per-item figures
-   * arrive as the viewer instead.
+   * Picked field by field rather than spread: these are a client component's
+   * props, serialised into the payload of a page anybody with the link can
+   * open. A spread of the trip once carried the owner's auth id, and a spread
+   * of the items carried every price and note a link without prices hides.
    */
-  const calendarTrip: CalendarTrip = {
-    id: trip.id,
+  const calendar: SharedCalendarTrip = {
     startDate: trip.startDate,
     endDate: trip.endDate,
     currency: trip.currency,
-    members: [],
-    items: items.map((item) => ({ ...item, payerIds: [], attendeeIds: [] })),
+    items: items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      category: item.category,
+      scheduledOn: item.scheduledOn,
+      endsOn: item.endsOn,
+      cost: item.cost,
+    })),
   };
-
-  const publicViewer = scope
-    ? {
-        // The service has already narrowed `items` to this traveller's, and
-        // the trip's member ids stay on the server.
-        memberId: null,
-        name: scope.memberName,
-        isYou: false,
-        lines: new Map(scope.lines.map((l) => [l.itemId, { low: l.low, high: l.high }])),
-      }
-    : null;
 
   const left = scope
     ? {
@@ -198,7 +194,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                     {items.length}
                   </Badge>
                 )}
-                {scope && showPrices && (
+                {scope && (
                   <Badge variant="outline" className="text-2xs font-normal">
                     {scope.memberName}&apos;s share
                   </Badge>
@@ -216,14 +212,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
 
               {groupKeys.map((key) => {
                 const groupItems = groups.get(key)!;
-                const total = groupItems.reduce(
-                  (acc, it) => {
-                    if (!it.price) return acc;
-                    const c = lineCost(it);
-                    return { low: acc.low + c.low, high: acc.high + c.high };
-                  },
-                  { low: 0, high: 0 }
-                );
+                const total = sumCosts(groupItems);
                 const label =
                   key === NO_DATE_KEY
                     ? "Unscheduled"
@@ -243,7 +232,6 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                     <ul className="-mx-2 divide-y">
                       {groupItems.map((item) => {
                         const meta = categoryMeta(item.category);
-                        const cost = lineCost(item);
                         return (
                           <li key={item.id} className="flex items-start gap-3 px-2 py-3">
                             <CategoryIcon category={item.category} />
@@ -252,12 +240,12 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                                 <Text weight="medium" className="truncate">
                                   {item.title}
                                 </Text>
-                                {showPrices && item.price && (
+                                {item.cost && (
                                   <span className="shrink-0 text-right">
                                     <Mono className="block whitespace-nowrap text-xs font-medium">
-                                      {moneyRange(cost.low, cost.high, trip.currency)}
+                                      {moneyRange(item.cost.low, item.cost.high, trip.currency)}
                                     </Mono>
-                                    {!scope && item.priceUnit !== "total" && (
+                                    {item.priceUnit && item.priceUnit !== "total" && (
                                       <Mono className="block whitespace-nowrap text-2xs text-muted-foreground">
                                         {unitSuffix(item.priceUnit)}
                                       </Mono>
@@ -299,7 +287,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                                   </a>
                                 )}
                               </div>
-                              {showPrices && item.notes && (
+                              {item.notes && (
                                 <Text variant="small">{item.notes}</Text>
                               )}
                               {item.stops.length > 0 && (
@@ -351,7 +339,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
 
   const aside = (
         <>
-          {showPrices && scope && (
+          {scope && (
             <Card>
               <CardHeader>
                 <CardTitle as="h2">Your share</CardTitle>
@@ -425,9 +413,8 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
       banner={banner}
       list={list}
       aside={aside}
-      trip={calendarTrip}
-      viewer={publicViewer}
-      showPrices={showPrices}
+      calendar={calendar}
+      viewerName={scope?.memberName ?? null}
     />
   );
 }

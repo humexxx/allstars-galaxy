@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { CalendarX } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -11,6 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Eyebrow } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { NbaConference, NbaData, Team } from "@/types/sports";
 
@@ -28,9 +32,18 @@ export function NbaView({ data }: NbaViewProps) {
     () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
     [data.teams],
   );
+  const hasStandings = data.standings.length > 0;
+  const played = useMemo(
+    () => data.games.filter((g) => g.status !== "scheduled"),
+    [data.games]
+  );
+  const upcoming = useMemo(
+    () => data.games.filter((g) => g.status === "scheduled"),
+    [data.games]
+  );
 
   return (
-    <Tabs defaultValue="games" className="space-y-6">
+    <Tabs defaultValue="games" className="gap-6">
       <SportShell
         emoji="🏀"
         title="NBA"
@@ -38,21 +51,44 @@ export function NbaView({ data }: NbaViewProps) {
         tabs={
           <TabsList>
             <TabsTrigger value="games">Games</TabsTrigger>
-            <TabsTrigger value="standings">Standings</TabsTrigger>
+            {/* balldontlie's free tier does not serve /standings, and a table
+                invented next to real scores is worse than no table. */}
+            {hasStandings && <TabsTrigger value="standings">Standings</TabsTrigger>}
           </TabsList>
         }
       >
         <TabsContent value="games">
-          <div className="grid gap-2 sm:grid-cols-2">
-            {data.games.map((g) => (
-              <ScoreCard key={g.id} match={g} teams={teamsMap} />
-            ))}
-          </div>
+          {data.games.length === 0 ? (
+            <EmptyState icon={CalendarX} title="No games scheduled right now." />
+          ) : (
+            /* Split, not one undifferentiated grid: out of season the list is
+               half finished finals and half fixtures months away, and the two
+               were rendering as the same thing. */
+            <div className="flex flex-col gap-6">
+              {([
+                ["Results", played],
+                ["Upcoming", upcoming],
+              ] as const).map(([label, list]) =>
+                list.length === 0 ? null : (
+                  <section key={label} className="flex flex-col gap-2">
+                    <Eyebrow>{label}</Eyebrow>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {list.map((g) => (
+                        <ScoreCard key={g.id} match={g} teams={teamsMap} />
+                      ))}
+                    </div>
+                  </section>
+                )
+              )}
+            </div>
+          )}
         </TabsContent>
 
-        <TabsContent value="standings">
-          <NbaStandings data={data} teamsMap={teamsMap} />
-        </TabsContent>
+        {hasStandings && (
+          <TabsContent value="standings">
+            <NbaStandings data={data} teamsMap={teamsMap} />
+          </TabsContent>
+        )}
       </SportShell>
     </Tabs>
   );
@@ -71,14 +107,19 @@ function NbaStandings({
     .sort((a, b) => a.position - b.position);
 
   return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
-        <Tabs value={conf} onValueChange={(v) => setConf(v as NbaConference)}>
-          <TabsList variant="line">
-            <TabsTrigger value="east">Eastern Conference</TabsTrigger>
-            <TabsTrigger value="west">Western Conference</TabsTrigger>
-          </TabsList>
-        </Tabs>
+    <Card size="sm">
+      <CardContent className="flex flex-col gap-3">
+        {/* A segmented control: both conferences share the one table below. */}
+        <ToggleGroup
+          type="single"
+          size="sm"
+          value={conf}
+          onValueChange={(v) => v && setConf(v as NbaConference)}
+          aria-label="Conference"
+        >
+          <ToggleGroupItem value="east">Eastern Conference</ToggleGroupItem>
+          <ToggleGroupItem value="west">Western Conference</ToggleGroupItem>
+        </ToggleGroup>
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">

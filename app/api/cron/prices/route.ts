@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { timingSafeEqual } from "node:crypto";
+import { isCronAuthorized } from "@/lib/cron-auth";
 
 import { refreshPrices } from "@/lib/services/price-service";
 import { backfillAllOwners } from "@/lib/services/allocation-service";
@@ -21,41 +21,29 @@ import { backfillAllOwners } from "@/lib/services/allocation-service";
 // with many individually-quoted tickers is slow rather than heavy.
 export const maxDuration = 60;
 
-const CRON_SECRET = process.env.CRON_SECRET;
-if (!CRON_SECRET) {
-  throw new Error("CRON_SECRET is not configured");
-}
-const EXPECTED_AUTH_HEADER = `Bearer ${CRON_SECRET}`;
-
-function isAuthorized(authHeader: string | null): boolean {
-  // Length check first: timingSafeEqual throws on a length mismatch.
-  if (!authHeader || authHeader.length !== EXPECTED_AUTH_HEADER.length) {
-    return false;
-  }
-  return timingSafeEqual(
-    Buffer.from(authHeader),
-    Buffer.from(EXPECTED_AUTH_HEADER)
-  );
-}
-
-export async function GET(request: NextRequest) {
-  if (!isAuthorized(request.headers.get("authorization"))) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  if (!isCronAuthorized(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await refreshPrices();
+  try {
+    const result = await refreshPrices();
 
-  // Then price any contribution approved since the last run. Doing it here and
-  // not only on demand is what stops a new investor's money being silently
-  // absent from the margin until somebody presses a button.
-  const backfill = await backfillAllOwners();
+    // Then price any contribution approved since the last run. Doing it here
+    // and not only on demand is what stops a new investor's money being
+    // silently absent from the margin until somebody presses a button.
+    const backfill = await backfillAllOwners();
 
-  // Partial failures are reported, not thrown: one unpriced asset must not
-  // discard the quotes that did land.
-  return NextResponse.json({
-    ok: true,
-    ...result,
-    backfill,
-    at: new Date().toISOString(),
-  });
+    // Partial failures are reported, not thrown: one unpriced asset must not
+    // discard the quotes that did land.
+    return NextResponse.json({
+      ok: true,
+      ...result,
+      backfill,
+      at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Price cron error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }

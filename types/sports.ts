@@ -2,17 +2,21 @@
 // designed to be filled by a real API later (e.g. football-data.org, ergast,
 // nba-api, etc.) without changing the UI layer.
 
-import type { userSportsPreferences } from "@/db/schema";
+import type { F1NewsImage, userSportsPreferences } from "@/db/schema";
 
-export type SportId =
-  | "football"
-  | "worldcup"
-  | "padel"
-  | "f1"
-  | "nba"
-  | "tennis"
-  | "nfl"
-  | "lol";
+/** The single list of sport keys — `sportIdSchema` validates against it. */
+export const SPORT_IDS = [
+  "football",
+  "worldcup",
+  "padel",
+  "f1",
+  "nba",
+  "tennis",
+  "nfl",
+  "lol",
+] as const;
+
+export type SportId = (typeof SPORT_IDS)[number];
 
 export type UserSportsPreference = typeof userSportsPreferences.$inferSelect;
 
@@ -81,28 +85,6 @@ export type Match = {
   awayRedCard?: boolean;
 };
 
-/** Two-legged knockout tie, e.g. UEFA Champions League round of 16. */
-export type LegTie = {
-  id: string;
-  homeTeamId: string;
-  awayTeamId: string;
-  legs: [LegLeg, LegLeg];
-  aggregateHome: number;
-  aggregateAway: number;
-  winnerTeamId: string | null;
-  /** Optional label such as "AET" if extra time decided the tie. */
-  decidedBy?: "ft" | "aet" | "pen" | "away-goals";
-};
-
-export type LegLeg = {
-  leg: 1 | 2;
-  homeScore: number;
-  awayScore: number;
-  /** ISO date. */
-  date: string;
-  status: MatchStatus;
-};
-
 /** League / group-stage row. */
 export type Standing = {
   position: number;
@@ -133,6 +115,10 @@ export type StandingBand =
 // ---------- Knockout bracket ----------
 
 export type BracketRoundId =
+  // A Grand Slam draw starts two rounds earlier than any knockout the other
+  // sports have: 128 players is a round of 128.
+  | "round-of-128"
+  | "round-of-64"
   | "round-of-32"
   | "round-of-16"
   | "quarter-final"
@@ -303,6 +289,13 @@ export type RacquetData = {
   season: number;
   rankings: PlayerRanking[];
   tournaments: RacquetTournament[];
+  /**
+   * Everyone appearing in any of this tour's draws.
+   *
+   * A list rather than a Map so it crosses the server/client boundary as
+   * plain data; the view builds the lookup.
+   */
+  drawPlayers?: Team[];
 };
 
 export type TennisData = {
@@ -388,4 +381,38 @@ export type LolSplit = {
 
 export type LolData = {
   splits: LolSplit[];
+};
+
+// ---------- F1 standings (ESPN) ----------
+
+export type F1StandingRow = {
+  position: number;
+  name: string;
+  points: number;
+  /** A driver's headshot, or nothing for a constructor. */
+  imageUrl?: string;
+  /** A driver's country flag. */
+  flagUrl?: string;
+  /** A constructor's team logo, when one is published for it. */
+  logoUrl?: string;
+  /** A constructor's livery colour, for its badge. */
+  color?: string;
+  /** A constructor's short code, shown when there is no logo. */
+  code?: string;
+};
+
+export type F1DashboardStandings = {
+  drivers: F1StandingRow[];
+  constructors: F1StandingRow[];
+};
+
+// ---------- F1 news (RapidAPI, stored daily) ----------
+
+export type F1NewsArticle = {
+  id: string;
+  headline: string;
+  description: string | null;
+  link: string | null;
+  images: F1NewsImage[];
+  firstSeenAt: Date;
 };

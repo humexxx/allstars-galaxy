@@ -1,7 +1,7 @@
 # Productivity
 
 > **Status:** Active
-> **Last reviewed:** 2026-08-22
+> **Last reviewed:** 2026-09-29
 
 ## Overview
 Two surfaces: a personal kanban *board* for day-to-day tasks, and *road paths*
@@ -9,25 +9,33 @@ for long-term goals with milestones, progress tracking, and scheduled
 auto-generated tasks.
 
 ## Routes
-- `/portal/productivity/board` — kanban board
-- `/portal/productivity/road-paths` — long-term goals + milestones
+- `/portal/productivity/board` — kanban board (`board/layout.tsx`, wide container)
+- `/portal/productivity/road-paths` — long-term goals + milestones (`road-paths/layout.tsx`, default container)
 
 ## Server actions — `/app/actions/`
 - `board.ts` — column/task CRUD, reordering, board initialization
-- `road-path.ts` — road path / milestone / progress CRUD; auto-task creation; stats
-- `task-automation.ts` — generate scheduled tasks from road paths
+- `road-path.ts` — road path / milestone / progress CRUD and auto-task creation.
+  `createRoadPathAction` returns a `message` when the path saved but its first
+  task did not
+- `task-automation.ts` — generate scheduled tasks from road paths (no UI caller)
+
+All return `ActionResult<X>` through `safe()`; raw ids are checked with
+`idSchema`, and "not found" is a returned failure, never a throw. The unused
+getter actions were deleted — pages read through the services.
 
 ## Services — `/lib/services/`
-- `board-service.ts`
-- `road-path-service.ts`
-- `task-automation-service.ts`
+- `board-service.ts` — `updateBoardColumn` / `updateBoardTask` return `null` when nothing matched
+- `road-path-service.ts` — every write is scoped by owner or parent row;
+  `getRoadPathDetail()` feeds the server-rendered detail view
+- `task-automation-service.ts` — `createAutomatedTasksForAllUsers()` (the daily
+  cron's entry point; only users with an active auto-creating path)
 
 ## Schemas — `/schemas/`
 - `board.ts`
 - `road-path.ts`
 
 ## Types — `/types/`
-- `productivity.ts`
+- `productivity.ts` — incl. `RoadPathDetail`
 
 ## Components
 `components/productivity/` — board UI, task cards, milestone editors.
@@ -41,6 +49,13 @@ auto-generated tasks.
 
 ## Notes
 - Conventional Commits scope: `productivity`
+- **A task can only sit in the caller's own column.** `createBoardTask`,
+  `updateBoardTask` and a cross-column `reorderTask` run
+  `ensureColumnOwnership` first; a foreign `columnId` used to be inserted as-is
+  and surfaced under the other user's column.
+- `/portal/productivity` has no page, so mutations revalidate it with the
+  `"layout"` type — the default `"page"` type matched nothing.
+- **Logic audit (2026-09-11).** `deleteBoardTask` closes the `order` gap so the positional reorder maths stays right; moving a task to another column from the dialog goes through `reorderBoardTaskAction` first. Task automation compares calendar days / months (UTC), not elapsed hours. Road-path `currentValue` follows the newest entry by date (and resets to 0 when none remain); `totalProgress` is clamped to 0–100 and `daysRemaining` to ≥ 0. `MonthPicker` builds dates from parts so the 31st never rolls over.
 - Auto-task generation runs on the daily cron — see `task-automation.ts`.
 - Board UI keeps optimistic state locally with explicit rollback on error (not via React 19's `useOptimistic`) because the DnD reorder queue depends on a stable local state model.
 - **A server action reports failure in its return value; only a crash throws.**
@@ -75,4 +90,11 @@ auto-generated tasks.
   state it had no history entry, so Back left the module, a refresh dropped
   you back to the grid, and the detail held whatever snapshot the list had
   when it was clicked.
-- `app/portal/productivity/loading.tsx` provides a column-grid skeleton for the board; `app/portal/productivity/error.tsx` is the module error boundary.
+- **The road-path detail renders on the server** from `?path=`, inside a keyed
+  `<Suspense>` with `road-path-detail-skeleton`; there is no client fetch and
+  no `router.refresh()`. Cards are keyboard-reachable: the title is a `Link`
+  whose hit area covers the card.
+- **The board drags from a grip button** with a `KeyboardSensor`, and a failed
+  mutation rolls back only that change, not a whole-board snapshot.
+- `board/loading.tsx` and `road-paths/loading.tsx` draw their own page;
+  `app/portal/productivity/error.tsx` is the module error boundary.

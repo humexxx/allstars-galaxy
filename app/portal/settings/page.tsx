@@ -11,21 +11,17 @@ export const metadata: Metadata = {
   description: "Personal preferences for your portal experience",
 };
 
-export const dynamic = "force-dynamic";
-
 export default async function SettingsPage() {
   const ctx = await requireEffectiveContext();
   const preferences = await getUserPreferences(ctx.effectiveUserId);
 
   return (
     <PortalPageContainer>
-      <section className="space-y-6">
       <PageHeader
         title="Settings"
         description="Personal preferences for your portal experience."
       />
       <SettingsShell preferences={preferences} />
-      </section>
     </PortalPageContainer>
   );
 }

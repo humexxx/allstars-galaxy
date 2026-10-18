@@ -77,6 +77,11 @@ pnpm db:seed        # Seed database
 - Coverage: `pnpm test:coverage` (powered by `@vitest/coverage-v8`). The
   service + action layers sit above 80% statements / 85% lines as of the last
   audit.
+- CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs lint, `tsc`,
+  vitest **and `pnpm build`** with placeholder env (`SKIP_ENV_VALIDATION=1`).
+  The build is the only check that catches a server/client boundary mistake or
+  a module-scope env throw, so nothing may read a secret at import time — the
+  cron routes read `CRON_SECRET` per request for exactly this reason.
 
 ## Architecture
 
@@ -168,11 +173,15 @@ All code, comments, and documentation in **English**.
 
 ### Schemas
 - Location: `/schemas` folder
-- Naming: `[name]Schema` + `[Name]Data`
+- Naming: `[name]Schema` + `[Name]Data` (`z.infer`). Add an `[Name]Input`
+  (`z.input`) only when the schema transforms, defaults or coerces — that is
+  what the action accepts; the service takes the parsed `…Data`.
 - Export both schema and inferred type
+- Shared primitives live in `schemas/common.ts`: `idSchema` (never an inline
+  `z.string().uuid()`), `isoDateSchema`, `moneySchema`
 
 ### Database Changes
-1. Edit `db/schema.ts`
+1. Edit `db/schema.ts` — a new table ends in `.enableRLS()` (see **Security**)
 2. `pnpm db:generate`
 3. `pnpm db:migrate` (see "Running migrations" below for caveats)
 4. Commit schema + migrations together
@@ -217,6 +226,14 @@ is missing and `DATABASE_URL` points at the transaction pooler.
   - **Plain "is signed in" checks** → `requireAuth()` / `requireAuthCached()`
     from the same module.
 - All service queries filter by `userId` for ownership
+- **Every `public` table has RLS on and no policies.** Supabase's Data API
+  serves those tables to anyone holding the publishable key — which ships in
+  the browser bundle — and until migration 0053 it handed out every row. The
+  app never goes through that API: Drizzle connects as `postgres`, the tables'
+  owner, which RLS does not apply to. So a new table chains `.enableRLS()`
+  (`db/schema.test.ts` fails otherwise), and the `anon` / `authenticated`
+  roles hold no grants in `public`. Never use `FORCE ROW LEVEL SECURITY` — it
+  would lock the app out too.
 - Always validate input with Zod
 - No secrets in client code
 
@@ -283,7 +300,8 @@ ALLOW_SIGNUPS  # "true" opens new accounts; anything else (incl. unset) closes t
 ```
 
 **`ALLOW_SIGNUPS` is fail-closed and app-side only.** It gates `/signup`, the
-login page's sign-up link, and the OAuth callback (which rejects an account
+login page's sign-up link, the landing's calls to action (they point at
+`/login` while closed), and the OAuth callback (which rejects an account
 created by that very sign-in — OAuth is a signup path too). It does **not** stop
 a direct `auth.signUp` call: that runs in the browser against Supabase with the
 publishable key. Pair it with Supabase's own *Allow new users to sign up*

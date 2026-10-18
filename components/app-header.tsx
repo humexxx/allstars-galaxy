@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { toast } from "sonner";
 import { useTransition } from "react";
 import { UserCog, X } from "lucide-react";
 import { User } from "@supabase/supabase-js";
@@ -13,8 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NavUser } from "./nav-user";
 import { stopImpersonationAction } from "@/app/actions/impersonation";
-import { type Role } from "@/components/portal/nav-config";
+import type { UserRole } from "@/types/user";
 import { cn } from "@/lib/utils";
+import { useTimeZoneCookie } from "@/hooks/use-time-zone-cookie";
 
 type ImpersonatedUser = {
   id: string;
@@ -27,7 +29,7 @@ type AppHeaderProps = {
   impersonatedUser: ImpersonatedUser | null;
   /** Effective role from the server context (DB-backed). Drives whether the
    *  Admin link surfaces in the horizontal nav. */
-  role?: Role;
+  role?: UserRole;
   isImpersonating?: boolean;
 };
 
@@ -46,6 +48,9 @@ export function AppHeader({
   isImpersonating: isImpersonatingProp,
 }: AppHeaderProps) {
   const [isStopping, startStop] = useTransition();
+  // Tells the server the reader's time zone, so "today" (the finance period,
+  // the dashboard's "now" figures) follows their calendar, not UTC's.
+  useTimeZoneCookie();
   const isImpersonating = isImpersonatingProp ?? impersonatedUser !== null;
 
   const userData = {
@@ -62,7 +67,12 @@ export function AppHeader({
 
   const handleStop = () => {
     startStop(async () => {
-      await stopImpersonationAction();
+      // Success redirects server-side; anything that comes back here failed.
+      try {
+        await stopImpersonationAction();
+      } catch {
+        toast.error("Failed to stop impersonating");
+      }
     });
   };
 
@@ -74,7 +84,7 @@ export function AppHeader({
         // a solid fallback where backdrop-filter isn't supported. The only time
         // we frame it is while impersonating, to keep that state obvious.
         isImpersonating
-          ? "border-b border-amber-500/40 bg-amber-100/70 dark:bg-amber-500/15"
+          ? "border-b border-warning/30 bg-warning/10"
           : "bg-background/95 supports-[backdrop-filter]:bg-background/60 backdrop-blur"
       )}
     >
@@ -94,7 +104,7 @@ export function AppHeader({
         // the mark; from sm up the box is exactly what it was.
         className="-m-2 flex shrink-0 items-center gap-2 rounded-md p-2 transition-opacity hover:opacity-80 sm:m-0 sm:p-0"
       >
-        <Logo className="size-5" />
+        <Logo className="size-5" decorative />
         <span className="hidden text-sm font-semibold tracking-tight sm:inline">
           Allstars Galaxy
         </span>
@@ -105,18 +115,15 @@ export function AppHeader({
       <div className="flex flex-1 items-center justify-center gap-2">
         {isImpersonating && (
           <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className="border-amber-500/60 bg-background/60 text-amber-700 dark:text-amber-200"
-            >
-              <UserCog className="mr-1 h-3 w-3" />
+            <Badge variant="warning">
+              <UserCog />
               Impersonating
             </Badge>
-            <span className="text-sm font-medium text-amber-900 dark:text-amber-100">
+            <span className="text-sm font-medium text-foreground">
               {impersonatedDisplayName}
             </span>
             {impersonatedUser?.email && impersonatedUser?.fullName && (
-              <span className="hidden text-xs text-amber-900/70 dark:text-amber-100/70 sm:inline">
+              <span className="hidden text-xs text-foreground/70 sm:inline">
                 ({impersonatedUser.email})
               </span>
             )}
@@ -131,9 +138,9 @@ export function AppHeader({
             size="sm"
             onClick={handleStop}
             disabled={isStopping}
-            className="border-amber-500/60 bg-background/60 text-amber-900 hover:bg-amber-500/20 dark:text-amber-100"
+            className="border-warning/30 text-warning hover:bg-warning/10 hover:text-warning"
           >
-            <X className="mr-1 h-3.5 w-3.5" />
+            <X />
             {isStopping ? "Stopping…" : "Stop impersonating"}
           </Button>
         )}

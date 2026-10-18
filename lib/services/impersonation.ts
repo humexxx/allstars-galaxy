@@ -14,6 +14,33 @@ import {
 
 export const IMPERSONATION_COOKIE = "cg_impersonating";
 
+export type ImpersonationTarget = {
+  id: string;
+  email: string | null;
+  fullName: string | null;
+  role: UserRole | null;
+};
+
+/**
+ * The user an admin wants to act as. The role comes back with it because both
+ * callers must refuse an admin target: starting a session, and every request
+ * made under one (the role can change mid-session).
+ */
+export async function getImpersonationTarget(
+  userId: string
+): Promise<ImpersonationTarget | null> {
+  const [target] = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      fullName: users.fullName,
+      role: users.role,
+    })
+    .from(users)
+    .where(eq(users.id, userId));
+  return target ?? null;
+}
+
 export type EffectiveContext = {
   realUser: User;
   realRole: UserRole | null;
@@ -42,15 +69,7 @@ async function loadEffectiveContext(): Promise<EffectiveContext | null> {
     };
   }
 
-  const [target] = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      fullName: users.fullName,
-      role: users.role,
-    })
-    .from(users)
-    .where(eq(users.id, impersonatedUserId));
+  const target = await getImpersonationTarget(impersonatedUserId);
 
   // The action already refuses to START impersonating an admin, but a role can
   // change while a session is live: promote the impersonated user and the

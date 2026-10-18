@@ -1,8 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useRef, useTransition } from "react";
 import { Images, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -23,8 +22,9 @@ type TripGalleryProps = {
 };
 
 export function TripGallery({ trip }: TripGalleryProps) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  /** Focus lands here after a delete: the button that had it is gone. */
+  const titleRef = useRef<HTMLHeadingElement>(null);
 
   const handleAdd = async ({
     url,
@@ -43,7 +43,6 @@ export function TripGallery({ trip }: TripGalleryProps) {
     });
     if (res.success) {
       toast.success("Photo added");
-      router.refresh();
     } else {
       toast.error(res.error);
     }
@@ -54,7 +53,7 @@ export function TripGallery({ trip }: TripGalleryProps) {
       const res = await deleteTripPhotoAction(trip.id, photoId);
       if (res.success) {
         toast.success("Photo removed");
-        router.refresh();
+        titleRef.current?.focus();
       } else {
         toast.error(res.error);
       }
@@ -64,29 +63,30 @@ export function TripGallery({ trip }: TripGalleryProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Gallery</CardTitle>
+        <CardTitle as="h2" ref={titleRef} tabIndex={-1} className="outline-none">
+          Gallery
+        </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4 ">
+      <CardContent className="flex flex-col gap-4">
         {trip.photos.length === 0 ? (
           <EmptyState
             icon={Images}
             title="No photos yet"
             description="Pick a few to show in the shared view."
-            className="border-dashed p-6"
           />
         ) : (
           // One row that scrolls sideways. A grid grew a new row for every
           // three photos and pushed everything below it down the page; a rail
           // costs the same height whether the trip has four photos or forty.
           <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1">
-            {trip.photos.map((photo) => (
+            {trip.photos.map((photo, i) => (
               <div
                 key={photo.id}
                 className="group relative aspect-square w-28 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
               >
                 <Image
                   src={photo.url}
-                  alt={photo.caption ?? "Trip photo"}
+                  alt={photo.caption ?? `${trip.title} photo ${i + 1}`}
                   fill
                   sizes="112px"
                   className="object-cover"
@@ -97,17 +97,17 @@ export function TripGallery({ trip }: TripGalleryProps) {
                 />
                 <Button
                   type="button"
-                  size="icon"
+                  size="icon-sm"
                   variant="secondary"
-                  // 24px was below any comfortable touch target, and this one is
-                  // destructive AND always visible on a phone. 36/28 is the
-                  // size the itinerary rows already use.
-                  className="absolute right-1 top-1 size-9 transition-opacity focus-visible:opacity-100 sm:size-7 sm:opacity-0 sm:group-hover:opacity-100"
+                  // The standard row-action size: 24px was below any
+                  // comfortable touch target, and this one is destructive AND
+                  // always visible on a phone.
+                  className="absolute right-1 top-1 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                   onClick={() => handleDelete(photo.id)}
                   disabled={isPending}
-                  aria-label="Delete photo"
+                  aria-label={`Delete photo ${i + 1}`}
                 >
-                  <Trash2 className="size-3.5" />
+                  <Trash2 />
                 </Button>
               </div>
             ))}

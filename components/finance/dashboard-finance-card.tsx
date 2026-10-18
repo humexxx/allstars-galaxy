@@ -1,31 +1,39 @@
 import Link from "next/link";
-import { ArrowRight, PlusCircle, TrendingUp, Wallet } from "lucide-react";
+import {
+  ArrowRight,
+  PlusCircle,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
 
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Heading, Mono, Text } from "@/components/ui/typography";
+import { statToneClass } from "@/components/ui/stat-card";
+import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
-import { formatCurrency } from "@/lib/utils/format";
+import { formatDay } from "@/lib/utils/date";
+import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
 import {
-  getAutoInvestRate,
   getMainPlan,
   getPlanWithLines,
-  getPortfolioValueForUser,
   listUserPlans,
-  projectPlan,
 } from "@/lib/services/finance-plan-service";
-import { buildCalibratedPlan } from "@/lib/services/finance-snapshot-service";
-import { periodIndexForDate } from "@/lib/finance/period";
-
-// UTC-anchored — projection.months[i].date is generated at UTC midnight; local
-// formatting would shift a month for users in negative-offset timezones.
-const MONTH_FMT = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  timeZone: "UTC",
-});
+import { loadCalibratedView } from "@/lib/services/finance-snapshot-service";
+import { buildDashboardFigures } from "@/lib/finance/dashboard";
+import { formatDebtFree } from "@/lib/finance/chart-series";
+import { getRequestTimeZone } from "@/lib/utils/request-today";
+import { todayInTimeZone } from "@/lib/utils/date";
 
 type DashboardFinanceCardProps = {
   userId: string;
@@ -38,21 +46,22 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     return (
       <Card className="col-span-full">
         <CardHeader>
-          <Heading level="h5" as="h2" className="flex items-center gap-2">
-            <Wallet className="h-5 w-5" />
+          <CardTitle as="h2" className="flex items-center gap-2">
+            <Wallet className="size-5 shrink-0" aria-hidden="true" />
             Finance plan
-          </Heading>
-        </CardHeader>
-        <CardContent className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Text variant="muted">
+          </CardTitle>
+          <CardDescription>
             Build a plan to project your savings, debts and net worth month by month.
-          </Text>
-          <Button asChild>
-            <Link href="/portal/plans/new">
-              <PlusCircle className="mr-1 h-4 w-4" /> Create plan
-            </Link>
-          </Button>
-        </CardContent>
+          </CardDescription>
+          <CardAction>
+            <Button asChild>
+              <Link href="/portal/plans/new">
+                <PlusCircle />
+                Create plan
+              </Link>
+            </Button>
+          </CardAction>
+        </CardHeader>
       </Card>
     );
   }
@@ -65,118 +74,85 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   const full = await getPlanWithLines(featured.id, userId);
   if (!full) return null;
 
-  // Calibrate from the latest confirmation so the card reflects the user's real
-  // numbers (the [id] page does the same). Raw plan would ignore confirmations.
-  const baseline = await buildCalibratedPlan(full);
-
-  const [portfolioValue, autoInvestRate] = await Promise.all([
-    baseline.includePortfolio
-      ? getPortfolioValueForUser(userId)
-      : Promise.resolve(0),
-    getAutoInvestRate(baseline),
-  ]);
-  const projection = projectPlan(
-    baseline,
-    baseline.incomes,
-    baseline.expenses,
-    baseline.debts,
-    { portfolioValue, autoInvestRate, overrides: baseline.overrides }
+  // Exactly what the plan page shows: the calibrated plan (portfolio growth
+  // included), with "now" as the day-aware position in the reader's zone.
+  const timeZone = await getRequestTimeZone();
+  const now = todayInTimeZone(timeZone);
+  const view = await loadCalibratedView(full, userId, now, { timeZone });
+  const fig = buildDashboardFigures(
+    view.projection,
+    view.today,
+    full.confirmationDayOfMonth,
+    now
   );
+  const points = fig.points;
+  const delta = fig.delta;
 
-  // Locate the accounting period that contains today (not months[0], the plan
-  // START period) so the "now" figures and the 12-period preview track reality.
-  const lastIdx = Math.max(0, projection.months.length - 1);
-  const todayIdx = Math.min(
-    Math.max(
-      0,
-      periodIndexForDate(baseline.startMonth, baseline.confirmationDayOfMonth, new Date())
-    ),
-    lastIdx
-  );
-  const todayMonth = projection.months[todayIdx];
-
-  const points = projection.months.slice(todayIdx, todayIdx + 12).map((m) => ({
-    month: MONTH_FMT.format(m.date),
-    netWorth: Math.round(m.netWorth),
-  }));
-
-  const currentNetWorth = todayMonth?.netWorth ?? 0;
-  const endNetWorth =
-    projection.months[Math.min(todayIdx + 12, lastIdx)]?.netWorth ??
-    currentNetWorth;
-  const delta = endNetWorth - currentNetWorth;
-  const totalDebt = todayMonth?.totalDebt ?? 0;
-
-  const kpis: Array<{ label: string; value: string; tone?: "neutral" | "positive" | "negative" | "primary" }> = [
-    { label: "Savings now", value: formatCurrency(todayMonth?.savings ?? 0) },
-    { label: "Investments", value: formatCurrency(todayMonth?.investments ?? 0), tone: "primary" },
-    { label: "Debt now", value: formatCurrency(totalDebt) },
+  const kpis: Array<{ label: string; value: string; tone?: KpiTone }> = [
     {
-      label: "Debt-free in",
+      label: fig.status === "before-start" ? "Savings at start" : "Savings now",
+      value: formatCurrency(fig.savings),
+    },
+    { label: "Investments", value: formatCurrency(fig.investments), tone: "primary" },
+    { label: "Debt now", value: formatCurrency(fig.totalDebt) },
+    {
+      label: "Debt-free",
       value:
-        projection.monthsToDebtFree !== null
-          ? `${projection.monthsToDebtFree} mo`
-          : full.debts.length === 0
+        full.debts.length === 0 && fig.debtFree.kind === "no-debt"
           ? "—"
-          : ">range",
+          : formatDebtFree(fig.debtFree).replace(/^Debt-free in /, "in "),
     },
     {
       label: "Net worth",
-      value: formatCurrency(currentNetWorth),
-      tone: currentNetWorth >= 0 ? "positive" : "negative",
+      value: formatCurrency(fig.netWorth),
+      tone: moneySign(fig.netWorth) >= 0 ? "positive" : "negative",
     },
   ];
 
   return (
     <Card className="col-span-full">
       <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1 space-y-1">
-            <Heading level="h5" as="h2" className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 shrink-0" />
-              <span className="truncate">{featured.name}</span>
-            </Heading>
-            <Text variant="muted" className="font-mono tabular-nums">
-              12-month projection · updated {featured.updatedAt.toLocaleDateString()}
-            </Text>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className={cn(
-                "gap-1 font-mono tabular-nums",
-                delta >= 0
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                  : "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
-              )}
-            >
-              <TrendingUp className="h-3 w-3" />
-              {delta >= 0 ? "+" : ""}
-              {formatCurrency(delta)} · 12 mo
-            </Badge>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/portal/plans/${featured.id}`}>
-                Open <ArrowRight className="ml-1 h-3 w-3" />
-              </Link>
-            </Button>
-          </div>
-        </div>
+        <CardTitle as="h2" className="flex min-w-0 items-center gap-2">
+          <Wallet className="size-5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{featured.name}</span>
+        </CardTitle>
+        {/* The delta rides the description line, not the action slot: beside
+            the button it squeezed the plan name to a few characters on phones. */}
+        <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 tabular-nums">
+          <span>12-month projection · updated {formatDay(featured.updatedAt)}</span>
+          <Badge variant={moneySign(delta) >= 0 ? "success" : "destructive"} className="font-mono tabular-nums">
+            {moneySign(delta) >= 0 ? <TrendingUp /> : <TrendingDown />}
+            {formatSignedCurrency(delta)} · {fig.deltaPeriods} mo
+          </Badge>
+        </CardDescription>
+        <CardAction>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/portal/plans/${featured.id}`}>
+              Open
+              <ArrowRight />
+            </Link>
+          </Button>
+        </CardAction>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {kpis.map((k) => (
             <KpiTile key={k.label} {...k} />
           ))}
         </div>
-
-        <div className="mt-4">
-          <DashboardFinanceMiniChart data={points} />
-        </div>
+        <DashboardFinanceMiniChart data={points} />
       </CardContent>
     </Card>
   );
 }
 
+type KpiTone = "neutral" | "positive" | "negative" | "primary";
+
+/**
+ * The StatCard figure (Eyebrow label, Mono value, `statToneClass`) as a tile
+ * inside this card rather than a card of its own. One step smaller than
+ * StatCard's figure: five of these share a row from `sm`.
+ */
 function KpiTile({
   label,
   value,
@@ -184,19 +160,17 @@ function KpiTile({
 }: {
   label: string;
   value: string;
-  tone?: "neutral" | "positive" | "negative" | "primary";
+  tone?: KpiTone;
 }) {
   return (
-    <div className="rounded-md border bg-card/50 p-3">
-      <Text variant="small" className="uppercase tracking-wide">
+    <div className="flex flex-col gap-1 rounded-lg border p-3">
+      <Eyebrow size="sm" as="div">
         {label}
-      </Text>
+      </Eyebrow>
       <Mono
         className={cn(
-          "mt-1 block text-lg font-semibold tabular-nums sm:text-xl",
-          tone === "positive" && "text-emerald-600 dark:text-emerald-400",
-          tone === "negative" && "text-rose-600 dark:text-rose-400",
-          tone === "primary" && "text-primary"
+          "text-lg font-semibold tabular-nums sm:text-xl",
+          tone === "primary" ? "text-primary" : tone !== "neutral" && statToneClass(tone)
         )}
       >
         {value}

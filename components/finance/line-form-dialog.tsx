@@ -8,17 +8,15 @@ import {
   ChevronRight,
   X,
 } from "lucide-react";
-import { format } from "date-fns";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { DateField } from "@/components/ui/date-field";
 import {
   Popover,
   PopoverContent,
@@ -33,6 +31,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+} from "@/components/ui/input-group";
+import {
   RadioGroup,
   RadioGroupItem,
 } from "@/components/ui/radio-group";
@@ -43,14 +54,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Eyebrow, Text } from "@/components/ui/typography";
+import { cn } from "@/lib/utils";
+import type { RecurrenceType } from "@/types/finance";
 
 export type LineKind = "recurring" | "one_time";
 export type LineVariant = "income" | "expense";
-export type RecurrenceType =
-  | "monthly_day"
-  | "monthly_weekday"
-  | "every_n_months";
 
 export type LineFormValues = {
   name: string;
@@ -60,8 +70,8 @@ export type LineFormValues = {
   date: string | null;
   startDate?: string | null;
   endDate?: string | null;
-  // New recurrence model. Defaults to monthly_day so existing flows behave
-  // identically; the UI for choosing other types ships with B5.
+  // Recurrence model. Defaults to monthly_day so existing flows behave
+  // identically.
   recurrenceType: RecurrenceType;
   weekOfMonth: number | null;
   dayOfWeek: number | null;
@@ -76,11 +86,15 @@ type LineFormDialogProps = {
   initial?: Partial<LineFormValues> & { id?: string };
   // Pre-fill the date for one-time entries when opened from the calendar.
   defaultDate?: string;
+  /** Rejects when the save failed; the caller has already said so, and the
+   *  dialog stays open with the input intact. */
   onSubmit: (values: LineFormValues) => Promise<void>;
 };
 
+/** Same rule as the server's `moneySchema`: non-negative, up to 2 decimals. */
+const MONEY = /^\d+(\.\d{1,2})?$/;
+
 function toISODate(d: Date): string {
-  // Normalise to UTC midnight to keep day-precision stable across timezones.
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate()
   ).padStart(2, "0")}`;
@@ -140,6 +154,7 @@ function LineForm({
   const noun = variant === "income" ? "income" : "expense";
   const nameInputId = useId();
   const amountInputId = useId();
+  const amountErrorId = useId();
   const domInputId = useId();
 
   const [name, setName] = useState(initial?.name ?? "");
@@ -159,9 +174,7 @@ function LineForm({
   const [endDate, setEndDate] = useState<string | null>(
     initial?.endDate ?? null
   );
-  // B1/B2 recurrence fields — the UI for these is the ScheduleSection's
-  // Repeats selector. Default to monthly_day for new entries (identical to
-  // the prior behaviour).
+  // Default to monthly_day for new entries (identical to the prior behaviour).
   const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>(
     initial?.recurrenceType ?? "monthly_day"
   );
@@ -179,9 +192,14 @@ function LineForm({
   );
   const [submitting, setSubmitting] = useState(false);
 
+  // The server rejects anything else as "Invalid input" with no hint of which
+  // field; saying so here, next to the field, is the useful version.
+  const amountInvalid = amount.trim().length > 0 && !MONEY.test(amount.trim());
+
   const canSubmit =
     name.trim().length > 0 &&
     amount.trim().length > 0 &&
+    !amountInvalid &&
     (kind === "recurring" || (kind === "one_time" && !!date));
 
   const handleSubmit = async () => {
@@ -205,7 +223,6 @@ function LineForm({
               endDate: kind === "recurring" ? endDate : null,
             }
           : {}),
-        // Recurrence fields pass through untouched; defaults to monthly_day.
         recurrenceType,
         weekOfMonth,
         dayOfWeek,
@@ -213,6 +230,8 @@ function LineForm({
         recurrenceStart,
       });
       onCancel();
+    } catch {
+      // Already reported by the caller; stay open so nothing typed is lost.
     } finally {
       setSubmitting(false);
     }
@@ -231,27 +250,34 @@ function LineForm({
         </DialogDescription>
       </DialogHeader>
 
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor={nameInputId}>Name</Label>
+      <div className="flex flex-col gap-4">
+        <Field className="gap-2">
+          <FieldLabel htmlFor={nameInputId}>Name</FieldLabel>
           <Input
             id={nameInputId}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={variant === "income" ? "Trabajo principal" : "Renta"}
           />
-        </div>
+        </Field>
 
-        <div className="space-y-1.5">
-          <Label htmlFor={amountInputId}>Amount</Label>
+        <Field className="gap-2" data-invalid={amountInvalid || undefined}>
+          <FieldLabel htmlFor={amountInputId}>Amount</FieldLabel>
           <Input
             id={amountInputId}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             inputMode="decimal"
             placeholder="0.00"
+            aria-invalid={amountInvalid || undefined}
+            aria-describedby={amountInvalid ? amountErrorId : undefined}
           />
-        </div>
+          {amountInvalid && (
+            <FieldError id={amountErrorId}>
+              Use a positive number with up to 2 decimals.
+            </FieldError>
+          )}
+        </Field>
 
         <ScheduleSection
           kind={kind}
@@ -281,11 +307,12 @@ function LineForm({
       </div>
 
       <DialogFooter>
-        <Button variant="ghost" onClick={onCancel} disabled={submitting}>
+        <Button variant="outline" onClick={onCancel} disabled={submitting}>
           Cancel
         </Button>
         <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
-          {isEdit ? "Save" : "Add"}
+          {submitting && <Spinner />}
+          {submitting ? "Saving…" : isEdit ? "Save" : "Add"}
         </Button>
       </DialogFooter>
     </>
@@ -372,15 +399,18 @@ function ScheduleSection({
     // Auto-expand if there's already data in there so users see what they have.
     Boolean(startDate || endDate)
   );
+  const dateId = useId();
+  const startId = useId();
+  const endId = useId();
 
   return (
-    <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-      <Eyebrow as="div" className="tracking-wide">
-        Schedule
-      </Eyebrow>
+    <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3">
+      <Eyebrow as="div">Schedule</Eyebrow>
 
-      <div className="space-y-1.5">
-        <Label>Type</Label>
+      <FieldSet>
+        <FieldLegend variant="label" className="mb-2">
+          Type
+        </FieldLegend>
         <RadioGroup
           value={kind}
           onValueChange={(v) => setKind(v as LineKind)}
@@ -395,7 +425,7 @@ function ScheduleSection({
             One-time
           </label>
         </RadioGroup>
-      </div>
+      </FieldSet>
 
       {kind === "recurring" ? (
         <RecurrenceFields
@@ -415,10 +445,15 @@ function ScheduleSection({
           noun={noun}
         />
       ) : (
-        <div className="space-y-1.5">
-          <Label>Date</Label>
-          <DatePicker value={date} onChange={setDate} placeholder="Pick a date" />
-        </div>
+        <Field className="gap-2">
+          <FieldLabel htmlFor={dateId}>Date</FieldLabel>
+          <DateField
+            id={dateId}
+            value={date ?? ""}
+            onChange={(d) => setDate(d || null)}
+            placeholder="Pick a date"
+          />
+        </Field>
       )}
 
       {showWindow && kind === "recurring" && (
@@ -427,36 +462,39 @@ function ScheduleSection({
             <button
               type="button"
               className="flex w-full items-center justify-between rounded px-1 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-              aria-label="Toggle advanced schedule options"
             >
               <span>Advanced</span>
               <ChevronDown
-                className={`h-3.5 w-3.5 transition-transform duration-200 ${
-                  advancedOpen ? "rotate-180" : ""
-                }`}
+                aria-hidden="true"
+                className={cn(
+                  "size-3.5 transition-transform duration-200",
+                  advancedOpen && "rotate-180"
+                )}
               />
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Start date</Label>
-                <DatePicker
-                  value={startDate}
-                  onChange={setStartDate}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field className="gap-2">
+                <FieldLabel htmlFor={startId}>Start date</FieldLabel>
+                <DateField
+                  id={startId}
+                  value={startDate ?? ""}
+                  onChange={(d) => setStartDate(d || null)}
                   placeholder="Plan start"
                   clearable
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label>End date</Label>
-                <DatePicker
-                  value={endDate}
-                  onChange={setEndDate}
+              </Field>
+              <Field className="gap-2">
+                <FieldLabel htmlFor={endId}>End date</FieldLabel>
+                <DateField
+                  id={endId}
+                  value={endDate ?? ""}
+                  onChange={(d) => setEndDate(d || null)}
                   placeholder="No end"
                   clearable
                 />
-              </div>
+              </Field>
             </div>
             <Text variant="small" className="pt-1.5">
               Limit when this income is active. Leave both empty to run from
@@ -506,15 +544,18 @@ export function RecurrenceFields({
   domInputId,
   noun,
 }: RecurrenceFieldsProps) {
+  const repeatsId = useId();
+  const firstMonthId = useId();
+
   return (
-    <div className="space-y-2.5">
-      <div className="space-y-1.5">
-        <Label>Repeats</Label>
+    <div className="flex flex-col gap-3">
+      <Field className="gap-2">
+        <FieldLabel htmlFor={repeatsId}>Repeats</FieldLabel>
         <Select
           value={recurrenceType}
           onValueChange={(v) => setRecurrenceType(v as RecurrenceType)}
         >
-          <SelectTrigger>
+          <SelectTrigger id={repeatsId}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -525,11 +566,11 @@ export function RecurrenceFields({
             <SelectItem value="every_n_months">Every N months</SelectItem>
           </SelectContent>
         </Select>
-      </div>
+      </Field>
 
       {recurrenceType === "monthly_day" && (
-        <div className="space-y-1.5">
-          <Label htmlFor={domInputId}>Day of month</Label>
+        <Field className="gap-2">
+          <FieldLabel htmlFor={domInputId}>Day of month</FieldLabel>
           <Input
             id={domInputId}
             value={dayOfMonth}
@@ -537,16 +578,18 @@ export function RecurrenceFields({
             inputMode="numeric"
             placeholder="1"
           />
-          <Text variant="small">
+          <FieldDescription>
             When in the month this {noun} hits (1–31). Day 31 clamps to the
             last day of months that don&apos;t have it.
-          </Text>
-        </div>
+          </FieldDescription>
+        </Field>
       )}
 
       {recurrenceType === "monthly_weekday" && (
-        <div className="space-y-1.5">
-          <Label>Occurs on the</Label>
+        <FieldSet className="gap-2">
+          <FieldLegend variant="label" className="mb-2">
+            Occurs on the
+          </FieldLegend>
           {/* Inline-sentence layout: "the [Last] [Friday] of every month" so
               the relationship between the two selects is obvious without
               separate labels. Wraps to two lines on narrow widths. */}
@@ -555,7 +598,7 @@ export function RecurrenceFields({
               value={weekOfMonth != null ? String(weekOfMonth) : ""}
               onValueChange={(v) => setWeekOfMonth(parseInt(v, 10))}
             >
-              <SelectTrigger className="w-28">
+              <SelectTrigger className="w-28" aria-label="Week of the month">
                 <SelectValue placeholder="Pick" />
               </SelectTrigger>
               <SelectContent>
@@ -570,7 +613,7 @@ export function RecurrenceFields({
               value={dayOfWeek != null ? String(dayOfWeek) : ""}
               onValueChange={(v) => setDayOfWeek(parseInt(v, 10))}
             >
-              <SelectTrigger className="w-36">
+              <SelectTrigger className="w-36" aria-label="Weekday">
                 <SelectValue placeholder="Pick day" />
               </SelectTrigger>
               <SelectContent>
@@ -583,17 +626,19 @@ export function RecurrenceFields({
             </Select>
             <Text variant="muted" as="span">of every month</Text>
           </div>
-          <Text variant="small">
+          <FieldDescription>
             Pick <strong>Last</strong> to always use the last occurrence of the
             chosen weekday (handles months that have only four).
-          </Text>
-        </div>
+          </FieldDescription>
+        </FieldSet>
       )}
 
       {recurrenceType === "every_n_months" && (
-        <div className="space-y-2.5">
-          <div className="space-y-1.5">
-            <Label>Occurs</Label>
+        <div className="flex flex-col gap-3">
+          <FieldSet className="gap-2">
+            <FieldLegend variant="label" className="mb-2">
+              Occurs
+            </FieldLegend>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <Text variant="muted" as="span">Every</Text>
               <Input
@@ -620,96 +665,37 @@ export function RecurrenceFields({
                 aria-label="Day of month"
               />
             </div>
-            <Text variant="small">
+            <FieldDescription>
               Interval is 1–12 months. Day clamps to the last day in shorter
               months.
-            </Text>
-          </div>
-          <div className="space-y-1.5">
-            <Label>First month</Label>
+            </FieldDescription>
+          </FieldSet>
+          <Field className="gap-2">
+            <FieldLabel htmlFor={firstMonthId}>First month</FieldLabel>
             <MonthPicker
+              id={firstMonthId}
               value={recurrenceStart}
               onChange={setRecurrenceStart}
               placeholder="Plan start"
               clearable
             />
-            <Text variant="small">
+            <FieldDescription>
               The month the cycle first lands on. Leave empty to anchor to the
               plan&apos;s start month.
-            </Text>
-          </div>
+            </FieldDescription>
+          </Field>
         </div>
       )}
     </div>
   );
 }
 
-function DatePicker({
-  value,
-  onChange,
-  placeholder,
-  clearable,
-}: {
-  value: string | null;
-  onChange: (value: string | null) => void;
-  placeholder: string;
-  clearable?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = fromISODate(value);
-  // The trigger is rendered inside a `relative` wrapper so the clear button
-  // can be absolutely positioned on top of the trigger's right edge — this
-  // keeps the whole control inside its column even when the parent is a
-  // 2-col grid (otherwise `w-full` on the trigger plus a sibling X icon
-  // overflows the column width).
-  return (
-    <div className="relative w-full">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            className={`w-full justify-start font-normal ${
-              clearable && value ? "pr-9" : ""
-            }`}
-            type="button"
-          >
-            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-            <span className="truncate">
-              {selected ? format(selected, "PPP") : placeholder}
-            </span>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
-            mode="single"
-            selected={selected}
-            onSelect={(d) => {
-              onChange(d ? toISODate(d) : null);
-              setOpen(false);
-            }}
-            initialFocus
-          />
-        </PopoverContent>
-      </Popover>
-      {clearable && value && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Clear date"
-          className="absolute right-0 top-1/2 h-9 w-9 -translate-y-1/2 text-muted-foreground hover:text-foreground sm:h-7 sm:w-7"
-          onClick={(e) => {
-            // Don't open the popover when the user only meant to clear.
-            e.stopPropagation();
-            onChange(null);
-          }}
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      )}
-    </div>
-  );
-}
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const MONTH_LABEL = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" });
 
 /**
  * Lightweight month/year picker for fields where the day is meaningless (e.g.
@@ -719,14 +705,17 @@ function DatePicker({
  *
  * UX: trigger renders "Month YYYY" (e.g. "January 2027"); popover has a year
  * stepper (◄ 2027 ►) and a 4×3 grid of month buttons. Selected month is
- * highlighted; the current real-world month is outlined for context.
+ * highlighted; the current real-world month is outlined for context. The clear
+ * button sits inside the control, the same way `DateField` does it.
  */
 function MonthPicker({
+  id,
   value,
   onChange,
   placeholder,
   clearable,
 }: {
+  id?: string;
   value: string | null;
   onChange: (value: string | null) => void;
   placeholder: string;
@@ -734,6 +723,8 @@ function MonthPicker({
 }) {
   const [open, setOpen] = useState(false);
   const selected = fromISODate(value);
+  // Only rendered after a click opens the dialog, so reading the clock here
+  // never runs during the server render.
   const today = new Date();
   const todayYear = today.getFullYear();
   const todayMonth = today.getMonth();
@@ -744,111 +735,108 @@ function MonthPicker({
     selected ? selected.getFullYear() : todayYear
   );
 
-  const monthNames = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ];
-
   const selectedYear = selected?.getFullYear();
   const selectedMonth = selected?.getMonth();
+  const showClear = Boolean(clearable && value);
+
+  const trigger = (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        // Reset the year-stepper to follow the saved value each time the
+        // popover opens, so reopening doesn't strand the user on a year
+        // they navigated away from last time.
+        if (o) setViewYear(selected ? selected.getFullYear() : todayYear);
+        setOpen(o);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          id={id}
+          variant={showClear ? "ghost" : "outline"}
+          className={cn(
+            "min-w-0 flex-1 justify-start font-normal",
+            showClear && "shadow-none hover:bg-transparent",
+            !selected && "text-muted-foreground"
+          )}
+          type="button"
+        >
+          <CalendarIcon className="shrink-0" />
+          <span className="truncate">
+            {selected ? MONTH_LABEL.format(selected) : placeholder}
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-3" align="start">
+        <div className="flex items-center justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setViewYear((y) => y - 1)}
+            aria-label="Previous year"
+          >
+            <ChevronLeft />
+          </Button>
+          <span className="text-sm font-medium">{viewYear}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setViewYear((y) => y + 1)}
+            aria-label="Next year"
+          >
+            <ChevronRight />
+          </Button>
+        </div>
+        <div className="mt-2 grid grid-cols-3 gap-1">
+          {MONTH_NAMES.map((name, idx) => {
+            const isSelected =
+              selectedYear === viewYear && selectedMonth === idx;
+            const isCurrent = viewYear === todayYear && idx === todayMonth;
+            return (
+              <Button
+                key={name}
+                type="button"
+                size="sm"
+                variant={isSelected ? "default" : "ghost"}
+                aria-pressed={isSelected}
+                aria-current={isCurrent ? "date" : undefined}
+                className={cn("h-9", !isSelected && isCurrent && "border border-border")}
+                onClick={() => {
+                  // ISO "YYYY-MM-01" — day is meaningless for this control
+                  // but the DB column is a date, so we pin to day 1.
+                  const mm = String(idx + 1).padStart(2, "0");
+                  onChange(`${viewYear}-${mm}-01`);
+                  setOpen(false);
+                }}
+              >
+                {name}
+              </Button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+
+  if (!showClear) {
+    return <div className="flex min-w-0 items-center">{trigger}</div>;
+  }
 
   return (
-    <div className="relative w-full">
-      <Popover
-        open={open}
-        onOpenChange={(o) => {
-          // Reset the year-stepper to follow the saved value each time the
-          // popover opens, so reopening doesn't strand the user on a year
-          // they navigated away from last time.
-          if (o) setViewYear(selected ? selected.getFullYear() : todayYear);
-          setOpen(o);
-        }}
-      >
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            className={`w-full justify-start font-normal ${
-              clearable && value ? "pr-9" : ""
-            }`}
-            type="button"
-          >
-            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-            <span className="truncate">
-              {selected ? format(selected, "MMMM yyyy") : placeholder}
-            </span>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-64 p-3" align="start">
-          <div className="flex items-center justify-between">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 sm:h-7 sm:w-7"
-              onClick={() => setViewYear((y) => y - 1)}
-              aria-label="Previous year"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm font-medium">{viewYear}</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 sm:h-7 sm:w-7"
-              onClick={() => setViewYear((y) => y + 1)}
-              aria-label="Next year"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="mt-2 grid grid-cols-3 gap-1">
-            {monthNames.map((name, idx) => {
-              const isSelected =
-                selectedYear === viewYear && selectedMonth === idx;
-              const isCurrent = viewYear === todayYear && idx === todayMonth;
-              return (
-                <Button
-                  key={name}
-                  type="button"
-                  size="sm"
-                  variant={isSelected ? "default" : "ghost"}
-                  className={`h-9 text-sm ${
-                    !isSelected && isCurrent
-                      ? "border border-border"
-                      : ""
-                  }`}
-                  onClick={() => {
-                    // ISO "YYYY-MM-01" — day is meaningless for this control
-                    // but the DB column is a date, so we pin to day 1.
-                    const mm = String(idx + 1).padStart(2, "0");
-                    onChange(`${viewYear}-${mm}-01`);
-                    setOpen(false);
-                  }}
-                >
-                  {name}
-                </Button>
-              );
-            })}
-          </div>
-        </PopoverContent>
-      </Popover>
-      {clearable && value && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
+    <InputGroup className="min-w-0">
+      {trigger}
+      <InputGroupAddon align="inline-end">
+        <InputGroupButton
+          size="icon-xs"
+          onClick={() => onChange(null)}
           aria-label="Clear month"
-          className="absolute right-0 top-1/2 h-9 w-9 -translate-y-1/2 text-muted-foreground hover:text-foreground sm:h-7 sm:w-7"
-          onClick={(e) => {
-            e.stopPropagation();
-            onChange(null);
-          }}
         >
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      )}
-    </div>
+          <X />
+        </InputGroupButton>
+      </InputGroupAddon>
+    </InputGroup>
   );
 }
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,7 +14,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/typography";
+import { cn } from "@/lib/utils";
+import { formatPercent } from "@/lib/utils/format";
 import { setTripMembersAction } from "@/app/actions/travel";
 
 export type MemberDraft = {
@@ -24,6 +26,17 @@ export type MemberDraft = {
   email: string;
   sharePercent: string;
 };
+
+/** A draft plus a stable React key: index keys moved typed text and focus
+ *  onto the next row whenever one above it was removed. */
+type Row = MemberDraft & { key: string };
+
+const blankRow = (): Row => ({
+  key: crypto.randomUUID(),
+  name: "",
+  email: "",
+  sharePercent: "",
+});
 
 /**
  * Who is going.
@@ -42,10 +55,11 @@ export function MembersDialog({
   members: MemberDraft[];
   onClose: () => void;
 }) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [rows, setRows] = useState<MemberDraft[]>(
-    members.length > 0 ? members : [{ name: "", email: "", sharePercent: "" }]
+  const [rows, setRows] = useState<Row[]>(() =>
+    members.length > 0
+      ? members.map((m) => ({ ...m, key: m.id ?? crypto.randomUUID() }))
+      : [blankRow()]
   );
 
   const update = (i: number, patch: Partial<MemberDraft>) =>
@@ -64,7 +78,6 @@ export function MembersDialog({
       });
       if (res.success) {
         toast.success("Travellers saved");
-        router.refresh();
         onClose();
       } else {
         toast.error(res.error);
@@ -79,7 +92,7 @@ export function MembersDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Travellers</DialogTitle>
           <DialogDescription>
@@ -87,7 +100,7 @@ export function MembersDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3 ">
+        <div className="flex flex-col gap-3">
           <div className="hidden gap-2 sm:grid sm:grid-cols-[1fr_1fr_5rem_2rem]">
             {/* Column headings, not field labels: a Label with no control
                 to point at announces as a label for nothing. */}
@@ -98,7 +111,7 @@ export function MembersDialog({
           </div>
 
           {rows.map((row, i) => (
-            <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_5rem_2rem]">
+            <div key={row.key} className="grid gap-2 sm:grid-cols-[1fr_1fr_5rem_2rem]">
               <Input
                 aria-label={`Name of traveller ${i + 1}`}
                 value={row.name}
@@ -122,14 +135,14 @@ export function MembersDialog({
               />
               <Button
                 type="button"
-                size="icon"
+                size="icon-sm"
                 variant="ghost"
-                className="size-9 text-destructive"
-                aria-label={`Remove traveller ${i + 1}`}
+                className="self-center text-destructive"
+                aria-label={`Remove ${row.name.trim() || `traveller ${i + 1}`}`}
                 disabled={rows.length === 1}
-                onClick={() => setRows((prev) => prev.filter((_, j) => j !== i))}
+                onClick={() => setRows((prev) => prev.filter((r) => r.key !== row.key))}
               >
-                <Trash2 className="size-4" />
+                <Trash2 />
               </Button>
             </div>
           ))}
@@ -140,18 +153,20 @@ export function MembersDialog({
               size="sm"
               variant="ghost"
               onClick={() =>
-                setRows((prev) => [...prev, { name: "", email: "", sharePercent: "" }])
+                setRows((prev) => [...prev, blankRow()])
               }
             >
-              <Plus className="size-4" /> Add traveller
+              <Plus /> Add traveller
             </Button>
             {fixedTotal > 0 && (
               <Text
-                className={`text-2xs ${
+                role="status"
+                className={cn(
+                  "text-2xs",
                   fixedTotal > 100 ? "text-destructive" : "text-muted-foreground"
-                }`}
+                )}
               >
-                Fixed shares total {fixedTotal.toFixed(0)}%
+                Fixed shares total {formatPercent(fixedTotal, 0)}
                 {fixedTotal > 100 && " — that is more than the whole trip"}
               </Text>
             )}
@@ -168,6 +183,7 @@ export function MembersDialog({
             Cancel
           </Button>
           <Button onClick={save} disabled={isPending || fixedTotal > 100}>
+            {isPending && <Spinner />}
             {isPending ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>

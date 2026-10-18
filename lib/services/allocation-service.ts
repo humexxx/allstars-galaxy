@@ -5,12 +5,13 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   investmentMethods,
+  methodAllocations,
   priceAssets,
   transactionAllocations,
   transactions,
 } from "@/db/schema";
-import { methodAllocations } from "@/db/schema";
 import {
+  isCompleteAllocation,
   splitContribution,
   unitsFor,
   type Allocation,
@@ -24,28 +25,14 @@ export type MethodAllocationRow = {
   percent: number;
 };
 
-export async function getMethodAllocations(
-  methodId: string
-): Promise<MethodAllocationRow[]> {
-  const rows = await db
-    .select({
-      assetId: methodAllocations.assetId,
-      percent: methodAllocations.percent,
-      symbol: priceAssets.symbol,
-      name: priceAssets.name,
-    })
-    .from(methodAllocations)
-    .innerJoin(priceAssets, eq(methodAllocations.assetId, priceAssets.id))
-    .where(eq(methodAllocations.methodId, methodId));
-
-  return rows.map((r) => ({ ...r, percent: parseFloat(r.percent) }));
-}
-
 /** Replace a method's policy wholesale — partial edits would leave gaps. */
 export async function setMethodAllocations(
   methodId: string,
   allocations: Allocation[]
 ): Promise<void> {
+  if (allocations.length > 0 && !isCompleteAllocation(allocations)) {
+    throw new Error("Allocations must total 100%");
+  }
   await db.transaction(async (tx) => {
     await tx.delete(methodAllocations).where(eq(methodAllocations.methodId, methodId));
     if (allocations.length > 0) {
@@ -87,9 +74,25 @@ export async function backfillTransactionAllocations(
   if (owned.length === 0) return { priced: 0, skipped: 0, errors: [] };
   const methodIds = owned.map((m) => m.id);
 
-  const policies = new Map<string, MethodAllocationRow[]>();
-  for (const methodId of methodIds) {
-    policies.set(methodId, await getMethodAllocations(methodId));
+  // One query for every owned method's policy, grouped in memory — a query
+  // per method made this O(methods) round-trips on every backfill.
+  const policyRows = await db
+    .select({
+      methodId: methodAllocations.methodId,
+      assetId: methodAllocations.assetId,
+      percent: methodAllocations.percent,
+      symbol: priceAssets.symbol,
+      name: priceAssets.name,
+    })
+    .from(methodAllocations)
+    .innerJoin(priceAssets, eq(methodAllocations.assetId, priceAssets.id))
+    .where(inArray(methodAllocations.methodId, methodIds));
+
+  const policies = new Map<string, MethodAllocationRow[]>(
+    methodIds.map((id) => [id, []])
+  );
+  for (const { methodId, ...row } of policyRows) {
+    policies.get(methodId)?.push({ ...row, percent: parseFloat(row.percent) });
   }
 
   const pending = await db
@@ -126,7 +129,7 @@ export async function backfillTransactionAllocations(
   // size inside the 5 req/min free tier.
   const assetIds = new Set<string>();
   for (const t of todo) {
-    for (const a of policies.get(t.methodId!) ?? []) assetIds.add(a.assetId);
+    for (const a of policies.get(t.methodId) ?? []) assetIds.add(a.assetId);
   }
   if (assetIds.size === 0) {
     return { priced: 0, skipped: todo.length, errors: ["no allocation configured"] };
@@ -158,9 +161,17 @@ export async function backfillTransactionAllocations(
   let skipped = 0;
 
   for (const t of todo) {
-    const policy = policies.get(t.methodId!) ?? [];
+    const policy = policies.get(t.methodId) ?? [];
     if (policy.length === 0) {
       skipped++;
+      continue;
+    }
+    // splitContribution hands the last slice the remainder, so a policy that
+    // does not reach 100% would silently overweight its last asset — forever,
+    // since the allocation rows are immutable.
+    if (!isCompleteAllocation(policy)) {
+      skipped++;
+      errors.push(`method ${t.methodId} allocation policy does not total 100%`);
       continue;
     }
 
@@ -218,8 +229,20 @@ export async function backfillAllOwners(): Promise<BackfillResult> {
   return totals;
 }
 
+export type DerivedHoldingRow = {
+  transactionId: string;
+  methodId: string;
+  assetId: string;
+  quantity: string;
+  amount: string;
+  priceAtPurchase: string;
+  pricedOn: Date;
+  symbol: string;
+  name: string;
+};
+
 /** Positions derived from every priced contribution, grouped by method. */
-export async function getDerivedHoldings(methodIds: string[]) {
+export async function getDerivedHoldings(methodIds: string[]): Promise<DerivedHoldingRow[]> {
   if (methodIds.length === 0) return [];
 
   return db
@@ -240,7 +263,9 @@ export async function getDerivedHoldings(methodIds: string[]) {
     .where(
       and(
         inArray(transactions.investmentMethodId, methodIds),
-        eq(transactions.status, "approved")
+        // A buy drained by withdrawals flips to "closed" but its units were
+        // real; dropping them left the withdrawal's negative units unmatched.
+        inArray(transactions.status, ["approved", "closed"])
       )
     );
 }

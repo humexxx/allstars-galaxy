@@ -35,7 +35,7 @@ export function DataError({
   title: string;
   backHref: string;
   backLabel: string;
-}) {
+}): React.JSX.Element {
   useEffect(() => {
     console.error(error);
   }, [error]);
@@ -47,7 +47,9 @@ export function DataError({
       {offline && <PlugZap className="size-8 text-muted-foreground" aria-hidden />}
 
       <div className="max-w-md space-y-2">
-        <Heading level="h3" as="h2">
+        {/* The error boundary replaces the whole page, header included, so
+            this is the page's only heading. */}
+        <Heading level="h3" as="h1">
           {offline ? "Couldn't reach the database" : title}
         </Heading>
 
@@ -57,7 +59,7 @@ export function DataError({
               The app is fine — your machine could not resolve the database host. It
               is usually a passing network hiccup; try again in a moment.
             </Text>
-            <Text variant="muted" className="text-xs">
+            <Text variant="small">
               If it keeps happening, run{" "}
               <Code>sh ~/.claude/scripts/diagnose-dns.sh</Code> to see which layer is
               failing.
@@ -70,7 +72,7 @@ export function DataError({
         )}
 
         {error.digest && (
-          <Text variant="muted" className="text-xs">
+          <Text variant="small">
             Reference: {error.digest}
           </Text>
         )}
@@ -78,7 +80,7 @@ export function DataError({
 
       <div className="flex flex-wrap items-center justify-center gap-3">
         <Button onClick={reset}>
-          <RefreshCw className="size-4" />
+          <RefreshCw />
           Try again
         </Button>
         <Button variant="outline" asChild>

@@ -12,7 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { format } from "date-fns";
+import { formatShortDay } from "@/lib/utils/date";
 import { TaskDialog } from "./task-dialog";
 import type { BoardColumn, BoardTask, TaskPriority } from "@/types";
 import type { CreateBoardTaskData } from "@/schemas/board";
@@ -28,9 +28,9 @@ type BoardTaskCardProps = {
 };
 
 const PRIORITY_STYLES: Record<TaskPriority, { bar: string; label: string; tone: string }> = {
-  low: { bar: "bg-emerald-500", label: "Low", tone: "text-emerald-600 dark:text-emerald-400" },
-  medium: { bar: "bg-amber-500", label: "Medium", tone: "text-amber-600 dark:text-amber-400" },
-  high: { bar: "bg-rose-500", label: "High", tone: "text-rose-600 dark:text-rose-400" },
+  low: { bar: "bg-success", label: "Low", tone: "text-success" },
+  medium: { bar: "bg-warning", label: "Medium", tone: "text-warning" },
+  high: { bar: "bg-destructive", label: "High", tone: "text-destructive" },
 };
 
 export function BoardTaskCard({
@@ -45,6 +45,7 @@ export function BoardTaskCard({
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -62,15 +63,16 @@ export function BoardTaskCard({
   const isOptimistic = task.id.startsWith("temp-");
 
   return (
+    // Only the grip drags. With the whole card as the drag button, the card
+    // was a `role="button"` that contained the options button, and a keyboard
+    // user had no way to pick one without the other.
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
       className={cn(
-        "group relative flex cursor-grab flex-col gap-1.5 rounded-lg border bg-card p-3 shadow-sm transition-shadow active:cursor-grabbing",
+        "group relative flex flex-col gap-1.5 rounded-lg border bg-card p-3 shadow-sm transition-shadow",
         isDragging && "opacity-40",
-        isOverlay && "cursor-grabbing shadow-lg ring-1 ring-primary/30",
+        isOverlay && "shadow-lg ring-1 ring-primary/30",
         isOptimistic && "opacity-70",
         !isOverlay && "hover:shadow-md"
       )}
@@ -84,22 +86,31 @@ export function BoardTaskCard({
 
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-1 items-start gap-1.5">
-          <GripVertical
-            className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/40 opacity-60 transition sm:opacity-0 sm:group-hover:opacity-100"
-            aria-hidden="true"
-          />
-          <Heading level="h6" as="h4">{task.title}</Heading>
+          <button
+            type="button"
+            ref={setActivatorNodeRef}
+            {...attributes}
+            {...listeners}
+            aria-label={`Drag ${task.title}`}
+            className={cn(
+              "-ml-1 mt-0.5 shrink-0 cursor-grab touch-none rounded-sm text-muted-foreground/60 opacity-60 transition hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 active:cursor-grabbing sm:opacity-0 sm:group-hover:opacity-100",
+              isOverlay && "cursor-grabbing opacity-100"
+            )}
+          >
+            <GripVertical className="size-4" aria-hidden="true" />
+          </button>
+          <Heading level="h6" as="h3">{task.title}</Heading>
         </div>
         {onDelete ? (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild onPointerDown={(e) => e.stopPropagation()}>
+            <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
-                size="icon"
-                className="size-9 shrink-0 text-muted-foreground/60 opacity-60 transition hover:text-foreground sm:size-6 sm:opacity-0 sm:group-hover:opacity-100"
+                size="icon-sm"
+                className="shrink-0 text-muted-foreground/60 opacity-60 transition hover:text-foreground focus-visible:opacity-100 data-[state=open]:opacity-100 sm:size-6 sm:opacity-0 sm:group-hover:opacity-100"
+                aria-label={`Options for ${task.title}`}
               >
-                <MoreHorizontal className="size-3.5" />
-                <span className="sr-only">Task options</span>
+                <MoreHorizontal />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -108,10 +119,7 @@ export function BoardTaskCard({
                   Edit task
                 </DropdownMenuItem>
               ) : null}
-              <DropdownMenuItem
-                onClick={() => onDelete(task.id)}
-                className="text-destructive"
-              >
+              <DropdownMenuItem variant="destructive" onSelect={() => onDelete(task.id)}>
                 Delete task
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -127,14 +135,16 @@ export function BoardTaskCard({
         <div className="mt-1 flex items-center gap-3 text-2xs">
           {priorityStyle ? (
             <span className={cn("inline-flex items-center gap-1 font-medium", priorityStyle.tone)}>
-              <span className={cn("size-1.5 rounded-full", priorityStyle.bar)} />
+              <span className={cn("size-1.5 rounded-full", priorityStyle.bar)} aria-hidden="true" />
               {priorityStyle.label}
             </span>
           ) : null}
           {task.dueDate ? (
-            <Mono className="inline-flex items-center gap-1 text-muted-foreground">
-              <Calendar className="size-3" />
-              {format(new Date(task.dueDate), "MMM d")}
+            // A timestamp: the server renders it in UTC, the browser in its
+            // own zone, and the day can differ near midnight.
+            <Mono className="inline-flex items-center gap-1 text-muted-foreground" suppressHydrationWarning>
+              <Calendar className="size-3" aria-hidden="true" />
+              {formatShortDay(task.dueDate)}
             </Mono>
           ) : null}
         </div>

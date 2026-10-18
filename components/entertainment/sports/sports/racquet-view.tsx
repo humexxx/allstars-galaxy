@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowDown, ArrowUp, Minus, Trophy } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, CalendarDays, ListOrdered, Minus, Trophy } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Select,
   SelectContent,
@@ -20,8 +21,11 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
-import type { RacquetData } from "@/types/sports";
+import { formatDayRange } from "@/lib/utils/date";
+import type { RacquetData, Team } from "@/types/sports";
 
+import { DrawMatchCard } from "../shared/draw-match-card";
+import { KnockoutBracket } from "../shared/knockout-bracket";
 import { SportShell } from "../shared/sport-shell";
 import { StatusPill } from "../shared/status-pill";
 import { SportsTh } from "../shared/table-primitives";
@@ -39,9 +43,16 @@ export function RacquetView({ emoji, title, subtitle, tours }: RacquetViewProps)
   const defaultTour = tours[0]?.value ?? "main";
   const [tourValue, setTourValue] = useState<string>(defaultTour);
   const activeTour = tours.find((t) => t.value === tourValue) ?? tours[0];
+  const drawn = activeTour.data.tournaments.filter((t) => t.bracket?.length);
+  // The players travel with the tour as a list so they cross the boundary as
+  // plain data; the lookup is built here.
+  const players = useMemo(
+    () => new Map((activeTour.data.drawPlayers ?? []).map((p) => [p.id, p])),
+    [activeTour.data.drawPlayers]
+  );
 
   return (
-    <Tabs defaultValue="rankings" className="space-y-6">
+    <Tabs defaultValue="rankings" className="gap-6">
       <SportShell
         emoji={emoji}
         title={title}
@@ -49,7 +60,7 @@ export function RacquetView({ emoji, title, subtitle, tours }: RacquetViewProps)
         controls={
           tours.length > 1 ? (
             <Select value={tourValue} onValueChange={setTourValue}>
-              <SelectTrigger className="w-56">
+              <SelectTrigger className="w-56" aria-label="Tour">
                 <SelectValue placeholder="Tour" />
               </SelectTrigger>
               <SelectContent>
@@ -66,6 +77,9 @@ export function RacquetView({ emoji, title, subtitle, tours }: RacquetViewProps)
           <TabsList>
             <TabsTrigger value="rankings">Rankings</TabsTrigger>
             <TabsTrigger value="tournaments">Tournaments</TabsTrigger>
+            {/* Only when there is a draw to show. A tab that opens on nothing
+                is worse than one that is not there. */}
+            {drawn.length > 0 && <TabsTrigger value="draw">Draw</TabsTrigger>}
           </TabsList>
         }
       >
@@ -75,8 +89,58 @@ export function RacquetView({ emoji, title, subtitle, tours }: RacquetViewProps)
         <TabsContent value="tournaments">
           <TournamentsList data={activeTour.data} />
         </TabsContent>
+        {drawn.length > 0 && (
+          <TabsContent value="draw">
+            <DrawPanel tournaments={drawn} players={players} />
+          </TabsContent>
+        )}
       </SportShell>
     </Tabs>
+  );
+}
+
+/**
+ * The draw for one tournament, the way a draw sheet reads: pick the event,
+ * then follow the winners across.
+ */
+function DrawPanel({
+  tournaments,
+  players,
+}: {
+  tournaments: RacquetData["tournaments"];
+  players: Map<string, Team>;
+}) {
+  const [openId, setOpenId] = useState(tournaments[0]?.id ?? "");
+  const open = tournaments.find((t) => t.id === openId) ?? tournaments[0];
+
+  return (
+    <div className="flex flex-col gap-4">
+      {tournaments.length > 1 && (
+        <Select value={open.id} onValueChange={setOpenId}>
+          <SelectTrigger className="w-full sm:w-72" aria-label="Tournament">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {tournaments.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                {t.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      <Card size="sm">
+        <CardContent>
+          <KnockoutBracket
+            rounds={open.bracket ?? []}
+            teams={players}
+            renderMatch={(match, teams) => (
+              <DrawMatchCard match={match} teams={teams} />
+            )}
+          />
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -87,18 +151,12 @@ function RankingsTable({ data }: { data: RacquetData }) {
   const showsMovement = data.rankings.some((p) => p.movement !== 0);
 
   if (data.rankings.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-10 text-center">
-          <Text variant="muted">No rankings published for this tour yet.</Text>
-        </CardContent>
-      </Card>
-    );
+    return <EmptyState icon={ListOrdered} title="No rankings published for this tour yet." />;
   }
 
   return (
     <Card>
-      <CardContent className="p-0">
+      <CardContent className="px-0">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -126,12 +184,12 @@ function RankingsTable({ data }: { data: RacquetData }) {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2.5">
-                    <span className="text-base leading-none">{p.flagEmoji}</span>
-                    <span className="text-sm font-medium">{p.shortName}</span>
+                    <span aria-hidden className="text-base leading-none">{p.flagEmoji}</span>
+                    <Text as="span" weight="medium">{p.shortName}</Text>
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Mono className="text-sm font-semibold">{p.points.toLocaleString()}</Mono>
+                  <Mono className="text-sm font-semibold">{p.points.toLocaleString("en-US")}</Mono>
                 </TableCell>
                 {showsMovement ? (
                   <TableCell className="text-center">
@@ -151,20 +209,20 @@ function Movement({ movement }: { movement: number }) {
   if (movement === 0) {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-        <Minus className="h-3 w-3" /> 0
+        <Minus className="size-3" aria-hidden /> 0
       </span>
     );
   }
   if (movement > 0) {
     return (
-      <span className="inline-flex items-center gap-0.5 text-xs font-medium text-emerald-600">
-        <ArrowUp className="h-3 w-3" /> {movement}
+      <span className="inline-flex items-center gap-0.5 text-xs font-medium text-success">
+        <ArrowUp className="size-3" aria-label="Up" /> {movement}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-0.5 text-xs font-medium text-rose-600">
-      <ArrowDown className="h-3 w-3" /> {Math.abs(movement)}
+    <span className="inline-flex items-center gap-0.5 text-xs font-medium text-destructive">
+      <ArrowDown className="size-3" aria-label="Down" /> {Math.abs(movement)}
     </span>
   );
 }
@@ -172,11 +230,7 @@ function Movement({ movement }: { movement: number }) {
 function TournamentsList({ data }: { data: RacquetData }) {
   if (data.tournaments.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-10 text-center">
-          <Text variant="muted">No tournaments on the calendar for this tour.</Text>
-        </CardContent>
-      </Card>
+      <EmptyState icon={CalendarDays} title="No tournaments on the calendar for this tour." />
     );
   }
 
@@ -184,21 +238,21 @@ function TournamentsList({ data }: { data: RacquetData }) {
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {data.tournaments.map((t) => (
         <Card key={t.id} size="sm">
-          <CardContent className="space-y-2 py-1">
+          <CardContent className="flex flex-col gap-2">
             <div className="flex items-start justify-between gap-2">
               <div className="leading-tight">
-                <Eyebrow className="text-2xs">{t.surface ?? "Tour"}</Eyebrow>
-                <div className="text-sm font-semibold">{t.name}</div>
+                <Eyebrow size="sm" as="div">{t.surface ?? "Tour"}</Eyebrow>
+                <Text as="div" weight="semibold">{t.name}</Text>
                 <Text variant="small" as="div">{t.location}</Text>
               </div>
               <StatusPill status={t.status} />
             </div>
             <Mono className="block text-xs text-muted-foreground">
-              {formatRange(t.startDate, t.endDate)}
+              {formatDayRange(t.startDate.slice(0, 10), t.endDate.slice(0, 10))}
             </Mono>
             {t.champion && (
               <div className="flex items-center gap-2 border-t pt-2 text-xs">
-                <Trophy className="h-3.5 w-3.5 text-amber-500" />
+                <Trophy className="size-3.5 text-warning" aria-label="Champion" />
                 <span className="font-medium">{t.champion}</span>
                 {t.runnerUp && (
                   <>
@@ -213,15 +267,4 @@ function TournamentsList({ data }: { data: RacquetData }) {
       ))}
     </div>
   );
-}
-
-function formatRange(start: string, end: string): string {
-  const s = new Date(start);
-  const e = new Date(end);
-  const sameMonth = s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear();
-  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-  if (sameMonth) {
-    return `${s.toLocaleDateString(undefined, opts)} – ${e.getDate()}, ${e.getFullYear()}`;
-  }
-  return `${s.toLocaleDateString(undefined, opts)} – ${e.toLocaleDateString(undefined, opts)}, ${e.getFullYear()}`;
 }

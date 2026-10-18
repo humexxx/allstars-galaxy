@@ -1,25 +1,23 @@
+import type { transactions } from "@/db/schema";
+
+export type Transaction = typeof transactions.$inferSelect;
+export type TransactionStatus = Transaction["status"];
+export type TransactionType = Transaction["type"];
+
+/** What a service needs to write a transaction row; the rest is derived. */
 export type TransactionInput = {
   investmentMethodId: string;
-  type: "buy" | "withdrawal";
+  type: TransactionType;
   amount: string;
   date: Date;
   notes?: string;
 };
 
-export interface Transaction {
+type AdminTransactionPerson = {
   id: string;
-  portfolioId: string;
-  investmentMethodId: string;
-  type: "buy" | "withdrawal";
-  amount: string;
-  fee: string;
-  total: string;
-  date: Date;
-  notes: string | null;
-  status: "pending" | "approved" | "rejected" | "closed";
-  createdAt: Date | null;
-  updatedAt: Date | null;
-}
+  email: string | null;
+  fullName: string | null;
+};
 
 export type AdminTransactionRow = {
   id: string;
@@ -27,30 +25,17 @@ export type AdminTransactionRow = {
   fee: string;
   total: string;
   date: Date;
-  status: "pending" | "approved" | "rejected" | "closed";
-  type: "buy" | "withdrawal";
+  status: TransactionStatus;
+  type: TransactionType;
   notes: string | null;
-  user: {
-    id: string;
-    email: string | null;
-    fullName: string | null;
-    avatarUrl: string | null;
-  } | null;
+  user: (AdminTransactionPerson & { avatarUrl: string | null }) | null;
   method: {
     id: string;
     name: string;
   } | null;
   portfolioName: string | null;
   approvedAt: Date | null;
-  approvedBy: {
-    id: string;
-    email: string | null;
-    fullName: string | null;
-  } | null;
+  approvedBy: AdminTransactionPerson | null;
   rejectedAt: Date | null;
-  rejectedBy: {
-    id: string;
-    email: string | null;
-    fullName: string | null;
-  } | null;
+  rejectedBy: AdminTransactionPerson | null;
 };

@@ -1,7 +1,7 @@
 import { Flame, Globe } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { AppProvider } from "@/app/portal/more-apps/apps-data";
+import type { AppProvider } from "@/types/apps";
 
 /**
  * Small provider mark used on More Apps cards.
@@ -31,7 +31,7 @@ export function ProviderIcon({
   if (provider === "firebase") {
     return (
       <Flame
-        className={cn("size-3 text-orange-500", className)}
+        className={cn("size-3 text-warning", className)}
         aria-hidden="true"
       />
     );

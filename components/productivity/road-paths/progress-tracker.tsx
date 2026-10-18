@@ -1,31 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { LineChart, Plus, Trash2 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Text, Mono } from "@/components/ui/typography";
-import { Plus, Trash2 } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { Mono, Text } from "@/components/ui/typography";
 import {
   createRoadPathProgressAction,
   deleteRoadPathProgressAction,
 } from "@/app/actions/road-path";
 import { runAction } from "@/lib/actions/run";
+import { formatDay } from "@/lib/utils/date";
 import { createRoadPathProgressSchema, type CreateRoadPathProgressInput } from "@/schemas/road-path";
 import type { RoadPathProgress } from "@/types";
-import { format } from "date-fns";
 
 type ProgressTrackerProps = {
   roadPathId: string;
   progress: RoadPathProgress[];
   unit: string;
-  onRefresh: () => void;
 };
 
-export function ProgressTracker({ roadPathId, progress, unit, onRefresh }: ProgressTrackerProps) {
+// The actions revalidate the page, so the log below re-renders from the
+// server on its own — there is nothing to refresh by hand.
+export function ProgressTracker({ roadPathId, progress, unit }: ProgressTrackerProps) {
   const [showForm, setShowForm] = useState(false);
+  const recordButtonRef = useRef<HTMLButtonElement>(null);
+  // No `value`: an empty number field, not a pre-filled zero.
+  const emptyValues = { roadPathId, notes: "" };
   const {
     register,
     handleSubmit,
@@ -33,28 +40,26 @@ export function ProgressTracker({ roadPathId, progress, unit, onRefresh }: Progr
     reset,
   } = useForm<CreateRoadPathProgressInput>({
     resolver: zodResolver(createRoadPathProgressSchema),
-    defaultValues: {
-      roadPathId,
-    },
+    defaultValues: emptyValues,
   });
 
-  const onSubmit = async (data: CreateRoadPathProgressInput) => {
+  const onSubmit = async (data: CreateRoadPathProgressInput): Promise<void> => {
     const { ok } = await runAction(createRoadPathProgressAction(data), {
       success: "Progress recorded",
       failure: "Failed to record progress",
     });
     if (!ok) return;
-    reset({ roadPathId });
+    reset(emptyValues);
     setShowForm(false);
-    onRefresh();
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string): Promise<void> => {
     const { ok } = await runAction(deleteRoadPathProgressAction(id), {
       success: "Entry removed",
       failure: "Failed to remove the entry",
     });
-    if (ok) onRefresh();
+    // The row and its button are gone; keep focus in the list.
+    if (ok) recordButtonRef.current?.focus();
   };
 
   const sortedProgress = progress.toSorted((a, b) => {
@@ -64,68 +69,79 @@ export function ProgressTracker({ roadPathId, progress, unit, onRefresh }: Progr
   });
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2 max-h-75 overflow-y-auto">
-        {sortedProgress.map((entry) => (
-          <div key={entry.id} className="flex items-center justify-between p-2 rounded-lg border">
-            <div>
-              <Text weight="medium"><Mono>{parseFloat(entry.value)}</Mono> {unit}</Text>
-              <Text variant="small">
-                {entry.date && <Mono>{format(new Date(entry.date), "MMM d, yyyy")}</Mono>}
-              </Text>
-            </div>
-            <div className="flex items-center gap-2">
-              {entry.notes && <Text variant="muted">{entry.notes}</Text>}
-              {/* A mistyped figure moves the whole percentage, so it has to be
-                  removable — the action existed, the button did not. */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                onClick={() => handleDelete(entry.id)}
-                aria-label="Remove this entry"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        ))}
-
-        {sortedProgress.length === 0 && !showForm && (
-          <Text variant="muted" className="text-center py-4">
-            No progress recorded yet
-          </Text>
-        )}
-      </div>
+    <div className="flex flex-col gap-4">
+      {sortedProgress.length > 0 ? (
+        <ul className="flex max-h-75 flex-col gap-2 overflow-y-auto">
+          {sortedProgress.map((entry) => {
+            const value = parseFloat(entry.value);
+            const day = entry.date ? formatDay(entry.date) : null;
+            return (
+              <li key={entry.id} className="flex items-center justify-between gap-2 rounded-lg border p-2">
+                <div>
+                  <Text weight="medium">
+                    <Mono>{value}</Mono> {unit}
+                  </Text>
+                  {day && (
+                    <Text variant="small">
+                      {/* A timestamp: server (UTC) and browser can land on
+                          different days near midnight. */}
+                      <Mono suppressHydrationWarning>{day}</Mono>
+                    </Text>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {entry.notes && <Text variant="muted">{entry.notes}</Text>}
+                  {/* A mistyped figure moves the whole percentage, so it has to be
+                      removable — the action existed, the button did not. */}
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-destructive"
+                    onClick={() => handleDelete(entry.id)}
+                    aria-label={`Remove the ${value} ${unit} entry`.replace(/\s+/g, " ")}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        !showForm && <EmptyState icon={LineChart} title="No progress recorded yet" className="p-6" />
+      )}
 
       {showForm ? (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-          <div className="space-y-2">
-            <Label htmlFor="currentValue">Value</Label>
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3">
+          <Field data-invalid={!!errors.value}>
+            <FieldLabel htmlFor="progress-value">Value</FieldLabel>
             <Input
-              id="currentValue"
+              id="progress-value"
               type="number"
               step="0.01"
               placeholder={`Current ${unit}`}
+              aria-invalid={!!errors.value}
+              autoFocus
               {...register("value", { valueAsNumber: true })}
             />
-            {errors.value && (
-              <p className="text-sm text-destructive">{errors.value.message}</p>
-            )}
-          </div>
+            <FieldError errors={[errors.value]} />
+          </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes (optional)</Label>
+          <Field data-invalid={!!errors.notes}>
+            <FieldLabel htmlFor="progress-notes">Notes (optional)</FieldLabel>
             <Input
-              id="notes"
-              placeholder="Any notes..."
+              id="progress-notes"
+              placeholder="Any notes…"
+              aria-invalid={!!errors.notes}
               {...register("notes")}
             />
-          </div>
+            <FieldError errors={[errors.notes]} />
+          </Field>
 
           <div className="flex gap-2">
             <Button type="submit" size="sm" disabled={isSubmitting}>
-              Record
+              {isSubmitting && <Spinner />}
+              {isSubmitting ? "Recording…" : "Record"}
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setShowForm(false)}>
               Cancel
@@ -133,9 +149,15 @@ export function ProgressTracker({ roadPathId, progress, unit, onRefresh }: Progr
           </div>
         </form>
       ) : (
-        <Button variant="outline" size="sm" onClick={() => setShowForm(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Record Progress
+        <Button
+          ref={recordButtonRef}
+          variant="outline"
+          size="sm"
+          className="self-start"
+          onClick={() => setShowForm(true)}
+        >
+          <Plus />
+          Record progress
         </Button>
       )}
     </div>

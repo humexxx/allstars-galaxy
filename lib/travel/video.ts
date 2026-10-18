@@ -42,12 +42,6 @@ export function youtubeVideoId(url: string | null | undefined): string | null {
   return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
 }
 
-/** Privacy-preserving embed host: no cookie until the viewer hits play. */
-export function youtubeEmbedUrl(url: string | null | undefined): string | null {
-  const id = youtubeVideoId(url);
-  return id ? `https://www.youtube-nocookie.com/embed/${id}` : null;
-}
-
 export type EmbeddedVideo = {
   provider: "youtube" | "instagram";
   embedUrl: string;

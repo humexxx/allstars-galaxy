@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { format } from "date-fns";
 
 import {
   Collapsible,
@@ -11,6 +10,8 @@ import {
 } from "@/components/ui/collapsible";
 
 import { Mono, Text } from "@/components/ui/typography";
+import { cn } from "@/lib/utils";
+import { formatWeekdayDay } from "@/lib/utils/date";
 import type { TripItemStop } from "@/types/travel";
 
 /**
@@ -38,7 +39,7 @@ export function ItemItinerary({ stops }: { stops: TripItemStop[] }) {
     <Collapsible open={open} onOpenChange={setOpen} className="mt-2">
       <CollapsibleTrigger className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground">
         <ChevronDown
-          className={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+          className={cn("size-3.5 transition-transform", open && "rotate-180")}
         />
         {open ? "Hide itinerary" : `Itinerary · ${stops.length} days`}
       </CollapsibleTrigger>
@@ -49,7 +50,9 @@ export function ItemItinerary({ stops }: { stops: TripItemStop[] }) {
         <li key={stop.id} className="relative py-2">
           <span
             aria-hidden
-            className="absolute -left-[1.3125rem] top-3.5 size-2 rounded-full bg-muted-foreground/40 ring-2 ring-background"
+            // Centred on the 1px rail: the list's 16px padding, half the
+            // rail, half the 8px dot — 21px, a scale step.
+            className="absolute -left-5.25 top-3.5 size-2 rounded-full bg-muted-foreground/40 ring-2 ring-background"
           />
           <div className="flex flex-wrap items-baseline gap-x-2">
             <Mono className="text-2xs uppercase tracking-wide text-muted-foreground">
@@ -57,14 +60,12 @@ export function ItemItinerary({ stops }: { stops: TripItemStop[] }) {
             </Mono>
             {stop.stopOn && (
               <Mono className="text-2xs text-muted-foreground">
-                {format(new Date(`${stop.stopOn}T00:00:00`), "EEE d MMM")}
+                {formatWeekdayDay(stop.stopOn)}
               </Mono>
             )}
           </div>
-          <Text className="text-sm font-medium">{stop.place}</Text>
-          {stop.note && (
-            <Text className="text-xs text-muted-foreground">{stop.note}</Text>
-          )}
+          <Text weight="medium">{stop.place}</Text>
+          {stop.note && <Text variant="small">{stop.note}</Text>}
         </li>
       ))}
     </ol>

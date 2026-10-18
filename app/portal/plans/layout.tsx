@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { ContextAvatar } from "@/components/portal/context-avatar";
 import { PortalPageContainer } from "@/components/portal/page-container";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
-import { getFinanceMood } from "@/lib/services/finance-plan-service";
+import { getFinanceMood } from "@/lib/services/finance-snapshot-service";
 import { getUserPreferences } from "@/lib/services/user-preferences-service";
 
 /**

@@ -5,6 +5,7 @@ import { roadPaths, roadPathMilestones, roadPathProgress, boardTasks } from "@/d
 import { eq, and, asc, desc, gte, lte } from "drizzle-orm";
 import type {
   RoadPath,
+  RoadPathDetail,
   RoadPathWithDetails,
   RoadPathMilestone,
   RoadPathProgress,
@@ -101,7 +102,7 @@ export async function updateRoadPath(
   roadPathId: string,
   userId: string,
   data: Omit<UpdateRoadPathData, "id">
-): Promise<RoadPath> {
+): Promise<RoadPath | null> {
   const { targetValue, currentValue, autoCreateTasks, ...rest } = data;
 
   const updateData: Partial<typeof roadPaths.$inferInsert> = {
@@ -125,7 +126,8 @@ export async function updateRoadPath(
     .where(and(eq(roadPaths.id, roadPathId), eq(roadPaths.userId, userId)))
     .returning();
 
-  return path;
+  // No row: the id was not this user's road path.
+  return path ?? null;
 }
 
 export async function deleteRoadPath(roadPathId: string, userId: string): Promise<void> {
@@ -168,7 +170,7 @@ export async function updateRoadPathMilestone(
   milestoneId: string,
   userId: string,
   data: Omit<UpdateRoadPathMilestoneData, "id">
-): Promise<RoadPathMilestone> {
+): Promise<RoadPathMilestone | null> {
   const milestone = await db.query.roadPathMilestones.findFirst({
     where: eq(roadPathMilestones.id, milestoneId),
     with: {
@@ -194,10 +196,16 @@ export async function updateRoadPathMilestone(
   const [updatedMilestone] = await db
     .update(roadPathMilestones)
     .set(updateData)
-    .where(eq(roadPathMilestones.id, milestoneId))
+    .where(
+      and(
+        eq(roadPathMilestones.id, milestoneId),
+        eq(roadPathMilestones.roadPathId, milestone.roadPathId)
+      )
+    )
     .returning();
 
-  return updatedMilestone;
+  // Deleted between the ownership read and the write.
+  return updatedMilestone ?? null;
 }
 
 export async function deleteRoadPathMilestone(milestoneId: string, userId: string): Promise<void> {
@@ -212,7 +220,14 @@ export async function deleteRoadPathMilestone(milestoneId: string, userId: strin
     throw new Error("Milestone not found");
   }
 
-  await db.delete(roadPathMilestones).where(eq(roadPathMilestones.id, milestoneId));
+  await db
+    .delete(roadPathMilestones)
+    .where(
+      and(
+        eq(roadPathMilestones.id, milestoneId),
+        eq(roadPathMilestones.roadPathId, milestone.roadPathId)
+      )
+    );
 }
 
 export async function getNextMilestoneOrder(roadPathId: string, userId: string): Promise<number> {
@@ -269,13 +284,19 @@ export async function createRoadPathProgress(
       })
       .returning();
 
+    // currentValue is the NEWEST entry by date, not the last one typed: a
+    // backdated entry used to overwrite a more recent figure.
+    const latest = await tx.query.roadPathProgress.findFirst({
+      where: eq(roadPathProgress.roadPathId, data.roadPathId),
+      orderBy: [desc(roadPathProgress.date)],
+    });
     await tx
       .update(roadPaths)
       .set({
-        currentValue: data.value.toString(),
+        currentValue: latest?.value ?? data.value.toString(),
         updatedAt: new Date(),
       })
-      .where(eq(roadPaths.id, data.roadPathId));
+      .where(and(eq(roadPaths.id, data.roadPathId), eq(roadPaths.userId, userId)));
 
     return progress;
   });
@@ -293,22 +314,28 @@ export async function deleteRoadPathProgress(progressId: string, userId: string)
     throw new Error("Progress entry not found");
   }
 
-  await db.delete(roadPathProgress).where(eq(roadPathProgress.id, progressId));
+  await db
+    .delete(roadPathProgress)
+    .where(
+      and(
+        eq(roadPathProgress.id, progressId),
+        eq(roadPathProgress.roadPathId, progress.roadPathId)
+      )
+    );
 
   const latestProgress = await db.query.roadPathProgress.findFirst({
     where: eq(roadPathProgress.roadPathId, progress.roadPathId),
     orderBy: [desc(roadPathProgress.date)],
   });
 
-  if (latestProgress) {
-    await db
-      .update(roadPaths)
-      .set({
-        currentValue: latestProgress.value,
-        updatedAt: new Date(),
-      })
-      .where(eq(roadPaths.id, progress.roadPathId));
-  }
+  // No entries left means no progress — the deleted figure must not linger.
+  await db
+    .update(roadPaths)
+    .set({
+      currentValue: latestProgress?.value ?? "0",
+      updatedAt: new Date(),
+    })
+    .where(and(eq(roadPaths.id, progress.roadPathId), eq(roadPaths.userId, userId)));
 }
 
 export async function calculateRoadPathStats(roadPathId: string, userId: string): Promise<RoadPathStats> {
@@ -318,24 +345,44 @@ export async function calculateRoadPathStats(roadPathId: string, userId: string)
     throw new Error("Road path not found");
   }
 
+  return computeRoadPathStats(path, new Date());
+}
+
+/**
+ * One road path with its stats, from a single read — the percentage and the
+ * figure under it have to come from the same row or they disagree on screen
+ * the moment progress is logged.
+ */
+export async function getRoadPathDetail(
+  roadPathId: string,
+  userId: string
+): Promise<RoadPathDetail | null> {
+  const roadPath = await getRoadPath(roadPathId, userId);
+  if (!roadPath) return null;
+  return { roadPath, stats: computeRoadPathStats(roadPath, new Date()) };
+}
+
+function computeRoadPathStats(path: RoadPathWithDetails, now: Date): RoadPathStats {
   const targetValue = parseFloat(path.targetValue || "0");
   const currentValue = parseFloat(path.currentValue || "0");
 
-  const totalProgress = targetValue > 0 ? (currentValue / targetValue) * 100 : 0;
+  // Clamped so both the card and the detail agree, and a bar never exceeds
+  // 100% or runs negative.
+  const totalProgress =
+    targetValue > 0 ? Math.max(0, Math.min(100, (currentValue / targetValue) * 100)) : 0;
 
   const completedMilestones = path.milestones.filter((m) => m.completedAt !== null).length;
   const totalMilestones = path.milestones.length;
 
+  const DAY_MS = 1000 * 60 * 60 * 24;
   let daysRemaining: number | null = null;
   if (path.targetDate) {
-    const now = new Date();
     const target = new Date(path.targetDate);
-    daysRemaining = Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    daysRemaining = Math.max(0, Math.ceil((target.getTime() - now.getTime()) / DAY_MS));
   }
 
-  const startDate = path.startDate ? new Date(path.startDate) : new Date();
-  const now = new Date();
-  const daysElapsed = Math.max(1, Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+  const startDate = path.startDate ? new Date(path.startDate) : now;
+  const daysElapsed = Math.max(1, Math.ceil((now.getTime() - startDate.getTime()) / DAY_MS));
   const progressRate = currentValue / daysElapsed;
 
   return {

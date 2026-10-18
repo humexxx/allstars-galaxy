@@ -2,26 +2,31 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/services/auth-server";
+import { safe, type ActionResult } from "@/lib/actions/safe";
+import { requireAdminCached } from "@/lib/services/auth-server";
 import { updateUserRole } from "@/lib/services/user-service";
 import { updateUserRoleSchema, type UpdateUserRoleData } from "@/schemas/admin";
 
 export async function updateUserRoleAction(
   input: UpdateUserRoleData,
-): Promise<{ success: true }> {
-  const admin = await requireAdmin();
+): Promise<ActionResult> {
+  return safe("admin-users", async () => {
+    const admin = await requireAdminCached();
 
-  const parsed = updateUserRoleSchema.safeParse(input);
-  if (!parsed.success) {
-    throw new Error("Invalid input");
-  }
+    const parsed = updateUserRoleSchema.safeParse(input);
+    if (!parsed.success) {
+      return { success: false, error: "Invalid input" };
+    }
 
-  if (parsed.data.userId === admin.id && parsed.data.role === "user") {
-    throw new Error("You cannot demote yourself");
-  }
+    if (parsed.data.userId === admin.id && parsed.data.role !== "admin") {
+      return { success: false, error: "You cannot demote yourself" };
+    }
 
-  await updateUserRole(parsed.data.userId, parsed.data.role);
+    if (!(await updateUserRole(parsed.data.userId, parsed.data.role))) {
+      return { success: false, error: "User not found" };
+    }
 
-  revalidatePath("/portal/admin/users");
-  return { success: true };
+    revalidatePath("/portal/admin/users");
+    return { success: true };
+  });
 }

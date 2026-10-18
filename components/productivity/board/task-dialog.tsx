@@ -14,8 +14,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -122,47 +123,55 @@ export function TaskDialog({
         <DialogTrigger asChild>
           {children || (
             <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Task
+              <Plus />
+              Add task
             </Button>
           )}
         </DialogTrigger>
       ) : null}
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit task" : "Create New Task"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit task" : "Create new task"}</DialogTitle>
           <DialogDescription>
-            {isEdit ? "Change the details or move it to another column." : "Add a new task to your board"}
+            {isEdit ? "Change the details or move it to another column." : "Add a new task to your board."}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit(submit)} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="title">Title</Label>
-            <Input id="title" placeholder="Task title" {...register("title")} />
-            {errors.title && <p className="text-sm text-destructive">{errors.title.message}</p>}
-          </div>
+        <form onSubmit={handleSubmit(submit)} className="flex flex-col gap-4">
+          <Field data-invalid={!!errors.title}>
+            <FieldLabel htmlFor="title">Title</FieldLabel>
+            <Input
+              id="title"
+              placeholder="Task title"
+              aria-invalid={!!errors.title}
+              {...register("title")}
+            />
+            <FieldError errors={[errors.title]} />
+          </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+          <Field data-invalid={!!errors.description}>
+            <FieldLabel htmlFor="description">Description</FieldLabel>
             <Textarea
               id="description"
               placeholder="Task description (optional)"
+              aria-invalid={!!errors.description}
               {...register("description")}
             />
-            {errors.description && (
-              <p className="text-sm text-destructive">{errors.description.message}</p>
-            )}
-          </div>
+            <FieldError errors={[errors.description]} />
+          </Field>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="columnId">Column</Label>
+            <Field data-invalid={!!errors.columnId}>
+              <FieldLabel htmlFor="columnId">Column</FieldLabel>
               <Controller
                 control={control}
                 name="columnId"
                 render={({ field }) => (
                   <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger id="columnId" className="w-full">
+                    <SelectTrigger
+                      id="columnId"
+                      className="w-full"
+                      aria-invalid={!!errors.columnId}
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -175,13 +184,11 @@ export function TaskDialog({
                   </Select>
                 )}
               />
-              {errors.columnId && (
-                <p className="text-sm text-destructive">{errors.columnId.message}</p>
-              )}
-            </div>
+              <FieldError errors={[errors.columnId]} />
+            </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="priority">Priority</Label>
+            <Field data-invalid={!!errors.priority}>
+              <FieldLabel htmlFor="priority">Priority</FieldLabel>
               <Controller
                 control={control}
                 name="priority"
@@ -192,7 +199,11 @@ export function TaskDialog({
                       field.onChange(value === "none" ? null : (value as TaskPriority))
                     }
                   >
-                    <SelectTrigger id="priority" className="w-full">
+                    <SelectTrigger
+                      id="priority"
+                      className="w-full"
+                      aria-invalid={!!errors.priority}
+                    >
                       <SelectValue placeholder="No priority" />
                     </SelectTrigger>
                     <SelectContent>
@@ -204,11 +215,12 @@ export function TaskDialog({
                   </Select>
                 )}
               />
-            </div>
+              <FieldError errors={[errors.priority]} />
+            </Field>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="dueDate">Due date</Label>
+          <Field data-invalid={!!errors.dueDate}>
+            <FieldLabel htmlFor="dueDate">Due date</FieldLabel>
             <Controller
               control={control}
               name="dueDate"
@@ -219,14 +231,17 @@ export function TaskDialog({
                   onChange={(day) => field.onChange(fromDay(day))}
                   placeholder="No due date"
                   clearable
+                  aria-invalid={!!errors.dueDate}
                 />
               )}
             />
-          </div>
+            <FieldError errors={[errors.dueDate]} />
+          </Field>
 
           <DialogFooter>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving…" : isEdit ? "Save changes" : "Create Task"}
+              {isSubmitting && <Spinner />}
+              {isSubmitting ? "Saving…" : isEdit ? "Save changes" : "Create task"}
             </Button>
           </DialogFooter>
         </form>

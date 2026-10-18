@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // user-service has two terminal chains:
 //   db.select({...}).from(users).orderBy(sql`...`)
-//   db.update(users).set({...}).where(eq(users.id, userId))
+//   db.update(users).set({...}).where(eq(users.id, userId)).returning({ id })
 // Per-test thenables are wired in via the helpers below so we can both seed
 // resolved rows and inspect call args.
 vi.mock("@/db", () => ({
@@ -31,10 +31,11 @@ function mockSelect(rows: unknown[]) {
   return chain;
 }
 
-function mockUpdate() {
+function mockUpdate(returned: unknown[] = [{ id: "row" }]) {
   const chain = {
     set: vi.fn().mockReturnThis(),
-    where: vi.fn().mockResolvedValue(undefined),
+    where: vi.fn().mockReturnThis(),
+    returning: vi.fn().mockResolvedValue(returned),
   };
   dbMock.update.mockReturnValue(chain as never);
   return chain;
@@ -192,9 +193,14 @@ describe("updateUserRole", () => {
     expect(chain.where).toHaveBeenCalledOnce();
   });
 
-  it("returns void (no value) on success", async () => {
+  it("returns true when the user exists", async () => {
     mockUpdate();
-    await expect(updateUserRole(USER_ID, "user")).resolves.toBeUndefined();
+    await expect(updateUserRole(USER_ID, "user")).resolves.toBe(true);
+  });
+
+  it("returns false when no user has that id", async () => {
+    mockUpdate([]);
+    await expect(updateUserRole(USER_ID, "user")).resolves.toBe(false);
   });
 
   it("issues exactly one UPDATE per call", async () => {
@@ -222,7 +228,8 @@ describe("updateUserRole", () => {
   it("propagates DB errors to the caller", async () => {
     const chain = {
       set: vi.fn().mockReturnThis(),
-      where: vi.fn().mockRejectedValue(new Error("permission denied")),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockRejectedValue(new Error("permission denied")),
     };
     dbMock.update.mockReturnValue(chain as never);
 

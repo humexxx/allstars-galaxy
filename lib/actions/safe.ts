@@ -11,9 +11,17 @@
  * Note: actions that simply rethrow (admin-only actions that bubble to the
  * Next.js error boundary) do NOT need this wrapper.
  */
-export type ActionResult<T = void> =
-  | { success: true; data?: T; message?: string }
-  | { success: false; error: string }
+type ActionOk<T> = [T] extends [void]
+  ? { success: true; message?: string }
+  : { success: true; data: T; message?: string }
+
+/**
+ * `data` is required whenever the action returns data, so a caller that has
+ * checked `success` can read it without `!`. Give every action an explicit
+ * `Promise<ActionResult<X>>` return type — that is also what lets `safe()`
+ * infer `T`.
+ */
+export type ActionResult<T = void> = ActionOk<T> | { success: false; error: string }
 
 export async function safe<T>(
   label: string,

@@ -87,30 +87,37 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   role: userRoleEnum("role").default("user"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}).enableRLS();
 
-export const investmentMethods = pgTable("investment_methods", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  description: text("description"),
-  // Who runs this method. Other users invest through them, so this is what
-  // "who is invested in MY methods" is keyed on, and it is ALSO the display
-  // credit — there used to be a free-text `author` column beside it, which
-  // could name someone who did not run the method. One relation, one answer.
-  // Nullable: a method without an owner is the old global-catalogue behaviour.
-  // SET NULL rather than cascade — deleting an admin must never delete a
-  // method other people hold money in.
-  ownerUserId: uuid("owner_user_id").references(() => users.id, {
-    onDelete: "set null",
-  }),
-  riskLevel: riskLevelEnum("risk_level").notNull(),
-  monthlyRoi: numeric("monthly_roi", { precision: 7, scale: 4 }).notNull(),
-  // Disabled methods are hidden from portfolio transaction selectors but still
-  // appear in finance plan auto-invest pickers (so they can be modelled as
-  // hypothetical scenarios without being actively used).
-  enabled: boolean("enabled").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+export const investmentMethods = pgTable(
+  "investment_methods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
+    // Who runs this method. Other users invest through them, so this is what
+    // "who is invested in MY methods" is keyed on, and it is ALSO the display
+    // credit — there used to be a free-text `author` column beside it, which
+    // could name someone who did not run the method. One relation, one answer.
+    // Nullable: a method without an owner is the old global-catalogue behaviour.
+    // SET NULL rather than cascade — deleting an admin must never delete a
+    // method other people hold money in.
+    ownerUserId: uuid("owner_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    riskLevel: riskLevelEnum("risk_level").notNull(),
+    monthlyRoi: numeric("monthly_roi", { precision: 7, scale: 4 }).notNull(),
+    // Disabled methods are hidden from portfolio transaction selectors but still
+    // appear in finance plan auto-invest pickers (so they can be modelled as
+    // hypothetical scenarios without being actively used).
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  // "Whose methods" is the hot filter for margin, portfolio and allocation
+  // reads; every other user-keyed column already carries one.
+  (t) => [index("investment_methods_owner_user_id_idx").on(t.ownerUserId)]
+).enableRLS();
 
 /**
  * Where an admin actually deploys the capital raised by a method, and what it
@@ -133,7 +140,7 @@ export const priceAssets = pgTable("price_assets", {
    *  which is the escape hatch for anything the provider doesn't cover. */
   source: text("source").notNull().default("coingecko"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 /**
  * Price history. Append-only: the cron inserts, nothing updates, so a bad
@@ -152,8 +159,10 @@ export const priceQuotes = pgTable(
   (t) => [
     index("price_quotes_asset_id_idx").on(t.assetId),
     index("price_quotes_fetched_at_idx").on(t.fetchedAt),
+    // Serves the "newest quote per asset" DISTINCT ON in price-service.
+    index("price_quotes_asset_id_fetched_at_idx").on(t.assetId, t.fetchedAt.desc()),
   ]
-);
+).enableRLS();
 
 /**
  * A method's investment policy: what share of incoming money goes to which
@@ -182,7 +191,7 @@ export const methodAllocations = pgTable(
     index("method_allocations_method_id_idx").on(t.methodId),
     uniqueIndex("method_allocations_method_asset_uq").on(t.methodId, t.assetId),
   ]
-);
+).enableRLS();
 
 /**
  * What a single contribution actually bought, priced at the day it landed.
@@ -220,7 +229,7 @@ export const transactionAllocations = pgTable(
     index("transaction_allocations_asset_id_idx").on(t.assetId),
     uniqueIndex("transaction_allocations_tx_asset_uq").on(t.transactionId, t.assetId),
   ]
-);
+).enableRLS();
 
 /**
  * Who is going on a trip.
@@ -261,7 +270,7 @@ export const tripItemStops = pgTable(
     index("trip_item_stops_item_id_idx").on(t.itemId),
     uniqueIndex("trip_item_stops_item_day_uq").on(t.itemId, t.dayNumber),
   ]
-);
+).enableRLS();
 
 export const tripMembers = pgTable(
   "trip_members",
@@ -285,7 +294,7 @@ export const tripMembers = pgTable(
       sql`${t.sharePercent} IS NULL OR (${t.sharePercent} >= 0 AND ${t.sharePercent} <= 100)`
     ),
   ]
-);
+).enableRLS();
 
 /**
  * Who pays for ONE activity, when it is not the trip's usual split.
@@ -322,7 +331,7 @@ export const tripItemAttendees = pgTable(
     index("trip_item_attendees_item_id_idx").on(t.itemId),
     uniqueIndex("trip_item_attendees_item_member_uq").on(t.itemId, t.memberId),
   ]
-);
+).enableRLS();
 
 /** Who splits the cost. See `tripItemAttendees` for who is actually going. */
 export const tripItemPayers = pgTable(
@@ -342,7 +351,7 @@ export const tripItemPayers = pgTable(
     index("trip_item_payers_item_id_idx").on(t.itemId),
     uniqueIndex("trip_item_payers_item_member_uq").on(t.itemId, t.memberId),
   ]
-);
+).enableRLS();
 
 /**
  * Money a member has already put in.
@@ -370,7 +379,7 @@ export const tripContributions = pgTable(
     index("trip_contributions_trip_id_idx").on(t.tripId),
     check("trip_contributions_amount_chk", sql`${t.amount} >= 0`),
   ]
-);
+).enableRLS();
 
 export const portfolios = pgTable("portfolios", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -380,7 +389,7 @@ export const portfolios = pgTable("portfolios", {
     .unique(),
   name: text("name").notNull().default("My Main Portfolio"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+}).enableRLS();
 
 export const transactions = pgTable(
   "transactions",
@@ -418,7 +427,7 @@ export const transactions = pgTable(
     index("transactions_approved_by_idx").on(t.approvedBy),
     index("transactions_rejected_by_idx").on(t.rejectedBy),
   ]
-);
+).enableRLS();
 
 export const portfolioSnapshots = pgTable(
   "portfolio_snapshots",
@@ -436,14 +445,14 @@ export const portfolioSnapshots = pgTable(
     index("portfolio_snapshots_portfolio_id_idx").on(t.portfolioId),
     index("portfolio_snapshots_date_idx").on(t.date),
   ]
-);
+).enableRLS();
 
 export const appState = pgTable("app_state", {
   key: text("key").primaryKey(),
   value: text("value"),
   error: text("error"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}).enableRLS();
 
 // Finance planning: each user can have multiple plans (scenarios) to model
 // future cash flow, debt amortization and net worth.
@@ -462,7 +471,8 @@ export const financePlans = pgTable(
     // Integer count of projected months. Minimum 12 (1 year), default 120 (10
     // years). The UI shows the first 12 months monthly and yearly snapshots after.
     monthsAhead: integer("months_ahead").notNull().default(120),
-    // Opening balance for the savings line at start_month.
+    // Opening balance for the savings line, as of `balances_as_of`. May be
+    // negative (an overdraft is carried, not clipped).
     initialSavings: numeric("initial_savings", { precision: 20, scale: 2 })
       .notNull()
       .default("0"),
@@ -513,6 +523,13 @@ export const financePlans = pgTable(
       (): AnyPgColumn => financePlans.id,
       { onDelete: "set null" }
     ),
+    // Calendar day (the reader's, not UTC's) the opening balances — initial
+    // savings / investments and the debts' opening balances — were last set
+    // on. Anything dated on/before it is already in those balances, so the
+    // projection doesn't apply it again. Null on rows from before the column
+    // existed: the projection then falls back to the creation day. A newer
+    // confirmation always wins.
+    balancesAsOf: date("balances_as_of"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -527,14 +544,16 @@ export const financePlans = pgTable(
       .on(t.userId)
       .where(sql`${t.isMain} = TRUE`),
     check("finance_plans_months_ahead_chk", sql`${t.monthsAhead} >= 1 AND ${t.monthsAhead} <= 120`),
-    check("finance_plans_initial_savings_chk", sql`${t.initialSavings} >= 0`),
+    // No >= 0 check on initial_savings: opening balances are restated as of
+    // the day they are edited, and a plan in deficit restates an overdraft
+    // (the same reason finance_plan_confirmations lost its savings check).
     check("finance_plans_initial_investments_chk", sql`${t.initialInvestments} >= 0`),
     check("finance_plans_savings_rate_chk", sql`${t.monthlySavingsRate} >= 0`),
     check("finance_plans_surplus_chk", sql`${t.surplusToDebtsPercent} >= 0 AND ${t.surplusToDebtsPercent} <= 1`),
     check("finance_plans_auto_invest_chk", sql`${t.autoInvestPercent} >= 0 AND ${t.autoInvestPercent} <= 1`),
     check("finance_plans_confirmation_day_chk", sql`${t.confirmationDayOfMonth} >= 0 AND ${t.confirmationDayOfMonth} <= 28`),
   ]
-);
+).enableRLS();
 
 export const financePlanIncomes = pgTable(
   "finance_plan_incomes",
@@ -593,7 +612,7 @@ export const financePlanIncomes = pgTable(
       sql`${t.intervalMonths} IS NULL OR (${t.intervalMonths} >= 1 AND ${t.intervalMonths} <= 12)`
     ),
   ]
-);
+).enableRLS();
 
 export const financePlanExpenses = pgTable(
   "finance_plan_expenses",
@@ -643,7 +662,7 @@ export const financePlanExpenses = pgTable(
       sql`${t.intervalMonths} IS NULL OR (${t.intervalMonths} >= 1 AND ${t.intervalMonths} <= 12)`
     ),
   ]
-);
+).enableRLS();
 
 /**
  * Snapshot of a finance plan's projected position at a point in time. Mirrors
@@ -675,7 +694,7 @@ export const financePlanSnapshots = pgTable(
     index("finance_plan_snapshots_plan_id_idx").on(t.planId),
     index("finance_plan_snapshots_date_idx").on(t.date),
   ]
-);
+).enableRLS();
 
 /**
  * Per-debt balance breakdown for a snapshot. Mirrors
@@ -700,7 +719,7 @@ export const financePlanSnapshotDebts = pgTable(
     uniqueIndex("finance_plan_snapshot_debts_uniq").on(t.snapshotId, t.debtId),
     index("finance_plan_snapshot_debts_debt_id_idx").on(t.debtId),
   ]
-);
+).enableRLS();
 
 /**
  * User-confirmed actuals for a given month. The user is prompted on the
@@ -715,7 +734,10 @@ export const financePlanConfirmations = pgTable(
     planId: uuid("plan_id")
       .notNull()
       .references(() => financePlans.id, { onDelete: "cascade" }),
-    // Anchor to the FIRST day of the confirmed month (always UTC midnight).
+    // The calendar day the balances describe: the reader's local day a user
+    // confirmed on, or the period start an auto row records the opening of.
+    // The name predates that (rows used to be keyed by month); a confirmation
+    // counts for whichever accounting period contains this day.
     confirmationMonth: date("confirmation_month").notNull(),
     confirmedSavings: numeric("confirmed_savings", { precision: 20, scale: 2 }).notNull(),
     confirmedInvestments: numeric("confirmed_investments", { precision: 20, scale: 2 })
@@ -729,10 +751,11 @@ export const financePlanConfirmations = pgTable(
   (t) => [
     uniqueIndex("finance_plan_confirmations_plan_month_uniq").on(t.planId, t.confirmationMonth),
     index("finance_plan_confirmations_plan_id_idx").on(t.planId),
-    check("finance_plan_confirmations_savings_chk", sql`${t.confirmedSavings} >= 0`),
+    // No >= 0 check on confirmed_savings: a deficit is carried as negative
+    // savings, and the auto-confirm cron records it as such.
     check("finance_plan_confirmations_investments_chk", sql`${t.confirmedInvestments} >= 0`),
   ]
-);
+).enableRLS();
 
 /**
  * Per-debt confirmed balance at confirmation time. Lets the user say
@@ -755,7 +778,7 @@ export const financePlanDebtConfirmations = pgTable(
     index("finance_plan_debt_confirmations_debt_id_idx").on(t.debtId),
     check("finance_plan_debt_confirmations_balance_chk", sql`${t.confirmedBalance} >= 0`),
   ]
-);
+).enableRLS();
 
 export const financePlanDebts = pgTable(
   "finance_plan_debts",
@@ -821,7 +844,7 @@ export const financePlanDebts = pgTable(
       sql`${t.intervalMonths} IS NULL OR (${t.intervalMonths} >= 1 AND ${t.intervalMonths} <= 12)`
     ),
   ]
-);
+).enableRLS();
 
 /**
  * Per-occurrence overrides for recurring income / expense / debt entries.
@@ -874,7 +897,7 @@ export const financePlanLineOverrides = pgTable(
       sql`(${t.action} <> 'amount') OR (${t.monthlyAmount} IS NOT NULL)`
     ),
   ]
-);
+).enableRLS();
 
 // Audit trail for mutations performed by an admin while impersonating another user.
 export const impersonationLogs = pgTable(
@@ -898,7 +921,7 @@ export const impersonationLogs = pgTable(
     index("impersonation_logs_impersonated_user_id_idx").on(t.impersonatedUserId),
     index("impersonation_logs_created_at_idx").on(t.createdAt),
   ]
-);
+).enableRLS();
 
 // Productivity Feature Tables
 export const boardColumns = pgTable(
@@ -914,7 +937,7 @@ export const boardColumns = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (t) => [index("board_columns_user_id_idx").on(t.userId)]
-);
+).enableRLS();
 
 export const boardTasks = pgTable(
   "board_tasks",
@@ -941,7 +964,7 @@ export const boardTasks = pgTable(
     index("board_tasks_column_id_idx").on(t.columnId),
     index("board_tasks_road_path_id_idx").on(t.roadPathId),
   ]
-);
+).enableRLS();
 
 export const roadPaths = pgTable(
   "road_paths",
@@ -965,7 +988,7 @@ export const roadPaths = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (t) => [index("road_paths_user_id_idx").on(t.userId)]
-);
+).enableRLS();
 
 export const roadPathMilestones = pgTable(
   "road_path_milestones",
@@ -983,7 +1006,7 @@ export const roadPathMilestones = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (t) => [index("road_path_milestones_road_path_id_idx").on(t.roadPathId)]
-);
+).enableRLS();
 
 export const roadPathProgress = pgTable(
   "road_path_progress",
@@ -1001,7 +1024,7 @@ export const roadPathProgress = pgTable(
     index("road_path_progress_road_path_id_idx").on(t.roadPathId),
     index("road_path_progress_date_idx").on(t.date),
   ]
-);
+).enableRLS();
 
 // Relations
 export const transactionsRelations = relations(transactions, ({ one }) => ({
@@ -1093,7 +1116,7 @@ export const trips = pgTable(
     index("trips_start_date_idx").on(t.startDate),
     check("trips_date_range_chk", sql`${t.endDate} IS NULL OR ${t.endDate} >= ${t.startDate}`),
   ]
-);
+).enableRLS();
 
 // trip_items: planned activities, reservations, transport, food stops, etc.
 // Each item can carry a link (booking URL), a price, and an optional scheduled
@@ -1147,7 +1170,7 @@ export const tripItems = pgTable(
     index("trip_items_scheduled_on_idx").on(t.scheduledOn),
     check("trip_items_price_chk", sql`${t.price} IS NULL OR ${t.price} >= 0`),
   ]
-);
+).enableRLS();
 
 // trip_photos: gallery shots. Both uploaded files (Supabase Storage public URLs)
 // and external URLs land here — the `source` enum just records provenance for
@@ -1176,7 +1199,7 @@ export const tripPhotos = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("trip_photos_trip_id_idx").on(t.tripId)]
-);
+).enableRLS();
 
 // trip_shares: opaque tokens that grant read-only public access to a trip via
 // `/trips/{token}`. The invitee_email column is metadata only — we record who
@@ -1213,7 +1236,7 @@ export const tripShares = pgTable(
     uniqueIndex("trip_shares_token_uniq").on(t.token),
     index("trip_shares_trip_id_idx").on(t.tripId),
   ]
-);
+).enableRLS();
 
 export const tripsRelations = relations(trips, ({ one, many }) => ({
   user: one(users, {
@@ -1253,6 +1276,50 @@ export const tripSharesRelations = relations(tripShares, ({ one }) => ({
 // /types/sports.ts) so adding/removing sports does not require an enum
 // migration. The UNIQUE (user_id, sport_id) constraint backs the toggle
 // semantics in the manage-favourites sheet.
+/**
+ * F1 news, kept rather than fetched on demand.
+ *
+ * RapidAPI's feed is a rolling window of the last 25 articles, so anything
+ * older is gone the moment it falls off. Storing each article is what makes an
+ * archive possible at all — the 163 rows this started with came from the
+ * humex-champions Firebase project, which had been collecting them daily since
+ * August 2025.
+ *
+ * `articleId` is RapidAPI's own `dataSourceIdentifier`, and it is what makes a
+ * refresh idempotent: the same article arriving twice updates its row instead
+ * of adding one.
+ */
+export const f1News = pgTable(
+  "f1_news",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    articleId: text("article_id").notNull(),
+    headline: text("headline").notNull(),
+    description: text("description"),
+    link: text("link"),
+    /** `[{ url, alt, caption, width, height }]` as the provider sends it. */
+    images: jsonb("images").$type<F1NewsImage[]>().default([]).notNull(),
+    /** When the article first reached us, not when it was published — the
+     *  provider does not send a publication date. */
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("f1_news_article_id_uniq").on(t.articleId),
+    index("f1_news_first_seen_at_idx").on(t.firstSeenAt),
+  ]
+).enableRLS();
+
+export type F1NewsImage = {
+  url: string;
+  alt?: string;
+  caption?: string;
+  width?: number;
+  height?: number;
+};
+
 export const userSportsPreferences = pgTable(
   "user_sports_preferences",
   {
@@ -1267,7 +1334,7 @@ export const userSportsPreferences = pgTable(
     uniqueIndex("user_sports_preferences_user_sport_uniq").on(t.userId, t.sportId),
     index("user_sports_preferences_user_id_idx").on(t.userId),
   ]
-);
+).enableRLS();
 
 // Portal-wide user preferences — one row per user, created lazily on first
 // write. Absence of a row means "all defaults" (the service layer owns the
@@ -1288,4 +1355,4 @@ export const userPreferences = pgTable("user_preferences", {
   financeMilestones: jsonb("finance_milestones").$type<number[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();

@@ -10,20 +10,15 @@ vi.mock("@/lib/services/impersonation", () => ({
 }));
 
 vi.mock("@/lib/services/road-path-service", () => ({
-  getUserRoadPaths: vi.fn(),
   getRoadPath: vi.fn(),
   createRoadPath: vi.fn(),
-  updateRoadPath: vi.fn(),
   deleteRoadPath: vi.fn(),
-  getRoadPathMilestones: vi.fn(),
   createRoadPathMilestone: vi.fn(),
   updateRoadPathMilestone: vi.fn(),
   deleteRoadPathMilestone: vi.fn(),
   getNextMilestoneOrder: vi.fn(),
-  getRoadPathProgress: vi.fn(),
   createRoadPathProgress: vi.fn(),
   deleteRoadPathProgress: vi.fn(),
-  calculateRoadPathStats: vi.fn(),
 }));
 
 vi.mock("@/lib/services/task-automation-service", () => ({
@@ -36,39 +31,25 @@ import {
   requireEffectiveContext,
 } from "@/lib/services/impersonation";
 import {
-  getUserRoadPaths,
-  getRoadPath,
   createRoadPath,
-  updateRoadPath,
   deleteRoadPath,
-  getRoadPathMilestones,
   createRoadPathMilestone,
   updateRoadPathMilestone,
   deleteRoadPathMilestone,
   getNextMilestoneOrder,
-  getRoadPathProgress,
   createRoadPathProgress,
   deleteRoadPathProgress,
-  calculateRoadPathStats,
 } from "@/lib/services/road-path-service";
 import { createAutomatedTasksForRoadPath } from "@/lib/services/task-automation-service";
 
 import {
-  getUserRoadPathsAction,
-  getRoadPathAction,
   createRoadPathAction,
-  updateRoadPathAction,
   deleteRoadPathAction,
-  getRoadPathMilestonesAction,
   createRoadPathMilestoneAction,
   updateRoadPathMilestoneAction,
   deleteRoadPathMilestoneAction,
-  getNextMilestoneOrderAction,
-  getRoadPathProgressAction,
-  getRoadPathDetailAction,
   createRoadPathProgressAction,
   deleteRoadPathProgressAction,
-  calculateRoadPathStatsAction,
 } from "./road-path";
 
 const USER_ID = "00000000-0000-4000-8000-000000000001";
@@ -90,43 +71,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
-});
-
-describe("getUserRoadPathsAction", () => {
-  it("returns the road paths for the effective user", async () => {
-    const paths = [{ id: ROAD_PATH_ID }] as unknown as Awaited<
-      ReturnType<typeof getUserRoadPaths>
-    >;
-    vi.mocked(getUserRoadPaths).mockResolvedValueOnce(paths);
-
-    const result = await getUserRoadPathsAction();
-
-    expect(result).toEqual({ success: true, data: paths });
-    expect(getUserRoadPaths).toHaveBeenCalledOnce();
-    expect(getUserRoadPaths).toHaveBeenCalledWith(USER_ID);
-  });
-});
-
-describe("getRoadPathAction", () => {
-  it("returns the road path when found", async () => {
-    const path = { id: ROAD_PATH_ID } as unknown as Awaited<
-      ReturnType<typeof getRoadPath>
-    >;
-    vi.mocked(getRoadPath).mockResolvedValueOnce(path);
-
-    const result = await getRoadPathAction(ROAD_PATH_ID);
-
-    expect(result).toEqual({ success: true, data: path });
-    expect(getRoadPath).toHaveBeenCalledWith(ROAD_PATH_ID, USER_ID);
-  });
-
-  it("throws when the road path is not found", async () => {
-    vi.mocked(getRoadPath).mockResolvedValueOnce(null);
-
-    await expect(getRoadPathAction(ROAD_PATH_ID)).rejects.toThrow(
-      "Road path not found"
-    );
-  });
 });
 
 describe("createRoadPathAction", () => {
@@ -158,7 +102,7 @@ describe("createRoadPathAction", () => {
         entityId: ROAD_PATH_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 
   it("triggers createAutomatedTasksForRoadPath when createFirstTask + autoCreateTasks are set", async () => {
@@ -186,7 +130,7 @@ describe("createRoadPathAction", () => {
     );
   });
 
-  it("swallows createAutomatedTasksForRoadPath errors and still resolves", async () => {
+  it("still creates the path when its first task fails, and says so", async () => {
     const path = {
       id: ROAD_PATH_ID,
       title: "Daily Run",
@@ -207,10 +151,14 @@ describe("createRoadPathAction", () => {
       createFirstTask: true,
     } as unknown as Parameters<typeof createRoadPathAction>[0]);
 
-    expect(result).toEqual({ success: true, data: path });
+    expect(result).toEqual({
+      success: true,
+      data: path,
+      message: "Road path created, but its first task could not be added",
+    });
     expect(createAutomatedTasksForRoadPath).toHaveBeenCalledOnce();
     expect(logImpersonatedMutation).toHaveBeenCalledOnce();
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
     errorSpy.mockRestore();
   });
 
@@ -221,61 +169,6 @@ describe("createRoadPathAction", () => {
 
     expect(result).toEqual({ success: false, error: "Invalid input" });
     expect(createRoadPath).not.toHaveBeenCalled();
-    expect(logImpersonatedMutation).not.toHaveBeenCalled();
-    expect(revalidatePath).not.toHaveBeenCalled();
-  });
-});
-
-describe("updateRoadPathAction", () => {
-  it("updates the road path on valid input", async () => {
-    const path = { id: ROAD_PATH_ID, title: "Updated" } as unknown as Awaited<
-      ReturnType<typeof updateRoadPath>
-    >;
-    vi.mocked(updateRoadPath).mockResolvedValueOnce(path);
-
-    const result = await updateRoadPathAction({
-      id: ROAD_PATH_ID,
-      title: "Updated",
-    } as unknown as Parameters<typeof updateRoadPathAction>[0]);
-
-    expect(result).toEqual({ success: true, data: path });
-    expect(updateRoadPath).toHaveBeenCalledOnce();
-    expect(updateRoadPath).toHaveBeenCalledWith(
-      ROAD_PATH_ID,
-      USER_ID,
-      expect.objectContaining({ title: "Updated" })
-    );
-    expect(logImpersonatedMutation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "roadPath.update",
-        entityTable: "road_paths",
-        entityId: ROAD_PATH_ID,
-      })
-    );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
-  });
-
-  it("throws when the road path is not found", async () => {
-    vi.mocked(updateRoadPath).mockResolvedValueOnce(
-      undefined as unknown as Awaited<ReturnType<typeof updateRoadPath>>
-    );
-
-    await expect(
-      updateRoadPathAction({
-        id: ROAD_PATH_ID,
-        title: "Updated",
-      } as unknown as Parameters<typeof updateRoadPathAction>[0])
-    ).rejects.toThrow("Road path not found");
-  });
-
-  it("rejects payloads with a non-uuid id", async () => {
-    const result = await updateRoadPathAction({
-      id: "not-a-uuid",
-      title: "Updated",
-    } as unknown as Parameters<typeof updateRoadPathAction>[0]);
-
-    expect(result).toEqual({ success: false, error: "Invalid input" });
-    expect(updateRoadPath).not.toHaveBeenCalled();
     expect(logImpersonatedMutation).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
   });
@@ -297,21 +190,14 @@ describe("deleteRoadPathAction", () => {
         entityId: ROAD_PATH_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
-});
 
-describe("getRoadPathMilestonesAction", () => {
-  it("returns the milestones for the given road path", async () => {
-    const milestones = [{ id: MILESTONE_ID }] as unknown as Awaited<
-      ReturnType<typeof getRoadPathMilestones>
-    >;
-    vi.mocked(getRoadPathMilestones).mockResolvedValueOnce(milestones);
+  it("rejects an id that is not a uuid", async () => {
+    const result = await deleteRoadPathAction("not-a-uuid");
 
-    const result = await getRoadPathMilestonesAction(ROAD_PATH_ID);
-
-    expect(result).toEqual({ success: true, data: milestones });
-    expect(getRoadPathMilestones).toHaveBeenCalledWith(ROAD_PATH_ID, USER_ID);
+    expect(result).toEqual({ success: false, error: "Invalid road path" });
+    expect(deleteRoadPath).not.toHaveBeenCalled();
   });
 });
 
@@ -345,7 +231,23 @@ describe("createRoadPathMilestoneAction", () => {
         entityId: MILESTONE_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
+  });
+
+  it("asks the database for the next order when none is given", async () => {
+    const milestone = { id: MILESTONE_ID, title: "M2" } as unknown as Awaited<
+      ReturnType<typeof createRoadPathMilestone>
+    >;
+    vi.mocked(getNextMilestoneOrder).mockResolvedValueOnce(3);
+    vi.mocked(createRoadPathMilestone).mockResolvedValueOnce(milestone);
+
+    await createRoadPathMilestoneAction({ roadPathId: ROAD_PATH_ID, title: "M2" });
+
+    expect(getNextMilestoneOrder).toHaveBeenCalledWith(ROAD_PATH_ID, USER_ID);
+    expect(createRoadPathMilestone).toHaveBeenCalledWith(
+      USER_ID,
+      expect.objectContaining({ order: 3 })
+    );
   });
 
   it("rejects payloads with a non-uuid roadPathId", async () => {
@@ -387,20 +289,29 @@ describe("updateRoadPathMilestoneAction", () => {
         entityId: MILESTONE_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 
-  it("throws when the milestone is not found", async () => {
-    vi.mocked(updateRoadPathMilestone).mockResolvedValueOnce(
-      undefined as unknown as Awaited<ReturnType<typeof updateRoadPathMilestone>>
-    );
+  it("returns an error when the milestone is not found", async () => {
+    vi.mocked(updateRoadPathMilestone).mockResolvedValueOnce(null);
 
-    await expect(
-      updateRoadPathMilestoneAction({
-        id: MILESTONE_ID,
-        title: "M1 v2",
-      } as unknown as Parameters<typeof updateRoadPathMilestoneAction>[0])
-    ).rejects.toThrow("Milestone not found");
+    const result = await updateRoadPathMilestoneAction({
+      id: MILESTONE_ID,
+      title: "M1 v2",
+    });
+
+    expect(result).toEqual({ success: false, error: "Milestone not found" });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("returns a failure instead of throwing when the service fails", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(updateRoadPathMilestone).mockRejectedValueOnce(new Error("Milestone not found"));
+
+    const result = await updateRoadPathMilestoneAction({ id: MILESTONE_ID, title: "M1 v2" });
+
+    expect(result).toEqual({ success: false, error: "Action failed" });
+    errorSpy.mockRestore();
   });
 
   it("rejects payloads with a non-uuid id", async () => {
@@ -433,113 +344,14 @@ describe("deleteRoadPathMilestoneAction", () => {
         entityId: MILESTONE_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
-  });
-});
-
-describe("getNextMilestoneOrderAction", () => {
-  it("returns the next milestone order", async () => {
-    vi.mocked(getNextMilestoneOrder).mockResolvedValueOnce(3);
-
-    const result = await getNextMilestoneOrderAction(ROAD_PATH_ID);
-
-    expect(result).toEqual({ success: true, data: 3 });
-    expect(getNextMilestoneOrder).toHaveBeenCalledWith(ROAD_PATH_ID, USER_ID);
-  });
-});
-
-describe("getRoadPathProgressAction", () => {
-  it("returns the progress entries with optional date filters", async () => {
-    const progress = [{ id: PROGRESS_ID }] as unknown as Awaited<
-      ReturnType<typeof getRoadPathProgress>
-    >;
-    vi.mocked(getRoadPathProgress).mockResolvedValueOnce(progress);
-
-    const start = new Date("2026-01-01");
-    const end = new Date("2026-12-31");
-    const result = await getRoadPathProgressAction(ROAD_PATH_ID, start, end);
-
-    expect(result).toEqual({ success: true, data: progress });
-    expect(getRoadPathProgress).toHaveBeenCalledWith(
-      ROAD_PATH_ID,
-      USER_ID,
-      start,
-      end
-    );
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 
-  it("works without optional date filters", async () => {
-    const progress = [] as unknown as Awaited<
-      ReturnType<typeof getRoadPathProgress>
-    >;
-    vi.mocked(getRoadPathProgress).mockResolvedValueOnce(progress);
+  it("rejects an id that is not a uuid", async () => {
+    const result = await deleteRoadPathMilestoneAction("not-a-uuid");
 
-    const result = await getRoadPathProgressAction(ROAD_PATH_ID);
-
-    expect(result).toEqual({ success: true, data: progress });
-    expect(getRoadPathProgress).toHaveBeenCalledWith(
-      ROAD_PATH_ID,
-      USER_ID,
-      undefined,
-      undefined
-    );
-  });
-});
-
-describe("getRoadPathDetailAction", () => {
-  it("returns milestones, progress, and stats together", async () => {
-    const milestones = [{ id: MILESTONE_ID }] as unknown as Awaited<
-      ReturnType<typeof getRoadPathMilestones>
-    >;
-    const progress = [{ id: PROGRESS_ID }] as unknown as Awaited<
-      ReturnType<typeof getRoadPathProgress>
-    >;
-    const stats = {
-      totalProgress: 50,
-      completedMilestones: 1,
-      totalMilestones: 2,
-      daysRemaining: 10,
-      progressRate: 0.5,
-    } as unknown as Awaited<ReturnType<typeof calculateRoadPathStats>>;
-
-    const roadPath = { id: ROAD_PATH_ID, currentValue: "7" } as unknown as Awaited<
-      ReturnType<typeof getRoadPath>
-    >;
-
-    vi.mocked(getRoadPath).mockResolvedValueOnce(roadPath);
-    vi.mocked(getRoadPathMilestones).mockResolvedValueOnce(milestones);
-    vi.mocked(getRoadPathProgress).mockResolvedValueOnce(progress);
-    vi.mocked(calculateRoadPathStats).mockResolvedValueOnce(stats);
-
-    const result = await getRoadPathDetailAction(ROAD_PATH_ID);
-
-    expect(result).toEqual({
-      success: true,
-      data: { roadPath, milestones, progress, stats },
-    });
-    expect(getRoadPathMilestones).toHaveBeenCalledWith(ROAD_PATH_ID, USER_ID);
-    expect(getRoadPathProgress).toHaveBeenCalledWith(ROAD_PATH_ID, USER_ID);
-    expect(calculateRoadPathStats).toHaveBeenCalledWith(ROAD_PATH_ID, USER_ID);
-  });
-
-  it("reports a road path that is not there rather than half a payload", async () => {
-    // The detail reads `currentValue` off this object. Returning success with
-    // no path would have the view render somebody's percentage against
-    // nothing at all.
-    vi.mocked(getRoadPath).mockResolvedValueOnce(null);
-    vi.mocked(getRoadPathMilestones).mockResolvedValueOnce([]);
-    vi.mocked(getRoadPathProgress).mockResolvedValueOnce([]);
-    vi.mocked(calculateRoadPathStats).mockResolvedValueOnce({
-      totalProgress: 0,
-      completedMilestones: 0,
-      totalMilestones: 0,
-      daysRemaining: null,
-      progressRate: 0,
-    });
-
-    const result = await getRoadPathDetailAction(ROAD_PATH_ID);
-
-    expect(result.success).toBe(false);
+    expect(result).toEqual({ success: false, error: "Invalid milestone" });
+    expect(deleteRoadPathMilestone).not.toHaveBeenCalled();
   });
 });
 
@@ -568,7 +380,7 @@ describe("createRoadPathProgressAction", () => {
         entityId: PROGRESS_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 
   it("rejects payloads with a non-uuid roadPathId", async () => {
@@ -599,24 +411,6 @@ describe("deleteRoadPathProgressAction", () => {
         entityId: PROGRESS_ID,
       })
     );
-    expect(revalidatePath).toHaveBeenCalledWith(PATH);
-  });
-});
-
-describe("calculateRoadPathStatsAction", () => {
-  it("returns the calculated stats", async () => {
-    const stats = {
-      totalProgress: 25,
-      completedMilestones: 1,
-      totalMilestones: 4,
-      daysRemaining: 30,
-      progressRate: 0.1,
-    } as unknown as Awaited<ReturnType<typeof calculateRoadPathStats>>;
-    vi.mocked(calculateRoadPathStats).mockResolvedValueOnce(stats);
-
-    const result = await calculateRoadPathStatsAction(ROAD_PATH_ID);
-
-    expect(result).toEqual({ success: true, data: stats });
-    expect(calculateRoadPathStats).toHaveBeenCalledWith(ROAD_PATH_ID, USER_ID);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 });

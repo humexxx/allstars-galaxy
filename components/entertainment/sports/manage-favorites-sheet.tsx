@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { Loader2, Star } from "lucide-react";
+import { useState } from "react";
+import { Star } from "lucide-react";
 import { toast } from "sonner";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -15,6 +15,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/typography";
 import { SPORTS } from "@/lib/data/sports/registry";
@@ -28,7 +29,6 @@ type ManageFavoritesSheetProps = {
 };
 
 export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetProps) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<SportId>>(
     () => new Set(favoriteSportIds)
@@ -37,11 +37,13 @@ export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetP
   // quickly let A's completion clear B's spinner (and re-enable B's switch)
   // while B's action was still running.
   const [pending, setPending] = useState<Set<SportId>>(() => new Set());
-  const [, startTransition] = useTransition();
 
   const count = selected.size;
 
-  async function handleToggle(sportId: SportId, next: boolean) {
+  async function handleToggle(sportId: SportId, next: boolean): Promise<void> {
+    // A second toggle while the first is in flight is ignored rather than
+    // blocked with `disabled`, which would drop keyboard focus off the switch.
+    if (pending.has(sportId)) return;
     // Optimistic — flip the chip immediately, revert if the action fails.
     setSelected((prev) => {
       const copy = new Set(prev);
@@ -50,12 +52,16 @@ export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetP
       return copy;
     });
     setPending((prev) => new Set(prev).add(sportId));
-    const result = await setSportFavoriteAction({ sportId, isFavorite: next });
+    // A rejection (network) must still clear the spinner and roll back.
+    const result = await setSportFavoriteAction({ sportId, isFavorite: next }).catch(
+      () => ({ success: false as const, error: "Failed to update favorites" })
+    );
     setPending((prev) => {
       const copy = new Set(prev);
       copy.delete(sportId);
       return copy;
     });
+    // No refresh on success: the action revalidates the hub and the dashboard.
     if (!result.success) {
       setSelected((prev) => {
         const copy = new Set(prev);
@@ -64,21 +70,19 @@ export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetP
         return copy;
       });
       toast.error(result.error);
-      return;
     }
-    startTransition(() => router.refresh());
   }
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <Button variant="outline" size="sm">
-          <Star className="mr-1.5 h-4 w-4" />
+          <Star />
           Manage favorites
           {count > 0 && (
-            <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary">
+            <Badge variant="info" className="tabular-nums">
               {count}
-            </span>
+            </Badge>
           )}
         </Button>
       </SheetTrigger>
@@ -106,23 +110,24 @@ export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetP
                 >
                   <span
                     aria-hidden
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-muted text-xl"
+                    className="grid size-10 shrink-0 place-items-center rounded-lg bg-muted text-xl"
                   >
                     {sport.emoji}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium">{sport.label}</div>
+                    <Text as="div" weight="medium">
+                      {sport.label}
+                    </Text>
                     <Text variant="small" as="div">
                       {sport.shortLabel}
                     </Text>
                   </div>
                   <div className="flex items-center gap-2">
-                    {isPending && (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                    )}
+                    {isPending && <Spinner className="size-3.5 text-muted-foreground" />}
                     <Switch
                       checked={isOn}
-                      disabled={isPending}
+                      aria-disabled={isPending}
+                      aria-busy={isPending}
                       onCheckedChange={(value) => handleToggle(sport.id, value)}
                       aria-label={`Toggle ${sport.label} as favorite`}
                     />
@@ -133,7 +138,7 @@ export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetP
           </ul>
 
           {count === 0 && (
-            <Text variant="muted" className="mt-4 text-center text-xs">
+            <Text variant="small" className="mt-4 text-center">
               Toggle any sport on to start tracking it.
             </Text>
           )}

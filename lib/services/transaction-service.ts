@@ -2,13 +2,12 @@ import "server-only";
 
 import { db } from "@/db";
 import { transactions } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { getUserRole } from "./auth-server";
 import { getUserPortfolio, createPortfolio } from "./portfolio-service";
 import type { Portfolio } from "@/types/portfolio";
-import type { Transaction } from "@/types";
-import type { TransactionInput } from "@/types/transaction";
+import type { Transaction, TransactionInput } from "@/types/transaction";
 
 export async function createTransaction(
   targetUserId: string,
@@ -56,13 +55,6 @@ export async function createTransaction(
   return { transaction, portfolio };
 }
 
-export async function getPortfolioTransactions(portfolioId: string): Promise<Transaction[]> {
-  return await db
-    .select()
-    .from(transactions)
-    .where(eq(transactions.portfolioId, portfolioId));
-}
-
 export function calculateTotal(amount: string, fee: string): string {
   const amountNum = parseFloat(amount);
   const feeNum = parseFloat(fee);
@@ -89,10 +81,16 @@ export async function approveTransactionById(
   });
 
   if (!transaction) throw new Error("Transaction not found");
+  // Settling twice is not idempotent: re-approving a buy resets currentValue
+  // to the original total (erasing accrued interest) and re-approving a
+  // withdrawal debits the source a second time. Only a pending row moves.
+  if (transaction.status !== "pending") {
+    throw new Error("Transaction is no longer pending");
+  }
 
   await db.transaction(async (tx) => {
     if (transaction.type === "buy") {
-      await tx
+      const [updated] = await tx
         .update(transactions)
         .set({
           status: "approved",
@@ -102,7 +100,10 @@ export async function approveTransactionById(
           currentValue: transaction.total,
           updatedAt: new Date(),
         })
-        .where(eq(transactions.id, transactionId));
+        .where(and(eq(transactions.id, transactionId), eq(transactions.status, "pending")))
+        .returning({ id: transactions.id });
+      // A concurrent approval got there first.
+      if (!updated) throw new Error("Transaction is no longer pending");
       return;
     }
 
@@ -138,7 +139,7 @@ export async function approveTransactionById(
         })
         .where(eq(transactions.id, sourceTransactionId));
 
-      await tx
+      const [updated] = await tx
         .update(transactions)
         .set({
           status: "approved",
@@ -146,7 +147,9 @@ export async function approveTransactionById(
           approvedBy: adminId,
           updatedAt: new Date(),
         })
-        .where(eq(transactions.id, transactionId));
+        .where(and(eq(transactions.id, transactionId), eq(transactions.status, "pending")))
+        .returning({ id: transactions.id });
+      if (!updated) throw new Error("Transaction is no longer pending");
     }
   });
 
@@ -165,10 +168,15 @@ export async function rejectTransactionById(
 ): Promise<{ portfolioId: string }> {
   const transaction = await db.query.transactions.findFirst({
     where: eq(transactions.id, transactionId),
-    columns: { id: true, portfolioId: true },
+    columns: { id: true, portfolioId: true, status: true },
   });
 
   if (!transaction) throw new Error("Transaction not found");
+  // Rejecting an approved row would leave its value in the portfolio while
+  // the status says otherwise.
+  if (transaction.status !== "pending") {
+    throw new Error("Transaction is no longer pending");
+  }
 
   await db
     .update(transactions)
@@ -178,7 +186,7 @@ export async function rejectTransactionById(
       rejectedBy: adminId,
       updatedAt: new Date(),
     })
-    .where(eq(transactions.id, transactionId));
+    .where(and(eq(transactions.id, transactionId), eq(transactions.status, "pending")));
 
   return { portfolioId: transaction.portfolioId };
 }

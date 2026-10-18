@@ -126,7 +126,7 @@ describe("TripPayments", () => {
       />
     );
 
-    expect(screen.getByText("Nothing from you yet.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing from you yet")).toBeInTheDocument();
   });
 
   it("refuses to take a payment before there is anybody to take it from", () => {
@@ -172,13 +172,12 @@ describe("the payment dialog's date", () => {
     renderCard("b");
     fireEvent.click(screen.getByRole("button", { name: /Log payment/i }));
 
+    // The picker shows the day rather than holding a YYYY-MM-DD value, so
+    // check the local day and year are what it reads.
     const now = new Date();
-    const local = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
-      now.getDate()
-    ).padStart(2, "0")}`;
-    expect(
-      (within(screen.getByRole("dialog")).getByLabelText("Paid on") as HTMLInputElement).value
-    ).toBe(local);
+    const field = within(screen.getByRole("dialog")).getByLabelText("Paid on");
+    expect(field).toHaveTextContent(new RegExp(`\\b${now.getDate()}\\b`));
+    expect(field).toHaveTextContent(String(now.getFullYear()));
   });
 
   it("associates every label with its control", () => {

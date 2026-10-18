@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -13,28 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Mono, Text } from "@/components/ui/typography";
-import { maskValue, statToneClass } from "@/components/ui/stat-card";
-import { formatCurrency } from "@/lib/utils/format";
+import { StatCard, maskValue, statToneClass } from "@/components/ui/stat-card";
+import { formatCurrency, formatPercent, formatSignedPercent } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
+import type { InvestorBreakdown as InvestorBreakdownRow } from "@/types/margin";
 
-export type InvestorBreakdownRow = {
-  investorId: string;
-  name: string;
-  isOwn: boolean;
-  contributed: number;
-  owed: number;
-  positionValue: number;
-  profitLoss: number;
-  positions: {
-    symbol: string;
-    name: string;
-    quantity: number;
-    invested: number;
-    price: number | null;
-    value: number | null;
-  }[];
-};
+const UNITS = new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 });
 
 /**
  * Per-person drill-down: what each investor put in, what their money actually
@@ -54,14 +41,10 @@ export function InvestorBreakdown({
   const [selected, setSelected] = useState<string | null>(null);
 
   if (rows.length === 0) {
-    return (
-      <Text variant="small" className="text-muted-foreground">
-        Nobody has invested yet.
-      </Text>
-    );
+    return <EmptyState icon={Users} title="Nobody has invested yet" />;
   }
 
-  const money = (v: number | null) => {
+  const money = (v: number | null): string => {
     if (v === null) return "—";
     const formatted = formatCurrency(v);
     return hideValues ? maskValue(formatted) : formatted;
@@ -73,106 +56,89 @@ export function InvestorBreakdown({
   const totalContributed = rows.reduce((sum, r) => sum + r.contributed, 0);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
+    <div className="flex flex-col gap-4">
+      {/* One person at a time; picking the active chip again clears it. */}
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        aria-label="Investor"
+        value={selected ?? ""}
+        onValueChange={(v) => setSelected(v || null)}
+      >
         {rows.map((r) => (
-          <Button
-            key={r.investorId}
-            variant="outline"
-            size="sm"
-            data-active={selected === r.investorId}
-            className="h-auto rounded-full py-1.5 data-[active=true]:border-foreground/30 data-[active=true]:bg-foreground/5"
-            onClick={() =>
-              setSelected((cur) => (cur === r.investorId ? null : r.investorId))
-            }
-          >
-            <span className="flex items-center gap-2">
-              {r.name}
-              {r.isOwn && (
-                <Badge variant="secondary" className="text-2xs">
-                  you
-                </Badge>
+          <ToggleGroupItem key={r.investorId} value={r.investorId} className="gap-2">
+            {r.name}
+            {r.isOwn && <Badge variant="secondary">you</Badge>}
+            <Mono
+              className={cn(
+                "text-2xs tabular-nums",
+                r.isOwn ? "" : statToneClass(r.profitLoss >= 0 ? "positive" : "negative")
               )}
-              <Mono
-                className={cn(
-                  "text-2xs tabular-nums",
-                  r.isOwn ? "" : statToneClass(r.profitLoss >= 0 ? "positive" : "negative")
-                )}
-              >
-                {money(r.contributed)}
-                {totalContributed > 0 && (
-                  <span className="ml-1 text-muted-foreground">
-                    {((r.contributed / totalContributed) * 100).toFixed(0)}%
-                  </span>
-                )}
-              </Mono>
-            </span>
-          </Button>
+            >
+              {money(r.contributed)}
+              {totalContributed > 0 && (
+                <span className="text-muted-foreground">
+                  {" "}
+                  {formatPercent((r.contributed / totalContributed) * 100, 0)}
+                </span>
+              )}
+            </Mono>
+          </ToggleGroupItem>
         ))}
-      </div>
+      </ToggleGroup>
 
       {active ? (
-        <Card>
-          <CardContent className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-4">
-              <Figure label="Contributed" value={money(active.contributed)} percent="100%" />
-              <Figure
-                label={active.isOwn ? "Your balance" : "You owe them"}
-                value={money(active.owed)}
-                percent={
-                  active.contributed > 0
-                    ? `+${(
-                        ((active.owed - active.contributed) / active.contributed) *
-                        100
-                      ).toFixed(1)}%`
-                    : undefined
-                }
-              />
-              <Figure
-                label="Their money is worth"
-                value={money(active.positionValue)}
-                percent={
-                  active.contributed > 0
-                    ? `${(
-                        ((active.positionValue - active.contributed) / active.contributed) *
-                        100
-                      ).toFixed(1)}%`
-                    : undefined
-                }
-                tone={
-                  active.positionValue >= active.contributed ? "positive" : "negative"
-                }
-              />
-              <Figure
-                label={active.isOwn ? "Gain on your own" : "Your margin on them"}
-                value={money(active.profitLoss)}
-                percent={
-                  active.owed > 0
-                    ? `${active.profitLoss >= 0 ? "+" : ""}${(
-                        (active.profitLoss / active.owed) *
-                        100
-                      ).toFixed(1)}%`
-                    : undefined
-                }
-                tone={active.profitLoss >= 0 ? "positive" : "negative"}
-              />
-            </div>
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Contributed" value={money(active.contributed)} percent="100%" />
+            <StatCard
+              label={active.isOwn ? "Your balance" : "You owe them"}
+              value={money(active.owed)}
+              percent={
+                active.contributed > 0
+                  ? formatSignedPercent(
+                      ((active.owed - active.contributed) / active.contributed) * 100,
+                      1
+                    )
+                  : undefined
+              }
+            />
+            <StatCard
+              label="Their money is worth"
+              value={money(active.positionValue)}
+              percent={
+                active.contributed > 0
+                  ? formatSignedPercent(
+                      ((active.positionValue - active.contributed) / active.contributed) *
+                        100,
+                      1
+                    )
+                  : undefined
+              }
+              tone={active.positionValue >= active.contributed ? "positive" : "negative"}
+            />
+            <StatCard
+              label={active.isOwn ? "Gain on your own" : "Your margin on them"}
+              value={money(active.profitLoss)}
+              percent={
+                active.owed > 0
+                  ? formatSignedPercent((active.profitLoss / active.owed) * 100, 1)
+                  : undefined
+              }
+              tone={active.profitLoss >= 0 ? "positive" : "negative"}
+            />
+          </div>
 
-            {active.isOwn ? (
-              <Text className="text-xs text-muted-foreground">
-                Your own money in your own method — capital, not debt. It is excluded
-                from the margin, which measures only what is left after paying
-                everyone else.
+          <Card>
+            <CardContent className="flex flex-col gap-4">
+              <Text variant="small">
+                {active.isOwn
+                  ? "Your own money in your own method — capital, not debt. It is excluded from the margin, which measures only what is left after paying everyone else."
+                  : `${active.name} is owed a fixed return whatever happens. This compares that promise against what their money actually bought.`}
               </Text>
-            ) : (
-              <Text className="text-xs text-muted-foreground">
-                {active.name} is owed a fixed return whatever happens. This compares
-                that promise against what their money actually bought.
-              </Text>
-            )}
 
-            {active.positions.length > 0 && (
-              <div className="relative overflow-x-auto">
+              {active.positions.length > 0 && (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -191,30 +157,28 @@ export function InvestorBreakdown({
                         <TableRow key={p.symbol}>
                           <TableCell>
                             <Mono className="text-xs font-medium">{p.symbol}</Mono>
-                            <Text className="text-2xs text-muted-foreground">{p.name}</Text>
+                            <Text variant="small" className="text-2xs">
+                              {p.name}
+                            </Text>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Mono className="text-xs tabular-nums">
-                              {p.quantity.toLocaleString(undefined, {
-                                maximumFractionDigits: 4,
-                              })}
-                            </Mono>
+                            <Mono className="text-xs">{UNITS.format(p.quantity)}</Mono>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Mono className="text-xs tabular-nums">{money(p.invested)}</Mono>
+                            <Mono className="text-xs">{money(p.invested)}</Mono>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Mono className="text-xs tabular-nums">
+                            <Mono className="text-xs">
                               {p.price === null ? "—" : formatCurrency(p.price)}
                             </Mono>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Mono className="text-xs tabular-nums">{money(p.value)}</Mono>
+                            <Mono className="text-xs">{money(p.value)}</Mono>
                           </TableCell>
                           <TableCell className="text-right">
                             <Mono
                               className={cn(
-                                "text-xs tabular-nums",
+                                "text-xs",
                                 statToneClass(
                                   pl === null ? "neutral" : pl >= 0 ? "positive" : "negative"
                                 )
@@ -225,12 +189,11 @@ export function InvestorBreakdown({
                             {pl !== null && p.invested > 0 && (
                               <Mono
                                 className={cn(
-                                  "block text-2xs tabular-nums",
+                                  "block text-2xs",
                                   statToneClass(pl >= 0 ? "positive" : "negative")
                                 )}
                               >
-                                {pl >= 0 ? "+" : ""}
-                                {((pl / p.invested) * 100).toFixed(1)}%
+                                {formatSignedPercent((pl / p.invested) * 100, 1)}
                               </Mono>
                             )}
                           </TableCell>
@@ -239,42 +202,15 @@ export function InvestorBreakdown({
                     })}
                   </TableBody>
                 </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
+        </>
       ) : (
-        <Text variant="small" className="text-muted-foreground">
+        <Text variant="small">
           Pick someone to see what their money bought and what it costs you.
         </Text>
       )}
-    </div>
-  );
-}
-
-function Figure({
-  label,
-  value,
-  percent,
-  tone,
-}: {
-  label: string;
-  value: string;
-  /** Never masked — it is what remains readable once the amount is hidden. */
-  percent?: string;
-  tone?: "positive" | "negative";
-}) {
-  return (
-    <div className="space-y-1">
-      <Text className="text-2xs text-muted-foreground">{label}</Text>
-      <div className="flex flex-wrap items-baseline gap-x-1.5">
-        <Mono className={cn("text-lg font-semibold tabular-nums", statToneClass(tone))}>
-          {value}
-        </Mono>
-        {percent && (
-          <Mono className={cn("text-xs tabular-nums", statToneClass(tone))}>{percent}</Mono>
-        )}
-      </div>
     </div>
   );
 }

@@ -54,7 +54,7 @@ export async function updateBoardColumn(
   columnId: string,
   userId: string,
   data: Omit<UpdateBoardColumnData, "id">
-): Promise<BoardColumn> {
+): Promise<BoardColumn | null> {
   const [column] = await db
     .update(boardColumns)
     .set({
@@ -64,7 +64,8 @@ export async function updateBoardColumn(
     .where(and(eq(boardColumns.id, columnId), eq(boardColumns.userId, userId)))
     .returning();
 
-  return column;
+  // No row: the id was not this user's column.
+  return column ?? null;
 }
 
 export async function deleteBoardColumn(columnId: string, userId: string): Promise<void> {
@@ -125,10 +126,24 @@ export async function getUserBoardTasks(userId: string): Promise<BoardTaskWithCo
   return tasks;
 }
 
+/**
+ * A column id is caller-supplied. Without this a task could be filed under
+ * another user's column, where their column query would pick it up.
+ */
+async function ensureColumnOwnership(columnId: string, userId: string): Promise<void> {
+  const column = await db.query.boardColumns.findFirst({
+    where: and(eq(boardColumns.id, columnId), eq(boardColumns.userId, userId)),
+    columns: { id: true },
+  });
+  if (!column) throw new Error("Column not found");
+}
+
 export async function createBoardTask(
   userId: string,
   data: CreateBoardTaskData & { order: number }
 ): Promise<BoardTask> {
+  await ensureColumnOwnership(data.columnId, userId);
+
   const [task] = await db
     .insert(boardTasks)
     .values({
@@ -144,7 +159,9 @@ export async function updateBoardTask(
   taskId: string,
   userId: string,
   data: Omit<UpdateBoardTaskData, "id">
-): Promise<BoardTask> {
+): Promise<BoardTask | null> {
+  if (data.columnId) await ensureColumnOwnership(data.columnId, userId);
+
   const [task] = await db
     .update(boardTasks)
     .set({
@@ -154,11 +171,27 @@ export async function updateBoardTask(
     .where(and(eq(boardTasks.id, taskId), eq(boardTasks.userId, userId)))
     .returning();
 
-  return task;
+  return task ?? null;
 }
 
 export async function deleteBoardTask(taskId: string, userId: string): Promise<void> {
-  await db.delete(boardTasks).where(and(eq(boardTasks.id, taskId), eq(boardTasks.userId, userId)));
+  const [deleted] = await db
+    .delete(boardTasks)
+    .where(and(eq(boardTasks.id, taskId), eq(boardTasks.userId, userId)))
+    .returning({ columnId: boardTasks.columnId, order: boardTasks.order });
+  if (!deleted) return;
+  // Close the gap. `reorderTask` treats the drop index as an order VALUE, so a
+  // column with holes (0, 2, 3) landed drags one slot off where the UI showed.
+  await db
+    .update(boardTasks)
+    .set({ order: sql`"order" - 1`, updatedAt: new Date() })
+    .where(
+      and(
+        eq(boardTasks.userId, userId),
+        eq(boardTasks.columnId, deleted.columnId),
+        gt(boardTasks.order, deleted.order)
+      )
+    );
 }
 
 export async function reorderTask(
@@ -175,6 +208,7 @@ export async function reorderTask(
 
   const oldOrder = task.order;
   const isSameColumn = sourceColumnId === destinationColumnId;
+  if (!isSameColumn) await ensureColumnOwnership(destinationColumnId, userId);
 
   if (isSameColumn) {
     if (newOrder > oldOrder) {

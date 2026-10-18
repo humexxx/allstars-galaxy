@@ -22,7 +22,10 @@ const headingVariants = cva("text-foreground text-balance", {
       // hero is bold, the page title semibold, every sub-level medium. Keep in
       // sync with the weight column in docs/TYPOGRAPHY.md.
       display: "text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl",
-      h1: "text-3xl font-semibold tracking-tight sm:text-4xl",
+      // Long names that open a page (a trip, an article): one step smaller
+      // than h1 on phones so a two-line name still fits the hero.
+      hero: "text-2xl font-bold tracking-tight sm:text-4xl",
+      h1: "text-3xl font-bold tracking-tight sm:text-4xl",
       h2: "text-2xl font-medium tracking-tight sm:text-3xl",
       h3: "text-xl font-medium tracking-tight sm:text-2xl",
       h4: "text-lg font-medium tracking-tight sm:text-xl",
@@ -67,6 +70,7 @@ function Heading({
 function defaultTagForLevel(level: HeadingProps["level"]): HeadingTag {
   switch (level) {
     case "display":
+    case "hero":
       return "h1";
     case "h1":
       return "h1";
@@ -135,16 +139,28 @@ function Text({
 }
 
 const eyebrowVariants = cva(
-  "text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground",
+  "font-semibold uppercase tracking-[0.18em] text-muted-foreground",
+  {
+    variants: {
+      size: {
+        default: "text-xs",
+        // Dense rails (KPI tiles, bracket labels) — the 10px step.
+        sm: "text-2xs",
+      },
+    },
+    defaultVariants: { size: "default" },
+  },
 );
 
-type EyebrowProps = React.HTMLAttributes<HTMLElement> & {
-  as?: "p" | "span" | "div";
-  asChild?: boolean;
-};
+type EyebrowProps = React.HTMLAttributes<HTMLElement> &
+  VariantProps<typeof eyebrowVariants> & {
+    as?: "p" | "span" | "div";
+    asChild?: boolean;
+  };
 
 function Eyebrow({
   className,
+  size,
   as = "span",
   asChild = false,
   ...props
@@ -153,7 +169,7 @@ function Eyebrow({
   return (
     <Comp
       data-slot="eyebrow"
-      className={cn(eyebrowVariants(), className)}
+      className={cn(eyebrowVariants({ size }), className)}
       {...props}
     />
   );

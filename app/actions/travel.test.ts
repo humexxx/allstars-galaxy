@@ -108,6 +108,8 @@ describe("createTripAction", () => {
       })
     );
     expect(revalidatePath).toHaveBeenCalledWith(TRIP_LIST_PATH);
+    // The dashboard's travel card features a trip, so it must not go stale.
+    expect(revalidatePath).toHaveBeenCalledWith("/portal");
   });
 
   it("returns an error envelope and does not call the service when title is missing", async () => {
@@ -224,6 +226,7 @@ describe("addTripItemAction", () => {
       })
     );
     expect(revalidatePath).toHaveBeenCalledWith(tripPath(TRIP_ID));
+    expect(revalidatePath).toHaveBeenCalledWith("/portal");
   });
 
   it("rejects when tripId is not a uuid", async () => {
@@ -334,6 +337,8 @@ describe("addTripPhotoAction", () => {
       })
     );
     expect(revalidatePath).toHaveBeenCalledWith(tripPath(TRIP_ID));
+    // Photos are not on the dashboard card; no reason to rebuild it.
+    expect(revalidatePath).not.toHaveBeenCalledWith("/portal");
   });
 });
 

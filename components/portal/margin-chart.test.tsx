@@ -2,7 +2,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { MarginChart, type MarginHistoryInputView } from "./margin-chart";
+import type { MarginHistoryInput } from "@/types/margin";
+
+import { MarginChart } from "./margin-chart";
 
 // Recharts needs layout, which jsdom does not do; the chart body is not what
 // these assertions are about.
@@ -19,7 +21,7 @@ vi.mock("@/components/ui/chart", () => ({
   ChartTooltipContent: () => null,
 }));
 
-const INPUT: MarginHistoryInputView = {
+const INPUT: MarginHistoryInput = {
   contributions: [
     { month: "2025-08", assetId: "ada", quantity: 1000, amount: 800, investorId: "y", methodId: "m1" },
     { month: "2025-09", assetId: "ada", quantity: 1000, amount: 800, investorId: "j", methodId: "m1" },

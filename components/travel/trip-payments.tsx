@@ -1,9 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { format } from "date-fns";
-import { Plus, Trash2, Users } from "lucide-react";
+import { useMemo, useRef, useState, useTransition } from "react";
+import { Plus, Receipt, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -15,7 +13,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { DateField } from "@/components/ui/date-field";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { MoneyInput } from "@/components/ui/money-input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -29,6 +28,7 @@ import {
 import { Mono, Text } from "@/components/ui/typography";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Progress } from "@/components/ui/progress";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
@@ -46,7 +46,7 @@ import {
 import type { TripContribution } from "@/types/travel";
 import { formatTripMoney, moneyRange } from "@/lib/travel/format";
 import { isoDay } from "@/lib/travel/calendar";
-
+import { formatDay } from "@/lib/utils/date";
 
 export type PaymentsTraveller = {
   id: string;
@@ -83,6 +83,8 @@ export function TripPayments({
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  /** Where focus goes when the payment it was on is deleted out from under it. */
+  const logButtonRef = useRef<HTMLButtonElement>(null);
 
   const byMember = useMemo(() => {
     const paid = new Map<string, number>();
@@ -124,7 +126,10 @@ export function TripPayments({
       <CardHeader>
         {/* Same as the itinerary's badge: under the heading on a phone, where
             the row has Log payment at the other end and nothing to spare. */}
-        <CardTitle className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
+        <CardTitle
+          as="h2"
+          className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2"
+        >
           <span>Payments</span>
           {focus && (
             <Badge variant="outline" className="text-2xs font-normal">
@@ -136,33 +141,37 @@ export function TripPayments({
             that grows a second column when it finds one. */}
         {travellers.length > 0 && (
           <CardAction>
-            <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
-              <Plus className="mr-1 size-3.5" /> Log payment
+            <Button
+              ref={logButtonRef}
+              size="sm"
+              variant="outline"
+              onClick={() => setAdding(true)}
+            >
+              <Plus /> Log payment
             </Button>
           </CardAction>
         )}
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-4 ">
+      <CardContent className="flex flex-col gap-4">
         {travellers.length === 0 ? (
           <EmptyState
             icon={Users}
             title="No travellers yet"
             description="A payment has to come from somebody — add the people going first."
-            className="border-dashed p-6"
           />
         ) : (
           <>
-            <div className="flex flex-col gap-1.5 ">
+            <div className="flex flex-col gap-1.5">
               <div className="flex items-baseline justify-between gap-2">
-                <Mono className="text-lg font-semibold tabular-nums">
+                <Mono className="text-xl font-semibold tabular-nums sm:text-2xl">
                   {formatTripMoney(paid, currency)}
                 </Mono>
                 <Mono className="shrink-0 text-xs text-muted-foreground">
                   of {moneyRange(owedLow, owedHigh, currency)}
                 </Mono>
               </div>
-              <Progress value={pct} className="h-1.5" />
+              <Progress value={pct} aria-label="Paid so far" />
               <Text className="text-2xs text-muted-foreground">
                 {left > 0 ? (
                   <>
@@ -179,11 +188,14 @@ export function TripPayments({
             </div>
 
             {shown.length === 0 ? (
-              <Text variant="small" className="text-muted-foreground">
-                {focus
-                  ? `Nothing from ${focus.isYou ? "you" : focus.name} yet.`
-                  : "No payments logged yet."}
-              </Text>
+              <EmptyState
+                icon={Receipt}
+                title={
+                  focus
+                    ? `Nothing from ${focus.isYou ? "you" : focus.name} yet`
+                    : "No payments logged yet"
+                }
+              />
             ) : (
               <ul className="-mx-2 divide-y">
                 {shown.map((c) => (
@@ -213,6 +225,7 @@ export function TripPayments({
           currency={currency}
           travellers={travellers}
           onClose={() => setOpenId(null)}
+          focusAfterDelete={logButtonRef}
         />
       )}
       {adding && (
@@ -256,7 +269,7 @@ function PaymentRow({
         className="flex w-full cursor-pointer flex-col gap-0.5 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className="flex w-full items-baseline justify-between gap-2">
-          <Text weight="medium" className="truncate text-sm">
+          <Text weight="medium" className="truncate">
             {who ?? contribution.note ?? "Payment"}
           </Text>
           <Mono className="shrink-0 whitespace-nowrap text-sm font-medium tabular-nums">
@@ -266,7 +279,7 @@ function PaymentRow({
         <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
           {contribution.paidOn && (
             <Mono className="text-2xs">
-              {format(new Date(`${contribution.paidOn}T00:00:00`), "d MMM yyyy")}
+              {formatDay(contribution.paidOn)}
             </Mono>
           )}
           {who && contribution.note && <span className="truncate">{contribution.note}</span>}
@@ -294,6 +307,7 @@ function PaymentDialog({
   travellers,
   payerId,
   onClose,
+  focusAfterDelete,
 }: {
   tripId: string;
   /** Absent when logging a new one. */
@@ -306,8 +320,14 @@ function PaymentDialog({
    */
   payerId?: string;
   onClose: () => void;
+  /**
+   * The row that opened this dialog is gone once its payment is deleted, and
+   * Radix would hand focus back to it — i.e. to nothing, dropping a keyboard
+   * user at the top of the page.
+   */
+  focusAfterDelete?: React.RefObject<HTMLButtonElement | null>;
 }) {
-  const router = useRouter();
+  const removed = useRef(false);
   const [saving, startSave] = useTransition();
   const [deleting, startDelete] = useTransition();
   const [amount, setAmount] = useState(contribution?.amount ?? "");
@@ -326,15 +346,18 @@ function PaymentDialog({
       ""
   );
 
+  const [amountError, setAmountError] = useState<string | null>(null);
+
   const busy = saving || deleting;
   const payer = travellers.find((t) => t.id === (contribution?.memberId ?? memberId));
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!/^\d+(\.\d{1,2})?$/.test(amount) || parseFloat(amount) <= 0) {
-      toast.error("Enter an amount above zero");
+      setAmountError("Enter an amount above zero");
       return;
     }
+    setAmountError(null);
     if (!contribution && !memberId) {
       toast.error("Pick who paid");
       return;
@@ -355,7 +378,6 @@ function PaymentDialog({
           });
       if (res.success) {
         toast.success(contribution ? "Payment updated" : "Payment logged");
-        router.refresh();
         onClose();
       } else {
         toast.error(res.error);
@@ -365,7 +387,14 @@ function PaymentDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent
+        className="sm:max-w-sm"
+        onCloseAutoFocus={(e) => {
+          if (!removed.current || !focusAfterDelete?.current) return;
+          e.preventDefault();
+          focusAfterDelete.current.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             {contribution ? `Payment from ${payer?.name ?? "somebody"}` : "Log a payment"}
@@ -401,7 +430,7 @@ function PaymentDialog({
           )}
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field className="gap-1.5">
+            <Field className="gap-1.5" data-invalid={!!amountError}>
               <FieldLabel htmlFor="edit-amount" className="text-xs">Amount</FieldLabel>
               <MoneyInput
                 id="edit-amount"
@@ -409,15 +438,18 @@ function PaymentDialog({
                 onChange={setAmount}
                 currency={currency}
                 placeholder="0.00"
+                aria-invalid={!!amountError}
               />
+              <FieldError>{amountError}</FieldError>
             </Field>
             <Field className="gap-1.5">
               <FieldLabel htmlFor="edit-date" className="text-xs">Paid on</FieldLabel>
-              <Input
+              <DateField
                 id="edit-date"
-                type="date"
                 value={paidOn}
-                onChange={(e) => setPaidOn(e.target.value)}
+                onChange={setPaidOn}
+                placeholder="Not recorded"
+                clearable
               />
             </Field>
           </div>
@@ -445,7 +477,7 @@ function PaymentDialog({
                   const res = await deleteTripContributionAction(tripId, contribution.id);
                   if (res.success) {
                     toast.success("Payment removed");
-                    router.refresh();
+                    removed.current = true;
                     onClose();
                   } else {
                     toast.error(res.error);
@@ -453,17 +485,18 @@ function PaymentDialog({
                 })
               }
             >
-              <Trash2 className="mr-1 size-3.5" />
+              {deleting ? <Spinner /> : <Trash2 />}
               {deleting ? "Removing…" : "Delete"}
             </Button>
             ) : (
               <span />
             )}
             <div className="flex items-center gap-2">
-              <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+              <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
                 Cancel
               </Button>
               <Button type="submit" disabled={busy}>
+                {saving && <Spinner />}
                 {saving ? "Saving…" : contribution ? "Save" : "Log payment"}
               </Button>
             </div>

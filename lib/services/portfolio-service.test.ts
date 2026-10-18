@@ -73,7 +73,6 @@ import {
   getPortfolioAssets,
   getPortfolioStats,
   getPortfolioTransactions,
-  getTransactionCurrentValue,
   getUserPortfolio,
 } from "./portfolio-service";
 import type {
@@ -194,6 +193,7 @@ describe("getPortfolioStats", () => {
     expect(stats).toEqual({
       totalValue: 0,
       costBasis: 0,
+      totalWithdrawn: 0,
       allTimeProfit: 0,
       allTimeProfitPercentage: 0,
       totalInvestmentMethods: 0,
@@ -520,63 +520,5 @@ describe("getPortfolioAssets", () => {
 
     const assets = await getPortfolioAssets(PORTFOLIO_ID);
     expect(assets).toEqual([]);
-  });
-});
-
-// ---------- getTransactionCurrentValue ----------
-
-describe("getTransactionCurrentValue", () => {
-  it("returns null when no transaction is found", async () => {
-    transactionFindFirst.mockResolvedValueOnce(undefined);
-    const result = await getTransactionCurrentValue("missing");
-    expect(result).toBeNull();
-  });
-
-  it("returns null when the transaction is not a buy", async () => {
-    transactionFindFirst.mockResolvedValueOnce({
-      id: "tx-1",
-      type: "withdrawal",
-      initialValue: "100",
-      currentValue: "100",
-    });
-
-    const result = await getTransactionCurrentValue("tx-1");
-    expect(result).toBeNull();
-  });
-
-  it("computes growth and growthPercentage from initial vs current value", async () => {
-    transactionFindFirst.mockResolvedValueOnce({
-      id: "tx-1",
-      type: "buy",
-      initialValue: "1000",
-      currentValue: "1250",
-    });
-
-    const result = await getTransactionCurrentValue("tx-1");
-
-    expect(result).toEqual({
-      initialValue: 1000,
-      currentValue: 1250,
-      growth: 250,
-      growthPercentage: 25,
-    });
-  });
-
-  it("treats null initial/current as 0 and avoids div-by-zero", async () => {
-    transactionFindFirst.mockResolvedValueOnce({
-      id: "tx-1",
-      type: "buy",
-      initialValue: null,
-      currentValue: null,
-    });
-
-    const result = await getTransactionCurrentValue("tx-1");
-
-    expect(result).toEqual({
-      initialValue: 0,
-      currentValue: 0,
-      growth: 0,
-      growthPercentage: 0,
-    });
   });
 });

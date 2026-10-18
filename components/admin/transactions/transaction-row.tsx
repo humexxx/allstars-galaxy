@@ -1,15 +1,18 @@
 "use client";
 
-import { useTransition } from "react";
-import { format } from "date-fns";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useState, useTransition, type MouseEvent } from "react";
 import { Check, X } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Spinner } from "@/components/ui/spinner";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Mono, Text } from "@/components/ui/typography";
+import { StatusBadge, TypeBadge } from "@/components/portfolio/transaction-badges";
 import { approveTransaction, rejectTransaction } from "@/app/actions/admin-transactions";
-import { toast } from "sonner";
+import { runAction } from "@/lib/actions/run";
+import { formatDateTime, formatDay } from "@/lib/utils/date";
+import { formatCurrency } from "@/lib/utils/format";
 import type { AdminTransactionRow } from "@/types/transaction";
 import {
   AlertDialog,
@@ -27,52 +30,77 @@ interface TransactionRowProps {
   transaction: AdminTransactionRow;
 }
 
+type Decision = "approve" | "reject";
+
+/**
+ * Timestamps: the server renders them in UTC, the browser in the admin's own
+ * zone, so the text legitimately differs between the two passes.
+ */
+function Timestamp({ value }: { value: Date }) {
+  return (
+    <Mono className="text-xs text-muted-foreground">
+      <time dateTime={new Date(value).toISOString()} suppressHydrationWarning>
+        {formatDateTime(value)}
+      </time>
+    </Mono>
+  );
+}
+
 export function TransactionRow({ transaction }: TransactionRowProps) {
   const [isPending, startTransition] = useTransition();
+  const [openDialog, setOpenDialog] = useState<Decision | null>(null);
 
-  const handleApprove = () => {
-    startTransition(async () => {
-      try {
-        await approveTransaction(transaction.id);
-        toast.success("Transaction approved");
-      } catch {
-        toast.error("Failed to approve");
-      }
-    });
-  };
-
-  const handleReject = () => {
-    startTransition(async () => {
-      try {
-        await rejectTransaction(transaction.id);
-        toast.success("Transaction rejected");
-      } catch {
-        toast.error("Failed to reject");
-      }
-    });
-  };
-
-  const getStatusVariant = (
-    status: string
-  ): "default" | "secondary" | "destructive" | "outline" => {
-    if (status === "approved") return "default";
-    if (status === "rejected") return "destructive";
-    if (status === "pending") return "secondary";
-    return "outline";
-  };
-
+  const amount = formatCurrency(transaction.amount);
   const userDisplayName =
     transaction.user?.fullName || transaction.user?.email || "this user";
+
+  const decide = (decision: Decision): void => {
+    startTransition(async () => {
+      const result = await runAction(
+        decision === "approve"
+          ? approveTransaction(transaction.id)
+          : rejectTransaction(transaction.id),
+        decision === "approve"
+          ? { success: "Transaction approved", failure: "Failed to approve transaction" }
+          : { success: "Transaction rejected", failure: "Failed to reject transaction" }
+      );
+      if (result.ok) setOpenDialog(null);
+    });
+  };
+
+  // Radix closes an AlertDialog on Action click; holding it open until the
+  // action settles is what lets the pending label and any failure show.
+  const confirm =
+    (decision: Decision) =>
+    (e: MouseEvent): void => {
+      e.preventDefault();
+      decide(decision);
+    };
+
+  const dialogProps = (decision: Decision) => ({
+    open: openDialog === decision,
+    onOpenChange: (open: boolean) => {
+      if (isPending) return;
+      setOpenDialog(open ? decision : null);
+    },
+  });
+
+  const who = (
+    <>
+      <strong>{userDisplayName}</strong>
+      {transaction.user?.email && transaction.user?.fullName && ` (${transaction.user.email})`}
+    </>
+  );
 
   return (
     <TableRow>
       <TableCell>
-        <Mono>{format(new Date(transaction.date), "PPP")}</Mono>
+        <Mono suppressHydrationWarning>{formatDay(transaction.date)}</Mono>
       </TableCell>
       <TableCell>
         {transaction.user ? (
           <div className="flex items-center gap-2">
-            <Avatar className="h-8 w-8">
+            <Avatar className="size-8">
               <AvatarImage src={transaction.user.avatarUrl || ""} />
               <AvatarFallback>
                 {transaction.user.fullName?.charAt(0) ||
@@ -81,7 +109,7 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
               </AvatarFallback>
             </Avatar>
             <div className="flex min-w-0 flex-col">
-              <Text as="span" variant="body" weight="medium">
+              <Text as="span" weight="medium">
                 {transaction.user.fullName || "Unknown"}
               </Text>
               <Mono className="max-w-48 truncate text-xs text-muted-foreground">
@@ -90,115 +118,106 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
             </div>
           </div>
         ) : (
-          <Text as="span" variant="muted">Unknown User</Text>
+          <Text as="span" variant="muted">
+            Unknown user
+          </Text>
         )}
       </TableCell>
       <TableCell>
-        <Badge variant={transaction.type === "buy" ? "default" : "secondary"}>
-          {transaction.type.toUpperCase()}
-        </Badge>
+        <TypeBadge type={transaction.type} />
       </TableCell>
       <TableCell>
-        <Mono className="font-medium">${transaction.amount}</Mono>
+        <Mono className="font-medium">{amount}</Mono>
       </TableCell>
       <TableCell>
-        <Badge variant={getStatusVariant(transaction.status)}>
-          {transaction.status}
-        </Badge>
+        <StatusBadge status={transaction.status} />
       </TableCell>
       <TableCell>
         {transaction.approvedBy && transaction.approvedAt && (
-          <div className="flex flex-col text-sm">
-            <span className="font-medium text-emerald-600 dark:text-emerald-400">
+          <div className="flex flex-col">
+            <Text as="span" weight="medium" className="text-success">
               {transaction.approvedBy.fullName || transaction.approvedBy.email}
-            </span>
-            <Mono className="text-xs text-muted-foreground">
-              {format(new Date(transaction.approvedAt), "PPp")}
-            </Mono>
+            </Text>
+            <Timestamp value={transaction.approvedAt} />
           </div>
         )}
         {transaction.rejectedBy && transaction.rejectedAt && (
-          <div className="flex flex-col text-sm">
-            <span className="font-medium text-rose-600 dark:text-rose-400">
+          <div className="flex flex-col">
+            <Text as="span" weight="medium" className="text-destructive">
               {transaction.rejectedBy.fullName || transaction.rejectedBy.email}
-            </span>
-            <Mono className="text-xs text-muted-foreground">
-              {format(new Date(transaction.rejectedAt), "PPp")}
-            </Mono>
+            </Text>
+            <Timestamp value={transaction.rejectedAt} />
           </div>
         )}
         {!transaction.approvedBy && !transaction.rejectedBy && (
-          <Text as="span" variant="muted">-</Text>
+          <Text as="span" variant="muted">
+            <span aria-hidden>—</span>
+            <span className="sr-only">Not processed</span>
+          </Text>
         )}
       </TableCell>
       <TableCell className="text-right">
         {transaction.status === "pending" && (
           <div className="flex items-center justify-end gap-2">
-            <AlertDialog>
+            <AlertDialog {...dialogProps("approve")}>
               <AlertDialogTrigger asChild>
                 <Button
-                  size="icon"
-                  variant="outline"
-                  className="h-8 w-8 text-emerald-600 dark:text-emerald-400"
-                  aria-label={`Approve $${transaction.amount} ${transaction.type} for ${userDisplayName}`}
+                  size="icon-sm"
+                  variant="ghost"
+                  className="text-success"
+                  aria-label={`Approve ${amount} ${transaction.type} for ${userDisplayName}`}
                   disabled={isPending}
                 >
-                  <Check className="h-4 w-4" />
+                  <Check />
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Approve Transaction</AlertDialogTitle>
+                  <AlertDialogTitle>Approve transaction</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to approve this{" "}
-                    <strong>${transaction.amount}</strong> {transaction.type}{" "}
-                    transaction for <strong>{userDisplayName}</strong>
-                    {transaction.user?.email && transaction.user?.fullName &&
-                      ` (${transaction.user.email})`}
-                    ?
+                    Approve this <strong>{amount}</strong> {transaction.type} transaction
+                    for {who}?
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleApprove} disabled={isPending}>
-                    {isPending ? "Approving..." : "Approve"}
+                  <AlertDialogAction onClick={confirm("approve")} disabled={isPending}>
+                    {isPending && <Spinner />}
+                    {isPending ? "Approving…" : "Approve"}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
 
-            <AlertDialog>
+            <AlertDialog {...dialogProps("reject")}>
               <AlertDialogTrigger asChild>
                 <Button
-                  size="icon"
-                  variant="outline"
-                  className="h-8 w-8 text-rose-600 dark:text-rose-400"
-                  aria-label={`Reject $${transaction.amount} ${transaction.type} for ${userDisplayName}`}
+                  size="icon-sm"
+                  variant="ghost"
+                  className="text-destructive"
+                  aria-label={`Reject ${amount} ${transaction.type} for ${userDisplayName}`}
                   disabled={isPending}
                 >
-                  <X className="h-4 w-4" />
+                  <X />
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Reject Transaction</AlertDialogTitle>
+                  <AlertDialogTitle>Reject transaction</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to reject this{" "}
-                    <strong>${transaction.amount}</strong> {transaction.type}{" "}
-                    transaction for <strong>{userDisplayName}</strong>
-                    {transaction.user?.email && transaction.user?.fullName &&
-                      ` (${transaction.user.email})`}
-                    ? This action cannot be undone.
+                    Reject this <strong>{amount}</strong> {transaction.type} transaction
+                    for {who}? This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
                   <AlertDialogAction
-                    onClick={handleReject}
+                    variant="destructive"
+                    onClick={confirm("reject")}
                     disabled={isPending}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    {isPending ? "Rejecting..." : "Reject"}
+                    {isPending && <Spinner />}
+                    {isPending ? "Rejecting…" : "Reject"}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

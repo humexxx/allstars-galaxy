@@ -8,18 +8,27 @@ import {
   DragEndEvent,
   DragOverlay,
   DragStartEvent,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
 import { BoardColumn } from "./board-column";
 import { BoardTaskCard } from "./board-task-card";
 import { CreateColumnDialog } from "./create-column-dialog";
 import { TaskDialog } from "./task-dialog";
-import { Maximize2, Minimize2, RefreshCw } from "lucide-react";
+import { Columns3, Maximize2, Minimize2 } from "lucide-react";
+import { PageHeader } from "@/components/portal/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Heading, Text } from "@/components/ui/typography";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Spinner } from "@/components/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   createBoardColumnAction,
@@ -32,6 +41,7 @@ import {
 } from "@/app/actions/board";
 import type { BoardColumn as BoardColumnType, BoardTask } from "@/types";
 import type { CreateBoardColumnData, CreateBoardTaskData } from "@/schemas/board";
+import { runAction } from "@/lib/actions/run";
 import { toast } from "sonner";
 
 type BoardViewProps = {
@@ -73,22 +83,41 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
   const [activeTask, setActiveTask] = useState<BoardTask | null>(null);
   const [pendingMutations, setPendingMutations] = useState<number>(0);
   const isSyncing = pendingMutations > 0;
+
+  // The actions revalidate this page, so fresh server props arrive after every
+  // mutation (and after edits made elsewhere, e.g. a road path's task). Adopt
+  // them once nothing is in flight; mid-flight they would stomp the
+  // optimistic state still waiting on its own response.
+  const [serverData, setServerData] = useState({ initialColumns, initialTasks });
+  if (
+    pendingMutations === 0 &&
+    (serverData.initialColumns !== initialColumns || serverData.initialTasks !== initialTasks)
+  ) {
+    setServerData({ initialColumns, initialTasks });
+    setColumns(initialColumns);
+    setTasks(initialTasks);
+  }
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const { setOpen: setSidebarOpen, open: isSidebarOpen } = useSidebar();
-  // Remember the sidebar state so we can restore it when the user collapses the board.
-  const sidebarStateBeforeExpand = useRef<boolean>(isSidebarOpen);
+  // Put the sidebar back the way the user had it. Set while expanded only.
+  const restoreSidebar = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
+  // In the toggle, not an effect on `isExpanded`: the effect also ran on mount
+  // (rewriting the sidebar cookie) and never on the way out.
+  const toggleExpanded = (): void => {
     if (isExpanded) {
-      sidebarStateBeforeExpand.current = isSidebarOpen;
-      setSidebarOpen(false);
+      restoreSidebar.current?.();
+      restoreSidebar.current = null;
     } else {
-      setSidebarOpen(sidebarStateBeforeExpand.current);
+      const wasOpen = isSidebarOpen;
+      restoreSidebar.current = () => setSidebarOpen(wasOpen);
+      setSidebarOpen(false);
     }
-    // We intentionally only react to the expand toggle; sidebar state changes from
-    // elsewhere should not loop back through this effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isExpanded]);
+    setIsExpanded(!isExpanded);
+  };
+
+  // Leaving the page while expanded must not strand the sidebar collapsed.
+  useEffect(() => () => restoreSidebar.current?.(), []);
   // Serialize reorder mutations: rapid drags get queued and applied in order
   // so the server never sees them out of sequence.
   const reorderQueue = useRef<Promise<void>>(Promise.resolve());
@@ -96,7 +125,9 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
-    })
+    }),
+    // Space picks a card up, the arrows move it, Space drops it.
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const taskIndex = useMemo(() => {
@@ -157,7 +188,20 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
 
     if (sameColumn && task.order === newOrder) return;
 
-    const previousTasks = tasks;
+    // Undo only this move. Restoring a whole-array snapshot taken here also
+    // undid anything else that changed while the request was in flight.
+    const sourceOrders = new Map(
+      (taskIndex.byColumnId[sourceColumnId] ?? []).map((t) => [t.id, t.order])
+    );
+    const destinationOrders = new Map(column.map((t) => [t.id, t.order]));
+    const rollback = (): void =>
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (t.id === taskId) return { ...t, columnId: sourceColumnId, order: task.order };
+          const order = sourceOrders.get(t.id) ?? destinationOrders.get(t.id);
+          return order === undefined ? t : { ...t, order };
+        })
+      );
 
     // Optimistic UI update — server call is enqueued below. BOTH columns are
     // renumbered: the service closes the gap the card leaves behind, and a
@@ -192,11 +236,11 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
             order: newOrder,
           });
           if (!result.success) {
-            setTasks(previousTasks);
+            rollback();
             toast.error(result.error || "Failed to move task");
           }
         } catch {
-          setTasks(previousTasks);
+          rollback();
           toast.error("Failed to move task");
         } finally {
           setPendingMutations((n) => n - 1);
@@ -259,7 +303,10 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
     taskId: string,
     data: CreateBoardTaskData
   ): Promise<void> => {
-    const previous = tasks;
+    const current = taskIndex.byId.get(taskId);
+    if (!current) return;
+    const restore = (): void =>
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? current : t)));
     setTasks((prev) =>
       prev.map((t) =>
         t.id === taskId
@@ -277,14 +324,30 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
 
     try {
       setPendingMutations((n) => n + 1);
+      // A column change is a move, not a field edit: `updateBoardTask` would
+      // write the new columnId with the old `order`, leaving a hole in the
+      // source column and a duplicate order in the destination. Reorder to
+      // the end of the destination first, then save the other fields.
+      if (current.columnId !== data.columnId) {
+        const destinationCount = (taskIndex.byColumnId[data.columnId] ?? []).length;
+        const moved = await reorderBoardTaskAction({
+          taskId,
+          sourceColumnId: current.columnId,
+          destinationColumnId: data.columnId,
+          order: destinationCount,
+        });
+        if (!moved.success) {
+          toast.error(moved.error || "Failed to move task");
+          throw new Error(moved.error || "Failed to move task");
+        }
+      }
       const result = await updateBoardTaskAction({ id: taskId, ...data });
       if (!result.success) {
-        setTasks(previous);
         toast.error(result.error || "Failed to update task");
         throw new Error(result.error || "Failed to update task");
       }
     } catch (error) {
-      setTasks(previous);
+      restore();
       throw error;
     } finally {
       setPendingMutations((n) => n - 1);
@@ -292,19 +355,21 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
   };
 
   const handleRenameColumn = async (columnId: string, name: string): Promise<void> => {
-    const previous = columns;
+    const previousName = columns.find((c) => c.id === columnId)?.name;
+    if (previousName === undefined) return;
     setColumns((prev) => prev.map((c) => (c.id === columnId ? { ...c, name } : c)));
 
     try {
       setPendingMutations((n) => n + 1);
       const result = await updateBoardColumnAction({ id: columnId, name });
       if (!result.success) {
-        setColumns(previous);
         toast.error(result.error || "Failed to rename column");
         throw new Error(result.error || "Failed to rename column");
       }
     } catch (error) {
-      setColumns(previous);
+      setColumns((prev) =>
+        prev.map((c) => (c.id === columnId ? { ...c, name: previousName } : c))
+      );
       throw error;
     } finally {
       setPendingMutations((n) => n - 1);
@@ -312,38 +377,37 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
   };
 
   const handleDeleteTask = async (taskId: string): Promise<void> => {
-    const previous = tasks;
+    const removed = taskIndex.byId.get(taskId);
+    if (!removed) return;
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
 
-    try {
-      setPendingMutations((n) => n + 1);
-      await deleteBoardTaskAction(taskId);
-    } catch {
-      setTasks(previous);
-      toast.error("Failed to delete task");
-    } finally {
-      setPendingMutations((n) => n - 1);
-    }
+    setPendingMutations((n) => n + 1);
+    const { ok } = await runAction(deleteBoardTaskAction(taskId), {
+      failure: "Failed to delete task",
+    });
+    // Put back only the card that failed to go.
+    if (!ok) setTasks((prev) => [...prev, removed]);
+    setPendingMutations((n) => n - 1);
   };
 
   const handleDeleteColumn = async (columnId: string): Promise<void> => {
-    const previous = columns;
-    const previousTasks = tasks;
+    const removedColumn = columns.find((c) => c.id === columnId);
+    if (!removedColumn) return;
+    const removedTasks = taskIndex.byColumnId[columnId] ?? [];
     setColumns((prev) => prev.filter((c) => c.id !== columnId));
     // board_tasks.column_id cascades, so the tasks are gone too. Leaving them
     // in state kept them counted and rendered by nothing.
     setTasks((prev) => prev.filter((t) => t.columnId !== columnId));
 
-    try {
-      setPendingMutations((n) => n + 1);
-      await deleteBoardColumnAction(columnId);
-    } catch {
-      setColumns(previous);
-      setTasks(previousTasks);
-      toast.error("Failed to delete column");
-    } finally {
-      setPendingMutations((n) => n - 1);
+    setPendingMutations((n) => n + 1);
+    const { ok } = await runAction(deleteBoardColumnAction(columnId), {
+      failure: "Failed to delete column",
+    });
+    if (!ok) {
+      setColumns((prev) => [...prev, removedColumn].sort((a, b) => a.order - b.order));
+      setTasks((prev) => [...prev, ...removedTasks]);
     }
+    setPendingMutations((n) => n - 1);
   };
 
   const nextColumnOrder = columns.length > 0 ? Math.max(...columns.map((c) => c.order)) + 1 : 0;
@@ -355,49 +419,55 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
       // element than its parent's max-width allows. Combined with closing the
       // sidebar, the board really fills the screen.
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-4",
+        "flex min-h-0 flex-1 flex-col gap-6",
         isExpanded && "w-screen -ml-[calc(50vw-50%)]"
       )}
     >
-      <header
-        className={cn(
-          "flex flex-wrap items-start justify-between gap-3",
-          isExpanded && "px-4 sm:px-6 lg:px-8"
-        )}
-      >
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Heading level="h1">Task Board</Heading>
-            {isSyncing ? (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <RefreshCw className="size-3 animate-spin" />
-                Syncing
-              </span>
+      <PageHeader
+        className={cn(isExpanded && "px-4 sm:px-8 lg:px-12")}
+        title="Task board"
+        description="Manage your tasks with a visual board."
+        badge={
+          isSyncing ? (
+            <Badge variant="secondary" role="status">
+              <Spinner aria-hidden="true" />
+              Syncing
+            </Badge>
+          ) : null
+        }
+        actions={
+          <>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleExpanded}
+                  aria-label={isExpanded ? "Collapse board" : "Expand board"}
+                >
+                  {isExpanded ? <Minimize2 /> : <Maximize2 />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{isExpanded ? "Collapse board" : "Expand board"}</TooltipContent>
+            </Tooltip>
+            {columns.length > 0 ? (
+              <>
+                <TaskDialog columns={columns} onSubmit={handleCreateTask} />
+                <CreateColumnDialog onCreate={handleCreateColumn} nextOrder={nextColumnOrder} />
+              </>
             ) : null}
-          </div>
-          <Text variant="muted">Manage your tasks with a visual board</Text>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsExpanded((v) => !v)}
-            aria-label={isExpanded ? "Collapse board" : "Expand board"}
-            title={isExpanded ? "Collapse board" : "Expand board"}
-          >
-            {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </Button>
-          {columns.length > 0 ? (
-            <TaskDialog columns={columns} onSubmit={handleCreateTask} />
-          ) : null}
-          <CreateColumnDialog onCreate={handleCreateColumn} nextOrder={nextColumnOrder} />
-        </div>
-      </header>
+          </>
+        }
+      />
 
       {columns.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed">
-          <Text variant="muted">No columns yet. Create your first column to start.</Text>
-        </div>
+        <EmptyState
+          variant="card"
+          icon={Columns3}
+          title="No columns yet"
+          description="Create your first column to start."
+          action={<CreateColumnDialog onCreate={handleCreateColumn} nextOrder={nextColumnOrder} />}
+        />
       ) : (
         <DndContext
           // Without a fixed id dnd-kit numbers `aria-describedby` from a
@@ -423,7 +493,7 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
               // stretch the document to the rail's full scroll width — the whole
               // page scrolls sideways on phones. `min-w-0` does not fix it.
               "relative -mx-1 flex min-h-0 flex-1 gap-3 overflow-x-auto px-1 pb-2",
-              isExpanded && "px-4 sm:px-6 lg:px-8"
+              isExpanded && "px-4 sm:px-8 lg:px-12"
             )}
           >
             <SortableContext items={columns.map((c) => c.id)} strategy={horizontalListSortingStrategy}>

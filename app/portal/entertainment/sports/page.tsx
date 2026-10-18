@@ -14,8 +14,6 @@ export const metadata: Metadata = {
   description: "Live scores, standings and brackets across your favourite sports.",
 };
 
-export const dynamic = "force-dynamic";
-
 export default async function SportsPage({
   searchParams,
 }: {
@@ -34,7 +32,7 @@ export default async function SportsPage({
   const payload = await loadSport(active);
 
   return (
-    <section className="space-y-6">
+    <>
       <PageHeader
         title="Sports"
         description="Live scores, tables, tournaments and brackets across football, the World Cup, F1, NBA, tennis, padel, NFL and League of Legends."
@@ -45,6 +43,6 @@ export default async function SportsPage({
         favoriteSportIds={favorites}
         payload={payload}
       />
-    </section>
+    </>
   );
 }

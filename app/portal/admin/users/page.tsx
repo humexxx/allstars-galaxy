@@ -9,8 +9,6 @@ export const metadata: Metadata = {
   description: "View and manage users",
 };
 
-export const dynamic = "force-dynamic";
-
 export default async function AdminUsersPage() {
   const admin = await requireAdminOrRedirect();
   const users = await getAllUsers();

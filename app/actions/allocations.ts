@@ -1,11 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
 
-import { db } from "@/db";
-import { investmentMethods, priceAssets, priceQuotes } from "@/db/schema";
-import { safe } from "@/lib/actions/safe";
+import { safe, type ActionResult } from "@/lib/actions/safe";
 import {
   logImpersonatedMutation,
   requireEffectiveContext,
@@ -13,43 +10,32 @@ import {
 import {
   backfillTransactionAllocations,
   setMethodAllocations,
+  type BackfillResult,
 } from "@/lib/services/allocation-service";
+import {
+  isAssetOnlyInOwnMethods,
+  isMethodOwner,
+  ownsAnyMethod,
+  updateInvestmentMethod,
+} from "@/lib/services/investment-method-service";
+import {
+  createPriceAsset,
+  getPriceAsset,
+  getPriceAssetBySymbol,
+  insertManualQuote,
+} from "@/lib/services/price-service";
 import {
   createPriceAssetSchema,
   setAllocationsSchema,
   setManualPriceSchema,
-  type CreatePriceAssetInput,
-  type SetAllocationsInput,
-  type SetManualPriceInput,
   updateMethodSchema,
-  type UpdateMethodInput,
+  type CreatePriceAssetInput,
+  type SetAllocationsData,
+  type SetManualPriceData,
+  type UpdateMethodData,
 } from "@/schemas/allocations";
 
 const PORTFOLIO_PATH = "/portal/portfolio";
-
-/**
- * Where the pooled capital goes is the owner's private business: it is the
- * other half of the margin, and investors only ever see the fixed return they
- * were promised. Ownership of the method — not merely being an admin — is the
- * gate.
- */
-async function ownsMethod(methodId: string, userId: string): Promise<boolean> {
-  const [method] = await db
-    .select({ id: investmentMethods.id })
-    .from(investmentMethods)
-    .where(and(eq(investmentMethods.id, methodId), eq(investmentMethods.ownerUserId, userId)))
-    .limit(1);
-  return !!method;
-}
-
-async function ownsAnyMethod(userId: string): Promise<boolean> {
-  const [method] = await db
-    .select({ id: investmentMethods.id })
-    .from(investmentMethods)
-    .where(eq(investmentMethods.ownerUserId, userId))
-    .limit(1);
-  return !!method;
-}
 
 /**
  * Set a method's allocation policy.
@@ -58,16 +44,18 @@ async function ownsAnyMethod(userId: string): Promise<boolean> {
  * the units they bought — rewriting them would mean the owner's position
  * silently changed every time they revised the plan.
  */
-export async function setAllocationsAction(input: SetAllocationsInput) {
+export async function setAllocationsAction(
+  input: SetAllocationsData
+): Promise<ActionResult> {
   return safe("allocations", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = setAllocationsSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false as const, error: parsed.error.issues[0].message };
+      return { success: false, error: parsed.error.issues[0].message };
     }
 
-    if (!(await ownsMethod(parsed.data.methodId, ctx.effectiveUserId))) {
-      return { success: false as const, error: "Method not found" };
+    if (!(await isMethodOwner(parsed.data.methodId, ctx.effectiveUserId))) {
+      return { success: false, error: "Method not found" };
     }
 
     await setMethodAllocations(parsed.data.methodId, parsed.data.allocations);
@@ -78,7 +66,7 @@ export async function setAllocationsAction(input: SetAllocationsInput) {
       after: { methodId: parsed.data.methodId, allocations: parsed.data.allocations },
     });
     revalidatePath(PORTFOLIO_PATH);
-    return { success: true as const };
+    return { success: true };
   });
 }
 
@@ -86,11 +74,11 @@ export async function setAllocationsAction(input: SetAllocationsInput) {
  * Price any approved contribution that has no allocation rows yet, using the
  * asset's close on the day the money landed.
  */
-export async function repriceContributionsAction() {
+export async function repriceContributionsAction(): Promise<ActionResult<BackfillResult>> {
   return safe("allocations", async () => {
     const ctx = await requireEffectiveContext();
     if (!(await ownsAnyMethod(ctx.effectiveUserId))) {
-      return { success: false as const, error: "Not allowed" };
+      return { success: false, error: "Not allowed" };
     }
 
     const result = await backfillTransactionAllocations(ctx.effectiveUserId);
@@ -101,7 +89,7 @@ export async function repriceContributionsAction() {
       after: { priced: result.priced, skipped: result.skipped },
     });
     revalidatePath(PORTFOLIO_PATH);
-    return { success: true as const, data: result };
+    return { success: true, data: result };
   });
 }
 
@@ -111,32 +99,31 @@ export async function repriceContributionsAction() {
  * Open to anyone who owns a method: the catalogue is shared reference data
  * (a ticker and a provider id), not anybody's position.
  */
-export async function createPriceAssetAction(input: CreatePriceAssetInput) {
+export async function createPriceAssetAction(
+  input: CreatePriceAssetInput
+): Promise<ActionResult<{ id: string }>> {
   return safe("allocations", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = createPriceAssetSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false as const, error: parsed.error.issues[0].message };
+      return { success: false, error: parsed.error.issues[0].message };
     }
     if (!(await ownsAnyMethod(ctx.effectiveUserId))) {
-      return { success: false as const, error: "Not allowed" };
+      return { success: false, error: "Not allowed" };
     }
 
     const { symbol, name, source, externalId } = parsed.data;
 
-    const [existing] = await db
-      .select({ id: priceAssets.id })
-      .from(priceAssets)
-      .where(eq(priceAssets.symbol, symbol))
-      .limit(1);
-    if (existing) {
-      return { success: false as const, error: `${symbol} already exists` };
+    if (await getPriceAssetBySymbol(symbol)) {
+      return { success: false, error: `${symbol} already exists` };
     }
 
-    const [created] = await db
-      .insert(priceAssets)
-      .values({ symbol, name, source, externalId: externalId || null })
-      .returning({ id: priceAssets.id });
+    const created = await createPriceAsset({
+      symbol,
+      name,
+      source,
+      externalId: externalId || null,
+    });
 
     await logImpersonatedMutation({
       action: "priceAsset.create",
@@ -144,39 +131,51 @@ export async function createPriceAssetAction(input: CreatePriceAssetInput) {
       after: { symbol, source, externalId },
     });
     revalidatePath(PORTFOLIO_PATH);
-    return { success: true as const, data: { id: created.id } };
+    return { success: true, data: created };
   });
 }
 
 /**
  * Price an asset by hand.
  *
- * Writes an ordinary quote row, so a manual price and a fetched one are the
- * same kind of fact and the margin reads them identically.
+ * Only for `manual` assets — a provider-quoted one would have the next cron
+ * run contradict the hand-typed figure — and only when every method holding
+ * the asset is the caller's own, or the caller is an admin acting as
+ * themselves. A quote is shared: writing one for an asset another owner's
+ * method holds would move THEIR margin.
  */
-export async function setManualPriceAction(input: SetManualPriceInput) {
+export async function setManualPriceAction(
+  input: SetManualPriceData
+): Promise<ActionResult> {
   return safe("allocations", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = setManualPriceSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false as const, error: parsed.error.issues[0].message };
-    }
-    if (!(await ownsAnyMethod(ctx.effectiveUserId))) {
-      return { success: false as const, error: "Not allowed" };
+      return { success: false, error: parsed.error.issues[0].message };
     }
 
-    await db.insert(priceQuotes).values({
-      assetId: parsed.data.assetId,
-      price: parsed.data.price.toFixed(8),
-    });
+    const asset = await getPriceAsset(parsed.data.assetId);
+    if (!asset) {
+      return { success: false, error: "Asset not found" };
+    }
+    if (asset.source !== "manual") {
+      return { success: false, error: "Only manually priced assets take a hand-typed price" };
+    }
+
+    const isAdmin = ctx.realRole === "admin" && !ctx.isImpersonating;
+    if (!isAdmin && !(await isAssetOnlyInOwnMethods(asset.id, ctx.effectiveUserId))) {
+      return { success: false, error: "Not allowed" };
+    }
+
+    await insertManualQuote(asset.id, parsed.data.price);
 
     await logImpersonatedMutation({
       action: "priceAsset.manualQuote",
       entityTable: "price_quotes",
-      after: { assetId: parsed.data.assetId, price: parsed.data.price },
+      after: { assetId: asset.id, price: parsed.data.price },
     });
     revalidatePath(PORTFOLIO_PATH);
-    return { success: true as const };
+    return { success: true };
   });
 }
 
@@ -186,45 +185,37 @@ export async function setManualPriceAction(input: SetManualPriceInput) {
  * Ownership, not admin: a method is somebody's product, and the person who
  * runs it is the one who gets to change what it promises.
  */
-export async function updateMethodAction(input: UpdateMethodInput) {
+export async function updateMethodAction(
+  input: UpdateMethodData
+): Promise<ActionResult> {
   return safe("allocations", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = updateMethodSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false as const, error: parsed.error.issues[0].message };
+      return { success: false, error: parsed.error.issues[0].message };
     }
 
     const { methodId, name, description, riskLevel, monthlyRoi, enabled } = parsed.data;
 
-    if (!(await ownsMethod(methodId, ctx.effectiveUserId))) {
-      return { success: false as const, error: "Method not found" };
+    const updated = await updateInvestmentMethod(methodId, ctx.effectiveUserId, {
+      name,
+      description: description || null,
+      riskLevel,
+      monthlyRoi,
+      enabled,
+    });
+    if (!updated) {
+      return { success: false, error: "Method not found" };
     }
-
-    const [before] = await db
-      .select()
-      .from(investmentMethods)
-      .where(eq(investmentMethods.id, methodId))
-      .limit(1);
-
-
-    await db
-      .update(investmentMethods)
-      .set({
-        name,
-        description: description || null,
-        riskLevel,
-        monthlyRoi: monthlyRoi.toFixed(4),
-        enabled,
-      })
-      .where(eq(investmentMethods.id, methodId));
 
     await logImpersonatedMutation({
       action: "investmentMethod.update",
       entityTable: "investment_methods",
-      before: before ? { name: before.name, monthlyRoi: before.monthlyRoi } : undefined,
+      entityId: methodId,
+      before: { name: updated.before.name, monthlyRoi: updated.before.monthlyRoi },
       after: { name, monthlyRoi },
     });
     revalidatePath(PORTFOLIO_PATH);
-    return { success: true as const };
+    return { success: true };
   });
 }

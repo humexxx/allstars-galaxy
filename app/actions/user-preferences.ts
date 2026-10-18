@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { safe } from "@/lib/actions/safe";
+import { safe, type ActionResult } from "@/lib/actions/safe";
 import {
   logImpersonatedMutation,
   requireEffectiveContext,
@@ -15,19 +15,19 @@ import {
   setFinanceMilestonesSchema,
   setShowContextAvatarSchema,
   type SetFinanceMilestonesInput,
-  type SetShowContextAvatarInput,
+  type SetShowContextAvatarData,
 } from "@/schemas/user-preferences";
 
 const SETTINGS_PATH = "/portal/settings";
 
 export async function setShowContextAvatarAction(
-  input: SetShowContextAvatarInput
-) {
+  input: SetShowContextAvatarData
+): Promise<ActionResult> {
   return safe("user-preferences", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = setShowContextAvatarSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false as const, error: "Invalid input" };
+      return { success: false, error: "Invalid input" };
     }
     await setShowContextAvatar(
       ctx.effectiveUserId,
@@ -42,18 +42,18 @@ export async function setShowContextAvatarAction(
     revalidatePath(SETTINGS_PATH);
     // The avatar renders from the plans layout, so invalidate the whole subtree.
     revalidatePath("/portal/plans", "layout");
-    return { success: true as const };
+    return { success: true };
   });
 }
 
 export async function setFinanceMilestonesAction(
   input: SetFinanceMilestonesInput
-) {
+): Promise<ActionResult<number[]>> {
   return safe("user-preferences", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = setFinanceMilestonesSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false as const, error: "Invalid milestones" };
+      return { success: false, error: "Invalid milestones" };
     }
     await setFinanceMilestones(ctx.effectiveUserId, parsed.data.milestones);
     await logImpersonatedMutation({
@@ -64,6 +64,6 @@ export async function setFinanceMilestonesAction(
     revalidatePath(SETTINGS_PATH);
     // Every plan chart annotates these, so invalidate the whole plans subtree.
     revalidatePath("/portal/plans", "layout");
-    return { success: true as const, data: parsed.data.milestones };
+    return { success: true, data: parsed.data.milestones };
   });
 }

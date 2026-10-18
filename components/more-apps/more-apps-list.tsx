@@ -1,11 +1,17 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronRight, EyeOff } from "lucide-react";
 
 import { AppCard } from "@/components/more-apps/app-card";
-import { Text } from "@/components/ui/typography";
-import type { AppListing } from "@/app/portal/more-apps/apps-data";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Separator } from "@/components/ui/separator";
+import type { AppListing } from "@/types/apps";
 
 const STORAGE_KEY = "more-apps:hidden";
 
@@ -47,7 +53,7 @@ function getServerSnapshot(): Set<string> {
 }
 
 function subscribe(callback: () => void): () => void {
-  const handler = () => {
+  const handler = (): void => {
     cachedSnapshot = null;
     callback();
   };
@@ -55,7 +61,7 @@ function subscribe(callback: () => void): () => void {
   return () => window.removeEventListener("storage", handler);
 }
 
-function persist(next: Set<string>) {
+function persist(next: Set<string>): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
   cachedSnapshot = next;
   // The native `storage` event only fires in OTHER tabs, so dispatch
@@ -92,7 +98,7 @@ export function MoreAppsList({ items }: { items: AppWithScreenshot[] }) {
   const hiddenList = items.filter(({ app }) => hidden.has(app.slug));
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-6">
       {visible.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map(({ app, screenshotUrl }) => (
@@ -105,27 +111,22 @@ export function MoreAppsList({ items }: { items: AppWithScreenshot[] }) {
           ))}
         </div>
       ) : (
-        <Text variant="muted">
-          All apps are hidden. Expand the section below to unhide some.
-        </Text>
+        <EmptyState
+          icon={EyeOff}
+          title="All apps are hidden"
+          description="Expand the section below to unhide some."
+        />
       )}
 
       {hiddenList.length > 0 && (
-        <div className="space-y-3 border-t pt-6">
-          <button
-            type="button"
-            onClick={() => setShowHidden((v) => !v)}
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {showHidden ? (
-              <ChevronDown className="size-4" />
-            ) : (
-              <ChevronRight className="size-4" />
-            )}
-            Hidden apps ({hiddenList.length})
-          </button>
-          {showHidden && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <>
+          <Separator />
+          <Collapsible open={showHidden} onOpenChange={setShowHidden} className="flex flex-col gap-3">
+            <CollapsibleTrigger className="group/hidden inline-flex w-fit items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+              <ChevronRight className="size-4 transition-transform group-data-[state=open]/hidden:rotate-90" />
+              Hidden apps ({hiddenList.length})
+            </CollapsibleTrigger>
+            <CollapsibleContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {hiddenList.map(({ app, screenshotUrl }) => (
                 <AppCard
                   key={app.slug}
@@ -134,9 +135,9 @@ export function MoreAppsList({ items }: { items: AppWithScreenshot[] }) {
                   onShow={() => show(app.slug)}
                 />
               ))}
-            </div>
-          )}
-        </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </>
       )}
     </div>
   );

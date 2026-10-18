@@ -1,31 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRef, useState, useTransition } from "react";
 import { Plus, RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Field, FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Mono, Text } from "@/components/ui/typography";
+import { formatCurrencyCompact } from "@/lib/utils/format";
 import { SettingRow } from "@/components/settings/settings-shell";
 import { DEFAULT_FINANCE_MILESTONES } from "@/lib/finance/milestones";
 import { MAX_MILESTONES } from "@/schemas/user-preferences";
 import { setFinanceMilestonesAction } from "@/app/actions/user-preferences";
-
-/** Compact display for a milestone chip: 0, 10k, 250k, 1M, 1.5M. */
-function format(v: number): string {
-  if (v === 0) return "0";
-  if (v >= 1_000_000) {
-    const m = v / 1_000_000;
-    return `${m % 1 < 0.05 ? Math.round(m) : m.toFixed(1)}M`;
-  }
-  if (v >= 1_000) {
-    const k = v / 1_000;
-    return `${k % 1 < 0.05 ? Math.round(k) : k.toFixed(1)}k`;
-  }
-  return String(Math.round(v));
-}
 
 /**
  * Accepts what people actually type for money: "250k", "1.5M", "100,000",
@@ -43,34 +32,41 @@ function parseAmount(raw: string): number | null {
 }
 
 export function FinanceSettings({ milestones }: { milestones: number[] }) {
-  const router = useRouter();
   const [values, setValues] = useState<number[]>(milestones);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSaving, startSave] = useTransition();
 
-  const save = (next: number[]) => {
+  const save = (next: number[]): void => {
     const previous = values;
     setValues(next);
     startSave(async () => {
-      const result = await setFinanceMilestonesAction({ milestones: next });
-      if (result.success) {
-        router.refresh();
-      } else {
+      // No refresh on success: the action revalidates the pages that read it.
+      const result = await setFinanceMilestonesAction({ milestones: next }).catch(
+        () => ({ success: false as const, error: "Failed to save milestones" })
+      );
+      if (!result.success) {
         setValues(previous);
         toast.error(result.error);
       }
     });
   };
 
-  const add = () => {
+  const remove = (value: number): void => {
+    save(values.filter((x) => x !== value));
+    // The chip and its button are gone; keep focus in the editor.
+    inputRef.current?.focus();
+  };
+
+  const add = (): void => {
     const parsed = parseAmount(draft);
     if (parsed === null) {
       setError("Use a number — 250k and 1.5M work too.");
       return;
     }
     if (values.includes(parsed)) {
-      setError(`${format(parsed)} is already on the list.`);
+      setError(`${formatCurrencyCompact(parsed)} is already on the list.`);
       return;
     }
     if (values.length >= MAX_MILESTONES) {
@@ -91,36 +87,39 @@ export function FinanceSettings({ milestones }: { milestones: number[] }) {
       label="Net-worth milestones"
       description="Marked on every plan's projection chart, so you can see when the line crosses them. Applies to all your plans."
     >
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-2">
           {values.length === 0 && (
-            <Text variant="small" className="text-muted-foreground">
-              No milestones — the charts will show no reference lines.
-            </Text>
+            <EmptyState
+              title="No milestones"
+              description="The charts will show no reference lines."
+              className="w-full p-6"
+            />
           )}
           {values.map((v) => (
             <span
               key={v}
-              className="inline-flex items-center gap-1 rounded-md border bg-muted/30 py-1 pr-1 pl-2.5 text-sm"
+              className="inline-flex items-center gap-1 rounded-lg border bg-muted/30 py-1 pr-1 pl-2.5 text-sm"
             >
-              <Mono className="tabular-nums">{format(v)}</Mono>
+              <Mono className="tabular-nums">{formatCurrencyCompact(v)}</Mono>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                aria-label={`Remove ${format(v)}`}
+                aria-label={`Remove ${formatCurrencyCompact(v)}`}
                 disabled={isSaving}
-                onClick={() => save(values.filter((x) => x !== v))}
+                onClick={() => remove(v)}
               >
-                <X className="size-3.5" />
+                <X />
               </Button>
             </span>
           ))}
         </div>
 
         <div className="flex flex-wrap items-start gap-2">
-          <div className="grid gap-1">
+          <Field data-invalid={error !== null} className="w-40 gap-1">
             <Input
+              ref={inputRef}
               value={draft}
               onChange={(e) => {
                 setDraft(e.target.value);
@@ -135,22 +134,17 @@ export function FinanceSettings({ milestones }: { milestones: number[] }) {
               placeholder="e.g. 250k"
               aria-label="New milestone"
               aria-invalid={error !== null}
-              className="w-40"
               inputMode="decimal"
             />
-            {error && (
-              <Text variant="small" className="text-destructive">
-                {error}
-              </Text>
-            )}
-          </div>
+            <FieldError>{error}</FieldError>
+          </Field>
           <Button
             type="button"
             variant="outline"
             onClick={add}
             disabled={isSaving || draft.trim().length === 0}
           >
-            <Plus className="mr-1 size-4" />
+            {isSaving ? <Spinner /> : <Plus />}
             Add
           </Button>
           {!isDefault && (
@@ -160,13 +154,13 @@ export function FinanceSettings({ milestones }: { milestones: number[] }) {
               disabled={isSaving}
               onClick={() => save([...DEFAULT_FINANCE_MILESTONES])}
             >
-              <RotateCcw className="mr-1 size-4" />
+              <RotateCcw />
               Reset
             </Button>
           )}
         </div>
 
-        <Text variant="small" className="text-muted-foreground">
+        <Text variant="small">
           Labels sit on one row and none are hidden, so a long list will start
           to overlap on the chart. {MAX_MILESTONES} is the cap.
         </Text>

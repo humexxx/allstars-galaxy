@@ -1,9 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
-import { safe } from "@/lib/actions/safe";
+import { safe, type ActionResult } from "@/lib/actions/safe";
 import {
   logImpersonatedMutation,
   requireEffectiveContext,
@@ -27,10 +26,11 @@ import {
   updateTripContribution,
   deleteTripContribution,
 } from "@/lib/services/travel-service";
+import { idSchema } from "@/schemas/common";
 import {
   createTripSchema,
   createTripShareSchema,
-  tripItemSchemaChecked,
+  tripItemSchema,
   tripPhotoSchema,
   updateTripItemSchema,
   moveTripItemSchema,
@@ -41,31 +41,45 @@ import {
   type TripPhotoInput,
   type UpdateTripInput,
   type UpdateTripItemInput,
-  type MoveTripItemInput,
+  type MoveTripItemData,
   setItemStopsSchema,
   type SetItemStopsData,
   setTripMembersSchema,
   type SetTripMembersData,
+  tripChildIdsSchema,
   tripContributionSchema,
   updateTripContributionSchema,
-  type TripContributionInput,
-  type UpdateTripContributionInput,
+  type TripContributionData,
+  type UpdateTripContributionData,
 } from "@/schemas/travel";
+import type { Trip, TripContribution, TripItem, TripPhoto, TripShare } from "@/types/travel";
 
 const TRIP_LIST_PATH = "/portal/entertainment/travel-planner";
+/** The dashboard's travel card: trip dates, item count, estimate, party size. */
+const DASHBOARD_PATH = "/portal";
 
 function pathForTrip(tripId: string): string {
   return `${TRIP_LIST_PATH}/${tripId}`;
 }
 
+/**
+ * The trip page, plus the dashboard when the change is one its travel card
+ * shows (dates, items, prices, travellers). Photos, shares and payments are
+ * not on the card, so they leave the dashboard's cache alone.
+ */
+function revalidateTrip(tripId: string, { dashboard }: { dashboard: boolean }): void {
+  revalidatePath(pathForTrip(tripId));
+  if (dashboard) revalidatePath(DASHBOARD_PATH);
+}
+
 // ---------- trips ----------
 
-export async function createTripAction(input: CreateTripInput) {
+export async function createTripAction(input: CreateTripInput): Promise<ActionResult<Trip>> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = createTripSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false as const, error: "Invalid input" };
+      return { success: false, error: "Invalid input" };
     }
     const trip = await createTrip(ctx.effectiveUserId, parsed.data);
     await logImpersonatedMutation({
@@ -75,16 +89,17 @@ export async function createTripAction(input: CreateTripInput) {
       after: trip,
     });
     revalidatePath(TRIP_LIST_PATH);
-    return { success: true as const, data: trip };
+    revalidatePath(DASHBOARD_PATH);
+    return { success: true, data: trip };
   });
 }
 
-export async function updateTripAction(input: UpdateTripInput) {
+export async function updateTripAction(input: UpdateTripInput): Promise<ActionResult<Trip>> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
     const parsed = updateTripSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false as const, error: "Invalid input" };
+      return { success: false, error: "Invalid input" };
     }
     const trip = await updateTrip(ctx.effectiveUserId, parsed.data);
     await logImpersonatedMutation({
@@ -94,16 +109,16 @@ export async function updateTripAction(input: UpdateTripInput) {
       after: trip,
     });
     revalidatePath(TRIP_LIST_PATH);
-    revalidatePath(pathForTrip(parsed.data.id));
-    return { success: true as const, data: trip };
+    revalidateTrip(parsed.data.id, { dashboard: true });
+    return { success: true, data: trip };
   });
 }
 
-export async function deleteTripAction(tripId: string) {
+export async function deleteTripAction(tripId: string): Promise<ActionResult> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const parsed = z.string().uuid().safeParse(tripId);
-    if (!parsed.success) return { success: false as const, error: "Invalid id" };
+    const parsed = idSchema.safeParse(tripId);
+    if (!parsed.success) return { success: false, error: "Invalid id" };
     await deleteTrip(ctx.effectiveUserId, parsed.data);
     await logImpersonatedMutation({
       action: "trip.delete",
@@ -111,19 +126,23 @@ export async function deleteTripAction(tripId: string) {
       entityId: parsed.data,
     });
     revalidatePath(TRIP_LIST_PATH);
-    return { success: true as const };
+    revalidatePath(DASHBOARD_PATH);
+    return { success: true };
   });
 }
 
 // ---------- items ----------
 
-export async function addTripItemAction(tripId: string, input: TripItemInput) {
+export async function addTripItemAction(
+  tripId: string,
+  input: TripItemInput
+): Promise<ActionResult<TripItem>> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const idParsed = z.string().uuid().safeParse(tripId);
-    const parsed = tripItemSchemaChecked.safeParse(input);
+    const idParsed = idSchema.safeParse(tripId);
+    const parsed = tripItemSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
-      return { success: false as const, error: "Invalid input" };
+      return { success: false, error: "Invalid input" };
     }
     const row = await addTripItem(ctx.effectiveUserId, idParsed.data, parsed.data);
     await logImpersonatedMutation({
@@ -131,21 +150,21 @@ export async function addTripItemAction(tripId: string, input: TripItemInput) {
       entityTable: "trip_items",
       entityId: row.id,
     });
-    revalidatePath(pathForTrip(idParsed.data));
-    return { success: true as const, data: row };
+    revalidateTrip(idParsed.data, { dashboard: true });
+    return { success: true, data: row };
   });
 }
 
 export async function updateTripItemAction(
   tripId: string,
   input: UpdateTripItemInput
-) {
+): Promise<ActionResult<TripItem>> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const idParsed = z.string().uuid().safeParse(tripId);
+    const idParsed = idSchema.safeParse(tripId);
     const parsed = updateTripItemSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
-      return { success: false as const, error: "Invalid input" };
+      return { success: false, error: "Invalid input" };
     }
     const row = await updateTripItem(ctx.effectiveUserId, idParsed.data, parsed.data);
     await logImpersonatedMutation({
@@ -153,18 +172,21 @@ export async function updateTripItemAction(
       entityTable: "trip_items",
       entityId: row.id,
     });
-    revalidatePath(pathForTrip(idParsed.data));
-    return { success: true as const, data: row };
+    revalidateTrip(idParsed.data, { dashboard: true });
+    return { success: true, data: row };
   });
 }
 
-export async function moveTripItemAction(tripId: string, input: MoveTripItemInput) {
+export async function moveTripItemAction(
+  tripId: string,
+  input: MoveTripItemData
+): Promise<ActionResult<TripItem>> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const idParsed = z.string().uuid().safeParse(tripId);
+    const idParsed = idSchema.safeParse(tripId);
     const parsed = moveTripItemSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
-      return { success: false as const, error: "Invalid input" };
+      return { success: false, error: "Invalid input" };
     }
     const row = await moveTripItem(ctx.effectiveUserId, idParsed.data, parsed.data);
     await logImpersonatedMutation({
@@ -173,18 +195,21 @@ export async function moveTripItemAction(tripId: string, input: MoveTripItemInpu
       entityId: row.id,
       metadata: { scheduledOn: parsed.data.scheduledOn, endsOn: parsed.data.endsOn ?? null },
     });
-    revalidatePath(pathForTrip(idParsed.data));
-    return { success: true as const, data: row };
+    revalidateTrip(idParsed.data, { dashboard: true });
+    return { success: true, data: row };
   });
 }
 
-export async function deleteTripItemAction(tripId: string, itemId: string) {
+export async function deleteTripItemAction(
+  tripId: string,
+  itemId: string
+): Promise<ActionResult> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const tripIdParsed = z.string().uuid().safeParse(tripId);
-    const itemIdParsed = z.string().uuid().safeParse(itemId);
+    const tripIdParsed = idSchema.safeParse(tripId);
+    const itemIdParsed = idSchema.safeParse(itemId);
     if (!tripIdParsed.success || !itemIdParsed.success) {
-      return { success: false as const, error: "Invalid id" };
+      return { success: false, error: "Invalid id" };
     }
     await deleteTripItem(ctx.effectiveUserId, tripIdParsed.data, itemIdParsed.data);
     await logImpersonatedMutation({
@@ -192,20 +217,23 @@ export async function deleteTripItemAction(tripId: string, itemId: string) {
       entityTable: "trip_items",
       entityId: itemIdParsed.data,
     });
-    revalidatePath(pathForTrip(tripIdParsed.data));
-    return { success: true as const };
+    revalidateTrip(tripIdParsed.data, { dashboard: true });
+    return { success: true };
   });
 }
 
 // ---------- photos ----------
 
-export async function addTripPhotoAction(tripId: string, input: TripPhotoInput) {
+export async function addTripPhotoAction(
+  tripId: string,
+  input: TripPhotoInput
+): Promise<ActionResult<TripPhoto>> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const idParsed = z.string().uuid().safeParse(tripId);
+    const idParsed = idSchema.safeParse(tripId);
     const parsed = tripPhotoSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
-      return { success: false as const, error: "Invalid input" };
+      return { success: false, error: "Invalid input" };
     }
     const row = await addTripPhoto(ctx.effectiveUserId, idParsed.data, parsed.data);
     await logImpersonatedMutation({
@@ -213,18 +241,21 @@ export async function addTripPhotoAction(tripId: string, input: TripPhotoInput) 
       entityTable: "trip_photos",
       entityId: row.id,
     });
-    revalidatePath(pathForTrip(idParsed.data));
-    return { success: true as const, data: row };
+    revalidateTrip(idParsed.data, { dashboard: false });
+    return { success: true, data: row };
   });
 }
 
-export async function deleteTripPhotoAction(tripId: string, photoId: string) {
+export async function deleteTripPhotoAction(
+  tripId: string,
+  photoId: string
+): Promise<ActionResult> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const tripIdParsed = z.string().uuid().safeParse(tripId);
-    const photoIdParsed = z.string().uuid().safeParse(photoId);
+    const tripIdParsed = idSchema.safeParse(tripId);
+    const photoIdParsed = idSchema.safeParse(photoId);
     if (!tripIdParsed.success || !photoIdParsed.success) {
-      return { success: false as const, error: "Invalid id" };
+      return { success: false, error: "Invalid id" };
     }
     const removed = await deleteTripPhoto(
       ctx.effectiveUserId,
@@ -250,8 +281,8 @@ export async function deleteTripPhotoAction(tripId: string, photoId: string) {
       entityTable: "trip_photos",
       entityId: photoIdParsed.data,
     });
-    revalidatePath(pathForTrip(tripIdParsed.data));
-    return { success: true as const };
+    revalidateTrip(tripIdParsed.data, { dashboard: false });
+    return { success: true };
   });
 }
 
@@ -260,13 +291,13 @@ export async function deleteTripPhotoAction(tripId: string, photoId: string) {
 export async function createTripShareAction(
   tripId: string,
   input: CreateTripShareInput
-) {
+): Promise<ActionResult<TripShare>> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const idParsed = z.string().uuid().safeParse(tripId);
+    const idParsed = idSchema.safeParse(tripId);
     const parsed = createTripShareSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
-      return { success: false as const, error: "Invalid input" };
+      return { success: false, error: "Invalid input" };
     }
     const row = await createTripShare(ctx.effectiveUserId, idParsed.data, parsed.data);
     await logImpersonatedMutation({
@@ -281,18 +312,21 @@ export async function createTripShareAction(
         showPrices: row.showPrices,
       },
     });
-    revalidatePath(pathForTrip(idParsed.data));
-    return { success: true as const, data: row };
+    revalidateTrip(idParsed.data, { dashboard: false });
+    return { success: true, data: row };
   });
 }
 
-export async function revokeTripShareAction(tripId: string, shareId: string) {
+export async function revokeTripShareAction(
+  tripId: string,
+  shareId: string
+): Promise<ActionResult> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const tripIdParsed = z.string().uuid().safeParse(tripId);
-    const shareIdParsed = z.string().uuid().safeParse(shareId);
+    const tripIdParsed = idSchema.safeParse(tripId);
+    const shareIdParsed = idSchema.safeParse(shareId);
     if (!tripIdParsed.success || !shareIdParsed.success) {
-      return { success: false as const, error: "Invalid id" };
+      return { success: false, error: "Invalid id" };
     }
     await revokeTripShare(ctx.effectiveUserId, tripIdParsed.data, shareIdParsed.data);
     await logImpersonatedMutation({
@@ -300,18 +334,21 @@ export async function revokeTripShareAction(tripId: string, shareId: string) {
       entityTable: "trip_shares",
       entityId: shareIdParsed.data,
     });
-    revalidatePath(pathForTrip(tripIdParsed.data));
-    return { success: true as const };
+    revalidateTrip(tripIdParsed.data, { dashboard: false });
+    return { success: true };
   });
 }
 
-export async function deleteTripShareAction(tripId: string, shareId: string) {
+export async function deleteTripShareAction(
+  tripId: string,
+  shareId: string
+): Promise<ActionResult> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const tripIdParsed = z.string().uuid().safeParse(tripId);
-    const shareIdParsed = z.string().uuid().safeParse(shareId);
+    const tripIdParsed = idSchema.safeParse(tripId);
+    const shareIdParsed = idSchema.safeParse(shareId);
     if (!tripIdParsed.success || !shareIdParsed.success) {
-      return { success: false as const, error: "Invalid id" };
+      return { success: false, error: "Invalid id" };
     }
     await deleteTripShare(ctx.effectiveUserId, tripIdParsed.data, shareIdParsed.data);
     await logImpersonatedMutation({
@@ -319,8 +356,8 @@ export async function deleteTripShareAction(tripId: string, shareId: string) {
       entityTable: "trip_shares",
       entityId: shareIdParsed.data,
     });
-    revalidatePath(pathForTrip(tripIdParsed.data));
-    return { success: true as const };
+    revalidateTrip(tripIdParsed.data, { dashboard: false });
+    return { success: true };
   });
 }
 
@@ -333,14 +370,14 @@ export async function deleteTripShareAction(tripId: string, shareId: string) {
 export async function setTripItemStopsAction(
   tripId: string,
   input: SetItemStopsData
-) {
+): Promise<ActionResult> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const idParsed = z.string().uuid().safeParse(tripId);
+    const idParsed = idSchema.safeParse(tripId);
     const parsed = setItemStopsSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
       return {
-        success: false as const,
+        success: false,
         error: parsed.success ? "Invalid trip" : parsed.error.issues[0].message,
       };
     }
@@ -357,8 +394,8 @@ export async function setTripItemStopsAction(
       entityId: parsed.data.itemId,
       after: { count: parsed.data.stops.length },
     });
-    revalidatePath(pathForTrip(idParsed.data));
-    return { success: true as const };
+    revalidateTrip(idParsed.data, { dashboard: false });
+    return { success: true };
   });
 }
 
@@ -366,14 +403,14 @@ export async function setTripItemStopsAction(
 export async function setTripMembersAction(
   tripId: string,
   input: SetTripMembersData
-) {
+): Promise<ActionResult> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const idParsed = z.string().uuid().safeParse(tripId);
+    const idParsed = idSchema.safeParse(tripId);
     const parsed = setTripMembersSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
       return {
-        success: false as const,
+        success: false,
         error: parsed.success ? "Invalid trip" : parsed.error.issues[0].message,
       };
     }
@@ -385,8 +422,8 @@ export async function setTripMembersAction(
       entityId: idParsed.data,
       after: { count: parsed.data.members.length },
     });
-    revalidatePath(pathForTrip(idParsed.data));
-    return { success: true as const };
+    revalidateTrip(idParsed.data, { dashboard: true });
+    return { success: true };
   });
 }
 
@@ -394,14 +431,14 @@ export async function setTripMembersAction(
 
 export async function addTripContributionAction(
   tripId: string,
-  input: TripContributionInput
-) {
+  input: TripContributionData
+): Promise<ActionResult<TripContribution>> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const idParsed = z.string().uuid().safeParse(tripId);
+    const idParsed = idSchema.safeParse(tripId);
     const parsed = tripContributionSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
-      return { success: false as const, error: "Invalid input" };
+      return { success: false, error: "Invalid input" };
     }
     const row = await addTripContribution(
       ctx.effectiveUserId,
@@ -414,21 +451,21 @@ export async function addTripContributionAction(
       entityId: row.id,
       metadata: { memberId: parsed.data.memberId, amount: parsed.data.amount },
     });
-    revalidatePath(pathForTrip(idParsed.data));
-    return { success: true as const, data: row };
+    revalidateTrip(idParsed.data, { dashboard: false });
+    return { success: true, data: row };
   });
 }
 
 export async function updateTripContributionAction(
   tripId: string,
-  input: UpdateTripContributionInput
-) {
+  input: UpdateTripContributionData
+): Promise<ActionResult<TripContribution>> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const idParsed = z.string().uuid().safeParse(tripId);
+    const idParsed = idSchema.safeParse(tripId);
     const parsed = updateTripContributionSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
-      return { success: false as const, error: "Invalid input" };
+      return { success: false, error: "Invalid input" };
     }
     const row = await updateTripContribution(
       ctx.effectiveUserId,
@@ -441,34 +478,28 @@ export async function updateTripContributionAction(
       entityId: row.id,
       metadata: { amount: parsed.data.amount },
     });
-    revalidatePath(pathForTrip(idParsed.data));
-    return { success: true as const, data: row };
+    revalidateTrip(idParsed.data, { dashboard: false });
+    return { success: true, data: row };
   });
 }
 
 export async function deleteTripContributionAction(
   tripId: string,
   contributionId: string
-) {
+): Promise<ActionResult> {
   return safe("travel", async () => {
     const ctx = await requireEffectiveContext();
-    const ids = z
-      .object({ tripId: z.string().uuid(), contributionId: z.string().uuid() })
-      .safeParse({ tripId, contributionId });
+    const ids = tripChildIdsSchema.safeParse({ tripId, childId: contributionId });
     if (!ids.success) {
-      return { success: false as const, error: "Invalid input" };
+      return { success: false, error: "Invalid input" };
     }
-    await deleteTripContribution(
-      ctx.effectiveUserId,
-      ids.data.tripId,
-      ids.data.contributionId
-    );
+    await deleteTripContribution(ctx.effectiveUserId, ids.data.tripId, ids.data.childId);
     await logImpersonatedMutation({
       action: "tripContribution.delete",
       entityTable: "trip_contributions",
-      entityId: ids.data.contributionId,
+      entityId: ids.data.childId,
     });
-    revalidatePath(pathForTrip(ids.data.tripId));
-    return { success: true as const, data: null };
+    revalidateTrip(ids.data.tripId, { dashboard: false });
+    return { success: true };
   });
 }

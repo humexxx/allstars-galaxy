@@ -28,7 +28,7 @@ test.describe("Auth — login / logout", () => {
     await page.goto("/login");
     await page.getByLabel("Email").fill(email!);
     await page.getByLabel("Password", { exact: true }).fill(password!);
-    await page.getByRole("button", { name: "Login", exact: true }).click();
+    await page.getByRole("button", { name: "Log in", exact: true }).click();
 
     await page.waitForURL("**/portal**", { timeout: 15_000 });
     await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
@@ -46,7 +46,7 @@ test.describe("Auth — login / logout", () => {
     await page.goto("/login");
     await page.getByLabel("Email").fill(email!);
     await page.getByLabel("Password", { exact: true }).fill(password!);
-    await page.getByRole("button", { name: "Login", exact: true }).click();
+    await page.getByRole("button", { name: "Log in", exact: true }).click();
     await page.waitForURL("**/portal**");
 
     // The nav-user trigger is a Button in the header that contains the
@@ -61,7 +61,7 @@ test.describe("Auth — login / logout", () => {
     await page.getByRole("menuitem", { name: /log out/i }).click();
 
     await page.waitForURL("**/login**", { timeout: 10_000 });
-    await expect(page.getByRole("button", { name: "Login", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Log in", exact: true })).toBeVisible();
   });
 });
 
@@ -91,6 +91,6 @@ test.describe("Auth — public pages", () => {
     await page.goto("/portal");
     // Middleware redirects unauthenticated users to /login (with a `next=` query param).
     await page.waitForURL(/\/login(\?|$)/, { timeout: 10_000 });
-    await expect(page.getByRole("button", { name: "Login", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Log in", exact: true })).toBeVisible();
   });
 });

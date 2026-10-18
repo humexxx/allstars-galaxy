@@ -10,20 +10,16 @@ vi.mock("@/lib/services/impersonation", () => ({
 }));
 
 vi.mock("@/lib/services/board-service", () => ({
-  getUserBoardColumns: vi.fn(),
   getBoardColumn: vi.fn(),
   createBoardColumn: vi.fn(),
   updateBoardColumn: vi.fn(),
   deleteBoardColumn: vi.fn(),
-  initializeDefaultColumns: vi.fn(),
   getBoardTask: vi.fn(),
-  getUserBoardTasks: vi.fn(),
   createBoardTask: vi.fn(),
   updateBoardTask: vi.fn(),
   deleteBoardTask: vi.fn(),
   reorderTask: vi.fn(),
   getNextTaskOrder: vi.fn(),
-  getNextColumnOrder: vi.fn(),
 }));
 
 import { revalidatePath } from "next/cache";
@@ -37,12 +33,7 @@ import {
   deleteBoardColumn,
   deleteBoardTask,
   getBoardColumn,
-  getBoardTask,
-  getNextColumnOrder,
   getNextTaskOrder,
-  getUserBoardColumns,
-  getUserBoardTasks,
-  initializeDefaultColumns,
   reorderTask,
   updateBoardColumn,
   updateBoardTask,
@@ -53,14 +44,6 @@ import {
   createBoardTaskAction,
   deleteBoardColumnAction,
   deleteBoardTaskAction,
-  getBoardColumnAction,
-  getBoardDataAction,
-  getBoardTaskAction,
-  getNextColumnOrderAction,
-  getNextTaskOrderAction,
-  getUserBoardColumnsAction,
-  getUserBoardTasksAction,
-  initializeDefaultColumnsAction,
   reorderBoardTaskAction,
   updateBoardColumnAction,
   updateBoardTaskAction,
@@ -85,40 +68,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
-});
-
-describe("getUserBoardColumnsAction", () => {
-  it("returns the columns for the effective user", async () => {
-    const columns = [{ id: COLUMN_ID, name: "Todo", tasks: [] }] as unknown as Awaited<
-      ReturnType<typeof getUserBoardColumns>
-    >;
-    vi.mocked(getUserBoardColumns).mockResolvedValueOnce(columns);
-
-    const result = await getUserBoardColumnsAction();
-
-    expect(result).toEqual({ success: true, data: columns });
-    expect(getUserBoardColumns).toHaveBeenCalledWith(USER_ID);
-  });
-});
-
-describe("getBoardColumnAction", () => {
-  it("returns the column when found", async () => {
-    const column = { id: COLUMN_ID, name: "Todo", tasks: [] } as unknown as Awaited<
-      ReturnType<typeof getBoardColumn>
-    >;
-    vi.mocked(getBoardColumn).mockResolvedValueOnce(column);
-
-    const result = await getBoardColumnAction(COLUMN_ID);
-
-    expect(result).toEqual({ success: true, data: column });
-    expect(getBoardColumn).toHaveBeenCalledWith(COLUMN_ID, USER_ID);
-  });
-
-  it("throws when column not found", async () => {
-    vi.mocked(getBoardColumn).mockResolvedValueOnce(null);
-
-    await expect(getBoardColumnAction(COLUMN_ID)).rejects.toThrow("Column not found");
-  });
 });
 
 describe("createBoardColumnAction", () => {
@@ -213,6 +162,15 @@ describe("updateBoardColumnAction", () => {
     );
   });
 
+  it("returns an error when the column is not the user's", async () => {
+    vi.mocked(updateBoardColumn).mockResolvedValueOnce(null);
+
+    const result = await updateBoardColumnAction({ id: COLUMN_ID, name: "Doing" });
+
+    expect(result).toEqual({ success: false, error: "Column not found" });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
   it("rejects when id is not a uuid", async () => {
     const result = await updateBoardColumnAction({
       id: "not-a-uuid",
@@ -242,73 +200,22 @@ describe("deleteBoardColumnAction", () => {
     );
     expect(revalidatePath).toHaveBeenCalledWith(BOARD_PATH);
   });
-});
 
-describe("initializeDefaultColumnsAction", () => {
-  it("seeds the default columns and revalidates", async () => {
-    const columns = [{ id: COLUMN_ID, name: "Todo" }] as unknown as Awaited<
-      ReturnType<typeof initializeDefaultColumns>
-    >;
-    vi.mocked(initializeDefaultColumns).mockResolvedValueOnce(columns);
+  it("rejects an id that is not a uuid", async () => {
+    const result = await deleteBoardColumnAction("not-a-uuid");
 
-    const result = await initializeDefaultColumnsAction();
-
-    expect(result).toEqual({ success: true, data: columns });
-    expect(initializeDefaultColumns).toHaveBeenCalledWith(USER_ID);
-    expect(revalidatePath).toHaveBeenCalledWith(BOARD_PATH);
-  });
-});
-
-describe("getUserBoardTasksAction", () => {
-  it("returns the user's tasks", async () => {
-    const tasks = [{ id: TASK_ID, title: "Ship it" }] as unknown as Awaited<
-      ReturnType<typeof getUserBoardTasks>
-    >;
-    vi.mocked(getUserBoardTasks).mockResolvedValueOnce(tasks);
-
-    const result = await getUserBoardTasksAction();
-
-    expect(result).toEqual({ success: true, data: tasks });
-    expect(getUserBoardTasks).toHaveBeenCalledWith(USER_ID);
-  });
-});
-
-describe("getBoardDataAction", () => {
-  it("returns columns and tasks together", async () => {
-    const columns = [{ id: COLUMN_ID }] as unknown as Awaited<
-      ReturnType<typeof getUserBoardColumns>
-    >;
-    const tasks = [{ id: TASK_ID }] as unknown as Awaited<
-      ReturnType<typeof getUserBoardTasks>
-    >;
-    vi.mocked(getUserBoardColumns).mockResolvedValueOnce(columns);
-    vi.mocked(getUserBoardTasks).mockResolvedValueOnce(tasks);
-
-    const result = await getBoardDataAction();
-
-    expect(result).toEqual({ success: true, data: { columns, tasks } });
-    expect(getUserBoardColumns).toHaveBeenCalledWith(USER_ID);
-    expect(getUserBoardTasks).toHaveBeenCalledWith(USER_ID);
-  });
-});
-
-describe("getBoardTaskAction", () => {
-  it("returns the task when found", async () => {
-    const task = { id: TASK_ID, title: "Ship it" } as unknown as Awaited<
-      ReturnType<typeof getBoardTask>
-    >;
-    vi.mocked(getBoardTask).mockResolvedValueOnce(task);
-
-    const result = await getBoardTaskAction(TASK_ID);
-
-    expect(result).toEqual({ success: true, data: task });
-    expect(getBoardTask).toHaveBeenCalledWith(TASK_ID, USER_ID);
+    expect(result).toEqual({ success: false, error: "Invalid column" });
+    expect(deleteBoardColumn).not.toHaveBeenCalled();
   });
 
-  it("throws when task not found", async () => {
-    vi.mocked(getBoardTask).mockResolvedValueOnce(null);
+  it("returns a failure instead of throwing when the service fails", async () => {
+    vi.spyOn(console, "error").mockImplementationOnce(() => undefined);
+    vi.mocked(deleteBoardColumn).mockRejectedValueOnce(new Error("db down"));
 
-    await expect(getBoardTaskAction(TASK_ID)).rejects.toThrow("Task not found");
+    const result = await deleteBoardColumnAction(COLUMN_ID);
+
+    expect(result).toEqual({ success: false, error: "Action failed" });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
 
@@ -405,6 +312,15 @@ describe("updateBoardTaskAction", () => {
     expect(revalidatePath).toHaveBeenCalledWith(BOARD_PATH);
   });
 
+  it("returns an error when the task is not the user's", async () => {
+    vi.mocked(updateBoardTask).mockResolvedValueOnce(null);
+
+    const result = await updateBoardTaskAction({ id: TASK_ID, title: "Ship it v2" });
+
+    expect(result).toEqual({ success: false, error: "Task not found" });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
   it("rejects when id is not a uuid", async () => {
     const result = await updateBoardTaskAction({
       id: "not-a-uuid",
@@ -433,6 +349,13 @@ describe("deleteBoardTaskAction", () => {
       })
     );
     expect(revalidatePath).toHaveBeenCalledWith(BOARD_PATH);
+  });
+
+  it("rejects an id that is not a uuid", async () => {
+    const result = await deleteBoardTaskAction("not-a-uuid");
+
+    expect(result).toEqual({ success: false, error: "Invalid task" });
+    expect(deleteBoardTask).not.toHaveBeenCalled();
   });
 });
 
@@ -479,27 +402,5 @@ describe("reorderBoardTaskAction", () => {
     expect(result).toEqual({ success: false, error: "Invalid input" });
     expect(reorderTask).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
-  });
-});
-
-describe("getNextTaskOrderAction", () => {
-  it("returns the next task order", async () => {
-    vi.mocked(getNextTaskOrder).mockResolvedValueOnce(5);
-
-    const result = await getNextTaskOrderAction(COLUMN_ID);
-
-    expect(result).toEqual({ success: true, data: 5 });
-    expect(getNextTaskOrder).toHaveBeenCalledWith(COLUMN_ID, USER_ID);
-  });
-});
-
-describe("getNextColumnOrderAction", () => {
-  it("returns the next column order", async () => {
-    vi.mocked(getNextColumnOrder).mockResolvedValueOnce(4);
-
-    const result = await getNextColumnOrderAction();
-
-    expect(result).toEqual({ success: true, data: 4 });
-    expect(getNextColumnOrder).toHaveBeenCalledWith(USER_ID);
   });
 });

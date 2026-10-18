@@ -4,16 +4,16 @@ import { useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Calendar as CalendarIcon, DollarSign } from "lucide-react";
+import { format } from "date-fns";
+import { ChevronDown } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Field,
   FieldError,
@@ -21,10 +21,12 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { UserSelector } from "@/components/user-selector";
-import { Mono, Text } from "@/components/ui/typography";
-import { format } from "date-fns";
+import { Eyebrow, Mono } from "@/components/ui/typography";
+import { formatCurrency } from "@/lib/utils/format";
+import { toDay } from "@/lib/utils/date";
 import { createTransactionSchema } from "@/schemas/transaction";
 import type { InvestmentMethod } from "@/types/portfolio";
+import type { TransactionType } from "@/types/transaction";
 
 const transactionFormSchema = createTransactionSchema.omit({
   investmentMethodId: true,
@@ -66,7 +68,7 @@ export function TransactionForm({
   adminUserId,
   isSubmitting = false,
 }: TransactionFormProps) {
-  const [activeTab, setActiveTab] = useState<"buy" | "withdrawal">("buy");
+  const [activeTab, setActiveTab] = useState<TransactionType>("buy");
   const {
     register,
     handleSubmit,
@@ -88,7 +90,7 @@ export function TransactionForm({
   const selectedUserId = useWatch({ control, name: "userId" });
 
   const fee = "0";
-  const total = amount ? (parseFloat(amount) + parseFloat(fee)).toFixed(2) : "0";
+  const total = amount ? parseFloat(amount) + parseFloat(fee) : 0;
 
   const submit = (data: TransactionFormData): void => {
     onSubmit({
@@ -101,24 +103,20 @@ export function TransactionForm({
 
   return (
     <form onSubmit={handleSubmit(submit)} className="flex flex-col gap-6">
-      <div className="flex gap-2 rounded-lg bg-muted p-1">
-        <Button
-          type="button"
-          variant={activeTab === "buy" ? "default" : "ghost"}
-          className="flex-1"
-          onClick={() => setActiveTab("buy")}
-        >
-          Buy
-        </Button>
-        <Button
-          type="button"
-          variant={activeTab === "withdrawal" ? "default" : "ghost"}
-          className="flex-1"
-          disabled
-        >
+      {/* Withdrawals are requested from a holding, not typed in here; the
+          segment stays visible so the form reads as the buy half of a pair. */}
+      <ToggleGroup
+        type="single"
+        value={activeTab}
+        onValueChange={(v) => v && setActiveTab(v as TransactionType)}
+        aria-label="Transaction type"
+        className="w-full"
+      >
+        <ToggleGroupItem value="buy">Buy</ToggleGroupItem>
+        <ToggleGroupItem value="withdrawal" disabled>
           Withdrawal
-        </Button>
-      </div>
+        </ToggleGroupItem>
+      </ToggleGroup>
 
       <button
         type="button"
@@ -127,124 +125,89 @@ export function TransactionForm({
         aria-label={`Change investment method (current: ${selectedMethod.name})`}
       >
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+          <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
             <span className="text-sm font-semibold text-primary">
               {selectedMethod.name.substring(0, 2).toUpperCase()}
             </span>
           </div>
-          <div className="flex flex-col">
-            <span className="font-medium">{selectedMethod.name}</span>
-          </div>
+          <span className="font-medium">{selectedMethod.name}</span>
         </div>
-        <svg
-          className="h-5 w-5 text-muted-foreground"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
+        <ChevronDown aria-hidden className="size-5 text-muted-foreground" />
       </button>
 
       <FieldGroup>
         {isAdmin && (
-          <Field>
+          <Field data-invalid={!!errors.userId}>
             <FieldLabel htmlFor="user">User</FieldLabel>
             <UserSelector
+              id="user"
               users={users}
               value={selectedUserId ?? ""}
-              onValueChange={(value) => setValue("userId", value)}
+              onValueChange={(value) =>
+                setValue("userId", value, { shouldValidate: true, shouldDirty: true })
+              }
               placeholder="Select a user"
             />
             <FieldError errors={[errors.userId]} />
           </Field>
         )}
 
-        <Field>
+        <Field data-invalid={!!errors.amount}>
           <FieldLabel htmlFor="amount">Amount</FieldLabel>
-          <div className="relative">
-            <DollarSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              id="amount"
-              type="number"
-              placeholder="0.00"
-              className="pl-10"
-              {...register("amount")}
-            />
-          </div>
+          <MoneyInput
+            id="amount"
+            currency="USD"
+            placeholder="0.00"
+            value={amount ?? ""}
+            onChange={(value) =>
+              setValue("amount", value, { shouldValidate: true, shouldDirty: true })
+            }
+            aria-invalid={!!errors.amount}
+          />
           <FieldError errors={[errors.amount]} />
         </Field>
 
-        <div className="grid grid-cols-3 gap-4">
-          <Field className="col-span-2">
-            <FieldLabel>Date</FieldLabel>
-            {isAdmin ? (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {format(date, "MMM d, yyyy")}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={date}
-                    onSelect={(d) => d && setValue("date", d)}
-                    autoFocus
-                    disabled={(date) => date > new Date()}
-                  />
-                </PopoverContent>
-              </Popover>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start text-left font-normal"
-                disabled
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {format(date, "MMM d, yyyy")}
-              </Button>
-            )}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field className="sm:col-span-2" data-invalid={!!errors.date}>
+            <FieldLabel htmlFor="date">Date</FieldLabel>
+            {/* Only admins back-date; for everyone else the server stamps
+                "now" regardless, so the picker is shown but locked. */}
+            <DateField
+              id="date"
+              value={format(date, "yyyy-MM-dd")}
+              onChange={(day) =>
+                day && setValue("date", toDay(day), { shouldValidate: true, shouldDirty: true })
+              }
+              disabled={!isAdmin}
+              aria-invalid={!!errors.date}
+            />
+            <FieldError errors={[errors.date]} />
           </Field>
 
           <Field>
             <FieldLabel htmlFor="fee">Fee</FieldLabel>
-            <Input
-              id="fee"
-              value={`$ ${fee}`}
-              disabled
-              className="bg-muted"
-            />
+            <Input id="fee" value={formatCurrency(fee)} disabled />
           </Field>
         </div>
 
-        <Field>
+        <Field data-invalid={!!errors.notes}>
           <FieldLabel htmlFor="notes">Notes</FieldLabel>
           <Textarea
             id="notes"
             placeholder="Optional notes"
             rows={3}
+            aria-invalid={!!errors.notes}
             {...register("notes")}
           />
           <FieldError errors={[errors.notes]} />
         </Field>
       </FieldGroup>
 
-      <div className="rounded-lg bg-muted p-4">
-        <Text variant="muted">Total Spent</Text>
-        <div className="text-3xl font-bold">$ <Mono>{total}</Mono></div>
+      <div className="flex flex-col gap-1 rounded-lg bg-muted p-4">
+        <Eyebrow as="div">Total spent</Eyebrow>
+        <Mono as="div" className="text-xl font-semibold tabular-nums sm:text-2xl">
+          {formatCurrency(total)}
+        </Mono>
       </div>
 
       <div className="flex gap-2">
@@ -267,7 +230,8 @@ export function TransactionForm({
             (isAdmin && !selectedUserId)
           }
         >
-          {isSubmitting ? "Adding…" : "Add Transaction"}
+          {isSubmitting && <Spinner />}
+          {isSubmitting ? "Adding…" : "Add transaction"}
         </Button>
       </div>
     </form>

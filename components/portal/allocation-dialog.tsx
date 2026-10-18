@@ -1,9 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +13,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -23,23 +20,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Mono, Text } from "@/components/ui/typography";
 import { createPriceAssetAction, setAllocationsAction } from "@/app/actions/allocations";
+import { runAction } from "@/lib/actions/run";
 import { allocationTotal, isCompleteAllocation } from "@/lib/finance/allocation";
+import { cn } from "@/lib/utils";
+import { formatPercent } from "@/lib/utils/format";
+import type { AssetOption } from "@/types/portfolio";
 
-export type MethodAllocationSummary = {
-  methodId: string;
-  allocations: { assetId: string; symbol: string; percent: number }[];
-};
+/** `key` is the row's identity: an index key moved focus and input state onto
+ *  the next row whenever one above it was removed. */
+type Row = { key: string; assetId: string; percent: string };
 
-export type AssetOption = {
-  id: string;
-  symbol: string;
-  name: string;
-  source: string;
-};
-
-type Row = { assetId: string; percent: string };
+const newRow = (assetId: string, percent: string): Row => ({
+  key: crypto.randomUUID(),
+  assetId,
+  percent,
+});
 
 type AllocationDialogProps = {
   open: boolean;
@@ -60,13 +58,12 @@ export function AllocationDialog({
   initial,
   onClose,
 }: AllocationDialogProps) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const [rows, setRows] = useState<Row[]>(
+  const [rows, setRows] = useState<Row[]>(() =>
     initial.length > 0
-      ? initial.map((a) => ({ assetId: a.assetId, percent: String(a.percent) }))
-      : [{ assetId: "", percent: "100" }]
+      ? initial.map((a) => newRow(a.assetId, String(a.percent)))
+      : [newRow("", "100")]
   );
 
   const [creating, setCreating] = useState(false);
@@ -83,41 +80,40 @@ export function AllocationDialog({
   );
   const total = allocationTotal(parsed);
   const complete = isCompleteAllocation(parsed);
+  const symbolOf = (assetId: string): string | undefined =>
+    assets.find((a) => a.id === assetId)?.symbol;
 
-  const update = (i: number, patch: Partial<Row>) =>
-    setRows((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const update = (key: string, patch: Partial<Row>): void =>
+    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
-  const submit = () => {
+  const submit = (): void => {
     startTransition(async () => {
-      const result = await setAllocationsAction({ methodId, allocations: parsed });
-      if (result?.success) {
-        toast.success("Allocation saved");
-        router.refresh();
-        onClose();
-      } else {
-        toast.error(result?.error ?? "Could not save the allocation");
-      }
+      const result = await runAction(
+        setAllocationsAction({ methodId, allocations: parsed }),
+        { success: "Allocation saved", failure: "Failed to save allocation" }
+      );
+      if (result.ok) onClose();
     });
   };
 
-  const addAsset = () => {
+  const addAsset = (): void => {
     startTransition(async () => {
-      const created = await createPriceAssetAction({
-        symbol: newSymbol,
-        name: newName,
-        source: "massive",
-        externalId: newTicker,
-      });
-      if (!created?.success || !created.data) {
-        toast.error(created?.success ? "Could not create the asset" : created?.error ?? "Failed");
-        return;
-      }
-      setRows((prev) => [...prev, { assetId: created.data!.id, percent: "0" }]);
+      const result = await runAction(
+        createPriceAssetAction({
+          symbol: newSymbol,
+          name: newName,
+          source: "massive",
+          externalId: newTicker,
+        }),
+        { failure: "Failed to create asset" }
+      );
+      if (!result.ok || !result.data) return;
+      const { id } = result.data;
+      setRows((prev) => [...prev, newRow(id, "0")]);
       setCreating(false);
       setNewSymbol("");
       setNewName("");
       setNewTicker("");
-      router.refresh();
     });
   };
 
@@ -132,18 +128,29 @@ export function AllocationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
-          {rows.map((row, i) => (
-            <div key={i} className="flex items-end gap-2">
-              <div className="min-w-0 flex-1 space-y-2">
-                {i === 0 && <Label>Asset</Label>}
+        <div className="flex flex-col gap-3">
+          {/* Column captions for sighted users; every control carries its own
+              name, since only the first row sat under a real label. */}
+          <div aria-hidden className="flex gap-2">
+            <Text as="span" weight="medium" className="min-w-0 flex-1">
+              Asset
+            </Text>
+            <Text as="span" weight="medium" className="w-24">
+              Share %
+            </Text>
+            <span className="w-8 shrink-0" />
+          </div>
+          {rows.map((row, i) => {
+            const label = symbolOf(row.assetId) ?? `row ${i + 1}`;
+            return (
+              <div key={row.key} className="flex items-center gap-2">
                 <Select
                   value={row.assetId}
                   onValueChange={(v) =>
-                    v === NEW_ASSET ? setCreating(true) : update(i, { assetId: v })
+                    v === NEW_ASSET ? setCreating(true) : update(row.key, { assetId: v })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger aria-label={`Asset, row ${i + 1}`} className="min-w-0 flex-1">
                     <SelectValue placeholder="Pick an asset" />
                   </SelectTrigger>
                   <SelectContent>
@@ -155,51 +162,52 @@ export function AllocationDialog({
                     <SelectItem value={NEW_ASSET}>+ New asset…</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="w-24 space-y-2">
-                {i === 0 && <Label htmlFor={`pct-${i}`}>Share %</Label>}
                 <Input
-                  id={`pct-${i}`}
                   type="number"
                   step="any"
                   inputMode="decimal"
+                  aria-label={`Share % for ${label}`}
+                  className="w-24"
                   value={row.percent}
-                  onChange={(e) => update(i, { percent: e.target.value })}
+                  onChange={(e) => update(row.key, { percent: e.target.value })}
                 />
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  className="shrink-0 text-destructive"
+                  aria-label={`Remove ${label}`}
+                  disabled={rows.length === 1}
+                  onClick={() => setRows((prev) => prev.filter((r) => r.key !== row.key))}
+                >
+                  <Trash2 />
+                </Button>
               </div>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="size-9 shrink-0 text-destructive"
-                aria-label="Remove row"
-                disabled={rows.length === 1}
-                onClick={() => setRows((prev) => prev.filter((_, j) => j !== i))}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
-          ))}
+            );
+          })}
 
           <div className="flex items-center justify-between">
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setRows((prev) => [...prev, { assetId: "", percent: "0" }])}
+              onClick={() => setRows((prev) => [...prev, newRow("", "0")])}
             >
-              <Plus className="size-4" />
+              <Plus />
               Add asset
             </Button>
             <Text
-              className={`text-xs ${complete ? "text-muted-foreground" : "text-destructive"}`}
+              variant="small"
+              role="status"
+              aria-live="polite"
+              className={cn(!complete && "text-destructive")}
             >
-              Total <Mono className="tabular-nums">{total.toFixed(2)}%</Mono>
+              Total <Mono>{formatPercent(total)}</Mono>
               {!complete && " — must be 100%"}
             </Text>
           </div>
 
           {creating && (
-            <div className="space-y-3 rounded-lg border border-dashed p-4">
-              <Text className="text-xs text-muted-foreground">
+            <div className="flex flex-col gap-3 rounded-lg border border-dashed p-4">
+              <Text variant="small">
                 New asset, priced by Massive. The ticker is the provider&apos;s id —
                 <Mono className="text-2xs"> X:ADAUSD</Mono> for crypto,
                 <Mono className="text-2xs"> SPY</Mono> for a stock or ETF.
@@ -225,7 +233,7 @@ export function AllocationDialog({
                 />
               </div>
               <div className="flex justify-end gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setCreating(false)}>
+                <Button variant="outline" size="sm" onClick={() => setCreating(false)}>
                   Cancel
                 </Button>
                 <Button
@@ -233,6 +241,7 @@ export function AllocationDialog({
                   disabled={isPending || !newSymbol || !newName || !newTicker}
                   onClick={addAsset}
                 >
+                  {isPending && <Spinner />}
                   Add
                 </Button>
               </div>
@@ -245,6 +254,7 @@ export function AllocationDialog({
             Cancel
           </Button>
           <Button onClick={submit} disabled={isPending || !complete}>
+            {isPending && <Spinner />}
             {isPending ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>

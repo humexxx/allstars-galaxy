@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { countryFlag, findAirport, searchAirports } from "./airports";
+import { countryFlag, searchAirports } from "./airports";
 
 describe("countryFlag", () => {
   it("builds a flag from an ISO-2 code", () => {
@@ -50,16 +50,5 @@ describe("searchAirports", () => {
 
   it("returns nothing for a query that matches nothing", () => {
     expect(searchAirports("zzzzzznotanairport")).toEqual([]);
-  });
-});
-
-describe("findAirport", () => {
-  it("resolves a saved code to its details", () => {
-    expect(findAirport("mco")?.city).toBe("Orlando");
-  });
-
-  it("returns null for an unknown or empty code", () => {
-    expect(findAirport("ZZZ")).toBeNull();
-    expect(findAirport(null)).toBeNull();
   });
 });

@@ -1,7 +1,12 @@
 "use client";
 
 import { StatCard, maskValue } from "@/components/ui/stat-card";
-import { formatCurrency } from "@/lib/utils/format";
+import {
+  formatCurrency,
+  formatPercent,
+  formatSignedCurrency,
+  formatSignedPercent,
+} from "@/lib/utils/format";
 
 export type OwnerKpis = {
   /** Cash everyone put in, the owner's included. */
@@ -34,7 +39,7 @@ export function OwnerKpiGrid({
   kpis: OwnerKpis;
   hideValues: boolean;
 }) {
-  const money = (v: number) => {
+  const money = (v: number): string => {
     const formatted = formatCurrency(v);
     return hideValues ? maskValue(formatted) : formatted;
   };
@@ -48,8 +53,8 @@ export function OwnerKpiGrid({
   const owedShare =
     kpis.contributed > 0 ? (kpis.liability / kpis.contributed) * 100 : null;
   const marginShare = kpis.liability > 0 ? (kpis.margin / kpis.liability) * 100 : null;
-  const pct = (v: number | null, signed = true) =>
-    v === null ? undefined : `${signed && v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+  const pct = (v: number | null, signed = true): string | undefined =>
+    v === null ? undefined : signed ? formatSignedPercent(v, 1) : formatPercent(v, 1);
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -75,7 +80,7 @@ export function OwnerKpiGrid({
         sublabel={
           coverage === null
             ? "Their promised return"
-            : `Allocations cover ${coverage.toFixed(0)}% of it`
+            : `Allocations cover ${formatPercent(coverage, 0)} of it`
         }
       />
 
@@ -89,16 +94,15 @@ export function OwnerKpiGrid({
             ? kpis.margin >= 0
               ? "Yours after paying everyone"
               : "Covered out of pocket"
-            : `${kpis.monthlyChange >= 0 ? "+" : "−"}${
+            : `${
                 hideValues
-                  ? maskValue(formatCurrency(Math.abs(kpis.monthlyChange)))
-                  : formatCurrency(Math.abs(kpis.monthlyChange))
+                  ? `${kpis.monthlyChange >= 0 ? "+" : "-"}${maskValue(
+                      formatCurrency(Math.abs(kpis.monthlyChange))
+                    )}`
+                  : formatSignedCurrency(kpis.monthlyChange)
               }${
                 kpis.liability > 0
-                  ? ` (${kpis.monthlyChange >= 0 ? "+" : ""}${(
-                      (kpis.monthlyChange / kpis.liability) *
-                      100
-                    ).toFixed(1)}%)`
+                  ? ` (${formatSignedPercent((kpis.monthlyChange / kpis.liability) * 100, 1)})`
                   : ""
               } this month`
         }

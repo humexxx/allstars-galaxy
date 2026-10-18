@@ -1,7 +1,7 @@
 # Entertainment
 
 > **Status:** In progress (travel shipped + dashboard card; sports UI shipped, favourites end-to-end on DB; LoL, F1, football, World Cup, padel and tennis wired to free live providers)
-> **Last reviewed:** 2026-08-23
+> **Last reviewed:** 2026-09-29
 
 ## Overview
 Two sub-modules: Travel Planner (trips, items, photos, public sharing) and
@@ -15,7 +15,7 @@ NBA and NFL still use mocks.
 - `/portal/entertainment/travel-planner` — list of trips (authenticated)
 - `/portal/entertainment/travel-planner/new` — create trip
 - `/portal/entertainment/travel-planner/[id]` — trip detail + editor
-- `/trips/[token]` — **public** shared trip view (top-level, no auth)
+- `/trips/[token]` — **public** shared trip view (top-level, no auth); `loading.tsx` paints the shell before the trip resolves
 - `/portal/entertainment/sports` — sports hub with tabs per sport + manage-favourites sheet
 
 ## Server actions — `/app/actions/`
@@ -23,8 +23,12 @@ NBA and NFL still use mocks.
   `addTripContributionAction` / `updateTripContributionAction` /
   `deleteTripContributionAction` for the payment log and
   `setTripItemStopsAction` for a cruise's ports. `createTripShareAction`
-  takes a `memberId` to scope a link to one traveller
-- `sports.ts` — `setSportFavoriteAction` toggles a sport favourite for the current user
+  takes a `memberId` to scope a link to one traveller. Every action returns
+  `ActionResult<X>`; trip, item and member mutations also revalidate `/portal`
+  (the dashboard travel card) through `revalidateTrip()`
+- `airports.ts` — `searchAirportsAction` → `ActionResult<Airport[]>`; the query
+  is checked with `airportQuerySchema` and a bad one returns no results
+- `sports.ts` — `setSportFavoriteAction` toggles a sport favourite for the current user (`ActionResult`)
 
 ## Services — `/lib/services/`
 - `travel-service.ts` — trip / item / photo / member / share CRUD,
@@ -32,33 +36,45 @@ NBA and NFL still use mocks.
   `buildScope` (one traveller's own view of a shared link) and
   `getDashboardTravelSummary` (featured trip with state badge + counts for the
   dashboard card). `ensureMemberBelongsToTrip` guards anything that names a
-  member: the foreign key proves the row exists, not which trip it is on
+  member: the foreign key proves the row exists, not which trip it is on.
+  `updateTrip` / `deleteTrip` scope the WHERE by owner and `updateTrip` throws
+  when no row matched
 - `sports-service.ts` — favourites CRUD + `getDashboardSportsSummary` that materialises one highlight per favourited sport (LoL via `getLolData()`, F1 via `getF1Data()`, football via `getFootballData()`, World Cup via `getWorldCupData()` — featured knockout match + latest result, padel via `getPadelData()`, rest from mock fixtures)
 - `lolesports-service.ts` — `getLolData()` fetches LEC/LCS/LCK/LPL from Lolesports' unofficial API (`esports-api.lolesports.com`), maps to `LolData` including playoff `BracketRound[]` (**one round per standings SECTION**, labelled with the section's own name — `buildLolBracket`; the old TBD-count heuristic remains only as fallback for unnamed sections, because TBD counting collapsed rounds into one column as ties resolved), picks the currently-active tournament (never the future split), maps regular-season stages (`regular_season`, `groups`, `group_stage`) into standings. A completed event missing `result` renders "—", never a fake 0–0. Cached 30 min via `unstable_cache`, falls back to `LOL_DATA` mock on any error
 - `jolpica-f1-service.ts` — `getF1Data()` fetches current-season races, driver + constructor standings and results from Jolpica-F1 (`api.jolpi.ca/ergast/f1`, Ergast-compatible drop-in), maps to `F1Data` with derived race status and podium tallies, cached 30 min, falls back to `F1_DATA` mock on any error
+- `espn-f1-standings-service.ts` — `getF1DashboardStandings(top)` reads ESPN's public `site.api.espn.com` racing standings (no key) for the dashboard card only, because Jolpica carries no driver photos or team liveries and the card wants both. Cached 5 min, returns `null` on any error so the card simply drops the tables. Two provider quirks it has to work around: the points figure is `championshipPts` for drivers but `points` for constructors (a variadic `stat()` takes the first name that resolves, or every constructor reads 0 pts), and ESPN's `abbreviation` on a constructor row is the *driver's* initials — Mercedes came through as "LP" — so `teamCode()` derives the code from the team name instead. ESPN publishes no constructor logo at all — every racing `teamlogos` path 404s — so `TEAM_LOGOS` maps ESPN's team name to a file under `public/f1/teams/`
 - `football-data-service.ts` — `getFootballData()` fetches standings + matches for UCL, La Liga, EPL and Serie A from football-data.org, maps to `FootballLeagueData[]`, cached 5 min, falls back per-league to mocks. Requires `FOOTBALL_DATA_API_KEY`. Knockout competitions (UCL) fetch the full season in ONE matches call and derive both recent matches and the two-legged knockout bracket (`buildKnockoutBracket` pairs legs by team set → aggregate + winner; **aggregate/winner stay `null` until BOTH legs are `FINISHED`** — summing scheduled legs with `?? 0` used to fabricate an aggregate and bold a "winner" mid-tie); league-only competitions use a ±60d window (capped 40). Finished cup matches map `score.duration` to `aet`/`pen` statuses. Stage labels use real round names (Round of 16 / Quarter-finals / etc.) for knockout, "Matchday N" for league play. Also exports `getWorldCupData()` (cache tag `sports:worldcup`, mock fallback `WORLD_CUP_DATA`): ONE `/competitions/WC/matches` call derives group tables (`buildGroupStandings` computes W/D/L/GF/GA/Pts per group from finished GROUP_STAGE matches → `FootballLeagueData.groups`), the flat match list, AND the single-leg knockout bracket. Undecided knockout fixtures come back with **all team fields `null`** (`teamFromFd` returns `null` → TBD bracket slots; TBD-vs-TBD fixtures are excluded from the flat match list but kept in the bracket). `KNOCKOUT_ROUND_ORDER` covers LAST_32 and THIRD_PLACE for cup formats. Total cold-load cost is 9 calls (4 comps × 2 + 1 WC), within the free 10/min limit
 - `padel-api-service.ts` — `getPadelData()` fetches men's + women's rankings and tournament list from Padel API (`padelapi.org/api`), maps to `PadelData`, cached 30 min, falls back to `PADEL_DATA` mock. Requires `PADEL_API_KEY`
 - `thesportsdb-tennis-service.ts` — `getTennisData()` fetches the next + last event per tour for ATP (id 4464) and WTA (id 4517) from TheSportsDB free public API (no key), derives a `RacquetTournament` per tournament (groups events by extracted tournament-name prefix), keeps `TENNIS_DATA` mock rankings since TheSportsDB has none. Cached 30 min, falls back to `TENNIS_DATA` mock on any error
 
 ## Schemas — `/schemas/`
-- `travel.ts` — `createTripSchema`, `updateTripSchema`, `tripItemSchema` +
-  `tripItemSchemaChecked` / `updateTripItemSchema` (both carry the
-  `endsAfterStart` refinement — a backwards range makes the calendar compute a
-  negative span), `tripPhotoSchema`, `createTripShareSchema`,
-  `tripContributionSchema` / `updateTripContributionSchema`,
-  `setItemStopsSchema`, `setTripMembersSchema`
-- `sports.ts` — `sportIdSchema`, `setSportFavoriteSchema`
+- `travel.ts` — `createTripSchema`, `updateTripSchema`, `tripItemBaseSchema` →
+  `tripItemSchema` / `updateTripItemSchema` (both carry the `endsAfterStart`
+  refinement — a backwards range makes the calendar compute a negative span),
+  `tripPhotoSchema`, `createTripShareSchema`, `tripContributionSchema` /
+  `updateTripContributionSchema`, `setItemStopsSchema`, `setTripMembersSchema`,
+  `airportQuerySchema`, `tripChildIdsSchema`. Types are `…Data`; an `…Input`
+  (`z.input`) exists only where the schema defaults or coerces
+  (`CreateTripInput`, `UpdateTripInput`, `TripItemInput`, `UpdateTripItemInput`,
+  `TripPhotoInput`, `CreateTripShareInput`), and that is what the actions take
+- `sports.ts` — `sportIdSchema` (`z.enum(SPORT_IDS)`), `setSportFavoriteSchema` / `SetSportFavoriteData`
 
 ## Types — `/types/`
 - `travel.ts` — `Trip`, `TripItem`, `TripPhoto`, `TripShare`,
   `TripContribution`, `TripMemberView`, `TripItemStop`, `TripItemWithStops`,
   `TripWithRelations`, `PublicTripView` + `PublicTripScope`, plus
   `DashboardTravelSummary` / `DashboardTravelFeaturedTrip` /
-  `DashboardTravelTripState`
-- `sports.ts` — full domain shapes for matches, standings, brackets, F1/NBA/NFL/LoL specifics, plus `UserSportsPreference` and `DashboardSportHighlight`. `SportId` includes `worldcup`; `FootballLeagueId` includes `world-cup`; `FootballLeagueData.groups?: FootballGroupStandings[]` carries per-group cup tables
+  `DashboardTravelTripState`, and `CalendarTrip` (what the month view needs,
+  shared by the owner and public pages)
+- `sports.ts` — `SPORT_IDS` (the one list `SportId` derives from), `F1StandingRow` / `F1DashboardStandings`, `F1NewsArticle`, and the full domain shapes for matches, standings, brackets, F1/NBA/NFL/LoL specifics, plus `UserSportsPreference` and `DashboardSportHighlight`. `SportId` includes `worldcup`; `FootballLeagueId` includes `world-cup`; `FootballLeagueData.groups?: FootballGroupStandings[]` carries per-group cup tables
 
 ## Components
-- `components/travel/` — trip list/detail, item editors, photo gallery, share panel
+- `components/travel/` — trip list/detail, item editors, photo gallery, share panel.
+  List/Calendar switches are `ToggleGroup` (they own no tab panels); dates are
+  picked with `DateField`; the airport picker is `Popover` + `Command`; the
+  trip form takes `onCancel` / `onSaved` so the edit dialog closes on both
+- `app/portal/entertainment/travel-planner/{,new/,[id]/}loading.tsx` — one
+  skeleton per page shape; a non-uuid `[id]` is a `notFound()`
 - `components/travel/trip-calendar.tsx` — the month view behind the List /
   Calendar tabs; bars laid over the day grid by `lib/travel/calendar.ts`
 - `components/travel/trip-payments.tsx` — the payment log, per traveller
@@ -70,6 +86,8 @@ NBA and NFL still use mocks.
 - `components/entertainment/sports/sports-hub.tsx` — client tab strip + per-sport view switcher; stars favourites and pins them first
 - `components/entertainment/sports/manage-favorites-sheet.tsx` — sheet with per-sport switches, optimistic updates via `setSportFavoriteAction`
 - `components/entertainment/sports/dashboard-sports-card.tsx` — server-component card mounted on `/portal` showing one highlight per favourited sport
+- `components/entertainment/sports/dashboard-f1-card.tsx` — F1's own `/portal` card, half the row (`md:grid-cols-2`), gated on F1 being favourited: next race, the championship top 3, then the news rail
+- `components/entertainment/sports/f1-standings-tabs.tsx` — client island inside that card, Drivers ⇄ Constructors over the same three rows. Drivers carry an ESPN headshot + country flag, constructors their team logo in the same circle, filled with `muted` rather than white so it reads as part of the card instead of a lit disc. A team with no logo published falls back to a livery-coloured disc with a 3-letter code, where `readableInk` picks black or white text off the disc's relative luminance so a yellow livery is not white-on-yellow
 - `components/entertainment/sports/sports/world-cup-view.tsx` — 🏆 World Cup tab: Knockout (default) / Matches / per-group standings grid
 - `components/entertainment/sports/shared/knockout-bracket.tsx` — responsive: below `sm` it renders a Google-style mobile bracket (scrollable round tab strip + each pair of ties connected to the next-round tie they feed; `orderPairs` matches feeders to next-round slots by team membership, falling back to positional order for TBD slots; third-place is skipped as a "next" round so SF winners connect to the final); `sm`+ keeps the 3-column sliding window
 - `components/entertainment/sports/shared/` — score cards, standings table, knockout bracket, team badge, last-5 form chips, `sport-shell.tsx` (header + body wrapper; every sport view mounts its `Tabs` around the shell and renders the `TabsList` inside the shell's `tabs` slot so the chip strip sits in the header row next to the title, à la Google's sports panels). `leg-score-card.tsx` renders BOTH two-legged ties (UCL: per-leg L1/L2 columns + aggregate) AND single best-of series (LoL/NFL playoffs: one score column from `homeScore`/`awayScore`) — it falls back to the single column when `match.legs` is empty, so bracket scores never disappear
@@ -108,6 +126,12 @@ NBA and NFL still use mocks.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **Logic audit (2026-09-11).** Travel: `TripCalendar` takes `showPrices` and the public calendar tab honours the link's setting; removing a traveller revokes their scoped share links (the FK would have widened them to the whole trip); `defaultShares` scales fixed shares up when they total under 100 with nobody flexible; a per-person item whose named payers are a subset of its attendees charges the payers for the other seats; the dashboard estimate uses `tripCost` with the party size; a hidden end date is not saved; stops renumber on save and "Add day" continues from the highest day; the public payload omits the owner's user id and shows item notes only on priced links. Sports: F1 picks a live race first and derives `live` from the race time; NBA live games carry scores and "recent" means finals; an ESPN tennis event that has not started is `upcoming`; F1 news dedupes a batch by article id and orders with a tiebreaker; date-only strings are read as calendar days; the dashboard card counts followed sports.
+- **`setTripMembers` scopes every member update to the trip.** A member id
+  borrowed from somebody else's trip used to be overwritten and re-parented.
+- **Sports feeds carry an 8s abort signal** (`lib/services/upstream.ts`); a hung
+  provider falls through to the mock fallback instead of holding the render.
+  `listUserFavoriteSportIds` is request-cached — the dashboard asks three times.
 - **The trip page has two views**, switched by `Tabs` next to *All trips*: the
   list answers *what is the plan*, the calendar answers *what does the month
   look like*. `TripCalendar` draws a whole month with arrows either side and a
@@ -494,10 +518,102 @@ NBA and NFL still use mocks.
   (the `SportPayload` union, `isSportId`, `SAMPLE_DATA_SPORTS`);
   [`lib/sports/load.ts`](../../lib/sports/load.ts) is `server-only` and does the
   fetching.
-- **NBA and NFL say they are sample data**, via `SAMPLE_DATA_SPORTS`. They have
-  no free provider with current data, so they render a hand-written season — and
-  a five-game May schedule under "Season 2025–26" with nothing admitting it is a
-  fixture reads as a broken live view.
+- **The NBA is live** via balldontlie
+  ([`lib/services/balldontlie-nba-service.ts`](../../lib/services/balldontlie-nba-service.ts)),
+  `BALLDONTLIE_API_KEY`. Two things shape it: the free tier allows **five
+  requests a minute shared by every visitor**, so a cold cache spends exactly
+  one — a single wide window, trimmed to the last six results and next six
+  fixtures in memory rather than by a second request; and `/standings` is not
+  on the free tier, so `standings` comes back empty and the view drops the tab
+  instead of showing an invented table beside real scores. Out of season that
+  window is what surfaces June's finals next to October's opener, and the
+  heading names the season the **results** belong to, not the fixtures'.
+- **Only the NFL is sample data now**, via `SAMPLE_DATA_SPORTS`. It has no free
+  provider with current data, so it renders a hand-written season — and a
+  hand-written season with nothing admitting it reads as a broken live view.
+- **Tennis has a draw.** `RacquetTournament.bracket` had been in the type since
+  the start with nothing rendering it. `KnockoutBracket` now takes an optional
+  `renderMatch`, so the same round/lane/mobile machinery draws a tennis tie
+  through `DrawMatchCard` — seeds, flags and set-by-set scores, the won set
+  highlighted — instead of football's L1/L2-plus-aggregate card. **A set is a
+  `leg`**: the type already carried per-leg scores and a set is exactly that
+  under another name, so nothing new was needed to hold one.
+- **The tennis draw is live, from ESPN's public scoreboard**
+  ([`lib/services/espn-tennis-service.ts`](../../lib/services/espn-tennis-service.ts)) —
+  the same endpoint espn.com reads, no key and no signup. It is what supplies
+  the bracket: TheSportsDB's free tier returns a calendar and, in practice, a
+  single event with no score, so a draw had to come from somewhere else. Two
+  providers, one view.
+  - **Qualifying is dropped and only followed rounds are kept.** ESPN returns
+    Qualifying 1st/2nd/Final alongside the main draw, and qualifying is not the
+    tournament.
+  - **A live tournament replaces its own calendar entry** rather than sitting
+    beside it, or the same US Open appears twice.
+  - **Players travel as `drawPlayers`, a list not a Map**, so they cross the
+    server/client boundary as plain data; the view builds the lookup.
+  - Rankings are still a fixture — nobody free serves them.
+- **Team logos are vendored, not hotlinked** (`public/f1/teams/`, 36 KB).
+  They come from F1's own media CDN, which is versioned by season and moves:
+  the 2026 paths already 404 while the 2025 ones serve. Copying them buys a
+  badge that cannot break mid-season. Audi and Cadillac joined the grid for
+  2026 with no mark published yet, which is why the livery fallback stays —
+  and a test asserts every mapped file actually exists on disk, since a
+  renamed asset would fail silently as a blank badge.
+  - **They are not the files F1 serves.** Each ships pre-plated on an opaque
+    white rounded square (only the corners are transparent), which on the dark
+    card renders as a column of bright discs. The plate is flood-filled away
+    from the border inwards — so white *inside* a mark survives, Mercedes' star
+    and Haas' box — and the result trimmed to its bounding box, so a wide mark
+    like Red Bull's fills the badge instead of floating in it. Every mark then
+    reads on both surfaces unplated, including the three that looked at risk
+    (Aston Martin is silver, not black; Williams and Racing Bulls are bright
+    blue). A test asserts no asset is still 96x96, which is what every raw
+    download is — the one way this regresses is somebody dropping a fresh file
+    in.
+- **The dashboard reads standings from a different provider than the F1 view**
+  — ESPN for the card, Jolpica for the page. Not an oversight: ESPN ships the
+  headshots and livery colours the card is built around, Jolpica ships the
+  fuller table the page needs. The two were checked against each other and
+  agree on points.
+- **F1 news is stored, not fetched on demand** — `f1_news` (migration `0048`),
+  read by [`lib/services/rapidapi-f1-news-service.ts`](../../lib/services/rapidapi-f1-news-service.ts).
+  RapidAPI's feed is a rolling window of the last 25 articles, so anything
+  older is gone the moment it falls off; keeping each one is what makes an
+  archive possible. `article_id` is the provider's own `dataSourceIdentifier`
+  and carries a unique index, so a refresh upserts and re-running the cron
+  never duplicates. The page reads the table and never the provider.
+  - **The refresh rides the existing daily cron** (`/api/cron/daily`), not a
+    schedule of its own.
+  - **It came from the humex-champions Firebase project**, which had been
+    collecting the same feed on an 08:00 UTC Cloud Function since August 2025.
+    188 articles were migrated across. Worth knowing: that project's per-article
+    writes had silently stopped in September 2025 while its cache document kept
+    updating daily, so the migration had to read both.
+  - `RAPIDAPI_KEY` unset just means no refresh — the stored archive still reads.
+  - **F1 owns one dashboard card**, `DashboardF1Card`: the next race and the
+    wire together, gated on the favourite. `getDashboardSportsSummary` takes an
+    `exclude` list so the general sports card leaves F1 out — the same race
+    printed in two cards side by side is the same race twice. That card also
+    **steps aside entirely** when F1 is somebody's only favourite, rather than
+    asking for favourites they have already picked.
+  - It is **two thirds of the row, not the whole of it** — one sport among
+    several — and the news is a scroll-snap rail rather than a carousel
+    library: the card is narrow, a swipe is the gesture already used here, and
+    it adds no dependency.
+  - **`/news/f1/[id]` is a public page**, like a shared trip: no auth, its own
+    layout, and OG tags so the link unfurls. Every headline in the app points
+    there rather than straight at the source, because that page is the one
+    worth sending somebody and it carries the rest of the wire underneath.
+  - **The page never reproduces the article.** RapidAPI sends a headline, a
+    short description and a link; the story belongs to whoever wrote it, so the
+    page shows the summary and points at the original.
+- **A `ScoreCard` prints its `stageLabel`** and does not pretend to be a link.
+  It carried the label without showing it, so a Finals game and a Tuesday in
+  November looked identical, and a hover chevron promised a screen that does
+  not exist.
+- **`TeamBadge` picks its ink from the background's luminance.** Club colours
+  are whatever the league uses and some are nearly white — the Spurs' silver
+  rendered white-on-white.
 - **A bracket with nobody in it is not rendered as a bracket.** Providers hand
   back the shape of a playoff before the draw is made — LoL returned eight
   TBD-vs-TBD slots — so `isBracketDrawn`

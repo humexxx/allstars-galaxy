@@ -5,7 +5,6 @@ import {
   iteratePeriods,
   nextPeriodStart,
   periodAnchorIso,
-  periodAtIndex,
   periodLengthDays,
   periodRangeFor,
   periodStartFor,
@@ -85,18 +84,7 @@ describe("periodRangeFor", () => {
   });
 });
 
-describe("periodAtIndex / iteratePeriods", () => {
-  it("indexes forward in time", () => {
-    expect(periodAtIndex(utc(2026, 0, 15), 15, 0)).toEqual({
-      start: utc(2026, 0, 15),
-      end: utc(2026, 1, 14),
-    });
-    expect(periodAtIndex(utc(2026, 0, 15), 15, 3)).toEqual({
-      start: utc(2026, 3, 15),
-      end: utc(2026, 4, 14),
-    });
-  });
-
+describe("iteratePeriods", () => {
   it("iteratePeriods returns N consecutive non-overlapping periods", () => {
     const periods = iteratePeriods(utc(2026, 0, 15), 15, 3);
     expect(periods).toHaveLength(3);

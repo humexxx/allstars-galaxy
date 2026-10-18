@@ -67,11 +67,3 @@ export function searchAirports(query: string, limit = 8): Airport[] {
   hits.sort((a, b) => a.rank - b.rank || a.row[0].localeCompare(b.row[0]));
   return hits.slice(0, limit).map((h) => toAirport(h.row));
 }
-
-/** Look up one code exactly, for showing a saved value with its flag. */
-export function findAirport(code: string | null | undefined): Airport | null {
-  if (!code) return null;
-  const upper = code.trim().toUpperCase();
-  const row = AIRPORTS.find((r) => r[0] === upper);
-  return row ? toAirport(row) : null;
-}

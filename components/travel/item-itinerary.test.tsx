@@ -54,7 +54,7 @@ describe("ItemItinerary", () => {
   it("formats a stop's date when it has one", () => {
     renderOpen();
 
-    expect(screen.getByText(/Sun 17 Jan/)).toBeInTheDocument();
+    expect(screen.getByText(/Sun, Jan 17/)).toBeInTheDocument();
   });
 
   it("survives a stop with no date and no note", () => {

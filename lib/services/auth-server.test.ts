@@ -264,6 +264,18 @@ describe("requireAdminOrRedirect", () => {
     await expect(requireAdminOrRedirect("/login")).rejects.toBeInstanceOf(RedirectSentinel);
     expect(redirectMock).toHaveBeenCalledWith("/login");
   });
+
+  it("rethrows a database failure instead of disguising it as a redirect", async () => {
+    seedUser(makeUser());
+    const outage = new Error("connect ECONNREFUSED");
+    dbMock.select.mockReturnValue({
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockRejectedValue(outage),
+    } as unknown as ReturnType<typeof db.select>);
+
+    await expect(requireAdminOrRedirect()).rejects.toBe(outage);
+    expect(redirectMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("requireProvider", () => {

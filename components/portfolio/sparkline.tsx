@@ -2,7 +2,7 @@
 
 import { Area, AreaChart, ResponsiveContainer, YAxis } from "recharts";
 
-type ChartDataPoint = { date: string; value: number };
+import type { ChartDataPoint } from "@/types/chart";
 
 /**
  * Bare trend line for a stat card: no axes, no grid, no labels.

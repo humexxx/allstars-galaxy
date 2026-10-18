@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { SearchIcon } from "lucide-react";
 
+import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,13 +17,11 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import {
-  visibleSections,
-  type Role,
-} from "@/components/portal/nav-config";
+import { visibleSections } from "@/components/portal/nav-config";
+import type { UserRole } from "@/types/user";
 
 type CommandMenuProps = {
-  role?: Role;
+  role?: UserRole;
   isImpersonating?: boolean;
 };
 
@@ -83,11 +82,11 @@ export function CommandMenu({
           "sm:h-8 sm:w-44 sm:justify-start sm:px-3 md:w-56 lg:w-64"
         )}
       >
-        <SearchIcon className="size-4 sm:hidden" />
+        <SearchIcon className="sm:hidden" />
         <span className="hidden sm:inline-flex">Search…</span>
-        <kbd className="pointer-events-none absolute top-1/2 right-1.5 hidden h-5 -translate-y-1/2 items-center gap-0.5 rounded border bg-background px-1.5 font-mono text-2xs font-medium text-muted-foreground select-none sm:flex">
-          <span className="text-xs">⌘</span>K
-        </kbd>
+        <Kbd className="absolute top-1/2 right-1.5 hidden -translate-y-1/2 border bg-background sm:inline-flex">
+          ⌘K
+        </Kbd>
       </Button>
 
       <CommandDialog

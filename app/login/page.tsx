@@ -19,12 +19,12 @@ export default function LoginPage() {
       <section className="flex flex-col gap-4 p-6 md:p-12">
         <header className="flex justify-center gap-2 md:justify-start">
           <Link href="/" className="flex items-center gap-2 font-medium">
-            <Logo className="size-6" />
+            <Logo className="size-6" decorative />
             Allstars Galaxy
           </Link>
         </header>
         <div className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-xs" aria-label="Login form">
+          <div className="w-full max-w-xs">
             <Suspense fallback={<FormSkeleton rows={2} />}>
               <LoginForm signupsOpen={signupsAllowed()} />
             </Suspense>
@@ -34,7 +34,7 @@ export default function LoginPage() {
       <aside className="bg-muted relative hidden lg:block" aria-hidden="true">
         <Image
           src="/images/placeholder.svg"
-          alt="Decorative background"
+          alt=""
           fill
           className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
           sizes="50vw"

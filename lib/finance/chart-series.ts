@@ -1,9 +1,10 @@
-import type { Projection } from "@/types/finance";
+import type { PlanSummary, Projection, TodayState } from "@/types/finance";
 
-import { periodIndexForDate } from "./period";
+import { periodIndexForDate, periodStartFor } from "./period";
 
-/** One real recorded monthly snapshot point (from `getRecentMonthlySnapshots`),
- *  used to draw the chart's past from actuals rather than a re-simulation. */
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** One real recorded snapshot (from `getRecentMonthlySnapshots`). */
 export type PlanHistoryPoint = {
   date: Date;
   savings: number;
@@ -12,37 +13,201 @@ export type PlanHistoryPoint = {
   netWorth: number;
 };
 
-/** One net-worth point on the chart timeline. `totalDebt` / `investments` ride
- *  along for the hover tooltip only — they are NOT plotted as lines. */
+/**
+ * One point on a plan's timeline, dated at its period start. EVERY point
+ * means the same thing: the balances at that period's CLOSE (except the
+ * today point, which the editor replaces with the day-aware position).
+ * `savings` / `totalDebt` / `investments` ride along for tooltips and
+ * dialogs; only `netWorth` is plotted.
+ */
 export type ChartPoint = {
   date: Date;
   netWorth: number;
+  savings?: number;
   totalDebt?: number;
   investments?: number;
 };
 
+function effAnchor(anchorDay: number): number {
+  return anchorDay > 0 ? anchorDay : 1;
+}
+
 /**
- * Pure-projection window: ~25% past + ~75% future, anchored on today's period.
- * Used for the forecast KPIs and the monthly-breakdown table, and as the chart
- * fallback when there are no real snapshots yet.
+ * The period whose CLOSE a snapshot records. Snapshots store the OPENING of
+ * the period they were taken in — the previous period's close — so a
+ * snapshot taken on any day of the September period belongs on the August
+ * slot. Plotting it at its own period put openings next to projected closes,
+ * one period out of step.
+ */
+export function snapshotClosePeriod(date: Date, anchorDay: number): Date {
+  const a = effAnchor(anchorDay);
+  const ownStart = periodStartFor(date, a);
+  return periodStartFor(new Date(ownStart.getTime() - MS_PER_DAY), a);
+}
+
+/**
+ * Real snapshots as close-of-period points, one per period (the latest
+ * snapshot wins), oldest first.
+ */
+export function historyToClosePoints(
+  history: readonly PlanHistoryPoint[],
+  anchorDay: number
+): ChartPoint[] {
+  const byPeriod = new Map<number, { taken: number; point: ChartPoint }>();
+  for (const h of history) {
+    const at = snapshotClosePeriod(h.date, anchorDay);
+    const key = at.getTime();
+    const prev = byPeriod.get(key);
+    if (prev && prev.taken >= h.date.getTime()) continue;
+    byPeriod.set(key, {
+      taken: h.date.getTime(),
+      point: {
+        date: at,
+        netWorth: h.netWorth,
+        savings: h.savings,
+        totalDebt: h.totalDebt,
+        investments: h.investments,
+      },
+    });
+  }
+  return [...byPeriod.values()]
+    .map((v) => v.point)
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+}
+
+/** A plan's whole timeline: real past + today's period onward. */
+export type PlanTimeline = {
+  points: ChartPoint[];
+  /** Index of the point for the period that contains today. */
+  todayIndex: number;
+};
+
+/**
+ * The past and future of one plan on one axis.
  *
- * "today" is resolved against the plan's accounting periods via
- * `periodIndexForDate` (not a raw `year*12+month` bucket), so a non-1
- * `anchorDay` lands on the period that actually contains today instead of
- * mis-counting by a period for the part of the month before the anchor. Pass
- * the plan's `confirmationDayOfMonth` as `anchorDay`; the default of 1 keeps
- * calendar-month behaviour for callers that don't care.
+ * - Past (periods that closed before today's): REAL snapshots, as closes.
+ *   With none, `simulatedPast` (the plan's own forecast — only passed while
+ *   the plan has no confirmation) or else the calibrated projection's own
+ *   rows before today.
+ * - Today's period onward: the (calibrated) projection.
+ *
+ * A plan that starts after today has no past and `todayIndex` 0 on its first
+ * period; one whose horizon ended has no future and `todayIndex` on its last.
+ */
+export function buildPlanTimeline(
+  history: readonly PlanHistoryPoint[],
+  projection: Projection,
+  today: Date,
+  anchorDay: number = 1,
+  simulatedPast?: Projection | null
+): PlanTimeline {
+  const months = projection.months;
+  if (months.length === 0) {
+    const past = historyToClosePoints(history, anchorDay);
+    return { points: past, todayIndex: Math.max(0, past.length - 1) };
+  }
+  const a = effAnchor(anchorDay);
+  const base = months[0].date;
+  const todayIdx = periodIndexForDate(base, a, today);
+  const isPast = (d: Date): boolean => periodIndexForDate(base, a, d) < todayIdx;
+  const toPoint = (m: Projection["months"][number]): ChartPoint => ({
+    date: m.date,
+    netWorth: m.netWorth,
+    savings: m.savings,
+    totalDebt: m.totalDebt,
+    investments: m.investments,
+  });
+
+  let past = historyToClosePoints(history, a).filter((p) => isPast(p.date));
+  if (past.length === 0 && simulatedPast) {
+    past = simulatedPast.months.filter((m) => isPast(m.date)).map(toPoint);
+  }
+  if (past.length === 0) {
+    past = months.filter((m) => isPast(m.date)).map(toPoint);
+  }
+  const future = months.filter((m) => !isPast(m.date)).map(toPoint);
+
+  if (future.length === 0) {
+    // Past the horizon: the last close stands in for today.
+    return { points: past, todayIndex: Math.max(0, past.length - 1) };
+  }
+  return { points: [...past, ...future], todayIndex: past.length };
+}
+
+/**
+ * The chart's window onto a plan's timeline: ~25% past (at most what exists)
+ * then the future, `horizonMonths` points in total. The chart, the End KPI
+ * and the table all read THIS series, so they can't disagree on where the
+ * window ends.
+ */
+export function buildChartSeries(
+  history: PlanHistoryPoint[],
+  projection: Projection,
+  horizonMonths: number,
+  today: Date = new Date(),
+  anchorDay: number = 1,
+  simulatedPast?: Projection | null
+): { points: ChartPoint[]; pastCount: number } {
+  const timeline = buildPlanTimeline(history, projection, today, anchorDay, simulatedPast);
+  const pastBudget = Math.max(1, Math.round(horizonMonths * 0.25));
+  const pastCount = Math.min(pastBudget, timeline.todayIndex);
+  const start = timeline.todayIndex - pastCount;
+  const points = timeline.points.slice(start, start + Math.max(1, horizonMonths));
+  return { points, pastCount };
+}
+
+/**
+ * Puts the day-aware position (`projectStateAt` for today) on the timeline's
+ * today point, which otherwise holds the period's projected CLOSE. The Today
+ * KPI, this dot and its tooltip then show one figure. Only for a today that
+ * falls inside the horizon.
+ */
+export function alignTodayPoint(
+  series: { points: ChartPoint[]; pastCount: number },
+  today: TodayState | null,
+  anchorDay: number
+): { points: ChartPoint[]; pastCount: number } {
+  if (!today || today.status !== "in-range") return series;
+  const point = series.points[series.pastCount];
+  if (!point || periodIndexForDate(point.date, effAnchor(anchorDay), today.date) !== 0) {
+    return series;
+  }
+  const points = series.points.slice();
+  points[series.pastCount] = {
+    ...point,
+    netWorth: today.netWorth,
+    savings: today.savings,
+    totalDebt: today.totalDebt,
+    investments: today.investments,
+  };
+  return { points, pastCount: series.pastCount };
+}
+
+/** `alignTodayPoint` for a whole timeline. */
+export function alignTimelineToday(
+  timeline: PlanTimeline,
+  today: TodayState | null,
+  anchorDay: number
+): PlanTimeline {
+  const aligned = alignTodayPoint(
+    { points: timeline.points, pastCount: timeline.todayIndex },
+    today,
+    anchorDay
+  );
+  return { points: aligned.points, todayIndex: timeline.todayIndex };
+}
+
+/**
+ * Pure-projection window: ~25% past + ~75% future, anchored on today's
+ * period (found with `periodIndexForDate`, so a non-1 anchor day lands on the
+ * period that really contains today).
  */
 export function computeProjectionWindow(
   projection: Projection,
   totalMonths: number,
   today: Date = new Date(),
   anchorDay: number = 1,
-  /**
-   * Fixed number of past periods to include. Omit for the default ~25% of the
-   * range — the plans comparison chart pins it (3 months) so the past stays a
-   * constant sliver no matter how long a horizon the user selects.
-   */
+  /** Fixed number of past periods; omit for ~25% of the range. */
   pastMonths?: number
 ): {
   startIndex: number;
@@ -50,14 +215,9 @@ export function computeProjectionWindow(
   pastCount: number;
   todayIndex: number;
 } {
-  const targetPast = Math.max(
-    1,
-    pastMonths ?? Math.round(totalMonths * 0.25)
-  );
+  const targetPast = Math.max(1, pastMonths ?? Math.round(totalMonths * 0.25));
   const base = projection.months[0]?.date;
   let projIdx = base ? periodIndexForDate(base, anchorDay, today) : 0;
-  // Clamp into range: today before the projection → first period; past the
-  // end → last period (so the window never points outside the data).
   if (projIdx < 0) projIdx = 0;
   else if (projIdx > projection.months.length - 1) {
     projIdx = Math.max(0, projection.months.length - 1);
@@ -69,56 +229,25 @@ export function computeProjectionWindow(
 }
 
 /**
- * Build the chart's net-worth series: periods that have CLOSED before today's
- * period come from REAL recorded snapshots (solid line); today's period and
- * forward come from the (confirmation-calibrated) projection (dashed).
- * `pastCount` is the solid/dashed boundary.
- *
- * Both sides are bucketed by accounting PERIOD (`periodIndexForDate`), not raw
- * calendar month, so a non-1 `anchorDay` keeps the boundary on the period that
- * truly contains today — and a snapshot dated day-30 still aligns with the
- * day-15 projection period it belongs to. Pass the plan's
- * `confirmationDayOfMonth` as `anchorDay`; default 1 = calendar months.
- *
- * Falls back to a pure-projection window (the re-simulated past) when there are
- * no usable snapshots yet — fresh plans before the cron has run a few times —
- * so the chart is never empty.
- *
- * `pastProjection` (optional) is the RAW, un-calibrated projection. The main
- * `projection` is calibrated to the latest confirmation, so after the user
- * confirms the CURRENT period it begins at today — leaving no past months to
- * re-simulate and erasing the chart's history. When there are no real snapshots
- * for the past, we synthesize the past line from `pastProjection` instead (it
- * still spans back to the plan's start), so confirming today never blanks the
- * chart. Real snapshots always take precedence when present.
- */
-/**
- * Aligns a base plan's projection ("ghost") to an already-built chart series.
- * Matching is by accounting PERIOD, never by array index — the base plan can
- * have a different startMonth, so index i of one projection is not index i of
- * the other. Points whose period the ghost projection doesn't cover map to
- * null (the chart skips them).
+ * Aligns a base plan's projection ("ghost") to a chart series by accounting
+ * PERIOD, never by array index. Periods the ghost doesn't cover map to null.
  */
 export function mapGhostValues(
   points: readonly ChartPoint[],
   ghost: Projection,
   anchorDay: number = 1
 ): (number | null)[] {
-  const effAnchor = anchorDay > 0 ? anchorDay : 1;
+  const a = effAnchor(anchorDay);
   return points.map((p) => {
-    const m = ghost.months.find(
-      (gm) => periodIndexForDate(gm.date, effAnchor, p.date) === 0
-    );
+    const m = ghost.months.find((gm) => periodIndexForDate(gm.date, a, p.date) === 0);
     return m ? m.netWorth : null;
   });
 }
 
 /**
- * Portfolio series aligned to a chart series: past points (indexes before
- * `pastCount`) read the latest recorded portfolio snapshot inside the point's
- * period; today and forward read the projection's (growing) portfolioValue,
- * matched by period. Nulls where neither side has data — the chart connects
- * across gaps.
+ * Portfolio series aligned to a chart series: past points read the latest
+ * recorded portfolio value inside the period they describe; today and forward
+ * read the projection's portfolioValue, matched by period.
  */
 export function mapPortfolioValues(
   points: readonly ChartPoint[],
@@ -127,106 +256,205 @@ export function mapPortfolioValues(
   pastCount: number,
   anchorDay: number = 1
 ): (number | null)[] {
-  const effAnchor = anchorDay > 0 ? anchorDay : 1;
+  const a = effAnchor(anchorDay);
   return points.map((p, i) => {
     if (i < pastCount) {
       let latest: number | null = null;
       for (const h of history) {
-        if (periodIndexForDate(h.date, effAnchor, p.date) === 0) latest = h.value;
+        if (periodIndexForDate(h.date, a, p.date) === 0) latest = h.value;
       }
       return latest;
     }
-    const m = projection.months.find(
-      (pm) => periodIndexForDate(pm.date, effAnchor, p.date) === 0
-    );
+    const m = projection.months.find((pm) => periodIndexForDate(pm.date, a, p.date) === 0);
     return m ? m.portfolioValue : null;
   });
 }
 
-export function buildChartSeries(
-  history: PlanHistoryPoint[],
+// ---------- debt-free: one definition everywhere ----------
+
+/**
+ * Months from TODAY until the period the debt clears in (counting that
+ * period): payoff in today's own period is 1, already cleared is 0. Every
+ * "Debt-free in N mo" label uses this.
+ */
+export function debtFreeMonthsFromDate(
+  payoffPeriodStart: Date,
+  anchorDay: number,
+  today: Date
+): number {
+  return Math.max(0, periodIndexForDate(today, effAnchor(anchorDay), payoffPeriodStart) + 1);
+}
+
+/** `debtFreeMonthsFromDate` for a projection; null when never within it. */
+export function debtFreeMonthsFromNow(
   projection: Projection,
-  horizonMonths: number,
-  today: Date = new Date(),
-  anchorDay: number = 1,
-  pastProjection?: Projection
-): { points: ChartPoint[]; pastCount: number } {
-  const pastBudget = Math.max(1, Math.round(horizonMonths * 0.25));
-  const base = projection.months[0]?.date;
+  today: Date = new Date()
+): number | null {
+  if (projection.monthsToDebtFree === null) return null;
+  const payoff = projection.months[projection.monthsToDebtFree - 1]?.date;
+  if (!payoff) return projection.monthsToDebtFree;
+  return debtFreeMonthsFromDate(payoff, projection.plan.confirmationDayOfMonth, today);
+}
 
-  // Period index of today relative to the projection's first period. Periods
-  // before this one have closed (real/past); this one and later are forecast.
-  const todayIdx = base ? periodIndexForDate(base, anchorDay, today) : 0;
+export type DebtFreeStatus =
+  | { kind: "no-debt" }
+  | { kind: "debt-free"; date: Date }
+  | { kind: "on-track"; months: number; date: Date }
+  | { kind: "beyond-horizon" };
 
-  // Real past: snapshots whose period closed before today's period, latest
-  // `pastBudget` of them.
-  const past = base
-    ? history
-        .filter((h) => periodIndexForDate(base, anchorDay, h.date) < todayIdx)
-        .slice(-pastBudget)
-        .map((h) => ({
-          date: h.date,
-          netWorth: h.netWorth,
-          totalDebt: h.totalDebt,
-          investments: h.investments,
-        }))
-    : [];
+/**
+ * What to say about a plan's debt. A plan whose debts all start at 0 (or has
+ * none) says "No debt" — it used to fall through to "Beyond horizon".
+ */
+export function describeDebtFree(
+  outcome: { hadDebt: boolean; debtFreeDate: Date | null },
+  anchorDay: number,
+  today: Date
+): DebtFreeStatus {
+  if (!outcome.hadDebt) return { kind: "no-debt" };
+  if (!outcome.debtFreeDate) return { kind: "beyond-horizon" };
+  const months = debtFreeMonthsFromDate(outcome.debtFreeDate, anchorDay, today);
+  if (months === 0) return { kind: "debt-free", date: outcome.debtFreeDate };
+  return { kind: "on-track", months, date: outcome.debtFreeDate };
+}
 
-  // Re-simulated past from the RAW projection — used only when there are no real
-  // snapshots for the closed periods (e.g. right after confirming the current
-  // period, which calibrates `projection` to start at today). Bucketed by the
-  // same `base`/`anchorDay`, so periods strictly before today.
-  const simPast =
-    past.length === 0 && pastProjection && base
-      ? pastProjection.months
-          .filter((m) => periodIndexForDate(base, anchorDay, m.date) < todayIdx)
-          .slice(-pastBudget)
-          .map((m) => ({
-            date: m.date,
-            netWorth: m.netWorth,
-            totalDebt: m.totalDebt,
-            investments: m.investments,
-          }))
-      : [];
+/** `DebtFreeStatus` from a precomputed `PlanSummary` (rail, compare tiles). */
+export function summaryDebtFree(summary: PlanSummary): DebtFreeStatus {
+  if (!summary.hadDebt) return { kind: "no-debt" };
+  if (summary.monthsToDebtFree === null || !summary.debtFreeDate) {
+    return { kind: "beyond-horizon" };
+  }
+  if (summary.monthsToDebtFree === 0) return { kind: "debt-free", date: summary.debtFreeDate };
+  return { kind: "on-track", months: summary.monthsToDebtFree, date: summary.debtFreeDate };
+}
 
-  const effectivePast = past.length > 0 ? past : simPast;
+const DEBT_FREE_MONTH = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
-  // Future: the projection from today's period forward.
-  const futureStart = base
-    ? projection.months.findIndex(
-        (m) => periodIndexForDate(base, anchorDay, m.date) >= todayIdx
-      )
-    : -1;
+/** "No debt" · "Debt-free" · "Debt-free in 4 mo · Jan 2027" · "Beyond horizon". */
+export function formatDebtFree(status: DebtFreeStatus): string {
+  switch (status.kind) {
+    case "no-debt":
+      return "No debt";
+    case "debt-free":
+      return "Debt-free";
+    case "on-track":
+      return `Debt-free in ${status.months} mo · ${DEBT_FREE_MONTH.format(status.date)}`;
+    case "beyond-horizon":
+      return "Beyond horizon";
+  }
+}
 
-  if (effectivePast.length === 0 || futureStart === -1) {
-    // No real history nor a re-simulable past (or today sits outside the
-    // projection) → pure-projection window, identical to the original behaviour.
-    const w = computeProjectionWindow(projection, horizonMonths, today, anchorDay);
-    const slice = projection.months
-      .slice(w.startIndex, w.startIndex + w.count)
-      .map((m) => ({
-        date: m.date,
-        netWorth: m.netWorth,
-        totalDebt: m.totalDebt,
-        investments: m.investments,
-      }));
-    return { points: slice, pastCount: w.pastCount };
+// ---------- plans comparison chart ----------
+
+export type CompareSeries = {
+  key: string;
+  timeline: PlanTimeline;
+};
+
+export type CompareRow = {
+  /** Calendar month (UTC midnight of its 1st) the row stands for. */
+  month: Date;
+  /** Per series: the value in that month, or null when the plan has none. */
+  values: Record<string, number | null>;
+};
+
+function monthKey(d: Date): number {
+  return d.getUTCFullYear() * 12 + d.getUTCMonth();
+}
+
+/**
+ * Rows for the plans comparison chart, JOINED BY CALENDAR MONTH: each plan
+ * contributes the point whose period starts in that month. (Rows used to be
+ * joined by array index, so a plan that started five months later was drawn
+ * five months early.) `boundary` is the row of today's month; with `months`
+ * the window is `pastMonths` rows before it plus the rest up to `months`,
+ * otherwise every month any plan covers.
+ */
+export function buildCompareRows(
+  series: readonly CompareSeries[],
+  metric: "netWorth" | "totalDebt",
+  today: Date,
+  months?: number,
+  pastMonths: number = 3
+): { rows: CompareRow[]; boundary: number } {
+  const lookups = series.map((s) => {
+    const map = new Map<number, number>();
+    for (const p of s.timeline.points) {
+      const v = metric === "netWorth" ? p.netWorth : p.totalDebt ?? 0;
+      map.set(monthKey(p.date), Number(v.toFixed(2)));
+    }
+    return { key: s.key, map };
+  });
+  const allKeys = lookups.flatMap((l) => [...l.map.keys()]);
+  if (allKeys.length === 0) return { rows: [], boundary: -1 };
+
+  const todayKey = monthKey(today);
+  let startKey: number;
+  let endKey: number;
+  if (months) {
+    startKey = todayKey - pastMonths;
+    endKey = startKey + months - 1;
+  } else {
+    startKey = Math.min(...allKeys);
+    endKey = Math.max(...allKeys);
   }
 
-  const future = projection.months
-    .slice(
-      futureStart,
-      futureStart + Math.max(1, horizonMonths - effectivePast.length)
-    )
-    .map((m) => ({
-      date: m.date,
-      netWorth: m.netWorth,
-      totalDebt: m.totalDebt,
-      investments: m.investments,
-    }));
+  const rows: CompareRow[] = [];
+  for (let k = startKey; k <= endKey; k++) {
+    const values: Record<string, number | null> = {};
+    for (const l of lookups) values[l.key] = l.map.get(k) ?? null;
+    rows.push({ month: new Date(Date.UTC(Math.floor(k / 12), k % 12, 1)), values });
+  }
+  const boundary = todayKey >= startKey && todayKey <= endKey ? todayKey - startKey : -1;
+  return { rows, boundary };
+}
 
-  return {
-    points: [...effectivePast, ...future],
-    pastCount: effectivePast.length,
-  };
+// ---------- milestones ----------
+
+function monthsBetweenDates(a: Date, b: Date): number {
+  return (
+    (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + (b.getUTCMonth() - a.getUTCMonth())
+  );
+}
+
+/**
+ * First crossing of each milestone along a series: `x` is the fractional
+ * point index (for placing the marker between points) and `monthsFromToday`
+ * the distance from the today point in CALENDAR months, interpolated between
+ * the two points' dates — so a gap in the recorded past (two points a
+ * quarter apart) still counts three months, not one step.
+ */
+export function milestoneCrossings(
+  points: readonly { date: Date; value: number }[],
+  todayIndex: number,
+  milestones: readonly number[]
+): { x: number; milestone: number; monthsFromToday: number }[] {
+  const out: { x: number; milestone: number; monthsFromToday: number }[] = [];
+  const todayDate = points[Math.min(Math.max(0, todayIndex), points.length - 1)]?.date;
+  if (!todayDate) return out;
+  for (const m of milestones) {
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1].value;
+      const curr = points[i].value;
+      if (
+        (prev < m && curr >= m) ||
+        (prev > m && curr <= m) ||
+        // Starting exactly on the milestone (0 is the common case) counts.
+        (i === 1 && prev === m)
+      ) {
+        const span = curr - prev;
+        const t = Math.max(0, Math.min(1, span === 0 ? 0 : (m - prev) / span));
+        const from = points[i - 1].date;
+        const monthsFromToday =
+          monthsBetweenDates(todayDate, from) + t * monthsBetweenDates(from, points[i].date);
+        out.push({ x: i - 1 + t, milestone: m, monthsFromToday });
+        break;
+      }
+    }
+  }
+  return out;
 }

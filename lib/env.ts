@@ -1,7 +1,5 @@
 import { z } from "zod"
 
-import type { Env } from "@/types/env"
-
 /**
  * Runtime env validation. Fails fast at first import if a required variable
  * is missing or malformed, instead of producing cryptic Supabase / Drizzle
@@ -20,6 +18,8 @@ const envSchema = z.object({
   VERCEL_API_TOKEN: z.string().min(1).optional(),
 })
 
+export type Env = z.infer<typeof envSchema>
+
 function loadEnv(): Env {
   if (process.env.SKIP_ENV_VALIDATION === "1") {
     return {
@@ -30,7 +30,7 @@ function loadEnv(): Env {
         process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,
       CRON_SECRET: process.env.CRON_SECRET,
       VERCEL_API_TOKEN: process.env.VERCEL_API_TOKEN,
-    }
+    } as Env
   }
 
   const parsed = envSchema.safeParse({

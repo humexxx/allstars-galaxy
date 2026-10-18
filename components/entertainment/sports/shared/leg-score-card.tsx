@@ -4,6 +4,16 @@ import type { BracketMatch, Team } from "@/types/sports";
 
 import { TeamBadge } from "./team-badge";
 
+// Pinned to en-US like `lib/utils/date`, so day/month order and clock style
+// do not change per visitor.
+const MATCH_TIME = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
 type LegScoreCardProps = {
   match: BracketMatch;
   teams: Map<string, Team>;
@@ -54,7 +64,7 @@ export function LegScoreCard({ match, teams, className }: LegScoreCardProps) {
           ))}
         </div>
       )}
-      <div className="space-y-1.5">
+      <div className="flex flex-col gap-1.5">
         <LegRow
           team={home}
           scores={homeScores}
@@ -72,15 +82,10 @@ export function LegScoreCard({ match, teams, className }: LegScoreCardProps) {
         </div>
       )}
       {!hasAggregate && match.date && (
-        <div className="mt-2 border-t pt-1.5 text-2xs text-muted-foreground">
+        // An instant: server (UTC) and browser text may differ.
+        <div className="mt-2 border-t pt-1.5 text-2xs text-muted-foreground" suppressHydrationWarning>
           {match.winnerTeamId ? "FT · " : ""}
-          {new Date(match.date).toLocaleDateString(undefined, {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+          {MATCH_TIME.format(new Date(match.date))}
         </div>
       )}
     </div>

@@ -1,0 +1,1 @@
+CREATE INDEX "price_quotes_asset_id_fetched_at_idx" ON "price_quotes" USING btree ("asset_id","fetched_at" DESC NULLS LAST);

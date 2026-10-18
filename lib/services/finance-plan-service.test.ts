@@ -14,10 +14,20 @@ vi.mock("@/db", () => ({
   },
 }));
 
+vi.mock("./ownership", () => ({
+  ensureOwnedRow: vi.fn().mockResolvedValue({ id: "plan-1", userId: "user-1" }),
+}));
+
+import { db } from "@/db";
 import {
+  cloneOverrides,
   compareDebtStrategies,
   deriveFinanceMood,
   projectPlan,
+  updateDebt,
+  updatePlan,
+  updateExpense,
+  updateIncome,
 } from "./finance-plan-service";
 import type {
   FinancePlan,
@@ -798,5 +808,180 @@ describe("deriveFinanceMood", () => {
         projection({ months: [{ netWorth: 900 }, { netWorth: 400 }] })
       )
     ).toBe("steady");
+  });
+});
+
+describe("line updates on a line from another plan", () => {
+  // The plan is owned, but the line id matches nothing on it: the update's
+  // WHERE (id AND planId) returns no row.
+  function updateReturning(rows: unknown[]): void {
+    const chain = {
+      set: () => chain,
+      where: () => chain,
+      returning: () => Promise.resolve(rows),
+    };
+    vi.mocked(db.update).mockReturnValueOnce(chain as never);
+  }
+
+  const line = { id: "foreign-line", name: "X", monthlyAmount: "1", kind: "recurring" };
+
+  it("throws a not-found error for an income instead of returning undefined", async () => {
+    updateReturning([]);
+    await expect(
+      updateIncome("user-1", "plan-1", { ...line, recurrenceType: "monthly_day" } as never)
+    ).rejects.toThrow("Income not found on this plan");
+  });
+
+  it("throws a not-found error for an expense", async () => {
+    updateReturning([]);
+    await expect(
+      updateExpense("user-1", "plan-1", { ...line, recurrenceType: "monthly_day" } as never)
+    ).rejects.toThrow("Expense not found on this plan");
+  });
+
+  it("throws a not-found error for a debt", async () => {
+    updateReturning([]);
+    await expect(
+      updateDebt("user-1", "plan-1", { id: "foreign-debt", recurrenceType: "monthly_day" } as never)
+    ).rejects.toThrow("Debt not found on this plan");
+  });
+
+  it("returns the row when it exists", async () => {
+    const row = { id: "line-1" };
+    updateReturning([row]);
+    await expect(
+      updateIncome("user-1", "plan-1", { ...line, recurrenceType: "monthly_day" } as never)
+    ).resolves.toBe(row);
+  });
+});
+
+describe("cloneOverrides (F6)", () => {
+  it("re-points every override at the clone's lines and drops dangling ones", () => {
+    const idMap = new Map([
+      ["income:inc-old", "inc-new"],
+      ["expense:rent-old", "rent-new"],
+    ]);
+    const rows = cloneOverrides(
+      [
+        buildOverride({ parentSide: "income", parentId: "inc-old", action: "skip", monthYear: "2026-03-01" }),
+        buildOverride({
+          parentSide: "expense",
+          parentId: "rent-old",
+          action: "reschedule",
+          monthYear: "2026-04-01",
+          date: "2026-04-03",
+        }),
+        buildOverride({ parentSide: "debt", parentId: "gone", action: "skip" }),
+      ],
+      "clone-plan",
+      idMap
+    );
+    expect(rows).toEqual([
+      {
+        planId: "clone-plan",
+        parentSide: "income",
+        parentId: "inc-new",
+        monthYear: "2026-03-01",
+        action: "skip",
+        date: null,
+        monthlyAmount: null,
+      },
+      {
+        planId: "clone-plan",
+        parentSide: "expense",
+        parentId: "rent-new",
+        monthYear: "2026-04-01",
+        action: "reschedule",
+        date: "2026-04-03",
+        monthlyAmount: null,
+      },
+    ]);
+  });
+});
+
+describe("updatePlan — opening-balance restatement (balances_as_of)", () => {
+  type Call = { op: string; table: unknown; values?: Record<string, unknown> };
+
+  // A recorder standing in for both `db` and the transaction handle.
+  function recorder(calls: Call[]): Record<string, unknown> {
+    const chain = (op: string, table: unknown): Record<string, unknown> => {
+      const call: Call = { op, table };
+      calls.push(call);
+      const c: Record<string, unknown> = {
+        set: (values: Record<string, unknown>) => {
+          call.values = values;
+          return c;
+        },
+        values: (values: Record<string, unknown>) => {
+          call.values = values as Record<string, unknown>;
+          return Promise.resolve();
+        },
+        where: () => c,
+        returning: () => Promise.resolve([{ id: "plan-1" }]),
+        then: (resolve: (v: unknown) => void) => resolve(undefined),
+      };
+      return c;
+    };
+    return {
+      update: (table: unknown) => chain("update", table),
+      insert: (table: unknown) => chain("insert", table),
+      delete: (table: unknown) => chain("delete", table),
+    };
+  }
+
+  const data = {
+    id: "plan-1",
+    name: "P",
+    startMonth: new Date(Date.UTC(2026, 0, 1)),
+    monthsAhead: 12,
+    initialSavings: "999",
+    monthlySavingsRate: "0",
+    includePortfolio: false,
+    surplusToDebtsPercent: "0",
+    debtStrategy: "avalanche",
+    autoInvestPercent: "0",
+    initialInvestments: "0",
+    confirmationDayOfMonth: 1,
+    color: "var(--chart-1)",
+  } as never;
+
+  it("a no-op edit (no restatement) writes the form values and never touches balances_as_of", async () => {
+    const calls: Call[] = [];
+    vi.mocked(db.update).mockImplementationOnce(
+      (recorder(calls).update as (t: unknown) => never)
+    );
+    await updatePlan("user-1", data, null);
+    expect(db.transaction).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].values).not.toHaveProperty("balancesAsOf");
+    expect(calls[0].values?.initialSavings).toBe("999");
+  });
+
+  it("an edit that restates re-dates the set, writes every debt and syncs a same-day confirmation", async () => {
+    const calls: Call[] = [];
+    vi.mocked(db.transaction).mockImplementationOnce((async (
+      fn: (tx: unknown) => Promise<unknown>
+    ) => fn(recorder(calls))) as never);
+    await updatePlan("user-1", data, {
+      initialSavings: "500.00",
+      initialInvestments: "120.00",
+      debtBalances: { "debt-1": "800.00" },
+      balancesAsOf: "2026-09-30",
+      syncConfirmationId: "conf-1",
+    });
+    const planWrites = calls.filter((c) => c.values && "balancesAsOf" in c.values);
+    expect(planWrites.length).toBeGreaterThan(0);
+    expect(planWrites.every((c) => c.values?.balancesAsOf === "2026-09-30")).toBe(true);
+    // The restated savings win over the raw form value.
+    expect(calls[0].values?.initialSavings).toBe("500.00");
+    expect(calls.some((c) => c.values?.initialBalance === "800.00")).toBe(true);
+    expect(calls.some((c) => c.values?.confirmedSavings === "500.00")).toBe(true);
+    const debtRows = calls.find((c) => c.op === "insert")?.values as unknown as {
+      debtId: string;
+      confirmedBalance: string;
+    }[];
+    expect(debtRows).toEqual([
+      { confirmationId: "conf-1", debtId: "debt-1", confirmedBalance: "800.00" },
+    ]);
   });
 });

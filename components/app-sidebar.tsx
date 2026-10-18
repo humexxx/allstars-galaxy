@@ -16,11 +16,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import {
-  visibleSections,
-  isNavLeafActive,
-  type Role,
-} from "@/components/portal/nav-config"
+import { visibleSections, isNavLeafActive } from "@/components/portal/nav-config"
+import type { UserRole } from "@/types/user"
 import { Mono } from "@/components/ui/typography"
 
 export function AppSidebar({
@@ -28,7 +25,7 @@ export function AppSidebar({
   isImpersonating = false,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  role?: Role
+  role?: UserRole
   isImpersonating?: boolean
 }) {
   const pathname = usePathname()

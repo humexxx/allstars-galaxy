@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { SettingRow } from "@/components/settings/settings-shell";
 import { ContextAvatar } from "@/components/portal/context-avatar";
-import type { UserPreferences } from "@/lib/services/user-preferences-service";
+import type { UserPreferences } from "@/types/preferences";
 
 import { setShowContextAvatarAction } from "@/app/actions/user-preferences";
 
@@ -17,25 +16,25 @@ type AppearanceSettingsProps = {
 };
 
 export function AppearanceSettings({ preferences }: AppearanceSettingsProps) {
-  const router = useRouter();
   const [showAvatar, setShowAvatar] = useState(preferences.showContextAvatar);
   const [isPending, setIsPending] = useState(false);
-  const [, startTransition] = useTransition();
 
-  async function handleToggle(next: boolean) {
+  async function handleToggle(next: boolean): Promise<void> {
+    // Ignored rather than `disabled` while a save is in flight: disabling
+    // the focused switch drops keyboard focus to the page.
+    if (isPending) return;
     // Optimistic — flip immediately, revert if the action fails.
     setShowAvatar(next);
     setIsPending(true);
-    const result = await setShowContextAvatarAction({
-      showContextAvatar: next,
-    });
+    const result = await setShowContextAvatarAction({ showContextAvatar: next }).catch(
+      () => ({ success: false as const, error: "Failed to save the setting" })
+    );
     setIsPending(false);
+    // No refresh on success: the action revalidates the pages that read it.
     if (!result.success) {
       setShowAvatar(!next);
       toast.error(result.error);
-      return;
     }
-    startTransition(() => router.refresh());
   }
 
   return (
@@ -44,12 +43,11 @@ export function AppearanceSettings({ preferences }: AppearanceSettingsProps) {
       description="Show a small animated mascot at the bottom of module pages — on Finance it mines for gold."
       control={
         <div className="flex items-center gap-2">
-          {isPending && (
-            <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-          )}
+          {isPending && <Spinner className="size-3.5 text-muted-foreground" />}
           <Switch
             checked={showAvatar}
-            disabled={isPending}
+            aria-disabled={isPending}
+            aria-busy={isPending}
             onCheckedChange={handleToggle}
             aria-label="Toggle module mascot"
           />

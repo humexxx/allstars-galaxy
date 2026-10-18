@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
+import { SkipLink } from "@/components/skip-link";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { DevToolsProvider } from "@/components/dev-tools/dev-tools-context";
@@ -36,6 +37,7 @@ export default async function PortalLayout({
             goes back to filling the viewport with its own scrolling pane,
             which is what keeps the sidebar and header fixed. */}
         <div className="flex min-h-svh w-full flex-col md:h-svh">
+          <SkipLink />
           <AppHeader
             realUser={ctx.realUser}
             impersonatedUser={ctx.impersonatedUser}
@@ -50,7 +52,11 @@ export default async function PortalLayout({
             <SidebarInset>
               {/* No container here: each route renders its own
                   `PortalPageContainer` and declares the width it needs. */}
-              <main className="flex min-h-0 min-w-0 flex-1 flex-col md:overflow-auto">
+              <main
+                id="main-content"
+                tabIndex={-1}
+                className="flex min-h-0 min-w-0 flex-1 flex-col outline-none md:overflow-auto"
+              >
                 {children}
               </main>
             </SidebarInset>

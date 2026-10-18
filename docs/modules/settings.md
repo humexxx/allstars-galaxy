@@ -1,7 +1,7 @@
 # Settings
 
 > **Status:** Active
-> **Last reviewed:** 2026-07-01
+> **Last reviewed:** 2026-09-29
 
 ## Overview
 Personal portal preferences. Today it holds a single appearance toggle — the
@@ -9,19 +9,21 @@ decorative module mascot (a clay-style bean doing a module-themed activity)
 shown after the content of module pages; on Finance it mines for gold.
 
 ## Routes
-- `/portal/settings` — preferences page (appearance toggles)
+- `/portal/settings` — preferences page (appearance toggles); the section rail
+  is `Tabs orientation="vertical"` with real panels. `settings/loading.tsx`
+  draws the rail and one card
 
 ## Server actions — `/app/actions/`
-- `user-preferences.ts` — `setShowContextAvatarAction` (toggle the module mascot)
+- `user-preferences.ts` — `setShowContextAvatarAction` (toggle the module mascot), `ActionResult`
 
 ## Services — `/lib/services/`
 - `user-preferences-service.ts` — `getUserPreferences` (returns defaults when the user has no row) / `setShowContextAvatar` (upsert)
 
 ## Schemas — `/schemas/`
-- `user-preferences.ts` — `setShowContextAvatarSchema` / `SetShowContextAvatarInput`
+- `user-preferences.ts` — `setShowContextAvatarSchema` / `SetShowContextAvatarData`
 
 ## Types — `/types/`
-- — (`UserPreferences` is exported from `user-preferences-service.ts`, next to the defaults it describes)
+- `preferences.ts` — `UserPreferences` (the service still owns the default values)
 
 ## Components
 `components/settings/` — `preferences-form.tsx` (optimistic Switch row + live mascot preview). The mascot itself is [`components/portal/context-avatar.tsx`](../../components/portal/context-avatar.tsx) — shared, pure SVG + CSS keyframes (no client JS), one variant per module (`finance` only so far), animations pause under `prefers-reduced-motion`.

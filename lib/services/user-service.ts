@@ -19,9 +19,15 @@ export async function getAllUsers(): Promise<UserListItem[]> {
     .orderBy(sql`${users.fullName} NULLS LAST, ${users.email}`);
 }
 
+/** False when no user has that id, so the caller can say so. */
 export async function updateUserRole(
   userId: string,
   role: UserRole
-): Promise<void> {
-  await db.update(users).set({ role, updatedAt: new Date() }).where(eq(users.id, userId));
+): Promise<boolean> {
+  const updated = await db
+    .update(users)
+    .set({ role, updatedAt: new Date() })
+    .where(eq(users.id, userId))
+    .returning({ id: users.id });
+  return updated.length > 0;
 }

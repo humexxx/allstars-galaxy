@@ -11,9 +11,9 @@ import { createApprovalSnapshot } from "@/lib/services/snapshot-service";
 import { createTransaction } from "@/lib/services/transaction-service";
 import {
   createTransactionSchema,
-  type CreateTransactionInput,
+  type CreateTransactionData,
 } from "@/schemas/transaction";
-import type { Transaction } from "@/types";
+import type { Transaction } from "@/types/transaction";
 
 /**
  * Create a transaction from the portfolio UI.
@@ -30,7 +30,7 @@ import type { Transaction } from "@/types";
  * action runs as the impersonated user would experience it.
  */
 export async function createTransactionAction(
-  input: CreateTransactionInput,
+  input: CreateTransactionData,
 ): Promise<ActionResult<Transaction>> {
   return safe("transactions", async () => {
     const ctx = await requireEffectiveContext();

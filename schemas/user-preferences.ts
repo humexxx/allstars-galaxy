@@ -4,7 +4,7 @@ export const setShowContextAvatarSchema = z.object({
   showContextAvatar: z.boolean(),
 });
 
-export type SetShowContextAvatarInput = z.infer<
+export type SetShowContextAvatarData = z.infer<
   typeof setShowContextAvatarSchema
 >;
 

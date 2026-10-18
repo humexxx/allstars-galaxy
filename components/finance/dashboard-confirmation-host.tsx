@@ -4,6 +4,7 @@ import {
 } from "@/lib/services/finance-plan-service";
 import { getConfirmationStatus } from "@/lib/services/finance-confirmation-service";
 import { periodRangeFor } from "@/lib/finance/period";
+import { getRequestToday } from "@/lib/utils/request-today";
 
 import { ConfirmationPrompt } from "./confirmation-prompt";
 
@@ -36,7 +37,8 @@ export async function DashboardConfirmationHost({ userId }: { userId: string }) 
   const full = await getPlanWithLines(main.id, userId);
   if (!full) return null;
 
-  const status = await getConfirmationStatus(full, userId);
+  // The reader's calendar day, not the server's UTC one.
+  const status = await getConfirmationStatus(full, userId, await getRequestToday());
   if (!status.isDue || !status.projectedState) return null;
 
   const projectedDebts = status.projectedState.debts.map((d) => ({

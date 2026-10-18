@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { toast } from "sonner";
 import {
+  Briefcase,
   MoreHorizontal,
   Search,
   ShieldCheck,
-  ShieldOff,
   UserCog,
+  UserRound,
 } from "lucide-react";
 
 import {
@@ -18,8 +18,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -41,15 +46,23 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Mono, Text } from "@/components/ui/typography";
+import { Spinner } from "@/components/ui/spinner";
+import { Eyebrow, Mono, Text } from "@/components/ui/typography";
+import { runAction } from "@/lib/actions/run";
 
 import { startImpersonationAction } from "@/app/actions/impersonation";
 import { updateUserRoleAction } from "@/app/actions/admin-users";
 
-import type { UserListItem } from "@/types";
+import { USER_ROLES, type UserListItem, type UserRole } from "@/types";
 
-// Pre-build the row action set so the UI stays declarative
-// and the user's selected behaviour (Impersonate + role toggle) is the only surface.
+// One entry per role, in the order the menu lists them. The role answers a
+// single question — may this account create investment methods — so the
+// labels say that rather than restating the enum.
+const ROLE_META: Record<UserRole, { label: string; hint: string; icon: typeof UserRound }> = {
+  admin: { label: "Admin", hint: "Everything, plus impersonation", icon: ShieldCheck },
+  provider: { label: "Provider", hint: "Can run investment methods", icon: Briefcase },
+  user: { label: "User", hint: "Invests through providers", icon: UserRound },
+};
 
 type UsersTableProps = {
   users: UserListItem[];
@@ -58,7 +71,7 @@ type UsersTableProps = {
 
 type PendingRoleChange = {
   user: UserListItem;
-  nextRole: "admin" | "user";
+  nextRole: UserRole;
 };
 
 export function UsersTable({ users, currentAdminId }: UsersTableProps) {
@@ -85,32 +98,34 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
     });
   }, [sortedUsers, query]);
 
-  const confirmRoleChange = () => {
+  const confirmRoleChange = (): void => {
     if (!pendingRoleChange) return;
     const { user, nextRole } = pendingRoleChange;
     startRoleTransition(async () => {
-      try {
-        await updateUserRoleAction({ userId: user.id, role: nextRole });
-        toast.success(`${user.fullName ?? user.email ?? "User"} is now ${nextRole}`);
-        setPendingRoleChange(null);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to update role");
-      }
+      const result = await runAction(
+        updateUserRoleAction({ userId: user.id, role: nextRole }),
+        {
+          success: `${user.fullName ?? user.email ?? "User"} is now ${ROLE_META[nextRole].label.toLowerCase()}`,
+          failure: "Failed to update role",
+        }
+      );
+      if (result.ok) setPendingRoleChange(null);
     });
   };
 
   return (
-    <div className="space-y-4">
-      <div className="relative max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
+    <div className="flex flex-col gap-4">
+      <InputGroup className="max-w-sm">
+        <InputGroupAddon>
+          <Search aria-hidden />
+        </InputGroupAddon>
+        <InputGroupInput
           placeholder="Filter by name, email or id…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="pl-9"
           aria-label="Filter users"
         />
-      </div>
+      </InputGroup>
 
       {filtered.length === 0 ? (
         <EmptyState
@@ -119,160 +134,165 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
           description={query ? "Try a different query." : undefined}
         />
       ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>User</TableHead>
-                <TableHead className="w-30">Role</TableHead>
-                <TableHead className="w-16 text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((user) => {
-                const isSelf = user.id === currentAdminId;
-                const isAdmin = user.role === "admin";
-                const displayName = user.fullName || user.email || "Unknown";
-                const initial = (user.fullName || user.email || "?").charAt(0).toUpperCase();
-                const nextRole: "admin" | "user" = isAdmin ? "user" : "admin";
+        <Card>
+          <CardContent className="px-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead className="w-30">Role</TableHead>
+                  <TableHead className="w-16 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((user) => {
+                  const isSelf = user.id === currentAdminId;
+                  const role: UserRole = user.role ?? "user";
+                  const isAdmin = role === "admin";
+                  const displayName = user.fullName || user.email || "Unknown";
+                  const initial = (user.fullName || user.email || "?").charAt(0).toUpperCase();
+                  const RoleIcon = ROLE_META[role].icon;
 
-                return (
-                  <TableRow key={user.id} className={isSelf ? "bg-muted/30" : undefined}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-9 w-9">
-                          <AvatarImage src={user.avatarUrl ?? ""} alt={displayName} />
-                          <AvatarFallback>{initial}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-2">
-                            <Text as="span" variant="body" weight="medium">{displayName}</Text>
-                            {isSelf && (
-                              <Badge variant="outline" className="text-xs">
-                                You
-                              </Badge>
+                  return (
+                    <TableRow key={user.id} className={isSelf ? "bg-muted/30" : undefined}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="size-9">
+                            <AvatarImage src={user.avatarUrl ?? ""} alt={displayName} />
+                            <AvatarFallback>{initial}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <Text as="span" variant="body" weight="medium">{displayName}</Text>
+                              {isSelf && (
+                                <Badge variant="outline">You</Badge>
+                              )}
+                            </div>
+                            {user.email && (
+                              <Mono className="text-xs text-muted-foreground">{user.email}</Mono>
                             )}
                           </div>
-                          {user.email && (
-                            <Mono className="text-xs text-muted-foreground">{user.email}</Mono>
-                          )}
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {isAdmin ? (
-                        <Badge variant="default" className="gap-1">
-                          <ShieldCheck className="h-3 w-3" />
-                          Admin
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={isAdmin ? "default" : "secondary"}>
+                          <RoleIcon aria-hidden />
+                          {ROLE_META[role].label}
                         </Badge>
-                      ) : (
-                        <Badge variant="secondary">User</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {isSelf ? (
-                        // No actions on yourself: keeps the UI honest and avoids a
-                        // dropdown with everything greyed out.
-                        <Text as="span" variant="small" aria-label="No actions available">
-                          —
-                        </Text>
-                      ) : (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              aria-label={`Actions for ${displayName}`}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-56">
-                            <DropdownMenuLabel>{displayName}</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {isSelf ? (
+                          // No actions on yourself: keeps the UI honest and avoids a
+                          // dropdown with everything greyed out.
+                          <Text as="span" variant="small">
+                            <span aria-hidden>—</span>
+                            <span className="sr-only">No actions available</span>
+                          </Text>
+                        ) : (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Actions for ${displayName}`}
+                              >
+                                <MoreHorizontal />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
+                              <DropdownMenuLabel>{displayName}</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
 
-                            {!isAdmin ? (
-                              <form action={startImpersonationAction}>
-                                <input type="hidden" name="userId" value={user.id} />
-                                <DropdownMenuItem asChild>
-                                  <button
-                                    type="submit"
-                                    className="w-full cursor-pointer text-left"
-                                  >
-                                    <UserCog className="mr-2 h-4 w-4" />
-                                    Impersonate
-                                  </button>
-                                </DropdownMenuItem>
-                              </form>
-                            ) : (
-                              <DropdownMenuItem disabled>
-                                <UserCog className="mr-2 h-4 w-4" />
-                                Impersonate
-                              </DropdownMenuItem>
-                            )}
-
-                            <DropdownMenuItem
-                              onSelect={(e) => {
-                                e.preventDefault();
-                                setPendingRoleChange({ user, nextRole });
-                              }}
-                            >
-                              {isAdmin ? (
-                                <>
-                                  <ShieldOff className="mr-2 h-4 w-4" />
-                                  Demote to user
-                                </>
+                              {!isAdmin ? (
+                                <form action={startImpersonationAction}>
+                                  <input type="hidden" name="userId" value={user.id} />
+                                  <DropdownMenuItem asChild>
+                                    <button
+                                      type="submit"
+                                      className="w-full cursor-pointer text-left"
+                                    >
+                                      <UserCog />
+                                      Impersonate
+                                    </button>
+                                  </DropdownMenuItem>
+                                </form>
                               ) : (
-                                <>
-                                  <ShieldCheck className="mr-2 h-4 w-4" />
-                                  Promote to admin
-                                </>
+                                <DropdownMenuItem disabled>
+                                  <UserCog />
+                                  Impersonate
+                                </DropdownMenuItem>
                               )}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+
+                              <DropdownMenuSeparator />
+                              <DropdownMenuLabel>
+                                <Eyebrow size="sm">Set role</Eyebrow>
+                              </DropdownMenuLabel>
+                              {USER_ROLES.filter((r) => r !== role).map((nextRole) => {
+                                const Icon = ROLE_META[nextRole].icon;
+                                return (
+                                  <DropdownMenuItem
+                                    key={nextRole}
+                                    onSelect={(e) => {
+                                      e.preventDefault();
+                                      setPendingRoleChange({ user, nextRole });
+                                    }}
+                                  >
+                                    <Icon />
+                                    {ROLE_META[nextRole].label}
+                                  </DropdownMenuItem>
+                                );
+                              })}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       <AlertDialog
         open={pendingRoleChange !== null}
         onOpenChange={(open) => {
-          if (!open) setPendingRoleChange(null);
+          if (!open && !isRolePending) setPendingRoleChange(null);
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pendingRoleChange?.nextRole === "admin"
-                ? "Promote to admin?"
-                : "Demote to user?"}
+              {pendingRoleChange
+                ? `Change role to ${ROLE_META[pendingRoleChange.nextRole].label}?`
+                : "Change role?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingRoleChange?.nextRole === "admin" ? (
+              {pendingRoleChange && (
                 <>
-                  <strong>{pendingRoleChange?.user.fullName ?? pendingRoleChange?.user.email}</strong>{" "}
-                  will gain full admin access — including the ability to approve transactions and
-                  impersonate other users.
-                </>
-              ) : (
-                <>
-                  <strong>{pendingRoleChange?.user.fullName ?? pendingRoleChange?.user.email}</strong>{" "}
-                  will lose admin access immediately.
+                  <strong>{pendingRoleChange.user.fullName ?? pendingRoleChange.user.email}</strong>{" "}
+                  becomes {ROLE_META[pendingRoleChange.nextRole].label.toLowerCase()}:{" "}
+                  {ROLE_META[pendingRoleChange.nextRole].hint.toLowerCase()}.
+                  {pendingRoleChange.user.role === "admin" &&
+                    pendingRoleChange.nextRole !== "admin" &&
+                    " They lose admin access immediately."}
                 </>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isRolePending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRoleChange} disabled={isRolePending}>
+            {/* Kept open until the save settles, so the pending label shows
+                and a refusal ("you cannot demote yourself") has somewhere to land. */}
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                confirmRoleChange();
+              }}
+              disabled={isRolePending}
+            >
+              {isRolePending && <Spinner />}
               {isRolePending ? "Saving…" : "Confirm"}
             </AlertDialogAction>
           </AlertDialogFooter>

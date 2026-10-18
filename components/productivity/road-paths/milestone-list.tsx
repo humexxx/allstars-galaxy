@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Flag, Plus, Trash2 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Text } from "@/components/ui/typography";
-import { Plus, Trash2 } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Field, FieldError } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import {
   createRoadPathMilestoneAction,
   updateRoadPathMilestoneAction,
@@ -15,16 +18,19 @@ import {
 } from "@/app/actions/road-path";
 import { createRoadPathMilestoneSchema, type CreateRoadPathMilestoneData } from "@/schemas/road-path";
 import { runAction } from "@/lib/actions/run";
+import { cn } from "@/lib/utils";
 import type { RoadPathMilestone } from "@/types";
 
 type MilestoneListProps = {
   roadPathId: string;
   milestones: RoadPathMilestone[];
-  onRefresh: () => void;
 };
 
-export function MilestoneList({ roadPathId, milestones, onRefresh }: MilestoneListProps) {
+// The actions revalidate the page, so the list below re-renders from the
+// server on its own — there is nothing to refresh by hand.
+export function MilestoneList({ roadPathId, milestones }: MilestoneListProps) {
   const [showForm, setShowForm] = useState(false);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
   const {
     register,
     handleSubmit,
@@ -32,82 +38,87 @@ export function MilestoneList({ roadPathId, milestones, onRefresh }: MilestoneLi
     reset,
   } = useForm<CreateRoadPathMilestoneData>({
     resolver: zodResolver(createRoadPathMilestoneSchema),
-    defaultValues: { roadPathId },
+    defaultValues: { roadPathId, title: "" },
   });
 
-  const onSubmit = async (data: CreateRoadPathMilestoneData) => {
+  const onSubmit = async (data: CreateRoadPathMilestoneData): Promise<void> => {
     const { ok } = await runAction(createRoadPathMilestoneAction(data), {
       success: "Milestone created",
       failure: "Failed to create milestone",
     });
     if (!ok) return;
-    reset({ roadPathId });
+    reset({ roadPathId, title: "" });
     setShowForm(false);
-    onRefresh();
   };
 
   const handleToggle = async (milestone: RoadPathMilestone): Promise<void> => {
-    const { ok } = await runAction(
+    await runAction(
       updateRoadPathMilestoneAction({
         id: milestone.id,
         completedAt: milestone.completedAt ? null : new Date(),
       }),
       { failure: "Failed to update milestone" }
     );
-    if (ok) onRefresh();
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string): Promise<void> => {
     const { ok } = await runAction(deleteRoadPathMilestoneAction(id), {
       success: "Milestone deleted",
       failure: "Failed to delete milestone",
     });
-    if (ok) onRefresh();
+    // The row and its button are gone; keep focus in the list.
+    if (ok) addButtonRef.current?.focus();
   };
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        {milestones.map((milestone) => (
-          <div key={milestone.id} className="flex items-center gap-2 p-2 rounded-lg border">
-            <Checkbox
-              checked={milestone.completedAt !== null}
-              onCheckedChange={() => handleToggle(milestone)}
-            />
-            <span className={milestone.completedAt !== null ? "line-through text-muted-foreground flex-1" : "flex-1"}>
-              {milestone.title}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => handleDelete(milestone.id)}
-              aria-label={`Delete ${milestone.title}`}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        ))}
-
-        {milestones.length === 0 && !showForm && (
-          <Text variant="muted" className="text-center py-4">
-            No milestones yet
-          </Text>
-        )}
-      </div>
+    <div className="flex flex-col gap-4">
+      {milestones.length > 0 ? (
+        <ul className="flex flex-col gap-2">
+          {milestones.map((milestone) => {
+            const done = milestone.completedAt !== null;
+            return (
+              <li key={milestone.id} className="flex items-center gap-2 rounded-lg border p-2">
+                <Checkbox
+                  checked={done}
+                  onCheckedChange={() => handleToggle(milestone)}
+                  aria-label={`Mark ${milestone.title} ${done ? "incomplete" : "complete"}`}
+                />
+                <span className={cn("flex-1 text-sm", done && "text-muted-foreground line-through")}>
+                  {milestone.title}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-destructive"
+                  onClick={() => handleDelete(milestone.id)}
+                  aria-label={`Delete ${milestone.title}`}
+                >
+                  <Trash2 />
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        !showForm && <EmptyState icon={Flag} title="No milestones yet" className="p-6" />
+      )}
 
       {showForm ? (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-2">
-          <Input
-            placeholder="Milestone title"
-            {...register("title")}
-          />
-          {errors.title && (
-            <p className="text-sm text-destructive">{errors.title.message}</p>
-          )}
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-2">
+          <Field data-invalid={!!errors.title}>
+            <Input
+              placeholder="Milestone title"
+              aria-label="Milestone title"
+              aria-invalid={!!errors.title}
+              autoFocus
+              {...register("title")}
+            />
+            <FieldError errors={[errors.title]} />
+          </Field>
           <div className="flex gap-2">
             <Button type="submit" size="sm" disabled={isSubmitting}>
-              Add
+              {isSubmitting && <Spinner />}
+              {isSubmitting ? "Adding…" : "Add"}
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setShowForm(false)}>
               Cancel
@@ -115,9 +126,15 @@ export function MilestoneList({ roadPathId, milestones, onRefresh }: MilestoneLi
           </div>
         </form>
       ) : (
-        <Button variant="outline" size="sm" onClick={() => setShowForm(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Milestone
+        <Button
+          ref={addButtonRef}
+          variant="outline"
+          size="sm"
+          className="self-start"
+          onClick={() => setShowForm(true)}
+        >
+          <Plus />
+          Add milestone
         </Button>
       )}
     </div>

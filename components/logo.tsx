@@ -1,3 +1,5 @@
+import type * as React from "react";
+
 import { cn } from "@/lib/utils";
 
 type LogoProps = {
@@ -10,6 +12,9 @@ type LogoProps = {
    */
   withBadge?: boolean;
   "aria-label"?: string;
+  /** Hide the mark from assistive tech when the brand name is already written
+   *  beside it — otherwise a screen reader announces "Allstars Galaxy" twice. */
+  decorative?: boolean;
 };
 
 /**
@@ -28,13 +33,15 @@ export function Logo({
   className,
   withBadge = true,
   "aria-label": ariaLabel = "Allstars Galaxy",
-}: LogoProps) {
+  decorative = false,
+}: LogoProps): React.JSX.Element {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 32 32"
-      role="img"
-      aria-label={ariaLabel}
+      {...(decorative
+        ? { "aria-hidden": true }
+        : { role: "img", "aria-label": ariaLabel })}
       className={cn(
         "shrink-0",
         withBadge ? "text-background" : "text-foreground",

@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
-import { Heading, Mono, Text } from "@/components/ui/typography";
+import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
+
+import { LIVE_MODULES, countWord } from "./modules";
 
 // Hero — radial spotlight + grid background + faux product card under the
 // copy. Same visual structure as trim-success, adapted to Allstars Galaxy
 // copy and KPIs.
-export function LandingHero() {
+export function LandingHero({ signupsOpen }: { signupsOpen: boolean }) {
   return (
     <section className="relative overflow-hidden border-b">
       {/* Soft radial spotlight */}
@@ -15,7 +17,7 @@ export function LandingHero() {
         className="pointer-events-none absolute inset-0 -z-0"
         style={{
           background:
-            "radial-gradient(60% 50% at 50% 0%, rgba(99,102,241,0.10) 0%, rgba(255,255,255,0) 70%)",
+            "radial-gradient(60% 50% at 50% 0%, color-mix(in oklch, var(--primary) 14%, transparent) 0%, transparent 70%)",
         }}
       />
       {/* Grid lines, masked to fade at the edges */}
@@ -24,7 +26,9 @@ export function LandingHero() {
         className="pointer-events-none absolute inset-0 -z-0 opacity-60"
         style={{
           backgroundImage:
-            "linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px)",
+            // Token-based so the grid is visible on the dark surface too; a
+            // fixed black line at 5% disappeared there.
+            "linear-gradient(to right, var(--border) 1px, transparent 1px), linear-gradient(to bottom, var(--border) 1px, transparent 1px)",
           backgroundSize: "56px 56px",
           maskImage:
             "radial-gradient(ellipse at center, black 40%, transparent 75%)",
@@ -36,8 +40,8 @@ export function LandingHero() {
           href="#modules"
           className="mx-auto mb-8 inline-flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs text-muted-foreground backdrop-blur transition-colors hover:text-foreground"
         >
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
-          Beta · six modules in one orbit
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-warning" />
+          Beta · {countWord(LIVE_MODULES.length)} modules in one orbit
           <ArrowRight className="h-3 w-3" />
         </Link>
 
@@ -47,10 +51,7 @@ export function LandingHero() {
           in one orbit.
         </Heading>
 
-        <Text
-          variant="lead"
-          className="mx-auto mt-6 max-w-2xl text-balance text-base sm:text-lg"
-        >
+        <Text variant="lead" className="mx-auto mt-6 max-w-2xl text-balance">
           Allstars Galaxy is the calm command center for your portfolio, your
           plans, your week and the trips you take along the way — built for
           people who compound.
@@ -58,11 +59,11 @@ export function LandingHero() {
 
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
-            href="/signup"
+            href={signupsOpen ? "/signup" : "/login"}
             className="inline-flex h-11 items-center justify-center rounded-full bg-foreground px-6 text-sm font-medium text-background transition hover:bg-foreground/90"
           >
-            Get started
-            <ArrowRight className="ml-1 h-4 w-4" />
+            {signupsOpen ? "Get started" : "Log in"}
+            <ArrowRight className="ml-1 size-4" />
           </Link>
           <a
             href="#modules"
@@ -73,20 +74,22 @@ export function LandingHero() {
         </div>
 
         <Text variant="small" className="mt-6">
-          Free during beta · No credit card · Your data stays yours
+          {signupsOpen
+            ? "Free during beta · No credit card · Your data stays yours"
+            : "Private beta · Not taking new accounts right now · Your data stays yours"}
         </Text>
       </div>
 
       {/* Faux product card — KPI tiles + a sparkline-ish bar chart, framed
           like a Mac window. Pure HTML/CSS, no image asset needed. */}
       <div className="relative mx-auto max-w-5xl px-6 pb-24">
-        <div className="relative overflow-hidden rounded-xl border bg-card p-1 shadow-[0_30px_120px_-20px_rgba(80,80,160,0.18)]">
+        <div className="relative overflow-hidden rounded-xl border bg-card p-1 shadow-2xl shadow-primary/10">
           <div className="rounded-lg border bg-muted p-6 sm:p-8">
             <div className="mb-6 flex items-center justify-between border-b pb-4">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="h-2 w-2 rounded-full bg-red-400" />
-                <span className="h-2 w-2 rounded-full bg-yellow-400" />
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                <span className="h-2 w-2 rounded-full bg-destructive" />
+                <span className="h-2 w-2 rounded-full bg-warning" />
+                <span className="h-2 w-2 rounded-full bg-success" />
                 <Mono className="ml-3 text-muted-foreground">
                   allstars-galaxy.app/portfolio
                 </Mono>
@@ -96,26 +99,29 @@ export function LandingHero() {
               </span>
             </div>
 
-            {/* KPIs mirror the real PortfolioStats fields surfaced on
-                /portal/portfolio: totalValue, allTimeProfitPercentage,
-                totalInvestmentMethods, activeTransactions. Numbers are
-                illustrative; the labels match what the app actually shows. */}
+            {/* KPIs mirror PortfolioKpiGrid on /portal/portfolio
+                (components/portal/portfolio-client.tsx) — same labels and
+                sublabels. Numbers are illustrative. */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {[
-                { label: "Portfolio value", value: "$284,150", delta: "+12.4% all-time" },
-                { label: "Methods in use", value: "5", delta: "DCA · Value · Dividend" },
-                { label: "Transactions", value: "318", delta: "+9 this month" },
+                { label: "Total value", value: "$284,150", note: "Current market value" },
+                { label: "All-time profit", value: "+$31,350", note: "up 12.4%", positive: true },
+                { label: "Active positions", value: "18", note: "5 methods" },
               ].map((kpi) => (
                 <div
                   key={kpi.label}
                   className="rounded-lg border bg-card p-4"
                 >
-                  <div className="text-xs text-muted-foreground">{kpi.label}</div>
-                  <div className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+                  <Eyebrow as="div" size="sm">{kpi.label}</Eyebrow>
+                  <Mono as="div" className="mt-1 text-2xl font-semibold">
                     {kpi.value}
-                  </div>
-                  <div className="mt-1 text-xs text-emerald-600">
-                    {kpi.delta}
+                  </Mono>
+                  <div
+                    className={`mt-1 text-xs ${
+                      kpi.positive ? "text-success" : "text-muted-foreground"
+                    }`}
+                  >
+                    {kpi.note}
                   </div>
                 </div>
               ))}

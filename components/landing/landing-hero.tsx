@@ -3,10 +3,12 @@ import { ArrowRight } from "lucide-react";
 
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 
+import { LIVE_MODULES, countWord } from "./modules";
+
 // Hero — radial spotlight + grid background + faux product card under the
 // copy. Same visual structure as trim-success, adapted to Allstars Galaxy
 // copy and KPIs.
-export function LandingHero() {
+export function LandingHero({ signupsOpen }: { signupsOpen: boolean }) {
   return (
     <section className="relative overflow-hidden border-b">
       {/* Soft radial spotlight */}
@@ -39,7 +41,7 @@ export function LandingHero() {
           className="mx-auto mb-8 inline-flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs text-muted-foreground backdrop-blur transition-colors hover:text-foreground"
         >
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-warning" />
-          Beta · six modules in one orbit
+          Beta · {countWord(LIVE_MODULES.length)} modules in one orbit
           <ArrowRight className="h-3 w-3" />
         </Link>
 
@@ -57,10 +59,10 @@ export function LandingHero() {
 
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
-            href="/signup"
+            href={signupsOpen ? "/signup" : "/login"}
             className="inline-flex h-11 items-center justify-center rounded-full bg-foreground px-6 text-sm font-medium text-background transition hover:bg-foreground/90"
           >
-            Get started
+            {signupsOpen ? "Get started" : "Log in"}
             <ArrowRight className="ml-1 size-4" />
           </Link>
           <a
@@ -72,7 +74,9 @@ export function LandingHero() {
         </div>
 
         <Text variant="small" className="mt-6">
-          Free during beta · No credit card · Your data stays yours
+          {signupsOpen
+            ? "Free during beta · No credit card · Your data stays yours"
+            : "Private beta · Not taking new accounts right now · Your data stays yours"}
         </Text>
       </div>
 
@@ -95,15 +99,14 @@ export function LandingHero() {
               </span>
             </div>
 
-            {/* KPIs mirror the real PortfolioStats fields surfaced on
-                /portal/portfolio: totalValue, allTimeProfitPercentage,
-                totalInvestmentMethods, activeTransactions. Numbers are
-                illustrative; the labels match what the app actually shows. */}
+            {/* KPIs mirror PortfolioKpiGrid on /portal/portfolio
+                (components/portal/portfolio-client.tsx) — same labels and
+                sublabels. Numbers are illustrative. */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {[
-                { label: "Portfolio value", value: "$284,150", delta: "+12.4% all-time" },
-                { label: "Methods in use", value: "5", delta: "DCA · Value · Dividend" },
-                { label: "Transactions", value: "318", delta: "+9 this month" },
+                { label: "Total value", value: "$284,150", note: "Current market value" },
+                { label: "All-time profit", value: "+$31,350", note: "up 12.4%", positive: true },
+                { label: "Active positions", value: "18", note: "5 methods" },
               ].map((kpi) => (
                 <div
                   key={kpi.label}
@@ -113,8 +116,12 @@ export function LandingHero() {
                   <Mono as="div" className="mt-1 text-2xl font-semibold">
                     {kpi.value}
                   </Mono>
-                  <div className="mt-1 text-xs text-success">
-                    {kpi.delta}
+                  <div
+                    className={`mt-1 text-xs ${
+                      kpi.positive ? "text-success" : "text-muted-foreground"
+                    }`}
+                  >
+                    {kpi.note}
                   </div>
                 </div>
               ))}

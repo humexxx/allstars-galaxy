@@ -9,6 +9,7 @@ import { LandingSplit } from "@/components/landing/landing-split";
 import { LandingFeatures } from "@/components/landing/landing-features";
 import { LandingCta } from "@/components/landing/landing-cta";
 import { LandingFooter } from "@/components/landing/landing-footer";
+import { signupsAllowed } from "@/lib/auth/signups";
 
 export const metadata: Metadata = {
   title: { absolute: "Allstars Galaxy — Money and time, in one orbit" },
@@ -17,19 +18,23 @@ export const metadata: Metadata = {
 };
 
 export default function LandingPage() {
+  // While signups are closed every "Get started" would land on the closed
+  // notice at /signup, so the calls to action point at /login instead.
+  const signupsOpen = signupsAllowed();
+
   return (
     <div className="min-h-screen bg-background text-foreground antialiased">
       <SkipLink />
-      <LandingNav />
+      <LandingNav signupsOpen={signupsOpen} />
       <main id="main-content" tabIndex={-1} className="outline-none">
-        <LandingHero />
+        <LandingHero signupsOpen={signupsOpen} />
         <LandingStats />
         <LandingModules />
         <LandingSplit />
         <LandingFeatures />
-        <LandingCta />
+        <LandingCta signupsOpen={signupsOpen} />
       </main>
-      <LandingFooter />
+      <LandingFooter signupsOpen={signupsOpen} />
     </div>
   );
 }

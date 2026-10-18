@@ -15,7 +15,7 @@ export function LandingSplit() {
             From scattered to systematic — in minutes.
           </Heading>
           <Text variant="muted" className="mt-4">
-            Connect your accounts, drop your goals, watch the orbit form. No
+            Add your accounts, drop your goals, watch the orbit form. No
             setup ceremony, no consultants required.
           </Text>
         </div>

@@ -292,7 +292,8 @@ ALLOW_SIGNUPS  # "true" opens new accounts; anything else (incl. unset) closes t
 ```
 
 **`ALLOW_SIGNUPS` is fail-closed and app-side only.** It gates `/signup`, the
-login page's sign-up link, and the OAuth callback (which rejects an account
+login page's sign-up link, the landing's calls to action (they point at
+`/login` while closed), and the OAuth callback (which rejects an account
 created by that very sign-in — OAuth is a signup path too). It does **not** stop
 a direct `auth.signUp` call: that runs in the browser against Supabase with the
 publishable key. Pair it with Supabase's own *Allow new users to sign up*

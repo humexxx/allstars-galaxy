@@ -1,8 +1,11 @@
+import { Fragment } from "react";
+
 import { Text } from "@/components/ui/typography";
 
-// Proof strip — quiet sentence on the left, the actual module surface area
-// on the right. Labels match the live modules in app/portal/* so the strip
-// doubles as a one-line product map.
+import { LIVE_MODULES } from "./modules";
+
+// Proof strip — quiet sentence on the left, the live modules on the right, so
+// the strip doubles as a one-line product map.
 export function LandingStats() {
   return (
     <section className="border-b bg-background">
@@ -11,17 +14,12 @@ export function LandingStats() {
           Built for people who think in systems, not in spreadsheets
         </Text>
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm font-medium text-muted-foreground">
-          <span>Portfolio</span>
-          <span>·</span>
-          <span>Methods</span>
-          <span>·</span>
-          <span>Plans</span>
-          <span>·</span>
-          <span>Board</span>
-          <span>·</span>
-          <span>Road Paths</span>
-          <span>·</span>
-          <span>Travel</span>
+          {LIVE_MODULES.map((module, index) => (
+            <Fragment key={module.href}>
+              {index > 0 && <span aria-hidden>·</span>}
+              <span>{module.name}</span>
+            </Fragment>
+          ))}
         </div>
       </div>
     </section>

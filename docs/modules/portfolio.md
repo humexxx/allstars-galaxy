@@ -80,8 +80,9 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
   inflate the owner's patrimony with money that isn't theirs. Same reason the
   planned chart toggle keeps it on its own series (see the design memo).
 - **Investment Methods lives inside Portfolio** (Methods tab), not its own
-  route. `/portal/investment-methods` is a permanent redirect — the landing
-  page links there from two places — and the sidebar entry is gone. The page
+  route. `/portal/investment-methods` is a permanent redirect — kept for
+  bookmarks; the landing covers Methods inside its Portfolio card — and the
+  sidebar entry is gone. The page
   fetches ALL methods (enabled + disabled) because `InvestmentMethodsView`
   filters to enabled itself and has a dev toggle for the rest; the transaction
   form gets the enabled subset. The tabs render **even without a portfolio**,

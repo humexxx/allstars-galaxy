@@ -3,43 +3,36 @@ import Link from "next/link";
 import { Eyebrow, Text } from "@/components/ui/typography";
 
 import { GalaxyLogo } from "./galaxy-logo";
+import { LIVE_MODULES } from "./modules";
 
-// Every link here either points at a real portal route or at an in-page
-// anchor of the landing. No placeholder pages (About, Blog, Help center,
-// etc.) — they would 404 today.
-const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
-  {
-    title: "Finance",
-    links: [
-      { label: "Portfolio", href: "/portal/portfolio" },
-      { label: "Investment Methods", href: "/portal/portfolio" },
-      { label: "Finance Plans", href: "/portal/plans" },
-    ],
-  },
-  {
-    title: "Productivity",
-    links: [
-      { label: "Board", href: "/portal/productivity/board" },
-      { label: "Road Paths", href: "/portal/productivity/road-paths" },
-    ],
-  },
-  {
-    title: "Entertainment",
-    links: [
-      { label: "Travel Planner", href: "/portal/entertainment/travel-planner" },
-    ],
-  },
-  {
-    title: "Account",
-    links: [
-      { label: "Log in", href: "/login" },
-      { label: "Get started", href: "/signup" },
-      { label: "Forgot password", href: "/forgot-password" },
-    ],
-  },
-];
+type FooterColumn = { title: string; links: { label: string; href: string }[] };
 
-export function LandingFooter() {
+// Every link here points at a real portal or auth route. No placeholder pages
+// (About, Blog, Help center, etc.) — they would 404 today. One product column
+// per portal section, straight from the landing's module list.
+function footerColumns(signupsOpen: boolean): FooterColumn[] {
+  const areas = [...new Set(LIVE_MODULES.map((module) => module.area))];
+
+  return [
+    ...areas.map((area) => ({
+      title: area,
+      links: LIVE_MODULES.filter((module) => module.area === area).map((module) => ({
+        label: module.name,
+        href: module.href,
+      })),
+    })),
+    {
+      title: "Account",
+      links: [
+        { label: "Log in", href: "/login" },
+        ...(signupsOpen ? [{ label: "Get started", href: "/signup" }] : []),
+        { label: "Forgot password", href: "/forgot-password" },
+      ],
+    },
+  ];
+}
+
+export function LandingFooter({ signupsOpen }: { signupsOpen: boolean }) {
   return (
     <footer className="border-t bg-background">
       <div className="mx-auto w-full max-w-7xl px-6 py-16 sm:px-8">
@@ -54,7 +47,7 @@ export function LandingFooter() {
             </Text>
           </div>
 
-          {COLUMNS.map((col) => (
+          {footerColumns(signupsOpen).map((col) => (
             <div key={col.title}>
               <Eyebrow as="div">{col.title}</Eyebrow>
               <ul className="mt-4 space-y-3">

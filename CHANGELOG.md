@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.7.0](https://github.com/humexxx/allstars-galaxy/compare/v0.6.0...v0.7.0) (2026-10-18)
+
+
+### Features
+
+* **landing:** sync modules with the portal and send CTAs to login while signups are closed ([dd5cc0e](https://github.com/humexxx/allstars-galaxy/commit/dd5cc0e8ffd178c1bf700e1434e93e85ec08ffe4))
+* **sports:** bring F1 news over from the Firebase project ([f80963d](https://github.com/humexxx/allstars-galaxy/commit/f80963d8be9ffcc887cdfcf939619734d99bb3a9))
+* **sports:** give an F1 story its own shareable page ([5888b46](https://github.com/humexxx/allstars-galaxy/commit/5888b46f7d9a08d63ca092840f18990e2fa95afa))
+* **sports:** give F1 one dashboard card instead of two halves ([85b2e76](https://github.com/humexxx/allstars-galaxy/commit/85b2e762195ec708cce62f05e2f88fe3539b4a83))
+* **sports:** give tennis a real draw ([a4103f4](https://github.com/humexxx/allstars-galaxy/commit/a4103f4affdcbd1f6f34e261a8cf7d812d9d70bb))
+* **sports:** give the constructors their team logos ([03e9995](https://github.com/humexxx/allstars-galaxy/commit/03e999592cd070104463649c235abfaa8524143e))
+* **sports:** put the F1 championship on the dashboard card ([525ad83](https://github.com/humexxx/allstars-galaxy/commit/525ad83c8a280a1c3ab50b4625c716eb1355e85f))
+* **sports:** put the F1 headlines on the dashboard ([4bcda0a](https://github.com/humexxx/allstars-galaxy/commit/4bcda0a6a067720b39e8d6a6f1b14bb849b45a04))
+* **sports:** put the NBA on live data and make a scoreboard readable ([1053e07](https://github.com/humexxx/allstars-galaxy/commit/1053e0797b3b0707cf085efa578df6327742a399))
+* **sports:** show the US Open draw that is actually being played ([3e03da8](https://github.com/humexxx/allstars-galaxy/commit/3e03da8f79845eda6c842a74000ac7695eeeaf07))
+
+
+### Bug Fixes
+
+* address review findings on the review branch ([a7520a9](https://github.com/humexxx/allstars-galaxy/commit/a7520a995340070916e5ac9b7bb207395332e14a))
+* close cross-tenant writes, unify roles and tighten UI consistency ([773505e](https://github.com/humexxx/allstars-galaxy/commit/773505e6ac81021e14b0b78bf2e989ce12a3042b))
+* close the logic bugs found by the module audits ([23c85d4](https://github.com/humexxx/allstars-galaxy/commit/23c85d470b67080fb464578c44e4f21da6287189))
+* **db:** enable row-level security on every public table ([2134c34](https://github.com/humexxx/allstars-galaxy/commit/2134c3439c2dfe7256a3023c25eabcebfc22b18e))
+* **finance:** correct plan projections, today figures and comparisons ([564e860](https://github.com/humexxx/allstars-galaxy/commit/564e860477281e56ca5ca64ff929915a7ada1281))
+* **finance:** date opening balances and close the remaining projection gaps ([97f4832](https://github.com/humexxx/allstars-galaxy/commit/97f483266084926689402c91b5bd225a56c62046))
+* **finance:** make the chart's today point match the Today KPI ([f150877](https://github.com/humexxx/allstars-galaxy/commit/f1508779f3e15b6fb9d120601327ef3c969eb684))
+* **sports:** take the white plates off the constructor logos ([cb1d63c](https://github.com/humexxx/allstars-galaxy/commit/cb1d63c22b0fa528205183a4528c00c4e4b25bb3))
+
+
+### Performance
+
+* cache shared lookups, bound upstream fetches and split heavy client chunks ([0415294](https://github.com/humexxx/allstars-galaxy/commit/04152942c73f7f12f581d123cd7ce6866dca0eca))
+* **portal:** stream dashboard cards and dedupe shared plan/favourite lookups ([f15a353](https://github.com/humexxx/allstars-galaxy/commit/f15a353dce3be3d18fb309c3e3d073818d28c79a))
+
+
+### Refactor
+
+* **ui:** align the app on shadcn primitives and one action contract ([2b6ffa8](https://github.com/humexxx/allstars-galaxy/commit/2b6ffa8d292828d021291aaf2cbe4c92f4ee7b7d))
+
 ## [0.6.0](https://github.com/humexxx/allstars-galaxy/compare/v0.5.1...v0.6.0) (2026-08-24)
 
 

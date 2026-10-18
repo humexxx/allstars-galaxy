@@ -181,7 +181,7 @@ All code, comments, and documentation in **English**.
   `z.string().uuid()`), `isoDateSchema`, `moneySchema`
 
 ### Database Changes
-1. Edit `db/schema.ts`
+1. Edit `db/schema.ts` — a new table ends in `.enableRLS()` (see **Security**)
 2. `pnpm db:generate`
 3. `pnpm db:migrate` (see "Running migrations" below for caveats)
 4. Commit schema + migrations together
@@ -226,6 +226,14 @@ is missing and `DATABASE_URL` points at the transaction pooler.
   - **Plain "is signed in" checks** → `requireAuth()` / `requireAuthCached()`
     from the same module.
 - All service queries filter by `userId` for ownership
+- **Every `public` table has RLS on and no policies.** Supabase's Data API
+  serves those tables to anyone holding the publishable key — which ships in
+  the browser bundle — and until migration 0053 it handed out every row. The
+  app never goes through that API: Drizzle connects as `postgres`, the tables'
+  owner, which RLS does not apply to. So a new table chains `.enableRLS()`
+  (`db/schema.test.ts` fails otherwise), and the `anon` / `authenticated`
+  roles hold no grants in `public`. Never use `FORCE ROW LEVEL SECURITY` — it
+  would lock the app out too.
 - Always validate input with Zod
 - No secrets in client code
 

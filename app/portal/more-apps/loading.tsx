@@ -1,4 +1,3 @@
-import { PageHeaderSkeleton } from "@/components/skeletons/page-header-skeleton"
 import { PortalPageContainer } from "@/components/portal/page-container"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -7,7 +6,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 export default function MoreAppsLoading() {
   return (
     <PortalPageContainer>
-      <PageHeaderSkeleton />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
         {Array.from({ length: 6 }).map((_, i) => (
           <Card key={i} className="pt-0">

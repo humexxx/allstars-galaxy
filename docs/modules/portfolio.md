@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active (page redesigned to mirror plan-editor layout)
-> **Last reviewed:** 2026-09-29
+> **Last reviewed:** 2026-10-18
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical

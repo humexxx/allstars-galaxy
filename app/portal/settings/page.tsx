@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 
-import { PageHeader } from "@/components/portal/page-header";
 import { PortalPageContainer } from "@/components/portal/page-container";
 import { SettingsShell } from "@/components/settings/settings-shell";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
@@ -17,10 +16,7 @@ export default async function SettingsPage() {
 
   return (
     <PortalPageContainer>
-      <PageHeader
-        title="Settings"
-        description="Personal preferences for your portal experience."
-      />
+      <h1 className="sr-only">Settings</h1>
       <SettingsShell preferences={preferences} />
     </PortalPageContainer>
   );

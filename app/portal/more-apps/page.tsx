@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { LayoutGrid } from "lucide-react";
 
-import { PageHeader } from "@/components/portal/page-header";
 import { PortalPageContainer } from "@/components/portal/page-container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireAdminOrRedirect } from "@/lib/services/auth-server";
@@ -58,10 +57,7 @@ export default async function MoreAppsPage() {
 
   return (
     <PortalPageContainer>
-      <PageHeader
-        title="More apps"
-        description="Quick links to my other apps and projects."
-      />
+      <h1 className="sr-only">More apps</h1>
       {apps.length === 0 ? (
         <EmptyState
           icon={LayoutGrid}

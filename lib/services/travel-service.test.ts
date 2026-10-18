@@ -603,7 +603,7 @@ describe("getPublicTripByToken", () => {
         stops: [],
         photos: [],
         cost: null,
-        priceUnit: null,
+        rate: null,
         notes: null,
       },
     ]);
@@ -640,7 +640,7 @@ describe("getPublicTripByToken", () => {
       expect(item).not.toHaveProperty("payerIds");
       expect(item).not.toHaveProperty("attendeeIds");
       expect(item.cost).toBeNull();
-      expect(item.priceUnit).toBeNull();
+      expect(item.rate).toBeNull();
       expect(item.notes).toBeNull();
     }
     expect(out?.scope).toBeNull();
@@ -649,6 +649,8 @@ describe("getPublicTripByToken", () => {
     for (const hidden of ["613.47", "829.31", "141.29", "per_night", "QX7RTA", "jason"]) {
       expect(payload).not.toContain(hidden);
     }
+    // Nothing to size, so the party is not even counted.
+    expect(dbMock.$count).not.toHaveBeenCalled();
   });
 
   it("gives a traveller's link without prices their items and none of the money", async () => {
@@ -676,7 +678,7 @@ describe("getPublicTripByToken", () => {
     expect(JSON.stringify(out)).not.toMatch(/829\.31|Wristbands/);
   });
 
-  it("prices a whole-trip link item by item, with the unit that explains each figure", async () => {
+  it("prices a whole-trip link as the planner does, with the arithmetic behind each figure", async () => {
     queueSelect([shareRow({ showPrices: true })]);
     queueSelect([tripFixture()]);
     queueSelect([
@@ -685,27 +687,48 @@ describe("getPublicTripByToken", () => {
         price: "600.00", priceMax: "800.00", notes: "Seat 14C",
       }),
       itemRow({
-        id: "i-2", title: "Hotel", price: "120.00", priceUnit: "per_night",
-        scheduledOn: "2026-06-02", endsOn: "2026-06-05",
+        id: "i-2", title: "Hotel", price: "120.00", priceMax: "150.00",
+        priceUnit: "per_night", scheduledOn: "2026-06-02", endsOn: "2026-06-05",
       }),
-      itemRow({ id: "i-3", title: "Dinner" }),
+      itemRow({
+        id: "i-3", title: "Star of the Seas", category: "cruise",
+        price: "1900.00", priceUnit: "per_person",
+      }),
+      itemRow({ id: "i-4", title: "Seaplane", price: "250.00", priceUnit: "per_person" }),
+      itemRow({ id: "i-5", title: "Dinner" }),
     ]);
     queueSelect([]); // photos
     queueSelect([]); // stops
     queueSelect([]); // payers
-    queueSelect([]); // attendees
+    queueSelect([
+      { itemId: "i-4", memberId: "jason" },
+      { itemId: "i-4", memberId: "bruno" },
+    ]); // attendees
+    // Three travellers. Only the count is read, never who they are.
+    dbMock.$count.mockResolvedValueOnce(3);
 
     const out = await getPublicTripByToken("tok");
 
-    expect(out?.items.map((i) => [i.title, i.cost, i.priceUnit])).toEqual([
-      ["SJO ⇄ MCO", { low: 600, high: 800 }, "total"],
+    expect(out?.items.map((i) => [i.title, i.cost, i.rate])).toEqual([
+      // A plain total has no arithmetic to show.
+      ["SJO ⇄ MCO", { low: 600, high: 800 }, null],
       // Three nights, not one: the unit is applied before the figure leaves.
-      ["Hotel", { low: 360, high: 360 }, "per_night"],
+      ["Hotel", { low: 360, high: 450 },
+        { low: 120, high: 150, unit: "per_night", times: 3 }],
+      // A fare for everybody is one fare per traveller, as on the planner's
+      // banner — counting it once made the trip look cheaper than it is.
+      ["Star of the Seas", { low: 5700, high: 5700 },
+        { low: 1900, high: 1900, unit: "per_person", times: 3 }],
+      // A fare for two is two fares, whoever else is going.
+      ["Seaplane", { low: 500, high: 500 },
+        { low: 250, high: 250, unit: "per_person", times: 2 }],
       // Unpriced is no figure, not $0.
       ["Dinner", null, null],
     ]);
     expect(out?.items[0].notes).toBe("Seat 14C");
     expect(out?.scope).toBeNull();
+    expect(dbMock.$count).toHaveBeenCalledOnce();
+    expect(JSON.stringify(out)).not.toMatch(/jason|bruno/);
   });
 
   it("hands a scoped link one traveller's figures and nobody else's", async () => {
@@ -748,6 +771,8 @@ describe("getPublicTripByToken", () => {
     // His half, on the item — and not the fare itself, which is Jason's half
     // as well.
     expect(out?.items[0].cost).toEqual({ low: 300, high: 400 });
+    // No arithmetic either: the fare per unit is the fare everybody splits.
+    expect(out?.items[0].rate).toBeNull();
     expect(out?.items[0]).not.toHaveProperty("price");
     expect(JSON.stringify(out?.items)).not.toMatch(/600|800/);
     // Jason is nowhere in what crosses the boundary.

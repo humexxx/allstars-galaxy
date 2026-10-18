@@ -128,8 +128,19 @@ export type PublicTripItem = Pick<
    * has priced the item.
    */
   cost: { low: number; high: number } | null;
-  /** Beside a whole-trip figure only, where "/ night" explains it. */
-  priceUnit: TripPriceUnit | null;
+  /**
+   * How a whole-trip figure was reached, for the line the planner prints
+   * under it: "$120 / night × 3", or a bare "/ night" when the unit applies
+   * once. Null on a plain total, on a scoped link — whose figure is a share,
+   * not a fare — and wherever there is no figure. `times` counts nights, or
+   * the travellers a fare is for; it never says who they are.
+   */
+  rate: {
+    low: number;
+    high: number;
+    unit: Exclude<TripPriceUnit, "total">;
+    times: number;
+  } | null;
   /** Hidden along with the money. */
   notes: string | null;
 };

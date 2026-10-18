@@ -8,6 +8,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { cn } from "@/lib/utils";
+import { niceTicks, yAxisWidth } from "@/lib/utils/chart-axis";
 import { formatCurrencyCompact } from "@/lib/utils/format";
 import type { ChartConfig } from "@/types/chart";
 
@@ -30,6 +31,7 @@ export function DashboardFinanceMiniChart({
   className?: string;
 }) {
   if (data.length === 0) return null;
+  const ticks = niceTicks(data.map((d) => d.netWorth));
   return (
     <ChartContainer config={chartConfig} className={cn("aspect-auto h-48 w-full", className)}>
       <AreaChart data={data} margin={{ left: 0, right: 0, top: 8, bottom: 0 }}>
@@ -40,12 +42,12 @@ export function DashboardFinanceMiniChart({
           axisLine={false}
           minTickGap={20}
         />
-        {/* Recharts reserves 8px for the tick even when it isn't drawn, so
-            52 is what leaves "-$100k" its minus sign; 44 clipped it. */}
         <YAxis
           tickLine={false}
           axisLine={false}
-          width={52}
+          width={yAxisWidth(ticks.map(formatCurrencyCompact))}
+          ticks={ticks}
+          domain={[ticks[0], ticks[ticks.length - 1]]}
           tickFormatter={formatCurrencyCompact}
         />
         <ChartTooltip content={<ChartTooltipContent indicator="line" />} />

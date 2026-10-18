@@ -15,6 +15,7 @@ import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
 import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
+import { getNflData } from "@/lib/services/espn-nfl-service";
 import {
   getFootballLeagueData,
   getWorldCupData,
@@ -30,6 +31,7 @@ import type {
   LolData,
   Match,
   NbaData,
+  NflData,
   PadelData,
   SportId,
   Team,
@@ -88,7 +90,7 @@ export async function setSportFavorite(
 
 /**
  * The dashboard's per-sport highlights, one per favourite, each read from the
- * same cached feed as its view; only the NFL is a fixture.
+ * same cached feed as its view.
  *
  * `exclude` is how F1 stays out of this card: it has one of its own that
  * carries the same highlight plus its news, and the same race in two cards
@@ -103,7 +105,7 @@ export async function getDashboardSportsSummary(
   // Football reads the Champions League alone — the one league the highlight
   // shows — so the dashboard spends two of football-data's ten a minute, not
   // eight.
-  const [lolData, f1Data, uclData, worldCupData, padelData, tennisData, nbaData] =
+  const [lolData, f1Data, uclData, worldCupData, padelData, tennisData, nbaData, nflData] =
     await Promise.all([
       favIds.includes("lol") ? getLolData() : Promise.resolve(null),
       favIds.includes("f1") ? getF1Data() : Promise.resolve(null),
@@ -114,6 +116,7 @@ export async function getDashboardSportsSummary(
       favIds.includes("padel") ? getPadelData() : Promise.resolve(null),
       favIds.includes("tennis") ? getTennisData() : Promise.resolve(null),
       favIds.includes("nba") ? getNbaData() : Promise.resolve(null),
+      favIds.includes("nfl") ? getNflData() : Promise.resolve(null),
     ]);
   return favIds
     .map((id) =>
@@ -125,6 +128,7 @@ export async function getDashboardSportsSummary(
         padelData,
         tennisData,
         nbaData,
+        nflData,
       }),
     )
     .filter((h): h is DashboardSportHighlight => h !== null);
@@ -149,6 +153,7 @@ type HighlightContext = {
   padelData: PadelData | null;
   tennisData: TennisData | null;
   nbaData: NbaData | null;
+  nflData: NflData | null;
 };
 
 function buildHighlight(
@@ -169,7 +174,7 @@ function buildHighlight(
     case "f1":
       return f1Highlight(base, ctx.f1Data ?? F1_DATA);
     case "nfl":
-      return nflHighlight(base);
+      return nflHighlight(base, ctx.nflData ?? NFL_DATA);
     case "tennis":
       return tennisHighlight(base, ctx.tennisData ?? TENNIS_DATA);
     case "padel":
@@ -288,10 +293,10 @@ function f1Highlight(base: HighlightBase, data: F1Data): DashboardSportHighlight
   };
 }
 
-function nflHighlight(base: HighlightBase): DashboardSportHighlight {
-  const teamsMap = new Map<string, Team>(NFL_DATA.teams.map((t) => [t.id, t]));
-  const featured = pickFeaturedMatch(NFL_DATA.games);
-  const afcLeader = NFL_DATA.standings.find(
+function nflHighlight(base: HighlightBase, data: NflData): DashboardSportHighlight {
+  const teamsMap = new Map<string, Team>(data.teams.map((t) => [t.id, t]));
+  const featured = pickFeaturedMatch(data.games);
+  const afcLeader = data.standings.find(
     (s) => s.conference === "afc" && s.position === 1
   );
   const afcTeam = afcLeader ? teamsMap.get(afcLeader.teamId) : null;
@@ -307,8 +312,8 @@ function nflHighlight(base: HighlightBase): DashboardSportHighlight {
     ...base,
     headline: featured
       ? matchHeadline(featured, teamsMap)
-      : `NFL · Season ${NFL_DATA.season}`,
-    context: featured?.stageLabel ?? `Season ${NFL_DATA.season}`,
+      : `NFL · Season ${data.season}`,
+    context: featured?.stageLabel ?? `Season ${data.season}`,
     tone: featured ? matchTone(featured) : "upcoming",
     secondary,
   };

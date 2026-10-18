@@ -1,10 +1,11 @@
 import "server-only";
 
 import { NBA_DATA } from "@/lib/data/sports/nba";
-import type { Match, MatchStatus, NbaData, Team } from "@/types/sports";
+import type { Match, MatchStatus, NbaConference, NbaData, NbaStanding, Team } from "@/types/sports";
 import { cachedFeed, upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://api.balldontlie.io/v1";
+const ESPN_STANDINGS_URL = "https://site.api.espn.com/apis/v2/sports/basketball/nba/standings";
 const REVALIDATE_SECONDS = 300;
 /**
  * The free tier allows five requests a minute, shared by everyone looking at
@@ -118,9 +119,13 @@ const TEAM_COLORS: Record<string, string> = {
   UTA: "#002B5C", WAS: "#002B5C",
 };
 
+/**
+ * Teams are keyed by abbreviation, not balldontlie's numeric id, so the ESPN
+ * table below can be joined onto the same teams.
+ */
 function teamFrom(t: BdlTeam): Team {
   return {
-    id: String(t.id),
+    id: t.abbreviation,
     name: t.full_name,
     shortName: t.name,
     code: t.abbreviation,
@@ -149,8 +154,8 @@ function matchFrom(game: BdlGame): Match {
   const played = game.status_state === "final" || game.status_state === "in";
   return {
     id: String(game.id),
-    homeTeamId: String(game.home_team.id),
-    awayTeamId: String(game.visitor_team.id),
+    homeTeamId: game.home_team.abbreviation,
+    awayTeamId: game.visitor_team.abbreviation,
     homeScore: played ? game.home_team_score : null,
     awayScore: played ? game.visitor_team_score : null,
     kickoff: game.datetime ?? `${game.date}T00:00:00Z`,
@@ -183,6 +188,99 @@ function recentAndNext(games: BdlGame[]): BdlGame[] {
   return [...played.slice(-6), ...ahead.slice(0, 6)];
 }
 
+type EspnStandingEntry = {
+  team?: { abbreviation?: string; displayName?: string; shortDisplayName?: string };
+  stats?: Array<{ name?: string; type?: string; displayValue?: string; value?: number }>;
+};
+
+type EspnStandings = {
+  children?: Array<{ abbreviation?: string; standings?: { entries?: EspnStandingEntry[] } }>;
+};
+
+/** Where ESPN's abbreviation is not the one balldontlie uses. */
+const ESPN_TO_BDL: Record<string, string> = {
+  GS: "GSW", NO: "NOP", NY: "NYK", SA: "SAS", UTAH: "UTA", WSH: "WAS",
+};
+
+function espnStat(entry: EspnStandingEntry, key: string): { value: number; display: string } {
+  const found = entry.stats?.find((s) => s.name === key || s.type === key);
+  const display = found?.displayValue ?? "";
+  const value = typeof found?.value === "number" ? found.value : Number(display);
+  return { value: Number.isFinite(value) ? value : 0, display };
+}
+
+/**
+ * Both conference tables from ESPN, joined onto balldontlie's teams.
+ *
+ * balldontlie's free tier serves no /standings, and deriving a table would
+ * take a request per hundred games. ESPN's public standings need no key and
+ * cost nothing from balldontlie's five a minute.
+ */
+function standingsFrom(json: EspnStandings): { standings: NbaStanding[]; teams: Team[] } {
+  const standings: NbaStanding[] = [];
+  const teams: Team[] = [];
+  for (const group of json.children ?? []) {
+    const conference: NbaConference | null =
+      group.abbreviation === "East" ? "east" : group.abbreviation === "West" ? "west" : null;
+    if (!conference) continue;
+    const rows = (group.standings?.entries ?? [])
+      .map((entry) => {
+        const espnCode = entry.team?.abbreviation;
+        if (!espnCode) return null;
+        const code = ESPN_TO_BDL[espnCode] ?? espnCode;
+        const won = espnStat(entry, "wins").value;
+        const lost = espnStat(entry, "losses").value;
+        const behind = espnStat(entry, "gamesBehind");
+        teams.push({
+          id: code,
+          name: entry.team?.displayName ?? code,
+          shortName: entry.team?.shortDisplayName ?? code,
+          code,
+          primaryColor: TEAM_COLORS[code],
+        });
+        return {
+          seed: espnStat(entry, "playoffSeed").value,
+          row: {
+            position: 0,
+            teamId: code,
+            conference,
+            played: won + lost,
+            won,
+            drawn: 0,
+            lost,
+            goalsFor: espnStat(entry, "pointsFor").value,
+            goalsAgainst: espnStat(entry, "pointsAgainst").value,
+            points: 0,
+            winPct: espnStat(entry, "winPercent").value,
+            // "-" for the leader.
+            gamesBehind: behind.display === "-" ? 0 : behind.value,
+            streak: espnStat(entry, "streak").display || "—",
+            last10: espnStat(entry, "lasttengames").display || "—",
+          } satisfies NbaStanding,
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+    const seeded = rows.every((r) => r.seed > 0);
+    rows
+      .sort((a, b) => (seeded ? a.seed - b.seed : b.row.winPct - a.row.winPct))
+      .forEach(({ row }, i) => standings.push({ ...row, position: i + 1 }));
+  }
+  return { standings, teams };
+}
+
+/**
+ * The table for the season the results belong to. ESPN names a season by the
+ * year it ends in (2025–26 is 2026), and `seasontype=2` keeps the preseason's
+ * exhibition records out of it.
+ */
+async function fetchStandings(season: number): Promise<EspnStandings> {
+  const res = await fetch(`${ESPN_STANDINGS_URL}?season=${season + 1}&seasontype=2`, {
+    signal: upstreamSignal(),
+  });
+  if (!res.ok) throw new Error(`espn nba standings ${res.status}`);
+  return (await res.json()) as EspnStandings;
+}
+
 async function fetchNbaFromApi(today: Date): Promise<NbaData> {
   const season = currentSeason(today);
   const { start, end } = gameWindow(today);
@@ -193,7 +291,7 @@ async function fetchNbaFromApi(today: Date): Promise<NbaData> {
   const byTeam = new Map<string, Team>();
   for (const game of games) {
     for (const t of [game.home_team, game.visitor_team]) {
-      if (!byTeam.has(String(t.id))) byTeam.set(String(t.id), teamFrom(t));
+      if (!byTeam.has(t.abbreviation)) byTeam.set(t.abbreviation, teamFrom(t));
     }
   }
 
@@ -207,14 +305,21 @@ async function fetchNbaFromApi(today: Date): Promise<NbaData> {
   const latestSeason =
     played[played.length - 1]?.season ?? sorted[sorted.length - 1]?.season ?? season;
 
+  // A table is an extra, not the feed: if ESPN is down the games still
+  // refresh, and the view drops the tab rather than inventing one.
+  const table = await fetchStandings(latestSeason)
+    .then(standingsFrom)
+    .catch((error) => {
+      console.warn("espn nba standings unavailable:", error);
+      return { standings: [] as NbaStanding[], teams: [] as Team[] };
+    });
+  for (const team of table.teams) if (!byTeam.has(team.id)) byTeam.set(team.id, team);
+
   return {
     season: seasonLabel(latestSeason),
     teams: [...byTeam.values()],
     games: sorted.map(matchFrom),
-    // The free tier does not serve /standings, and deriving a table would
-    // take a request per hundred games. The view drops the tab rather than
-    // showing a made-up one next to real scores.
-    standings: [],
+    standings: table.standings,
   };
 }
 
@@ -231,4 +336,11 @@ export const getNbaData = cachedFeed(
 );
 
 /** Pure helpers, exported for their tests — nothing here touches the network. */
-export const __testing = { currentSeason, seasonLabel, recentAndNext, statusFrom, gameWindow };
+export const __testing = {
+  currentSeason,
+  seasonLabel,
+  recentAndNext,
+  statusFrom,
+  gameWindow,
+  standingsFrom,
+};

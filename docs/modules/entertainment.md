@@ -1,16 +1,16 @@
 # Entertainment
 
-> **Status:** In progress (travel shipped + dashboard card; sports UI shipped, favourites end-to-end on DB; LoL, F1, football, World Cup, padel, tennis and NBA wired to free live providers)
+> **Status:** In progress (travel shipped + dashboard card; sports UI shipped, favourites end-to-end on DB; LoL, F1, football, World Cup, padel, tennis, NBA and NFL wired to free live providers)
 > **Last reviewed:** 2026-10-18
 
 ## Overview
 Two sub-modules: Travel Planner (trips, items, photos, public sharing) and
 Sports (live scores, standings and brackets for football, F1, NBA, tennis,
 padel, NFL and League of Legends, plus a per-user favourites picker). Every
-sport but the NFL is wired to a free live provider (Lolesports for LoL,
-Jolpica-F1 + ESPN for F1, football-data.org for football and the World Cup,
-Padel API for padel, ESPN for tennis, balldontlie for the NBA); the NFL is a
-fixture.
+sport is wired to a free live provider (Lolesports for LoL, Jolpica-F1 + ESPN
+for F1, football-data.org for football and the World Cup, Padel API for padel,
+ESPN for tennis and the NFL, balldontlie + ESPN's table for the NBA) and falls
+back to its fixture only when its feed has never answered.
 
 ## Routes
 - `/portal/entertainment/travel-planner` — list of trips (authenticated)
@@ -40,14 +40,15 @@ fixture.
   member: the foreign key proves the row exists, not which trip it is on.
   `updateTrip` / `deleteTrip` scope the WHERE by owner and `updateTrip` throws
   when no row matched
-- `sports-service.ts` — favourites CRUD + `getDashboardSportsSummary` that materialises one highlight per favourited sport from the same feeds as the views (football via `getFootballLeagueData("uefa-champions-league")` only, World Cup via `getWorldCupData()` — featured knockout match + latest result, NBA via `getNbaData()`, LoL, F1, padel, tennis); only the NFL reads its fixture
+- `sports-service.ts` — favourites CRUD + `getDashboardSportsSummary` that materialises one highlight per favourited sport from the same feeds as the views (football via `getFootballLeagueData("uefa-champions-league")` only, World Cup via `getWorldCupData()` — featured knockout match + latest result, NBA via `getNbaData()`, NFL via `getNflData()`, LoL, F1, padel, tennis)
 - `lolesports-service.ts` — `getLolData()` fetches Worlds / MSI / First Stand (only while on or ≤21 days after the final, listed first) plus LEC/LCS/LCK/LPL from Lolesports' unofficial API (`esports-api.lolesports.com`), maps to `LolData` including playoff `BracketRound[]` (one round per standings section, **split by the schedule's `blockName`** when a whole playoff arrives as one section — `buildLolBracket`; the TBD-count heuristic remains only as fallback for unnamed sections), picks the currently-active tournament (never the future split), keeps only that tournament's schedule events, maps `regular_season` / `groups` / `group_stage` / `swiss` into standings and leaves play-ins out of the bracket. A completed event missing `result` renders "—", never a fake 0–0. Cached 5 min via `cachedFeed`, `LOL_DATA` only when there is no last good answer
 - `jolpica-f1-service.ts` — `getF1Data()` fetches current-season races, driver + constructor standings and the podium (`results/1|2|3` — one row per race, because `limit` is capped at 100) from Jolpica-F1 (`api.jolpi.ca/ergast/f1`, Ergast-compatible drop-in), maps to `F1Data` with derived race status and podium tallies, cached 5 min via `cachedFeed`, `F1_DATA` only when there is no last good answer
 - `espn-f1-standings-service.ts` — `getF1DashboardStandings(top)` reads ESPN's public `site.api.espn.com` racing standings (no key) for the dashboard card only, because Jolpica carries no driver photos or team liveries and the card wants both. Cached 5 min, returns `null` when ESPN fails and there is no last good answer, so the card simply drops the tables. Two provider quirks it has to work around: the points figure is `championshipPts` for drivers but `points` for constructors (a variadic `stat()` takes the first name that resolves, or every constructor reads 0 pts), and ESPN's `abbreviation` on a constructor row is the *driver's* initials — Mercedes came through as "LP" — so `teamCode()` derives the code from the team name instead. ESPN publishes no constructor logo at all — every racing `teamlogos` path 404s — so `TEAM_LOGOS` maps ESPN's team name to a file under `public/f1/teams/`
 - `football-data-service.ts` — `getFootballLeagueData(id)` fetches standings + matches for one of UCL, La Liga, EPL and Serie A from football-data.org (each its own 5-min `cachedFeed` entry; `getFootballData()` is all four), keeps the last good table through a failed refresh and falls back per league to the fixture only when cold. Requires `FOOTBALL_DATA_API_KEY`. Stops sending once the provider's `x-requests-available-minute` reaches 0 or it answers 429 (until `x-requestcounter-reset`), two requests in flight at most; shoot-outs come out of `fullTime` into `Match.penalties` (`goalsOf`); form is derived from the fetched matches (`formFromMatches`) since the free tier sends `form: null`. Knockout competitions (UCL) fetch the full season in ONE matches call and derive both recent matches and the two-legged knockout bracket (`buildKnockoutBracket` pairs legs by team set → aggregate + winner; **aggregate/winner stay `null` until BOTH legs are `FINISHED`** — summing scheduled legs with `?? 0` used to fabricate an aggregate and bold a "winner" mid-tie); league-only competitions use a ±60d window (capped 40). Finished cup matches map `score.duration` to `aet`/`pen` statuses. Stage labels use real round names (Round of 16 / Quarter-finals / etc.) for knockout, "Matchday N" for league play. Also exports `getWorldCupData()` (cache tag `sports:worldcup`, mock fallback `WORLD_CUP_DATA`): ONE `/competitions/WC/matches` call derives group tables (`buildGroupStandings` computes W/D/L/GF/GA/Pts per group from finished GROUP_STAGE matches → `FootballLeagueData.groups`), the flat match list, AND the single-leg knockout bracket. Undecided knockout fixtures come back with **all team fields `null`** (`teamFromFd` returns `null` → TBD bracket slots; TBD-vs-TBD fixtures are excluded from the flat match list but kept in the bracket). `KNOCKOUT_ROUND_ORDER` covers LAST_32 and THIRD_PLACE for cup formats. Cold-load cost is 2 calls per competition and 1 for the World Cup
 - `padel-api-service.ts` — `getPadelData()` fetches men's + women's rankings (`per_page`, not `limit`) and the Premier Padel calendar (`level=major,p1,p2,finals`, last 45 days on) from Padel API (`padelapi.org/api`), maps `pending | live | finished` and each category's `winners` into `PadelData`, cached 5 min via `cachedFeed`, `PADEL_DATA` only when cold. Requires `PADEL_API_KEY`
 - `espn-tennis-service.ts` — `getTennisData()` reads ESPN's public tennis API (no key) for both tours: one scoreboard over today ±14 days (calendar, status from the matches, champion, every main draw — `tournamentFrom`) and the top 20 of `/rankings` (`rankingFrom`). Cached 5 min via `cachedFeed`, `TENNIS_DATA` only when cold
-- `balldontlie-nba-service.ts` — `getNbaData()` reads one page of balldontlie games (`BALLDONTLIE_API_KEY`): today ±4 days in season, June 1 → +130 days out of season (`gameWindow`), trimmed to the last six finals and next six fixtures. Cached 5 min via `cachedFeed`, `NBA_DATA` only when cold
+- `balldontlie-nba-service.ts` — `getNbaData()` reads one page of balldontlie games (`BALLDONTLIE_API_KEY`): today ±4 days in season, June 1 → +130 days out of season (`gameWindow`), trimmed to the last six finals and next six fixtures, plus ESPN's regular-season table for the season those results belong to (`standingsFrom`; teams keyed by abbreviation so the two join). Cached 5 min via `cachedFeed`, `NBA_DATA` only when cold
+- `espn-nfl-service.ts` — `getNflData()` reads ESPN's public NFL API (no key): this week's scoreboard, `standings?level=3` (conference seed + division), and in the postseason one scoreboard per round for the bracket (`roundFrom`). Cached 5 min via `cachedFeed`, `NFL_DATA` only when cold
 
 ## Schemas — `/schemas/`
 - `travel.ts` — `createTripSchema`, `updateTripSchema`, `tripItemBaseSchema` →
@@ -123,7 +124,8 @@ fixture.
   a browser with no session, which is the only place the server/client boundary
   is real
 - `lib/services/sports-service.test.ts` — Vitest, mocks `@/db`; covers favourites CRUD + dashboard summary shape per sport, and the NBA highlight reading the live feed
-- `lib/services/{football-data,jolpica-f1,espn-tennis,padel-api,balldontlie-nba,lolesports}-service.test.ts` — Vitest, the mappers against trimmed copies of each provider's real payload (shoot-outs, form, budget headers, podium steps, ESPN draw states, padel states, NBA window, LoL blocks); `upstream.test.ts` covers `cachedFeed`
+- `lib/services/{football-data,jolpica-f1,espn-tennis,espn-nfl,padel-api,balldontlie-nba,lolesports}-service.test.ts` — Vitest, the mappers against trimmed copies of each provider's real payload (shoot-outs, form, budget headers, podium steps, ESPN draw states, NFL seeds/divisions/bracket, padel states, NBA window and table, LoL blocks); `upstream.test.ts` covers `cachedFeed`
+- `lib/sports/load.test.ts` — Vitest; `sample` is set when a sport serves its fixture and not otherwise
 - `components/entertainment/sports/shared/score-card.test.tsx` — Vitest + jsdom; a shoot-out prints beside the score and marks its winner
 - `app/actions/sports.test.ts` — Vitest, mocks impersonation + service + `next/cache`; covers happy path, zod rejection, auth failure, impersonation routing
 - `e2e/sports-favorites.spec.ts` — Playwright, real Supabase user; covers empty CTA → toggle → persistence → dashboard highlights → un-toggle round trip
@@ -506,7 +508,8 @@ fixture.
 - `app/portal/entertainment/loading.tsx`, `app/portal/entertainment/travel-planner/[id]/not-found.tsx`, and `app/portal/entertainment/error.tsx` give the module its skeleton / 404 / error boundaries.
 - **Sports data — sources (as of 2026-10-18):**
   - **Live**: LoL (Lolesports, with Worlds / MSI / First Stand while they run), F1 (Jolpica-F1; ESPN for the dashboard card), football (football-data.org — UCL/La Liga/EPL/Serie A), World Cup (football-data.org — its own `worldcup` sport tab, NOT in the football league selector; the 2026 edition is over, so the tab shows the finished tournament), padel (Padel API — men + women rankings + Premier Padel calendar), tennis (ESPN — calendar, draws and rankings), NBA (balldontlie — games only). All share the same shape: live fetch → map into the existing typed data shape → cached **5 min** via `cachedFeed` ([`lib/services/upstream.ts`](../../lib/services/upstream.ts)), which keeps the last good answer through a failed refresh and falls back to the mock fixture only when there has never been one → fetched by [`lib/sports/load.ts`](../../lib/sports/load.ts) for **the active sport only** and passed to `SportsHub` as one `SportPayload`.
-  - **Mock only**: NFL (no decent free provider with current-season data). NBA standings stay empty: balldontlie's free tier blocks `/standings`, and computing them from 1230 games would cost 13 paginated calls at 5 req/min.
+  - **Also live**: NFL (ESPN — scoreboard, standings, postseason bracket) and the NBA's table (ESPN; balldontlie's free tier blocks `/standings`, and computing it from 1230 games would cost 13 paginated calls at 5 req/min).
+  - **Mock only**: none. Each sport still has its fixture, served only when its feed has never answered, and the hub then says so (see `SportPayload.sample`).
   - **Rejected providers**: API-SPORTS (free tier hard-locked to seasons 2022–2024, useless for current data; paid plan ~$100/mo); Riot Games official API (no esports/tournament data, only personal player stats); TheSportsDB (its free key `3` now answers 403 to everything, and the replacement test key `123` returns one past event per tour and nothing upcoming).
   - **Env vars**: `FOOTBALL_DATA_API_KEY`, `BALLDONTLIE_API_KEY` and `PADEL_API_KEY` (all optional — the service falls back to mock when unset). Lolesports, Jolpica and ESPN need no key.
 - **A failed refresh used to cache the mock.** Every service caught its own error inside `unstable_cache` and returned the fixture, which was then stored as the data for the full five minutes — one football-data 429 was five minutes of invented tables. `unstable_cache` already keeps a stale entry when its callback throws, so `cachedFeed` lets the fetch throw and applies the fallback outside the cache.
@@ -533,17 +536,38 @@ fixture.
   requests a minute shared by every visitor**, so a cold cache spends exactly
   one — a single window, trimmed to the last six results and next six
   fixtures in memory rather than by a second request; and `/standings` is not
-  on the free tier, so `standings` comes back empty and the view drops the tab
-  instead of showing an invented table beside real scores. **A page is the
+  on the free tier, so the table comes from ESPN's public standings instead —
+  for the season the results belong to (`season` + 1, ESPN's end-year label,
+  `seasontype=2` so preseason exhibitions stay out), and dropped rather than
+  failing the feed if ESPN does not answer. Teams are keyed by abbreviation
+  (`NYK`, not balldontlie's `20`), with ESPN's six differing codes (`NY`,
+  `GS`, `SA`, `NO`, `UTAH`, `WSH`) mapped across. **A page is the
   oldest hundred games in the range**, so the window is today ±4 days in
   season and June 1 → +130 days out of it (`gameWindow`); the old ±130 days
   would have frozen on the season's first fortnight from November. Out of
   season that window is what surfaces June's finals next to October's opener,
   and the heading names the season the **results** belong to, not the
   fixtures'. The dashboard card reads the same feed (it read `NBA_DATA`).
-- **Only the NFL is sample data now**, via `SAMPLE_DATA_SPORTS`. It has no free
-  provider with current data, so it renders a hand-written season — and a
-  hand-written season with nothing admitting it reads as a broken live view.
+- **The Sample data notice follows the payload, not a list of sports.**
+  `loadSport` sets `SportPayload.sample` when a feed hands back its fixture —
+  an identity check, since `cachedFeed` returns the fixture object itself and
+  never a copy. The fixed `SAMPLE_DATA_SPORTS` set held only the NFL, and a
+  live sport serving its fixture (a missing key, a provider down on a cold
+  cache) said nothing at all.
+- **The NFL is ESPN's public API**
+  ([`lib/services/espn-nfl-service.ts`](../../lib/services/espn-nfl-service.ts)),
+  the same endpoints espn.com reads. It had been a fixture on the belief that
+  no free provider carried current data; its invented Super Bowl LX was
+  Chiefs–Lions, the real one Seahawks 29–13 Patriots.
+  - `standings?level=3` nests conference → division, the only place the
+    division is named; each team sits at ESPN's conference seed.
+  - ESPN takes no date range for the NFL, so the bracket is one scoreboard per
+    round (`dates=<season>&seasontype=3&week=1|2|3|5`; week 4 is the Pro
+    Bowl), fetched only once the season type is postseason or off-season.
+  - Badges stay monograms in club colour, as before: a logo on a disc of its
+    own colour disappears (the Chiefs' red arrowhead on red). The scoreboard
+    names a colour only for teams playing that week, so the colours are a
+    table.
 - **Tennis has a draw.** `RacquetTournament.bracket` had been in the type since
   the start with nothing rendering it. `KnockoutBracket` now takes an optional
   `renderMatch`, so the same round/lane/mobile machinery draws a tennis tie

@@ -14,7 +14,7 @@ Built with **Next.js 16 (App Router)**, **React 19** (Server Components),
 | Finance | Plans (incomes / expenses / debts) with monthly confirmation & health scoring | [docs/modules/finance.md](docs/modules/finance.md) |
 | Portfolio | Real portfolio: transactions, snapshots, investment methods | [docs/modules/portfolio.md](docs/modules/portfolio.md) |
 | Productivity | Personal kanban board + long-term road paths with milestones | [docs/modules/productivity.md](docs/modules/productivity.md) |
-| Entertainment / Travel | Trip planner with public share links | [docs/modules/entertainment.md](docs/modules/entertainment.md) |
+| Entertainment | Trip planner with public share links, plus live sports scores, standings and F1 news | [docs/modules/entertainment.md](docs/modules/entertainment.md) |
 | Admin | User management, transaction approvals, impersonation | [docs/modules/admin.md](docs/modules/admin.md) |
 | Auth | Supabase email auth + server action wrappers | [docs/modules/auth.md](docs/modules/auth.md) |
 
@@ -53,6 +53,8 @@ See [`.env.example`](.env.example) for the full template. Minimum:
 - `DATABASE_URL` — Supabase transaction pooler (port `6543`), used by the app
 - `DIRECT_URL` — Supabase session pooler (port `5432`), used by `drizzle-kit`
 - `CRON_SECRET` — protects `/api/cron/daily`
+- `ALLOW_SIGNUPS` — `true` opens new accounts; anything else keeps them closed,
+  and the landing's calls to action point at login instead
 
 ## Releases
 

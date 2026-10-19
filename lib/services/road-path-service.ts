@@ -40,7 +40,7 @@ export async function getUserRoadPaths(userId: string): Promise<RoadPathWithDeta
         orderBy: [asc(roadPathMilestones.order)],
       },
       progress: {
-        orderBy: [desc(roadPathProgress.date)],
+        orderBy: [desc(roadPathProgress.date), desc(roadPathProgress.createdAt)],
       },
       tasks: {
         orderBy: [desc(boardTasks.createdAt)],
@@ -62,7 +62,7 @@ export async function getRoadPath(roadPathId: string, userId: string): Promise<R
         orderBy: [asc(roadPathMilestones.order)],
       },
       progress: {
-        orderBy: [desc(roadPathProgress.date)],
+        orderBy: [desc(roadPathProgress.date), desc(roadPathProgress.createdAt)],
       },
       tasks: {
         orderBy: [desc(boardTasks.createdAt)],
@@ -285,10 +285,12 @@ export async function createRoadPathProgress(
       .returning();
 
     // currentValue is the NEWEST entry by date, not the last one typed: a
-    // backdated entry used to overwrite a more recent figure.
+    // backdated entry used to overwrite a more recent figure. Form entries
+    // land on the day's midnight, so two on the same day tie — the later
+    // one written wins.
     const latest = await tx.query.roadPathProgress.findFirst({
       where: eq(roadPathProgress.roadPathId, data.roadPathId),
-      orderBy: [desc(roadPathProgress.date)],
+      orderBy: [desc(roadPathProgress.date), desc(roadPathProgress.createdAt)],
     });
     await tx
       .update(roadPaths)
@@ -325,7 +327,7 @@ export async function deleteRoadPathProgress(progressId: string, userId: string)
 
   const latestProgress = await db.query.roadPathProgress.findFirst({
     where: eq(roadPathProgress.roadPathId, progress.roadPathId),
-    orderBy: [desc(roadPathProgress.date)],
+    orderBy: [desc(roadPathProgress.date), desc(roadPathProgress.createdAt)],
   });
 
   // No entries left means no progress — the deleted figure must not linger.

@@ -4,11 +4,12 @@ import { revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
 import { requireAdminCached } from "@/lib/services/auth-server";
-import { applyMonthlyInterest, markInterestApplied } from "@/lib/services/interest-service";
+import { applyMonthlyInterest, interestMonthOf } from "@/lib/services/interest-service";
 import {
   createManualSnapshotsForAllPortfolios,
   deleteManualSnapshotsForAllPortfolios,
 } from "@/lib/services/snapshot-service";
+import { formatMonthLong } from "@/lib/utils/date";
 import {
   manualSnapshotFormSchema,
   type ManualSnapshotFormData,
@@ -16,8 +17,9 @@ import {
 
 /**
  * Create a manual snapshot for all portfolios.
- * Optionally applies monthly interest first (affects every portfolio).
- * Admin only.
+ * Optionally applies monthly interest first (affects every portfolio), for
+ * the snapshot's month — refused when that month was already compounded, by
+ * this or the daily cron. Admin only.
  */
 export async function createManualSnapshotAction(
   data: ManualSnapshotFormData,
@@ -32,9 +34,18 @@ export async function createManualSnapshotAction(
     const validated = parsed.data;
 
     if (validated.applyInterest) {
-      await applyMonthlyInterest(validated.date);
-      // Otherwise the cron applies the same month again on the 1st.
-      await markInterestApplied();
+      // Months up to the one on record count as done, so claiming a month
+      // that has not started would make the cron skip every month up to it.
+      if (interestMonthOf(validated.date) > interestMonthOf(new Date())) {
+        return { success: false, error: "Interest can't be applied for a future month" };
+      }
+      const run = await applyMonthlyInterest(validated.date, validated.date);
+      if (!run.applied) {
+        return {
+          success: false,
+          error: `Interest for ${formatMonthLong(`${run.month}-01`)} has already been applied`,
+        };
+      }
     }
 
     const { snapshotsCreated, totalValue } =

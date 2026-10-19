@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
@@ -25,13 +25,19 @@ import { moneyRange } from "@/lib/travel/format";
 import { formatMonthLong, formatWeekdayDay } from "@/lib/utils/date";
 import { MarqueeText } from "./marquee-text";
 
-import type { CalendarTrip, TripItemWithStops } from "@/types/travel";
+import type {
+  CalendarTrip,
+  SharedCalendarTrip,
+  TripItem,
+  TripItemWithStops,
+} from "@/types/travel";
 import { moveTripItemAction } from "@/app/actions/travel";
 /**
  * Loaded when an item is opened, never before.
  *
- * The shared page mounts this calendar read-only, and a visitor who cannot
- * edit anything has no reason to download the form that edits it.
+ * The shared page mounts `SharedTripCalendar`, which never renders it, and a
+ * visitor who cannot edit anything has no reason to download the form that
+ * edits it.
  */
 const ItemForm = dynamic(() =>
   import("./item-form").then((m) => ({ default: m.ItemForm }))
@@ -96,6 +102,16 @@ const COL_SPAN = [
   "col-span-5", "col-span-6", "col-span-7",
 ];
 
+/** What the month draws an item from, whoever is looking at it. */
+type MonthItem = Pick<TripItem, "id" | "title" | "category" | "scheduledOn" | "endsOn">;
+
+/** The planner's handles on an item. A shared link has none. */
+type MonthEdit = {
+  open: (itemId: string) => void;
+  move: (itemId: string, dates: { scheduledOn: string; endsOn: string | null }) => void;
+  busy: boolean;
+};
+
 /**
  * The trip laid out on the calendar it will actually happen on.
  *
@@ -107,35 +123,51 @@ const COL_SPAN = [
  * chip in each cell, because the length of the bar IS the information. A
  * return flight is deliberately two bars and not one: its second date is the
  * day it comes back, not a day it occupies.
+ *
+ * Drawn from `MonthItem` and nothing wider, so the share link's version can be
+ * handed only what it shows. The planner's `TripCalendar` and the link's
+ * `SharedTripCalendar` decide the figures and whether a bar is a handle.
  */
-export function TripCalendar({
-  trip,
-  partySize = 1,
-  viewer = null,
-  readOnly = false,
-  showPrices = true,
+function MonthCalendar({
+  startDate,
+  endDate,
+  items: source,
+  prices,
+  badge,
+  edit,
+  children,
 }: {
-  trip: CalendarTrip;
-  partySize?: number;
-  viewer?: ItineraryViewer | null;
-  /** A share link created without prices must not print them on the bars. */
-  showPrices?: boolean;
+  startDate: string;
+  endDate: string | null;
+  /** Already narrowed to whoever the month is for. */
+  items: MonthItem[];
   /**
-   * A shared link shows the month; it does not rearrange it. The month arrows
-   * stay — reading the plan means looking at the days around it — but the
-   * bars stop being handles and the editor never loads.
+   * The figure on each bar, by item id.
+   *
+   * On the item rather than on the day: the figure used to sit in the day
+   * cell, which meant a day with two bookings showed one number belonging to
+   * neither. On the bar it is unambiguous, and the day keeps the room the
+   * number was taking.
    */
-  readOnly?: boolean;
+  prices: ReadonlyMap<string, string>;
+  /** Whose share the figures are; null for the trip itself. */
+  badge: string | null;
+  /**
+   * Absent on a shared link, which shows the month and does not rearrange
+   * it. The month arrows stay — reading the plan means looking at the days
+   * around it — but the bars stop being handles.
+   */
+  edit?: MonthEdit;
+  /** The planner's editor dialog. */
+  children?: ReactNode;
 }) {
-  const tripMonth = trip.startDate.slice(0, 7);
+  const readOnly = !edit;
+  const tripMonth = startDate.slice(0, 7);
   const [month, setMonth] = useState(tripMonth);
-
-  /** Only what the selected traveller is part of; the whole plan otherwise. */
-  const mine = useMemo(() => viewerItems(trip.items, viewer), [trip.items, viewer]);
 
   const items: CalendarItem[] = useMemo(
     () =>
-      mine
+      source
         .filter((i) => i.scheduledOn)
         .map((i) => ({
           id: i.id,
@@ -144,7 +176,7 @@ export function TripCalendar({
           scheduledOn: i.scheduledOn,
           endsOn: i.endsOn,
         })),
-    [mine]
+    [source]
   );
 
   const weeks = useMemo(() => monthWeeks(month), [month]);
@@ -166,51 +198,22 @@ export function TripCalendar({
       }),
     [weeks, items]
   );
-  const byId = useMemo(() => new Map(trip.items.map((i) => [i.id, i])), [trip.items]);
-
-  /**
-   * What each item costs, on the item rather than on the day.
-   *
-   * The figure used to sit in the day cell, which meant a day with two
-   * bookings showed one number belonging to neither. On the bar it is
-   * unambiguous, and the day keeps the room the number was taking.
-   */
-  const costByItem = useMemo(() => {
-    const map = new Map<string, string>();
-    if (!showPrices) return map;
-    for (const item of trip.items) {
-      if (item.price === null) continue;
-      const c = readerCost(item, partySize, viewer);
-      if (c.high > 0) map.set(item.id, moneyRange(c.low, c.high, trip.currency));
-    }
-    return map;
-  }, [trip.items, partySize, viewer, trip.currency, showPrices]);
+  const byId = useMemo(() => new Map(source.map((i) => [i.id, i])), [source]);
 
   // Snapshotted once, not read during render: this component is rendered on
   // the server too, and a server in UTC against a reader six hours behind
   // would ring a different cell in each pass and hydrate mismatched.
   const [today] = useState(() => isoDay(new Date()));
-  const [editing, setEditing] = useState<TripItemWithStops | null>(null);
   const [overDay, setOverDay] = useState<string | null>(null);
-  const [isMoving, startMove] = useTransition();
 
   const handleDrop = (payload: DragPayload, targetDay: string) => {
     const item = byId.get(payload.id);
-    if (!item?.scheduledOn) return;
+    if (!edit || !item?.scheduledOn) return;
     const delta = daysBetween(payload.grabbedOn, targetDay);
     if (delta === 0) return;
-    const scheduledOn = shiftDay(item.scheduledOn, delta);
-    startMove(async () => {
-      const res = await moveTripItemAction(trip.id, {
-        id: item.id,
-        scheduledOn,
-        endsOn: item.endsOn ? shiftDay(item.endsOn, delta) : null,
-      });
-      if (res.success) {
-        toast.success(`Moved to ${dayLabel(scheduledOn)}`);
-      } else {
-        toast.error(res.error);
-      }
+    edit.move(item.id, {
+      scheduledOn: shiftDay(item.scheduledOn, delta),
+      endsOn: item.endsOn ? shiftDay(item.endsOn, delta) : null,
     });
   };
 
@@ -226,8 +229,8 @@ export function TripCalendar({
     const index = Math.floor(((clientX - rect.left) / rect.width) * 7);
     return week[Math.min(6, Math.max(0, index))];
   };
-  const tripEnd = trip.endDate ?? trip.startDate;
-  const inTrip = (day: string) => day >= trip.startDate && day <= tripEnd;
+  const tripEnd = endDate ?? startDate;
+  const inTrip = (day: string) => day >= startDate && day <= tripEnd;
 
   return (
     <Card>
@@ -240,9 +243,9 @@ export function TripCalendar({
           className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2"
         >
           <span>{formatMonthLong(`${month}-01`)}</span>
-          {viewer && (
+          {badge && (
             <Badge variant="outline" className="text-2xs font-normal">
-              {viewer.isYou ? "your share" : `${viewer.name}'s share`}
+              {badge}
             </Badge>
           )}
         </CardTitle>
@@ -367,7 +370,7 @@ export function TripCalendar({
                 {segments.map((seg) => {
                   const meta = categoryMeta(seg.item.category);
                   const full = byId.get(seg.item.id);
-                  const price = costByItem.get(seg.item.id);
+                  const price = prices.get(seg.item.id);
                   // One booking, one price. Both halves of a there-and-back
                   // open a run, so printing it on each made a single
                   // $600–$800 fare read as $1,200–$1,600 on the month.
@@ -392,23 +395,15 @@ export function TripCalendar({
                           aria-label={
                             readOnly ? seg.item.title : `Edit ${seg.item.title}`
                           }
-                          onClick={
-                            readOnly
-                              ? undefined
-                              : () => {
-                                  const full = byId.get(seg.item.id);
-                                  if (full) setEditing(full);
-                                }
-                          }
+                          onClick={edit ? () => edit.open(seg.item.id) : undefined}
                           onKeyDown={
-                            readOnly
-                              ? undefined
-                              : (e) => {
+                            edit
+                              ? (e) => {
                                   if (e.key !== "Enter" && e.key !== " ") return;
                                   e.preventDefault();
-                                  const full = byId.get(seg.item.id);
-                                  if (full) setEditing(full);
+                                  edit.open(seg.item.id);
                                 }
+                              : undefined
                           }
                           style={{
                             gridRow: seg.lane + 1,
@@ -420,7 +415,7 @@ export function TripCalendar({
                             // is too — the shared page's bars had no focus mark.
                             "outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             !readOnly && "cursor-pointer",
-                            isMoving && "opacity-60",
+                            edit?.busy && "opacity-60",
                             meta.bar,
                             COL_START[seg.start],
                             COL_SPAN[seg.span - 1],
@@ -513,6 +508,65 @@ export function TripCalendar({
         })}
       </CardContent>
 
+      {children}
+    </Card>
+  );
+}
+
+/** The planner's month: costed for the selected traveller, and every bar a handle. */
+export function TripCalendar({
+  trip,
+  partySize = 1,
+  viewer = null,
+}: {
+  trip: CalendarTrip;
+  partySize?: number;
+  viewer?: ItineraryViewer | null;
+}) {
+  /** Only what the selected traveller is part of; the whole plan otherwise. */
+  const mine = useMemo(() => viewerItems(trip.items, viewer), [trip.items, viewer]);
+  const byId = useMemo(() => new Map(trip.items.map((i) => [i.id, i])), [trip.items]);
+
+  const prices = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of trip.items) {
+      if (item.price === null) continue;
+      const c = readerCost(item, partySize, viewer);
+      if (c.high > 0) map.set(item.id, moneyRange(c.low, c.high, trip.currency));
+    }
+    return map;
+  }, [trip.items, partySize, viewer, trip.currency]);
+
+  const [editing, setEditing] = useState<TripItemWithStops | null>(null);
+  const [isMoving, startMove] = useTransition();
+
+  const edit: MonthEdit = {
+    open: (itemId) => {
+      const full = byId.get(itemId);
+      if (full) setEditing(full);
+    },
+    move: (itemId, dates) => {
+      startMove(async () => {
+        const res = await moveTripItemAction(trip.id, { id: itemId, ...dates });
+        if (res.success) {
+          toast.success(`Moved to ${dayLabel(dates.scheduledOn)}`);
+        } else {
+          toast.error(res.error);
+        }
+      });
+    },
+    busy: isMoving,
+  };
+
+  return (
+    <MonthCalendar
+      startDate={trip.startDate}
+      endDate={trip.endDate}
+      items={mine}
+      prices={prices}
+      badge={viewer ? (viewer.isYou ? "your share" : `${viewer.name}'s share`) : null}
+      edit={edit}
+    >
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
@@ -533,6 +587,43 @@ export function TripCalendar({
           )}
         </DialogContent>
       </Dialog>
-    </Card>
+    </MonthCalendar>
+  );
+}
+
+/**
+ * The month on a share link: the same calendar with nothing to press.
+ *
+ * Its props are `SharedCalendarTrip` and nothing wider, because they are
+ * serialised into a page anybody holding the link can open. Each figure was
+ * worked out on the server, so what it was worked out from never arrives —
+ * and on a link without prices there is no figure at all.
+ */
+export function SharedTripCalendar({
+  trip,
+  viewerName,
+}: {
+  trip: SharedCalendarTrip;
+  /** The traveller a scoped link costs the month for. */
+  viewerName: string | null;
+}) {
+  const prices = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of trip.items) {
+      if (item.cost && item.cost.high > 0) {
+        map.set(item.id, moneyRange(item.cost.low, item.cost.high, trip.currency));
+      }
+    }
+    return map;
+  }, [trip.items, trip.currency]);
+
+  return (
+    <MonthCalendar
+      startDate={trip.startDate}
+      endDate={trip.endDate}
+      items={trip.items}
+      prices={prices}
+      badge={viewerName ? `${viewerName}'s share` : null}
+    />
   );
 }

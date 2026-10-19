@@ -12,6 +12,7 @@ import { KnockoutBracket } from "../shared/knockout-bracket";
 import { ScoreCard } from "../shared/score-card";
 import { SportShell } from "../shared/sport-shell";
 import { StandingsTable } from "../shared/standings-table";
+import { TableCard } from "../shared/table-primitives";
 
 type WorldCupViewProps = {
   data: FootballLeagueData;
@@ -69,18 +70,20 @@ export function WorldCupView({ data }: WorldCupViewProps) {
 
         <TabsContent value="groups">
           {hasGroups && data.groups ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            // Compact tables, two to a row only once a row can hold two: a
+            // group is four teams and its points, and three full tables side
+            // by side were each clipped before the points column.
+            <div className="grid gap-4 @2xl:grid-cols-2">
               {data.groups.map((group) => (
-                <div key={group.label} className="flex flex-col gap-2">
+                <div key={group.label} className="flex min-w-0 flex-col gap-2">
                   <Eyebrow size="sm">{group.label}</Eyebrow>
-                  <Card>
-                    <CardContent className="px-0">
-                      <StandingsTable
-                        standings={group.standings}
-                        teams={teamsMap}
-                      />
-                    </CardContent>
-                  </Card>
+                  <TableCard>
+                    <StandingsTable
+                      standings={group.standings}
+                      teams={teamsMap}
+                      variant="compact"
+                    />
+                  </TableCard>
                 </div>
               ))}
             </div>
@@ -114,9 +117,10 @@ function MatchesGrid({
       {Object.entries(grouped).map(([label, group]) => (
         <div key={label} className="flex flex-col gap-2">
           <Eyebrow size="sm">{label}</Eyebrow>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 @xl:grid-cols-2">
             {group.map((match) => (
-              <ScoreCard key={match.id} match={match} teams={teamsMap} />
+              // The group heading already names the stage.
+              <ScoreCard key={match.id} match={match} teams={teamsMap} hideStage />
             ))}
           </div>
         </div>

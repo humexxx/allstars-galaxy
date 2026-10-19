@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { format } from "date-fns";
+import { endOfDay, format } from "date-fns";
 import { toast } from "sonner";
 
 import {
@@ -43,6 +43,19 @@ interface ManualSnapshotDialogProps {
 
 const todayIso = (): string => format(new Date(), "yyyy-MM-dd");
 
+/**
+ * The instant a snapshot of `day` is taken at.
+ *
+ * Snapshots and interest keep every transaction dated `<= snapshot`, and a
+ * transaction's date carries a time of day. Local midnight left out anything
+ * dated that day — a buy approved at 10:00 was missing from an 11:00 snapshot
+ * — and east of UTC it is the previous UTC day. Today is therefore "now"
+ * (nothing later has happened yet); an earlier day is the end of that day.
+ */
+function snapshotInstant(day: string): Date {
+  return day === todayIso() ? new Date() : endOfDay(toDay(day));
+}
+
 export function ManualSnapshotDialog({
   open,
   onOpenChange,
@@ -65,7 +78,7 @@ export function ManualSnapshotDialog({
   const handleSubmit = async (): Promise<void> => {
     setIsLoading(true);
     const result = await runAction(
-      createManualSnapshotAction({ date: toDay(date), applyInterest, source }),
+      createManualSnapshotAction({ date: snapshotInstant(date), applyInterest, source }),
       { failure: "Failed to create snapshot" }
     );
     setIsLoading(false);
@@ -135,8 +148,9 @@ export function ManualSnapshotDialog({
             <FieldContent>
               <FieldLabel htmlFor="apply-interest">Apply monthly interest</FieldLabel>
               <FieldDescription>
-                Calculate and apply compound interest to all active investments
-                before creating the snapshot
+                Compound one month of interest on all active investments before
+                creating the snapshot. A month compounds once, by this or the
+                daily job
               </FieldDescription>
             </FieldContent>
             <Switch

@@ -1,18 +1,11 @@
+"use client";
+
 import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { BracketMatch, Team } from "@/types/sports";
 
 import { TeamBadge } from "./team-badge";
-
-// Pinned to en-US like `lib/utils/date`, so day/month order and clock style
-// do not change per visitor.
-const MATCH_TIME = new Intl.DateTimeFormat("en-US", {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
+import { useMatchTime } from "./time-zone-context";
 
 type LegScoreCardProps = {
   match: BracketMatch;
@@ -25,6 +18,7 @@ type LegScoreCardProps = {
  * an aggregate line at the bottom.
  */
 export function LegScoreCard({ match, teams, className }: LegScoreCardProps) {
+  const format = useMatchTime();
   const home = match.homeTeamId ? teams.get(match.homeTeamId) ?? null : null;
   const away = match.awayTeamId ? teams.get(match.awayTeamId) ?? null : null;
   const legs = match.legs ?? [];
@@ -82,10 +76,9 @@ export function LegScoreCard({ match, teams, className }: LegScoreCardProps) {
         </div>
       )}
       {!hasAggregate && match.date && (
-        // An instant: server (UTC) and browser text may differ.
-        <div className="mt-2 border-t pt-1.5 text-2xs text-muted-foreground" suppressHydrationWarning>
+        <div className="mt-2 border-t pt-1.5 text-2xs text-muted-foreground">
           {match.winnerTeamId ? "FT · " : ""}
-          {MATCH_TIME.format(new Date(match.date))}
+          {format.dayTime(match.date)}
         </div>
       )}
     </div>

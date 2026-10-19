@@ -2,8 +2,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { TripCalendar } from "./trip-calendar";
-import type { TripItemWithStops, TripWithRelations } from "@/types/travel";
+import { SharedTripCalendar, TripCalendar } from "./trip-calendar";
+import type {
+  SharedCalendarTrip,
+  TripItemWithStops,
+  TripWithRelations,
+} from "@/types/travel";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/app/actions/travel", () => ({
@@ -174,6 +178,41 @@ describe("bar geometry", () => {
     expect(overlay.className).toContain("grid-cols-7");
     expect(overlay.className).toContain("gap-x-1");
     expect(overlay.className).not.toMatch(/\bp[xl]?-\d/);
+  });
+});
+
+describe("SharedTripCalendar", () => {
+  const shared = (items: SharedCalendarTrip["items"]): SharedCalendarTrip => ({
+    currency: "USD", startDate: "2027-01-15", endDate: "2027-01-24", items,
+  });
+  const SHARED_CRUISE: SharedCalendarTrip["items"][number] = {
+    id: "c", title: "Star of the Seas", category: "cruise",
+    scheduledOn: "2027-01-17", endsOn: "2027-01-24", cost: { low: 1900, high: 1900 },
+  };
+
+  it("prints the figure the server worked out, on a month nobody can edit", () => {
+    const { container } = render(
+      <SharedTripCalendar trip={shared([SHARED_CRUISE])} viewerName="Bruno Fabián" />
+    );
+    const bars = [...container.querySelectorAll("[data-slot=calendar-bar]")];
+
+    expect(bars[0].textContent).toContain("Star of the Seas · $1,900");
+    expect(screen.getByText("Bruno Fabián's share")).toBeInTheDocument();
+    expect(bars.every((b) => b.getAttribute("role") === "note")).toBe(true);
+    expect(container.querySelector("[draggable=true]")).toBeNull();
+
+    fireEvent.click(bars[0]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("draws a link without prices with no figure on any bar", () => {
+    const { container } = render(
+      <SharedTripCalendar trip={shared([{ ...SHARED_CRUISE, cost: null }])} viewerName={null} />
+    );
+
+    expect(container.textContent).toContain("Star of the Seas");
+    expect(container.textContent).not.toContain("$");
+    expect(screen.queryByText(/share$/)).toBeNull();
   });
 });
 

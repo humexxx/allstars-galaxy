@@ -36,15 +36,20 @@ export function NavUser({ user }: NavUserProps) {
             <AvatarImage src={user.avatar} alt={user.name} />
             <AvatarFallback>{user.name.substring(0, 2).toUpperCase()}</AvatarFallback>
           </Avatar>
-          <div className="hidden flex-1 text-left text-sm leading-tight md:grid">
+          <div className="hidden flex-1 text-left text-sm leading-tight lg:grid">
             <span className="truncate font-semibold">{user.name}</span>
             <span className="truncate text-xs text-muted-foreground">{user.email}</span>
           </div>
-          <ChevronsUpDown className="ml-auto hidden md:block" />
+          <ChevronsUpDown className="ml-auto hidden lg:block" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>My account</DropdownMenuLabel>
+        {/* The trigger hides the name and email below `md`, so the menu is
+            where a phone user sees which account they are signed in as. */}
+        <DropdownMenuLabel className="flex flex-col gap-0.5">
+          <span className="truncate text-sm font-semibold text-foreground">{user.name}</span>
+          <span className="truncate text-xs font-normal text-muted-foreground">{user.email}</span>
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/portal/settings">

@@ -17,7 +17,7 @@ import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { maskValue } from "@/components/ui/stat-card";
 import { formatCurrency, formatCurrencyCompact } from "@/lib/utils/format";
 import { formatMonthLong } from "@/lib/utils/date";
-import { buildMarginHistory } from "@/lib/finance/margin-history";
+import { buildMarginHistory, type MarginPoint } from "@/lib/finance/margin-history";
 import { cn } from "@/lib/utils";
 import type { MarginHistoryInput } from "@/types/margin";
 
@@ -72,6 +72,7 @@ export function MarginChart({
     const series = buildMarginHistory({
       contributions: keep(input.contributions),
       liabilities: keep(input.liabilities),
+      cashFlows: keep(input.cashFlows),
       prices: new Map(input.prices),
       today: input.today,
     });
@@ -207,13 +208,32 @@ export function MarginChart({
           <ChartTooltip
             content={
               <ChartTooltipContent
-                formatter={(value, name) => (
-                  <span className="flex w-full justify-between gap-4">
-                    <span className="text-muted-foreground">
-                      {CONFIG[name as keyof typeof CONFIG]?.label ?? name}
+                formatter={(value, name, item) => (
+                  <>
+                    <span className="flex w-full justify-between gap-4">
+                      <span className="text-muted-foreground">
+                        {CONFIG[name as keyof typeof CONFIG]?.label ?? name}
+                      </span>
+                      <Mono className="tabular-nums">{money(value as number)}</Mono>
                     </span>
-                    <Mono className="tabular-nums">{money(value as number)}</Mono>
-                  </span>
+                    {/* The gap between the two lines is the whole point of the
+                        chart — say it rather than make the reader subtract. */}
+                    {name === "deployed" && (
+                      <span className="flex w-full justify-between gap-4 border-t pt-1">
+                        <span className="font-medium">Margin</span>
+                        <Mono
+                          className={cn(
+                            "font-medium tabular-nums",
+                            (item.payload as MarginPoint).margin >= 0
+                              ? "text-success"
+                              : "text-destructive"
+                          )}
+                        >
+                          {money((item.payload as MarginPoint).margin)}
+                        </Mono>
+                      </span>
+                    )}
+                  </>
                 )}
                 labelFormatter={(m: string) => formatMonthLong(`${m}-01`)}
               />
@@ -284,10 +304,14 @@ function FilterGroup({
         value={value ?? ALL}
         onValueChange={(v) => onChange(!v || v === ALL ? null : v)}
       >
-        <ToggleGroupItem value={ALL}>All</ToggleGroupItem>
+        {/* Content-sized chips that wrap; the group's default `flex-1` crushed
+            long names into one row inside the popover. */}
+        <ToggleGroupItem value={ALL} className="flex-none">
+          All
+        </ToggleGroupItem>
         {options.map((o) => (
-          <ToggleGroupItem key={o.id} value={o.id}>
-            {o.label}
+          <ToggleGroupItem key={o.id} value={o.id} className="max-w-full flex-none">
+            <span className="truncate">{o.label}</span>
           </ToggleGroupItem>
         ))}
       </ToggleGroup>

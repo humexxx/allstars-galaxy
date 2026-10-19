@@ -16,6 +16,7 @@ import { requireEffectiveContext } from "@/lib/services/impersonation";
 import type { ChartDataPoint } from "@/types/chart";
 import type { PortfolioTransaction } from "@/types/portfolio";
 import PortfolioClientPage from "@/components/portal/portfolio-client";
+import { performanceSeries } from "@/components/portfolio/performance-series";
 import { PortalPageContainer } from "@/components/portal/page-container";
 
 export const metadata: Metadata = {
@@ -73,24 +74,21 @@ export default async function PortfolioPage() {
       getPortfolioTransactions(portfolio.id),
       getPortfolioPerformanceData(portfolio.id, "All"),
     ]);
-
-    // Fallback: build chart from approved transactions if no snapshots exist.
-    if (chartData.length === 0) {
-      const approvedTransactions = transactions.filter((t) => t.status === "approved");
-      if (approvedTransactions.length > 0) {
-        let runningTotal = 0;
-        chartData = approvedTransactions.map((t) => {
-          runningTotal += t.type === "buy" ? parseFloat(t.total) : -parseFloat(t.total);
-          return { date: new Date(t.date).toISOString(), value: runningTotal };
-        });
-      }
-    }
+    chartData = performanceSeries(chartData, transactions, stats.totalValue, new Date());
   }
+
+  // Positions are the owner's private half of a method: a client is sold the
+  // fixed return, and where the pooled money actually goes never reaches
+  // their screen. Allocations therefore only travel for methods this user
+  // runs — their own rows elsewhere carry none.
+  const ownedMethodIds = new Set(methodInvestors.map((m) => m.methodId));
 
   // Both tables render the same shape, so the allocation lookup is one query
   // covering every transaction on the page — the owner's and their investors'.
   const allTxIds = [
-    ...transactions.map((t) => t.id),
+    ...transactions
+      .filter((t) => ownedMethodIds.has(t.investmentMethod.id))
+      .map((t) => t.id),
     ...investorTransactions.map((t) => t.id),
   ];
   const [allocationsByTx, latestPrices] = await Promise.all([
@@ -109,11 +107,28 @@ export default async function PortfolioPage() {
       price: priceBySymbol.get(a.symbol) ?? null,
     }));
 
+  // A buy's stored value is net of what was withdrawn from it; the table adds
+  // that back so a withdrawal does not read as the investment losing money.
+  const withdrawnFrom = new Map<string, number>();
+  for (const t of [...transactions, ...investorTransactions]) {
+    if (t.type !== "withdrawal" || t.status !== "approved" || !t.sourceTransactionId) continue;
+    withdrawnFrom.set(
+      t.sourceTransactionId,
+      (withdrawnFrom.get(t.sourceTransactionId) ?? 0) + parseFloat(t.total)
+    );
+  }
+
   const data = {
     portfolio,
     stats,
     transactions,
     chartData,
+    cashFlows: transactions
+      .filter((t) => t.status === "approved" || t.status === "closed")
+      .map((t) => ({
+        date: new Date(t.date).toISOString(),
+        amount: (t.type === "withdrawal" ? -1 : 1) * parseFloat(t.total),
+      })),
     methods,
     isAdmin,
     users,
@@ -121,6 +136,10 @@ export default async function PortfolioPage() {
     methodAllocations: managedOverview.allocations,
     marginHistory: managedOverview.history,
     marginHistoryInput: managedOverview.historyInput,
+    marginStatus: {
+      unconfigured: managedOverview.overview.unconfigured,
+      unpriced: managedOverview.overview.unpriced,
+    },
     investorBreakdown: managedOverview.investors,
     transactionRows: transactions.map((t) => ({
       id: t.id,
@@ -131,7 +150,8 @@ export default async function PortfolioPage() {
       total: t.total,
       initialValue: t.initialValue,
       currentValue: t.currentValue,
-      allocations: withPrices(t.id),
+      withdrawn: withdrawnFrom.get(t.id),
+      allocations: ownedMethodIds.has(t.investmentMethod.id) ? withPrices(t.id) : [],
     })),
     investorTransactions: investorTransactions.map((t) => ({
       id: t.id,
@@ -144,6 +164,7 @@ export default async function PortfolioPage() {
       total: t.total,
       initialValue: t.initialValue,
       currentValue: t.currentValue,
+      withdrawn: withdrawnFrom.get(t.id),
       allocations: withPrices(t.id),
     })),
     priceAssets: priceAssets.map((a) => ({
@@ -161,3 +182,4 @@ export default async function PortfolioPage() {
     </PortalPageContainer>
   );
 }
+

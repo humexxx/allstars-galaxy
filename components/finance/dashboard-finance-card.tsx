@@ -22,7 +22,6 @@ import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
-import { formatDay } from "@/lib/utils/date";
 import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
 import {
   getMainPlan,
@@ -31,7 +30,11 @@ import {
 } from "@/lib/services/finance-plan-service";
 import { loadCalibratedView } from "@/lib/services/finance-snapshot-service";
 import { buildDashboardFigures } from "@/lib/finance/dashboard";
-import { formatDebtFree } from "@/lib/finance/chart-series";
+import {
+  formatDebtFree,
+  formatDebtFreeMonth,
+  type DebtFreeStatus,
+} from "@/lib/finance/chart-series";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { todayInTimeZone } from "@/lib/utils/date";
 
@@ -87,27 +90,37 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   );
   const points = fig.points;
   const delta = fig.delta;
+  // The reader's calendar day, not the server's: this renders on the server
+  // (UTC), which dated an evening edit in Costa Rica "tomorrow".
+  const updated = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone,
+  }).format(featured.updatedAt);
 
-  const kpis: Array<{ label: string; value: string; tone?: KpiTone }> = [
+  const netWorth: Figure = {
+    label: "Net worth",
+    value: formatCurrency(fig.netWorth),
+    tone: moneySign(fig.netWorth) >= 0 ? "positive" : "negative",
+  };
+  const breakdown: Figure[] = [
     {
       label: fig.status === "before-start" ? "Savings at start" : "Savings now",
       value: formatCurrency(fig.savings),
     },
     { label: "Investments", value: formatCurrency(fig.investments), tone: "primary" },
-    { label: "Debt now", value: formatCurrency(fig.totalDebt) },
     {
-      label: "Debt-free",
-      value:
-        full.debts.length === 0 && fig.debtFree.kind === "no-debt"
-          ? "—"
-          : formatDebtFree(fig.debtFree).replace(/^Debt-free in /, "in "),
+      label: "Debt now",
+      value: formatCurrency(fig.totalDebt),
+      // Red like the plan page's Total debt row, which shows this figure.
+      tone: moneySign(fig.totalDebt) > 0 ? "negative" : undefined,
     },
-    {
-      label: "Net worth",
-      value: formatCurrency(fig.netWorth),
-      tone: moneySign(fig.netWorth) >= 0 ? "positive" : "negative",
-    },
+    { label: "Debt-free", ...debtFreeFigure(fig.debtFree, full.debts.length > 0) },
   ];
+  // A plan with no periods has no line to draw, and a rail beside nothing is
+  // a column of figures with a hole on its left.
+  const rail = points.length > 0;
 
   return (
     <Card className="col-span-full">
@@ -119,7 +132,10 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
         {/* The delta rides the description line, not the action slot: beside
             the button it squeezed the plan name to a few characters on phones. */}
         <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 tabular-nums">
-          <span>12-month projection · updated {formatDay(featured.updatedAt)}</span>
+          <span>
+            12-month projection ·{" "}
+            <span className="whitespace-nowrap">updated {updated}</span>
+          </span>
           <Badge variant={moneySign(delta) >= 0 ? "success" : "destructive"} className="font-mono tabular-nums">
             {moneySign(delta) >= 0 ? <TrendingUp /> : <TrendingDown />}
             {formatSignedCurrency(delta)} · {fig.deltaPeriods} mo
@@ -134,47 +150,90 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
           </Button>
         </CardAction>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          {kpis.map((k) => (
-            <KpiTile key={k.label} {...k} />
-          ))}
+      {/* Laid out on the card's width, not the viewport's: from `md` the
+          sidebar takes 256px, so this card is narrower at 800px than at 700px.
+          Wide, the chart fills the left and the figures stack in a rail on the
+          right; narrow, net worth heads the chart it plots and the breakdown
+          follows. */}
+      <CardContent className="@container">
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-4",
+            rail && "@xl:grid-cols-[minmax(0,1fr)_14rem] @xl:grid-rows-[auto_1fr] @xl:gap-x-8"
+          )}
+        >
+          <dl className={cn(rail && "@xl:col-start-2")}>
+            <FigureItem figure={netWorth} hero />
+          </dl>
+          <DashboardFinanceMiniChart
+            data={points}
+            color={featured.color}
+            className="h-48 sm:h-56 @xl:col-start-1 @xl:row-span-2 @xl:row-start-1 @xl:h-auto @xl:min-h-72"
+          />
+          <dl
+            className={cn(
+              "grid grid-cols-2 gap-x-4 gap-y-3",
+              rail && "@xl:col-start-2 @xl:grid-cols-1 @xl:self-end"
+            )}
+          >
+            {breakdown.map((f) => (
+              <FigureItem key={f.label} figure={f} />
+            ))}
+          </dl>
         </div>
-        <DashboardFinanceMiniChart data={points} />
       </CardContent>
     </Card>
   );
 }
 
-type KpiTone = "neutral" | "positive" | "negative" | "primary";
+type FigureTone = "neutral" | "positive" | "negative" | "primary";
 
-/**
- * The StatCard figure (Eyebrow label, Mono value, `statToneClass`) as a tile
- * inside this card rather than a card of its own. One step smaller than
- * StatCard's figure: five of these share a row from `sm`.
- */
-function KpiTile({
-  label,
-  value,
-  tone = "neutral",
-}: {
+type Figure = {
   label: string;
   value: string;
-  tone?: KpiTone;
-}) {
+  /** Muted, beside the value: the countdown next to a payoff month. */
+  note?: string;
+  tone?: FigureTone;
+};
+
+/**
+ * The payoff month as the figure and the countdown as its note: "Jan 2027"
+ * with "in 12 mo" beside it, which a narrow phone cell wraps whole instead of
+ * breaking the date in two.
+ */
+function debtFreeFigure(
+  status: DebtFreeStatus,
+  hasDebts: boolean
+): Pick<Figure, "value" | "note"> {
+  if (!hasDebts && status.kind === "no-debt") return { value: "—" };
+  if (status.kind !== "on-track") return { value: formatDebtFree(status) };
+  return { value: formatDebtFreeMonth(status.date), note: `in ${status.months} mo` };
+}
+
+/**
+ * The StatCard figure (Eyebrow label, Mono value, `statToneClass`) as one
+ * term of this card's description list. `hero` is StatCard's own size; the
+ * breakdown is one step down, the secondary-stat size.
+ */
+function FigureItem({ figure, hero = false }: { figure: Figure; hero?: boolean }) {
+  const { label, value, note, tone = "neutral" } = figure;
   return (
-    <div className="flex flex-col gap-1 rounded-lg border p-3">
-      <Eyebrow size="sm" as="div">
-        {label}
+    <div className="flex min-w-0 flex-col gap-1">
+      <Eyebrow size="sm" asChild>
+        <dt>{label}</dt>
       </Eyebrow>
-      <Mono
-        className={cn(
-          "text-lg font-semibold tabular-nums sm:text-xl",
-          tone === "primary" ? "text-primary" : tone !== "neutral" && statToneClass(tone)
-        )}
-      >
-        {value}
-      </Mono>
+      <dd className="flex flex-wrap items-baseline gap-x-2">
+        <Mono
+          className={cn(
+            "font-semibold",
+            hero ? "text-xl sm:text-2xl" : "text-base sm:text-lg",
+            tone === "primary" ? "text-primary" : tone !== "neutral" && statToneClass(tone)
+          )}
+        >
+          {value}
+        </Mono>
+        {note && <Mono className="text-xs text-muted-foreground">{note}</Mono>}
+      </dd>
     </div>
   );
 }

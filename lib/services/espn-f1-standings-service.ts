@@ -1,9 +1,8 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
 import type { F1DashboardStandings } from "@/types/sports";
 
-import { upstreamSignal } from "./upstream";
+import { cachedFeed, upstreamSignal } from "./upstream";
 
 const URL = "https://site.api.espn.com/apis/v2/sports/racing/f1/standings";
 const REVALIDATE_SECONDS = 300;
@@ -155,15 +154,10 @@ async function fetchStandings(top: number): Promise<F1DashboardStandings> {
 }
 
 /** Top of both championships, or null when ESPN is unreachable. */
-export const getF1DashboardStandings = unstable_cache(
-  async (top = 3): Promise<F1DashboardStandings | null> => {
-    try {
-      return await fetchStandings(top);
-    } catch (error) {
-      console.warn("espn f1 standings unavailable:", error);
-      return null;
-    }
-  },
+export const getF1DashboardStandings = cachedFeed<[top?: number], F1DashboardStandings | null>(
+  "espn f1 standings",
+  (top = 3) => fetchStandings(top),
+  () => null,
   ["espn-f1-standings"],
   { revalidate: REVALIDATE_SECONDS }
 );

@@ -20,7 +20,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import { formatShortDay } from "@/lib/utils/date";
 import { isBracketDrawn } from "@/lib/sports/bracket";
 import type {
   LolData,
@@ -33,8 +32,9 @@ import type {
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { Last5Form } from "../shared/last-5-form";
 import { SportShell } from "../shared/sport-shell";
-import { SportsTh } from "../shared/table-primitives";
+import { SportsTh, TableCard } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
+import { useMatchTime } from "../shared/time-zone-context";
 
 type LolViewProps = {
   data: LolData;
@@ -78,7 +78,7 @@ export function LolView({ data }: LolViewProps) {
             <SelectContent>
               {data.splits.map((s) => (
                 <SelectItem key={s.region} value={s.region}>
-                  {s.region.toUpperCase()} — {s.name}
+                  {s.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -87,22 +87,27 @@ export function LolView({ data }: LolViewProps) {
         tabs={
           <TabsList>
             <TabsTrigger value="matches">Matches</TabsTrigger>
-            <TabsTrigger value="standings">Standings</TabsTrigger>
+            {/* Worlds' Swiss stage publishes no table until it is played. */}
+            {split.standings.length > 0 && (
+              <TabsTrigger value="standings">Standings</TabsTrigger>
+            )}
             {playoffs && <TabsTrigger value="playoffs">Playoffs</TabsTrigger>}
           </TabsList>
         }
       >
         <TabsContent value="matches">
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 @xl:grid-cols-2">
             {split.matches.map((m) => (
               <LolMatchCard key={m.id} match={m} teams={teamsMap} />
             ))}
           </div>
         </TabsContent>
 
-        <TabsContent value="standings">
-          <LolStandings split={split} teamsMap={teamsMap} />
-        </TabsContent>
+        {split.standings.length > 0 && (
+          <TabsContent value="standings">
+            <LolStandings split={split} teamsMap={teamsMap} />
+          </TabsContent>
+        )}
 
         {playoffs && (
           <TabsContent value="playoffs">
@@ -125,10 +130,12 @@ function LolMatchCard({
   match: LolMatch;
   teams: Map<string, Team>;
 }) {
+  const format = useMatchTime();
   const home = teams.get(match.homeTeamId);
   const away = teams.get(match.awayTeamId);
   if (!home || !away) return null;
   const isScheduled = match.status === "scheduled";
+  const isLive = match.status === "live";
   const homeWon =
     match.homeScore !== null &&
     match.awayScore !== null &&
@@ -149,11 +156,25 @@ function LolMatchCard({
         <LolTeamRow team={home} score={match.homeScore} winner={homeWon} scheduled={isScheduled} />
         <LolTeamRow team={away} score={match.awayScore} winner={awayWon} scheduled={isScheduled} />
       </div>
-      <div className="border-l pl-3 text-right">
-        {/* An instant: server (UTC) and browser can land on different days. */}
-        <Mono className="text-2xs uppercase tracking-wide text-muted-foreground" suppressHydrationWarning>
-          {isScheduled ? formatShortDay(match.date) : match.status.toUpperCase()}
-        </Mono>
+      {/* Same column as `ScoreCard`: the status over the day for a result,
+          the day over the time for a fixture. */}
+      <div className="flex min-w-16 flex-col items-end justify-center gap-0.5 border-l pl-3 text-right">
+        {!isScheduled && (
+          <span
+            className={cn(
+              "text-2xs font-medium uppercase tracking-wide text-muted-foreground",
+              isLive && "text-success",
+            )}
+          >
+            {match.status}
+          </span>
+        )}
+        {!isLive && (
+          <Mono className="text-2xs text-muted-foreground">{format.shortDay(match.date)}</Mono>
+        )}
+        {isScheduled && (
+          <Mono className="text-2xs text-muted-foreground">{format.time(match.date)}</Mono>
+        )}
       </div>
     </div>
   );
@@ -198,12 +219,11 @@ function LolStandings({
   teamsMap: Map<string, Team>;
 }) {
   return (
-    <Card>
-      <CardContent className="px-0">
+    <TableCard>
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <SportsTh className="w-8">
+              <SportsTh className="w-8 pl-3">
                 #
               </SportsTh>
               <SportsTh>
@@ -225,7 +245,7 @@ function LolStandings({
               const team = teamsMap.get(row.teamId);
               return (
                 <TableRow key={row.teamId}>
-                  <TableCell className="text-sm tabular-nums text-muted-foreground">
+                  <TableCell className="pl-3 text-sm tabular-nums text-muted-foreground">
                     {row.position}
                   </TableCell>
                   <TableCell>
@@ -250,7 +270,6 @@ function LolStandings({
             })}
           </TableBody>
         </Table>
-      </CardContent>
-    </Card>
+    </TableCard>
   );
 }

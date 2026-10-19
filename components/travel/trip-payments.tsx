@@ -146,8 +146,12 @@ export function TripPayments({
               size="sm"
               variant="outline"
               onClick={() => setAdding(true)}
+              aria-label="Log payment"
             >
-              <Plus /> Log payment
+              {/* Icon only between `lg` and `xl`: there the sidebar leaves
+                  this column ~240px, and "Payments" plus the labelled button
+                  ran the button past the card's padding. */}
+              <Plus /> <span className="lg:max-xl:hidden">Log payment</span>
             </Button>
           </CardAction>
         )}
@@ -163,7 +167,9 @@ export function TripPayments({
         ) : (
           <>
             <div className="flex flex-col gap-1.5">
-              <div className="flex items-baseline justify-between gap-2">
+              {/* Wraps: in the narrow aside at 1024px the "of $8,747 ~ $9,977"
+                  beside the paid figure ran off the card's edge and was cut. */}
+              <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
                 <Mono className="text-xl font-semibold tabular-nums sm:text-2xl">
                   {formatTripMoney(paid, currency)}
                 </Mono>
@@ -172,7 +178,7 @@ export function TripPayments({
                 </Mono>
               </div>
               <Progress value={pct} aria-label="Paid so far" />
-              <Text className="text-2xs text-muted-foreground">
+              <Text className="text-pretty text-2xs text-muted-foreground">
                 {left > 0 ? (
                   <>
                     {formatTripMoney(left, currency)} still to go

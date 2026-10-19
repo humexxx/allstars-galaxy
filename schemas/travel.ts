@@ -18,7 +18,8 @@ export const tripPhotoSourceSchema = z.enum(["upload", "url"]);
 
 export const createTripSchema = z
   .object({
-    title: z.string().min(1).max(120),
+    // A sentence, because the trip form prints it under the field.
+    title: z.string().trim().min(1, "Give the trip a name").max(120),
     destination: z.string().max(200).optional().nullable(),
     description: z.string().max(2000).optional().nullable(),
     startDate: isoDateSchema,
@@ -40,7 +41,8 @@ export const createTripSchema = z
 export const updateTripSchema = z
   .object({
     id: idSchema,
-    title: z.string().min(1).max(120),
+    // A sentence, because the trip form prints it under the field.
+    title: z.string().trim().min(1, "Give the trip a name").max(120),
     destination: z.string().max(200).optional().nullable(),
     description: z.string().max(2000).optional().nullable(),
     startDate: isoDateSchema,

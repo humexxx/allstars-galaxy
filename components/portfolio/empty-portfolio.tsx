@@ -8,7 +8,7 @@ export function EmptyPortfolio({ onAddTransaction }: { onAddTransaction: () => v
       variant="card"
       icon={Wallet}
       title="Your portfolio is empty"
-      description="Start tracking your crypto investments by adding your first transaction"
+      description="Pick an investment method and add your first transaction."
       action={
         <Button onClick={onAddTransaction} size="lg" className="w-full">
           <PlusCircle />

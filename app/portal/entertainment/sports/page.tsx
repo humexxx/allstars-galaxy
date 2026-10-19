@@ -17,10 +17,12 @@ export const metadata: Metadata = {
 export default async function SportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sport?: string }>;
+  searchParams: Promise<{ sport?: string; tab?: string; league?: string }>;
 }) {
   const ctx = await requireEffectiveContext();
-  const [favorites, { sport }] = await Promise.all([
+  // Kickoffs are formatted in the reader's zone by the portal-wide
+  // ReaderTimeZoneProvider, so the server and the browser print the same time.
+  const [favorites, { sport, tab, league }] = await Promise.all([
     listUserFavoriteSportIds(ctx.effectiveUserId),
     searchParams,
   ]);
@@ -29,19 +31,19 @@ export default async function SportsPage({
   // and a link can point at one. It also means the page fetches one provider
   // instead of all six.
   const active = isSportId(sport) ? sport : (favorites[0] ?? DEFAULT_SPORT);
-  const payload = await loadSport(active);
+  const payload = await loadSport(active, { league });
 
   return (
     <>
       <PageHeader
         title="Sports"
-        description="Live scores, tables, tournaments and brackets across football, the World Cup, F1, NBA, tennis, padel, NFL and League of Legends."
         actions={<ManageFavoritesSheet favoriteSportIds={favorites} />}
       />
       <SportsHub
         activeSport={active}
         favoriteSportIds={favorites}
         payload={payload}
+        initialTab={tab}
       />
     </>
   );

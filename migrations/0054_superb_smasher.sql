@@ -1,0 +1,1 @@
+ALTER TABLE "finance_plan_incomes" ADD COLUMN "owed_to_me" boolean DEFAULT false NOT NULL;

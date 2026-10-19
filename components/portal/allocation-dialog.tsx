@@ -128,7 +128,11 @@ export function AllocationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3">
+        {/* `min-w-0`: DialogContent is a grid, and a grid item will not shrink
+            below its content — an asset name like "SPY — SPDR S&P 500 ETF
+            Trust" widened the whole dialog past a phone's edge, pushing the
+            share inputs, the remove buttons and Save off-screen. */}
+        <div className="flex min-w-0 flex-col gap-3">
           {/* Column captions for sighted users; every control carries its own
               name, since only the first row sat under a real label. */}
           <div aria-hidden className="flex gap-2">

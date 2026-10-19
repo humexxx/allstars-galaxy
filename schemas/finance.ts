@@ -88,19 +88,28 @@ function refineRecurrence<T extends RecurrenceShape>(val: T, ctx: z.RefinementCt
   }
 }
 
-export const planNameSchema = z.string().trim().min(1).max(120);
+export const planNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Give the plan a name.")
+  .max(120, "Keep the name to 120 characters.");
+
+// May be negative: the balance on the day it is stated can be an overdraft
+// (deficits are carried, and a restatement can roll one forward).
+const openingSavings = z
+  .string()
+  .regex(/^-?\d+(\.\d{1,2})?$/, "Must be a number with up to 2 decimals");
 
 export const createFinancePlanSchema = z.object({
   name: planNameSchema,
   description: z.string().max(1000).optional().nullable(),
   startMonth: z.coerce.date(),
-  monthsAhead: z.number().int().min(12).max(120),
-  // May be negative: the balance on the day it is stated can be an overdraft
-  // (deficits are carried, and a restatement can roll one forward).
-  initialSavings: z
-    .string()
-    .regex(/^-?\d+(\.\d{1,2})?$/, "Must be a number with up to 2 decimals")
-    .default("0"),
+  monthsAhead: z
+    .number({ error: "Enter a number of months (12–120)." })
+    .int("Whole months only.")
+    .min(12, "At least 12 months.")
+    .max(120, "At most 120 months (10 years)."),
+  initialSavings: openingSavings.default("0"),
   monthlySavingsRate: monthlyRate.default("0"),
   includePortfolio: z.boolean().default(false),
   surplusToDebtsPercent: share.default("0"),
@@ -109,7 +118,12 @@ export const createFinancePlanSchema = z.object({
   autoInvestMethodId: idSchema.nullable().optional(),
   initialInvestments: decimal.default("0"),
   // 0 = disabled monthly confirmation. Otherwise day of month 1..28.
-  confirmationDayOfMonth: z.number().int().min(0).max(28).default(1),
+  confirmationDayOfMonth: z
+    .number({ error: "Enter a day from 1 to 28, or 0 to turn it off." })
+    .int("Enter a day from 1 to 28, or 0 to turn it off.")
+    .min(0, "Enter a day from 1 to 28, or 0 to turn it off.")
+    .max(28, "Enter a day from 1 to 28, or 0 to turn it off.")
+    .default(1),
   color: z.string().min(1).max(60).default("var(--chart-1)"),
 });
 
@@ -129,6 +143,12 @@ export const planColorSchema = z.object({
 
 export const updateFinancePlanSchema = createFinancePlanSchema.extend({
   id: idSchema,
+  // Sent only when the user changed them (the form shows where the plan
+  // stands today), and never defaulted: a figure left out keeps rolling
+  // forward, where a default "0" would restate it — see
+  // `lib/finance/opening-balances.ts`.
+  initialSavings: openingSavings.optional(),
+  initialInvestments: decimal.optional(),
   // Scenario link. Only settable via update (scenarios are created by cloning);
   // null detaches the scenario from its base plan.
   basedOnPlanId: idSchema.nullable().optional(),
@@ -146,6 +166,8 @@ const incomeShape = {
   name: z.string().min(1).max(120),
   monthlyAmount: decimal.default("0"),
   kind: lineKind.default("recurring"),
+  // Someone paying back what they owe — counts in net worth before it lands.
+  owedToMe: z.boolean().default(false),
   dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
   date: isoDate.nullable().optional(),
   startDate: isoDate.nullable().optional(),
@@ -174,6 +196,14 @@ function refineIncome(
       code: "custom",
       path: ["endDate"],
       message: "End date must be on or after start date",
+    });
+  }
+  // Without an end, the amount owed — and the net worth it adds — never stops.
+  if (val.owedToMe && !val.endDate) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["endDate"],
+      message: "Money owed to you needs an end date: the month of the last repayment",
     });
   }
   refineRecurrence(val, ctx);

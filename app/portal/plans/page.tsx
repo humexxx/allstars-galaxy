@@ -43,7 +43,6 @@ export default async function FinancePlansPage() {
     <section className="flex flex-col gap-6">
       <PageHeader
         title="Finance Plans"
-        description="Build scenarios for your income, expenses, debts and projected net worth."
         actions={
           <Button asChild>
             <Link href="/portal/plans/new">

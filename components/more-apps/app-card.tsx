@@ -90,7 +90,10 @@ export function AppCard({
   return (
     <Card
       className={cn(
-        "flex flex-col transition-shadow",
+        // `pt-0`: the cover is the card's top edge. Card only drops its top
+        // padding for an <img> first child, so the gradient placeholder sat
+        // under a 24px band of white.
+        "flex flex-col pt-0 transition-shadow",
         isLive && "hover:ring-foreground/15 hover:shadow-md",
         (!isLive || onShow) && "opacity-60"
       )}
@@ -103,14 +106,16 @@ export function AppCard({
         <img
           src={screenshotUrl}
           alt={`${app.name} preview`}
-          className="aspect-video w-full object-cover"
+          className="aspect-5/2 w-full object-cover sm:aspect-video"
           loading="lazy"
         />
       ) : (
         <div
           aria-hidden="true"
           className={cn(
-            "flex aspect-video w-full items-center justify-center rounded-t-xl bg-gradient-to-br text-6xl font-bold text-background/90 select-none",
+            // Shorter on a phone, where a 16:9 cover was taller than
+            // everything the card had to say.
+            "flex aspect-5/2 w-full items-center justify-center rounded-t-xl bg-gradient-to-br text-5xl font-bold text-background/90 select-none sm:aspect-video sm:text-6xl",
             gradient
           )}
         >
@@ -180,8 +185,9 @@ export function AppCard({
             </Badge>
           )}
           {domain && (
-            <Badge variant="outline" className="font-mono">
-              {domain}
+            // A long host ran out of a narrow card instead of shortening.
+            <Badge variant="outline" className="max-w-full font-mono" title={domain}>
+              <span className="truncate">{domain}</span>
             </Badge>
           )}
         </div>

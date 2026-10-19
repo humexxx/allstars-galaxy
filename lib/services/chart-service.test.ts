@@ -43,26 +43,9 @@ afterEach(() => {
 });
 
 describe("getPortfolioPerformanceData — empty snapshots", () => {
-  it("returns two dummy zero points (start-of-month + now) when there are no snapshots", async () => {
+  it("returns no points — never a fabricated $0 line", async () => {
     seedRows([]);
-    const out = await getPortfolioPerformanceData(PORTFOLIO_ID, "All");
-
-    expect(out).toHaveLength(2);
-    expect(out[0].value).toBe(0);
-    expect(out[1].value).toBe(0);
-    expect(new Date(out[0].date).getUTCDate()).toBe(1);
-    expect(new Date(out[0].date).getUTCMonth()).toBe(4); // May = 4 (0-indexed)
-    expect(out[1].date).toBe(new Date("2026-05-15T12:00:00Z").toISOString());
-  });
-
-  it("when today is the 1st, the leading dummy falls back to the previous month", async () => {
-    vi.setSystemTime(new Date("2026-05-01T08:00:00Z"));
-    seedRows([]);
-
-    const out = await getPortfolioPerformanceData(PORTFOLIO_ID, "All");
-
-    expect(new Date(out[0].date).getUTCMonth()).toBe(3); // April
-    expect(new Date(out[0].date).getUTCDate()).toBe(1);
+    await expect(getPortfolioPerformanceData(PORTFOLIO_ID, "All")).resolves.toEqual([]);
   });
 });
 

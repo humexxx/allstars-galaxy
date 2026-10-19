@@ -116,8 +116,10 @@ export function FinanceSettings({ milestones }: { milestones: number[] }) {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-start gap-2">
-          <Field data-invalid={error !== null} className="w-40 gap-1">
+        {/* The error runs under the whole row: inside the 160px field it
+            broke "Use a number — 250k and 1.5M work too." over three lines. */}
+        <Field data-invalid={error !== null} className="gap-1.5">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               ref={inputRef}
               value={draft}
@@ -134,31 +136,33 @@ export function FinanceSettings({ milestones }: { milestones: number[] }) {
               placeholder="e.g. 250k"
               aria-label="New milestone"
               aria-invalid={error !== null}
+              aria-describedby={error ? "milestone-error" : undefined}
               inputMode="decimal"
+              className="w-40"
             />
-            <FieldError>{error}</FieldError>
-          </Field>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={add}
-            disabled={isSaving || draft.trim().length === 0}
-          >
-            {isSaving ? <Spinner /> : <Plus />}
-            Add
-          </Button>
-          {!isDefault && (
             <Button
               type="button"
-              variant="ghost"
-              disabled={isSaving}
-              onClick={() => save([...DEFAULT_FINANCE_MILESTONES])}
+              variant="outline"
+              onClick={add}
+              disabled={isSaving || draft.trim().length === 0}
             >
-              <RotateCcw />
-              Reset
+              {isSaving ? <Spinner /> : <Plus />}
+              Add
             </Button>
-          )}
-        </div>
+            {!isDefault && (
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={isSaving}
+                onClick={() => save([...DEFAULT_FINANCE_MILESTONES])}
+              >
+                <RotateCcw />
+                Reset
+              </Button>
+            )}
+          </div>
+          <FieldError id="milestone-error">{error}</FieldError>
+        </Field>
 
         <Text variant="small">
           Labels sit on one row and none are hidden, so a long list will start

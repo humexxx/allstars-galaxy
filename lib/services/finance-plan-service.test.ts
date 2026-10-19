@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 // The module pulls in `@/db` at the top, but `projectPlan` and
 // `compareDebtStrategies` are pure functions that never touch it. Mocking the
@@ -22,12 +24,14 @@ import { db } from "@/db";
 import {
   cloneOverrides,
   compareDebtStrategies,
+  deleteLineOverride,
   deriveFinanceMood,
   projectPlan,
   updateDebt,
   updatePlan,
   updateExpense,
   updateIncome,
+  upsertLineOverride,
 } from "./finance-plan-service";
 import type {
   FinancePlan,
@@ -945,7 +949,9 @@ describe("updatePlan — opening-balance restatement (balances_as_of)", () => {
     color: "var(--chart-1)",
   } as never;
 
-  it("a no-op edit (no restatement) writes the form values and never touches balances_as_of", async () => {
+  it("an edit with no restatement never touches the opening balances or balances_as_of", async () => {
+    // Even a figure the caller sent: written without re-dating, it would be
+    // claimed as of a day it was never true on.
     const calls: Call[] = [];
     vi.mocked(db.update).mockImplementationOnce(
       (recorder(calls).update as (t: unknown) => never)
@@ -954,7 +960,9 @@ describe("updatePlan — opening-balance restatement (balances_as_of)", () => {
     expect(db.transaction).not.toHaveBeenCalled();
     expect(calls).toHaveLength(1);
     expect(calls[0].values).not.toHaveProperty("balancesAsOf");
-    expect(calls[0].values?.initialSavings).toBe("999");
+    expect(calls[0].values).not.toHaveProperty("initialSavings");
+    expect(calls[0].values).not.toHaveProperty("initialInvestments");
+    expect(calls[0].values?.name).toBe("P");
   });
 
   it("an edit that restates re-dates the set, writes every debt and syncs a same-day confirmation", async () => {
@@ -983,5 +991,122 @@ describe("updatePlan — opening-balance restatement (balances_as_of)", () => {
     expect(debtRows).toEqual([
       { confirmationId: "conf-1", debtId: "debt-1", confirmedBalance: "800.00" },
     ]);
+  });
+});
+
+describe("per-month line overrides: the line must be the plan's", () => {
+  // Overrides point at their line polymorphically (no FK), and the upsert's
+  // conflict key is (side, line, month) — not the plan. So a caller could pass
+  // THEIR plan id with SOMEONE ELSE's income id and overwrite that user's
+  // override for the month.
+  const VICTIM_INCOME = "99999999-9999-4999-8999-999999999999";
+  const override = {
+    parentSide: "income" as const,
+    parentId: VICTIM_INCOME,
+    monthYear: "2026-03-01",
+    action: "amount" as const,
+    monthlyAmount: "1",
+  };
+
+  type Recorded = {
+    lineLookups: SQL[];
+    inserts: { values: Record<string, unknown>; onConflict?: { set: Record<string, unknown> } }[];
+  };
+
+  // Stands in for `db` and the transaction handle; `lineRows` is what the
+  // "is this line on the plan?" lookup finds.
+  function stage(lineRows: unknown[]): Recorded {
+    const rec: Recorded = { lineLookups: [], inserts: [] };
+    const exec = {
+      select: () => {
+        const c = {
+          from: () => c,
+          where: (cond: SQL) => {
+            rec.lineLookups.push(cond);
+            return c;
+          },
+          limit: () => Promise.resolve(lineRows),
+          then: (resolve: (v: unknown) => void) => resolve(lineRows),
+        };
+        return c;
+      },
+      insert: () => {
+        const entry: Recorded["inserts"][number] = { values: {} };
+        rec.inserts.push(entry);
+        const c = {
+          values: (v: Record<string, unknown>) => {
+            entry.values = v;
+            return c;
+          },
+          onConflictDoUpdate: (cfg: { set: Record<string, unknown> }) => {
+            entry.onConflict = cfg;
+            return Promise.resolve();
+          },
+        };
+        return c;
+      },
+    };
+    vi.mocked(db.select).mockImplementation(exec.select as never);
+    vi.mocked(db.insert).mockImplementation(exec.insert as never);
+    vi.mocked(db.transaction).mockImplementation((async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn(exec)) as never);
+    return rec;
+  }
+
+  const render = (cond: SQL): { sql: string; params: unknown[] } =>
+    new PgDialect().sqlToQuery(cond);
+
+  afterEach(() => {
+    vi.mocked(db.select).mockReset();
+    vi.mocked(db.insert).mockReset();
+    vi.mocked(db.transaction).mockReset();
+  });
+
+  it("refuses another plan's line and writes nothing (cross-user attempt)", async () => {
+    const rec = stage([]); // the line is not on the caller's plan
+    await expect(upsertLineOverride("user-1", "plan-1", override)).rejects.toThrow(
+      "Line not found on this plan"
+    );
+    expect(rec.inserts).toHaveLength(0);
+  });
+
+  it("looks the line up on THIS plan, on the override's side", async () => {
+    const rec = stage([]);
+    await upsertLineOverride("user-1", "plan-1", override).catch(() => undefined);
+    expect(rec.lineLookups).toHaveLength(1);
+    const { sql, params } = render(rec.lineLookups[0]);
+    expect(sql).toContain('"finance_plan_incomes"."plan_id"');
+    expect(params).toEqual(expect.arrayContaining([VICTIM_INCOME, "plan-1"]));
+  });
+
+  it("upserts the plan's own line, and a conflicting row is claimed for this plan", async () => {
+    const rec = stage([{ id: VICTIM_INCOME }]);
+    await upsertLineOverride("user-1", "plan-1", { ...override, parentSide: "debt" });
+    const { sql } = render(rec.lineLookups[0]);
+    expect(sql).toContain('"finance_plan_debts"."plan_id"');
+    expect(rec.inserts).toHaveLength(1);
+    expect(rec.inserts[0].values).toMatchObject({ planId: "plan-1", parentId: VICTIM_INCOME });
+    // The conflict key is (side, line, month): the line is proven to be this
+    // plan's, so the row it hits is too — even one aimed at it from another
+    // plan before this check existed.
+    expect(rec.inserts[0].onConflict?.set).toMatchObject({ planId: "plan-1", monthlyAmount: "1" });
+  });
+
+  it("deleting an override only ever touches the caller's own plan", async () => {
+    let cond: SQL | undefined;
+    vi.mocked(db.delete).mockReturnValueOnce({
+      where: (c: SQL) => {
+        cond = c;
+        return Promise.resolve();
+      },
+    } as never);
+    await deleteLineOverride("user-1", "plan-1", {
+      parentSide: "income",
+      parentId: VICTIM_INCOME,
+      monthYear: "2026-03-01",
+    });
+    const { sql, params } = render(cond as SQL);
+    expect(sql).toContain('"finance_plan_line_overrides"."plan_id"');
+    expect(params).toEqual(expect.arrayContaining(["plan-1", VICTIM_INCOME]));
   });
 });

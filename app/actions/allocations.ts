@@ -71,8 +71,8 @@ export async function setAllocationsAction(
 }
 
 /**
- * Price any approved contribution that has no allocation rows yet, using the
- * asset's close on the day the money landed.
+ * Price any settled (approved or closed) contribution that has no allocation
+ * rows yet, using the asset's close on the day the money landed.
  */
 export async function repriceContributionsAction(): Promise<ActionResult<BackfillResult>> {
   return safe("allocations", async () => {

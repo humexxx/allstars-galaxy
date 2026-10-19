@@ -1,10 +1,9 @@
 import { DashboardCardSkeleton } from "@/components/portal/dashboard-card-skeleton"
 import { PortalPageContainer } from "@/components/portal/page-container"
-import { PageHeaderSkeleton } from "@/components/skeletons/page-header-skeleton"
 
 /**
- * The portal root's fallback is the dashboard's: same header, same two-column
- * grid of cards, so the streamed cards land in the boxes the skeleton drew.
+ * The portal root's fallback is the dashboard's: the same two-column grid of
+ * cards, so the streamed cards land in the boxes the skeleton drew.
  * Sections with a different shape ship their own loading.tsx.
  */
 export default function PortalLoading() {
@@ -14,9 +13,8 @@ export default function PortalLoading() {
         <span className="sr-only" role="status">
           Loading…
         </span>
-        <PageHeaderSkeleton />
         <div className="grid auto-rows-min gap-4 md:grid-cols-2">
-          <DashboardCardSkeleton tiles={5} chart />
+          <DashboardCardSkeleton rail={5} />
           <DashboardCardSkeleton tiles={3} />
           <DashboardCardSkeleton tiles={3} />
           <DashboardCardSkeleton tiles={2} className="col-span-1" />

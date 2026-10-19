@@ -124,6 +124,16 @@ Never introduce another font family. The smallest sanctioned size is `text-2xs`
 (10px); never use arbitrary `text-[Npx]`. For spacing, reuse the Tailwind scale —
 never arbitrary `[...]` padding/margin/gap (see SPACING.md).
 
+### Dates
+Format through [`lib/utils/date.ts`](lib/utils/date.ts) (always `en-US`). A
+`YYYY-MM-DD` value is a calendar day and formats the same everywhere. An
+**instant** (a timestamp) formatted in a client component must pass the
+reader's zone — `formatDay(value, useReaderTimeZone())` — or the server (UTC)
+and the browser render different days every evening west of Greenwich and
+hydration fails. Server code gets "today" from `getRequestToday()` /
+`getRequestTodayIso()` (`lib/utils/request-today.ts`, the `tz` cookie), never
+from `new Date()` passed down to a client.
+
 ### Chart colours
 `--chart-1..5` in [`app/globals.css`](app/globals.css) are a **categorical**
 series palette — five distinct hues in a fixed order, encoding *identity* (which
@@ -331,15 +341,20 @@ MASSIVE_API_KEY         # Massive, formerly Polygon.io (rebranded early 2026).
 PADEL_API_KEY           # Premier Padel + FIP tournaments, last 6 months of
                         # matches free. 50K req/mo. https://padelapi.org
 
+# F1 news
+RAPIDAPI_KEY            # Refreshes the stored F1 news archive on the daily
+                        # cron. Unset = no refresh (not a cron failure); the
+                        # articles already stored keep reading.
+
 # DORMANT — kept for reference, not used by any service today:
 API_SPORTS_KEY          # Free tier hard-locked to seasons 2022-2024, unusable
                         # for current data. ~$100/mo for the All Sports paid
                         # plan if we ever upgrade. https://dashboard.api-sports.io
 ```
 
-F1 (Jolpica), LoL (Lolesports) and TheSportsDB are key-less — nothing to
-configure in `.env`. NFL and tennis stay on mock fixtures (no decent free
-provider with current data).
+F1 (Jolpica, plus ESPN for the dashboard card), LoL (Lolesports), tennis and
+the NFL (ESPN) are key-less — nothing to configure in `.env`. The NBA's games
+need `BALLDONTLIE_API_KEY`; its table comes from ESPN, also key-less.
 
 ## Common Workflows
 

@@ -6,6 +6,8 @@ import {
   createFinancePlanSchema,
   lineOverrideSchema,
   planDebtSchema,
+  updateFinancePlanSchema,
+  planIncomeSchema,
 } from "./finance";
 
 describe("lineOverrideSchema: reschedules may cross months", () => {
@@ -34,6 +36,27 @@ describe("initial savings may be negative (a restated overdraft)", () => {
   it("accepts a negative opening savings figure", () => {
     const plan = { name: "P", startMonth: "2026-09", monthsAhead: 24, initialSavings: "-120.50" };
     expect(createFinancePlanSchema.safeParse(plan).success).toBe(true);
+  });
+});
+
+describe("updating a plan: opening balances are never defaulted", () => {
+  const edit = {
+    id: "11111111-1111-4111-8111-111111111111",
+    name: "P",
+    startMonth: "2026-09",
+    monthsAhead: 24,
+  };
+
+  it("leaves an omitted balance undefined (it rolls forward), where create defaults it to 0", () => {
+    const r = updateFinancePlanSchema.parse(edit);
+    expect(r.initialSavings).toBeUndefined();
+    expect(r.initialInvestments).toBeUndefined();
+    expect(createFinancePlanSchema.parse(edit).initialSavings).toBe("0");
+  });
+
+  it("still validates a balance that is sent", () => {
+    expect(updateFinancePlanSchema.safeParse({ ...edit, initialSavings: "-120.50" }).success).toBe(true);
+    expect(updateFinancePlanSchema.safeParse({ ...edit, initialInvestments: "-1" }).success).toBe(false);
   });
 });
 
@@ -72,5 +95,65 @@ describe("rate bounds", () => {
     expect(createFinancePlanSchema.safeParse({ ...plan, monthlySavingsRate: "5" }).success).toBe(false);
     expect(createFinancePlanSchema.safeParse({ ...plan, surplusToDebtsPercent: "60" }).success).toBe(false);
     expect(createFinancePlanSchema.safeParse({ ...plan, monthlySavingsRate: "0.004" }).success).toBe(true);
+  });
+});
+
+
+
+describe("createFinancePlanSchema — messages the plan form shows per field", () => {
+  const base = {
+    name: "Plan",
+    startMonth: "2026-09",
+    monthsAhead: 36,
+  };
+  const messageFor = (input: Record<string, unknown>, field: string): string | undefined => {
+    const r = createFinancePlanSchema.safeParse({ ...base, ...input });
+    return r.success ? undefined : r.error.issues.find((i) => i.path[0] === field)?.message;
+  };
+
+  it("says what is wrong instead of zod's 'Too small: expected …'", () => {
+    expect(messageFor({ name: "  " }, "name")).toBe("Give the plan a name.");
+    expect(messageFor({ monthsAhead: 5 }, "monthsAhead")).toBe("At least 12 months.");
+    expect(messageFor({ monthsAhead: Number.NaN }, "monthsAhead")).toBe(
+      "Enter a number of months (12–120)."
+    );
+    expect(messageFor({ confirmationDayOfMonth: 31 }, "confirmationDayOfMonth")).toMatch(
+      /1 to 28/
+    );
+  });
+});
+
+describe("money owed to you", () => {
+  const owedRecurring = {
+    name: "Padre",
+    monthlyAmount: "6000",
+    kind: "recurring" as const,
+    owedToMe: true,
+    recurrenceType: "every_n_months" as const,
+    intervalMonths: 6,
+    dayOfMonth: 31,
+  };
+
+  it("defaults to an ordinary income", () => {
+    const parsed = planIncomeSchema.parse({ name: "Salary", monthlyAmount: "3000" });
+    expect(parsed.owedToMe).toBe(false);
+  });
+
+  it("needs an end date when it repeats, or it would be owed forever", () => {
+    const result = planIncomeSchema.safeParse(owedRecurring);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(["endDate"]);
+    expect(planIncomeSchema.safeParse({ ...owedRecurring, endDate: "2030-02-01" }).success).toBe(true);
+  });
+
+  it("takes a one-time repayment with just its date", () => {
+    const result = planIncomeSchema.safeParse({
+      name: "Hermana",
+      monthlyAmount: "600",
+      kind: "one_time",
+      date: "2026-12-31",
+      owedToMe: true,
+    });
+    expect(result.success).toBe(true);
   });
 });

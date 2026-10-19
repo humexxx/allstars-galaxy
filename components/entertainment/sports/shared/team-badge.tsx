@@ -7,10 +7,13 @@ type TeamBadgeProps = {
   className?: string;
 };
 
+// A three-letter code ("BOD", "RMA") at the 10px floor is ~19px of ink: in
+// the old 20px disc it ran edge to edge and the curve clipped the outer
+// letters. 24px is the smallest disc that holds one with air around it.
 const sizeMap = {
-  sm: "size-5 text-2xs",
-  md: "size-6 text-2xs",
-  lg: "size-8 text-xs",
+  sm: "size-6 text-2xs tracking-tighter",
+  md: "size-7 text-2xs tracking-tighter",
+  lg: "size-9 text-xs tracking-tight",
 };
 
 /**
@@ -39,7 +42,7 @@ export function TeamBadge({ team, size = "md", className }: TeamBadgeProps) {
     <span
       aria-hidden
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-full font-semibold ring-1 ring-black/10",
+        "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold leading-none ring-1 ring-black/10",
         sizeMap[size],
         className,
       )}

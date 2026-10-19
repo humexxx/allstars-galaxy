@@ -9,7 +9,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { SPORTS } from "@/lib/data/sports/registry";
-import { SAMPLE_DATA_SPORTS, type SportPayload } from "@/lib/sports/payload";
+import type { SportPayload } from "@/lib/sports/payload";
 import type { SportId, SportMeta } from "@/types/sports";
 
 import { F1View } from "./sports/f1-view";
@@ -27,12 +27,15 @@ type SportsHubProps = {
   favoriteSportIds?: SportId[];
   /** Exactly the sport being shown — the page fetches one, not all eight. */
   payload: SportPayload;
+  /** `?tab=` — lets a link open a view on a given tab (F1's news). */
+  initialTab?: string;
 };
 
 export function SportsHub({
   activeSport,
   favoriteSportIds = [],
   payload,
+  initialTab,
 }: SportsHubProps) {
   const favSet = useMemo(() => new Set(favoriteSportIds), [favoriteSportIds]);
 
@@ -50,18 +53,19 @@ export function SportsHub({
   return (
     <div className="flex flex-col gap-6">
       <SportSelector active={activeSport} favSet={favSet} sports={orderedSports} />
-      {SAMPLE_DATA_SPORTS.has(activeSport) && <SampleDataNotice />}
-      <SportContent payload={payload} />
+      {payload.sample && <SampleDataNotice />}
+      <SportContent payload={payload} initialTab={initialTab} />
     </div>
   );
 }
 
 /**
- * Says out loud that a sport is a fixture.
+ * Says out loud that a sport is showing its fixture.
  *
- * The NFL has no free provider with current data, so it renders a
- * hand-written season. Nothing on the page admitted it, which made a stale
- * scoreboard look like a broken live one.
+ * Every sport has a live provider now, but each falls back to a hand-written
+ * season when its feed has never answered — a missing key, a provider down on
+ * a cold cache. Nothing on the page admitted it, which made a stale scoreboard
+ * look like a broken live one.
  */
 function SampleDataNotice() {
   return (
@@ -70,7 +74,7 @@ function SampleDataNotice() {
       <Info />
       <AlertTitle>Sample data</AlertTitle>
       <AlertDescription>
-        No live provider is wired up for this sport yet, so these fixtures and
+        The live feed for this sport is not answering, so these fixtures and
         standings are made up.
       </AlertDescription>
     </Alert>
@@ -149,14 +153,20 @@ function SportMark({ emoji }: { emoji: string }) {
   );
 }
 
-function SportContent({ payload }: { payload: SportPayload }) {
+function SportContent({
+  payload,
+  initialTab,
+}: {
+  payload: SportPayload;
+  initialTab?: string;
+}) {
   switch (payload.sport) {
     case "football":
-      return <FootballView leagues={payload.leagues} />;
+      return <FootballView league={payload.league} options={payload.options} />;
     case "worldcup":
       return <WorldCupView data={payload.data} />;
     case "f1":
-      return <F1View data={payload.data} news={payload.news} />;
+      return <F1View data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "nba":
       return <NbaView data={payload.data} />;
     case "tennis":

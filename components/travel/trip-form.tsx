@@ -3,7 +3,6 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format } from "date-fns";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -35,16 +34,21 @@ const COLORS = [
   "var(--chart-5)",
 ];
 
-function todayIso(): string {
-  return format(new Date(), "yyyy-MM-dd");
-}
-
 export function TripForm({
   trip,
+  today,
   onCancel,
   onSaved,
 }: {
   trip?: Trip;
+  /**
+   * The reader's today as YYYY-MM-DD, decided by the server
+   * (`getRequestTodayIso`). Creating seeds the start date from it. Reading the
+   * clock here gave the server's UTC day in the HTML and the browser's own day
+   * on hydration — every evening west of Greenwich the two disagreed and React
+   * discarded the whole form.
+   */
+  today?: string;
   /**
    * Inside the edit dialog, Cancel closes the dialog. Without it (the "new
    * trip" page) Cancel goes back to the list — `router.back()` left the app
@@ -64,7 +68,7 @@ export function TripForm({
 
   // Only honour ?startDate= when creating — on edit the trip's own startDate is
   // the source of truth and a stale URL param shouldn't overwrite it.
-  const seedStartDate = trip?.startDate ?? searchParams.get("startDate") ?? todayIso();
+  const seedStartDate = trip?.startDate ?? searchParams.get("startDate") ?? today ?? "";
 
   const {
     register,
@@ -113,13 +117,19 @@ export function TripForm({
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
       <div className="grid gap-6 md:grid-cols-2">
-        <div className="flex flex-col gap-4">
+        {/* A container: the dates pair up by the room this column has, not
+            by the viewport. Inside the edit dialog the column is ~350px at
+            any screen width, and side by side the end day read "Sun, 15
+            Nov…" behind its clear button. */}
+        <div className="@container flex flex-col gap-4">
           <Field className="gap-2" data-invalid={!!errors.title}>
             <FieldLabel htmlFor="trip-title">Title</FieldLabel>
             <Input
               id="trip-title"
               placeholder="Summer in Lisbon"
-              required
+              // The schema reports a missing title under the field; native
+              // `required` raised the browser's bubble before it could.
+              aria-required
               autoFocus
               aria-invalid={!!errors.title}
               {...register("title", {
@@ -142,7 +152,7 @@ export function TripForm({
             <FieldError errors={[errors.destination]} />
           </Field>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 @sm:grid-cols-2">
             <Field className="gap-2" data-invalid={!!errors.startDate}>
               <FieldLabel htmlFor="trip-start">Start</FieldLabel>
               <Controller

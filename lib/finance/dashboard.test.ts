@@ -50,6 +50,20 @@ describe("F11: dashboard card figures", () => {
     expect(fig.delta).toBeCloseTo(fig.points.at(-1)!.netWorth - fig.netWorth, 0);
   });
 
+  it("points keep cents and name their year, so the tooltip matches the tiles", () => {
+    const projection = projectPlan(plan, incomes, expenses, [], options);
+    const today = projectStateAt(plan, incomes, expenses, [], options, now);
+    const fig = buildDashboardFigures(projection, today, 1, now);
+    // The first point IS the Net worth tile (it was rounded to whole dollars).
+    expect(fig.points[0].netWorth).toBe(Math.round(today!.netWorth * 100) / 100);
+    expect(fig.points[0]).toMatchObject({ month: "Now", label: "Today" });
+    // Today is in Sep 2026; the 12th close is Sep 2027 — same month, so the
+    // label carries the year.
+    expect(fig.points[1].label).toBe("Oct 2026");
+    expect(fig.points.at(-1)!.label).toBe("Sep 2027");
+    expect(fig.points.at(-1)!.month).toBe("Sep");
+  });
+
   it("a plan that hasn't started shows its opening figures", () => {
     const later = { ...plan, startMonth: U(2027, 1), initialSavings: "5000" } as FinancePlan;
     const projection = projectPlan(later, incomes, expenses, [], {});

@@ -43,13 +43,24 @@ export function tripDays(start: string, end: string | null): number {
   return Math.round((e.getTime() - s.getTime()) / 86_400_000) + 1;
 }
 
+/**
+ * "$1,380" for a whole amount, "$1,750.50" for one with cents.
+ *
+ * Never "$1,750.5": a minimum of zero decimals with a maximum of two printed
+ * half a cent column, which reads as a typo on every payment of x.50 and on
+ * every 20% share of a round figure. Whole numbers still drop the ".00" — the
+ * itinerary is mostly quotes, and "$1,380.00" is noise there. Decided on the
+ * value rounded to cents, so 2829.8000000001 is "$2,829.80", not an integer
+ * test that floating point fails.
+ */
 export function formatTripMoney(value: number, currency: string): string {
+  const whole = Math.round(value * 100) % 100 === 0;
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: whole ? 0 : 2,
+      maximumFractionDigits: whole ? 0 : 2,
     }).format(value);
   } catch {
     // Unknown currency code falls back to plain number prefixed with code.

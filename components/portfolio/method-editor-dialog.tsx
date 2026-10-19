@@ -127,8 +127,7 @@ export function MethodEditorDialog({
               </SelectContent>
             </Select>
             <FieldDescription>
-              Credited to you — a method is attributed to whoever runs it, so
-              there is nothing to set here.
+              Shown to clients beside the method&apos;s name.
             </FieldDescription>
           </Field>
 

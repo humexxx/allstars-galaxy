@@ -221,8 +221,8 @@ export function PlansWorkspace({
           column on mobile (chart first, then the rail). */}
       {/* min-w-0 on both grid children: grid items default to min-width:auto,
           so recharts' measured svg would inflate the column past the viewport
-          on mobile instead of shrinking. No items-start — the rail card
-          stretches to match the chart card's height. */}
+          on mobile instead of shrinking. The chart card sets the row height
+          on lg and the rail fills it (see the rail card). */}
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="min-w-0 lg:col-span-2">
           <CardHeader className="flex flex-wrap items-center justify-between gap-3">
@@ -288,12 +288,20 @@ export function PlansWorkspace({
                 focusedPlanId={focusedId}
                 months={months}
                 pastMonths={PAST_MONTHS}
+                // The rail beside (or under) the chart already names and
+                // colours every series; with many plans the legend wrapped
+                // each name word by word under the plot.
+                legendClassName="hidden"
               />
             )}
           </CardContent>
         </Card>
 
-        <Card className="min-w-0">
+        {/* h-0 + min-h-full on lg: the rail takes the chart card's height
+            instead of setting the row's — with many plans it stretched the
+            chart card into a tall empty band under the plot. The list
+            scrolls inside it instead. */}
+        <Card className="min-w-0 lg:h-0 lg:min-h-full">
           <CardHeader>
             <Eyebrow asChild>
               <h2 ref={listHeadingRef} tabIndex={-1} className="outline-none">
@@ -301,10 +309,10 @@ export function PlansWorkspace({
               </h2>
             </Eyebrow>
             <CardDescription>
-              Point at a plan to highlight it. Its dot sets the line colour.
+              Tick plans to chart them; a plan’s dot sets its line colour.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="lg:min-h-0 lg:overflow-y-auto">
             <ul className="flex flex-col gap-2">
               {plans.map((plan) => {
                 const s = summaries[plan.id];
@@ -349,18 +357,25 @@ export function PlansWorkspace({
                         )}
                       </div>
                       {s && (
-                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                          <span className="inline-flex items-center gap-1">
-                            NW
+                        // Two lines, not one wrapping row: wrapped, the "·"
+                        // separator was left dangling at the end of line one.
+                        <div className="mt-0.5 flex flex-col gap-0.5 text-xs text-muted-foreground">
+                          <span className="flex flex-wrap items-baseline gap-x-1">
+                            Net worth
                             <Mono
-                              className={moneySign(s.endingNetWorth) >= 0 ? POSITIVE : NEGATIVE}
+                              className={
+                                moneySign(s.endingNetWorth) > 0
+                                  ? POSITIVE
+                                  : moneySign(s.endingNetWorth) < 0
+                                    ? NEGATIVE
+                                    : undefined
+                              }
                             >
                               {formatCurrency(s.endingNetWorth)}
                             </Mono>
                             {/* Dated: each plan ends on its own horizon. */}
                             {s.endDate && <span>at {END_LABEL.format(s.endDate)}</span>}
                           </span>
-                          <span aria-hidden="true">·</span>
                           {(() => {
                             const status = summaryDebtFree(s);
                             return (

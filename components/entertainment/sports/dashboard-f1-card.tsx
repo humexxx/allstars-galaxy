@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Eyebrow, Mono } from "@/components/ui/typography";
-import { formatShortDay } from "@/lib/utils/date";
+import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { getF1DashboardStandings } from "@/lib/services/espn-f1-standings-service";
 import { getF1News } from "@/lib/services/rapidapi-f1-news-service";
 import {
@@ -21,6 +21,7 @@ import {
 } from "@/lib/services/sports-service";
 import { F1StandingsTabs } from "@/components/entertainment/sports/f1-standings-tabs";
 import { StatusPill } from "@/components/entertainment/sports/shared/status-pill";
+import { matchTimeFormat } from "@/components/entertainment/sports/shared/match-time";
 import type { F1NewsImage } from "@/db/schema";
 
 const F1_PATH = "/portal/entertainment/sports?sport=f1";
@@ -48,11 +49,15 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
   const favorites = await listUserFavoriteSportIds(userId);
   if (!favorites.includes("f1")) return null;
 
-  const [highlight, news, standings] = await Promise.all([
+  const [highlight, news, standings, timeZone] = await Promise.all([
     getF1DashboardHighlight(),
     getF1News(SHOWN),
     getF1DashboardStandings(3),
+    getRequestTimeZone(),
   ]);
+  // The reader's day, not the server's (UTC): a story from 22:00 in Costa
+  // Rica belongs to that evening, not tomorrow.
+  const format = matchTimeFormat(timeZone);
   if (!highlight && news.length === 0) return null;
 
   return (
@@ -128,7 +133,7 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
                       {item.headline}
                     </span>
                     <Mono className="mt-auto text-2xs text-muted-foreground">
-                      {formatShortDay(item.firstSeenAt)}
+                      {format.shortDay(item.firstSeenAt)}
                     </Mono>
                   </Link>
                 );

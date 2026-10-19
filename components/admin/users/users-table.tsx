@@ -135,13 +135,18 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
         />
       ) : (
         <Card>
-          <CardContent className="px-0">
+          <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>User</TableHead>
-                  <TableHead className="w-30">Role</TableHead>
-                  <TableHead className="w-16 text-right">Actions</TableHead>
+                  {/* On a phone the role rides under the name: as its own
+                      column it pushed Actions off-screen behind a sideways
+                      scroll, beside a long email. */}
+                  <TableHead className="hidden w-30 sm:table-cell">Role</TableHead>
+                  <TableHead className="w-16 text-right">
+                    <span className="sr-only sm:not-sr-only">Actions</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -155,26 +160,36 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
 
                   return (
                     <TableRow key={user.id} className={isSelf ? "bg-muted/30" : undefined}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar className="size-9">
+                      <TableCell className="max-w-0 sm:max-w-none">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <Avatar className="size-9 shrink-0">
                             <AvatarImage src={user.avatarUrl ?? ""} alt={displayName} />
                             <AvatarFallback>{initial}</AvatarFallback>
                           </Avatar>
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-2">
-                              <Text as="span" variant="body" weight="medium">{displayName}</Text>
+                          <div className="flex min-w-0 flex-col gap-0.5">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <Text as="span" variant="body" weight="medium" className="truncate">
+                                {displayName}
+                              </Text>
                               {isSelf && (
-                                <Badge variant="outline">You</Badge>
+                                <Badge variant="outline" className="shrink-0">You</Badge>
                               )}
                             </div>
-                            {user.email && (
-                              <Mono className="text-xs text-muted-foreground">{user.email}</Mono>
+                            {user.email && user.email !== displayName && (
+                              <Mono className="truncate text-xs text-muted-foreground">
+                                {user.email}
+                              </Mono>
                             )}
+                            <div className="sm:hidden">
+                              <Badge variant={isAdmin ? "default" : "secondary"}>
+                                <RoleIcon aria-hidden />
+                                {ROLE_META[role].label}
+                              </Badge>
+                            </div>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         <Badge variant={isAdmin ? "default" : "secondary"}>
                           <RoleIcon aria-hidden />
                           {ROLE_META[role].label}
@@ -189,7 +204,7 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
                             <span className="sr-only">No actions available</span>
                           </Text>
                         ) : (
-                          <DropdownMenu>
+                          <DropdownMenu modal={false}>
                             <DropdownMenuTrigger asChild>
                               <Button
                                 variant="ghost"
@@ -232,10 +247,11 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
                                 return (
                                   <DropdownMenuItem
                                     key={nextRole}
-                                    onSelect={(e) => {
-                                      e.preventDefault();
-                                      setPendingRoleChange({ user, nextRole });
-                                    }}
+                                    // Let the menu close: held open with
+                                    // preventDefault it stayed painted under
+                                    // the confirm dialog and kept the page
+                                    // inert after Cancel.
+                                    onSelect={() => setPendingRoleChange({ user, nextRole })}
                                   >
                                     <Icon />
                                     {ROLE_META[nextRole].label}
@@ -271,7 +287,9 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
             <AlertDialogDescription>
               {pendingRoleChange && (
                 <>
-                  <strong>{pendingRoleChange.user.fullName ?? pendingRoleChange.user.email}</strong>{" "}
+                  <strong className="break-words">
+                    {pendingRoleChange.user.fullName ?? pendingRoleChange.user.email}
+                  </strong>{" "}
                   becomes {ROLE_META[pendingRoleChange.nextRole].label.toLowerCase()}:{" "}
                   {ROLE_META[pendingRoleChange.nextRole].hint.toLowerCase()}.
                   {pendingRoleChange.user.role === "admin" &&
@@ -293,7 +311,11 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
               disabled={isRolePending}
             >
               {isRolePending && <Spinner />}
-              {isRolePending ? "Saving…" : "Confirm"}
+              {isRolePending
+                ? "Saving…"
+                : pendingRoleChange
+                  ? `Make ${ROLE_META[pendingRoleChange.nextRole].label.toLowerCase()}`
+                  : "Confirm"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

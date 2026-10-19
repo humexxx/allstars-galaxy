@@ -278,6 +278,9 @@ async function writeRestatement(
 /**
  * `restatement` (from `restateOpeningBalances`) is passed when the edit
  * changes an opening balance: the whole set is then restated as of that day.
+ * Opening balances change ONLY that way — without one they are left alone,
+ * since a figure written without re-dating `balances_as_of` would be claimed
+ * as of a day it was never true on.
  */
 export async function updatePlan(
   userId: string,
@@ -300,19 +303,23 @@ export async function updatePlan(
         description: data.description ?? null,
         startMonth: data.startMonth,
         monthsAhead: data.monthsAhead,
-        initialSavings: restatement?.initialSavings ?? data.initialSavings,
         monthlySavingsRate: data.monthlySavingsRate,
         includePortfolio: data.includePortfolio,
         surplusToDebtsPercent: data.surplusToDebtsPercent,
         debtStrategy: data.debtStrategy,
         autoInvestPercent: data.autoInvestPercent,
         autoInvestMethodId: data.autoInvestMethodId ?? null,
-        initialInvestments: restatement?.initialInvestments ?? data.initialInvestments,
         confirmationDayOfMonth: data.confirmationDayOfMonth,
         color: data.color,
         // undefined leaves the link untouched; null explicitly detaches.
         basedOnPlanId: data.basedOnPlanId,
-        ...(restatement ? { balancesAsOf: restatement.balancesAsOf } : {}),
+        ...(restatement
+          ? {
+              initialSavings: restatement.initialSavings,
+              initialInvestments: restatement.initialInvestments,
+              balancesAsOf: restatement.balancesAsOf,
+            }
+          : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(financePlans.id, data.id), eq(financePlans.userId, userId)))
@@ -479,6 +486,7 @@ export async function clonePlan(
             name: i.name,
             monthlyAmount: i.monthlyAmount,
             kind: i.kind,
+            owedToMe: i.owedToMe,
             dayOfMonth: i.dayOfMonth,
             date: i.date,
             startDate: i.startDate,
@@ -600,6 +608,7 @@ export async function addIncome(
       name: data.name,
       monthlyAmount: data.monthlyAmount,
       kind: data.kind,
+      owedToMe: data.owedToMe,
       dayOfMonth: data.dayOfMonth ?? null,
       date: data.kind === "one_time" ? data.date ?? null : null,
       startDate: data.kind === "recurring" ? data.startDate ?? null : null,
@@ -627,6 +636,7 @@ export async function updateIncome(
       name: data.name,
       monthlyAmount: data.monthlyAmount,
       kind: data.kind,
+      owedToMe: data.owedToMe,
       dayOfMonth: data.dayOfMonth ?? null,
       date: data.kind === "one_time" ? data.date ?? null : null,
       startDate: data.kind === "recurring" ? data.startDate ?? null : null,
@@ -857,10 +867,41 @@ export async function deleteDebt(
 // ---------- per-month line overrides ----------
 
 /**
+ * Whether `lineId` is a line of `planId` on `side`. Overrides point at their
+ * line polymorphically (no FK), so nothing else stops a caller from aiming
+ * one at another plan's line.
+ */
+async function isLineOfPlan(
+  exec: typeof db | Tx,
+  side: LineOverrideData["parentSide"],
+  lineId: string,
+  planId: string
+): Promise<boolean> {
+  const table =
+    side === "income"
+      ? financePlanIncomes
+      : side === "expense"
+        ? financePlanExpenses
+        : financePlanDebts;
+  const [row] = await exec
+    .select({ id: table.id })
+    .from(table)
+    .where(and(eq(table.id, lineId), eq(table.planId, planId)))
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
  * Upserts a single override for (parentSide, parentId, monthYear). The unique
  * index on those three columns makes this an idempotent replace: writing a
  * second override for the same recurring entry in the same month replaces
  * whatever was there before.
+ *
+ * That key has no plan in it, so owning `planId` proves nothing about the
+ * row a conflict lands on: the line must be checked to be this plan's first
+ * (in the same transaction), or a caller could pass their own plan with
+ * another user's income id and overwrite that user's override. Once it is,
+ * the key is effectively plan-scoped — a line belongs to exactly one plan.
  */
 export async function upsertLineOverride(
   userId: string,
@@ -868,31 +909,37 @@ export async function upsertLineOverride(
   data: LineOverrideData
 ): Promise<void> {
   await ensureOwnership(planId, userId);
-  await db
-    .insert(financePlanLineOverrides)
-    .values({
-      planId,
-      parentSide: data.parentSide,
-      parentId: data.parentId,
-      monthYear: data.monthYear,
-      action: data.action,
-      date: data.action === "reschedule" ? data.date ?? null : null,
-      monthlyAmount:
-        data.action === "amount" ? data.monthlyAmount ?? null : null,
-    })
-    .onConflictDoUpdate({
-      target: [
-        financePlanLineOverrides.parentSide,
-        financePlanLineOverrides.parentId,
-        financePlanLineOverrides.monthYear,
-      ],
-      set: {
-        action: data.action,
-        date: data.action === "reschedule" ? data.date ?? null : null,
-        monthlyAmount:
-          data.action === "amount" ? data.monthlyAmount ?? null : null,
-      },
-    });
+  const fields = {
+    action: data.action,
+    date: data.action === "reschedule" ? data.date ?? null : null,
+    monthlyAmount: data.action === "amount" ? data.monthlyAmount ?? null : null,
+  };
+  await db.transaction(async (tx) => {
+    if (!(await isLineOfPlan(tx, data.parentSide, data.parentId, planId))) {
+      throw new Error("Line not found on this plan");
+    }
+    await tx
+      .insert(financePlanLineOverrides)
+      .values({
+        planId,
+        parentSide: data.parentSide,
+        parentId: data.parentId,
+        monthYear: data.monthYear,
+        ...fields,
+      })
+      .onConflictDoUpdate({
+        target: [
+          financePlanLineOverrides.parentSide,
+          financePlanLineOverrides.parentId,
+          financePlanLineOverrides.monthYear,
+        ],
+        // `planId` too: the line is this plan's, so the row keyed by it is.
+        // That reclaims a row aimed at this line from another plan before the
+        // check above existed, which otherwise kept the slot and swallowed
+        // every later write for the month.
+        set: { planId, ...fields },
+      });
+  });
 }
 
 export async function deleteLineOverride(
@@ -901,6 +948,7 @@ export async function deleteLineOverride(
   data: DeleteLineOverrideData
 ): Promise<void> {
   await ensureOwnership(planId, userId);
+  // Scoped to the owned plan, so a foreign line id matches nothing here.
   await db
     .delete(financePlanLineOverrides)
     .where(
@@ -975,20 +1023,39 @@ export async function getAutoInvestRate(plan: FinancePlan): Promise<number> {
 }
 
 /**
+ * `getAutoInvestRate` for many methods in one query (the list and compare
+ * pages project every plan): method id → monthly ROI as a decimal. A method
+ * that no longer exists is absent, which callers read as 0 like the single
+ * lookup does.
+ */
+export async function getAutoInvestRates(
+  methodIds: readonly string[]
+): Promise<Map<string, number>> {
+  if (methodIds.length === 0) return new Map();
+  const rows = await db
+    .select({ id: investmentMethods.id, monthlyRoi: investmentMethods.monthlyRoi })
+    .from(investmentMethods)
+    .where(inArray(investmentMethods.id, [...methodIds]));
+  return new Map(rows.map((r) => [r.id, num(r.monthlyRoi) / 100]));
+}
+
+/**
  * Everything `projectPlan` needs beyond the plan's own lines: the live
  * portfolio (and its blended growth) when the plan includes it, the
  * auto-invest method's ROI, the overrides and the as-of day. One place, so
  * the plan page, the lists, the dashboard, the snapshots and the strategy
- * comparison all project with the SAME inputs.
+ * comparison all project with the SAME inputs. `prefetched.autoInvestRate`
+ * is for a caller that already batch-loaded it (`getAutoInvestRates`).
  */
 export async function projectionOptionsFor(
   plan: FinancePlanWithLines,
-  userId: string
+  userId: string,
+  prefetched: { autoInvestRate?: number } = {}
 ): Promise<ProjectOptions> {
   const [portfolioValue, portfolioMonthlyGrowthRate, autoInvestRate] = await Promise.all([
     plan.includePortfolio ? getPortfolioValueForUser(userId) : Promise.resolve(0),
     plan.includePortfolio ? getPortfolioWeightedMonthlyRoi(userId) : Promise.resolve(0),
-    getAutoInvestRate(plan),
+    prefetched.autoInvestRate ?? getAutoInvestRate(plan),
   ]);
   return {
     portfolioValue,

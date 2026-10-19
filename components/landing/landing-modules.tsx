@@ -3,8 +3,20 @@ import { ArrowUpRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Eyebrow, Heading, Text } from "@/components/ui/typography";
+import { cn } from "@/lib/utils";
 
 import { LANDING_MODULES, LIVE_MODULES, SOON_MODULES, countWord } from "./modules";
+
+/** Column span for the last card, keyed by card count mod 6 (the grid is 2
+ *  columns from `sm` and 3 from `lg`), so the final row is always full. */
+const LAST_ROW_SPAN: Record<number, string> = {
+  0: "",
+  1: "sm:col-span-2 lg:col-span-3",
+  2: "lg:col-span-2",
+  3: "sm:col-span-2 lg:col-span-1",
+  4: "lg:col-span-3",
+  5: "sm:col-span-2 lg:col-span-2",
+};
 
 function moduleCount(): string {
   const live = countWord(LIVE_MODULES.length);
@@ -28,9 +40,16 @@ export function LandingModules() {
         </div>
 
         <div className="mt-12 grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2 lg:grid-cols-3">
-          {LANDING_MODULES.map((module) => {
+          {LANDING_MODULES.map((module, index) => {
             const { icon: Icon, title, description } = module;
             const isSoon = module.status === "soon";
+            // The grid draws its dividers with `gap-px` over a border-coloured
+            // background, so an unfilled last row showed up as a grey slab.
+            // The last card stretches across whatever the row has left.
+            const span =
+              index === LANDING_MODULES.length - 1
+                ? LAST_ROW_SPAN[LANDING_MODULES.length % 6]
+                : "";
             const body = (
               <div
                 className={`group relative h-full bg-card p-6 transition-colors sm:p-8 ${
@@ -61,7 +80,7 @@ export function LandingModules() {
 
             if (module.status === "soon") {
               return (
-                <div key={title} className="bg-card">
+                <div key={title} className={cn("bg-card", span)}>
                   {body}
                 </div>
               );
@@ -71,7 +90,7 @@ export function LandingModules() {
               <Link
                 key={title}
                 href={module.href}
-                className="bg-card outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                className={cn("bg-card outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset", span)}
               >
                 {body}
               </Link>

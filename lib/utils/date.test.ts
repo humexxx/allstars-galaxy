@@ -5,6 +5,7 @@ import {
   earliestCalendarDay,
   isValidTimeZone,
   todayInTimeZone,
+  formatDateTime,
   formatDay,
   formatDayRange,
   formatMonth,
@@ -90,5 +91,22 @@ describe("earliestCalendarDay", () => {
         calendarDayInTimeZone(instant, zone).getTime()
       );
     }
+  });
+});
+
+describe("formatting an instant in the reader's zone", () => {
+  // 02:30 UTC on Oct 1 is still the evening of Sep 30 in Costa Rica (UTC−6).
+  const instant = new Date("2026-10-01T02:30:00Z");
+
+  it("names the reader's day, not the server's", () => {
+    expect(formatDay(instant, "UTC")).toBe("Oct 1, 2026");
+    expect(formatDay(instant, "America/Costa_Rica")).toBe("Sep 30, 2026");
+    expect(formatShortDay(instant, "America/Costa_Rica")).toBe("Sep 30");
+    expect(formatDateTime(instant, "America/Costa_Rica")).toBe("Sep 30, 2026, 8:30 PM");
+  });
+
+  it("leaves a date-only value on the calendar day it names", () => {
+    expect(formatDay("2026-03-08", "America/Costa_Rica")).toBe("Mar 8, 2026");
+    expect(formatDay("2026-03-08", "Asia/Tokyo")).toBe("Mar 8, 2026");
   });
 });

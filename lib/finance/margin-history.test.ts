@@ -5,6 +5,7 @@ import {
   discountToMonth,
   monthRange,
   monthsBetween,
+  withdrawnLiability,
 } from "./margin-history";
 
 describe("monthRange", () => {
@@ -146,5 +147,54 @@ describe("buildMarginHistory", () => {
     expect(
       buildMarginHistory({ contributions: [], liabilities: [], prices, today: "2026-08" })
     ).toEqual([]);
+  });
+
+  it("counts withdrawn money as owed for every month before it left", () => {
+    // 10,000 at 1%/month from 2026-03; 1,000 withdrawn in 2026-09. The stored
+    // value is net of the withdrawal, so discounting it alone drew March-August
+    // about 1,000 short — as if that money had never been owed.
+    const r = 0.01;
+    const sep = (10000 * Math.pow(1 + r, 6) - 1000) * (1 + r); // stored, 2026-10
+    const out = buildMarginHistory({
+      contributions: [],
+      liabilities: [
+        { month: "2026-03", currentValue: sep, monthlyRoi: r, isOwn: false },
+        withdrawnLiability({
+          amount: 1000,
+          monthlyRoi: r,
+          sourceMonth: "2026-03",
+          withdrawalMonth: "2026-09",
+          today: "2026-10",
+          isOwn: false,
+        }),
+      ],
+      prices,
+      today: "2026-10",
+    });
+
+    const byMonth = new Map(out.map((p) => [p.month, p.liability]));
+    expect(byMonth.get("2026-03")).toBeCloseTo(10000, 6);
+    expect(byMonth.get("2026-08")).toBeCloseTo(10000 * Math.pow(1 + r, 5), 6);
+    // From the withdrawal month on, only what is left is owed.
+    expect(byMonth.get("2026-09")).toBeCloseTo(10000 * Math.pow(1 + r, 6) - 1000, 6);
+    expect(byMonth.get("2026-10")).toBeCloseTo(sep, 6);
+  });
+
+  it("takes contributed cash from the cash flows, priced or not", () => {
+    // Nothing priced yet: the book still holds 5,000 of real money. Summing the
+    // priced allocations made the headline read "Contributed $0.00".
+    const out = buildMarginHistory({
+      contributions: [],
+      liabilities: [{ month: "2026-02", currentValue: 5000, monthlyRoi: 0, isOwn: true }],
+      cashFlows: [
+        { month: "2026-02", amount: 5000 },
+        { month: "2026-04", amount: -1200 },
+      ],
+      prices,
+      today: "2026-04",
+    });
+
+    expect(out.map((p) => p.invested)).toEqual([5000, 5000, 3800]);
+    expect(out.every((p) => p.deployed === 0)).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 import {
   Select,
@@ -13,6 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow } from "@/components/ui/typography";
 import { Card, CardContent } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
+import { TableCard } from "../shared/table-primitives";
 import type { FootballLeagueData, FootballLeagueId, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
@@ -21,20 +24,23 @@ import { SportShell } from "../shared/sport-shell";
 import { StandingsTable } from "../shared/standings-table";
 
 type FootballViewProps = {
-  leagues: FootballLeagueData[];
+  league: FootballLeagueData;
+  options: ReadonlyArray<{ id: FootballLeagueId; name: string }>;
 };
 
 type TabKey = "overview" | "matches" | "table" | "knockout";
 
-export function FootballView({ leagues }: FootballViewProps) {
-  const [leagueId, setLeagueId] = useState<FootballLeagueId>(
-    leagues[0]?.league.id ?? "uefa-champions-league",
-  );
-
-  const league = useMemo(
-    () => leagues.find((l) => l.league.id === leagueId) ?? leagues[0],
-    [leagues, leagueId],
-  );
+/**
+ * One league, picked through the URL (`?league=`) rather than client state:
+ * the page fetches only the league on screen, so a refresh keeps it, Back
+ * returns to the last one, and a link can point at one.
+ */
+export function FootballView({ league, options }: FootballViewProps) {
+  const router = useRouter();
+  const [navigating, startNavigation] = useTransition();
+  // The pick shows at once; the league itself arrives with the navigation.
+  const [picked, setPicked] = useState<FootballLeagueId | null>(null);
+  const leagueId = league.league.id;
 
   const teamsMap = useMemo(
     () => new Map<string, Team>(league.teams.map((t) => [t.id, t])),
@@ -59,21 +65,30 @@ export function FootballView({ leagues }: FootballViewProps) {
         title={league.league.name}
         subtitle={`${league.league.region} · Season ${league.league.season}`}
         controls={
-          <Select
-            value={leagueId}
-            onValueChange={(v) => setLeagueId(v as FootballLeagueId)}
-          >
-            <SelectTrigger className="w-56" aria-label="League">
-              <SelectValue placeholder="League" />
-            </SelectTrigger>
-            <SelectContent>
-              {leagues.map((l) => (
-                <SelectItem key={l.league.id} value={l.league.id}>
-                  {l.league.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            {navigating && <Spinner />}
+            <Select
+              value={navigating && picked ? picked : leagueId}
+              onValueChange={(v) => {
+                const next = v as FootballLeagueId;
+                setPicked(next);
+                startNavigation(() =>
+                  router.push(`?sport=football&league=${next}`, { scroll: false })
+                );
+              }}
+            >
+              <SelectTrigger className="w-56" aria-label="League" aria-busy={navigating}>
+                <SelectValue placeholder="League" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         }
         tabs={
           <TabsList>
@@ -102,14 +117,13 @@ export function FootballView({ leagues }: FootballViewProps) {
               />
             }
             standings={
-              <Card>
-                <CardContent className="px-0">
-                  <StandingsTable
-                    standings={league.standings.slice(0, 6)}
-                    teams={teamsMap}
-                  />
-                </CardContent>
-              </Card>
+              <TableCard>
+                <StandingsTable
+                  standings={league.standings.slice(0, 6)}
+                  teams={teamsMap}
+                  variant="compact"
+                />
+              </TableCard>
             }
           />
         </TabsContent>
@@ -126,11 +140,9 @@ export function FootballView({ leagues }: FootballViewProps) {
           {league.standings.length === 0 ? (
             <EmptyState title="No standings available yet" />
           ) : (
-            <Card>
-              <CardContent className="px-0">
-                <StandingsTable standings={league.standings} teams={teamsMap} />
-              </CardContent>
-            </Card>
+            <TableCard>
+              <StandingsTable standings={league.standings} teams={teamsMap} />
+            </TableCard>
           )}
         </TabsContent>
 
@@ -156,7 +168,7 @@ function OverviewLayout({
   standings: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+    <div className="grid gap-6 @4xl:grid-cols-[2fr_1fr]">
       <section className="flex min-w-0 flex-col gap-3">
         <Eyebrow>Matches</Eyebrow>
         {matches}
@@ -190,9 +202,10 @@ function MatchesGrid({
       {Object.entries(grouped).map(([label, group]) => (
         <div key={label} className="flex flex-col gap-2">
           <Eyebrow size="sm">{label}</Eyebrow>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 @xl:grid-cols-2">
             {group.map((match) => (
-              <ScoreCard key={match.id} match={match} teams={teamsMap} />
+              // The group heading already names the stage.
+              <ScoreCard key={match.id} match={match} teams={teamsMap} hideStage />
             ))}
           </div>
         </div>

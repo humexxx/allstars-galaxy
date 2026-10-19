@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { ChevronRight, Search } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Text } from "@/components/ui/typography";
+import { formatRoi } from "./figures";
 import {
   Dialog,
   DialogContent,
@@ -46,7 +49,10 @@ export function InvestmentMethodSelector({
             Pick where this money goes. You can change it on the next step.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        {/* `min-w-0` here, and `block` on Radix's viewport wrapper (it is
+            `display: table`, which grows to its widest child): without both a
+            long method name widened the dialog past a phone's edge. */}
+        <div className="flex min-w-0 flex-col gap-4">
           <InputGroup>
             <InputGroupAddon>
               <Search aria-hidden />
@@ -58,24 +64,41 @@ export function InvestmentMethodSelector({
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </InputGroup>
-          <ScrollArea className="max-h-[60svh]">
+          <ScrollArea className="max-h-[60svh] [&_[data-slot=scroll-area-viewport]>div]:block!">
             <div className="flex flex-col gap-2">
+              {filteredMethods.length === 0 && (
+                <EmptyState
+                  icon={Search}
+                  title={
+                    methods.length === 0
+                      ? "No methods are open to new money"
+                      : "No methods match your search"
+                  }
+                />
+              )}
               {filteredMethods.map((method) => (
                 <Button
                   key={method.id}
                   variant="ghost"
-                  className="flex h-auto items-center justify-between p-4"
+                  className="flex h-auto w-full min-w-0 items-center justify-between gap-3 p-4"
                   onClick={() => {
                     onSelect(method);
                   }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
                       <span className="text-sm font-semibold text-primary">
                         {method.name.substring(0, 2).toUpperCase()}
                       </span>
                     </div>
-                    <span className="font-medium">{method.name}</span>
+                    {/* What a client picks on: the fixed return and the risk. */}
+                    <div className="flex min-w-0 flex-col items-start gap-0.5 text-left">
+                      <span className="max-w-full truncate font-medium">{method.name}</span>
+                      <Text as="span" variant="small" className="font-normal">
+                        {method.riskLevel} risk ·{" "}
+                        {formatRoi(parseFloat(method.monthlyRoi))} a month
+                      </Text>
+                    </div>
                   </div>
                   <ChevronRight aria-hidden className="text-muted-foreground" />
                 </Button>

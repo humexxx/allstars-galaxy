@@ -10,6 +10,7 @@ const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("@/app/actions/sports", () => ({ setSportFavoriteAction: vi.fn() }));
 vi.mock("@/app/actions/racquet", () => ({ getRacquetDrawAction: vi.fn() }));
+vi.mock("@/app/actions/f1", () => ({ getF1RaceClassificationAction: vi.fn() }));
 
 function renderHub(): ReturnType<typeof render> {
   return render(

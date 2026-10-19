@@ -1,9 +1,7 @@
 "use client";
 
-import { Trophy } from "lucide-react";
 import { useState } from "react";
 
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -15,14 +13,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import { formatWeekdayDayYear } from "@/lib/utils/date";
-import type { F1Constructor, F1Data, F1Driver, F1NewsArticle, F1Race } from "@/types/sports";
+import type { F1Constructor, F1Data, F1Driver, F1NewsArticle } from "@/types/sports";
 
-import { F1CircuitOutline } from "../f1-circuit-outline";
+import { F1Races } from "../f1-races";
 import { NewsList } from "../shared/news-list";
 import { Portrait } from "../shared/portrait";
 import { SportShell } from "../shared/sport-shell";
-import { StatusPill } from "../shared/status-pill";
 import { SportsTh, TableCard } from "../shared/table-primitives";
 
 type F1ViewProps = {
@@ -99,11 +95,7 @@ export function F1View({ data, news = [], initialTab }: F1ViewProps) {
         </TabsContent>
 
         <TabsContent value="races">
-          <div className="grid gap-2 @xl:grid-cols-2 @4xl:grid-cols-3">
-            {data.races.map((race) => (
-              <RaceCard key={race.id} race={race} />
-            ))}
-          </div>
+          <F1Races data={data} />
         </TabsContent>
 
         {news.length > 0 && (
@@ -215,48 +207,5 @@ function ConstructorsTable({ constructors }: { constructors: F1Constructor[] }) 
         ))}
       </TableBody>
     </Table>
-  );
-}
-
-function RaceCard({ race }: { race: F1Race }) {
-  return (
-    <Card size="sm">
-      <CardContent className="flex flex-col gap-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span aria-hidden className="text-xl leading-none">{race.flagEmoji}</span>
-            <div className="leading-tight">
-              <Text variant="small" as="div">
-                Round {race.round}
-              </Text>
-              <Text as="div" weight="semibold">{race.name}</Text>
-            </div>
-          </div>
-          <StatusPill status={race.status} />
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-col gap-2">
-            <Text variant="small" as="div">
-              {race.circuit} · {race.location}
-            </Text>
-            {/* A calendar day: only the YYYY-MM-DD part, read local. */}
-            <Mono className="block text-xs text-muted-foreground">
-              {formatWeekdayDayYear(race.date.slice(0, 10))}
-            </Mono>
-          </div>
-          <F1CircuitOutline circuitId={race.circuitId} className="size-12 text-muted-foreground" />
-        </div>
-        {race.podium && (
-          <div className="mt-1 flex items-center gap-2 border-t pt-2 text-xs">
-            <Trophy className="size-3.5 text-warning" aria-label="Podium" />
-            <Mono className="font-medium">{race.podium[0]}</Mono>
-            <span className="text-muted-foreground">·</span>
-            <Mono>{race.podium[1]}</Mono>
-            <span className="text-muted-foreground">·</span>
-            <Mono>{race.podium[2]}</Mono>
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }

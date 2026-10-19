@@ -1,12 +1,23 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { F1_DATA } from "@/lib/data/sports/f1";
 import { F1_CIRCUIT_OUTLINES, F1_CIRCUIT_VIEWBOX } from "@/lib/data/sports/f1-circuits";
 import type { F1Data } from "@/types/sports";
 
 import { F1View } from "./f1-view";
+
+// The Races tab's sheet loads a classification through a server action.
+vi.mock("@/app/actions/f1", () => ({ getF1RaceClassificationAction: vi.fn() }));
+
+beforeEach(() => {
+  // The race sheet picks its side from the viewport; jsdom has no matchMedia.
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+  );
+});
 
 const tabs = () => screen.getAllByRole("tab").map((t) => t.textContent);
 const openTab = () => screen.getByRole("tab", { selected: true }).textContent;
@@ -61,17 +72,17 @@ describe("F1View", () => {
     const data: F1Data = { ...F1_DATA, races: [monaco, { ...spain, circuitId: "kyalami" }] };
     render(<F1View data={data} initialTab="races" />);
 
-    const outlineOf = (raceName: string) =>
-      screen
-        .getByText(raceName)
-        .closest('[data-slot="card"]')
-        ?.querySelector(`svg[viewBox="${F1_CIRCUIT_VIEWBOX}"]`);
-    expect(outlineOf("Monaco GP")?.querySelector("path")).toHaveAttribute(
+    const outline = (scope: Element | null) =>
+      scope?.querySelector(`svg[viewBox="${F1_CIRCUIT_VIEWBOX}"]`);
+    // Monaco is next, so it is the featured card; Spain is a tile under Coming up.
+    const featured = screen.getByRole("button", { name: "Monaco GP" }).closest('[data-slot="card"]');
+    expect(outline(featured)?.querySelector("path")).toHaveAttribute(
       "d",
       F1_CIRCUIT_OUTLINES.monaco
     );
-    expect(outlineOf("Spanish GP")).toBeNull();
+    const tile = screen.getByRole("button", { name: /Spanish GP/ });
+    expect(outline(tile)).toBeNull();
     // The circuit is still named in words.
-    expect(screen.getByText(/Circuit de Barcelona/)).toBeInTheDocument();
+    expect(tile).toHaveTextContent("Circuit de Barcelona");
   });
 });

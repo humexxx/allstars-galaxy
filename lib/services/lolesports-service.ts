@@ -47,6 +47,13 @@ const TARGET_LEAGUES: TargetLeague[] = [
 /** How long an international event stays on the strip after its final. */
 const INTERNATIONAL_GRACE_DAYS = 21;
 
+/**
+ * Lolesports draws its logos for a dark background, so every logo sits on
+ * one. T1's red logo on T1's red disc vanished, as did Fnatic's orange.
+ */
+const LOGO_DISC = "#222";
+
+/** Discs for the teams drawn as initials, when the API sends no logo. */
 const FALLBACK_COLOR_BY_CODE: Record<string, string> = {
   G2: "#FF1654",
   FNC: "#FF5800",
@@ -149,7 +156,9 @@ function toTeam(ref: { name: string; code: string; image?: string }): Team {
     shortName: ref.name,
     code: ref.code,
     logoUrl: ref.image,
-    primaryColor: FALLBACK_COLOR_BY_CODE[ref.code.toUpperCase()] ?? "#222",
+    primaryColor: ref.image
+      ? LOGO_DISC
+      : (FALLBACK_COLOR_BY_CODE[ref.code.toUpperCase()] ?? LOGO_DISC),
   };
 }
 
@@ -865,5 +874,6 @@ export const __testing = {
   isBracketStage,
   isCurrentEvent,
   pickActiveTournament,
+  toTeam,
   withinTournament,
 };

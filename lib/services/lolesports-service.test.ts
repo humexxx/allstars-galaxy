@@ -8,6 +8,7 @@ const {
   isBracketStage,
   isCurrentEvent,
   pickActiveTournament,
+  toTeam,
   withinTournament,
 } = __testing;
 
@@ -20,6 +21,21 @@ const team = (code: string, gameWins?: number) => ({
 const tie = (id: string, home: string, away: string, score?: [number, number]) => ({
   id,
   teams: [team(home, score?.[0]), team(away, score?.[1])],
+});
+
+describe("toTeam", () => {
+  it("puts a logo on a dark disc, whatever the team's own colour", () => {
+    // T1's red logo on T1's red disc could not be seen.
+    expect(toTeam({ name: "T1", code: "T1", image: "https://static.lolesports.com/teams/t1.png" }))
+      .toMatchObject({ logoUrl: "https://static.lolesports.com/teams/t1.png", primaryColor: "#222" });
+    expect(toTeam({ name: "Fnatic", code: "FNC", image: "https://static.lolesports.com/teams/fnc.png" }))
+      .toMatchObject({ primaryColor: "#222" });
+  });
+
+  it("keeps the team's colour for a badge drawn as its initials", () => {
+    expect(toTeam({ name: "T1", code: "T1" })).toMatchObject({ logoUrl: undefined, primaryColor: "#E2012D" });
+    expect(toTeam({ name: "Unknown", code: "UNK" }).primaryColor).toBe("#222");
+  });
 });
 
 describe("buildLolBracket", () => {

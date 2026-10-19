@@ -1333,6 +1333,9 @@ export const userSportsPreferences = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     sportId: text("sport_id").notNull(),
+    // The championship the dashboard card shows; null is the card's own pick.
+    // Validated per sport on write (`setSportCompetitionSchema`).
+    competition: text("competition"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

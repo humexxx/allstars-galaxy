@@ -166,7 +166,8 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
   in masked mode. Percentages deliberately stay visible: a share is not a
   balance.
 - **CSV export**: `GET /api/portfolio/export`, gated by
-  `requireEffectiveContext` so an impersonating admin exports what they see.
+  `getEffectiveContext` so an impersonating admin exports what they see;
+  signed out it answers 401 JSON instead of throwing `Unauthorized` into a 500.
   Cells starting with `=`, `+`, `-` or `@` are prefixed with a quote — Excel
   and Sheets execute those as formulas.
 - **The export carries what the app derives, not just the cash.** For someone

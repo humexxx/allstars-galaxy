@@ -1,7 +1,7 @@
 # Auth
 
 > **Status:** Active
-> **Last reviewed:** 2026-10-16
+> **Last reviewed:** 2026-10-18
 
 ## Overview
 Supabase-backed authentication: email/password login, signup, password reset,
@@ -25,7 +25,7 @@ gates in `lib/services/auth-server.ts` / `lib/services/impersonation.ts`.
   bounced back to `/login` with no explanation.)
 
 ## Server actions — `/app/actions/`
-- `auth.ts` — `signOutAction` (server-side sign-out + redirect to `/login`). Login / signup / password reset still use the Supabase client directly because they depend on `window.location.origin` for redirect URLs.
+- `auth.ts` — `signOutAction` (clears the impersonation cookie, server-side sign-out, redirect to `/login`). Login / signup / password reset still use the Supabase client directly because they depend on `window.location.origin` for redirect URLs.
 
 ## Services
 - `lib/auth/auth-client.ts` — `AuthService`, the **browser** calls (password
@@ -73,6 +73,13 @@ All four use `Alert` for form-level errors and `Field` + `FieldError` with
   change while a session is live, and without the second check a promotion
   would leave the cookie granting admin-as-admin access for the rest of its
   30-minute life.
+- **Signing out ends impersonation.** `signOutAction` deletes `cg_impersonating`
+  itself: Supabase's `signOut` clears only its own cookies, so an admin who
+  signed back in within the cookie's 30 minutes silently resumed impersonating.
+- **Route handlers don't use the `require*` gates.** Their throw reaches the
+  client as a 500, and the proxy only redirects signed-out requests off
+  `/portal`. A handler calls `getEffectiveContext()` and answers 401 itself, as
+  `GET /api/portfolio/export` does.
 - Conventional Commits scope: `auth`
 - **Every `?next=` goes through `safeNextPath`** ([`lib/auth/safe-next.ts`](../../lib/auth/safe-next.ts)) — the OAuth callback, the login form and the sign-up form. "Starts with `/`, not `//`" was not enough: URL parsers read a backslash as a slash and drop tabs, so `/\evil.com` and `/<tab>/evil.com` resolved to evil.com. The helper refuses backslashes and control characters and requires the resolved URL to stay on the same origin. The proxy also bounces a signed-in user off `/forgot-password` and matches `/portal` exactly. The login page renders the sign-up hand-off `?message=`.
 - **Every** server action across the app must wrap its handler in

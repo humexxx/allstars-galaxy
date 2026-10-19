@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { getEffectiveContext } from "@/lib/services/impersonation";
 import {
   getUserPortfolio,
   getPortfolioTransactions,
@@ -16,7 +16,7 @@ import { cell, signed } from "./csv";
  * CSV of the transaction history, as rich as the screen it mirrors.
  *
  * Built server-side rather than from client state so the rows come from an
- * auth-gated query — `requireEffectiveContext` also means an admin who is
+ * auth-gated query — `getEffectiveContext` also means an admin who is
  * impersonating exports the impersonated user's history, matching what they
  * see.
  *
@@ -90,7 +90,12 @@ const COLUMNS: {
 ];
 
 export async function GET(): Promise<NextResponse> {
-  const ctx = await requireEffectiveContext();
+  // Not `requireEffectiveContext`: a route handler turns its throw into a 500,
+  // and the proxy only bounces signed-out requests off `/portal`.
+  const ctx = await getEffectiveContext();
+  if (!ctx) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const [portfolio, investorTxDesc, assets, methods] = await Promise.all([
     getUserPortfolio(ctx.effectiveUserId),

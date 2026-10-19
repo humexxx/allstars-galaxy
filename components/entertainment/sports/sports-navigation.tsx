@@ -42,22 +42,20 @@ export function SportStripSkeleton(): React.ReactElement {
 export function SportSkeleton(): React.ReactElement {
   return (
     <div className="@container flex flex-col" aria-hidden="true">
-      <div className="contents @4xl:flex @4xl:h-12 @4xl:items-center @4xl:gap-6 @4xl:border-b">
-        <div className="flex items-center gap-3 pb-4 @4xl:gap-2 @4xl:pb-0">
-          <Skeleton className="size-12 shrink-0 rounded-xl @4xl:size-8 @4xl:rounded-lg" />
-          <div className="flex flex-col gap-1">
-            <Skeleton className="h-7 w-40 sm:h-8 @4xl:h-5 @4xl:w-36" />
-            <Skeleton className="h-5 w-56 @4xl:h-3 @4xl:w-28" />
-          </div>
+      <div className="flex items-center gap-3 pb-4">
+        <Skeleton className="size-10 shrink-0 rounded-lg" />
+        <div className="flex flex-col gap-1">
+          <Skeleton className="h-6 w-44" />
+          <Skeleton className="h-4 w-28" />
         </div>
-        <div className="flex h-12 items-end gap-4 border-b pb-2 @4xl:h-auto @4xl:self-stretch @4xl:border-0">
-          <Skeleton className="h-6 w-20" />
-          <Skeleton className="h-6 w-20" />
-        </div>
+      </div>
+      <div className="flex h-12 items-end gap-4 border-b pb-2">
+        <Skeleton className="h-6 w-20" />
+        <Skeleton className="h-6 w-20" />
       </div>
       <div className="grid items-start gap-6 pt-6 @4xl:grid-cols-[2fr_1fr]">
         <div className="flex flex-col gap-3">
-          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-8 w-full" />
           <div className="grid gap-2 @xl:grid-cols-2">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-20 w-full rounded-lg" />

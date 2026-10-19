@@ -125,7 +125,7 @@ scrollers:
 
 | Piece | Value | Where |
 | --- | --- | --- |
-| Sport bar (tabs below `@4xl`, the whole header row from it) | `h-12` (48px) at `top-14 md:top-0` (the `@4xl` row only exists from `md`, so `top-0`), `z-20`, opaque `bg-background` + `border-b` | [`sport-shell.tsx`](../components/entertainment/sports/shared/sport-shell.tsx) |
+| Sport bar (the tabs row; the name row above it scrolls away) | `h-12` (48px) at `top-14 md:top-0`, `z-20`, opaque `bg-background` + `border-b` | [`sport-shell.tsx`](../components/entertainment/sports/shared/sport-shell.tsx) |
 | Day headings | `top-26 md:top-12` (header + bar, then the bar alone), `z-10`; days `scroll-mt-26 md:scroll-mt-12` | [`matches-by-date.tsx`](../components/entertainment/sports/shared/matches-by-date.tsx) |
 | Overview side table (`@4xl` only) | `top-18` (the bar + 24px); `bottom-6 self-end` once taller than the room below the bar | [`overview-split.tsx`](../components/entertainment/sports/shared/overview-split.tsx) |
 

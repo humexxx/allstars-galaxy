@@ -16,7 +16,7 @@ describe("NflView", () => {
 
   it("puts the standings beside the games, in the shared split", () => {
     render(<NflView data={{ ...NFL_DATA, playoffs: [] }} />);
-    const standings = screen.getByText("Standings").parentElement!;
+    const standings = screen.getByText("Standings").closest("section")!;
     const games = screen.getByText("Games").closest("section")!;
 
     expect(standings.parentElement).toBe(games.parentElement);

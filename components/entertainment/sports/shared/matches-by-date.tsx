@@ -118,7 +118,7 @@ export function MatchesByDate({
 
   return (
     <section className={cn("flex min-w-0 flex-col gap-3", className)}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
         <Eyebrow>{label}</Eyebrow>
         {options.length > 1 && (
           <Select value={team} onValueChange={pickTeam}>
@@ -142,7 +142,12 @@ export function MatchesByDate({
       ) : (
         <div ref={listRef} className="flex flex-col gap-4">
           {earlier > 0 && (
-            <Button variant="ghost" size="sm" className="self-center" onClick={revealEarlier}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-ml-2 self-start text-muted-foreground"
+              onClick={revealEarlier}
+            >
               <ChevronUp />
               Earlier results ({earlier} {earlier === 1 ? "day" : "days"})
             </Button>

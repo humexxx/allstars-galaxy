@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { cn } from "@/lib/utils";
 import { Heading, Text } from "@/components/ui/typography";
 
@@ -13,7 +13,7 @@ type SportShellProps = {
   subtitle?: string;
   /** Optional pill controls (league/conference/region selector). */
   controls?: ReactNode;
-  /** Tab strip: the sticky row, beside the name from `@4xl`. */
+  /** Tab strip: the sticky row under the name. */
   tabs?: ReactNode;
   /** Right-aligned tabs/sub-navigation. */
   rightSlot?: ReactNode;
@@ -26,10 +26,12 @@ type SportShellProps = {
  * heading: the sports hub has no `PageHeader`, so the sport or competition is
  * the `<h1>`.
  *
- * The tabs ride along with the page, in a sticky bar under the app header.
- * From `@4xl` the whole header is that bar, one row: tile, name, tabs, then
- * the controls on the right. Narrower, the name and controls take a row of
- * their own that scrolls away, and only the tabs stick.
+ * Two rows, at every width, the way a repository or a league page reads: the
+ * name (with the controls on its right) scrolls away, and the tabs under it
+ * stick below the app header. Once the name has gone, a compact copy of it
+ * slides into the tabs row so a stuck bar still says what it is about. The
+ * name and the tabs used to share one row from `@4xl`, where a two-line title
+ * centred on the row and tabs sitting on its border never lined up.
  */
 export function SportShell({
   emoji,
@@ -41,11 +43,12 @@ export function SportShell({
   children,
   className,
 }: SportShellProps): React.ReactElement {
-  const barRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const hasTabs = Boolean(tabs);
+  const titleGone = useScrolledAway(titleRef, hasTabs);
 
   // A new tab picked while the bar is stuck opened part-way down its panel,
   // as far down as the old one had been read. Put its top back under the bar.
@@ -63,11 +66,7 @@ export function SportShell({
       );
       if (!picked) return;
       revealSelectedTab(scroller);
-      const bar =
-        [barRef.current, tabsRow].find(
-          (el): el is HTMLDivElement => !!el && getComputedStyle(el).position === "sticky"
-        ) ?? tabsRow;
-      const hidden = bar.getBoundingClientRect().bottom - content.getBoundingClientRect().top;
+      const hidden = tabsRow.getBoundingClientRect().bottom - content.getBoundingClientRect().top;
       if (hidden > 0) scrollByFrom(content, -hidden);
     });
     observer.observe(tabsRow, { subtree: true, attributes: true, attributeFilter: ["aria-selected"] });
@@ -75,69 +74,92 @@ export function SportShell({
   }, [hasTabs]);
 
   return (
-    // The root is what the sticky pieces stick inside, so they stay up for
-    // the whole panel. Both are its own children even when the tabs sit in
-    // the name's row: the bar is `display: contents` until `@4xl`, and an
-    // element sticks only within its parent's box.
-    //
-    // The source runs name, tabs, controls, the order of the `@4xl` row, so
-    // the keyboard reaches the tabs before the picker on their right. Below
-    // it the root wraps, and `order` lifts the name and then the controls
-    // onto the line above the tabs.
-    <div className={cn("@container flex flex-wrap items-center gap-x-4", className)}>
+    <div className={cn("@container flex flex-col", className)}>
       <div
-        ref={barRef}
-        className="contents @4xl:sticky @4xl:top-0 @4xl:z-20 @4xl:flex @4xl:h-12 @4xl:basis-full @4xl:items-center @4xl:gap-6 @4xl:border-b @4xl:bg-background"
+        ref={titleRef}
+        className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-4"
       >
-        <div className="order-first flex min-w-0 basis-full items-center gap-3 pb-4 @2xl:flex-1 @4xl:order-none @4xl:flex-initial @4xl:gap-2 @4xl:pb-0">
+        <div className="flex min-w-0 items-center gap-3">
           {emoji && (
             <span
               aria-hidden
-              className="grid size-12 shrink-0 place-items-center rounded-xl bg-muted/60 text-2xl ring-1 ring-foreground/10 @4xl:size-8 @4xl:rounded-lg @4xl:text-lg"
+              className="grid size-10 shrink-0 place-items-center rounded-lg bg-muted/60 text-xl ring-1 ring-foreground/10"
             >
               {emoji}
             </span>
           )}
-          <div className="flex min-w-0 flex-col gap-1 @4xl:gap-0">
-            <Heading level="h3" as="h1" className="@4xl:truncate @4xl:text-base">
+          <div className="flex min-w-0 flex-col">
+            <Heading level="h4" as="h1" className="truncate">
               {title}
             </Heading>
             {subtitle && (
-              <Text variant="muted" className="@4xl:truncate @4xl:text-xs">
+              <Text variant="muted" className="truncate">
                 {subtitle}
               </Text>
             )}
           </div>
         </div>
-        {tabs && (
-          <div
-            ref={tabsRef}
-            className="sticky top-14 z-20 flex h-12 min-w-0 basis-full items-end border-b bg-background md:top-0 @4xl:static @4xl:h-auto @4xl:shrink-0 @4xl:basis-auto @4xl:self-stretch @4xl:border-0 @4xl:bg-transparent"
-          >
-            {/* Scrolls sideways when the tabs outrun a phone (LoL's four
-                during Worlds). Bottom-aligned, and let down over the border
-                with room under the list, so a line tab's underline still
-                lands on the border instead of being clipped by the scroller. */}
-            <div
-              ref={scrollerRef}
-              className="-mb-0.5 flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-0.5"
-            >
-              {tabs}
-            </div>
-          </div>
-        )}
         {(controls || rightSlot) && (
-          <div className="-order-1 flex basis-full flex-wrap items-center gap-2 pb-4 @2xl:basis-auto @4xl:order-none @4xl:ml-auto @4xl:shrink-0 @4xl:flex-nowrap @4xl:pb-0">
+          <div className="flex flex-wrap items-center gap-2">
             {controls}
             {rightSlot}
           </div>
         )}
       </div>
-      <div ref={contentRef} className="min-w-0 basis-full pt-6">
+      {tabs && (
+        <div
+          ref={tabsRef}
+          className="sticky top-14 z-20 flex h-12 min-w-0 items-end gap-4 border-b bg-background md:top-0"
+        >
+          {/* The name again, small, only while the row above is out of
+              sight; the h1 is still there for a screen reader. */}
+          {titleGone && (
+            <span
+              aria-hidden
+              className="flex max-w-40 min-w-0 shrink-0 items-center gap-2 self-center text-sm font-medium @xl:max-w-64"
+            >
+              {emoji && <span className="text-base leading-none">{emoji}</span>}
+              <span className="truncate">{title}</span>
+            </span>
+          )}
+          {/* Scrolls sideways when the tabs outrun a phone (LoL's four
+              during Worlds). Bottom-aligned, and let down over the border
+              with room under the list, so a line tab's underline still lands
+              on the border instead of being clipped by the scroller. */}
+          <div
+            ref={scrollerRef}
+            className="-mb-0.5 flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-0.5"
+          >
+            {tabs}
+          </div>
+        </div>
+      )}
+      <div ref={contentRef} className="min-w-0 pt-6">
         {children}
       </div>
     </div>
   );
+}
+
+/**
+ * Whether `ref` has scrolled up out of sight under the app header (56px; on
+ * a phone the document scrolls beneath it, from `md` the portal's `<main>`
+ * starts below it, so the same margin serves both). Starts false, so the
+ * server's render and the first client render agree.
+ */
+function useScrolledAway(ref: RefObject<HTMLElement | null>, active: boolean): boolean {
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !active) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setGone(!entry.isIntersecting && entry.boundingClientRect.top < 56),
+      { rootMargin: "-56px 0px 0px 0px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, active]);
+  return gone;
 }
 
 /**

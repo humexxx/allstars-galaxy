@@ -153,10 +153,12 @@ tables) drops `PageHeader` altogether and keeps an `<h1 className="sr-only">`,
 so the outline still has its heading.
 
 The sports hub is the exception with a visible heading of its own: no
-`PageHeader`, and the sport bar (`SportShell`) is the `<h1>` — the sport or
-competition at `h3` size where it heads the page, `text-base` (subtitle
-`text-xs`) once it shares one sticky row with the tabs from `@4xl`. A page
-title saying "Sports" above "UEFA Champions League" cost a row and said less.
+`PageHeader`, and the sport's name (`SportShell`) is the `<h1>` — the sport or
+competition at `h4` size with a `muted` subtitle under it, on a row of its own
+above the tabs at every width. Squeezed into one row beside the tabs it never
+lined up: a two-line title centred on the row, tabs sitting on its border. A
+page title saying "Sports" above "UEFA Champions League" cost a row and said
+less.
 
 ### Code, IDs, and numerics — use `<Code>` / `<Mono>`
 

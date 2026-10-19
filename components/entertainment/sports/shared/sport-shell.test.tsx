@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -74,32 +74,55 @@ describe("SportShell", () => {
     expect(screen.getByRole("button", { name: "League" })).toBeInTheDocument();
   });
 
-  it("keeps the tabs in a sticky row that clears the app header on a phone", () => {
+  it("keeps the tabs in a sticky row of their own, clear of the app header", () => {
     renderShell();
     const row = tabsRow();
-    expect(row).toHaveClass("sticky", "top-14", "md:top-0", "bg-background");
-    // From @4xl the whole header row is the sticky bar instead.
-    expect(row.parentElement).toHaveClass("@4xl:sticky", "@4xl:top-0", "contents");
+    expect(row).toHaveClass("sticky", "top-14", "md:top-0", "bg-background", "border-b");
+    // The name is a row above it, which scrolls away.
+    expect(row.contains(screen.getByRole("heading", { level: 1 }))).toBe(false);
   });
 
   it("lets the tabs scroll sideways inside their row rather than widen the page", () => {
     renderShell();
     const row = tabsRow();
     const scroller = screen.getByRole("tablist").parentElement!;
-    expect(row).toHaveClass("min-w-0", "basis-full");
+    expect(row).toHaveClass("min-w-0");
     expect(scroller.parentElement).toBe(row);
     expect(scroller).toHaveClass("min-w-0", "overflow-x-auto", "overflow-y-hidden");
   });
 
-  it("reaches the tabs before the controls, the order of the @4xl row", () => {
+  it("reads top to bottom: the name and its controls, then the tabs", () => {
     renderShell();
     const tablist = screen.getByRole("tablist");
     const league = screen.getByRole("button", { name: "League" });
-    expect(tablist.compareDocumentPosition(league) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Below @4xl the controls' wrapper, not the control, moves above the tabs.
-    const wrapper = league.parentElement!;
-    expect(wrapper).toHaveClass("-order-1", "@4xl:order-none");
-    expect(wrapper.parentElement).toBe(tabsRow().parentElement);
+    expect(league.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tabsRow().contains(league)).toBe(false);
+  });
+
+  it("puts a small copy of the name in the tabs row once the name has scrolled away", () => {
+    let report: (entries: Partial<IntersectionObserverEntry>[]) => void = () => {};
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: (entries: Partial<IntersectionObserverEntry>[]) => void) {
+          report = callback;
+        }
+        observe(): void {}
+        disconnect(): void {}
+      }
+    );
+    renderShell();
+    const row = tabsRow();
+    expect(within(row).queryByText("UEFA Champions League")).toBeNull();
+
+    act(() => report([{ isIntersecting: false, boundingClientRect: rect(-80, -10) }]));
+    expect(within(row).getByText("UEFA Champions League")).toBeInTheDocument();
+    // Still one h1: the copy is for the eye.
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+
+    act(() => report([{ isIntersecting: true, boundingClientRect: rect(120, 180) }]));
+    expect(within(row).queryByText("UEFA Champions League")).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it("puts a new tab's top back under the bar when the bar is stuck", async () => {

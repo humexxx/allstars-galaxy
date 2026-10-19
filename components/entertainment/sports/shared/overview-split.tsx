@@ -44,7 +44,11 @@ export function OverviewSplit({
             tall ? "@4xl:bottom-6 @4xl:self-end" : "@4xl:top-18"
           )}
         >
-          <Eyebrow>{tableLabel}</Eyebrow>
+          {/* As tall as the matches' label row, whose team filter sets its
+              height, so the two labels sit on one line. */}
+          <div className="flex h-8 items-center">
+            <Eyebrow>{tableLabel}</Eyebrow>
+          </div>
           {table}
         </section>
       ) : null}

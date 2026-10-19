@@ -24,7 +24,7 @@ function stage(height: number): void {
   vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(VIEW);
 }
 
-const tableSection = (): HTMLElement => screen.getByText("Standings").parentElement!;
+const tableSection = (): HTMLElement => screen.getByText("Standings").closest("section")!;
 
 afterEach(() => {
   vi.restoreAllMocks();

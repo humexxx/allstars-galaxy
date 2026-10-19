@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.8.0](https://github.com/humexxx/allstars-galaxy/compare/v0.7.0...v0.8.0) (2026-10-19)
+
+
+### Features
+
+* **finance:** count money owed to you in net worth ([403abec](https://github.com/humexxx/allstars-galaxy/commit/403abecbc528477c9d1890533ef6e16476978228))
+* **finance:** count money owed to you in net worth ([b2dc276](https://github.com/humexxx/allstars-galaxy/commit/b2dc276c5ca7c000c0edc6adbb1d5955fc5a0927))
+* **portal:** drop the dashboard header and give the finance chart a figure rail ([251dfaf](https://github.com/humexxx/allstars-galaxy/commit/251dfaf6dcef496facbafabad3e327de2f714051))
+* **portal:** trim page headers that only restated the page ([e4397dd](https://github.com/humexxx/allstars-galaxy/commit/e4397ddb20d9f6bd94e4c5162f10b9cdf7d080c2))
+* **sports:** take the NFL live and give the NBA a table, both from ESPN ([262b416](https://github.com/humexxx/allstars-galaxy/commit/262b416cc54908ac774fd992dbc21b7a8f528ca2))
+
+
+### Bug Fixes
+
+* **finance:** size chart Y axes to the tick labels they draw ([8112c2a](https://github.com/humexxx/allstars-galaxy/commit/8112c2a31b4aa66c41ee0dd0821679408d103b35))
+* render-verified screens, critical Next.js security upgrade, and release-review fixes ([533866c](https://github.com/humexxx/allstars-galaxy/commit/533866c22e317d112db1ae813b8e64ad851194c7))
+* **sports:** keep every sports feed live and current, NFL included ([6ad8979](https://github.com/humexxx/allstars-galaxy/commit/6ad897996446352267d7fef28a63e39c75db1d36))
+* **sports:** keep live data through failed refreshes and repair provider drift ([535c6be](https://github.com/humexxx/allstars-galaxy/commit/535c6be32dded7f33f2dbbbf34fc2a28549650c9))
+* **travel:** cost shared trips like the planner and show the unit maths ([be6d3e2](https://github.com/humexxx/allstars-galaxy/commit/be6d3e2ce1831ed9dc59ba8baa67591216d8ee7c))
+* **travel:** cost shared trips like the planner and show the unit maths ([2bab69d](https://github.com/humexxx/allstars-galaxy/commit/2bab69d08bda4d231571cfa93a7fa3e275495747))
+* **travel:** keep prices and notes out of share links that hide them ([cb829d6](https://github.com/humexxx/allstars-galaxy/commit/cb829d6282cb97c41fa3afa56a16859f98f5698c))
+
+
+### Performance
+
+* **sports:** fetch only the football league on screen ([9524e33](https://github.com/humexxx/allstars-galaxy/commit/9524e331caa5f362940c13cadfbbefe8a284f322))
+
 ## [0.7.0](https://github.com/humexxx/allstars-galaxy/compare/v0.6.0...v0.7.0) (2026-10-18)
 
 

@@ -200,7 +200,16 @@ export type BracketMatch = {
   homeTeamId: string | null;
   awayTeamId: string | null;
   /** When the tie is two-legged, leg scores live here (a tennis draw's sets). */
-  legs?: Array<{ homeScore: number | null; awayScore: number | null; date?: string }>;
+  legs?: Array<{
+    homeScore: number | null;
+    awayScore: number | null;
+    date?: string;
+    /** A racquet set's tie-break points, where it went to one: 7–6(3). */
+    homeTiebreak?: number | null;
+    awayTiebreak?: number | null;
+  }>;
+  /** A racquet tie decided without being played out. */
+  outcome?: "walkover" | "retired";
   homeScore?: number | null;
   awayScore?: number | null;
   aggregateHome?: number | null;
@@ -380,15 +389,57 @@ export type RacquetTournament = {
   /** Champion player short name (e.g. "C. Alcaraz"). */
   champion?: string;
   runnerUp?: string;
-  /** Optional rendered bracket for the final stages. */
+  /**
+   * The draw, shipped only for the featured and the current tournament; any
+   * other one loads on demand (`getRacquetDrawAction`).
+   */
   bracket?: BracketRound[];
+  /** "Grand Slam", "Major", "P1". */
+  tier?: string;
+  /** The event's poster, where the provider publishes one. */
+  imageUrl?: string;
+  /** The arena or the full place name: "Allianz Cloud Milano". */
+  venue?: string;
+  prize?: { amount: number; currency: string };
+  /** Last edition's champion — the name to beat before this one has a final. */
+  defendingChampion?: string;
+};
+
+/** One line of a tour's season calendar: no draw, just enough to list it and open it. */
+export type RacquetCalendarEntry = {
+  /** The same id the tour's `tournaments` use, so a calendar row opens the same sheet. */
+  id: string;
+  name: string;
+  /** Calendar days, `YYYY-MM-DD`. */
+  startDate: string;
+  endDate: string;
+  status: RacquetTournament["status"];
+  champion?: string;
+};
+
+/** One tournament's draw as the details sheet loads it. */
+export type RacquetDraw = {
+  tournamentId: string;
+  rounds: BracketRound[];
+  /** Everyone in `rounds`, as plain data; the view builds the lookup. */
+  players: Team[];
+  champion?: string;
+  runnerUp?: string;
+  /**
+   * The provider withholds this draw's results — Padel API's free plan, for
+   * events older than about six months — so only the champions can be shown.
+   */
+  resultsHidden?: boolean;
 };
 
 export type RacquetData = {
   tour: RacquetTour;
   season: number;
   rankings: PlayerRanking[];
+  /** What just finished, what is on and what is next, in date order. */
   tournaments: RacquetTournament[];
+  /** The whole season, in date order. */
+  calendar?: RacquetCalendarEntry[];
   /**
    * Everyone appearing in any of this tour's draws.
    *

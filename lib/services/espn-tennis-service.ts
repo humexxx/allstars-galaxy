@@ -2,12 +2,15 @@ import "server-only";
 
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
 import { espnImage } from "@/lib/sports/espn-images";
+import { clampDay, drawIsOut, drawsShipped, statusByDates } from "@/lib/sports/racquet";
 import type {
   BracketMatch,
   BracketRound,
   BracketRoundId,
   PlayerRanking,
+  RacquetCalendarEntry,
   RacquetData,
+  RacquetDraw,
   RacquetTournament,
   Team,
   TennisData,
@@ -15,12 +18,19 @@ import type {
 import { cachedFeed, upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/tennis";
+const CORE_URL = "https://sports.core.api.espn.com/v2/sports/tennis/leagues";
 const REVALIDATE_SECONDS = 300;
+/** The season's calendar is published once and barely moves. */
+const CALENDAR_SECONDS = 86_400;
+/** A finished draw never changes again. */
+const FINISHED_DRAW_SECONDS = 86_400;
 const RANKING_LIMIT = 20;
 /** Two weeks either side: what just finished, what is on, what is next. */
 const CALENDAR_DAYS = 14;
 
 type EspnTour = "atp" | "wta";
+
+const SLUGS: Record<EspnTour, string> = { atp: "mens-singles", wta: "womens-singles" };
 
 type EspnAthlete = {
   id?: string;
@@ -34,13 +44,21 @@ type EspnCompetitor = {
   winner?: boolean;
   athlete?: EspnAthlete;
   curatedRank?: { current?: number };
-  linescores?: Array<{ value?: number }>;
+  /** A set; `tiebreak` is this player's points in it when it went to one. */
+  linescores?: Array<{ value?: number; tiebreak?: number }>;
 };
 
 type EspnCompetition = {
   id: string;
   date?: string;
-  status?: { type?: { state?: "pre" | "in" | "post"; completed?: boolean } };
+  status?: {
+    type?: {
+      /** STATUS_FINAL, STATUS_WALKOVER, STATUS_RETIRED, STATUS_CANCELED… */
+      name?: string;
+      state?: "pre" | "in" | "post";
+      completed?: boolean;
+    };
+  };
   round?: { displayName?: string };
   competitors?: EspnCompetitor[];
 };
@@ -55,7 +73,15 @@ type EspnEvent = {
   name?: string;
   date?: string;
   endDate?: string;
+  /** A Grand Slam — the only tier ESPN flags. */
+  major?: boolean;
   venue?: { displayName?: string; fullName?: string; address?: { city?: string } };
+  /** Last edition's champions, one per draw. */
+  previousWinners?: Array<{
+    displayName?: string;
+    shortDisplayName?: string;
+    type?: { slug?: string };
+  }>;
   groupings?: EspnGrouping[];
 };
 
@@ -81,6 +107,19 @@ type EspnRank = {
 };
 
 type EspnRankings = { rankings?: Array<{ ranks?: EspnRank[] }> };
+
+type EspnCalendar = {
+  sections?: Array<{
+    label?: string;
+    startDate?: string;
+    endDate?: string;
+    /** `…/leagues/atp/events/315-2026?lang=en` — the scoreboard's event id. */
+    event?: { $ref?: string };
+  }>;
+};
+
+/** A calendar line before the feed has said how it stands. */
+type CalendarSeed = Pick<RacquetCalendarEntry, "id" | "name" | "startDate" | "endDate">;
 
 /**
  * ESPN's round names, mapped onto the ids the bracket already knows.
@@ -157,10 +196,17 @@ function matchFrom(c: EspnCompetition): { match: BracketMatch; players: Team[] }
     home?.linescores?.length ?? 0,
     away?.linescores?.length ?? 0
   );
-  const legs = Array.from({ length: sets }, (_, i) => ({
-    homeScore: home?.linescores?.[i]?.value ?? null,
-    awayScore: away?.linescores?.[i]?.value ?? null,
-  }));
+  const legs = Array.from({ length: sets }, (_, i) => {
+    const homeTiebreak = home?.linescores?.[i]?.tiebreak;
+    const awayTiebreak = away?.linescores?.[i]?.tiebreak;
+    return {
+      homeScore: home?.linescores?.[i]?.value ?? null,
+      awayScore: away?.linescores?.[i]?.value ?? null,
+      ...(homeTiebreak !== undefined && { homeTiebreak }),
+      ...(awayTiebreak !== undefined && { awayTiebreak }),
+    };
+  });
+  const status = c.status?.type?.name;
 
   const winnerId = home?.winner
     ? (homePlayer?.id ?? null)
@@ -176,6 +222,8 @@ function matchFrom(c: EspnCompetition): { match: BracketMatch; players: Team[] }
       legs: legs.length > 0 ? legs : undefined,
       winnerTeamId: winnerId,
       date: c.date?.slice(0, 10),
+      ...(status === "STATUS_WALKOVER" && { outcome: "walkover" as const }),
+      ...(status === "STATUS_RETIRED" && { outcome: "retired" as const }),
     },
     players: [homePlayer, awayPlayer].filter((p): p is Team => p !== null),
   };
@@ -207,6 +255,22 @@ function statusOf(
   return "live";
 }
 
+/**
+ * The calendar day an ESPN boundary names.
+ *
+ * ESPN dates an event by its local midnights in a US zone — Shanghai runs
+ * `2026-10-05T04:00Z` to `2026-10-19T03:59Z` on the scoreboard and
+ * `T07:00Z` to `T06:59Z` on the calendar — so the end's UTC date is a day
+ * late ("Oct 5 – 19" for a final on the 18th). Twelve hours into the event
+ * from either edge is the right day for any zone in the Americas.
+ */
+function espnDay(instant: string | undefined, edge: "start" | "end"): string {
+  const time = Date.parse(instant ?? "");
+  if (Number.isNaN(time)) return (instant ?? "").slice(0, 10);
+  const shifted = time + (edge === "start" ? 12 : -12) * 3_600_000;
+  return new Date(shifted).toISOString().slice(0, 10);
+}
+
 /** "Tokyo, Japan" → "Tokyo". */
 function locationOf(event: EspnEvent): string {
   const place =
@@ -232,12 +296,6 @@ export type EspnDraw = {
 };
 
 /**
- * One tournament of a tour, with its main draw when there is one to show.
- *
- * Returns null for an event the tour has no singles draw in — ESPN lists the
- * same city twice when it hosts two events in one week.
- */
-/**
  * A slot ESPN cancelled: "post" but never completed, TBD against TBD. Basel
  * carried three of them beside its real quarter-finals, which added empty
  * ties to the draw and read the tournament as under way a week early.
@@ -247,6 +305,12 @@ function isCancelled(c: EspnCompetition): boolean {
   return c.status?.type?.state === "post" && c.status.type.completed === false;
 }
 
+/**
+ * One tournament of a tour, with its main draw when there is one to show.
+ *
+ * Returns null for an event the tour has no singles draw in — ESPN lists the
+ * same city twice when it hosts two events in one week.
+ */
 function tournamentFrom(event: EspnEvent, slug: string, now = Date.now()): EspnDraw | null {
   const grouping = event.groupings?.find((g) => g.grouping?.slug === slug);
   const competitions = (grouping?.competitions ?? []).filter((c) => !isCancelled(c));
@@ -276,16 +340,22 @@ function tournamentFrom(event: EspnEvent, slug: string, now = Date.now()): EspnD
     }
   }
 
+  const place = event.venue?.displayName;
+  const defending = event.previousWinners?.find((w) => w.type?.slug === slug);
   return {
     tournament: {
       id: `espn-${event.id}-${slug}`,
       name: event.name ?? "Tournament",
       location: locationOf(event),
-      startDate: (event.date ?? "").slice(0, 10),
-      endDate: (event.endDate ?? event.date ?? "").slice(0, 10),
+      startDate: espnDay(event.date, "start"),
+      endDate: espnDay(event.endDate ?? event.date, "end"),
       status: statusOf(event, competitions, now),
       ...finalistsOf(competitions),
       bracket: rounds.length > 0 ? rounds : undefined,
+      tier: event.major ? "Grand Slam" : undefined,
+      // The full place, where it says more than the city: "Shanghai, China PR".
+      venue: place?.includes(",") ? place : undefined,
+      defendingChampion: defending?.shortDisplayName ?? defending?.displayName,
     },
     players: [...players.values()],
   };
@@ -332,38 +402,75 @@ function photosById(rankings: EspnRankings): Map<string, string> {
   return photos;
 }
 
+/** A draw's players with the photos the rankings have for them. */
+function withPhotos(players: Team[], photos: Map<string, string>): Team[] {
+  // The draw card reads `logoUrl` as the player's photo.
+  return players.map((p) => {
+    const photo = photos.get(p.id);
+    return photo ? { ...p, logoUrl: photo } : p;
+  });
+}
+
+/**
+ * The season's calendar, joined to what the scoreboard has scored.
+ *
+ * A line the scoreboard covers takes its state and champion from the matches;
+ * any other is placed by its dates. The join falls back to the name and the
+ * first day, since ESPN lists one week's event twice in a city hosting two
+ * (Lyon as 110-2026 and 452-2026) and only one of the ids has a draw.
+ */
+function calendarWith(
+  seeds: CalendarSeed[],
+  tournaments: RacquetTournament[],
+  today: string
+): RacquetCalendarEntry[] {
+  const byId = new Map(tournaments.map((t) => [t.id, t]));
+  const byName = new Map(tournaments.map((t) => [`${t.name}|${t.startDate}`, t]));
+  return seeds.map((seed) => {
+    const scored = byId.get(seed.id) ?? byName.get(`${seed.name}|${seed.startDate}`);
+    return scored
+      ? { ...seed, id: scored.id, status: scored.status, champion: scored.champion }
+      : { ...seed, status: statusByDates(seed.startDate, seed.endDate, today) };
+  });
+}
+
 /**
  * A tour's calendar, draws and rankings.
  *
  * Tournaments run in date order; on the same day the bigger draw goes first,
  * so the dashboard's "first live event" is the Masters rather than the 250
- * that happens to share its week.
+ * that happens to share its week. Only the featured and the current
+ * tournament keep their draws — the rest load when opened — so the page does
+ * not carry a fortnight of brackets nobody asked for.
  */
 function tourFrom(
   tour: EspnTour,
   board: EspnScoreboard,
   rankings: EspnRankings,
-  now = Date.now()
+  now = Date.now(),
+  seeds: CalendarSeed[] = []
 ): RacquetData {
-  const slug = tour === "atp" ? "mens-singles" : "womens-singles";
+  const slug = SLUGS[tour];
   const photos = photosById(rankings);
-  const players = new Map<string, Team>();
-  const entries: Array<{ tournament: RacquetTournament; size: number }> = [];
+  const entries: Array<{ tournament: RacquetTournament; players: Team[]; size: number }> = [];
   for (const event of board.events ?? []) {
     const mapped = tournamentFrom(event, slug, now);
     if (!mapped) continue;
-    for (const p of mapped.players) {
-      // The draw card reads `logoUrl` as the player's photo.
-      const photo = photos.get(p.id);
-      players.set(p.id, photo ? { ...p, logoUrl: photo } : p);
-    }
     const size = mapped.tournament.bracket?.reduce((n, r) => n + r.matches.length, 0) ?? 0;
-    entries.push({ tournament: mapped.tournament, size });
+    entries.push({ ...mapped, size });
   }
   entries.sort(
     (a, b) =>
       a.tournament.startDate.localeCompare(b.tournament.startDate) || b.size - a.size
   );
+
+  const shipped = drawsShipped(entries.map((e) => e.tournament));
+  const players = new Map<string, Team>();
+  const tournaments = entries.map(({ tournament, players: drawn }) => {
+    if (!shipped.has(tournament.id)) return { ...tournament, bracket: undefined };
+    for (const p of withPhotos(drawn, photos)) players.set(p.id, p);
+    return tournament;
+  });
 
   return {
     tour,
@@ -372,9 +479,47 @@ function tourFrom(
       .map(rankingFrom)
       .filter((r): r is PlayerRanking => r !== null)
       .slice(0, RANKING_LIMIT),
-    tournaments: entries.map((e) => e.tournament),
+    tournaments,
+    calendar: calendarWith(seeds, tournaments, new Date(now).toISOString().slice(0, 10)),
     drawPlayers: [...players.values()],
   };
+}
+
+/**
+ * The season's lines from ESPN's calendar: one per event, by the id the
+ * scoreboard uses, deduplicated by name and first day.
+ */
+function calendarFrom(calendar: EspnCalendar, slug: string): CalendarSeed[] {
+  const seen = new Set<string>();
+  const seeds: CalendarSeed[] = [];
+  for (const section of calendar.sections ?? []) {
+    const eventId = section.event?.$ref?.match(/\/events\/([^/?]+)/)?.[1];
+    if (!eventId || !section.label || !section.startDate) continue;
+    const startDate = espnDay(section.startDate, "start");
+    const key = `${section.label}|${startDate}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    seeds.push({
+      id: `espn-${eventId}-${slug}`,
+      name: section.label,
+      startDate,
+      endDate: espnDay(section.endDate ?? section.startDate, "end"),
+    });
+  }
+  return seeds.sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
+
+/**
+ * The one event a draw is read from, holding only the one draw.
+ *
+ * A scoreboard day returns every event spanning it with every grouping —
+ * the US Open's final day is 1.76 MB, near the 2 MB Next's cache refuses —
+ * and only this event's singles are ever drawn.
+ */
+function eventFrom(board: EspnScoreboard, eventId: string, slug: string): EspnEvent | null {
+  const event = board.events?.find((e) => e.id === eventId);
+  if (!event) return null;
+  return { ...event, groupings: (event.groupings ?? []).filter((g) => g.grouping?.slug === slug) };
 }
 
 function yyyymmdd(date: Date): string {
@@ -389,11 +534,37 @@ function calendarRange(now: Date): string {
   return `${yyyymmdd(from)}-${yyyymmdd(to)}`;
 }
 
-async function fetchEspn<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, { signal: upstreamSignal() });
-  if (!res.ok) throw new Error(`espn tennis ${res.status} on ${path}`);
+async function fetchEspn<T>(url: string, cache?: RequestCache): Promise<T> {
+  const res = await fetch(url.startsWith("http") ? url : `${BASE_URL}${url}`, {
+    signal: upstreamSignal(),
+    ...(cache && { cache }),
+  });
+  if (!res.ok) throw new Error(`espn tennis ${res.status} on ${url}`);
   return (await res.json()) as T;
 }
+
+/**
+ * A tour's season calendar, the previous season's while the new one is still
+ * empty — in January `?dates=2027` had no sections. One call a day per tour.
+ */
+async function fetchCalendarFromApi(tour: EspnTour, year: number): Promise<CalendarSeed[]> {
+  for (const season of [year, year - 1]) {
+    const calendar = await fetchEspn<EspnCalendar>(
+      `${CORE_URL}/${tour}/calendar/whitelist?dates=${season}`
+    );
+    const seeds = calendarFrom(calendar, SLUGS[tour]);
+    if (seeds.length > 0) return seeds;
+  }
+  return [];
+}
+
+const getTennisCalendar = cachedFeed<[EspnTour, number], CalendarSeed[]>(
+  "espn tennis calendar",
+  fetchCalendarFromApi,
+  () => [],
+  ["espn:tennis-calendar"],
+  { revalidate: CALENDAR_SECONDS, tags: ["sports:tennis"] }
+);
 
 /**
  * Both tours from ESPN's public API — the same endpoints espn.com reads, no key.
@@ -402,19 +573,24 @@ async function fetchEspn<T>(path: string): Promise<T> {
  * answered 403, so the calendar fell back to the fixture and October showed
  * Roland Garros as live. ESPN also publishes the rankings, which were a
  * fixture all along. Four calls: one scoreboard over a date range and one
- * rankings table per tour.
+ * rankings table per tour — plus each tour's season calendar, a day-long
+ * cache of its own.
  */
 async function fetchTennisFromApi(): Promise<TennisData> {
   const now = new Date();
   const range = calendarRange(now);
-  const [atpBoard, atpRankings, wtaBoard, wtaRankings] = await Promise.all([
-    fetchEspn<EspnScoreboard>(`/atp/scoreboard?dates=${range}`),
-    fetchEspn<EspnRankings>(`/atp/rankings`),
-    fetchEspn<EspnScoreboard>(`/wta/scoreboard?dates=${range}`),
-    fetchEspn<EspnRankings>(`/wta/rankings`),
-  ]);
-  const atp = tourFrom("atp", atpBoard, atpRankings, now.getTime());
-  const wta = tourFrom("wta", wtaBoard, wtaRankings, now.getTime());
+  const year = now.getUTCFullYear();
+  const [atpBoard, atpRankings, wtaBoard, wtaRankings, atpCalendar, wtaCalendar] =
+    await Promise.all([
+      fetchEspn<EspnScoreboard>(`/atp/scoreboard?dates=${range}`),
+      fetchEspn<EspnRankings>(`/atp/rankings`),
+      fetchEspn<EspnScoreboard>(`/wta/scoreboard?dates=${range}`),
+      fetchEspn<EspnRankings>(`/wta/rankings`),
+      getTennisCalendar("atp", year),
+      getTennisCalendar("wta", year),
+    ]);
+  const atp = tourFrom("atp", atpBoard, atpRankings, now.getTime(), atpCalendar);
+  const wta = tourFrom("wta", wtaBoard, wtaRankings, now.getTime(), wtaCalendar);
   if (atp.rankings.length === 0 && wta.rankings.length === 0) {
     throw new Error("espn tennis returned no rankings");
   }
@@ -429,6 +605,90 @@ export const getTennisData = cachedFeed(
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:tennis"] }
 );
 
+/**
+ * One event's draw, read off the scoreboard for one of its days.
+ *
+ * Any day of an event returns its whole draw (the `event=` parameter is
+ * ignored), so the day is the final for a finished one. The raw day skips
+ * Next's fetch cache — a Grand Slam's runs to 1.76 MB — and only the mapped
+ * draw of the one event is cached.
+ */
+async function fetchTennisDraw(tour: EspnTour, eventId: string, day: string): Promise<RacquetDraw> {
+  const slug = SLUGS[tour];
+  const [board, rankings] = await Promise.all([
+    fetchEspn<EspnScoreboard>(`/${tour}/scoreboard?dates=${day.replaceAll("-", "")}`, "no-store"),
+    fetchEspn<EspnRankings>(`/${tour}/rankings`),
+  ]);
+  const event = eventFrom(board, eventId, slug);
+  if (!event) throw new Error(`espn tennis: event ${eventId} is not on ${day}`);
+  const tournamentId = `espn-${eventId}-${slug}`;
+  const mapped = tournamentFrom(event, slug);
+  if (!mapped) return { tournamentId, rounds: [], players: [] };
+  return {
+    tournamentId,
+    rounds: mapped.tournament.bracket ?? [],
+    players: withPhotos(mapped.players, photosById(rankings)),
+    champion: mapped.tournament.champion,
+    runnerUp: mapped.tournament.runnerUp,
+  };
+}
+
+const getLiveDraw = cachedFeed<[EspnTour, string, string], RacquetDraw | null>(
+  "espn tennis draw",
+  fetchTennisDraw,
+  () => null,
+  ["espn:tennis-draw:live"],
+  { revalidate: REVALIDATE_SECONDS, tags: ["sports:tennis"] }
+);
+
+const getFinishedDraw = cachedFeed<[EspnTour, string, string], RacquetDraw | null>(
+  "espn tennis draw",
+  fetchTennisDraw,
+  () => null,
+  ["espn:tennis-draw:finished"],
+  { revalidate: FINISHED_DRAW_SECONDS, tags: ["sports:tennis"] }
+);
+
+/**
+ * One tournament's draw for the details sheet, by the id the view knows it by.
+ *
+ * Only an event on the tour's calendar is read — the id arrives from the
+ * browser — and the feed's own draw is reused when it shipped one. Null when
+ * the event is unknown or ESPN did not answer.
+ */
+export async function getTennisDraw(
+  tour: EspnTour,
+  tournamentId: string
+): Promise<RacquetDraw | null> {
+  const parsed = /^espn-(\d+-\d{4})-(mens|womens)-singles$/.exec(tournamentId);
+  if (!parsed || `${parsed[2]}-singles` !== SLUGS[tour]) return null;
+  const section = (await getTennisData())[tour];
+  const scored = section.tournaments.find((t) => t.id === tournamentId);
+  if (scored?.bracket?.length) {
+    const used = new Set(
+      scored.bracket.flatMap((r) => r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]))
+    );
+    return {
+      tournamentId,
+      rounds: scored.bracket,
+      players: (section.drawPlayers ?? []).filter((p) => used.has(p.id)),
+      champion: scored.champion,
+      runnerUp: scored.runnerUp,
+    };
+  }
+  const known = scored ?? section.calendar?.find((t) => t.id === tournamentId);
+  if (!known) return null;
+
+  const empty: RacquetDraw = { tournamentId, rounds: [], players: [] };
+  const today = new Date().toISOString().slice(0, 10);
+  if (!drawIsOut(known.status, known.startDate, today)) return empty;
+  const day = clampDay(today, known.startDate, known.endDate);
+  const load = known.status === "completed" ? getFinishedDraw : getLiveDraw;
+  const draw = await load(tour, parsed[1], day);
+  // An event days away may not be on the scoreboard yet: nothing drawn, not a failure.
+  return draw ?? (known.status === "upcoming" ? empty : null);
+}
+
 /** Pure mappers, exported for their tests — nothing here touches the network. */
 export const __testing = {
   tournamentFrom,
@@ -438,5 +698,11 @@ export const __testing = {
   photosById,
   tourFrom,
   calendarRange,
+  calendarFrom,
+  calendarWith,
+  eventFrom,
+  espnDay,
+  fetchCalendarFromApi,
+  fetchTennisDraw,
   ROUND_IDS,
 };

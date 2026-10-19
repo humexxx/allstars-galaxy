@@ -13,12 +13,12 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Eyebrow } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { NflConference, NflData, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { MatchesByDate } from "../shared/matches-by-date";
+import { OverviewSplit } from "../shared/overview-split";
 import { SportShell } from "../shared/sport-shell";
 import { SportsTh, TableCellNum } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
@@ -27,7 +27,7 @@ type NflViewProps = {
   data: NflData;
 };
 
-export function NflView({ data }: NflViewProps) {
+export function NflView({ data }: NflViewProps): React.ReactElement {
   const teamsMap = useMemo(
     () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
     [data.teams],
@@ -55,18 +55,18 @@ export function NflView({ data }: NflViewProps) {
       >
         {/* The week's games and the table on one tab. */}
         <TabsContent value="overview">
-          <div className="grid items-start gap-6 @4xl:grid-cols-[2fr_1fr]">
-            <MatchesByDate
-              matches={data.games}
-              teams={teamsMap}
-              label="Games"
-              emptyTitle="No games this week."
-            />
-            <section className="flex min-w-0 flex-col gap-3">
-              <Eyebrow>Standings</Eyebrow>
-              <NflStandings data={data} teamsMap={teamsMap} />
-            </section>
-          </div>
+          <OverviewSplit
+            matches={
+              <MatchesByDate
+                matches={data.games}
+                teams={teamsMap}
+                label="Games"
+                emptyTitle="No games this week."
+              />
+            }
+            table={<NflStandings data={data} teamsMap={teamsMap} />}
+            tableLabel="Standings"
+          />
         </TabsContent>
 
         {hasPlayoffs && (
@@ -89,7 +89,7 @@ function NflStandings({
 }: {
   data: NflData;
   teamsMap: Map<string, Team>;
-}) {
+}): React.ReactElement {
   const [conf, setConf] = useState<NflConference>("afc");
   const rows = data.standings
     .filter((s) => s.conference === conf)

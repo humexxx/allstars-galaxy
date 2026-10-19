@@ -13,12 +13,12 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Eyebrow } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { NbaConference, NbaData, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { MatchesByDate } from "../shared/matches-by-date";
+import { OverviewSplit } from "../shared/overview-split";
 import { SportShell } from "../shared/sport-shell";
 import { SportsTh, TableCellNum } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
@@ -59,20 +59,18 @@ export function NbaView({ data }: NbaViewProps) {
         {/* Games and the table on one tab: day by day on the left, the
             conference table beside them. */}
         <TabsContent value="overview">
-          <div className={cn("grid items-start gap-6", hasStandings && "@4xl:grid-cols-[2fr_1fr]")}>
-            <MatchesByDate
-              matches={data.games}
-              teams={teamsMap}
-              label="Games"
-              emptyTitle="No games scheduled right now."
-            />
-            {hasStandings && (
-              <section className="flex min-w-0 flex-col gap-3">
-                <Eyebrow>Standings</Eyebrow>
-                <NbaStandings data={data} teamsMap={teamsMap} />
-              </section>
-            )}
-          </div>
+          <OverviewSplit
+            matches={
+              <MatchesByDate
+                matches={data.games}
+                teams={teamsMap}
+                label="Games"
+                emptyTitle="No games scheduled right now."
+              />
+            }
+            table={hasStandings && <NbaStandings data={data} teamsMap={teamsMap} />}
+            tableLabel="Standings"
+          />
         </TabsContent>
 
         {hasPlayoffs && (

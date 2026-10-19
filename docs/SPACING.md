@@ -103,6 +103,26 @@ shell reads as one flat surface (the shadcn-docs look), separated only by space.
 The `h-[calc(...)]` on the sidebar is the one sanctioned arbitrary value: it's a
 computed height, not a spacing step.
 
+### Sticky inside a page
+
+What scrolls under the header changes at `md` (see
+[`app/portal/layout.tsx`](../app/portal/layout.tsx)). Below it the document
+scrolls beneath the sticky header, so anything sticky inside a page sits at
+**`top-14`** to clear it; from `md` the header is outside the scrolling
+`<main>`, and the same element sits at **`top-0`**. Write both
+(`top-14 md:top-0`) and stack later offsets on them.
+
+The sports hub is the one user so far — a single page scroll, no inner
+scrollers:
+
+| Piece | Value | Where |
+| --- | --- | --- |
+| Sport bar (tabs below `@4xl`, the whole header row from it) | `h-12` (48px) at `top-14 md:top-0` (the `@4xl` row only exists from `md`, so `top-0`), `z-20`, opaque `bg-background` + `border-b` | [`sport-shell.tsx`](../components/entertainment/sports/shared/sport-shell.tsx) |
+| Day headings | `top-26 md:top-12` (header + bar, then the bar alone), `z-10`; days `scroll-mt-26 md:scroll-mt-12` | [`matches-by-date.tsx`](../components/entertainment/sports/shared/matches-by-date.tsx) |
+| Overview side table (`@4xl` only) | `top-18` (the bar + 24px); `bottom-6 self-end` once taller than the room below the bar | [`overview-split.tsx`](../components/entertainment/sports/shared/overview-split.tsx) |
+
+Change the bar's height and move the two rows under it by the same amount.
+
 ## Cards & sections
 
 - Card padding comes from the shadcn `Card`/`CardHeader`/`CardContent`

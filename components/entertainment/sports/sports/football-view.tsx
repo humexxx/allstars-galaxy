@@ -10,14 +10,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Eyebrow } from "@/components/ui/typography";
 import { Card, CardContent } from "@/components/ui/card";
 import { TableCard } from "../shared/table-primitives";
 import type { FootballLeagueData, FootballLeagueId, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { MatchesByDate } from "../shared/matches-by-date";
+import { OverviewSplit } from "../shared/overview-split";
 import { SportShell } from "../shared/sport-shell";
 import { StandingsTable } from "../shared/standings-table";
 import { useSportsNavigation } from "../sports-navigation";
@@ -28,7 +27,7 @@ type FootballViewProps = {
   options: ReadonlyArray<{ id: FootballLeagueId; name: string }>;
 };
 
-type TabKey = "overview" | "table" | "knockout";
+type TabKey = "overview" | "knockout";
 
 /**
  * One competition, picked through the URL (`?league=`) rather than client
@@ -38,7 +37,7 @@ type TabKey = "overview" | "table" | "knockout";
  * The World Cup is one of them, laid out as the tournament it is: a bracket,
  * fixtures and group tables rather than a season's single table.
  */
-export function FootballView({ league, options }: FootballViewProps) {
+export function FootballView({ league, options }: FootballViewProps): React.ReactElement {
   const picker = <LeaguePicker leagueId={league.league.id} options={options} />;
   return league.league.id === "world-cup" ? (
     <WorldCupView data={league} controls={picker} />
@@ -53,7 +52,7 @@ function LeaguePicker({
 }: {
   leagueId: FootballLeagueId;
   options: FootballViewProps["options"];
-}) {
+}): React.ReactElement {
   // The hub's own transition: while the league loads, the hub shows a
   // skeleton of it.
   const navigate = useSportsNavigation();
@@ -78,7 +77,13 @@ function LeaguePicker({
   );
 }
 
-function LeagueView({ league, picker }: { league: FootballLeagueData; picker: React.ReactNode }) {
+function LeagueView({
+  league,
+  picker,
+}: {
+  league: FootballLeagueData;
+  picker: React.ReactNode;
+}): React.ReactElement {
   const leagueId = league.league.id;
 
   const teamsMap = useMemo(
@@ -87,14 +92,10 @@ function LeagueView({ league, picker }: { league: FootballLeagueData; picker: Re
   );
 
   const hasKnockoutData = !!league.knockout && league.knockout.length > 0;
-  const defaultTab: TabKey = hasKnockoutData
-    ? "knockout"
-    : league.league.hasKnockout
-      ? "overview"
-      : "table";
+  const defaultTab: TabKey = hasKnockoutData ? "knockout" : "overview";
 
   return (
-    // Keyed by league: leagues differ in which tabs exist (knockout vs table),
+    // Keyed by league: leagues differ in which tabs exist (a knockout or not),
     // and an uncontrolled Tabs keeps its old value when the active trigger
     // unmounts — switching UCL→La Liga stranded the view on a blank "knockout"
     // tab. Remounting re-resolves defaultTab for the new league.
@@ -107,9 +108,6 @@ function LeagueView({ league, picker }: { league: FootballLeagueData; picker: Re
         tabs={
           <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="table" disabled={league.standings.length === 0}>
-              Table
-            </TabsTrigger>
             {league.league.hasKnockout && (
               <TabsTrigger value="knockout" disabled={!hasKnockoutData}>
                 Knockout
@@ -118,31 +116,19 @@ function LeagueView({ league, picker }: { league: FootballLeagueData; picker: Re
           </TabsList>
         }
       >
-        {/* One tab for what Overview and Matches used to split: every match,
-            day by day, with the top of the table beside it. */}
+        {/* Every match day by day, and the whole table beside them: a Table
+            tab of its own only repeated it with more columns. */}
         <TabsContent value="overview">
-          <OverviewLayout
+          <OverviewSplit
             matches={<MatchesByDate matches={league.matches} teams={teamsMap} />}
-            standings={
-              <TableCard>
-                <StandingsTable
-                  standings={league.standings.slice(0, 8)}
-                  teams={teamsMap}
-                  variant="compact"
-                />
-              </TableCard>
+            table={
+              league.standings.length > 0 && (
+                <TableCard>
+                  <StandingsTable standings={league.standings} teams={teamsMap} variant="compact" />
+                </TableCard>
+              )
             }
           />
-        </TabsContent>
-
-        <TabsContent value="table">
-          {league.standings.length === 0 ? (
-            <EmptyState title="No standings available yet" />
-          ) : (
-            <TableCard>
-              <StandingsTable standings={league.standings} teams={teamsMap} />
-            </TableCard>
-          )}
         </TabsContent>
 
         {league.league.hasKnockout && league.knockout && (
@@ -156,23 +142,5 @@ function LeagueView({ league, picker }: { league: FootballLeagueData; picker: Re
         )}
       </SportShell>
     </Tabs>
-  );
-}
-
-function OverviewLayout({
-  matches,
-  standings,
-}: {
-  matches: React.ReactNode;
-  standings: React.ReactNode;
-}) {
-  return (
-    <div className="grid items-start gap-6 @4xl:grid-cols-[2fr_1fr]">
-      {matches}
-      <section className="flex min-w-0 flex-col gap-3">
-        <Eyebrow>Table</Eyebrow>
-        {standings}
-      </section>
-    </div>
   );
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/humexxx/allstars-galaxy/compare/v0.9.0...v0.9.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **auth:** export answers 401 when signed out; sign-out clears impersonation ([72f1808](https://github.com/humexxx/allstars-galaxy/commit/72f18081295a5d6db1948943062c57622d006c88))
+
 ## [0.9.0](https://github.com/humexxx/allstars-galaxy/compare/v0.8.0...v0.9.0) (2026-10-19)
 
 

@@ -158,6 +158,15 @@ describe("endOfDayInTimeZone", () => {
     expect(endOfDayInTimeZone("2026-09-27", "Pacific/Auckland").toISOString()).toBe(
       "2026-09-27T10:59:59.999Z"
     );
+    // Chile changes its clocks at 24:00. Falling back repeats 23:00–23:59 of
+    // Apr 3, and the day ends after the second pass; springing forward skips
+    // Sep 6's first hour, so Sep 5 still ends at its own midnight.
+    expect(endOfDayInTimeZone("2027-04-03", "America/Santiago").toISOString()).toBe(
+      "2027-04-04T03:59:59.999Z"
+    );
+    expect(endOfDayInTimeZone("2026-09-05", "America/Santiago").toISOString()).toBe(
+      "2026-09-06T03:59:59.999Z"
+    );
   });
 
   it("falls back to UTC for a missing or unknown zone", () => {

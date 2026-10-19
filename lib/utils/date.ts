@@ -211,13 +211,25 @@ export function todayInTimeZone(
 export function endOfDayInTimeZone(day: string, timeZone?: string | null): Date {
   const zone = isValidTimeZone(timeZone) ? timeZone : "UTC";
   const [y, m, d] = day.split("-").map(Number);
-  // 23:59:59.999 read as if it were UTC, then moved by the zone's offset. The
-  // offset is measured a second time at the corrected instant, which settles a
-  // DST change that falls between the guess and the answer.
-  const wall = Date.UTC(y, m - 1, d, 23, 59, 59, 999);
-  const guess = wall - zoneOffsetMs(wall, zone);
-  return new Date(wall - zoneOffsetMs(guess, zone));
+  // A millisecond before the next day starts. That midnight, read as if it
+  // were UTC, is one instant per offset in force around it (a day either side
+  // brackets any DST change near it), and the next day starts at the earliest
+  // of them that is already on its date. Working from 23:59:59.999 instead
+  // lands in the first pass of an hour that a fall-back at 24:00 repeats
+  // (Chile), and ends the day an hour early.
+  const midnight = Date.UTC(y, m - 1, d + 1);
+  const nextDay = new Date(midnight).toISOString().slice(0, 10);
+  const starts = [-DAY_MS, DAY_MS]
+    .map((shift) => midnight - zoneOffsetMs(midnight + shift, zone))
+    .filter(
+      (t) => calendarDayInTimeZone(new Date(t), zone).toISOString().slice(0, 10) === nextDay
+    );
+  const start =
+    starts.length > 0 ? Math.min(...starts) : midnight - zoneOffsetMs(midnight, zone);
+  return new Date(start - 1);
 }
+
+const DAY_MS = 86_400_000;
 
 const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
 

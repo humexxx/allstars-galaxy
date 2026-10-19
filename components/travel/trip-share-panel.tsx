@@ -269,15 +269,18 @@ export function TripSharePanel({
           <ul className="mt-2 flex flex-col gap-1">
             {revoked.map((share) => (
               <li key={share.id} className="flex items-center justify-between gap-2 rounded border bg-muted/30 px-2 py-1">
-                <Text as="span" variant="small">
-                  {share.inviteeEmail ?? "Anonymous"} ·{" "}
-                  {share.revokedAt ? (
-                    <Mono>{formatShortDay(share.revokedAt, timeZone)}</Mono>
-                  ) : share.expiresAt ? (
-                    <Mono>expired {formatShortDay(share.expiresAt, timeZone)}</Mono>
-                  ) : (
-                    ""
+                {/* The email gives way, never the date: a long address
+                    pushed Extend past the phone sheet's edge. */}
+                <Text as="span" variant="small" className="flex min-w-0 items-baseline gap-1">
+                  <span className="truncate">{share.inviteeEmail ?? "Anonymous"}</span>
+                  {(share.revokedAt || share.expiresAt) && (
+                    <span aria-hidden="true" className="shrink-0">·</span>
                   )}
+                  {share.revokedAt ? (
+                    <Mono className="shrink-0">{formatShortDay(share.revokedAt, timeZone)}</Mono>
+                  ) : share.expiresAt ? (
+                    <Mono className="shrink-0">expired {formatShortDay(share.expiresAt, timeZone)}</Mono>
+                  ) : null}
                 </Text>
                 <div className="flex shrink-0 items-center gap-1">
                   {/* Only a link that ran out. A revoked one stays revoked —

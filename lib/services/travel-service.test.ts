@@ -189,7 +189,7 @@ function shareRow(overrides: Record<string, unknown> = {}): Record<string, unkno
     revokedAt: null,
     showPrices: false,
     showMembers: false,
-    createdAt: new Date(),
+    createdAt: new Date("2026-10-01T00:00:00Z"),
     ...overrides,
   };
 }

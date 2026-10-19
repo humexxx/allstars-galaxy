@@ -1,7 +1,5 @@
-import type { Projection, TodayState } from "@/types/finance";
+import type { Projection, ProjectionMonth, TodayState } from "@/types/finance";
 import { roundCents } from "@/lib/utils/format";
-
-import { describeDebtFree, type DebtFreeStatus } from "./chart-series";
 
 const MONTH_FMT = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
 const MONTH_YEAR_FMT = new Intl.DateTimeFormat("en-US", {
@@ -10,32 +8,69 @@ const MONTH_YEAR_FMT = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-/** One mini-chart point. */
-export type DashboardPoint = {
+/** What net worth is made of, at one point. */
+export type DashboardParts = {
+  /** Can be negative: an overdrawn account. */
+  savings: number;
+  /** Investments AND the portfolio — see `partsOf`. */
+  investments: number;
+  /** Money owed to the user, not yet repaid. */
+  receivables: number;
+  /** Owed BY the user, as a positive amount. */
+  debt: number;
+  netWorth: number;
+};
+
+/** One mini-chart point, at cent precision: the tooltip printed "-1,467"
+ *  beside a "-$1,467.28" tile for the same point. */
+export type DashboardPoint = DashboardParts & {
   /** Axis tick: "Now" for today's position, else the month ("Oct"). */
   month: string;
   /** Tooltip title: "Today", else month and year — the 12 closes run into
    *  the same month a year on, so the bare month is ambiguous. */
   label: string;
-  /** At cent precision, the figure the KPI tiles print. */
-  netWorth: number;
 };
 
 /** What the dashboard's finance card shows. */
-export type DashboardFigures = {
+export type DashboardFigures = DashboardParts & {
   /** Mini-chart: today's position, then the next 12 period closes. */
   points: DashboardPoint[];
-  savings: number;
-  investments: number;
-  totalDebt: number;
-  netWorth: number;
   /** Last chart point − today: the change the "12 mo" badge names. */
   delta: number;
   /** Periods the delta spans (12, fewer when the horizon ends sooner). */
   deltaPeriods: number;
-  debtFree: DebtFreeStatus;
   status: TodayState["status"] | null;
 };
+
+type State = Pick<
+  TodayState & ProjectionMonth,
+  "savings" | "investments" | "portfolioValue" | "receivables" | "totalDebt" | "netWorth"
+>;
+
+/**
+ * The portfolio is folded into investments so the parts add up to net worth.
+ * On its own line it had no tile: a plan holding its money in the portfolio
+ * read "Investments $0.00" beside a net worth that the tiles could not explain.
+ */
+function partsOf(s: State): DashboardParts {
+  return {
+    savings: s.savings,
+    investments: s.investments + s.portfolioValue,
+    receivables: s.receivables,
+    debt: s.totalDebt,
+    netWorth: s.netWorth,
+  };
+}
+
+function inCents(p: DashboardParts): DashboardParts {
+  return {
+    savings: roundCents(p.savings),
+    investments: roundCents(p.investments),
+    receivables: roundCents(p.receivables),
+    debt: roundCents(p.debt),
+    netWorth: roundCents(p.netWorth),
+  };
+}
 
 /**
  * The dashboard card's figures, from the SAME calibrated projection and
@@ -45,22 +80,19 @@ export type DashboardFigures = {
  */
 export function buildDashboardFigures(
   projection: Projection,
-  today: TodayState | null,
-  anchorDay: number,
-  now: Date
+  today: TodayState | null
 ): DashboardFigures {
   const months = projection.months;
-  const debtFree = describeDebtFree(projection, anchorDay, now);
   if (!today || months.length === 0) {
     return {
       points: [],
       savings: 0,
       investments: 0,
-      totalDebt: 0,
+      receivables: 0,
+      debt: 0,
       netWorth: 0,
       delta: 0,
       deltaPeriods: 0,
-      debtFree,
       status: null,
     };
   }
@@ -71,30 +103,25 @@ export function buildDashboardFigures(
   const firstAfter =
     today.status === "before-start" ? 0 : Math.min(today.periodIndex + 1, months.length);
   const ahead = months.slice(firstAfter, firstAfter + 12);
-  // Cents, not whole dollars: the tooltip printed "-1,467" beside a
-  // "-$1,467.28" tile for the same point.
+  const now = partsOf(today);
   const points: DashboardPoint[] = [
     {
       month: today.status === "before-start" ? "Start" : "Now",
       label: today.status === "before-start" ? "At the start" : "Today",
-      netWorth: roundCents(today.netWorth),
+      ...inCents(now),
     },
     ...ahead.map((m) => ({
       month: MONTH_FMT.format(m.date),
       label: MONTH_YEAR_FMT.format(m.date),
-      netWorth: roundCents(m.netWorth),
+      ...inCents(partsOf(m)),
     })),
   ];
   const end = ahead.length > 0 ? ahead[ahead.length - 1].netWorth : today.netWorth;
   return {
+    ...now,
     points,
-    savings: today.savings,
-    investments: today.investments,
-    totalDebt: today.totalDebt,
-    netWorth: today.netWorth,
     delta: end - today.netWorth,
     deltaPeriods: ahead.length,
-    debtFree,
     status: today.status,
   };
 }

@@ -15,7 +15,11 @@ import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
-import { getFootballLeagueData } from "@/lib/services/football-data-service";
+import {
+  FOOTBALL_COMPETITIONS,
+  getFootballLeagueData,
+  getWorldCupData,
+} from "@/lib/services/football-data-service";
 import { getF1Data, getF1SeasonWinners } from "@/lib/services/jolpica-f1-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
@@ -31,7 +35,9 @@ import type {
   DashboardTableRow,
   F1DashboardHighlight,
   F1Data,
+  FavoriteSport,
   FootballLeagueData,
+  FootballLeagueId,
   LolChampion,
   LolData,
   LolMatch,
@@ -48,6 +54,12 @@ import type {
   Team,
   UserSportsPreference,
 } from "@/types/sports";
+import {
+  FOOTBALL_COMPETITION_IDS,
+  LOL_REGIONS,
+  PADEL_CATEGORIES,
+  TENNIS_TOURS,
+} from "@/types/sports";
 
 // ---------- Favourite CRUD ----------
 
@@ -62,14 +74,21 @@ export async function listUserSportsFavorites(
 }
 
 /**
- * Request-cached: the dashboard's sports card, its F1 card and the summary
- * builder all ask for the same list during one render.
+ * Request-cached: the dashboard's sport cards and its F1 card ask for the same
+ * rows during one render.
  */
+export const listUserFavoriteSports = cache(async function listUserFavoriteSports(
+  userId: string
+): Promise<FavoriteSport[]> {
+  const rows = await listUserSportsFavorites(userId);
+  return rows.map((row) => ({ sportId: row.sportId as SportId, competition: row.competition }));
+});
+
 export const listUserFavoriteSportIds = cache(async function listUserFavoriteSportIds(
   userId: string
 ): Promise<SportId[]> {
-  const rows = await listUserSportsFavorites(userId);
-  return rows.map((row) => row.sportId as SportId);
+  const favorites = await listUserFavoriteSports(userId);
+  return favorites.map((favorite) => favorite.sportId);
 });
 
 export async function setSportFavorite(
@@ -96,6 +115,29 @@ export async function setSportFavorite(
     );
 }
 
+/**
+ * Sets the championship a favourite's dashboard card shows (null: the card's
+ * own pick). Only the caller's own favourite row is touched; null when the
+ * sport is not one of their favourites, since a card exists only for those.
+ */
+export async function setSportCompetition(
+  userId: string,
+  sportId: SportId,
+  competition: string | null
+): Promise<UserSportsPreference | null> {
+  const [row] = await db
+    .update(userSportsPreferences)
+    .set({ competition })
+    .where(
+      and(
+        eq(userSportsPreferences.userId, userId),
+        eq(userSportsPreferences.sportId, sportId)
+      )
+    )
+    .returning();
+  return row ?? null;
+}
+
 // ---------- Dashboard cards ----------
 
 /** Matches listed under a card's featured one. */
@@ -120,49 +162,83 @@ const LOL_LEAGUE: Record<LolRegion, string> = {
   lpl: "LPL",
 };
 
+/** Football's card with nothing chosen. */
+const DEFAULT_FOOTBALL: FootballLeagueId = "uefa-champions-league";
+const LOL_AUTOMATIC = "Follow what's on";
+
 type CardBase = Pick<DashboardSportCard, "sportId" | "label" | "emoji">;
 
 /**
  * One favourite sport's dashboard card, read from the same cached feed as its
- * view.
+ * view, for the championship it is set to (`competition`, null for the
+ * card's own pick).
  *
  * Null for F1, whose card also carries the news (`DashboardF1Card`), and for
- * anything without a card. Football reads the Champions League alone, so the
- * dashboard spends two of football-data's ten requests a minute, not eight.
+ * anything without a card. Football reads the one league the card shows, so
+ * the dashboard spends two of football-data's ten requests a minute, not
+ * eight. A stored choice the sport no longer offers (a league dropped, a LoL
+ * event over) falls back to the card's own pick rather than failing it.
  */
-export async function getDashboardSportCard(sportId: SportId): Promise<DashboardSportCard | null> {
+export async function getDashboardSportCard(
+  sportId: SportId,
+  competition: string | null = null
+): Promise<DashboardSportCard | null> {
   const meta = SPORTS_BY_ID.get(sportId);
   if (!meta) return null;
   const base: CardBase = { sportId, label: meta.label, emoji: meta.emoji };
 
   switch (sportId) {
     case "football": {
-      const ucl = await getFootballLeagueData("uefa-champions-league");
-      return footballCard(base, ucl ?? getFootballLeague("uefa-champions-league"));
+      const id = oneOf(FOOTBALL_COMPETITION_IDS, competition) ?? DEFAULT_FOOTBALL;
+      // The World Cup has a feed of its own: one call for its groups,
+      // fixtures and bracket.
+      const data = id === "world-cup" ? await getWorldCupData() : await getFootballLeagueData(id);
+      return {
+        ...footballCard(base, data ?? getFootballLeague(id)),
+        competitions: {
+          value: id,
+          options: FOOTBALL_COMPETITIONS.map((c) => ({ id: c.id, label: c.name })),
+        },
+      };
     }
     case "nba":
       return nbaCard(base, (await getNbaData()) ?? NBA_DATA);
     case "nfl":
       return nflCard(base, (await getNflData()) ?? NFL_DATA);
     case "lol":
-      return lolCard(base, (await getLolData()) ?? LOL_DATA);
+      return lolCard(base, (await getLolData()) ?? LOL_DATA, oneOf(LOL_REGIONS, competition));
     case "tennis": {
       const data = (await getTennisData()) ?? TENNIS_DATA;
-      return racquetCard(base, [
-        { id: "atp", label: "ATP", data: data.atp },
-        { id: "wta", label: "WTA", data: data.wta },
-      ]);
+      return racquetCard(
+        base,
+        [
+          { id: "atp", label: "ATP", data: data.atp },
+          { id: "wta", label: "WTA", data: data.wta },
+        ],
+        oneOf(TENNIS_TOURS, competition),
+        "Both tours"
+      );
     }
     case "padel": {
       const data = (await getPadelData()) ?? PADEL_DATA;
-      return racquetCard(base, [
-        { id: "men", label: "Men", data: data.men },
-        { id: "women", label: "Women", data: data.women },
-      ]);
+      return racquetCard(
+        base,
+        [
+          { id: "men", label: "Men", data: data.men },
+          { id: "women", label: "Women", data: data.women },
+        ],
+        oneOf(PADEL_CATEGORIES, competition),
+        "Men and women"
+      );
     }
     default:
       return null;
   }
+}
+
+/** `value` when it is one of `choices`, else null. */
+function oneOf<T extends string>(choices: readonly T[], value: string | null): T | null {
+  return choices.find((choice) => choice === value) ?? null;
 }
 
 /**
@@ -272,9 +348,22 @@ function nflCard(base: CardBase, data: NflData): DashboardSportCard {
   };
 }
 
-/** The first split the feed lists: the international event while it leads, else the split on now. */
-function lolCard(base: CardBase, data: LolData): DashboardSportCard {
-  const split = data.splits[0];
+/**
+ * The split the card is set to, or with none chosen (or one no longer in the
+ * feed) the first the feed lists: the international event while it leads,
+ * else the split on now.
+ */
+function lolCard(base: CardBase, data: LolData, region: LolRegion | null = null): DashboardSportCard {
+  const chosen = region ? data.splits.find((s) => s.region === region) : undefined;
+  const competitions = {
+    value: chosen ? chosen.region : null,
+    automatic: LOL_AUTOMATIC,
+    options: data.splits.map((s) => ({ id: s.region, label: s.name })),
+  };
+  return { ...lolSplitCard(base, data, chosen ?? data.splits[0]), competitions };
+}
+
+function lolSplitCard(base: CardBase, data: LolData, split: LolSplit | undefined): DashboardSportCard {
   if (!split) return { ...base, context: "No event on", matches: [], tables: [] };
   const teams = teamsById(split.teams);
   if (split.international && split.champion) {
@@ -415,11 +504,20 @@ function swissRecords(stage: SwissStage): { teamId: string; wins: number; losses
     .sort((a, b) => b.wins - a.wins || a.losses - b.losses);
 }
 
+/**
+ * The tournament on or next and the rankings, across both tours or only the
+ * one the card is set to. The line under the title names that choice: the
+ * lead box already says whether the tournament is on now or next.
+ */
 function racquetCard(
   base: CardBase,
-  tours: { id: string; label: string; data: RacquetData }[]
+  tours: { id: string; label: string; data: RacquetData }[],
+  chosen: string | null,
+  automatic: string
 ): DashboardSportCard {
-  const tournaments = tours.flatMap((t) => t.data.tournaments);
+  const pick = tours.find((t) => t.id === chosen);
+  const shown = pick ? [pick] : tours;
+  const tournaments = shown.flatMap((t) => t.data.tournaments);
   const event =
     tournaments.find((t) => t.status === "live") ??
     tournaments
@@ -427,11 +525,7 @@ function racquetCard(
       .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
   return {
     ...base,
-    context: event
-      ? event.status === "live"
-        ? "On now"
-        : "Next up"
-      : `Season ${tours[0]?.data.season ?? ""}`.trim(),
+    context: pick?.label ?? automatic,
     event: event
       ? {
           name: event.name,
@@ -442,7 +536,7 @@ function racquetCard(
         }
       : undefined,
     matches: [],
-    tables: tours
+    tables: shown
       .map((t) => ({
         id: t.id,
         label: t.label,
@@ -457,6 +551,11 @@ function racquetCard(
         ),
       }))
       .filter((t) => t.rows.length > 0),
+    competitions: {
+      value: pick?.id ?? null,
+      automatic,
+      options: tours.map((t) => ({ id: t.id, label: t.label })),
+    },
   };
 }
 
@@ -623,4 +722,4 @@ function matchTone(match: Match): DashboardMatch["status"] {
 }
 
 /** Pure helpers, exported for their tests. */
-export const __testing = { lolCard, swissRecords, f1Highlight };
+export const __testing = { lolCard, racquetCard, swissRecords, f1Highlight };

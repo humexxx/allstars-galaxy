@@ -25,6 +25,7 @@ vi.mock("@/lib/services/sports-service", () => ({
 vi.mock("@/lib/utils/request-today", () => ({
   getRequestTimeZone: vi.fn(async () => "America/Costa_Rica"),
 }));
+vi.mock("@/app/actions/sports", () => ({ setSportCompetitionAction: vi.fn() }));
 
 import { DashboardSportCard } from "./dashboard-sport-card";
 

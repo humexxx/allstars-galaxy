@@ -85,7 +85,23 @@ export type DashboardSportCard = {
    * zone after its label ("Tips off Tue, Oct 20").
    */
   note?: { title: string; text?: string; when?: { label: string; startsAt: string } };
+  /** The championship picker, on a sport that has a choice (`SPORT_COMPETITIONS`). */
+  competitions?: DashboardCompetitions;
 };
+
+/**
+ * What a card is set to and what else it could show. `value` is the choice
+ * the card honoured, or null for the sport's own pick, named `automatic`.
+ * Football has no such pick: its default is the Champions League itself.
+ */
+export type DashboardCompetitions = {
+  value: string | null;
+  automatic?: string;
+  options: { id: string; label: string }[];
+};
+
+/** A favourite sport and the championship its dashboard card is set to. */
+export type FavoriteSport = { sportId: SportId; competition: string | null };
 
 export type SportMeta = {
   id: SportId;
@@ -212,12 +228,16 @@ export type BracketRound = {
 
 // ---------- Football leagues ----------
 
-export type FootballLeagueId =
-  | "uefa-champions-league"
-  | "la-liga"
-  | "premier-league"
-  | "serie-a"
-  | "world-cup";
+/** Every football competition, the World Cup included — `FootballLeagueId` derives from it. */
+export const FOOTBALL_COMPETITION_IDS = [
+  "uefa-champions-league",
+  "la-liga",
+  "premier-league",
+  "serie-a",
+  "world-cup",
+] as const;
+
+export type FootballLeagueId = (typeof FOOTBALL_COMPETITION_IDS)[number];
 
 export type FootballLeague = {
   id: FootballLeagueId;
@@ -584,7 +604,9 @@ export type NflData = {
 // ---------- League of Legends ----------
 
 /** The four regional leagues, plus the international events while they run. */
-export type LolRegion = "lec" | "lcs" | "lck" | "lpl" | "worlds" | "msi" | "first-stand";
+export const LOL_REGIONS = ["lec", "lcs", "lck", "lpl", "worlds", "msi", "first-stand"] as const;
+
+export type LolRegion = (typeof LOL_REGIONS)[number];
 
 export type LolStanding = {
   position: number;
@@ -721,4 +743,24 @@ export type F1NewsArticle = {
   link: string | null;
   images: F1NewsImage[];
   firstSeenAt: Date;
+};
+
+// ---------- Dashboard competitions ----------
+
+/** The tours a tennis card can narrow to: `TennisData`'s keys. */
+export const TENNIS_TOURS = ["atp", "wta"] as const satisfies readonly (keyof TennisData)[];
+
+/** The categories a padel card can narrow to: `PadelData`'s keys. */
+export const PADEL_CATEGORIES = ["men", "women"] as const satisfies readonly (keyof PadelData)[];
+
+/**
+ * What each sport's dashboard card can be set to
+ * (`user_sports_preferences.competition`, null for the card's own pick). A
+ * sport missing here has nothing to choose.
+ */
+export const SPORT_COMPETITIONS: Partial<Record<SportId, readonly string[]>> = {
+  football: FOOTBALL_COMPETITION_IDS,
+  lol: LOL_REGIONS,
+  tennis: TENNIS_TOURS,
+  padel: PADEL_CATEGORIES,
 };

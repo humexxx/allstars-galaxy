@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
@@ -20,6 +21,7 @@ import type {
   SportId,
 } from "@/types/sports";
 
+import { DashboardCompetitionPicker } from "./dashboard-competition-picker";
 import { DashboardSportTables } from "./dashboard-sport-tables";
 import { SPORT_CARD_HEADER, SPORT_CARD_ROWS, SPORT_CARD_SECTION } from "./shared/dashboard-card-rows";
 import { FeatureBox } from "./shared/feature-box";
@@ -31,18 +33,29 @@ const SPORTS_PATH = "/portal/entertainment/sports";
 
 /**
  * One favourite sport on the dashboard, laid out like the F1 card: what is on
- * now or next, what follows it, and the top of the table.
+ * now or next, what follows it, and the top of the table — for the
+ * championship the reader set it to (`competition`, null for the card's own
+ * pick), which the line under the title picks.
  *
  * Half a row, like F1's: one sport among several. Each card sits in its own
  * Suspense boundary, so a slow provider only holds up its own sport.
  */
-export async function DashboardSportCard({ sportId }: { sportId: SportId }) {
-  const [card, timeZone] = await Promise.all([getDashboardSportCard(sportId), getRequestTimeZone()]);
+export async function DashboardSportCard({
+  sportId,
+  competition = null,
+}: {
+  sportId: SportId;
+  competition?: string | null;
+}): Promise<ReactElement | null> {
+  const [card, timeZone] = await Promise.all([
+    getDashboardSportCard(sportId, competition),
+    getRequestTimeZone(),
+  ]);
   if (!card) return null;
   // The reader's zone, not the server's (UTC): an evening kickoff in Costa
   // Rica is that evening, not tomorrow.
   const format = matchTimeFormat(timeZone);
-  const href = `${SPORTS_PATH}?sport=${card.sportId}`;
+  const href = hubHref(card);
   const groups = groupCardMatches(card.matches);
 
   return (
@@ -55,7 +68,17 @@ export async function DashboardSportCard({ sportId }: { sportId: SportId }) {
           </span>
           {card.label}
         </CardTitle>
-        <CardDescription className="truncate">{card.context}</CardDescription>
+        {card.competitions ? (
+          <CardDescription className="min-w-0">
+            <DashboardCompetitionPicker
+              sportId={card.sportId}
+              label={card.context}
+              competitions={card.competitions}
+            />
+          </CardDescription>
+        ) : (
+          <CardDescription className="truncate">{card.context}</CardDescription>
+        )}
         <CardAction>
           <Button variant="outline" size="sm" asChild>
             <Link href={href}>
@@ -101,6 +124,14 @@ export async function DashboardSportCard({ sportId }: { sportId: SportId }) {
       </div>
     </Card>
   );
+}
+
+/** The sport in the hub, and for football the league the card is set to. */
+function hubHref(card: DashboardSportCardData): string {
+  const league = card.sportId === "football" ? card.competitions?.value : null;
+  return league
+    ? `${SPORTS_PATH}?sport=football&league=${league}`
+    : `${SPORTS_PATH}?sport=${card.sportId}`;
 }
 
 type MatchGroup = { label: string; matches: DashboardMatch[] };

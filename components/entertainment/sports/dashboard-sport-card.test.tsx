@@ -12,6 +12,7 @@ vi.mock("@/lib/services/sports-service", () => ({ getDashboardSportCard: vi.fn()
 vi.mock("@/lib/utils/request-today", () => ({
   getRequestTimeZone: vi.fn(async () => "America/Costa_Rica"),
 }));
+vi.mock("@/app/actions/sports", () => ({ setSportCompetitionAction: vi.fn() }));
 
 import { getDashboardSportCard } from "@/lib/services/sports-service";
 
@@ -60,9 +61,9 @@ describe("groupCardMatches", () => {
 });
 
 describe("DashboardSportCard", () => {
-  async function renderCard(value: Card): Promise<void> {
+  async function renderCard(value: Card, competition: string | null = null): Promise<void> {
     vi.mocked(getDashboardSportCard).mockResolvedValue(value);
-    render(await DashboardSportCard({ sportId: value.sportId }));
+    render((await DashboardSportCard({ sportId: value.sportId, competition }))!);
   }
 
   it("lists the fixtures under Up next and the results under Latest results", async () => {
@@ -96,5 +97,51 @@ describe("DashboardSportCard", () => {
     const upNext = screen.getByText("Up next").parentElement!;
     expect(within(upNext).getByText("8:00 PM")).toBeInTheDocument();
     expect(within(upNext).getByText("Oct 23")).toBeInTheDocument();
+  });
+
+  it("asks for the card on the championship it is set to", async () => {
+    await renderCard(card([]), "lck");
+
+    expect(getDashboardSportCard).toHaveBeenCalledWith("lol", "lck");
+  });
+
+  it("makes the line under the title the championship picker when the sport has a choice", async () => {
+    await renderCard({
+      ...card([]),
+      competitions: {
+        value: null,
+        automatic: "Follow what's on",
+        options: [{ id: "worlds", label: "Worlds 2026" }],
+      },
+    });
+
+    expect(screen.getByRole("combobox", { name: "Championship" })).toHaveTextContent(
+      "Worlds 2026 · Swiss"
+    );
+    expect(screen.getByRole("link", { name: /Open/ })).toHaveAttribute(
+      "href",
+      "/portal/entertainment/sports?sport=lol"
+    );
+  });
+
+  it("keeps the plain line for a sport with nothing to choose", async () => {
+    await renderCard({ ...card([]), sportId: "nfl", context: "Season 2026" });
+
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.getByText("Season 2026")).toBeInTheDocument();
+  });
+
+  it("opens football's hub on the league the card shows", async () => {
+    await renderCard({
+      ...card([]),
+      sportId: "football",
+      context: "LaLiga",
+      competitions: { value: "la-liga", options: [{ id: "la-liga", label: "LaLiga" }] },
+    });
+
+    expect(screen.getByRole("link", { name: /Open/ })).toHaveAttribute(
+      "href",
+      "/portal/entertainment/sports?sport=football&league=la-liga"
+    );
   });
 });

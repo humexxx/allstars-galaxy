@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Text } from "@/components/ui/typography";
 import { DashboardCardSkeleton } from "@/components/portal/dashboard-card-skeleton";
-import { listUserFavoriteSportIds } from "@/lib/services/sports-service";
+import { listUserFavoriteSports } from "@/lib/services/sports-service";
 import type { SportId } from "@/types/sports";
 
 import { DashboardF1Card } from "./dashboard-f1-card";
@@ -18,14 +18,15 @@ const SPORTS_PATH = "/portal/entertainment/sports";
 const CARD_SPORTS = new Set<SportId>(["football", "nba", "nfl", "lol", "tennis", "padel", "f1"]);
 
 /**
- * One card per favourite sport, in the order they were picked.
+ * One card per favourite sport, in the order they were picked, each on the
+ * championship its favourite row is set to.
  *
  * Each sits in its own Suspense boundary: they wait on different providers,
  * and one slow feed should only hold up its own card. The cards are grid
  * items of the dashboard itself — Suspense and the fragment add no wrapper.
  */
 export async function DashboardSportCards({ userId }: { userId: string }) {
-  const favorites = (await listUserFavoriteSportIds(userId)).filter((id) => CARD_SPORTS.has(id));
+  const favorites = (await listUserFavoriteSports(userId)).filter((f) => CARD_SPORTS.has(f.sportId));
 
   if (favorites.length === 0) {
     return (
@@ -53,7 +54,7 @@ export async function DashboardSportCards({ userId }: { userId: string }) {
 
   return (
     <>
-      {favorites.map((sportId) => (
+      {favorites.map(({ sportId, competition }) => (
         <Suspense
           key={sportId}
           // Four rows tall like the card it stands in for, or the cards
@@ -63,7 +64,7 @@ export async function DashboardSportCards({ userId }: { userId: string }) {
           {sportId === "f1" ? (
             <DashboardF1Card userId={userId} />
           ) : (
-            <DashboardSportCard sportId={sportId} />
+            <DashboardSportCard sportId={sportId} competition={competition} />
           )}
         </Suspense>
       ))}

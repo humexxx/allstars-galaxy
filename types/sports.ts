@@ -36,6 +36,62 @@ export type DashboardSportHighlight = {
   /** Optional secondary entry under the main headline (e.g. league leader). */
   secondary?: { label: string; value: string };
 };
+/** One side of a match on a dashboard card. */
+export type DashboardSide = {
+  name: string;
+  code: string;
+  logoUrl?: string;
+  color?: string;
+  score: number | null;
+  winner: boolean;
+};
+
+export type DashboardMatch = {
+  id: string;
+  home: DashboardSide;
+  away: DashboardSide;
+  status: "live" | "upcoming" | "result";
+  /** An instant; the card formats it in the reader's zone. */
+  startsAt: string;
+  /** "Matchday 3", "Swiss · BO1". */
+  label?: string;
+  /** Football's live minute. */
+  minute?: number;
+};
+
+export type DashboardTableRow = {
+  position: number;
+  name: string;
+  /** A team's logo is fitted inside the disc; a player's photo fills it. */
+  image?: { url: string; kind: "logo" | "photo" };
+  code?: string;
+  color?: string;
+  flagEmoji?: string;
+  /** "6 pts", "60–22", "9,880". */
+  value: string;
+};
+
+export type DashboardTable = { id: string; label: string; rows: DashboardTableRow[] };
+
+/**
+ * One favourite sport's dashboard card: what is on now or next, what follows,
+ * and the top of the table. The same shape for every sport, so they share one
+ * card.
+ */
+export type DashboardSportCard = {
+  sportId: SportId;
+  label: string;
+  emoji: string;
+  /** The line under the title: the competition, its stage. */
+  context: string;
+  featured?: DashboardMatch;
+  /** Racquet sports have tournaments rather than matches on the dashboard. */
+  event?: { name: string; detail: string; status: "live" | "upcoming" | "completed" };
+  matches: DashboardMatch[];
+  /** More than one shows as a toggle (East / West, ATP / WTA). */
+  tables: DashboardTable[];
+};
+
 
 export type SportMeta = {
   id: SportId;

@@ -13,29 +13,33 @@ import { NFL_DATA } from "@/lib/data/sports/nfl";
 import { PADEL_DATA } from "@/lib/data/sports/padel";
 import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
-import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
-import {
-  getFootballLeagueData,
-  getWorldCupData,
-} from "@/lib/services/football-data-service";
+import { getFootballLeagueData } from "@/lib/services/football-data-service";
 import { getF1Data } from "@/lib/services/jolpica-f1-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
+import { formatDayRange } from "@/lib/utils/date";
 import type {
+  DashboardMatch,
+  DashboardSide,
+  DashboardSportCard,
   DashboardSportHighlight,
+  DashboardTable,
+  DashboardTableRow,
   F1Data,
   FootballLeagueData,
   LolData,
+  LolMatch,
   Match,
+  NbaConference,
   NbaData,
+  NflConference,
   NflData,
-  PadelData,
+  RacquetData,
   SportId,
   Team,
-  TennisData,
   UserSportsPreference,
 } from "@/types/sports";
 
@@ -86,52 +90,56 @@ export async function setSportFavorite(
     );
 }
 
-// ---------- Dashboard summary ----------
+// ---------- Dashboard cards ----------
+
+/** Matches listed under a card's featured one. */
+const CARD_MATCHES = 2;
+/** Rows of a card's table. */
+const CARD_ROWS = 5;
+
+type CardBase = Pick<DashboardSportCard, "sportId" | "label" | "emoji">;
 
 /**
- * The dashboard's per-sport highlights, one per favourite, each read from the
- * same cached feed as its view.
+ * One favourite sport's dashboard card, read from the same cached feed as its
+ * view.
  *
- * `exclude` is how F1 stays out of this card: it has one of its own that
- * carries the same highlight plus its news, and the same race in two cards
- * next to each other is just the same race twice.
+ * Null for F1, whose card also carries the news (`DashboardF1Card`), and for
+ * anything without a card. Football reads the Champions League alone, so the
+ * dashboard spends two of football-data's ten requests a minute, not eight.
  */
-export async function getDashboardSportsSummary(
-  userId: string,
-  exclude: readonly SportId[] = []
-): Promise<DashboardSportHighlight[]> {
-  const all = await listUserFavoriteSportIds(userId);
-  const favIds = all.filter((id) => !exclude.includes(id));
-  // Football reads the Champions League alone — the one league the highlight
-  // shows — so the dashboard spends two of football-data's ten a minute, not
-  // eight.
-  const [lolData, f1Data, uclData, worldCupData, padelData, tennisData, nbaData, nflData] =
-    await Promise.all([
-      favIds.includes("lol") ? getLolData() : Promise.resolve(null),
-      favIds.includes("f1") ? getF1Data() : Promise.resolve(null),
-      favIds.includes("football")
-        ? getFootballLeagueData("uefa-champions-league")
-        : Promise.resolve(null),
-      favIds.includes("worldcup") ? getWorldCupData() : Promise.resolve(null),
-      favIds.includes("padel") ? getPadelData() : Promise.resolve(null),
-      favIds.includes("tennis") ? getTennisData() : Promise.resolve(null),
-      favIds.includes("nba") ? getNbaData() : Promise.resolve(null),
-      favIds.includes("nfl") ? getNflData() : Promise.resolve(null),
-    ]);
-  return favIds
-    .map((id) =>
-      buildHighlight(id, {
-        lolData,
-        f1Data,
-        uclData,
-        worldCupData,
-        padelData,
-        tennisData,
-        nbaData,
-        nflData,
-      }),
-    )
-    .filter((h): h is DashboardSportHighlight => h !== null);
+export async function getDashboardSportCard(sportId: SportId): Promise<DashboardSportCard | null> {
+  const meta = SPORTS_BY_ID.get(sportId);
+  if (!meta) return null;
+  const base: CardBase = { sportId, label: meta.label, emoji: meta.emoji };
+
+  switch (sportId) {
+    case "football": {
+      const ucl = await getFootballLeagueData("uefa-champions-league");
+      return footballCard(base, ucl ?? getFootballLeague("uefa-champions-league"));
+    }
+    case "nba":
+      return nbaCard(base, (await getNbaData()) ?? NBA_DATA);
+    case "nfl":
+      return nflCard(base, (await getNflData()) ?? NFL_DATA);
+    case "lol":
+      return lolCard(base, (await getLolData()) ?? LOL_DATA);
+    case "tennis": {
+      const data = (await getTennisData()) ?? TENNIS_DATA;
+      return racquetCard(base, [
+        { id: "atp", label: "ATP", data: data.atp },
+        { id: "wta", label: "WTA", data: data.wta },
+      ]);
+    }
+    case "padel": {
+      const data = (await getPadelData()) ?? PADEL_DATA;
+      return racquetCard(base, [
+        { id: "men", label: "Men", data: data.men },
+        { id: "women", label: "Women", data: data.women },
+      ]);
+    }
+    default:
+      return null;
+  }
 }
 
 /** Just F1's highlight, for the card that owns it on the dashboard. */
@@ -145,126 +153,149 @@ export async function getF1DashboardHighlight(): Promise<DashboardSportHighlight
   );
 }
 
-type HighlightContext = {
-  lolData: LolData | null;
-  f1Data: F1Data | null;
-  uclData: FootballLeagueData | null;
-  worldCupData: FootballLeagueData | null;
-  padelData: PadelData | null;
-  tennisData: TennisData | null;
-  nbaData: NbaData | null;
-  nflData: NflData | null;
-};
-
-function buildHighlight(
-  sportId: SportId,
-  ctx: HighlightContext,
-): DashboardSportHighlight | null {
-  const meta = SPORTS_BY_ID.get(sportId);
-  if (!meta) return null;
-  const base = { sportId, emoji: meta.emoji, label: meta.label };
-
-  switch (sportId) {
-    case "football":
-      return footballHighlight(base, ctx.uclData);
-    case "worldcup":
-      return worldCupHighlight(base, ctx.worldCupData ?? WORLD_CUP_DATA);
-    case "nba":
-      return nbaHighlight(base, ctx.nbaData ?? NBA_DATA);
-    case "f1":
-      return f1Highlight(base, ctx.f1Data ?? F1_DATA);
-    case "nfl":
-      return nflHighlight(base, ctx.nflData ?? NFL_DATA);
-    case "tennis":
-      return tennisHighlight(base, ctx.tennisData ?? TENNIS_DATA);
-    case "padel":
-      return padelHighlight(base, ctx.padelData ?? PADEL_DATA);
-    case "lol":
-      return lolHighlight(base, ctx.lolData ?? LOL_DATA);
-  }
-}
-
-type HighlightBase = Pick<DashboardSportHighlight, "sportId" | "emoji" | "label">;
-
-function footballHighlight(
-  base: HighlightBase,
-  liveUcl: FootballLeagueData | null,
-): DashboardSportHighlight {
-  const ucl = liveUcl ?? getFootballLeague("uefa-champions-league");
-  const teamsMap = new Map<string, Team>(ucl.teams.map((t) => [t.id, t]));
-  const featured = pickFeaturedMatch(ucl.matches);
-  const leader = ucl.standings[0];
-  const leaderTeam = leader ? teamsMap.get(leader.teamId) : null;
-
+function footballCard(base: CardBase, data: FootballLeagueData): DashboardSportCard {
+  const teams = teamsById(data.teams);
+  const { featured, matches } = featuredAndNext(data.matches, teams);
   return {
     ...base,
-    headline: featured
-      ? matchHeadline(featured, teamsMap)
-      : `${ucl.league.shortName} · season ${ucl.league.season}`,
-    context: featured?.stageLabel ?? ucl.league.name,
-    tone: featured ? matchTone(featured) : "upcoming",
-    secondary: leaderTeam
-      ? { label: "League leader", value: `${leaderTeam.shortName} · ${leader.points} pts` }
-      : undefined,
+    context: data.league.name,
+    featured,
+    matches,
+    tables:
+      data.standings.length > 0
+        ? [
+            {
+              id: "table",
+              label: "Table",
+              rows: data.standings
+                .slice(0, CARD_ROWS)
+                .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.points} pts`)),
+            },
+          ]
+        : [],
   };
 }
 
-function worldCupHighlight(
-  base: HighlightBase,
-  data: FootballLeagueData,
-): DashboardSportHighlight {
-  const teamsMap = new Map<string, Team>(data.teams.map((t) => [t.id, t]));
-  const featured = pickFeaturedMatch(data.matches);
-  const lastResult = data.matches
-    .filter((m) => m.status === "ft" || m.status === "aet" || m.status === "pen")
-    .sort((a, b) => new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime())[0];
-  const secondary =
-    lastResult && lastResult.id !== featured?.id
-      ? { label: "Latest result", value: matchHeadline(lastResult, teamsMap) }
-      : undefined;
-
+function nbaCard(base: CardBase, data: NbaData): DashboardSportCard {
+  const teams = teamsById(data.teams);
+  const { featured, matches } = featuredAndNext(data.games, teams);
+  const conference = (id: NbaConference, label: string): DashboardTable => ({
+    id,
+    label,
+    rows: data.standings
+      .filter((s) => s.conference === id)
+      .sort((a, b) => a.position - b.position)
+      .slice(0, CARD_ROWS)
+      .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.won}–${s.lost}`)),
+  });
   return {
     ...base,
-    headline: featured
-      ? matchHeadline(featured, teamsMap)
-      : data.league.name,
-    context: featured?.stageLabel
-      ? `${featured.stageLabel} · ${data.league.name}`
-      : data.league.name,
-    tone: featured ? matchTone(featured) : "upcoming",
-    secondary,
+    context: `Season ${data.season}`,
+    featured,
+    matches,
+    tables: [conference("east", "East"), conference("west", "West")].filter((t) => t.rows.length > 0),
   };
 }
 
-function nbaHighlight(base: HighlightBase, data: NbaData): DashboardSportHighlight {
-  const teamsMap = new Map<string, Team>(data.teams.map((t) => [t.id, t]));
-  const featured = pickFeaturedMatch(data.games);
-  // Live data has no table (the free tier serves no /standings), so the
-  // secondary line only appears on the fixture.
-  const eastLeader = data.standings.find(
-    (s) => s.conference === "east" && s.position === 1
-  );
-  const eastTeam = eastLeader ? teamsMap.get(eastLeader.teamId) : null;
-  const secondary =
-    eastLeader && eastTeam
+function nflCard(base: CardBase, data: NflData): DashboardSportCard {
+  const teams = teamsById(data.teams);
+  const { featured, matches } = featuredAndNext(data.games, teams);
+  const conference = (id: NflConference, label: string): DashboardTable => ({
+    id,
+    label,
+    rows: data.standings
+      .filter((s) => s.conference === id)
+      .sort((a, b) => a.position - b.position)
+      .slice(0, CARD_ROWS)
+      .map((s) =>
+        teamRow(
+          s.position,
+          teams.get(s.teamId),
+          s.teamId,
+          s.ties > 0 ? `${s.wins}–${s.losses}–${s.ties}` : `${s.wins}–${s.losses}`
+        )
+      ),
+  });
+  return {
+    ...base,
+    context: `Season ${data.season}`,
+    featured,
+    matches,
+    tables: [conference("afc", "AFC"), conference("nfc", "NFC")].filter((t) => t.rows.length > 0),
+  };
+}
+
+function lolCard(base: CardBase, data: LolData): DashboardSportCard {
+  const split = data.splits[0];
+  if (!split) return { ...base, context: "No event on", matches: [], tables: [] };
+  const teams = teamsById(split.teams);
+  // Already in display order: live, then the nearest upcoming, then the
+  // latest results.
+  const [first, ...rest] = split.matches.map((m) => lolCardMatch(m, teams));
+  return {
+    ...base,
+    context: first?.label ? `${split.name} · ${first.label.split(" · ")[0]}` : split.name,
+    featured: first,
+    matches: rest.slice(0, CARD_MATCHES),
+    tables:
+      split.standings.length > 0
+        ? [
+            {
+              id: "standings",
+              label: "Standings",
+              rows: split.standings
+                .slice(0, CARD_ROWS)
+                .map((s) =>
+                  teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.wins}–${s.losses}`)
+                ),
+            },
+          ]
+        : [],
+  };
+}
+
+function racquetCard(
+  base: CardBase,
+  tours: { id: string; label: string; data: RacquetData }[]
+): DashboardSportCard {
+  const tournaments = tours.flatMap((t) => t.data.tournaments);
+  const event =
+    tournaments.find((t) => t.status === "live") ??
+    tournaments
+      .filter((t) => t.status === "upcoming")
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+  return {
+    ...base,
+    context: event
+      ? event.status === "live"
+        ? "On now"
+        : "Next up"
+      : `Season ${tours[0]?.data.season ?? ""}`.trim(),
+    event: event
       ? {
-          label: "East leader",
-          value: `${eastTeam.shortName} · ${eastLeader.won}–${eastLeader.lost}`,
+          name: event.name,
+          detail: [event.location, event.surface, formatDayRange(event.startDate, event.endDate)]
+            .filter(Boolean)
+            .join(" · "),
+          status: event.status,
         }
-      : undefined;
-
-  return {
-    ...base,
-    headline: featured
-      ? matchHeadline(featured, teamsMap)
-      : `NBA · ${data.season}`,
-    // Out of season the heading's season is the finals', while the next game
-    // is October's opener; its date is what is true of it.
-    context: featured
-      ? (featured.stageLabel ?? formatShortDate(featured.kickoff))
-      : `Season ${data.season}`,
-    tone: featured ? matchTone(featured) : "upcoming",
-    secondary,
+      : undefined,
+    matches: [],
+    tables: tours
+      .map((t) => ({
+        id: t.id,
+        label: t.label,
+        rows: t.data.rankings.slice(0, CARD_ROWS).map(
+          (p): DashboardTableRow => ({
+            position: p.position,
+            name: p.shortName,
+            image: p.photoUrl ? { url: p.photoUrl, kind: "photo" } : undefined,
+            flagEmoji: p.flagEmoji,
+            value: p.points.toLocaleString("en-US"),
+          })
+        ),
+      }))
+      .filter((t) => t.rows.length > 0),
   };
 }
 
@@ -293,119 +324,106 @@ function f1Highlight(base: HighlightBase, data: F1Data): DashboardSportHighlight
   };
 }
 
-function nflHighlight(base: HighlightBase, data: NflData): DashboardSportHighlight {
-  const teamsMap = new Map<string, Team>(data.teams.map((t) => [t.id, t]));
-  const featured = pickFeaturedMatch(data.games);
-  const afcLeader = data.standings.find(
-    (s) => s.conference === "afc" && s.position === 1
-  );
-  const afcTeam = afcLeader ? teamsMap.get(afcLeader.teamId) : null;
-  const secondary =
-    afcLeader && afcTeam
-      ? {
-          label: "AFC leader",
-          value: `${afcTeam.shortName} · ${afcLeader.wins}–${afcLeader.losses}`,
-        }
-      : undefined;
-
-  return {
-    ...base,
-    headline: featured
-      ? matchHeadline(featured, teamsMap)
-      : `NFL · Season ${data.season}`,
-    context: featured?.stageLabel ?? `Season ${data.season}`,
-    tone: featured ? matchTone(featured) : "upcoming",
-    secondary,
-  };
-}
-
-function tennisHighlight(base: HighlightBase, data: TennisData): DashboardSportHighlight {
-  const liveTournament =
-    data.atp.tournaments.find((t) => t.status === "live") ??
-    data.atp.tournaments.find((t) => t.status === "upcoming");
-  const atpLeader = data.atp.rankings[0];
-
-  return {
-    ...base,
-    headline: liveTournament
-      ? `${liveTournament.name} · ${liveTournament.location}`
-      : `ATP / WTA · Season ${data.atp.season}`,
-    context: liveTournament
-      ? `${liveTournament.surface ?? "Tour"} · ${formatRange(
-          liveTournament.startDate,
-          liveTournament.endDate
-        )}`
-      : `Season ${data.atp.season}`,
-    tone: liveTournament?.status === "live" ? "live" : "upcoming",
-    secondary: atpLeader
-      ? { label: "ATP #1", value: `${atpLeader.shortName} · ${atpLeader.points.toLocaleString()} pts` }
-      : undefined,
-  };
-}
-
-function padelHighlight(base: HighlightBase, data: PadelData): DashboardSportHighlight {
-  const live =
-    data.men.tournaments.find((t) => t.status === "live") ??
-    data.men.tournaments.find((t) => t.status === "upcoming");
-  const leader = data.men.rankings[0];
-
-  return {
-    ...base,
-    headline: live ? `${live.name} · ${live.location}` : "Padel · WPT",
-    context: live
-      ? formatRange(live.startDate, live.endDate)
-      : `Season ${data.men.season}`,
-    tone: live?.status === "live" ? "live" : "upcoming",
-    secondary: leader
-      ? { label: "Padel Men #1", value: `${leader.shortName} · ${leader.points.toLocaleString()} pts` }
-      : undefined,
-  };
-}
-
-function lolHighlight(base: HighlightBase, data: LolData): DashboardSportHighlight {
-  const split = data.splits[0];
-  if (!split) {
-    return {
-      ...base,
-      headline: "League of Legends",
-      context: "No active split",
-      tone: "upcoming",
-    };
-  }
-  const teamsMap = new Map<string, Team>(split.teams.map((t) => [t.id, t]));
-  const featured =
-    split.matches.find((m) => m.status === "live") ??
-    split.matches.find((m) => m.status === "scheduled") ??
-    // Results sort most-recent-first, so the fallback is the head, not the
-    // tail (which was the oldest match of the split).
-    split.matches[0];
-  const leader = split.standings[0];
-  const leaderTeam = leader ? teamsMap.get(leader.teamId) : null;
-
-  const headline = featured
-    ? lolMatchHeadline(featured, teamsMap)
-    : `${split.name} · ${split.season}`;
-
-  return {
-    ...base,
-    headline,
-    context: featured?.stageLabel ?? `${split.name} · ${split.season}`,
-    tone:
-      featured?.status === "live"
-        ? "live"
-        : featured?.status === "scheduled"
-          ? "upcoming"
-          : "result",
-    secondary: leaderTeam
-      ? {
-          label: `${split.name} leader`,
-          value: `${leaderTeam.shortName} · ${leader.wins}–${leader.losses}`,
-        }
-      : undefined,
-  };
-}
+type HighlightBase = Pick<DashboardSportHighlight, "sportId" | "emoji" | "label">;
 
 // ---------- Helpers ----------
+
+function teamsById(teams: Team[]): Map<string, Team> {
+  return new Map(teams.map((t) => [t.id, t]));
+}
+
+function teamRow(position: number, team: Team | undefined, id: string, value: string): DashboardTableRow {
+  return {
+    position,
+    name: team?.shortName ?? id,
+    image: team?.logoUrl ? { url: team.logoUrl, kind: "logo" } : undefined,
+    code: team?.code,
+    color: team?.primaryColor,
+    value,
+  };
+}
+
+const FINISHED = new Set<Match["status"]>(["ft", "aet", "pen"]);
+
+/**
+ * The card's featured match and the ones listed under it: whatever else is
+ * live, then the next fixtures — or, with nothing ahead, the latest results.
+ */
+function featuredAndNext(
+  all: Match[],
+  teams: Map<string, Team>
+): { featured?: DashboardMatch; matches: DashboardMatch[] } {
+  const featured = pickFeaturedMatch(all);
+  if (!featured) return { matches: [] };
+  const others = all.filter((m) => m.id !== featured.id);
+  const ahead = [
+    ...others.filter((m) => m.status === "live"),
+    ...others
+      .filter((m) => m.status === "scheduled")
+      .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime()),
+  ];
+  const behind = others
+    .filter((m) => FINISHED.has(m.status))
+    .sort((a, b) => new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime());
+  return {
+    featured: cardMatch(featured, teams),
+    matches: (ahead.length > 0 ? ahead : behind).slice(0, CARD_MATCHES).map((m) => cardMatch(m, teams)),
+  };
+}
+
+function side(team: Team | undefined, id: string, score: number | null, winner: boolean): DashboardSide {
+  return {
+    name: team?.shortName ?? id,
+    code: team?.code ?? id.slice(0, 3).toUpperCase(),
+    logoUrl: team?.logoUrl,
+    color: team?.primaryColor,
+    score,
+    winner,
+  };
+}
+
+function cardMatch(match: Match, teams: Map<string, Team>): DashboardMatch {
+  const started = match.status !== "scheduled";
+  const home = started ? match.homeScore : null;
+  const away = started ? match.awayScore : null;
+  const decided = FINISHED.has(match.status) && home !== null && away !== null;
+  // A shoot-out decides a level score; it is kept out of the score itself.
+  const homeAhead =
+    decided && (home > away || (home === away && (match.penalties?.home ?? 0) > (match.penalties?.away ?? 0)));
+  const awayAhead =
+    decided && (away > home || (home === away && (match.penalties?.away ?? 0) > (match.penalties?.home ?? 0)));
+  return {
+    id: match.id,
+    home: side(teams.get(match.homeTeamId), match.homeTeamId, home, homeAhead),
+    away: side(teams.get(match.awayTeamId), match.awayTeamId, away, awayAhead),
+    status: matchTone(match),
+    startsAt: match.kickoff,
+    label: match.stageLabel,
+    minute: match.status === "live" ? match.minute : undefined,
+  };
+}
+
+function lolCardMatch(match: LolMatch, teams: Map<string, Team>): DashboardMatch {
+  const decided = match.status === "ft" && match.homeScore !== null && match.awayScore !== null;
+  return {
+    id: match.id,
+    home: side(
+      teams.get(match.homeTeamId),
+      match.homeTeamId,
+      match.status === "scheduled" ? null : match.homeScore,
+      decided && match.homeScore! > match.awayScore!
+    ),
+    away: side(
+      teams.get(match.awayTeamId),
+      match.awayTeamId,
+      match.status === "scheduled" ? null : match.awayScore,
+      decided && match.awayScore! > match.homeScore!
+    ),
+    status: match.status === "live" ? "live" : match.status === "scheduled" ? "upcoming" : "result",
+    startsAt: match.date,
+    label: match.stageLabel ? `${match.stageLabel} · BO${match.bestOf}` : `BO${match.bestOf}`,
+  };
+}
 
 /**
  * Pick the most "interesting" match to surface: live > next scheduled > most
@@ -419,34 +437,12 @@ function pickFeaturedMatch(matches: Match[]): Match | null {
     .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime());
   if (upcoming[0]) return upcoming[0];
   const finished = matches
-    .filter((m) => m.status === "ft" || m.status === "aet" || m.status === "pen")
+    .filter((m) => FINISHED.has(m.status))
     .sort((a, b) => new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime());
   return finished[0] ?? matches[0] ?? null;
 }
 
-function matchHeadline(match: Match, teams: Map<string, Team>): string {
-  const home = teams.get(match.homeTeamId)?.shortName ?? match.homeTeamId;
-  const away = teams.get(match.awayTeamId)?.shortName ?? match.awayTeamId;
-  if (match.status === "scheduled") {
-    return `${home} vs ${away}`;
-  }
-  const pens = match.penalties
-    ? ` (${match.penalties.home}–${match.penalties.away} pens)`
-    : "";
-  return `${home} ${match.homeScore ?? "-"} – ${match.awayScore ?? "-"} ${away}${pens}`;
-}
-
-function lolMatchHeadline(
-  match: { homeTeamId: string; awayTeamId: string; homeScore: number | null; awayScore: number | null; status: string },
-  teams: Map<string, Team>
-): string {
-  const home = teams.get(match.homeTeamId)?.shortName ?? match.homeTeamId;
-  const away = teams.get(match.awayTeamId)?.shortName ?? match.awayTeamId;
-  if (match.status === "scheduled") return `${home} vs ${away}`;
-  return `${home} ${match.homeScore ?? "-"} – ${match.awayScore ?? "-"} ${away}`;
-}
-
-function matchTone(match: Match): DashboardSportHighlight["tone"] {
+function matchTone(match: Match): DashboardMatch["status"] {
   if (match.status === "live") return "live";
   if (match.status === "scheduled") return "upcoming";
   return "result";
@@ -466,13 +462,4 @@ function formatShortDate(iso: string): string {
     month: "short",
     day: "numeric",
   });
-}
-
-function formatRange(start: string, end: string): string {
-  const s = dateOnly(start);
-  const e = dateOnly(end);
-  const sameMonth = s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear();
-  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-  if (sameMonth) return `${s.toLocaleDateString(undefined, opts)} – ${e.getDate()}`;
-  return `${s.toLocaleDateString(undefined, opts)} – ${e.toLocaleDateString(undefined, opts)}`;
 }

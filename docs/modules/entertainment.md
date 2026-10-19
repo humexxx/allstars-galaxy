@@ -44,7 +44,7 @@ back to its fixture only when its feed has never answered.
   member: the foreign key proves the row exists, not which trip it is on.
   `updateTrip` / `deleteTrip` scope the WHERE by owner and `updateTrip` throws
   when no row matched
-- `sports-service.ts` — favourites CRUD + `getDashboardSportsSummary` that materialises one highlight per favourited sport from the same feeds as the views (football via `getFootballLeagueData("uefa-champions-league")` only, World Cup via `getWorldCupData()` — featured knockout match + latest result, NBA via `getNbaData()`, NFL via `getNflData()`, LoL, F1, padel, tennis)
+- `sports-service.ts` — favourites CRUD + `getDashboardSportCard(sportId)`: one favourite's dashboard card (featured match, the next two, the top five of its table, or for tennis and padel the tournament on or next and both tours' rankings) from the same cached feed as its view. Football reads the Champions League alone. `getF1DashboardHighlight` feeds the F1 card
 - `lolesports-service.ts` — `getLolData()` fetches Worlds / MSI / First Stand (only while on or ≤21 days after the final, listed first) plus LEC/LCS/LCK/LPL from Lolesports' unofficial API (`esports-api.lolesports.com`), maps to `LolData` including playoff `BracketRound[]` (one round per standings section, **split by the schedule's `blockName`** when a whole playoff arrives as one section — `buildLolBracket`; the TBD-count heuristic remains only as fallback for unnamed sections), picks the currently-active tournament (never the future split), keeps only that tournament's schedule events, maps `regular_season` / `groups` / `group_stage` / `swiss` into standings and leaves play-ins out of the bracket. Worlds' Swiss stage also becomes a `SwissStage` (`buildSwissStage`, see *Notes*). A completed event missing `result` renders "—", never a fake 0–0. Cached 5 min via `cachedFeed`, `LOL_DATA` only when there is no last good answer
 - `jolpica-f1-service.ts` — `getF1Data()` fetches current-season races, driver + constructor standings and the podium (`results/1|2|3` — one row per race, because `limit` is capped at 100) from Jolpica-F1 (`api.jolpi.ca/ergast/f1`, Ergast-compatible drop-in), maps to `F1Data` with derived race status and podium tallies, cached 5 min via `cachedFeed`, `F1_DATA` only when there is no last good answer
 - `espn-f1-standings-service.ts` — `getF1DashboardStandings(top)` reads ESPN's public `site.api.espn.com` racing standings (no key) for the dashboard card only, because Jolpica carries no driver photos or team liveries and the card wants both. Cached 5 min, returns `null` when ESPN fails and there is no last good answer, so the card simply drops the tables. Two provider quirks it has to work around: the points figure is `championshipPts` for drivers but `points` for constructors (a variadic `stat()` takes the first name that resolves, or every constructor reads 0 pts), and ESPN's `abbreviation` on a constructor row is the *driver's* initials — Mercedes came through as "LP" — so `teamCode()` derives the code from the team name instead. ESPN publishes no constructor logo at all — every racing `teamlogos` path 404s — so `TEAM_LOGOS` maps ESPN's team name to a file under `public/f1/teams/`
@@ -103,7 +103,8 @@ back to its fixture only when its feed has never answered.
 - `components/travel/dashboard-travel-card.tsx` — server-component card mounted on `/portal`: two featured trips side by side once the card is `@3xl` wide, only the first on a phone (in progress → next upcoming → most recent past), each with cover photo, state badge, items count and estimated total
 - `components/entertainment/sports/sports-hub.tsx` — client tab strip + per-sport view switcher; stars favourites and pins them first
 - `components/entertainment/sports/manage-favorites-sheet.tsx` — sheet with per-sport switches, optimistic updates via `setSportFavoriteAction`
-- `components/entertainment/sports/dashboard-sports-card.tsx` — server-component card mounted on `/portal` showing one highlight per favourited sport
+- `components/entertainment/sports/dashboard-sport-cards.tsx` — mounted on `/portal`: one card per favourite sport in the order picked, each in its own Suspense boundary (F1's is `DashboardF1Card`), or a "Pick favorites" card when there are none
+- `components/entertainment/sports/dashboard-sport-card.tsx` — one sport's half-row card, laid out like F1's: the featured match (or tournament), "Up next" / "Latest results", then `dashboard-sport-tables.tsx`, a client island toggling the tables (East / West, AFC / NFC, ATP / WTA, Men / Women) with team crests or player faces
 - `components/entertainment/sports/dashboard-f1-card.tsx` — F1's own `/portal` card, half the row (`md:grid-cols-2`), gated on F1 being favourited: next race, the championship top 3, then the news rail
 - `components/entertainment/sports/f1-standings-tabs.tsx` — client island inside that card, Drivers ⇄ Constructors over the same three rows. Drivers carry an ESPN headshot + country flag, constructors their team logo in the same circle, filled with `muted` rather than white so it reads as part of the card instead of a lit disc. A team with no logo published falls back to a livery-coloured disc with a 3-letter code, where `readableInk` picks black or white text off the disc's relative luminance so a yellow livery is not white-on-yellow
 - `components/entertainment/sports/sports/world-cup-view.tsx` — 🏆 World Cup tab: Knockout (default) / Matches / per-group standings grid
@@ -685,11 +686,9 @@ from `new Date()` and hydration-failed every evening west of UTC.
     updating daily, so the migration had to read both.
   - `RAPIDAPI_KEY` unset just means no refresh — the stored archive still reads.
   - **F1 owns one dashboard card**, `DashboardF1Card`: the next race and the
-    wire together, gated on the favourite. `getDashboardSportsSummary` takes an
-    `exclude` list so the general sports card leaves F1 out — the same race
-    printed in two cards side by side is the same race twice. That card also
-    **steps aside entirely** when F1 is somebody's only favourite, rather than
-    asking for favourites they have already picked.
+    wire together, gated on the favourite. Every other favourite sport now gets
+    a card of its own in the same mould (`DashboardSportCard`), so there is no
+    general sports card to leave F1 out of.
   - It is **two thirds of the row, not the whole of it** — one sport among
     several — and the news is a scroll-snap rail rather than a carousel
     library: the card is narrow, a swipe is the gesture already used here, and

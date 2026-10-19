@@ -73,7 +73,9 @@ export function F1NextRace({
             </span>
           )}
         </div>
-        <F1CircuitOutline circuitId={race.circuitId} className="size-14 text-muted-foreground" />
+        {/* As tall as the lines beside it: at 56px a wide track like Austin
+            drew a sliver, too small to be the block's picture. */}
+        <F1CircuitOutline circuitId={race.circuitId} className="size-20 shrink-0 text-foreground/80" />
       </div>
     </FeatureBox>
   );

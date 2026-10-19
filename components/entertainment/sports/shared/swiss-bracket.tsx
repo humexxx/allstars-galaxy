@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { SwissExit, SwissMatch, SwissPool, SwissStage, Team } from "@/types/sports";
@@ -195,34 +196,76 @@ function PoolBox({
   );
 }
 
+const STATUS_LABEL: Record<SwissMatch["status"], string> = {
+  scheduled: "Upcoming",
+  live: "Live",
+  ft: "Final",
+  aet: "Final",
+  pen: "Final",
+  postponed: "Postponed",
+  cancelled: "Cancelled",
+};
+
+/**
+ * Both teams of one match, with its day beside them until it is played. The
+ * time, the format and the result are a hover — or a focus — away.
+ */
 function MatchRows({ match, teams }: { match: SwissMatch; teams: Map<string, Team> }) {
   const format = useMatchTime();
   const decided = Boolean(match.winnerTeamId);
   const sides = [
     { id: match.homeTeamId, score: match.homeScore },
     { id: match.awayTeamId, score: match.awayScore },
-  ];
+  ].map((side) => ({ ...side, team: side.id ? teams.get(side.id) : undefined }));
+  const played = sides.every((side) => side.score !== null && side.score !== undefined);
+  const name = (side: (typeof sides)[number]) => side.team?.code ?? "TBD";
+
   return (
-    <div
-      className="flex flex-col gap-1 px-2.5 py-1.5"
-      title={match.date ? format.dayTime(match.date) : undefined}
-    >
-      {sides.map(({ id, score }, i) => {
-        const team = id ? teams.get(id) : undefined;
-        const won = decided && id === match.winnerTeamId;
-        return (
-          <div key={i} className="flex items-center justify-between gap-2 text-xs">
-            <TeamLine team={team} muted={decided && !won} strong={won} />
-            {score !== null && score !== undefined && (
-              <Mono className={cn(won ? "font-semibold" : "text-muted-foreground")}>{score}</Mono>
-            )}
-            {i === 0 && match.status === "live" && (
-              <span aria-label="Live" className="size-1.5 shrink-0 rounded-full bg-success" />
-            )}
-          </div>
-        );
-      })}
-    </div>
+    <Tooltip delayDuration={100}>
+      <TooltipTrigger asChild>
+        <div
+          tabIndex={0}
+          className="flex cursor-default flex-col gap-1 px-2.5 py-1.5 outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60"
+        >
+          {sides.map((side, i) => {
+            const won = decided && side.id === match.winnerTeamId;
+            return (
+              <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                <TeamLine team={side.team} muted={decided && !won} strong={won} />
+                {side.score !== null && side.score !== undefined ? (
+                  <Mono className={cn(won ? "font-semibold" : "text-muted-foreground")}>{side.score}</Mono>
+                ) : (
+                  i === 0 &&
+                  match.date && (
+                    <Mono className="shrink-0 text-2xs text-muted-foreground">
+                      {format.shortDay(match.date)}
+                    </Mono>
+                  )
+                )}
+                {i === 0 && match.status === "live" && (
+                  <span aria-label="Live" className="size-1.5 shrink-0 rounded-full bg-success" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={6}>
+        <div className="grid gap-0.5">
+          <span className="font-semibold">
+            {played
+              ? `${name(sides[0])} ${sides[0].score}–${sides[1].score} ${name(sides[1])}`
+              : `${name(sides[0])} vs ${name(sides[1])}`}
+          </span>
+          {match.date && <span>{format.dayTime(match.date)}</span>}
+          <span className="opacity-70">
+            {[match.bestOf ? `Best of ${match.bestOf}` : null, STATUS_LABEL[match.status]]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

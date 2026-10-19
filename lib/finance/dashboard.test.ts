@@ -32,7 +32,7 @@ describe("F11: dashboard card figures", () => {
   it("'now' is today's day-aware position with the portfolio growing, like the plan page", () => {
     const projection = projectPlan(plan, incomes, expenses, [], options);
     const today = projectStateAt(plan, incomes, expenses, [], options, now);
-    const fig = buildDashboardFigures(projection, today, 1, now);
+    const fig = buildDashboardFigures(projection, today);
     // Sep 10: salary (25th) not in yet; portfolio at its Sep opening
     // 20,000 × 1.01^8. The card used to show the Sep CLOSE with a flat
     // portfolio: $38,000.
@@ -44,7 +44,7 @@ describe("F11: dashboard card figures", () => {
   it("the '12 mo' badge measures to the chart's LAST point", () => {
     const projection = projectPlan(plan, incomes, expenses, [], options);
     const today = projectStateAt(plan, incomes, expenses, [], options, now);
-    const fig = buildDashboardFigures(projection, today, 1, now);
+    const fig = buildDashboardFigures(projection, today);
     expect(fig.points).toHaveLength(13); // today + 12 closes
     expect(fig.deltaPeriods).toBe(12);
     expect(fig.delta).toBeCloseTo(fig.points.at(-1)!.netWorth - fig.netWorth, 0);
@@ -53,7 +53,7 @@ describe("F11: dashboard card figures", () => {
   it("points keep cents and name their year, so the tooltip matches the tiles", () => {
     const projection = projectPlan(plan, incomes, expenses, [], options);
     const today = projectStateAt(plan, incomes, expenses, [], options, now);
-    const fig = buildDashboardFigures(projection, today, 1, now);
+    const fig = buildDashboardFigures(projection, today);
     // The first point IS the Net worth tile (it was rounded to whole dollars).
     expect(fig.points[0].netWorth).toBe(Math.round(today!.netWorth * 100) / 100);
     expect(fig.points[0]).toMatchObject({ month: "Now", label: "Today" });
@@ -64,11 +64,33 @@ describe("F11: dashboard card figures", () => {
     expect(fig.points.at(-1)!.month).toBe("Sep");
   });
 
+  it("money owed to you is a figure of its own, and the parts add up to net worth", () => {
+    const withOwed = [
+      ...incomes,
+      { id: "o", name: "Padre", monthlyAmount: "2300", kind: "one_time", date: "2026-12-31", owedToMe: true },
+    ] as unknown as FinancePlanIncome[];
+    const projection = projectPlan(plan, withOwed, expenses, [], options);
+    const today = projectStateAt(plan, withOwed, expenses, [], options, now);
+    const fig = buildDashboardFigures(projection, today);
+
+    expect(fig.receivables).toBe(2300);
+    expect(fig.points[0].receivables).toBe(2300);
+    // Repaid on Dec 31: by the last close it is cash, not owed.
+    expect(fig.points.at(-1)!.receivables).toBe(0);
+    // The portfolio rides in investments, or the tiles fall $20k short of
+    // the net worth above them.
+    expect(fig.investments).toBeCloseTo(today!.investments + today!.portfolioValue, 6);
+    expect(fig.savings + fig.investments + fig.receivables - fig.debt).toBeCloseTo(fig.netWorth, 6);
+    for (const p of fig.points) {
+      expect(p.savings + p.investments + p.receivables - p.debt).toBeCloseTo(p.netWorth, 1);
+    }
+  });
+
   it("a plan that hasn't started shows its opening figures", () => {
     const later = { ...plan, startMonth: U(2027, 1), initialSavings: "5000" } as FinancePlan;
     const projection = projectPlan(later, incomes, expenses, [], {});
     const today = projectStateAt(later, incomes, expenses, [], {}, now);
-    const fig = buildDashboardFigures(projection, today, 1, now);
+    const fig = buildDashboardFigures(projection, today);
     expect(fig.status).toBe("before-start");
     expect(fig.savings).toBe(5000);
   });

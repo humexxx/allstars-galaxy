@@ -22,6 +22,7 @@ import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
+import { dashboardSeries, type DashboardSeries } from "./dashboard-finance-series";
 import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
 import {
   getMainPlan,
@@ -30,11 +31,6 @@ import {
 } from "@/lib/services/finance-plan-service";
 import { loadCalibratedView } from "@/lib/services/finance-snapshot-service";
 import { buildDashboardFigures } from "@/lib/finance/dashboard";
-import {
-  formatDebtFree,
-  formatDebtFreeMonth,
-  type DebtFreeStatus,
-} from "@/lib/finance/chart-series";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { todayInTimeZone } from "@/lib/utils/date";
 
@@ -82,12 +78,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   const timeZone = await getRequestTimeZone();
   const now = todayInTimeZone(timeZone);
   const view = await loadCalibratedView(full, userId, now, { timeZone });
-  const fig = buildDashboardFigures(
-    view.projection,
-    view.today,
-    full.confirmationDayOfMonth,
-    now
-  );
+  const fig = buildDashboardFigures(view.projection, view.today);
   const points = fig.points;
   const delta = fig.delta;
   // The reader's calendar day, not the server's: this renders on the server
@@ -99,24 +90,36 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     timeZone,
   }).format(featured.updatedAt);
 
+  // Only net worth is coloured by its sign. Each part wore its own colour
+  // (blue investments, red debt), which clashed with the chart's series
+  // colours that the swatches beside these labels now carry.
   const netWorth: Figure = {
+    series: dashboardSeries("netWorth"),
     label: "Net worth",
     value: formatCurrency(fig.netWorth),
     tone: moneySign(fig.netWorth) >= 0 ? "positive" : "negative",
   };
   const breakdown: Figure[] = [
     {
+      series: dashboardSeries("savings"),
       label: fig.status === "before-start" ? "Savings at start" : "Savings now",
       value: formatCurrency(fig.savings),
     },
-    { label: "Investments", value: formatCurrency(fig.investments), tone: "primary" },
     {
-      label: "Debt now",
-      value: formatCurrency(fig.totalDebt),
-      // Red like the plan page's Total debt row, which shows this figure.
-      tone: moneySign(fig.totalDebt) > 0 ? "negative" : undefined,
+      series: dashboardSeries("investments"),
+      label: "Investments",
+      value: formatCurrency(fig.investments),
     },
-    { label: "Debt-free", ...debtFreeFigure(fig.debtFree, full.debts.length > 0) },
+    {
+      series: dashboardSeries("receivables"),
+      label: "Owed to you",
+      value: formatCurrency(fig.receivables),
+    },
+    {
+      series: dashboardSeries("debt"),
+      label: "Debt now",
+      value: formatCurrency(fig.debt),
+    },
   ];
   // A plan with no periods has no line to draw, and a rail beside nothing is
   // a column of figures with a hole on its left.
@@ -163,11 +166,10 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
           )}
         >
           <dl className={cn(rail && "@xl:col-start-2")}>
-            <FigureItem figure={netWorth} hero />
+            <FigureItem figure={netWorth} />
           </dl>
           <DashboardFinanceMiniChart
             data={points}
-            color={featured.color}
             className="h-48 sm:h-56 @xl:col-start-1 @xl:row-span-2 @xl:row-start-1 @xl:h-auto @xl:min-h-72"
           />
           <dl
@@ -186,53 +188,40 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   );
 }
 
-type FigureTone = "neutral" | "positive" | "negative" | "primary";
-
 type Figure = {
+  /** The chart series this figure is a reading of; its swatch is the legend. */
+  series: DashboardSeries;
   label: string;
   value: string;
-  /** Muted, beside the value: the countdown next to a payoff month. */
-  note?: string;
-  tone?: FigureTone;
+  tone?: "positive" | "negative";
 };
 
 /**
- * The payoff month as the figure and the countdown as its note: "Jan 2027"
- * with "in 12 mo" beside it, which a narrow phone cell wraps whole instead of
- * breaking the date in two.
- */
-function debtFreeFigure(
-  status: DebtFreeStatus,
-  hasDebts: boolean
-): Pick<Figure, "value" | "note"> {
-  if (!hasDebts && status.kind === "no-debt") return { value: "—" };
-  if (status.kind !== "on-track") return { value: formatDebtFree(status) };
-  return { value: formatDebtFreeMonth(status.date), note: `in ${status.months} mo` };
-}
-
-/**
  * The StatCard figure (Eyebrow label, Mono value, `statToneClass`) as one
- * term of this card's description list. `hero` is StatCard's own size; the
- * breakdown is one step down, the secondary-stat size.
+ * term of this card's description list. Every figure is the same size: net
+ * worth leads the rail and carries the sign colour, which is emphasis enough.
  */
-function FigureItem({ figure, hero = false }: { figure: Figure; hero?: boolean }) {
-  const { label, value, note, tone = "neutral" } = figure;
+function FigureItem({ figure }: { figure: Figure }) {
+  const { series, label, value, tone } = figure;
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <Eyebrow size="sm" asChild>
-        <dt>{label}</dt>
+        <dt className="flex items-center gap-1.5">
+          <span
+            aria-hidden="true"
+            className={cn(
+              "shrink-0",
+              series.mark === "line" ? "h-0.5 w-2.5 rounded-full" : "size-2 rounded-xs"
+            )}
+            style={{ backgroundColor: series.color }}
+          />
+          {label}
+        </dt>
       </Eyebrow>
-      <dd className="flex flex-wrap items-baseline gap-x-2">
-        <Mono
-          className={cn(
-            "font-semibold",
-            hero ? "text-xl sm:text-2xl" : "text-base sm:text-lg",
-            tone === "primary" ? "text-primary" : tone !== "neutral" && statToneClass(tone)
-          )}
-        >
+      <dd>
+        <Mono className={cn("text-lg font-semibold sm:text-xl", statToneClass(tone))}>
           {value}
         </Mono>
-        {note && <Mono className="text-xs text-muted-foreground">{note}</Mono>}
       </dd>
     </div>
   );

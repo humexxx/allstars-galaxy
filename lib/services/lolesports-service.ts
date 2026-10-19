@@ -13,6 +13,9 @@ import type {
   LolSplit,
   LolStanding,
   MatchStatus,
+  SwissExit,
+  SwissPool,
+  SwissStage,
   Team,
 } from "@/types/sports";
 import { cachedFeed, upstreamSignal } from "./upstream";
@@ -104,7 +107,7 @@ type LolesportsRanking = {
 
 type LolesportsStandingsMatch = {
   id?: string;
-  state?: "unstarted" | "inProgress" | "completed";
+  state?: LolesportsEvent["state"];
   teams: LolesportsStandingTeam[];
 };
 
@@ -384,10 +387,187 @@ function toBracketMatch(
 
 type PlayoffSection = { name: string | null; matches: LolesportsStandingsMatch[] };
 
+/** What only the schedule knows about a match. */
+type ScheduledMatch = { date: string; bestOf: 1 | 3 | 5 };
+
+type SwissShape = {
+  winsToAdvance: number;
+  lossesToExit: number;
+  /** Matches per pool, round by round, best record first. */
+  rounds: { wins: number; losses: number; matches: number }[][];
+  exits: { wins: number; losses: number; slots: number }[];
+};
+
+const byRecord = (
+  a: { wins: number; losses: number },
+  b: { wins: number; losses: number },
+): number => b.wins - a.wins || a.losses - b.losses;
+
+/**
+ * The pools a Swiss stage plays for this many teams, counts only. Null when a
+ * pool would hold an odd number of teams, which no real format has.
+ */
+function swissShape(teams: number, winsToAdvance: number, lossesToExit: number): SwissShape | null {
+  type Pool = { wins: number; losses: number; teams: number };
+  let pools: Pool[] = [{ wins: 0, losses: 0, teams }];
+  const rounds: SwissShape["rounds"] = [];
+  const exits = new Map<string, Pool>();
+  while (pools.length > 0) {
+    const next = new Map<string, Pool>();
+    const round: SwissShape["rounds"][number] = [];
+    for (const pool of pools.sort(byRecord)) {
+      if (pool.teams % 2 !== 0) return null;
+      round.push({ wins: pool.wins, losses: pool.losses, matches: pool.teams / 2 });
+      for (const [wins, losses] of [
+        [pool.wins + 1, pool.losses],
+        [pool.wins, pool.losses + 1],
+      ]) {
+        const into = wins === winsToAdvance || losses === lossesToExit ? exits : next;
+        const key = `${wins}-${losses}`;
+        const target = into.get(key) ?? { wins, losses, teams: 0 };
+        target.teams += pool.teams / 2;
+        into.set(key, target);
+      }
+    }
+    rounds.push(round);
+    pools = Array.from(next.values());
+  }
+  return {
+    winsToAdvance,
+    lossesToExit,
+    rounds,
+    exits: Array.from(exits.values())
+      .sort(byRecord)
+      .map((e) => ({ wins: e.wins, losses: e.losses, slots: e.teams })),
+  };
+}
+
+/**
+ * The Swiss formats that play exactly this many matches, likeliest first.
+ * Worlds' is 16 teams, through on three wins and out on three losses: 33.
+ */
+function swissShapesFor(matchCount: number, knownTeams: number): SwissShape[] {
+  const shapes: SwissShape[] = [];
+  for (const wins of [3, 2, 4]) {
+    for (let teams = Math.max(4, knownTeams + (knownTeams % 2)); teams <= 64; teams += 2) {
+      const shape = swissShape(teams, wins, wins);
+      const total = shape?.rounds.flat().reduce((sum, p) => sum + p.matches, 0);
+      if (shape && total === matchCount) shapes.push(shape);
+    }
+  }
+  return shapes;
+}
+
+/** The team that won a finished match, by code. */
+function swissWinner(match: LolesportsStandingsMatch): string | null {
+  const [home, away] = match.teams;
+  if (!home || !away || home.code === "TBD" || away.code === "TBD") return null;
+  if (home.result?.outcome === "win") return home.code;
+  if (away.result?.outcome === "win") return away.code;
+  if (match.state !== "completed") return null;
+  const homeWins = home.result?.gameWins ?? 0;
+  const awayWins = away.result?.gameWins ?? 0;
+  if (homeWins === awayWins) return null;
+  return homeWins > awayWins ? home.code : away.code;
+}
+
+/**
+ * Worlds' Swiss stage as pools and exits, so it can be drawn as the tree it
+ * is rather than a list of cards.
+ *
+ * The API sends the stage as one section of matches, round by round and best
+ * record first within a round, and says nothing about which record a match
+ * was played on. That order is the only key, so it is checked: every team the
+ * results place in a match must be on that match's record, or the stage is not
+ * drawn at all rather than drawn wrong.
+ */
+function buildSwissStage(
+  matches: LolesportsStandingsMatch[],
+  schedule: Map<string, ScheduledMatch> = new Map(),
+): SwissStage | null {
+  if (matches.length === 0) return null;
+  const known = new Set(
+    matches.flatMap((m) => m.teams.filter((t) => t.code !== "TBD").map((t) => t.code)),
+  );
+  for (const shape of swissShapesFor(matches.length, known.size)) {
+    const stage = fitSwissShape(shape, matches, schedule);
+    if (stage) return stage;
+  }
+  return null;
+}
+
+function fitSwissShape(
+  shape: SwissShape,
+  matches: LolesportsStandingsMatch[],
+  schedule: Map<string, ScheduledMatch>,
+): SwissStage | null {
+  const records = new Map<string, { wins: number; losses: number }>();
+  const recordOf = (code: string) => records.get(code) ?? { wins: 0, losses: 0 };
+  // Each exit's teams in the order they got there.
+  const finished = new Map<string, string[]>();
+  let next = 0;
+  const rounds: SwissPool[][] = [];
+  for (const [r, round] of shape.rounds.entries()) {
+    const pools: SwissPool[] = [];
+    for (const [p, slot] of round.entries()) {
+      const played = matches.slice(next, next + slot.matches);
+      next += slot.matches;
+      for (const match of played) {
+        for (const t of match.teams) {
+          if (t.code === "TBD") continue;
+          const rec = recordOf(t.code);
+          if (rec.wins !== slot.wins || rec.losses !== slot.losses) return null;
+        }
+      }
+      for (const match of played) {
+        const winner = swissWinner(match);
+        if (!winner) continue;
+        for (const t of match.teams) {
+          const before = recordOf(t.code);
+          const rec =
+            t.code === winner
+              ? { wins: before.wins + 1, losses: before.losses }
+              : { wins: before.wins, losses: before.losses + 1 };
+          records.set(t.code, rec);
+          if (rec.wins === shape.winsToAdvance || rec.losses === shape.lossesToExit) {
+            const key = `${rec.wins}-${rec.losses}`;
+            finished.set(key, [...(finished.get(key) ?? []), teamIdFromCode(t.code)]);
+          }
+        }
+      }
+      pools.push({
+        wins: slot.wins,
+        losses: slot.losses,
+        matches: played.map((m, i) => {
+          const scheduled = m.id ? schedule.get(m.id) : undefined;
+          return {
+            ...toBracketMatch(m, `swiss-${r}-${p}-${i}`),
+            status: toMatchStatus(m.state ?? "unstarted"),
+            ...(scheduled ? { date: scheduled.date, bestOf: scheduled.bestOf } : {}),
+          };
+        }),
+      });
+    }
+    rounds.push(pools);
+  }
+  const exits: SwissExit[] = shape.exits.map((exit) => ({
+    ...exit,
+    advanced: exit.wins === shape.winsToAdvance,
+    teamIds: finished.get(`${exit.wins}-${exit.losses}`) ?? [],
+  }));
+  return {
+    winsToAdvance: shape.winsToAdvance,
+    lossesToExit: shape.lossesToExit,
+    rounds,
+    exits,
+  };
+}
+
 async function getStandingsAndPlayoffs(tournamentId: string): Promise<{
   teams: Team[];
   standings: LolStanding[];
   playoffSections: PlayoffSection[];
+  swissMatches: LolesportsStandingsMatch[];
 }> {
   const data = await fetchLolesports<{
     data: { standings: LolesportsStandingsEntry[] };
@@ -396,12 +576,25 @@ async function getStandingsAndPlayoffs(tournamentId: string): Promise<{
   const teamsMap = new Map<string, Team>();
   const rows: LolStanding[] = [];
   const playoffSections: PlayoffSection[] = [];
+  const swissMatches: LolesportsStandingsMatch[] = [];
 
   for (const entry of data.data.standings) {
     for (const stage of entry.stages) {
       const isRegular = REGULAR_STAGE_SLUGS.has(stage.slug ?? "");
       const isBracket = isBracketStage(stage.slug);
       for (const section of stage.sections) {
+        // Ranked nowhere (no table until it is played), so its teams and
+        // matches are only here.
+        if (stage.slug === "swiss") {
+          for (const match of section.matches ?? []) {
+            for (const team of match.teams) {
+              if (team.code === "TBD") continue;
+              const t = toTeam(team);
+              if (!teamsMap.has(t.id)) teamsMap.set(t.id, t);
+            }
+            swissMatches.push(match);
+          }
+        }
         // Standings rows come from regular-season rankings.
         if (isRegular) {
           for (const ranking of section.rankings ?? []) {
@@ -445,6 +638,7 @@ async function getStandingsAndPlayoffs(tournamentId: string): Promise<{
     teams: Array.from(teamsMap.values()),
     standings: dedupedStandings,
     playoffSections,
+    swissMatches,
   };
 }
 
@@ -476,6 +670,7 @@ async function getSchedule(
   matches: LolMatch[];
   extraTeams: Team[];
   blockByMatchId: Map<string, string>;
+  scheduleByMatchId: Map<string, ScheduledMatch>;
 }> {
   const data = await fetchLolesports<{
     data: { schedule: { events: LolesportsEvent[] } };
@@ -484,11 +679,16 @@ async function getSchedule(
   const teamsMap = new Map<string, Team>();
   const matches: LolMatch[] = [];
   const blockByMatchId = new Map<string, string>();
+  const scheduleByMatchId = new Map<string, ScheduledMatch>();
 
   for (const event of data.data.schedule.events) {
     if (event.type !== "match" || !event.match) continue;
     if (!withinTournament(event.startTime, tournament)) continue;
     if (event.blockName) blockByMatchId.set(event.match.id, event.blockName);
+    scheduleByMatchId.set(event.match.id, {
+      date: event.startTime,
+      bestOf: event.match.strategy?.count ?? 1,
+    });
     const [home, away] = event.match.teams;
     if (!home || !away || home.code === "TBD" || away.code === "TBD") continue;
 
@@ -522,6 +722,7 @@ async function getSchedule(
     ),
     extraTeams: Array.from(teamsMap.values()),
     blockByMatchId,
+    scheduleByMatchId,
   };
 }
 
@@ -553,6 +754,7 @@ async function fetchSplit(
     teams: [] as Team[],
     standings: [] as LolStanding[],
     playoffSections: [] as PlayoffSection[],
+    swissMatches: [] as LolesportsStandingsMatch[],
   };
   const [standingsRes, scheduleRes] = await Promise.all([
     tournament
@@ -566,6 +768,7 @@ async function fetchSplit(
     standingsRes.playoffSections.length > 0
       ? buildLolBracket(standingsRes.playoffSections, scheduleRes.blockByMatchId)
       : undefined;
+  const swiss = buildSwissStage(standingsRes.swissMatches, scheduleRes.scheduleByMatchId);
 
   const teamsMap = new Map<string, Team>();
   for (const t of [...standingsRes.teams, ...scheduleRes.extraTeams]) {
@@ -592,6 +795,7 @@ async function fetchSplit(
     teams,
     standings: standingsWithForm,
     matches: scheduleRes.matches.slice(0, 24),
+    ...(swiss ? { swiss } : {}),
     playoffs,
   };
 }
@@ -631,6 +835,7 @@ export const getLolData = cachedFeed(
 /** Pure mappers, exported for their tests — nothing here touches the network. */
 export const __testing = {
   buildLolBracket,
+  buildSwissStage,
   isBracketStage,
   isCurrentEvent,
   pickActiveTournament,

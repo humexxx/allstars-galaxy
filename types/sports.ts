@@ -372,6 +372,40 @@ export type LolMatch = {
   stageLabel?: string;
 };
 
+/** One match of a Swiss round. Its teams are null until the pairing is drawn. */
+export type SwissMatch = BracketMatch & {
+  status: MatchStatus;
+  bestOf?: 1 | 3 | 5;
+};
+
+/** Everyone on one record plays one match a round: the "1-0" pool. */
+export type SwissPool = {
+  /** The record going into the round. */
+  wins: number;
+  losses: number;
+  matches: SwissMatch[];
+};
+
+/** A record that ends the stage: through on enough wins, out on enough losses. */
+export type SwissExit = {
+  wins: number;
+  losses: number;
+  advanced: boolean;
+  /** How many teams finish on this record. */
+  slots: number;
+  /** The ones known so far. */
+  teamIds: string[];
+};
+
+export type SwissStage = {
+  winsToAdvance: number;
+  lossesToExit: number;
+  /** Round by round, best record first. */
+  rounds: SwissPool[][];
+  /** Best record first. */
+  exits: SwissExit[];
+};
+
 export type LolSplit = {
   region: LolRegion;
   name: string;
@@ -379,6 +413,8 @@ export type LolSplit = {
   teams: Team[];
   standings: LolStanding[];
   matches: LolMatch[];
+  /** Worlds' Swiss stage, between the play-ins and the knockouts. */
+  swiss?: SwissStage;
   playoffs?: BracketRound[];
 };
 

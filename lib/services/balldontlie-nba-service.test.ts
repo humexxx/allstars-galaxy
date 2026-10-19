@@ -229,10 +229,14 @@ describe("playoffYear", () => {
   });
 
   it("keeps it while balldontlie still shows the finals, named by their season", () => {
-    // Mid-October the opener is days away, but the latest results are still
+    // By August the calendar says 2027, but the latest results are still
     // 2025–26's finals: a 2026 postseason, not a 2027 one.
-    expect(playoffYear(new Date(2026, 9, 18, 12), [finals as never])).toBe(2026);
     expect(playoffYear(new Date(2026, 7, 1, 12), [finals as never])).toBe(2026);
+  });
+
+  it("drops it once the next season's games are on the page", () => {
+    const opener = { ...game("2026-10-20"), season: 2026 };
+    expect(playoffYear(new Date(2026, 9, 18, 12), [finals, opener] as never)).toBeNull();
   });
 });
 

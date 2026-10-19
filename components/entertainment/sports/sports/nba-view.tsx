@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Lock } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -16,6 +17,7 @@ import { Eyebrow } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { NbaConference, NbaData, Team } from "@/types/sports";
 
+import { KnockoutBracket } from "../shared/knockout-bracket";
 import { MatchesByDate } from "../shared/matches-by-date";
 import { SportShell } from "../shared/sport-shell";
 import { SportsTh, TableCellNum } from "../shared/table-primitives";
@@ -33,9 +35,11 @@ export function NbaView({ data }: NbaViewProps) {
   // ESPN's table rides along with balldontlie's games; a table invented next
   // to real scores is worse than none, so without it the games fill the row.
   const hasStandings = data.standings.length > 0;
+  const playoffs = data.playoffs ?? [];
+  const hasPlayoffs = playoffs.length > 0;
 
   return (
-    <Tabs defaultValue="overview" className="gap-6">
+    <Tabs defaultValue={hasPlayoffs ? "postseason" : "overview"} className="gap-6">
       <SportShell
         emoji="🏀"
         title="NBA"
@@ -43,6 +47,12 @@ export function NbaView({ data }: NbaViewProps) {
         tabs={
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
+            {/* Always there, locked until the play-in week: where the bracket
+                will be is worth knowing before it exists. */}
+            <TabsTrigger value="postseason" disabled={!hasPlayoffs}>
+              {!hasPlayoffs && <Lock aria-hidden />}
+              Postseason
+            </TabsTrigger>
           </TabsList>
         }
       >
@@ -64,6 +74,16 @@ export function NbaView({ data }: NbaViewProps) {
             )}
           </div>
         </TabsContent>
+
+        {hasPlayoffs && (
+          <TabsContent value="postseason">
+            <Card size="sm">
+              <CardContent>
+                <KnockoutBracket rounds={playoffs} teams={teamsMap} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </SportShell>
     </Tabs>
   );

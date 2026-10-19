@@ -382,13 +382,18 @@ const FIRST_ROUND_SLOT: Record<number, number> = { 1: 0, 4: 1, 3: 2, 2: 3 };
  *
  * By the calendar, from the regular season's last week to the end of June.
  * Beyond that, only while balldontlie's own page still holds postseason
- * games: all summer the finals are the latest results, and the bracket they
- * closed stays with them. Their season names the year, because by October
- * the calendar has moved on to the next one.
+ * games and nothing later: all summer the finals are the latest results, and
+ * the bracket they closed stays with them. Once the next season's games are
+ * on the page the bracket is last season's, and the tab locks until the next
+ * play-in rather than sitting beside the openers. Their season names the
+ * year, because by October the calendar has moved on to the next one.
  */
 function playoffYear(today: Date, page: BdlGame[]): number | null {
   const seasons = page.filter((g) => g.postseason).map((g) => g.season);
-  if (seasons.length > 0) return Math.max(...seasons) + 1;
+  if (seasons.length > 0) {
+    const season = Math.max(...seasons);
+    return page.some((g) => g.season > season) ? null : season + 1;
+  }
   const month = today.getMonth();
   const inWindow = (month === 3 && today.getDate() >= 10) || month === 4 || month === 5;
   return inWindow ? today.getFullYear() : null;

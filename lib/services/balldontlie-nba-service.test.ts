@@ -133,28 +133,39 @@ describe("recentAndNext", () => {
 
 describe("tipOffFrom", () => {
   const season2026 = (page: PageGame[]): PageGame[] => page.filter((g) => g.season === 2026);
+  // The off-season page starts at June 1, before the season does.
+  const tipOff = (games: Parameters<typeof tipOffFrom>[0]): string | undefined =>
+    tipOffFrom(games, 2026, "2026-06-01");
 
   it("is the first regular-season game while none has been played", () => {
-    expect(tipOffFrom(season2026(pageOct18))).toBe("2026-10-20T19:00:00.000Z");
+    expect(tipOff(season2026(pageOct18))).toBe("2026-10-20T19:00:00.000Z");
   });
 
   it("is gone once the opening night has been played", () => {
-    expect(tipOffFrom(season2026(pageOct21))).toBeUndefined();
+    expect(tipOff(season2026(pageOct21))).toBeUndefined();
   });
 
   it("is gone while a game is in progress", () => {
     const live = season2026(pageOct18).map((g, i) => (i === 0 ? { ...g, status_state: "in" } : g));
-    expect(tipOffFrom(live)).toBeUndefined();
+    expect(tipOff(live)).toBeUndefined();
   });
 
   it("stays a calendar day when balldontlie has no time for it", () => {
     // A made-up UTC midnight would read as Oct 19 in Costa Rica.
     const untimed = season2026(pageOct18).map((g) => ({ ...g, datetime: null }));
-    expect(tipOffFrom(untimed)).toBe("2026-10-20");
+    expect(tipOff(untimed)).toBe("2026-10-20");
   });
 
   it("is undefined with no games of the season", () => {
-    expect(tipOffFrom([])).toBeUndefined();
+    expect(tipOff([])).toBeUndefined();
+  });
+
+  it("reads nothing off a page that starts after the season did", () => {
+    // Across the All-Star break the in-season page (Feb 13–21) holds only
+    // fixtures, and the first of them is not the opener.
+    const afterBreak = season2026(pageOct18).map((g) => ({ ...g, season: 2025 }));
+    expect(tipOffFrom(afterBreak, 2025, "2026-02-13")).toBeUndefined();
+    expect(tipOffFrom(season2026(pageOct18), 2026, "2026-10-24")).toBeUndefined();
   });
 });
 
@@ -799,6 +810,28 @@ describe("getNbaData through the year", () => {
     expect(data.season).toBe("2026–27");
     expect(data.games).toHaveLength(1);
     expect(data.tipOff).toBeUndefined();
+  });
+
+  it("names no tip-off and no champion across the All-Star break", async () => {
+    vi.setSystemTime(new Date(2026, 1, 17, 12));
+    const fixture = (date: string) => ({
+      ...bdlGame(date, false),
+      datetime: `${date}T00:30:00Z`,
+      status: `${date}T00:30:00Z`,
+      status_state: "scheduled",
+    });
+    const calls = stubFeeds({
+      games: [fixture("2026-02-19"), fixture("2026-02-20"), fixture("2026-02-21")],
+      header: () => json(preseason2026),
+    });
+    const data = await getNbaData();
+
+    expect(data).not.toBe(NBA_DATA);
+    expect(data.season).toBe("2025–26");
+    expect(data.games).toHaveLength(3);
+    expect(data.tipOff).toBeUndefined();
+    expect(data.champion).toBeUndefined();
+    expect(calls()).toEqual([STANDINGS(2026)]);
   });
 
   it("makes no extra request in the middle of the season", async () => {

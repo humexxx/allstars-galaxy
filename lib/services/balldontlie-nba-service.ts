@@ -218,13 +218,19 @@ function recentAndNext(games: Match[]): Match[] {
 }
 
 /**
- * When the season's first regular-season game starts, while none of its games
+ * When `season`'s first regular-season game starts, while none of its games
  * has been played. Undefined from the opener on, which is what closes the
  * preseason and the champion's line.
+ *
+ * Only off a page that starts before the season does (`from`, before Oct 1):
+ * in season the page is a few nights either side of today, and across the
+ * All-Star break every game on it is still to come, so its first was read as
+ * the opener in the middle of February.
  */
-function tipOffFrom(season: BdlGame[]): string | undefined {
-  if (season.some((g) => g.status_state === "final" || g.status_state === "in")) return undefined;
-  const first = season
+function tipOffFrom(games: BdlGame[], season: number, from: string): string | undefined {
+  if (from >= `${season}-10-01`) return undefined;
+  if (games.some((g) => g.status_state === "final" || g.status_state === "in")) return undefined;
+  const first = games
     .filter((g) => !g.postseason && !g.postponed)
     .sort((a, b) => Date.parse(a.datetime ?? a.date) - Date.parse(b.datetime ?? b.date))[0];
   // A date-only fallback stays a calendar day; a made-up UTC midnight would
@@ -828,7 +834,7 @@ async function fetchNbaFromApi(today: Date): Promise<NbaData> {
   // one's heading and table. Everything shown is one season's: from Oct 1 the
   // new one, until then the old one, which from mid-June is the finals alone.
   const own = page.filter((g) => g.season === season);
-  const tipOff = tipOffFrom(own);
+  const tipOff = tipOffFrom(own, season, start);
   const crowned = tipOff ? championFrom(page, season - 1) : undefined;
 
   // The table, the bracket and the preseason are extras, not the feed: if
@@ -845,7 +851,7 @@ async function fetchNbaFromApi(today: Date): Promise<NbaData> {
         return { standings: [] as NbaStanding[], teams: [] as Team[] };
       }),
     year === null ? Promise.resolve(NO_PLAYOFFS) : getNbaPlayoffs(year),
-    tipOff && today.getMonth() >= 9 ? getNbaPreseason(season) : Promise.resolve(NO_PRESEASON),
+    tipOff ? getNbaPreseason(season) : Promise.resolve(NO_PRESEASON),
   ]);
 
   const games = recentAndNext([...own.map(matchFrom), ...preseason.games]);

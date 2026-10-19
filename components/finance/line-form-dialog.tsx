@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Field,
+  FieldContent,
   FieldDescription,
   FieldError,
   FieldLabel,
@@ -55,6 +56,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { Eyebrow, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { RecurrenceType } from "@/types/finance";
@@ -70,6 +72,8 @@ export type LineFormValues = {
   date: string | null;
   startDate?: string | null;
   endDate?: string | null;
+  // Income-only: someone paying back what they owe the user.
+  owedToMe?: boolean;
   // Recurrence model. Defaults to monthly_day so existing flows behave
   // identically.
   recurrenceType: RecurrenceType;
@@ -156,6 +160,8 @@ function LineForm({
   const amountInputId = useId();
   const amountErrorId = useId();
   const domInputId = useId();
+  const owedInputId = useId();
+  const owedErrorId = useId();
 
   const [name, setName] = useState(initial?.name ?? "");
   const [amount, setAmount] = useState(initial?.monthlyAmount ?? "");
@@ -190,16 +196,21 @@ function LineForm({
   const [recurrenceStart, setRecurrenceStart] = useState<string | null>(
     initial?.recurrenceStart ?? null
   );
+  const [owedToMe, setOwedToMe] = useState(initial?.owedToMe ?? false);
   const [submitting, setSubmitting] = useState(false);
 
   // The server rejects anything else as "Invalid input" with no hint of which
   // field; saying so here, next to the field, is the useful version.
   const amountInvalid = amount.trim().length > 0 && !MONEY.test(amount.trim());
+  // Same rule as the schema: an open-ended repayment would be owed forever.
+  const owedNeedsEnd =
+    variant === "income" && owedToMe && kind === "recurring" && !endDate;
 
   const canSubmit =
     name.trim().length > 0 &&
     amount.trim().length > 0 &&
     !amountInvalid &&
+    !owedNeedsEnd &&
     (kind === "recurring" || (kind === "one_time" && !!date));
 
   const handleSubmit = async () => {
@@ -221,6 +232,7 @@ function LineForm({
           ? {
               startDate: kind === "recurring" ? startDate : null,
               endDate: kind === "recurring" ? endDate : null,
+              owedToMe,
             }
           : {}),
         recurrenceType,
@@ -304,6 +316,34 @@ function LineForm({
           noun={noun}
           showWindow={variant === "income"}
         />
+
+        {variant === "income" && (
+          <Field
+            orientation="horizontal"
+            className="justify-between rounded-lg border p-3"
+            data-invalid={owedNeedsEnd || undefined}
+          >
+            <FieldContent>
+              <FieldLabel htmlFor={owedInputId} className="cursor-pointer">
+                Owed to you
+              </FieldLabel>
+              <FieldDescription>
+                Someone is paying you back. It counts in your net worth until it arrives.
+              </FieldDescription>
+              {owedNeedsEnd && (
+                <FieldError id={owedErrorId}>
+                  Set an end date under Schedule → Advanced: the month of the last repayment.
+                </FieldError>
+              )}
+            </FieldContent>
+            <Switch
+              id={owedInputId}
+              checked={owedToMe}
+              onCheckedChange={setOwedToMe}
+              aria-describedby={owedNeedsEnd ? owedErrorId : undefined}
+            />
+          </Field>
+        )}
       </div>
 
       <DialogFooter>

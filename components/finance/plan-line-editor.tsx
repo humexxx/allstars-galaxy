@@ -34,6 +34,7 @@ export type EditorLine = {
   // Income-only — undefined on expenses.
   startDate?: string | null;
   endDate?: string | null;
+  owedToMe?: boolean;
 };
 
 type PlanLineEditorProps = {
@@ -165,9 +166,12 @@ function LineRow({
     <TableRow>
       <TableCell className="font-medium">{line.name}</TableCell>
       <TableCell>
-        <Badge variant={line.kind === "recurring" ? "secondary" : "outline"}>
-          {line.kind === "recurring" ? "Recurring" : "One-time"}
-        </Badge>
+        <div className="flex flex-wrap gap-1">
+          <Badge variant={line.kind === "recurring" ? "secondary" : "outline"}>
+            {line.kind === "recurring" ? "Recurring" : "One-time"}
+          </Badge>
+          {line.owedToMe && <Badge variant="info">Owed to you</Badge>}
+        </div>
       </TableCell>
       <TableCell className="font-mono tabular-nums">
         {formatCurrency(Number(line.monthlyAmount))}

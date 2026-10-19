@@ -146,6 +146,8 @@ const incomeShape = {
   name: z.string().min(1).max(120),
   monthlyAmount: decimal.default("0"),
   kind: lineKind.default("recurring"),
+  // Someone paying back what they owe — counts in net worth before it lands.
+  owedToMe: z.boolean().default(false),
   dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
   date: isoDate.nullable().optional(),
   startDate: isoDate.nullable().optional(),
@@ -174,6 +176,14 @@ function refineIncome(
       code: "custom",
       path: ["endDate"],
       message: "End date must be on or after start date",
+    });
+  }
+  // Without an end, the amount owed — and the net worth it adds — never stops.
+  if (val.owedToMe && !val.endDate) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["endDate"],
+      message: "Money owed to you needs an end date: the month of the last repayment",
     });
   }
   refineRecurrence(val, ctx);

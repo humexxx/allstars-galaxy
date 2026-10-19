@@ -1,7 +1,7 @@
 "use client";
 
 import { RotateCw, Timer } from "lucide-react";
-import { useCallback, useRef, useState, type JSX, type ReactNode } from "react";
+import { useCallback, useRef, useState, type JSX, type ReactNode, type RefObject } from "react";
 
 import { getF1RaceClassificationAction } from "@/app/actions/f1";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -75,6 +75,12 @@ type F1RaceSheetProps = {
   race: F1Race | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * What opened the sheet, which gets the focus back on close. Opened from a
+   * tile rather than a trigger, Radix has nothing of its own to return it
+   * to, and the focus fell to the top of the page.
+   */
+  returnFocus?: RefObject<HTMLElement | null>;
   season: number;
   drivers: F1Driver[];
   classification?: ClassificationState;
@@ -90,6 +96,7 @@ export function F1RaceSheet({
   race,
   open,
   onOpenChange,
+  returnFocus,
   season,
   drivers,
   classification,
@@ -101,6 +108,12 @@ export function F1RaceSheet({
       <SheetContent
         side={isMobile ? "bottom" : "right"}
         className="gap-0 data-[side=bottom]:max-h-5/6 data-[side=right]:sm:max-w-md"
+        onCloseAutoFocus={(event) => {
+          const opener = returnFocus?.current;
+          if (!opener) return;
+          event.preventDefault();
+          opener.focus();
+        }}
       >
         {race && (
           <RaceDetails
@@ -122,7 +135,9 @@ function RaceDetails({
   drivers,
   classification,
   onRetry,
-}: Omit<F1RaceSheetProps, "race" | "open" | "onOpenChange"> & { race: F1Race }): JSX.Element {
+}: Omit<F1RaceSheetProps, "race" | "open" | "onOpenChange" | "returnFocus"> & {
+  race: F1Race;
+}): JSX.Element {
   const format = useMatchTime();
   const now = useNow();
   const hasSessions = raceSessions(race).length > 0;

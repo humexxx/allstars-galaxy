@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarDays, ChevronDown, Flag } from "lucide-react";
-import { useMemo, useState, type JSX, type ReactNode } from "react";
+import { useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,8 @@ import { useMatchTime } from "./shared/time-zone-context";
 import { StatusPill } from "./shared/status-pill";
 import { useNow } from "./use-now";
 
-type OpenRace = (race: F1Race) => void;
+/** `opener` gets the focus back when the sheet closes. */
+type OpenRace = (race: F1Race, opener: HTMLElement) => void;
 
 const TILE =
   "flex w-full flex-col gap-3 rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50";
@@ -41,8 +42,10 @@ export function F1Races({ data }: { data: F1Data }): JSX.Element {
   const [raceId, setRaceId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const race = raceId ? (data.races.find((r) => r.id === raceId) ?? null) : null;
+  const opener = useRef<HTMLElement | null>(null);
 
-  const open: OpenRace = (next) => {
+  const open: OpenRace = (next, from) => {
+    opener.current = from;
     setRaceId(next.id);
     setSheetOpen(true);
     if (next.status === "completed") void classifications.load(next.round);
@@ -82,6 +85,7 @@ export function F1Races({ data }: { data: F1Data }): JSX.Element {
         race={race}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
+        returnFocus={opener}
         season={data.season}
         drivers={data.drivers}
         classification={race ? classifications.get(race.round) : undefined}
@@ -146,7 +150,7 @@ function FeaturedRace({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX
             </span>
             <button
               type="button"
-              onClick={() => onOpen(race)}
+              onClick={(event) => onOpen(race, event.currentTarget)}
               className="text-left outline-none after:absolute after:inset-0"
             >
               {race.name}
@@ -178,7 +182,7 @@ function FeaturedRace({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX
 function RaceTile({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX.Element {
   const format = useMatchTime();
   return (
-    <button type="button" onClick={() => onOpen(race)} className={TILE}>
+    <button type="button" onClick={(event) => onOpen(race, event.currentTarget)} className={TILE}>
       <span className="flex w-full items-start justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2">
           <span aria-hidden className="text-xl leading-none">
@@ -239,7 +243,7 @@ function FullCalendar({
               <li key={race.id}>
                 <button
                   type="button"
-                  onClick={() => onOpen(race)}
+                  onClick={(event) => onOpen(race, event.currentTarget)}
                   className={cn(
                     "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors outline-none hover:bg-muted/40 focus-visible:bg-muted/40",
                     race.status === "completed" && "text-muted-foreground"

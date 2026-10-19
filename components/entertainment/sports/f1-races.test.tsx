@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/actions/f1", () => ({ getF1RaceClassificationAction: vi.fn() }));
@@ -171,6 +171,20 @@ describe("F1Races", () => {
     expect(within(sheet()).getByRole("heading", { name: "Qatar Grand Prix" })).toBeInTheDocument();
     expect(within(sheet()).queryByText("Classification")).toBeNull();
     expect(getF1RaceClassificationAction).not.toHaveBeenCalled();
+  });
+
+  it("hands the focus back to the race that opened the sheet", async () => {
+    renderRaces();
+    const tile = tiles("Coming up")[0];
+    tile.focus();
+    fireEvent.click(tile);
+    expect(within(sheet()).getByRole("heading", { name: "Mexico City Grand Prix" })).toBeInTheDocument();
+    await waitFor(() => expect(sheet()).toContainElement(document.activeElement as HTMLElement));
+
+    fireEvent.keyDown(sheet(), { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(tile));
   });
 
   it("opens the featured race from anywhere on its card", () => {

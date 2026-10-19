@@ -212,7 +212,7 @@ function DebtForm({ initial, onSubmit, onCancel }: DebtFormProps) {
             id={nameInputId}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Tarjeta de crédito"
+            placeholder="Credit card"
           />
         </Field>
 

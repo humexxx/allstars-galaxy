@@ -54,14 +54,15 @@ export type BackfillResult = {
 };
 
 /**
- * Price every approved contribution that has no allocation rows yet.
+ * Price every settled contribution that has no allocation rows yet.
  *
  * Runs against history, not live prices: each contribution is valued at its
  * own date, so the resulting position is what the money would really have
  * bought. Already-priced contributions are never touched — the whole point of
  * storing `priceAtPurchase` is that it stops being a question.
  *
- * Rejected transactions are excluded: no money moved, so nothing was bought.
+ * Rejected and pending transactions are excluded: no money moved, so nothing
+ * was bought.
  */
 export async function backfillTransactionAllocations(
   ownerUserId: string
@@ -107,7 +108,11 @@ export async function backfillTransactionAllocations(
     .where(
       and(
         inArray(transactions.investmentMethodId, methodIds),
-        eq(transactions.status, "approved")
+        // The same statuses `getDerivedHoldings` reads. A buy withdrawn to
+        // zero flips to "closed"; pricing only "approved" priced its
+        // withdrawal alone, so the method held negative units and the buy
+        // stayed in the unpriced count forever.
+        inArray(transactions.status, ["approved", "closed"])
       )
     );
 

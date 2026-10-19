@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow } from "@/components/ui/typography";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
+import { TableCard } from "../shared/table-primitives";
 import type { FootballLeagueData, FootballLeagueId, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
@@ -116,14 +117,13 @@ export function FootballView({ league, options }: FootballViewProps) {
               />
             }
             standings={
-              <Card>
-                <CardContent className="px-0">
-                  <StandingsTable
-                    standings={league.standings.slice(0, 6)}
-                    teams={teamsMap}
-                  />
-                </CardContent>
-              </Card>
+              <TableCard>
+                <StandingsTable
+                  standings={league.standings.slice(0, 6)}
+                  teams={teamsMap}
+                  variant="compact"
+                />
+              </TableCard>
             }
           />
         </TabsContent>
@@ -140,11 +140,9 @@ export function FootballView({ league, options }: FootballViewProps) {
           {league.standings.length === 0 ? (
             <EmptyState title="No standings available yet" />
           ) : (
-            <Card>
-              <CardContent className="px-0">
-                <StandingsTable standings={league.standings} teams={teamsMap} />
-              </CardContent>
-            </Card>
+            <TableCard>
+              <StandingsTable standings={league.standings} teams={teamsMap} />
+            </TableCard>
           )}
         </TabsContent>
 
@@ -170,7 +168,7 @@ function OverviewLayout({
   standings: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+    <div className="grid gap-6 @4xl:grid-cols-[2fr_1fr]">
       <section className="flex min-w-0 flex-col gap-3">
         <Eyebrow>Matches</Eyebrow>
         {matches}
@@ -204,9 +202,10 @@ function MatchesGrid({
       {Object.entries(grouped).map(([label, group]) => (
         <div key={label} className="flex flex-col gap-2">
           <Eyebrow size="sm">{label}</Eyebrow>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 @xl:grid-cols-2">
             {group.map((match) => (
-              <ScoreCard key={match.id} match={match} teams={teamsMap} />
+              // The group heading already names the stage.
+              <ScoreCard key={match.id} match={match} teams={teamsMap} hideStage />
             ))}
           </div>
         </div>

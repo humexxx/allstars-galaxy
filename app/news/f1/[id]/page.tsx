@@ -113,7 +113,7 @@ export default async function F1ArticlePage({
               More F1 news
             </Heading>
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/portal/entertainment/sports?sport=f1">
+              <Link href="/portal/entertainment/sports?sport=f1&tab=news">
                 All news <ArrowRight />
               </Link>
             </Button>

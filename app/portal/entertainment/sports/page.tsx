@@ -17,10 +17,12 @@ export const metadata: Metadata = {
 export default async function SportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sport?: string; league?: string }>;
+  searchParams: Promise<{ sport?: string; tab?: string; league?: string }>;
 }) {
   const ctx = await requireEffectiveContext();
-  const [favorites, { sport, league }] = await Promise.all([
+  // Kickoffs are formatted in the reader's zone by the portal-wide
+  // ReaderTimeZoneProvider, so the server and the browser print the same time.
+  const [favorites, { sport, tab, league }] = await Promise.all([
     listUserFavoriteSportIds(ctx.effectiveUserId),
     searchParams,
   ]);
@@ -41,6 +43,7 @@ export default async function SportsPage({
         activeSport={active}
         favoriteSportIds={favorites}
         payload={payload}
+        initialTab={tab}
       />
     </>
   );

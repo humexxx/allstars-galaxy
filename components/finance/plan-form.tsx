@@ -56,7 +56,16 @@ import type {
 
 type PlanFormProps = {
   plan?: FinancePlan;
+  /** Where the (calibrated) plan stands today — what an existing plan's
+   *  balance fields show. The stored opening balances may be long
+   *  superseded by a confirmation, and showing them made "leave it" and
+   *  "it is this again" the same input. */
+  current?: { savings: number; investments: number };
   investmentMethods: InvestmentMethodOption[];
+  /** The reader's calendar day (UTC midnight), resolved on the server in
+   *  their zone: a new plan starts in THEIR month. `new Date()` read in UTC
+   *  started an evening plan in Costa Rica a month late. */
+  today?: Date;
 };
 
 // The month input holds a "YYYY-MM" string; the schema's z.coerce.date()
@@ -87,7 +96,18 @@ function percentLabel(pct: number): string {
   return "Very aggressive";
 }
 
-export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.ReactElement {
+/** A balance as the money inputs hold it (2 decimals). */
+function moneyValue(value: number): string {
+  const rounded = Math.round(value * 100) / 100;
+  return (rounded === 0 ? 0 : rounded).toFixed(2);
+}
+
+export function PlanForm({
+  plan,
+  current,
+  investmentMethods,
+  today,
+}: PlanFormProps): React.ReactElement {
   const router = useRouter();
   const [includePortfolio, setIncludePortfolio] = useState(
     plan?.includePortfolio ?? false
@@ -121,6 +141,17 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
     plan?.autoInvestMethodId ?? investmentMethods[0]?.id ?? ""
   );
 
+  // An existing plan's balance fields hold where it stands TODAY. Frozen at
+  // mount, like the form's own defaults: a figure is an edit when it differs
+  // from what its field was given, even if `current` moves on meanwhile (a
+  // revalidation, midnight) — else an untouched field would go out stale.
+  const [{ shownSavings, shownInvestments }] = useState(() => ({
+    shownSavings: plan ? moneyValue(current?.savings ?? parseFloat(plan.initialSavings)) : "0",
+    shownInvestments: plan
+      ? moneyValue(Math.max(0, current?.investments ?? parseFloat(plan.initialInvestments)))
+      : "0",
+  }));
+
   const {
     register,
     handleSubmit,
@@ -130,13 +161,13 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
     defaultValues: {
       name: plan?.name ?? "",
       description: plan?.description ?? "",
-      startMonth: toMonthInputValue(plan?.startMonth ?? new Date()),
+      startMonth: toMonthInputValue(plan?.startMonth ?? today ?? new Date()),
       // Default 120 (10 years) for new plans matches the schema default and lets the
       // chart densifier kick in (first 12 months monthly, then year-ends after).
       monthsAhead: plan?.monthsAhead ?? 120,
-      initialSavings: plan?.initialSavings ?? "0",
+      initialSavings: shownSavings,
       monthlySavingsRate: plan?.monthlySavingsRate ?? "0",
-      initialInvestments: plan?.initialInvestments ?? "0",
+      initialInvestments: shownInvestments,
       // Monthly confirmation prompt: 0 disables, 1..28 sets the trigger day.
       confirmationDayOfMonth: plan?.confirmationDayOfMonth ?? 1,
     },
@@ -157,8 +188,17 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
       color,
     };
 
+    // An edit sends a balance only when the user changed it: every figure it
+    // sends restates the opening balances as of today, and one left alone
+    // must keep rolling forward rather than be re-stated as what it showed.
+    const { initialSavings, initialInvestments, ...rest } = payload;
     const result = plan
-      ? await updatePlanAction({ id: plan.id, ...payload })
+      ? await updatePlanAction({
+          id: plan.id,
+          ...rest,
+          ...(initialSavings !== shownSavings ? { initialSavings } : {}),
+          ...(initialInvestments !== shownInvestments ? { initialInvestments } : {}),
+        })
       : await createPlanAction(payload);
 
     if (result.success) {
@@ -181,10 +221,17 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle as="h2">{plan ? "Plan settings" : "New plan"}</CardTitle>
+          <CardTitle as="h2">{plan ? "Plan settings" : "Basics"}</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} id="plan-form" className="flex flex-col gap-4">
+          {/* noValidate: the browser's own bubbles stopped at the first empty
+              field and hid the schema's messages for every other one. */}
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            id="plan-form"
+            noValidate
+            className="flex flex-col gap-4"
+          >
             <div className="grid gap-4 sm:grid-cols-2">
               <Field className="gap-2 sm:col-span-2" data-invalid={!!errors.name || undefined}>
                 <FieldLabel htmlFor="plan-name">Name</FieldLabel>
@@ -240,7 +287,9 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
                 </FieldDescription>
               </Field>
               <Field className="gap-2" data-invalid={!!errors.initialSavings || undefined}>
-                <FieldLabel htmlFor="plan-savings">Initial savings</FieldLabel>
+                <FieldLabel htmlFor="plan-savings">
+                  {plan ? "Savings today" : "Initial savings"}
+                </FieldLabel>
                 <Input
                   id="plan-savings"
                   inputMode="decimal"
@@ -252,7 +301,7 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
                 <FieldError id="plan-savings-error" errors={[errors.initialSavings]} />
                 <FieldDescription>
                   {plan
-                    ? "Your balance today. Changing it restates the plan's opening balances as of today: the others roll forward to where the plan has them now, and nothing already paid in or out is counted again."
+                    ? "Where the plan has your savings today. Change it to what you hold to restate the plan's opening balances as of today; figures you leave alone keep rolling forward, and nothing already paid in or out is counted again."
                     : "Your balance on the day you create the plan — anything already paid in or out this period is in it, so it isn't counted again."}
                 </FieldDescription>
               </Field>
@@ -527,7 +576,9 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
               className="gap-2"
               data-invalid={!!errors.initialInvestments || undefined}
             >
-              <FieldLabel htmlFor="plan-init-investments">Initial investments balance</FieldLabel>
+              <FieldLabel htmlFor="plan-init-investments">
+                {plan ? "Investments today" : "Initial investments balance"}
+              </FieldLabel>
               <Input
                 id="plan-init-investments"
                 inputMode="decimal"
@@ -541,7 +592,9 @@ export function PlanForm({ plan, investmentMethods }: PlanFormProps): React.Reac
                 errors={[errors.initialInvestments]}
               />
               <FieldDescription>
-                Opening balance for the investments bucket at the start month.
+                {plan
+                  ? "Where the plan has the investments bucket today. Changing it restates the opening balances as of today, like Savings today."
+                  : "What the investments bucket holds on the day you create the plan."}
               </FieldDescription>
             </Field>
           </div>

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldDescription,
+  FieldError,
   FieldLabel,
   FieldLegend,
   FieldSet,
@@ -27,6 +28,7 @@ import { Mono, Text } from "@/components/ui/typography";
 import { saveConfirmationAction } from "@/app/actions/finance-confirmations";
 import { runAction } from "@/lib/actions/run";
 import { formatCurrency } from "@/lib/utils/format";
+import { amountError, normalizeAmount } from "@/lib/finance/amount-input";
 import type { FinancePlanDebt } from "@/types/finance";
 
 type ConfirmationDialogProps = {
@@ -68,19 +70,36 @@ export function ConfirmationDialog({
     return map;
   });
 
+  // Shown after the first submit attempt, then live as the reader fixes them.
+  const [attempted, setAttempted] = useState(false);
+  const errors = {
+    savings: amountError(savings, true),
+    investments: amountError(investments, false),
+    debts: Object.fromEntries(
+      debts.map((d) => [d.id, amountError(debtBalances[d.id] ?? "", false)])
+    ) as Record<string, string | null>,
+  };
+  const hasErrors =
+    errors.savings !== null ||
+    errors.investments !== null ||
+    Object.values(errors.debts).some((e) => e !== null);
+  const show = (e: string | null): string | null => (attempted ? e : null);
+
   const handleSubmit = () => {
+    setAttempted(true);
+    if (hasErrors) return;
     startTransition(async () => {
       // The action revalidates the plan and the dashboard, so the recalibrated
       // projection arrives with its response.
       const result = await runAction(
         saveConfirmationAction({
           planId,
-          confirmedSavings: savings || "0",
-          confirmedInvestments: investments || "0",
+          confirmedSavings: normalizeAmount(savings),
+          confirmedInvestments: normalizeAmount(investments),
           notes: notes.trim() || null,
           debtBalances: debts.map((d) => ({
             debtId: d.id,
-            confirmedBalance: debtBalances[d.id] || "0",
+            confirmedBalance: normalizeAmount(debtBalances[d.id] ?? ""),
           })),
         }),
         {
@@ -116,10 +135,13 @@ export function ConfirmationDialog({
                 inputMode="decimal"
                 value={savings}
                 onChange={(e) => setSavings(e.target.value)}
+                aria-invalid={show(errors.savings) !== null || undefined}
+                aria-describedby="conf-savings-hint conf-savings-error"
               />
-              <FieldDescription>
+              <FieldDescription id="conf-savings-hint">
                 Projected: <Mono>{formatCurrency(projected.savings)}</Mono>
               </FieldDescription>
+              <FieldError id="conf-savings-error">{show(errors.savings)}</FieldError>
             </Field>
             <Field className="gap-2">
               <FieldLabel htmlFor="conf-investments">Investments</FieldLabel>
@@ -128,10 +150,15 @@ export function ConfirmationDialog({
                 inputMode="decimal"
                 value={investments}
                 onChange={(e) => setInvestments(e.target.value)}
+                aria-invalid={show(errors.investments) !== null || undefined}
+                aria-describedby="conf-investments-hint conf-investments-error"
               />
-              <FieldDescription>
+              <FieldDescription id="conf-investments-hint">
                 Projected: <Mono>{formatCurrency(projected.investments)}</Mono>
               </FieldDescription>
+              <FieldError id="conf-investments-error">
+                {show(errors.investments)}
+              </FieldError>
             </Field>
           </div>
 
@@ -143,22 +170,31 @@ export function ConfirmationDialog({
               <div className="flex flex-col gap-3 rounded-lg border p-3">
                 {debts.map((d) => {
                   const projectedDebt = projected.debts.find((p) => p.debtId === d.id);
+                  const error = show(errors.debts[d.id] ?? null);
+                  const errorId = `conf-debt-${d.id}-error`;
                   return (
                     <div key={d.id} className="grid items-center gap-2 sm:grid-cols-2 sm:gap-3">
-                      <div>
-                        <Text variant="body" weight="medium">{d.name}</Text>
+                      <div className="min-w-0">
+                        <Text variant="body" weight="medium" className="truncate">
+                          {d.name}
+                        </Text>
                         <Text variant="small">
                           Projected: <Mono>{formatCurrency(projectedDebt?.balance ?? 0)}</Mono>
                         </Text>
                       </div>
-                      <Input
-                        inputMode="decimal"
-                        value={debtBalances[d.id] ?? ""}
-                        onChange={(e) =>
-                          setDebtBalances({ ...debtBalances, [d.id]: e.target.value })
-                        }
-                        aria-label={`Confirmed balance for ${d.name}`}
-                      />
+                      <div className="flex flex-col gap-1">
+                        <Input
+                          inputMode="decimal"
+                          value={debtBalances[d.id] ?? ""}
+                          onChange={(e) =>
+                            setDebtBalances({ ...debtBalances, [d.id]: e.target.value })
+                          }
+                          aria-label={`Confirmed balance for ${d.name}`}
+                          aria-invalid={error !== null || undefined}
+                          aria-describedby={error ? errorId : undefined}
+                        />
+                        <FieldError id={errorId}>{error}</FieldError>
+                      </div>
                     </div>
                   );
                 })}

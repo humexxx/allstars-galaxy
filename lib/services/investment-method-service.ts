@@ -3,7 +3,12 @@ import "server-only";
 import { and, asc, eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import { investmentMethods, methodAllocations } from "@/db/schema";
+import {
+  investmentMethods,
+  methodAllocations,
+  transactionAllocations,
+  transactions,
+} from "@/db/schema";
 import type { InvestmentMethodOption } from "@/types/finance";
 import type { InvestmentMethod } from "@/types/portfolio";
 
@@ -40,17 +45,32 @@ export async function ownsAnyMethod(userId: string): Promise<boolean> {
  * Whether `userId` is the only person whose methods route money into this
  * asset. A price is shared reference data: a quote written for an asset that
  * somebody else's method also holds would move THEIR margin too.
+ *
+ * "Holds" is the units in `transaction_allocations`, not only the policy:
+ * dropping an asset from a policy leaves the units already bought — and the
+ * margin is computed from those.
  */
 export async function isAssetOnlyInOwnMethods(
   assetId: string,
   userId: string
 ): Promise<boolean> {
-  const rows = await db
-    .select({ ownerUserId: investmentMethods.ownerUserId })
-    .from(methodAllocations)
-    .innerJoin(investmentMethods, eq(methodAllocations.methodId, investmentMethods.id))
-    .where(eq(methodAllocations.assetId, assetId));
-  return rows.length > 0 && rows.every((r) => r.ownerUserId === userId);
+  const [policyOwners, holderOwners] = await Promise.all([
+    db
+      .select({ ownerUserId: investmentMethods.ownerUserId })
+      .from(methodAllocations)
+      .innerJoin(investmentMethods, eq(methodAllocations.methodId, investmentMethods.id))
+      .where(eq(methodAllocations.assetId, assetId)),
+    db
+      .selectDistinct({ ownerUserId: investmentMethods.ownerUserId })
+      .from(transactionAllocations)
+      .innerJoin(transactions, eq(transactionAllocations.transactionId, transactions.id))
+      .innerJoin(investmentMethods, eq(transactions.investmentMethodId, investmentMethods.id))
+      .where(eq(transactionAllocations.assetId, assetId)),
+  ]);
+  return (
+    policyOwners.length > 0 &&
+    [...policyOwners, ...holderOwners].every((r) => r.ownerUserId === userId)
+  );
 }
 
 export type InvestmentMethodUpdate = {

@@ -72,7 +72,7 @@ export function NbaView({ data }: NbaViewProps) {
                 list.length === 0 ? null : (
                   <section key={label} className="flex flex-col gap-2">
                     <Eyebrow>{label}</Eyebrow>
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="grid gap-2 @xl:grid-cols-2">
                       {list.map((g) => (
                         <ScoreCard key={g.id} match={g} teams={teamsMap} />
                       ))}

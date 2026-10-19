@@ -1,3 +1,5 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import { Newspaper } from "lucide-react";
@@ -5,8 +7,9 @@ import { Newspaper } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Mono, Text } from "@/components/ui/typography";
 import type { F1NewsImage } from "@/db/schema";
-import { formatDay } from "@/lib/utils/date";
 import type { F1NewsArticle } from "@/types/sports";
+
+import { useMatchTime } from "./time-zone-context";
 
 /**
  * A wire of articles, newest first.
@@ -20,6 +23,7 @@ function thumbnail(images: F1NewsImage[]): F1NewsImage | null {
 }
 
 export function NewsList({ items }: { items: F1NewsArticle[] }) {
+  const format = useMatchTime();
   if (items.length === 0) {
     return (
       <EmptyState
@@ -31,7 +35,7 @@ export function NewsList({ items }: { items: F1NewsArticle[] }) {
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-3 @xl:grid-cols-2">
       {items.map((item) => {
         const image = thumbnail(item.images);
         return (
@@ -67,8 +71,8 @@ export function NewsList({ items }: { items: F1NewsArticle[] }) {
                   {item.description}
                 </Text>
               )}
-              <Mono className="mt-auto text-2xs text-muted-foreground" suppressHydrationWarning>
-                {formatDay(item.firstSeenAt)}
+              <Mono className="mt-auto text-2xs text-muted-foreground">
+                {format.day(item.firstSeenAt)}
               </Mono>
             </div>
           </Link>

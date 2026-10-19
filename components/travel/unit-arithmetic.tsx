@@ -31,7 +31,7 @@ export function UnitArithmetic({
     return (
       <Mono className="block whitespace-nowrap text-2xs text-muted-foreground">
         {formatTripMoney(low, currency)}
-        {high > low && <>–{formatTripMoney(high, currency)}</>}{" "}
+        {high > low && <>~{formatTripMoney(high, currency)}</>}{" "}
         {unitSuffix(unit)} × {times}
       </Mono>
     );

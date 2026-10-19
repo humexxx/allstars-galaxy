@@ -1,7 +1,7 @@
 # Auth
 
 > **Status:** Active
-> **Last reviewed:** 2026-09-29
+> **Last reviewed:** 2026-10-16
 
 ## Overview
 Supabase-backed authentication: email/password login, signup, password reset,
@@ -74,7 +74,7 @@ All four use `Alert` for form-level errors and `Field` + `FieldError` with
   would leave the cookie granting admin-as-admin access for the rest of its
   30-minute life.
 - Conventional Commits scope: `auth`
-- **The OAuth callback validates `next`** the way the login form does (a path on this origin, no `//`); `${origin}${next}` with `next=@evil.com` used to leave the app. The proxy also bounces a signed-in user off `/forgot-password` and matches `/portal` exactly. The login page renders the sign-up hand-off `?message=`.
+- **Every `?next=` goes through `safeNextPath`** ([`lib/auth/safe-next.ts`](../../lib/auth/safe-next.ts)) — the OAuth callback, the login form and the sign-up form. "Starts with `/`, not `//`" was not enough: URL parsers read a backslash as a slash and drop tabs, so `/\evil.com` and `/<tab>/evil.com` resolved to evil.com. The helper refuses backslashes and control characters and requires the resolved URL to stay on the same origin. The proxy also bounces a signed-in user off `/forgot-password` and matches `/portal` exactly. The login page renders the sign-up hand-off `?message=`.
 - **Every** server action across the app must wrap its handler in
   `authenticatedAction` or `adminAction`. If you add a new module, follow this
   pattern.

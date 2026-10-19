@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Suspense, useMemo, useState, useTransition } from "react";
@@ -63,6 +62,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 /** Which reading of the plan is on screen. */
 type TripView = "list" | "calendar";
 import { TripGallery } from "./trip-gallery";
+import { TripPhoto } from "./trip-photo";
 import { TripPayments } from "./trip-payments";
 import { tripCost } from "@/lib/travel/pricing";
 import { TravellerBar } from "@/components/travel/traveller-bar";
@@ -212,11 +212,14 @@ export function TripDetail({
         >
           {/* Named even where the word is hidden: below `sm` the label is
               `hidden`, which left the control with no accessible name. */}
-          <ToggleGroupItem value="list" aria-label="List">
+          {/* `flex-none`: the group splits its width equally, and "Calendar"
+              got the same 74px as "List" — its label ran into the track's
+              edge with no padding left on the right. */}
+          <ToggleGroupItem value="list" aria-label="List" className="flex-none">
             <ListIcon />
             <span className="hidden sm:inline">List</span>
           </ToggleGroupItem>
-          <ToggleGroupItem value="calendar" aria-label="Calendar">
+          <ToggleGroupItem value="calendar" aria-label="Calendar" className="flex-none">
             <CalendarDays />
             <span className="hidden sm:inline">Calendar</span>
           </ToggleGroupItem>
@@ -232,30 +235,35 @@ export function TripDetail({
           // 21/9 leaves 167px on a 390px phone, and the pill, the buttons and
           // the title all landed on top of each other. The floor wins on a
           // phone, the ratio wins from tablet up.
-          className="relative min-h-72 w-full bg-muted sm:aspect-21/9 sm:min-h-0"
-          style={trip.coverPhotoUrl ? undefined : { backgroundColor: trip.color }}
+          className="relative flex min-h-72 w-full flex-col bg-muted sm:aspect-21/9 sm:min-h-auto"
+          // The trip colour under the photo too: it is what shows if the
+          // cover link has died.
+          style={{ backgroundColor: trip.color }}
         >
           {trip.coverPhotoUrl && (
-            <Image
+            <TripPhoto
               src={trip.coverPhotoUrl}
               alt={`${trip.title} cover photo`}
-              fill
               priority
               sizes="(max-width: 1024px) 100vw, 1024px"
-              className="object-cover"
-              // Trip covers can be uploaded to Supabase Storage OR pasted as
-              // an external URL (see `tripPhotoSourceEnum`). `unoptimized`
-              // sidesteps `images.remotePatterns` so legacy external URLs
-              // still render — same forgiving behavior as the previous
-              // CSS-background implementation.
-              unoptimized
+              fallback="none"
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+          {/* Deeper through the middle than it was (/20): a long name runs
+              two or three lines up into the photo, and over a snowfield its
+              top line was white on pale grey. The controls up top carry
+              their own solid surfaces, so the top can stay clear. */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
           {/* One flow rather than three overlays pinned to three corners:
               justify-between keeps the controls and the title apart at any
               height, instead of letting them meet in the middle. */}
-          <div className="absolute inset-0 flex flex-col justify-between gap-4 p-4 text-white sm:p-6">
+          {/* In flow, not `absolute inset-0`: pinned over a box of fixed
+              height, a long name ("Islandia, Finlandia & Tomorrowland
+              Winter: the long way round") pushed the dates out of the bottom
+              of the banner on a phone, and the 21/9 box clipped it at
+              tablet width. The ratio and the floor are minimums now — the
+              banner grows when its words need it. */}
+          <div className="relative flex flex-1 flex-col justify-between gap-4 p-4 text-white sm:p-6">
             <div className="flex items-start justify-between gap-2">
             <TravellerBar
               travellers={shares.map((s) => ({
@@ -276,7 +284,10 @@ export function TripDetail({
                   326px banner, and the row they shared with the total and the
                   faces had no width left — the manage-travellers button was
                   wrapping onto a line of its own. */}
-              <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+              {/* Labelled and in a row only from `lg`: at tablet width the
+                  sidebar leaves the banner ~450px, and the pill plus three
+                  labelled buttons ran the delete button off its right edge. */}
+              <div className="flex shrink-0 flex-col gap-2 lg:flex-row">
                 {/* Sharing sits with the trip, not in a card down the page:
                     it is something you do to the whole thing, and which
                     traveller is selected changes what the link will show. */}
@@ -291,7 +302,7 @@ export function TripDetail({
                   aria-label="Share this trip"
                 >
                   <Share2 />
-                  <span className="hidden sm:inline">Share</span>
+                  <span className="hidden lg:inline">Share</span>
                 </Button>
                 <Button
                   size="sm"
@@ -300,7 +311,7 @@ export function TripDetail({
                   aria-label="Edit this trip"
                 >
                   <Pencil />
-                  <span className="hidden sm:inline">Edit</span>
+                  <span className="hidden lg:inline">Edit</span>
                 </Button>
                 {/* Same solid surface as its neighbours, red only in the icon:
                     the tinted \`destructive\` variant is translucent, and over
@@ -321,17 +332,17 @@ export function TripDetail({
               {/* \`hero\`, not \`h1\`: a trip name is long by nature ("Islandia,
                   Finlandia & Tomorrowland Winter"), and at the h1's 30px it ran
                   to two lines and owned the banner on a phone. */}
-              <Heading level="hero" className="text-white">
+              <Heading level="hero" className="text-white text-shadow-sm">
                 {trip.title}
               </Heading>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
                 {trip.destination && (
                   <span className="inline-flex items-center gap-1.5">
-                    <MapPin className="size-4" /> {trip.destination}
+                    <MapPin className="size-4 shrink-0" /> {trip.destination}
                   </span>
                 )}
                 <span className="inline-flex items-center gap-1.5">
-                  <CalendarDays className="size-4" />
+                  <CalendarDays className="size-4 shrink-0" />
                   <Mono>{formatDateRange(trip.startDate, trip.endDate)}</Mono>
                 </span>
               </div>

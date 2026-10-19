@@ -4,7 +4,7 @@ import { cache } from "react";
 
 import { db } from "@/db";
 import { portfolios, transactions, investmentMethods, users } from "@/db/schema";
-import { eq, and, ne, desc } from "drizzle-orm";
+import { eq, and, ne, desc, inArray } from "drizzle-orm";
 import type { Portfolio, PortfolioTransaction, PortfolioStats, PortfolioAsset, MethodInvestors } from "@/types/portfolio";
 import type { TransactionStatus, TransactionType } from "@/types/transaction";
 
@@ -35,13 +35,18 @@ export async function createPortfolio(userId: string, name?: string): Promise<Po
 export const getPortfolioStats = cache(async function getPortfolioStats(
   portfolioId: string
 ): Promise<PortfolioStats> {
-  // Every approved row: buys carry the holding and the cost basis, withdrawals
-  // the money already taken out.
+  // Every settled row: buys carry the holding and the cost basis, withdrawals
+  // the money already taken out. A buy drained by withdrawals flips to
+  // "closed" — its cost basis is still real, and dropping it while keeping its
+  // withdrawals counted the cash taken out of it as pure profit.
   const approvedTransactions = await db
     .select()
     .from(transactions)
     .where(
-      and(eq(transactions.portfolioId, portfolioId), eq(transactions.status, "approved"))
+      and(
+        eq(transactions.portfolioId, portfolioId),
+        inArray(transactions.status, ["approved", "closed"])
+      )
     );
   const buyTransactions = approvedTransactions.filter((t) => t.type === "buy");
   const totalWithdrawn = approvedTransactions
@@ -99,6 +104,7 @@ export async function getPortfolioTransactions(portfolioId: string): Promise<Por
       date: transactions.date,
       status: transactions.status,
       notes: transactions.notes,
+      sourceTransactionId: transactions.sourceTransactionId,
       investmentMethod: investmentMethods,
     })
     .from(transactions)
@@ -154,8 +160,10 @@ export const getPortfolioAssets = cache(async function getPortfolioAssets(
     }
 
     const amount = parseFloat(transaction.total);
-    
-    if (transaction.status === "approved") {
+
+    // "closed" is a buy drained by withdrawals: its cost is still part of what
+    // was invested, or the withdrawals taken out of it read as profit.
+    if (transaction.status === "approved" || transaction.status === "closed") {
       if (transaction.type === "buy") {
         const initialValue = parseFloat(transaction.initialValue || "0");
         const currentValue = parseFloat(transaction.currentValue || "0");
@@ -248,7 +256,9 @@ export async function getMethodInvestors(
     }
     // A method with no transactions still belongs in the list — "nobody has
     // invested yet" is information the owner wants.
-    if (!r.investorId || r.status !== "approved") continue;
+    // "closed" buys (drained by withdrawals) still count as invested — their
+    // withdrawals are counted, so dropping the buy would net them negative.
+    if (!r.investorId || (r.status !== "approved" && r.status !== "closed")) continue;
 
     const method = byMethod.get(r.methodId)!;
     let investor = method.investors.find((i) => i.userId === r.investorId);
@@ -290,9 +300,13 @@ export type InvestorTransaction = {
   investorEmail: string | null;
   type: TransactionType;
   status: TransactionStatus;
+  amount: string;
+  fee: string;
   total: string;
   initialValue: string | null;
   currentValue: string | null;
+  /** The buy a withdrawal was taken from. */
+  sourceTransactionId: string | null;
 };
 
 /**
@@ -317,9 +331,12 @@ export async function getInvestorTransactions(
       investorEmail: users.email,
       type: transactions.type,
       status: transactions.status,
+      amount: transactions.amount,
+      fee: transactions.fee,
       total: transactions.total,
       initialValue: transactions.initialValue,
       currentValue: transactions.currentValue,
+      sourceTransactionId: transactions.sourceTransactionId,
     })
     .from(investmentMethods)
     .innerJoin(transactions, eq(transactions.investmentMethodId, investmentMethods.id))

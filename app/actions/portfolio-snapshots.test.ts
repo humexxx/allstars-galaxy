@@ -10,7 +10,7 @@ vi.mock("@/lib/services/auth-server", () => ({
 
 vi.mock("@/lib/services/interest-service", () => ({
   applyMonthlyInterest: vi.fn(),
-  markInterestApplied: vi.fn(),
+  interestMonthOf: (when: Date) => when.toISOString().slice(0, 7),
 }));
 
 vi.mock("@/lib/services/snapshot-service", () => ({
@@ -78,9 +78,11 @@ describe("createManualSnapshotAction", () => {
 
   it("applies monthly interest first when applyInterest=true", async () => {
     vi.mocked(applyMonthlyInterest).mockResolvedValueOnce({
-      portfoliosProcessed: 2,
-      totalInterestApplied: 50,
-    } as unknown as Awaited<ReturnType<typeof applyMonthlyInterest>>);
+      applied: true,
+      month: "2026-02",
+      processed: 2,
+      closed: 0,
+    });
     vi.mocked(createManualSnapshotsForAllPortfolios).mockResolvedValueOnce({
       snapshotsCreated: 2,
       totalValue: 500,
@@ -98,12 +100,57 @@ describe("createManualSnapshotAction", () => {
       success: true,
       data: { totalValue: 500, snapshotsCreated: 2 },
     });
-    expect(applyMonthlyInterest).toHaveBeenCalledWith(date);
+    // The snapshot's own month is claimed, and only its buys compound.
+    expect(applyMonthlyInterest).toHaveBeenCalledWith(date, date);
     expect(createManualSnapshotsForAllPortfolios).toHaveBeenCalledWith(
       date,
       "admin_enforce",
     );
     expect(revalidatePath).toHaveBeenCalledWith("/portal/portfolio");
+  });
+
+  it("refuses a month that was already compounded and takes no snapshot", async () => {
+    // The cron compounded October on the 1st; an Oct 16 manual snapshot with
+    // "apply interest" compounded October a second time.
+    vi.mocked(applyMonthlyInterest).mockResolvedValueOnce({
+      applied: false,
+      month: "2026-10",
+    });
+
+    const result = await createManualSnapshotAction({
+      date: new Date("2026-10-16T09:00:00Z"),
+      applyInterest: true,
+      source: "manual",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "Interest for October 2026 has already been applied",
+    });
+    expect(createManualSnapshotsForAllPortfolios).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("refuses interest for a month that has not started", async () => {
+    // Claiming a future month would make the cron skip every month up to it.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-16T09:00:00Z"));
+    try {
+      const result = await createManualSnapshotAction({
+        date: new Date("2026-11-02T09:00:00Z"),
+        applyInterest: true,
+        source: "manual",
+      });
+
+      expect(result).toEqual({
+        success: false,
+        error: "Interest can't be applied for a future month",
+      });
+      expect(applyMonthlyInterest).not.toHaveBeenCalled();
+      expect(createManualSnapshotsForAllPortfolios).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("fails generically when the caller is not an admin and skips all work", async () => {

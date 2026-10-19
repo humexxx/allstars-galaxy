@@ -1,6 +1,8 @@
 import { BoardView } from "@/components/productivity/board/board-view";
 import type { Metadata } from "next";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { getRequestTimeZone } from "@/lib/utils/request-today";
+import { dayKey } from "@/components/productivity/board/due-date";
 import {
   getUserBoardColumns,
   getUserBoardTasks,
@@ -16,12 +18,20 @@ export default async function BoardPage(): Promise<React.ReactElement> {
   const ctx = await requireEffectiveContext();
   const userId = ctx.effectiveUserId;
 
-  const [existingColumns, tasks] = await Promise.all([
+  const [existingColumns, tasks, timeZone] = await Promise.all([
     getUserBoardColumns(userId),
     getUserBoardTasks(userId),
+    getRequestTimeZone(),
   ]);
   const columns =
     existingColumns.length > 0 ? existingColumns : await initializeDefaultColumns(userId);
 
-  return <BoardView initialColumns={columns} initialTasks={tasks} />;
+  return (
+    <BoardView
+      initialColumns={columns}
+      initialTasks={tasks}
+      timeZone={timeZone}
+      today={dayKey(new Date(), timeZone)}
+    />
+  );
 }

@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // then assert on the call args.
 
 const selectImpl = vi.fn();
+const selectDistinctOnImpl = vi.fn();
 const insertImpl = vi.fn();
 const deleteImpl = vi.fn();
 const txInsertImpl = vi.fn();
@@ -18,6 +19,7 @@ const txDeleteImpl = vi.fn();
 vi.mock("@/db", () => ({
   db: {
     select: (...args: unknown[]) => selectImpl(...args),
+    selectDistinctOn: (...args: unknown[]) => selectDistinctOnImpl(...args),
     insert: (...args: unknown[]) => insertImpl(...args),
     delete: (...args: unknown[]) => deleteImpl(...args),
     transaction: (cb: (tx: unknown) => Promise<unknown>) =>
@@ -45,6 +47,7 @@ import {
   autoConfirmSkippedPeriods,
   getConfirmationStatus,
   getLatestConfirmation,
+  getLatestConfirmations,
   saveConfirmation,
 } from "./finance-confirmation-service";
 import type {
@@ -188,6 +191,7 @@ afterEach(() => {
   // Reset both call history AND any queued mockReturnValueOnce / mockResolvedValueOnce
   // values so leftover queue entries from one test don't bleed into the next.
   selectImpl.mockReset();
+  selectDistinctOnImpl.mockReset();
   insertImpl.mockReset();
   deleteImpl.mockReset();
   txInsertImpl.mockReset();
@@ -237,6 +241,39 @@ describe("getLatestConfirmation", () => {
     expect(result?.debtConfirmations).toHaveLength(2);
     expect(result?.debtConfirmations[0].debtId).toBe("debt-A");
     expect(selectImpl).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("getLatestConfirmations (batched)", () => {
+  it("no plans, no queries", async () => {
+    await expect(getLatestConfirmations([])).resolves.toEqual(new Map());
+    expect(selectDistinctOnImpl).not.toHaveBeenCalled();
+  });
+
+  it("one row per plan plus all their debt rows: two queries for any number of plans", async () => {
+    const OTHER = "33333333-3333-3333-3333-333333333333";
+    const latestRows = makeSelectChain([
+      buildConfirmation({ id: "c-1", planId: PLAN_ID }),
+      buildConfirmation({ id: "c-2", planId: OTHER }),
+    ]);
+    selectDistinctOnImpl.mockReturnValueOnce(latestRows);
+    selectImpl.mockReturnValueOnce(
+      makeSelectChain([
+        buildDebtConfirmation({ id: "d-1", confirmationId: "c-1" }),
+        buildDebtConfirmation({ id: "d-2", confirmationId: "c-1", debtId: "debt-2" }),
+      ])
+    );
+
+    const byPlan = await getLatestConfirmations([PLAN_ID, OTHER, "no-confirmations"]);
+
+    expect(selectDistinctOnImpl).toHaveBeenCalledTimes(1);
+    expect(selectImpl).toHaveBeenCalledTimes(1);
+    // Same pick as getLatestConfirmation: newest day, then newest save.
+    expect(latestRows.orderBy).toHaveBeenCalledTimes(1);
+    expect(latestRows.orderBy.mock.calls[0]).toHaveLength(3);
+    expect(byPlan.get(PLAN_ID)?.debtConfirmations.map((d) => d.id)).toEqual(["d-1", "d-2"]);
+    expect(byPlan.get(OTHER)?.debtConfirmations).toEqual([]);
+    expect(byPlan.has("no-confirmations")).toBe(false);
   });
 });
 
@@ -768,6 +805,75 @@ describe("autoConfirmSkippedPeriods — anchor changes (F26)", () => {
     // Only Jun 15 is written — May 15 – Jun 14 already has the Jun 1 row.
     expect(result).toEqual({ confirmationsCreated: 1 });
     expect(insertAuto.values.mock.calls.map((c) => c[0].confirmationMonth)).toEqual(["2026-06-15"]);
+  });
+});
+
+describe("autoConfirmSkippedPeriods — never before the plan's balances (balances_as_of)", () => {
+  // Every period ending on/before the day the balances are stated on is
+  // already IN them. The calibrated plan starts from that statement, so the
+  // "projected opening" of an earlier period is just today's balances — and
+  // the cron used to write it, with a `confirmation` snapshot, for every
+  // period since the plan's start, which the chart then drew as real past.
+  function stageInserts(): Record<string, ReturnType<typeof vi.fn>> {
+    const insert: Record<string, ReturnType<typeof vi.fn>> = {};
+    insert.values = vi.fn().mockReturnValue(insert);
+    insert.onConflictDoNothing = vi.fn().mockReturnValue(insert);
+    insert.returning = vi.fn().mockResolvedValue([buildConfirmation({ id: "a" })]);
+    txInsertImpl.mockReturnValue(insert);
+    getProjectedStateForMonthMock.mockResolvedValue({ ...buildProjectionMonth(), debts: [] });
+    createConfirmationSnapshotMock.mockResolvedValue(undefined);
+    return insert;
+  }
+
+  it("a plan created after its start month writes nothing for the periods before it", async () => {
+    // Starts Jan 2026, created (balances stated) Oct 16; the cron runs Oct 17.
+    const plan = buildPlan({ balancesAsOf: "2026-10-16" } as never);
+    selectImpl
+      .mockReturnValueOnce(makeSelectChain([])) // no confirmations at all
+      .mockReturnValueOnce(makeSelectChain([])); // latest: none
+    const insert = stageInserts();
+
+    const result = await autoConfirmSkippedPeriods(plan, USER_ID, new Date(Date.UTC(2026, 9, 17)));
+
+    expect(result).toEqual({ confirmationsCreated: 0 });
+    expect(insert.values).not.toHaveBeenCalled();
+    expect(createConfirmationSnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it("a restatement newer than the latest confirmation: only periods after it", async () => {
+    // Confirmed Jun 1, restated Sep 20, cron Nov 5: Jul–Sep are inside the
+    // restated balances; only October (closed, after Sep 20) is skipped.
+    const plan = buildPlan({ balancesAsOf: "2026-09-20" } as never);
+    selectImpl
+      .mockReturnValueOnce(makeSelectChain([{ month: "2026-06-01" }]))
+      .mockReturnValueOnce(
+        makeSelectChain([buildConfirmation({ confirmationMonth: "2026-06-01" })])
+      )
+      .mockReturnValueOnce(makeSelectChain([]));
+    const insert = stageInserts();
+
+    const result = await autoConfirmSkippedPeriods(plan, USER_ID, new Date(Date.UTC(2026, 10, 5)));
+
+    expect(insert.values.mock.calls.map((c) => c[0].confirmationMonth)).toEqual(["2026-10-01"]);
+    expect(result).toEqual({ confirmationsCreated: 1 });
+  });
+
+  it("a confirmation newer than the statement still sets the start, as before", async () => {
+    const plan = buildPlan({ balancesAsOf: "2026-03-10" } as never);
+    selectImpl
+      .mockReturnValueOnce(makeSelectChain([{ month: "2026-04-01" }]))
+      .mockReturnValueOnce(
+        makeSelectChain([buildConfirmation({ confirmationMonth: "2026-04-01" })])
+      )
+      .mockReturnValueOnce(makeSelectChain([]));
+    const insert = stageInserts();
+
+    await autoConfirmSkippedPeriods(plan, USER_ID, new Date(Date.UTC(2026, 6, 15)));
+
+    expect(insert.values.mock.calls.map((c) => c[0].confirmationMonth)).toEqual([
+      "2026-05-01",
+      "2026-06-01",
+    ]);
   });
 });
 

@@ -102,7 +102,20 @@ export function FinancialHealthDonut({
   const stroke = Math.max(6, Math.round(size * 0.109));
   const r = size * 0.4;
   const circumference = 2 * Math.PI * r;
-  const percentClass = size >= 100 ? "text-2xl" : "text-lg";
+  // Steps down for 4+ digits: a plan spending 30× its income read "3063%"
+  // straight across the ring.
+  // Sized from the target, not the count-up, so it doesn't jump mid-animation.
+  const digits = hasIncome ? String(Math.round(targetRatio * 100)).length : 1;
+  const percentClass =
+    size >= 100
+      ? digits >= 5
+        ? "text-base"
+        : digits === 4
+          ? "text-lg"
+          : "text-2xl"
+      : digits >= 4
+        ? "text-sm"
+        : "text-lg";
   // Clamp the displayed fill so the ring never overflows past full when the
   // ratio exceeds 1 (e.g. someone owes more than they earn).
   const filled = Math.min(1, Math.max(0, displayedRatio));

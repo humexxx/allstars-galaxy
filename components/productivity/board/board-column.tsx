@@ -29,6 +29,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { BoardColumn as BoardColumnType, BoardTask } from "@/types";
 import type { CreateBoardTaskData } from "@/schemas/board";
 import { TaskDialog } from "./task-dialog";
+import { isDoneColumnName } from "./due-date";
 import { cn } from "@/lib/utils";
 
 type BoardColumnProps = {
@@ -42,6 +43,9 @@ type BoardColumnProps = {
   onDeleteTask: (taskId: string) => Promise<void>;
   onUpdateTask: (taskId: string, data: CreateBoardTaskData) => Promise<void>;
   isDimmed?: boolean;
+  /** The reader's zone and today in it, for the cards' due dates. */
+  timeZone?: string;
+  today?: string;
 };
 
 export function BoardColumn({
@@ -54,6 +58,8 @@ export function BoardColumn({
   onDeleteTask,
   onUpdateTask,
   isDimmed = false,
+  timeZone,
+  today,
 }: BoardColumnProps): React.ReactElement {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -61,6 +67,7 @@ export function BoardColumn({
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState(column.name);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const isOnlyColumn = columns.length <= 1;
 
   const startRename = (): void => {
     setDraftName(column.name);
@@ -151,11 +158,15 @@ export function BoardColumn({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={startRename}>Rename column</DropdownMenuItem>
+              {/* The last column cannot go: the page re-creates the default
+                  three for a board with none, so deleting it brought back
+                  Todo / Working / Done the moment the page revalidated. */}
               <DropdownMenuItem
                 variant="destructive"
+                disabled={isOnlyColumn}
                 onSelect={() => setConfirmingDelete(true)}
               >
-                Delete column
+                {isOnlyColumn ? "Can’t delete the only column" : "Delete column"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -175,6 +186,9 @@ export function BoardColumn({
               key={task.id}
               task={task}
               columns={columns}
+              timeZone={timeZone}
+              today={today}
+              isDone={isDoneColumnName(column.name)}
               onDelete={onDeleteTask}
               onUpdate={onUpdateTask}
             />

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -12,6 +12,7 @@ import {
 import type { FinanceSnapshotSource } from "@/schemas/finance-snapshot";
 
 import {
+  getAutoInvestRates,
   getMainPlan,
   getPlanWithLines,
   projectionOptionsFor,
@@ -19,12 +20,14 @@ import {
 } from "./finance-plan-service";
 import {
   changesOpeningBalances,
+  effectiveEdits,
   restateOpeningSet,
   type OpeningBalanceEdits,
 } from "@/lib/finance/opening-balances";
 import {
   autoConfirmSkippedPeriods,
   getLatestConfirmation,
+  getLatestConfirmations,
 } from "./finance-confirmation-service";
 import { ensureOwnedRow } from "./ownership";
 import {
@@ -235,7 +238,15 @@ export async function loadCalibratedView(
   options: CalibrationOptions = {}
 ): Promise<CalibratedView> {
   const baseline = await buildCalibratedPlan(plan, options);
-  const projectOptions = await projectionOptionsFor(baseline, userId);
+  return viewOf(baseline, await projectionOptionsFor(baseline, userId), today);
+}
+
+/** The projection and today's position of an already calibrated plan. */
+function viewOf(
+  baseline: FinancePlanWithLines,
+  projectOptions: ProjectOptions,
+  today: Date
+): CalibratedView {
   const projection = projectPlan(
     baseline,
     baseline.incomes,
@@ -554,63 +565,131 @@ export async function getRecentMonthlySnapshots(
   monthsBack: number = 3,
   today: Date = new Date(),
   anchorDay: number = 1
-): Promise<
-  Array<{
-    date: Date;
-    savings: number;
-    investments: number;
-    totalDebt: number;
-    netWorth: number;
-  }>
-> {
+): Promise<HistoryPoint[]> {
   await ensurePlanOwnership(planId, userId);
-  // Snapshots store net worth without money owed to the user; it is added
-  // here from the plan's current lines (see createSnapshotForPlan).
   const plan = await getPlanWithLines(planId, userId);
-  const repayments = plan ? planRepayments(plan) : [];
-
-  // First day (UTC) of the month that is `monthsBack` months before `today`.
-  const cutoff = new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - monthsBack, 1)
-  );
 
   const rows = await db
-    .select({
-      date: financePlanSnapshots.date,
-      savings: financePlanSnapshots.savings,
-      investments: financePlanSnapshots.investments,
-      totalDebt: financePlanSnapshots.totalDebt,
-      netWorth: financePlanSnapshots.netWorth,
-    })
+    .select(HISTORY_COLUMNS)
     .from(financePlanSnapshots)
     .where(
       and(
         eq(financePlanSnapshots.planId, planId),
-        gte(financePlanSnapshots.date, cutoff)
+        gte(financePlanSnapshots.date, historyCutoff(today, monthsBack))
       )
     )
     .orderBy(desc(financePlanSnapshots.date));
 
-  // Keep only the latest snapshot per accounting PERIOD (rows are date-desc, so
-  // the first seen per bucket is the latest) so the chart gets one clean point
-  // per period even if the cron wrote multiple rows per day. Bucket key = the
-  // period's anchor date, which collapses to first-of-month when anchorDay = 1.
+  return withReceivables(latestPerPeriod(rows, anchorDay), plan);
+}
+
+/**
+ * Snapshots store net worth without money owed to the user (see
+ * createSnapshotForPlan); this adds back what was still owed on each point's
+ * day, from the plan's current lines, so history and forecast agree.
+ */
+function withReceivables(
+  points: HistoryPoint[],
+  plan: FinancePlanWithLines | null
+): HistoryPoint[] {
+  const repayments = plan ? planRepayments(plan) : [];
+  if (repayments.length === 0) return points;
+  return points.map((p) => ({ ...p, netWorth: p.netWorth + owedAfter(repayments, p.date) }));
+}
+
+/** One recorded point of a plan's history, as the chart plots it. */
+type HistoryPoint = {
+  date: Date;
+  savings: number;
+  investments: number;
+  totalDebt: number;
+  netWorth: number;
+};
+
+const HISTORY_COLUMNS = {
+  date: financePlanSnapshots.date,
+  savings: financePlanSnapshots.savings,
+  investments: financePlanSnapshots.investments,
+  totalDebt: financePlanSnapshots.totalDebt,
+  netWorth: financePlanSnapshots.netWorth,
+};
+
+type HistoryRow = {
+  date: Date;
+  savings: string;
+  investments: string;
+  totalDebt: string;
+  netWorth: string;
+};
+
+/** First day (UTC) of the month that is `monthsBack` months before `today`. */
+function historyCutoff(today: Date, monthsBack: number): Date {
+  return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - monthsBack, 1));
+}
+
+/**
+ * Keeps only the latest snapshot per accounting PERIOD (rows must be
+ * date-desc, so the first seen per bucket is the latest) so the chart gets
+ * one clean point per period even if the cron wrote multiple rows per day.
+ * Bucket key = the period's anchor date, which collapses to first-of-month
+ * when anchorDay = 1. Oldest first.
+ */
+function latestPerPeriod(rows: readonly HistoryRow[], anchorDay: number): HistoryPoint[] {
   const anchor = anchorDay > 0 ? anchorDay : 1;
-  const latestPerPeriod = new Map<string, (typeof rows)[number]>();
+  const byPeriod = new Map<string, HistoryRow>();
   for (const r of rows) {
     const key = periodStartFor(r.date, anchor).toISOString().slice(0, 10);
-    if (!latestPerPeriod.has(key)) latestPerPeriod.set(key, r);
+    if (!byPeriod.has(key)) byPeriod.set(key, r);
   }
 
-  return Array.from(latestPerPeriod.values())
+  return Array.from(byPeriod.values())
     .sort((a, b) => a.date.getTime() - b.date.getTime())
     .map((r) => ({
       date: r.date,
       savings: parseFloat(r.savings),
       investments: parseFloat(r.investments),
       totalDebt: parseFloat(r.totalDebt),
-      netWorth: parseFloat(r.netWorth) + owedAfter(repayments, r.date),
+      netWorth: parseFloat(r.netWorth),
     }));
+}
+
+/**
+ * `getRecentMonthlySnapshots` for plans already loaded for their owner, in
+ * one query: no ownership round trip, since each plan row carries its
+ * `userId` and the caller has checked it. Each plan is bucketed by its own
+ * anchor.
+ */
+async function recentSnapshotsForPlans(
+  plans: readonly FinancePlanWithLines[],
+  monthsBack: number,
+  today: Date
+): Promise<Map<string, HistoryPoint[]>> {
+  const rows = await db
+    .select({ planId: financePlanSnapshots.planId, ...HISTORY_COLUMNS })
+    .from(financePlanSnapshots)
+    .where(
+      and(
+        inArray(
+          financePlanSnapshots.planId,
+          plans.map((p) => p.id)
+        ),
+        gte(financePlanSnapshots.date, historyCutoff(today, monthsBack))
+      )
+    )
+    .orderBy(desc(financePlanSnapshots.date));
+
+  return new Map(
+    plans.map((p) => [
+      p.id,
+      withReceivables(
+        latestPerPeriod(
+          rows.filter((r) => r.planId === p.id),
+          p.confirmationDayOfMonth
+        ),
+        p
+      ),
+    ])
+  );
 }
 
 // ---------- exposed for confirmation flow ----------
@@ -685,6 +764,12 @@ export type PlanOverview = {
  * Every plan calibrated, projected and put on a timeline the same way the
  * plan page does it — so the rail, the comparison chart and the plan page
  * agree on each figure. A scenario opens on its base plan's as-of day.
+ *
+ * `plans` are the user's, as `listUserPlansWithLines(userId)` loads them.
+ * Their latest confirmations, auto-invest rates and history are batched (a
+ * fixed handful of queries however many plans): going through
+ * `loadCalibratedView` + `getRecentMonthlySnapshots` per plan cost about
+ * five round trips each, ownership check included.
  */
 export async function loadPlanOverviews(
   plans: FinancePlanWithLines[],
@@ -693,15 +778,38 @@ export async function loadPlanOverviews(
   timeZone: string | null,
   historyMonths: number = 6
 ): Promise<PlanOverview[]> {
+  if (plans.length === 0) return [];
+  // The rows carry their owner, so no ownership query is needed — but a plan
+  // that isn't the caller's is still refused, like `ensureOwnedRow` does.
+  if (plans.some((p) => p.userId !== userId)) throw new Error("Plan not found");
+
+  const methodIds = [
+    ...new Set(plans.flatMap((p) => (p.autoInvestMethodId ? [p.autoInvestMethodId] : []))),
+  ];
+  const [latestByPlan, rateByMethod, historyByPlan] = await Promise.all([
+    getLatestConfirmations(plans.map((p) => p.id)),
+    getAutoInvestRates(methodIds),
+    recentSnapshotsForPlans(plans, historyMonths, today),
+  ]);
+
   const byId = new Map(plans.map((p) => [p.id, p]));
   return Promise.all(
     plans.map(async (plan) => {
       const base = plan.basedOnPlanId ? byId.get(plan.basedOnPlanId) : undefined;
       const asOfFallback = base ? calibratePlan(base, null, { timeZone }).asOf ?? null : null;
-      const [view, history] = await Promise.all([
-        loadCalibratedView(plan, userId, today, { timeZone, asOfFallback }),
-        getRecentMonthlySnapshots(plan.id, userId, historyMonths, today, plan.confirmationDayOfMonth),
-      ]);
+      const baseline = calibratePlan(plan, latestByPlan.get(plan.id) ?? null, {
+        timeZone,
+        asOfFallback,
+      });
+      const autoInvestRate = plan.autoInvestMethodId
+        ? rateByMethod.get(plan.autoInvestMethodId) ?? 0
+        : 0;
+      const view = viewOf(
+        baseline,
+        await projectionOptionsFor(baseline, userId, { autoInvestRate }),
+        today
+      );
+      const history = historyByPlan.get(plan.id) ?? [];
       const anchor = plan.confirmationDayOfMonth;
       const timeline = alignTimelineToday(
         buildPlanTimeline(
@@ -732,8 +840,10 @@ export async function loadPlanOverviews(
  * changes none of them (a no-op save must not re-date anything). Edited
  * figures keep their new values; the others move to where the CURRENT
  * calibrated plan (latest confirmation or plan statement) projects them on
- * `today` — see `lib/finance/opening-balances.ts`. A confirmation made on
- * `today` is flagged for syncing, so the two statements of the day agree.
+ * `today` — see `lib/finance/opening-balances.ts`. Which figures are edits is
+ * judged against that same position (`effectiveEdits`), the one the plan
+ * form shows. A confirmation made on `today` is flagged for syncing, so the
+ * two statements of the day agree.
  */
 export async function restateOpeningBalances(
   plan: FinancePlanWithLines,
@@ -770,7 +880,9 @@ export async function restateOpeningBalances(
       balance: parseFloat(d.initialBalance),
     })),
   };
-  const set = restateOpeningSet(plan, state, edits, today);
+  const changed = effectiveEdits(plan, state, edits);
+  if (!changed) return null;
+  const set = restateOpeningSet(plan, state, changed, today);
   const syncConfirmationId =
     latest && isoDay(confirmationDay(latest)) === set.balancesAsOf ? latest.id : null;
   return { ...set, syncConfirmationId };

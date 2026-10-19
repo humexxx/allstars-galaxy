@@ -14,6 +14,8 @@ vi.mock("@/lib/services/board-service", () => ({
   createBoardColumn: vi.fn(),
   updateBoardColumn: vi.fn(),
   deleteBoardColumn: vi.fn(),
+  // Three columns by default, so a delete is allowed unless a test says not.
+  countBoardColumns: vi.fn().mockResolvedValue(3),
   getBoardTask: vi.fn(),
   createBoardTask: vi.fn(),
   updateBoardTask: vi.fn(),
@@ -28,6 +30,7 @@ import {
   requireEffectiveContext,
 } from "@/lib/services/impersonation";
 import {
+  countBoardColumns,
   createBoardColumn,
   createBoardTask,
   deleteBoardColumn,
@@ -199,6 +202,15 @@ describe("deleteBoardColumnAction", () => {
       })
     );
     expect(revalidatePath).toHaveBeenCalledWith(BOARD_PATH);
+  });
+
+  it("refuses to delete the last column", async () => {
+    vi.mocked(countBoardColumns).mockResolvedValueOnce(1);
+
+    const result = await deleteBoardColumnAction(COLUMN_ID);
+
+    expect(result).toEqual({ success: false, error: "A board needs at least one column" });
+    expect(deleteBoardColumn).not.toHaveBeenCalled();
   });
 
   it("rejects an id that is not a uuid", async () => {

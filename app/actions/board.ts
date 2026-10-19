@@ -11,6 +11,7 @@ import {
   getBoardColumn,
   createBoardColumn,
   updateBoardColumn,
+  countBoardColumns,
   deleteBoardColumn,
   getBoardTask,
   createBoardTask,
@@ -92,6 +93,13 @@ export async function deleteBoardColumnAction(columnId: string): Promise<ActionR
     const ctx = await requireEffectiveContext();
     const parsed = idSchema.safeParse(columnId);
     if (!parsed.success) return { success: false, error: "Invalid column" };
+
+    // The board page re-creates the default columns whenever a user has
+    // none, so deleting the last one would bring three back. Refuse it here
+    // too — the menu disabling it is only a convenience.
+    if ((await countBoardColumns(ctx.effectiveUserId)) <= 1) {
+      return { success: false, error: "A board needs at least one column" };
+    }
 
     const before = ctx.isImpersonating
       ? await getBoardColumn(parsed.data, ctx.effectiveUserId)

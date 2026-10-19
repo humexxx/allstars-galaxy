@@ -8,6 +8,9 @@ import {
 } from "@/lib/services/portfolio-service";
 import { getAllocationsByTransaction } from "@/lib/services/allocation-service";
 import { getLatestPrices, listPriceAssets } from "@/lib/services/price-service";
+import { listAllInvestmentMethods } from "@/lib/services/investment-method-service";
+
+import { cell, signed } from "./csv";
 
 /**
  * CSV of the transaction history, as rich as the screen it mirrors.
@@ -24,19 +27,6 @@ import { getLatestPrices, listPriceAssets } from "@/lib/services/price-service";
  */
 
 /**
- * RFC 4180 quoting. The leading-symbol guard is the important part: a cell
- * starting with = + - or @ is executed as a formula by Excel and Sheets, so a
- * crafted note could run on whoever opens the file. Prefixing a single quote
- * neutralises it without changing the visible text.
- */
-function cell(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  let s = String(value);
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-  return `"${s.replace(/"/g, '""')}"`;
-}
-
-/**
  * One definition drives the header, every row and the totals line.
  *
  * They used to be three hand-written lists that had to be kept the same
@@ -45,6 +35,9 @@ function cell(value: unknown): string {
  * heading. Deriving all three from this makes that impossible.
  */
 type Row = {
+  /** Which transaction the row belongs to: a split contribution emits
+   *  several rows, and the totals line counts transactions, not rows. */
+  txId: string;
   investor: string;
   date: string;
   type: string;
@@ -66,7 +59,15 @@ type Row = {
   approved: boolean;
 };
 
-const COLUMNS: { header: string; get: (r: Row) => unknown; sum?: boolean }[] = [
+const COLUMNS: {
+  header: string;
+  get: (r: Row) => unknown;
+  sum?: boolean;
+  /** What a contribution bought. The owner's private half of a method: only
+   *  exported for methods the viewer runs, and the columns are dropped
+   *  entirely for someone who runs none. */
+  position?: boolean;
+}[] = [
   { header: "Investor", get: (r) => r.investor },
   { header: "Date", get: (r) => r.date },
   { header: "Type", get: (r) => r.type },
@@ -77,23 +78,32 @@ const COLUMNS: { header: string; get: (r: Row) => unknown; sum?: boolean }[] = [
   { header: "Fee", get: (r) => r.fee, sum: true },
   { header: "Total", get: (r) => r.total, sum: true },
   { header: "Contributed", get: (r) => r.contributed, sum: true },
-  { header: "Owed now", get: (r) => r.owed, sum: true },
-  { header: "Asset", get: (r) => r.asset },
-  { header: "Units", get: (r) => r.units },
-  { header: "Price at purchase", get: (r) => r.priceAtPurchase },
-  { header: "Worth now", get: (r) => r.worthNow, sum: true },
-  { header: "P/L", get: (r) => r.profitLoss, sum: true },
+  // "Balance now", not "Owed now": on your own rows nobody owes you anything —
+  // it is the promised balance, which is what an investor is owed.
+  { header: "Balance now", get: (r) => r.owed, sum: true },
+  { header: "Asset", get: (r) => r.asset, position: true },
+  { header: "Units", get: (r) => r.units, position: true },
+  { header: "Price at purchase", get: (r) => r.priceAtPurchase, position: true },
+  { header: "Worth now", get: (r) => r.worthNow, sum: true, position: true },
+  { header: "P/L", get: (r) => r.profitLoss, sum: true, position: true },
   { header: "Notes", get: (r) => r.notes },
 ];
 
 export async function GET(): Promise<NextResponse> {
   const ctx = await requireEffectiveContext();
 
-  const [portfolio, investorTx, assets] = await Promise.all([
+  const [portfolio, investorTxDesc, assets, methods] = await Promise.all([
     getUserPortfolio(ctx.effectiveUserId),
     getInvestorTransactions(ctx.effectiveUserId),
     listPriceAssets(),
+    listAllInvestmentMethods(),
   ]);
+  // Oldest first, like the viewer's own rows — the two blocks used to run in
+  // opposite directions within one file.
+  const investorTx = [...investorTxDesc].reverse();
+  const owned = new Set(
+    methods.filter((m) => m.ownerUserId === ctx.effectiveUserId).map((m) => m.id)
+  );
 
   const own = portfolio ? await getPortfolioTransactions(portfolio.id) : [];
   if (own.length === 0 && investorTx.length === 0) {
@@ -101,8 +111,10 @@ export async function GET(): Promise<NextResponse> {
   }
 
   const [allocations, prices] = await Promise.all([
+    // Positions only for methods this user runs: where a client's money is
+    // deployed is never theirs to see, on screen or in a file.
     getAllocationsByTransaction([
-      ...own.map((t) => t.id),
+      ...own.filter((t) => owned.has(t.investmentMethod.id)).map((t) => t.id),
       ...investorTx.map((t) => t.id),
     ]),
     getLatestPrices(assets.map((a) => a.id)),
@@ -143,15 +155,18 @@ export async function GET(): Promise<NextResponse> {
     ...own.flatMap((t) =>
       expand(
         {
+          txId: t.id,
           investor: "You",
           date: t.date.toISOString().slice(0, 10),
           type: t.type,
           status: t.status,
           method: t.investmentMethod.name,
           risk: t.investmentMethod.riskLevel,
-          amount: t.amount,
+          // Signed like the investor rows below: the totals line added
+          // your own withdrawals to your buys instead of netting them.
+          amount: signed(t.amount, t.type),
           fee: t.fee,
-          total: t.total,
+          total: signed(t.total, t.type),
           contributed: t.initialValue,
           owed: t.currentValue,
           notes: t.notes,
@@ -163,16 +178,19 @@ export async function GET(): Promise<NextResponse> {
     ...investorTx.flatMap((t) =>
       expand(
         {
+          txId: t.id,
           investor: t.investorName,
           date: t.date.toISOString().slice(0, 10),
           type: t.type,
           status: t.status,
           method: t.methodName,
           risk: "",
-          amount: null,
-          fee: null,
+          // Filled like your own rows: left blank, the Amount total covered
+          // only your rows while Total covered everyone's.
+          amount: signed(t.amount, t.type),
+          fee: t.fee,
           // Signed so the totals line nets withdrawals instead of adding them.
-          total: t.type === "withdrawal" ? `-${t.total}` : t.total,
+          total: signed(t.total, t.type),
           contributed: t.initialValue,
           owed: t.currentValue,
           notes: null,
@@ -183,9 +201,14 @@ export async function GET(): Promise<NextResponse> {
     ),
   ];
 
+  const columns =
+    owned.size > 0 || investorTx.length > 0 ? COLUMNS : COLUMNS.filter((c) => !c.position);
   const approved = rows.filter((r) => r.approved);
-  const totals = COLUMNS.map((c, i) => {
-    if (i === 0) return `TOTAL (${approved.length} approved of ${rows.length})`;
+  // Transactions, not rows: a contribution split across two assets is one
+  // movement, and counting its rows overstated the number.
+  const txCount = (list: Row[]): number => new Set(list.map((r) => r.txId)).size;
+  const totals = columns.map((c, i) => {
+    if (i === 0) return `TOTAL (${txCount(approved)} approved of ${txCount(rows)})`;
     if (!c.sum) return "";
     return approved
       .reduce((acc, r) => acc + (Number(c.get(r)) || 0), 0)
@@ -193,8 +216,8 @@ export async function GET(): Promise<NextResponse> {
   });
 
   const body = [
-    COLUMNS.map((c) => c.header).join(","),
-    ...rows.map((r) => COLUMNS.map((c) => cell(c.get(r))).join(",")),
+    columns.map((c) => c.header).join(","),
+    ...rows.map((r) => columns.map((c) => cell(c.get(r))).join(",")),
     "",
     totals.map(cell).join(","),
   ];

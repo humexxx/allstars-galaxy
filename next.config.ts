@@ -37,6 +37,19 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "images.unsplash.com" },
     ],
   },
+  // The methods catalogue moved into Portfolio's Methods tab. Redirecting here
+  // rather than from a page: the portal's streaming loading.tsx committed a
+  // 200 before a page-level `permanentRedirect` could run, so bookmarks and
+  // crawlers never saw the 308.
+  async redirects() {
+    return [
+      {
+        source: "/portal/investment-methods",
+        destination: "/portal/portfolio",
+        permanent: true,
+      },
+    ];
+  },
   experimental: {
     optimizePackageImports: [
       "lucide-react",

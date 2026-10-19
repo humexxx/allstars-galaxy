@@ -193,6 +193,41 @@ describe("updatePlanAction", () => {
     expect(updatePlan).toHaveBeenCalledWith(USER_ID, expect.anything(), restatement);
   });
 
+  // The Settings form shows where the plan stands TODAY and sends a balance
+  // only when the user changed it. Restating an untouched figure with what
+  // the form happened to hold re-dated a stale value past the latest
+  // confirmation (savings 5000 → 1000 for an edit of investments alone).
+  it("takes only the balances the form sent as edits; the rest roll forward", async () => {
+    const stored = { id: PLAN_ID, initialSavings: "1000", initialInvestments: "0", debts: [] };
+    vi.mocked(getPlanWithLines).mockResolvedValueOnce(stored as never);
+    vi.mocked(updatePlan).mockResolvedValueOnce({ id: PLAN_ID } as never);
+    const input: Record<string, unknown> = { ...validInput, initialInvestments: "200" };
+    delete input.initialSavings;
+
+    await updatePlanAction(input as never);
+
+    const edits = vi.mocked(restateOpeningBalances).mock.calls[0][3];
+    expect(edits).toEqual({ investments: "200" });
+    expect(Object.keys(edits)).toEqual(["investments"]);
+  });
+
+  it("a payload without balances (a strategy or portfolio toggle) restates nothing", async () => {
+    vi.mocked(getPlanWithLines).mockResolvedValueOnce({ id: PLAN_ID, debts: [] } as never);
+    vi.mocked(updatePlan).mockResolvedValueOnce({ id: PLAN_ID } as never);
+    const input: Record<string, unknown> = { ...validInput, debtStrategy: "snowball" };
+    delete input.initialSavings;
+    delete input.initialInvestments;
+
+    const result = await updatePlanAction(input as never);
+
+    expect(result.success).toBe(true);
+    const edits = vi.mocked(restateOpeningBalances).mock.calls[0]?.[3] ?? {};
+    expect(edits).toEqual({});
+    const data = vi.mocked(updatePlan).mock.calls[0][1];
+    expect(data.initialSavings).toBeUndefined();
+    expect(data.initialInvestments).toBeUndefined();
+  });
+
   it("returns Invalid input when id is not a UUID", async () => {
     const result = await updatePlanAction({ ...validInput, id: "not-a-uuid" } as unknown as never);
 

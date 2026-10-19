@@ -15,13 +15,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Mono, Text } from "@/components/ui/typography";
+import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { StatCard, maskValue, statToneClass } from "@/components/ui/stat-card";
 import { formatCurrency, formatPercent, formatSignedPercent } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
+import { formatUnits } from "@/components/portfolio/figures";
 import type { InvestorBreakdown as InvestorBreakdownRow } from "@/types/margin";
-
-const UNITS = new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 });
 
 /**
  * Per-person drill-down: what each investor put in, what their money actually
@@ -57,18 +56,26 @@ export function InvestorBreakdown({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* One person at a time; picking the active chip again clears it. */}
+      {/* One person at a time; picking the active chip again clears it.
+          Chips size to their content and wrap: the group's items are
+          `flex-1 min-w-0` by default, which squeezed three long names onto one
+          phone-width row until they overlapped. */}
       <ToggleGroup
         type="single"
         variant="outline"
         size="sm"
         aria-label="Investor"
+        className="w-full"
         value={selected ?? ""}
         onValueChange={(v) => setSelected(v || null)}
       >
         {rows.map((r) => (
-          <ToggleGroupItem key={r.investorId} value={r.investorId} className="gap-2">
-            {r.name}
+          <ToggleGroupItem
+            key={r.investorId}
+            value={r.investorId}
+            className="max-w-full flex-none gap-2"
+          >
+            <span className="min-w-0 truncate">{r.name}</span>
             {r.isOwn && <Badge variant="secondary">you</Badge>}
             <Mono
               className={cn(
@@ -90,44 +97,58 @@ export function InvestorBreakdown({
 
       {active ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Contributed" value={money(active.contributed)} percent="100%" />
-            <StatCard
-              label={active.isOwn ? "Your balance" : "You owe them"}
-              value={money(active.owed)}
-              percent={
-                active.contributed > 0
-                  ? formatSignedPercent(
-                      ((active.owed - active.contributed) / active.contributed) * 100,
-                      1
-                    )
-                  : undefined
-              }
-            />
-            <StatCard
-              label="Their money is worth"
-              value={money(active.positionValue)}
-              percent={
-                active.contributed > 0
-                  ? formatSignedPercent(
-                      ((active.positionValue - active.contributed) / active.contributed) *
-                        100,
-                      1
-                    )
-                  : undefined
-              }
-              tone={active.positionValue >= active.contributed ? "positive" : "negative"}
-            />
-            <StatCard
-              label={active.isOwn ? "Gain on your own" : "Your margin on them"}
-              value={money(active.profitLoss)}
-              percent={
-                active.owed > 0
-                  ? formatSignedPercent((active.profitLoss / active.owed) * 100, 1)
-                  : undefined
-              }
-              tone={active.profitLoss >= 0 ? "positive" : "negative"}
-            />
+          <div className="@container">
+            {/* Columns follow the width the grid actually has, not the viewport: at
+               1024px the sidebar leaves ~670px, and four cards there clipped every
+               figure mid-number. */}
+            <div className="grid gap-4 @md:grid-cols-2 @4xl:grid-cols-4">
+              <StatCard
+                label="Contributed"
+                value={money(active.contributed)}
+                percent={active.contributed > 0 ? "100%" : undefined}
+                sublabel={
+                  active.withdrawn > 0
+                    ? `Net of ${money(active.withdrawn)} withdrawn`
+                    : "Cash put in"
+                }
+              />
+              <StatCard
+                label={active.isOwn ? "Your balance" : "You owe them"}
+                value={money(active.owed)}
+                percent={
+                  active.contributed > 0
+                    ? formatSignedPercent(
+                        ((active.owed - active.contributed) / active.contributed) * 100,
+                        1
+                      )
+                    : undefined
+                }
+              />
+              <StatCard
+                label="Their money is worth"
+                value={money(active.positionValue)}
+                percent={
+                  active.contributed > 0
+                    ? formatSignedPercent(
+                        ((active.positionValue - active.contributed) / active.contributed) *
+                          100,
+                        1
+                      )
+                    : undefined
+                }
+                tone={active.positionValue >= active.contributed ? "positive" : "negative"}
+              />
+              <StatCard
+                label={active.isOwn ? "Gain on your own" : "Your margin on them"}
+                value={money(active.profitLoss)}
+                percent={
+                  active.owed > 0
+                    ? formatSignedPercent((active.profitLoss / active.owed) * 100, 1)
+                    : undefined
+                }
+                tone={active.profitLoss >= 0 ? "positive" : "negative"}
+              />
+            </div>
           </div>
 
           <Card>
@@ -139,69 +160,7 @@ export function InvestorBreakdown({
               </Text>
 
               {active.positions.length > 0 && (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Position</TableHead>
-                      <TableHead className="text-right">Units</TableHead>
-                      <TableHead className="text-right">Invested</TableHead>
-                      <TableHead className="text-right">Price</TableHead>
-                      <TableHead className="text-right">Value</TableHead>
-                      <TableHead className="text-right">P/L</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {active.positions.map((p) => {
-                      const pl = p.value === null ? null : p.value - p.invested;
-                      return (
-                        <TableRow key={p.symbol}>
-                          <TableCell>
-                            <Mono className="text-xs font-medium">{p.symbol}</Mono>
-                            <Text variant="small" className="text-2xs">
-                              {p.name}
-                            </Text>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono className="text-xs">{UNITS.format(p.quantity)}</Mono>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono className="text-xs">{money(p.invested)}</Mono>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono className="text-xs">
-                              {p.price === null ? "—" : formatCurrency(p.price)}
-                            </Mono>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono className="text-xs">{money(p.value)}</Mono>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono
-                              className={cn(
-                                "text-xs",
-                                statToneClass(
-                                  pl === null ? "neutral" : pl >= 0 ? "positive" : "negative"
-                                )
-                              )}
-                            >
-                              {money(pl)}
-                            </Mono>
-                            {pl !== null && p.invested > 0 && (
-                              <Mono
-                                className={cn(
-                                  "block text-2xs",
-                                  statToneClass(pl >= 0 ? "positive" : "negative")
-                                )}
-                              >
-                                {formatSignedPercent((pl / p.invested) * 100, 1)}
-                              </Mono>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                <Positions positions={active.positions} money={money} hideValues={hideValues} />
               )}
             </CardContent>
           </Card>
@@ -211,6 +170,129 @@ export function InvestorBreakdown({
           Pick someone to see what their money bought and what it costs you.
         </Text>
       )}
+    </div>
+  );
+}
+
+function Positions({
+  positions,
+  money,
+  hideValues,
+}: {
+  positions: InvestorBreakdownRow["positions"];
+  money: (v: number | null) => string;
+  hideValues: boolean;
+}) {
+  // Units times the (public) price is the amount, so masked mode masks units.
+  const units = (q: number): string =>
+    hideValues ? maskValue(formatUnits(q)) : formatUnits(q);
+  const rows = positions.map((p) => {
+    const pl = p.value === null ? null : p.value - p.invested;
+    const tone = statToneClass(pl === null ? "neutral" : pl >= 0 ? "positive" : "negative");
+    const share =
+      pl !== null && p.invested > 0 ? formatSignedPercent((pl / p.invested) * 100, 1) : null;
+    return { p, pl, tone, share };
+  });
+
+  // Sized by the card, not the viewport: six columns do not fit a phone, and
+  // a table scrolled sideways inside a card hides the figure that matters.
+  return (
+    <div className="@container">
+      <ul className="flex flex-col divide-y @xl:hidden">
+        {rows.map(({ p, pl, tone, share }) => (
+          <li key={p.symbol} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="flex min-w-0 items-baseline gap-2">
+                <Mono className="text-xs font-medium">{p.symbol}</Mono>
+                <Text as="span" variant="small" className="truncate text-2xs">
+                  {p.name}
+                </Text>
+              </div>
+              <Mono className="shrink-0 text-xs">
+                {units(p.quantity)} @ {p.price === null ? "—" : formatCurrency(p.price)}
+              </Mono>
+            </div>
+            <dl className="grid grid-cols-3 gap-x-3">
+              <div className="flex flex-col gap-1">
+                <dt>
+                  <Eyebrow as="span" size="sm">
+                    Invested
+                  </Eyebrow>
+                </dt>
+                <dd>
+                  <Mono className="text-xs">{money(p.invested)}</Mono>
+                </dd>
+              </div>
+              <div className="flex flex-col gap-1 text-center">
+                <dt>
+                  <Eyebrow as="span" size="sm">
+                    Value
+                  </Eyebrow>
+                </dt>
+                <dd>
+                  <Mono className="text-xs">{money(p.value)}</Mono>
+                </dd>
+              </div>
+              <div className="flex flex-col gap-1 text-right">
+                <dt>
+                  <Eyebrow as="span" size="sm">
+                    P/L
+                  </Eyebrow>
+                </dt>
+                <dd>
+                  <Mono className={cn("text-xs", tone)}>{money(pl)}</Mono>
+                  {share && <Mono className={cn("block text-2xs", tone)}>{share}</Mono>}
+                </dd>
+              </div>
+            </dl>
+          </li>
+        ))}
+      </ul>
+
+      <div className="hidden @xl:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Position</TableHead>
+              <TableHead className="text-right">Units</TableHead>
+              <TableHead className="text-right">Invested</TableHead>
+              <TableHead className="text-right">Price</TableHead>
+              <TableHead className="text-right">Value</TableHead>
+              <TableHead className="text-right">P/L</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map(({ p, pl, tone, share }) => (
+              <TableRow key={p.symbol}>
+                <TableCell>
+                  <Mono className="text-xs font-medium">{p.symbol}</Mono>
+                  <Text variant="small" className="text-2xs">
+                    {p.name}
+                  </Text>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Mono className="text-xs">{units(p.quantity)}</Mono>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Mono className="text-xs">{money(p.invested)}</Mono>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Mono className="text-xs">
+                    {p.price === null ? "—" : formatCurrency(p.price)}
+                  </Mono>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Mono className="text-xs">{money(p.value)}</Mono>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Mono className={cn("text-xs", tone)}>{money(pl)}</Mono>
+                  {share && <Mono className={cn("block text-2xs", tone)}>{share}</Mono>}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

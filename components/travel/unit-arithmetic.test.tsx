@@ -9,7 +9,7 @@ describe("UnitArithmetic", () => {
     const { container } = render(
       <UnitArithmetic low={100} high={150} unit="per_night" times={2} currency="USD" />
     );
-    expect(container.textContent).toBe("$100–$150 / night × 2");
+    expect(container.textContent).toBe("$100~$150 / night × 2");
   });
 
   it("shows a single figure when there is no range", () => {

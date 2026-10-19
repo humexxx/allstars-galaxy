@@ -18,6 +18,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { Heading, Text } from "@/components/ui/typography";
 import { formatDay, formatMonth } from "@/lib/utils/date";
 import { formatCurrency } from "@/lib/utils/format";
+import { describeRecurrence } from "@/lib/finance/recurrence-label";
+import type { RecurrenceType } from "@/types/finance";
 import {
   LineFormDialog,
   type LineFormValues,
@@ -34,6 +36,12 @@ export type EditorLine = {
   // Income-only — undefined on expenses.
   startDate?: string | null;
   endDate?: string | null;
+  // The recurrence model, so the Schedule column can say what it is.
+  recurrenceType?: RecurrenceType;
+  weekOfMonth?: number | null;
+  dayOfWeek?: number | null;
+  intervalMonths?: number | null;
+  recurrenceStart?: string | null;
   owedToMe?: boolean;
 };
 
@@ -108,9 +116,11 @@ export function PlanLineEditor({
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead className="w-28">Type</TableHead>
-                <TableHead className="w-36">Amount</TableHead>
-                <TableHead>Schedule</TableHead>
+                {/* Phone: type and schedule ride under the name instead of
+                    pushing the Schedule column off-screen. */}
+                <TableHead className="hidden w-28 sm:table-cell">Type</TableHead>
+                <TableHead className="text-right sm:w-36 sm:text-left">Amount</TableHead>
+                <TableHead className="hidden sm:table-cell">Schedule</TableHead>
                 <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
@@ -164,8 +174,15 @@ function LineRow({
 
   return (
     <TableRow>
-      <TableCell className="font-medium">{line.name}</TableCell>
-      <TableCell>
+      <TableCell className="max-w-48 font-medium whitespace-normal sm:max-w-none">
+        <span className="block break-words">{line.name}</span>
+        <span className="block text-xs font-normal text-muted-foreground sm:hidden">
+          {line.kind === "recurring" ? "Recurring" : "One-time"} ·{" "}
+          <ScheduleSummary line={line} variant={variant} />
+          {line.owedToMe && " · Owed to you"}
+        </span>
+      </TableCell>
+      <TableCell className="hidden sm:table-cell">
         <div className="flex flex-wrap gap-1">
           <Badge variant={line.kind === "recurring" ? "secondary" : "outline"}>
             {line.kind === "recurring" ? "Recurring" : "One-time"}
@@ -173,10 +190,10 @@ function LineRow({
           {line.owedToMe && <Badge variant="info">Owed to you</Badge>}
         </div>
       </TableCell>
-      <TableCell className="font-mono tabular-nums">
+      <TableCell className="text-right font-mono tabular-nums sm:text-left">
         {formatCurrency(Number(line.monthlyAmount))}
       </TableCell>
-      <TableCell className="text-xs text-muted-foreground">
+      <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">
         <ScheduleSummary line={line} variant={variant} />
       </TableCell>
       <TableCell className="text-right">
@@ -224,16 +241,21 @@ function ScheduleSummary({
   if (line.kind === "one_time") {
     return <>{line.date ? formatDay(line.date) : "—"}</>;
   }
-  const day = line.dayOfMonth ?? 1;
-  const start = line.startDate ?? null;
-  const end = line.endDate ?? null;
-  const parts: string[] = [`Day ${day}`];
+  const parts: string[] = [
+    describeRecurrence({
+      recurrenceType: line.recurrenceType ?? "monthly_day",
+      dayOfMonth: line.dayOfMonth,
+      weekOfMonth: line.weekOfMonth,
+      dayOfWeek: line.dayOfWeek,
+      intervalMonths: line.intervalMonths,
+      recurrenceStart: line.recurrenceStart,
+    }),
+  ];
   if (variant === "income") {
+    const start = line.startDate ?? null;
+    const end = line.endDate ?? null;
     if (start) parts.push(`from ${formatMonth(start)}`);
     if (end) parts.push(`until ${formatMonth(end)}`);
-    if (!start && !end) parts.push("perpetual");
-  } else {
-    parts.push("monthly");
   }
   return <>{parts.join(" · ")}</>;
 }

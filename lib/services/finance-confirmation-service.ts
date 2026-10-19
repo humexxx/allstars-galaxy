@@ -92,6 +92,47 @@ export async function getLatestConfirmation(
 }
 
 /**
+ * `getLatestConfirmation` for many plans in two queries, however many there
+ * are (the list and compare pages calibrate every plan). Same pick — the
+ * first row per plan in the same order — via DISTINCT ON. Plans with no
+ * confirmation are absent from the map.
+ */
+export async function getLatestConfirmations(
+  planIds: readonly string[]
+): Promise<Map<string, ConfirmationWithDebts>> {
+  const byPlan = new Map<string, ConfirmationWithDebts>();
+  if (planIds.length === 0) return byPlan;
+
+  const latest = await db
+    .selectDistinctOn([financePlanConfirmations.planId])
+    .from(financePlanConfirmations)
+    .where(inArray(financePlanConfirmations.planId, [...planIds]))
+    .orderBy(
+      financePlanConfirmations.planId,
+      desc(financePlanConfirmations.confirmationMonth),
+      desc(financePlanConfirmations.confirmedAt)
+    );
+  if (latest.length === 0) return byPlan;
+
+  const debtRows = await db
+    .select()
+    .from(financePlanDebtConfirmations)
+    .where(
+      inArray(
+        financePlanDebtConfirmations.confirmationId,
+        latest.map((r) => r.id)
+      )
+    );
+  for (const row of latest) {
+    byPlan.set(row.planId, {
+      ...row,
+      debtConfirmations: debtRows.filter((d) => d.confirmationId === row.id),
+    });
+  }
+  return byPlan;
+}
+
+/**
  * Whether the plan still needs a confirmation for the period containing
  * `today` (the reader's calendar day), and what the dialog should pre-fill.
  *
@@ -233,15 +274,38 @@ export async function saveConfirmation(
 }
 
 /**
+ * The newest day the plan's balances are already known on: its start, its
+ * latest confirmation, or `balances_as_of` (the creation day of a new plan,
+ * re-dated by every restatement), whichever is LATEST. A period ending on or
+ * before it is already in those balances — and since the calibrated plan
+ * starts from that statement, an earlier period's "projected opening" is
+ * just today's balances. A legacy row (no `balances_as_of`) states its
+ * balances at the start, so its start is the day.
+ */
+function balancesKnownOn(
+  plan: Pick<FinancePlanWithLines, "startMonth" | "balancesAsOf">,
+  latest: { confirmationMonth: string } | null
+): Date {
+  const days = [new Date(plan.startMonth)];
+  if (latest) days.push(rowDay(latest));
+  const stated = parseIsoDay(plan.balancesAsOf ?? null);
+  if (stated) days.push(stated);
+  return new Date(Math.max(...days.map((d) => d.getTime())));
+}
+
+/**
  * Roll the baseline forward through any CLOSED period the user left
  * unconfirmed. Runs from the daily cron before snapshots.
  *
  *   - The CURRENT period is never auto-confirmed — the user is still prompted.
- *   - Every period strictly between the latest confirmation's period (or the
- *     plan start when there is none) and the current period is closed. Each
- *     one with no confirmation DATED INSIDE IT gets a `source: "auto"` row
- *     recording its projected OPENING, keyed by its period start, chaining the
- *     baseline forward one period at a time.
+ *   - Every period strictly between the one holding the plan's newest
+ *     statement of its balances (`balancesKnownOn`) and the current period
+ *     is closed. Each one with no confirmation DATED INSIDE IT gets a
+ *     `source: "auto"` row recording its projected OPENING, keyed by its
+ *     period start, chaining the baseline forward one period at a time.
+ *     Periods before that statement are never written: a plan created or
+ *     restated mid-way used to get one for every period since its start, at
+ *     today's balances, which the chart drew as real past.
  *
  * Periods are matched by containment, so rows saved under an older anchor day
  * still count and no duplicate is written beside them.
@@ -268,9 +332,7 @@ export async function autoConfirmSkippedPeriods(
   );
 
   const latest = await getLatestConfirmation(plan.id);
-  const baselineStart = latest
-    ? periodStartFor(rowDay(latest), anchor)
-    : periodStartFor(new Date(plan.startMonth), anchor);
+  const baselineStart = periodStartFor(balancesKnownOn(plan, latest), anchor);
 
   let confirmationsCreated = 0;
   let cursor = nextPeriodStart(baselineStart, anchor);

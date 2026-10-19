@@ -9,7 +9,7 @@ import { TripsOverview } from "@/components/travel/trips-overview";
 
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { listUserTrips } from "@/lib/services/travel-service";
-import { isoDay } from "@/lib/travel/calendar";
+import { getRequestTodayIso } from "@/lib/utils/request-today";
 
 export const metadata: Metadata = {
   title: "Travel Planner",
@@ -21,9 +21,9 @@ export const dynamic = "force-dynamic";
 export default async function TravelPlannerPage() {
   const ctx = await requireEffectiveContext();
   const trips = await listUserTrips(ctx.effectiveUserId);
-  // Decided here, once, so the server render and the browser agree on which
-  // trips are upcoming and how far away they are.
-  const today = isoDay(new Date());
+  // Decided here, once, on the reader's calendar, so the server render and the
+  // browser agree on which trips are upcoming and how far away they are.
+  const today = await getRequestTodayIso();
 
   return (
     <section className="flex flex-col gap-6">

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { changesOpeningBalances, restateOpeningSet } from "./opening-balances";
+import { changesOpeningBalances, effectiveEdits, restateOpeningSet } from "./opening-balances";
 import type { FinancePlanWithLines, TodayState } from "@/types/finance";
 
 const plan = {
@@ -30,12 +30,10 @@ const projected: TodayState = {
 };
 
 describe("changesOpeningBalances", () => {
-  it("is false for a no-op edit (same values, cent precision, zero-balance debt added)", () => {
+  it("is false for a no-op edit (debts as stored to the cent, zero-balance debt added)", () => {
     expect(changesOpeningBalances(plan, {})).toBe(false);
     expect(
       changesOpeningBalances(plan, {
-        savings: "1000.00",
-        investments: "250.50",
         debts: { a: "5000", b: "300.00" },
         addedDebtBalance: "0",
       })
@@ -43,14 +41,41 @@ describe("changesOpeningBalances", () => {
   });
 
   it("is true when any opening balance actually changes", () => {
-    expect(changesOpeningBalances(plan, { savings: "1000.01" })).toBe(true);
-    expect(changesOpeningBalances(plan, { investments: "0" })).toBe(true);
     expect(changesOpeningBalances(plan, { debts: { b: "299" } })).toBe(true);
     expect(changesOpeningBalances(plan, { addedDebtBalance: "10" })).toBe(true);
   });
 
+  it("a savings or investments figure may change even when it equals the stored one", () => {
+    // The plan form shows where the plan stands today, so the stored figure
+    // is no reference for it — `effectiveEdits` decides against today.
+    expect(changesOpeningBalances(plan, { savings: "1000.00" })).toBe(true);
+    expect(changesOpeningBalances(plan, { investments: "250.5" })).toBe(true);
+  });
+
   it("ignores an edit for a debt that is not on the plan", () => {
     expect(changesOpeningBalances(plan, { debts: { zzz: "1" } })).toBe(false);
+  });
+});
+
+describe("effectiveEdits", () => {
+  it("drops a savings or investments figure equal to where the plan stands today", () => {
+    expect(effectiveEdits(plan, projected, { savings: "4321.46", investments: "610" })).toBeNull();
+  });
+
+  it("keeps a figure equal only to the (superseded) stored one", () => {
+    expect(effectiveEdits(plan, projected, { savings: "1000", investments: "610.00" })).toEqual({
+      savings: "1000",
+    });
+  });
+
+  it("judges debts against their stored balance, and a zero added debt changes nothing", () => {
+    expect(
+      effectiveEdits(plan, projected, { debts: { a: "5000.00", b: "250" }, addedDebtBalance: "0" })
+    ).toEqual({ debts: { b: "250" } });
+  });
+
+  it("compares investments with the clamped figure the form shows", () => {
+    expect(effectiveEdits(plan, { ...projected, investments: -3 }, { investments: "0" })).toBeNull();
   });
 });
 

@@ -13,7 +13,7 @@ export default async function AdminUsersPage() {
   const users = await getAllUsers();
 
   return (
-    <section className="space-y-6">
+    <section className="flex flex-col gap-6">
       <h1 className="sr-only">Users</h1>
       <UsersTable users={users} currentAdminId={admin.id} />
     </section>

@@ -6,7 +6,8 @@ import { PageHeaderSkeleton } from "@/components/skeletons/page-header-skeleton"
  * Mirrors the PlanEditor silhouette: the compact PageHeader (back link, title,
  * tabs + More) and the Polymarket-style Overview hero — a 3/4 main panel
  * (forecast header with its control cluster + the default Graph view) beside
- * the 1/4 gauge / figures / strategy sidebar. Matching spacing + breakpoints
+ * the 1/4 gauge / figures / strategy sidebar (from xl; below it the sidebar
+ * cards sit under the panel, two abreast from lg). Matching spacing + breakpoints
  * keeps the swap to the real editor a content fill-in, not a layout shift.
  */
 export default function PlanDetailLoading() {
@@ -18,10 +19,10 @@ export default function PlanDetailLoading() {
       <PageHeaderSkeleton back size="compact" actions={2} descriptionWidth="w-96" />
 
       {/* Overview hero: 3/4 main panel + 1/4 sidebar (stacked on mobile). */}
-      <div className="grid gap-4 lg:grid-cols-4 lg:items-start">
+      <div className="grid gap-4 xl:grid-cols-4 xl:items-start">
         {/* Graph view card — fixed panel height on lg (ProjectionPanel's
-            lg:h-160 view box) */}
-        <Card className="min-w-0 lg:col-span-3 lg:h-160">
+            xl:h-160 view box) */}
+        <Card className="min-w-0 xl:col-span-3 xl:h-160">
           <CardHeader className="gap-3">
             <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
               {/* KPIs: Today / Next / End */}
@@ -48,15 +49,15 @@ export default function PlanDetailLoading() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="lg:min-h-0 lg:flex-1">
-            <Skeleton className="h-72 w-full sm:h-80 lg:h-full" />
+          <CardContent className="xl:min-h-0 xl:flex-1">
+            <Skeleton className="h-72 w-full sm:h-80 xl:h-full" />
           </CardContent>
         </Card>
 
         {/* Sidebar: figures card (gauge + rows, stretches) + debt strategy */}
-        <div className="flex min-w-0 flex-col gap-3 lg:h-160 lg:gap-4">
-          <Card className="lg:flex-1">
-            <CardContent className="flex flex-col gap-4">
+        <div className="grid min-w-0 items-start gap-3 lg:grid-cols-2 xl:flex xl:min-h-160 xl:flex-col xl:items-stretch xl:gap-4">
+          <Card className="xl:flex-1">
+            <CardContent className="flex flex-col gap-3">
               <div className="flex flex-col items-center gap-1.5">
                 <Skeleton className="size-30 rounded-full" />
                 <Skeleton className="h-3 w-24" />

@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import { formatCurrency, moneySign } from "@/lib/utils/format";
+import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
 import { densify } from "@/lib/finance/table-rows";
 import type { Projection } from "@/types/finance";
 
@@ -39,6 +39,8 @@ type ProjectionTableProps = {
   monthsToShow?: number;
   /** Index of the first row to show — the forecast window's start. */
   startIndex?: number;
+  /** Projection row of the period that contains today, highlighted. */
+  currentIndex?: number;
 };
 
 // How many extra months a single "Load more" click reveals beyond the
@@ -50,6 +52,7 @@ export function ProjectionTable({
   projection,
   monthsToShow,
   startIndex = 0,
+  currentIndex,
 }: ProjectionTableProps) {
   const [showAll, setShowAll] = useState(false);
   // Extra months on top of the prop-supplied initial window. Reset whenever
@@ -191,7 +194,28 @@ export function ProjectionTable({
           <Table className="text-xs">
             <TableHeader className="sticky top-0 bg-card">
               <TableRow>
-                <TableHead className="w-20">Month</TableHead>
+                {/* Sticky: on a phone the table scrolls sideways, and without
+                    the month every figure past the first columns was
+                    anonymous. */}
+                <TableHead className="sticky left-0 z-10 w-20 bg-card">
+                  {/* The current period's row is its projected CLOSE; the
+                      header's Today figure is the position on today, so the
+                      two differ by design. Said here, where they meet. */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        tabIndex={0}
+                        className="cursor-help rounded-sm underline decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        Month
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Each row is where the period closes. Today&apos;s position is the
+                      Today figure above.
+                    </TooltipContent>
+                  </Tooltip>
+                </TableHead>
                 <TableHead className="text-right">Income</TableHead>
                 <TableHead className="text-right">Expenses</TableHead>
                 <TableHead className="text-right">
@@ -232,9 +256,22 @@ export function ProjectionTable({
             </TableHeader>
             <TableBody>
               {rows.map((m) => (
-                <TableRow key={m.monthOffset} data-month-offset={m.monthOffset}>
-                  <TableCell className="font-medium">
+                <TableRow
+                  key={m.monthOffset}
+                  data-month-offset={m.monthOffset}
+                  aria-current={m.monthOffset === currentIndex ? "date" : undefined}
+                  className={cn(m.monthOffset === currentIndex && "bg-muted")}
+                >
+                  <TableCell
+                    className={cn(
+                      "sticky left-0 z-10 font-medium",
+                      m.monthOffset === currentIndex ? "bg-muted" : "bg-card"
+                    )}
+                  >
                     <Mono>{MONTH_FORMATTER.format(m.date)}</Mono>
+                    {m.monthOffset === currentIndex && (
+                      <span className="sr-only"> (current period, projected close)</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <Mono>{formatCurrency(m.income)}</Mono>
@@ -267,8 +304,7 @@ export function ProjectionTable({
                             <Mono
                               className={isPositive ? "text-success" : "text-destructive"}
                             >
-                              {isPositive ? "+" : "−"}
-                              {formatCurrency(Math.abs(net))}
+                              {formatSignedCurrency(net)}
                               <span className="sr-only"> ({detail})</span>
                             </Mono>
                           </TooltipTrigger>
@@ -296,7 +332,8 @@ export function ProjectionTable({
                   <TableCell
                     className={cn(
                       "text-right font-mono font-semibold tabular-nums",
-                      moneySign(m.netWorth) >= 0 ? "text-success" : "text-destructive"
+                      moneySign(m.netWorth) > 0 && "text-success",
+                      moneySign(m.netWorth) < 0 && "text-destructive"
                     )}
                   >
                     {formatCurrency(m.netWorth)}

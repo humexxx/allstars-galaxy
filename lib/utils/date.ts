@@ -51,14 +51,57 @@ const LONG_DAY = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
+const zoned = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * Formats `value` with `base`'s options, in `timeZone` when one is given.
+ *
+ * An instant rendered by a client component is formatted twice — in UTC on
+ * the server, in the browser's zone on hydration — so every evening west of
+ * Greenwich the two disagreed on the day and React threw the markup away.
+ * Passing the reader's zone (`useReaderTimeZone()`) makes both renders agree.
+ * A date-only string stays the calendar day it names, whatever the zone.
+ */
+function formatIn(base: Intl.DateTimeFormat, value: DateInput, timeZone?: string): string {
+  if (!timeZone) return base.format(toDay(value));
+  if (typeof value === "string" && DATE_ONLY.test(value)) {
+    const [y, m, d] = value.split("-").map(Number);
+    return zonedFormatter(base, "UTC").format(new Date(Date.UTC(y, m - 1, d)));
+  }
+  return zonedFormatter(base, timeZone).format(toDay(value));
+}
+
+function zonedFormatter(base: Intl.DateTimeFormat, timeZone: string): Intl.DateTimeFormat {
+  const options = base.resolvedOptions();
+  const key = `${timeZone}|${JSON.stringify(options)}`;
+  let formatter = zoned.get(key);
+  if (!formatter) {
+    // Only the fields these formatters use; `resolvedOptions()` also carries
+    // the locale, calendar and the zone being replaced.
+    const { weekday, year, month, day, hour, minute, hour12 } = options;
+    formatter = new Intl.DateTimeFormat("en-US", {
+      weekday,
+      year,
+      month,
+      day,
+      hour,
+      minute,
+      hour12,
+      timeZone,
+    } as Intl.DateTimeFormatOptions);
+    zoned.set(key, formatter);
+  }
+  return formatter;
+}
+
 /** "Sep 3, 2026" */
-export function formatDay(value: DateInput): string {
-  return DAY.format(toDay(value));
+export function formatDay(value: DateInput, timeZone?: string): string {
+  return formatIn(DAY, value, timeZone);
 }
 
 /** "Sep 3" */
-export function formatShortDay(value: DateInput): string {
-  return SHORT_DAY.format(toDay(value));
+export function formatShortDay(value: DateInput, timeZone?: string): string {
+  return formatIn(SHORT_DAY, value, timeZone);
 }
 
 /** "Thu, Sep 3" */
@@ -87,8 +130,8 @@ export function formatMonthLong(value: DateInput): string {
 }
 
 /** "Sep 3, 2026, 4:05 PM" */
-export function formatDateTime(value: DateInput): string {
-  return DATE_TIME.format(toDay(value));
+export function formatDateTime(value: DateInput, timeZone?: string): string {
+  return formatIn(DATE_TIME, value, timeZone);
 }
 
 /**

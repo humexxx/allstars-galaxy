@@ -783,6 +783,35 @@ describe("getPublicTripByToken", () => {
     expect(dbMock.select).toHaveBeenCalledTimes(9);
   });
 
+  it("carries no prices or notes on a link that hides prices", async () => {
+    // The page hid them, but the items were serialised to the client
+    // calendar with price, range, notes and cost — readable in the source.
+    queueSelect([
+      { id: "s-1", tripId: TRIP_ID, token: "tok", revokedAt: null, expiresAt: null,
+        inviteeEmail: null, memberId: null, showPrices: false, createdAt: new Date() },
+    ]);
+    queueSelect([tripFixture()]);
+    queueSelect([
+      { id: "hotel", tripId: TRIP_ID, title: "Hotel", price: "180", priceMax: "220",
+        priceUnit: "per_night", notes: "Door code 4412", scheduledOn: "2026-11-02",
+        endsOn: "2026-11-07" },
+    ]);
+    queueSelect([]); // photos
+    queueSelect([]); // stops
+    queueSelect([]); // payers
+    queueSelect([]); // attendees
+
+    const out = await getPublicTripByToken("tok");
+    const payload = JSON.stringify(out?.items);
+    expect(payload).not.toContain("180");
+    expect(payload).not.toContain("220");
+    expect(payload).not.toContain("Door code");
+    // Not even the keys: the item is built field by field (`toPublicItem`).
+    expect(out?.items[0]).not.toHaveProperty("price");
+    expect(out?.items[0]).not.toHaveProperty("priceMax");
+    expect(out?.items[0]).toMatchObject({ notes: null, cost: null, rate: null });
+  });
+
   it("leaves an unscoped link with no traveller attached", async () => {
     queueSelect([
       { id: "s-1", tripId: TRIP_ID, token: "tok", revokedAt: null, expiresAt: null,
@@ -914,6 +943,29 @@ describe("getDashboardTravelSummary", () => {
     expect(out.featured?.totalEstimate).toBeCloseTo(150);
 
     vi.useRealTimers();
+  });
+
+  it("prices a per-person item by its own attendees, on the reader's day", async () => {
+    // A guided hike for two of four travellers is two tickets. Without the
+    // attendee lists the card multiplied by the whole party and charged four.
+    vi.mocked(db.$count).mockResolvedValueOnce(4);
+    const trip = tripFixture({ id: "t-1", startDate: "2026-10-01", endDate: "2026-10-05" });
+    queueSelect([trip]);
+    queueSelect([
+      { id: "hike", price: "120", priceMax: null, priceUnit: "per_person", scheduledOn: null, endsOn: null },
+      { id: "train", price: "95", priceMax: null, priceUnit: "per_person", scheduledOn: null, endsOn: null },
+    ]);
+    queueSelect([
+      { itemId: "hike", memberId: "m-1" },
+      { itemId: "hike", memberId: "m-2" },
+    ]);
+
+    // Sep 30 for the reader, whatever the server's clock says: the trip has
+    // not started yet.
+    const out = await getDashboardTravelSummary(USER_ID, "2026-09-30");
+
+    expect(out.featured?.state).toBe("upcoming");
+    expect(out.featured?.totalEstimate).toBe(120 * 2 + 95 * 4);
   });
 
   it("falls back to the next upcoming trip when nothing is in progress", async () => {

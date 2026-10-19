@@ -22,7 +22,6 @@ import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
-import { formatDay } from "@/lib/utils/date";
 import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
 import {
   getMainPlan,
@@ -91,6 +90,14 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   );
   const points = fig.points;
   const delta = fig.delta;
+  // The reader's calendar day, not the server's: this renders on the server
+  // (UTC), which dated an evening edit in Costa Rica "tomorrow".
+  const updated = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone,
+  }).format(featured.updatedAt);
 
   const netWorth: Figure = {
     label: "Net worth",
@@ -103,7 +110,12 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       value: formatCurrency(fig.savings),
     },
     { label: "Investments", value: formatCurrency(fig.investments), tone: "primary" },
-    { label: "Debt now", value: formatCurrency(fig.totalDebt) },
+    {
+      label: "Debt now",
+      value: formatCurrency(fig.totalDebt),
+      // Red like the plan page's Total debt row, which shows this figure.
+      tone: moneySign(fig.totalDebt) > 0 ? "negative" : undefined,
+    },
     { label: "Debt-free", ...debtFreeFigure(fig.debtFree, full.debts.length > 0) },
   ];
   // A plan with no periods has no line to draw, and a rail beside nothing is
@@ -120,7 +132,10 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
         {/* The delta rides the description line, not the action slot: beside
             the button it squeezed the plan name to a few characters on phones. */}
         <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 tabular-nums">
-          <span>12-month projection · updated {formatDay(featured.updatedAt)}</span>
+          <span>
+            12-month projection ·{" "}
+            <span className="whitespace-nowrap">updated {updated}</span>
+          </span>
           <Badge variant={moneySign(delta) >= 0 ? "success" : "destructive"} className="font-mono tabular-nums">
             {moneySign(delta) >= 0 ? <TrendingUp /> : <TrendingDown />}
             {formatSignedCurrency(delta)} · {fig.deltaPeriods} mo
@@ -152,6 +167,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
           </dl>
           <DashboardFinanceMiniChart
             data={points}
+            color={featured.color}
             className="h-48 sm:h-56 @xl:col-start-1 @xl:row-span-2 @xl:row-start-1 @xl:h-auto @xl:min-h-72"
           />
           <dl

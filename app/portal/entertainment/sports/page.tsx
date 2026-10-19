@@ -29,9 +29,11 @@ export default async function SportsPage({
 
   // The sport is in the URL, so a refresh keeps it, Back walks between sports,
   // and a link can point at one. It also means the page fetches one provider
-  // instead of all six.
-  const active = isSportId(sport) ? sport : (favorites[0] ?? DEFAULT_SPORT);
-  const payload = await loadSport(active, { league });
+  // instead of all six. The World Cup was a sport of its own before it moved
+  // into football, and links to it still land on it.
+  const worldCupLink = sport === "worldcup";
+  const active = worldCupLink ? "football" : isSportId(sport) ? sport : (favorites[0] ?? DEFAULT_SPORT);
+  const payload = await loadSport(active, { league: worldCupLink ? "world-cup" : league });
 
   return (
     <>

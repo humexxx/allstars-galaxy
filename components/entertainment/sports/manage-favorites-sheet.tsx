@@ -30,8 +30,7 @@ import { setSportFavoriteAction } from "@/app/actions/sports";
  * nothing twice.
  */
 const COVERAGE: Record<SportId, string> = {
-  football: "Champions League, Premier League, La Liga, Serie A",
-  worldcup: "Knockout bracket, fixtures and group tables",
+  football: "Champions League, Premier League, La Liga, Serie A and the World Cup",
   padel: "Premier Padel rankings and tournaments",
   f1: "Drivers, constructors, races and news",
   nba: "Scores and conference standings",

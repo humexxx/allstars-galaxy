@@ -49,6 +49,12 @@ export async function loadSport(
   switch (sport) {
     case "football": {
       const id = footballLeagueFrom(params.league);
+      // The World Cup is one of football's competitions, with a feed of its
+      // own: one call covers its groups, fixtures and bracket.
+      if (id === "world-cup") {
+        const league = await getWorldCupData();
+        return { sport, league, options: FOOTBALL_COMPETITIONS, sample: league === WORLD_CUP_DATA };
+      }
       const league = await getFootballLeagueData(id);
       return {
         sport,
@@ -56,10 +62,6 @@ export async function loadSport(
         options: FOOTBALL_COMPETITIONS,
         sample: league === getFootballLeague(id),
       };
-    }
-    case "worldcup": {
-      const data = await getWorldCupData();
-      return { sport, data, sample: data === WORLD_CUP_DATA };
     }
     case "f1": {
       // Two providers: Jolpica for the championship, the stored RapidAPI feed

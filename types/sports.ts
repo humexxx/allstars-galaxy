@@ -7,7 +7,6 @@ import type { F1NewsImage, userSportsPreferences } from "@/db/schema";
 /** The single list of sport keys — `sportIdSchema` validates against it. */
 export const SPORT_IDS = [
   "football",
-  "worldcup",
   "padel",
   "f1",
   "nba",
@@ -36,6 +35,7 @@ export type DashboardSportHighlight = {
   /** Optional secondary entry under the main headline (e.g. league leader). */
   secondary?: { label: string; value: string };
 };
+
 /** One side of a match on a dashboard card. */
 export type DashboardSide = {
   name: string;
@@ -91,7 +91,6 @@ export type DashboardSportCard = {
   /** More than one shows as a toggle (East / West, ATP / WTA). */
   tables: DashboardTable[];
 };
-
 
 export type SportMeta = {
   id: SportId;

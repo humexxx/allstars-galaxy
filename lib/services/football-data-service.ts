@@ -877,9 +877,15 @@ function competitionFor(id: FootballLeagueId): CompetitionConfig {
   return competition;
 }
 
-/** What the league picker offers, in its order. Names only: nothing is fetched. */
-export const FOOTBALL_COMPETITIONS: ReadonlyArray<{ id: FootballLeagueId; name: string }> =
-  COMPETITIONS.map((c) => ({ id: c.internalId, name: c.name }));
+/**
+ * What the league picker offers, in its order. Names only: nothing is fetched.
+ * The World Cup comes last: a tournament every four years, not a season, and
+ * read by `getWorldCupData` rather than `getFootballLeagueData`.
+ */
+export const FOOTBALL_COMPETITIONS: ReadonlyArray<{ id: FootballLeagueId; name: string }> = [
+  ...COMPETITIONS,
+  WORLD_CUP,
+].map((c) => ({ id: c.internalId, name: c.name }));
 
 /**
  * One competition, cached on its own. The page and the dashboard each ask for

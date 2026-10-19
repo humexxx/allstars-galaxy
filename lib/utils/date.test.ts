@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   calendarDayInTimeZone,
   earliestCalendarDay,
+  endOfDayInTimeZone,
   isValidTimeZone,
   todayInTimeZone,
   formatDateTime,
@@ -108,5 +109,63 @@ describe("formatting an instant in the reader's zone", () => {
   it("leaves a date-only value on the calendar day it names", () => {
     expect(formatDay("2026-03-08", "America/Costa_Rica")).toBe("Mar 8, 2026");
     expect(formatDay("2026-03-08", "Asia/Tokyo")).toBe("Mar 8, 2026");
+  });
+});
+
+describe("endOfDayInTimeZone", () => {
+  it("ends the day on the reader's clock, not Greenwich's", () => {
+    expect(endOfDayInTimeZone("2027-01-16", "UTC").toISOString()).toBe(
+      "2027-01-16T23:59:59.999Z"
+    );
+    // West of Greenwich the reader's evening is the next UTC morning.
+    expect(endOfDayInTimeZone("2027-01-16", "America/Los_Angeles").toISOString()).toBe(
+      "2027-01-17T07:59:59.999Z"
+    );
+    expect(endOfDayInTimeZone("2027-01-16", "America/Costa_Rica").toISOString()).toBe(
+      "2027-01-17T05:59:59.999Z"
+    );
+    // East of it, the day is over before UTC's is.
+    expect(endOfDayInTimeZone("2027-01-16", "Asia/Tokyo").toISOString()).toBe(
+      "2027-01-16T14:59:59.999Z"
+    );
+    expect(endOfDayInTimeZone("2027-01-16", "Asia/Kolkata").toISOString()).toBe(
+      "2027-01-16T18:29:59.999Z"
+    );
+  });
+
+  it("is the last moment that still reads as that day there", () => {
+    const end = endOfDayInTimeZone("2027-01-16", "America/Los_Angeles");
+    expect(formatShortDay(end, "America/Los_Angeles")).toBe("Jan 16");
+    expect(formatShortDay(new Date(end.getTime() + 1), "America/Los_Angeles")).toBe("Jan 17");
+  });
+
+  it("uses the offset in force that evening across a DST change", () => {
+    // New York springs forward at 2am on Mar 8 and falls back on Nov 1.
+    expect(endOfDayInTimeZone("2026-03-07", "America/New_York").toISOString()).toBe(
+      "2026-03-08T04:59:59.999Z"
+    );
+    expect(endOfDayInTimeZone("2026-03-08", "America/New_York").toISOString()).toBe(
+      "2026-03-09T03:59:59.999Z"
+    );
+    expect(endOfDayInTimeZone("2026-11-01", "America/New_York").toISOString()).toBe(
+      "2026-11-02T04:59:59.999Z"
+    );
+    // Auckland springs forward in the small hours of Sep 27, between where
+    // the first guess lands and the answer for the day before.
+    expect(endOfDayInTimeZone("2026-09-26", "Pacific/Auckland").toISOString()).toBe(
+      "2026-09-26T11:59:59.999Z"
+    );
+    expect(endOfDayInTimeZone("2026-09-27", "Pacific/Auckland").toISOString()).toBe(
+      "2026-09-27T10:59:59.999Z"
+    );
+  });
+
+  it("falls back to UTC for a missing or unknown zone", () => {
+    expect(endOfDayInTimeZone("2027-01-16", null).toISOString()).toBe(
+      "2027-01-16T23:59:59.999Z"
+    );
+    expect(endOfDayInTimeZone("2027-01-16", "Not/AZone").toISOString()).toBe(
+      "2027-01-16T23:59:59.999Z"
+    );
   });
 });

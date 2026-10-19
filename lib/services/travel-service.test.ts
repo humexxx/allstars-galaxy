@@ -1,3 +1,5 @@
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // travel-service composes several Drizzle chain shapes:
@@ -112,6 +114,7 @@ import {
   revokeTripShare,
   updateTrip,
   updateTripItem,
+  updateTripShareExpiry,
 } from "./travel-service";
 
 const dbMock = vi.mocked(db, true);
@@ -558,6 +561,65 @@ describe("deleteTripShare", () => {
     await deleteTripShare(USER_ID, TRIP_ID, "s-1");
 
     expect(dbMock.delete).toHaveBeenCalledOnce();
+  });
+});
+
+describe("updateTripShareExpiry", () => {
+  type UpdateChain = {
+    set: { mock: { calls: unknown[][] } };
+    where: { mock: { calls: unknown[][] } };
+  };
+  const lastUpdate = (): UpdateChain =>
+    dbMock.update.mock.results[0]?.value as unknown as UpdateChain;
+
+  it("sets expires_at and nothing else, on a live share of this trip", async () => {
+    const expiresAt = new Date("2027-01-17T07:59:59.999Z");
+    queueSelect([{ userId: USER_ID }]); // ensureTripOwnership
+    queueUpdate([shareRow({ expiresAt })]);
+
+    const out = await updateTripShareExpiry(USER_ID, TRIP_ID, { shareId: "s-1", expiresAt });
+
+    expect(out).toEqual(shareRow({ expiresAt }));
+    // Not the token, the scope, what it shows or whether it is revoked.
+    expect(lastUpdate().set.mock.calls[0][0]).toEqual({ expiresAt });
+
+    // The share has to be this one, on this trip, and not revoked: an edit to
+    // a revoked link's expiry must not reopen it.
+    const where = new PgDialect().sqlToQuery(lastUpdate().where.mock.calls[0][0] as SQL);
+    expect(where.sql).toContain('"trip_shares"."id" = $1');
+    expect(where.sql).toContain('"trip_shares"."trip_id" = $2');
+    expect(where.sql).toContain('"trip_shares"."revoked_at" is null');
+    expect(where.params).toEqual(["s-1", TRIP_ID]);
+  });
+
+  it("clears the expiry for a link that should never expire", async () => {
+    queueSelect([{ userId: USER_ID }]);
+    queueUpdate([shareRow({ expiresAt: null })]);
+
+    await updateTripShareExpiry(USER_ID, TRIP_ID, { shareId: "s-1", expiresAt: null });
+
+    expect(lastUpdate().set.mock.calls[0][0]).toEqual({ expiresAt: null });
+  });
+
+  it("returns null when no live share matched — revoked, or another trip's", async () => {
+    queueSelect([{ userId: USER_ID }]);
+    queueUpdate([]);
+
+    await expect(
+      updateTripShareExpiry(USER_ID, TRIP_ID, {
+        shareId: "s-revoked",
+        expiresAt: new Date("2027-01-01T00:00:00Z"),
+      })
+    ).resolves.toBeNull();
+  });
+
+  it("touches nothing on a trip the user does not own", async () => {
+    queueSelect([{ userId: OTHER_USER_ID }]);
+
+    await expect(
+      updateTripShareExpiry(USER_ID, TRIP_ID, { shareId: "s-1", expiresAt: null })
+    ).rejects.toThrow("Trip not found");
+    expect(dbMock.update).not.toHaveBeenCalled();
   });
 });
 

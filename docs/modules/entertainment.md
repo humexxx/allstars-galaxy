@@ -24,7 +24,9 @@ back to its fixture only when its feed has never answered.
   `addTripContributionAction` / `updateTripContributionAction` /
   `deleteTripContributionAction` for the payment log and
   `setTripItemStopsAction` for a cruise's ports. `createTripShareAction`
-  takes a `memberId` to scope a link to one traveller. Every action returns
+  takes a `memberId` to scope a link to one traveller and an `expiresAt`;
+  `updateTripShareExpiryAction` resets a link's expiry, which revives an
+  expired link but never a revoked one. Every action returns
   `ActionResult<X>`; trip, item and member mutations also revalidate `/portal`
   (the dashboard travel card) through `revalidateTrip()`
 - `airports.ts` — `searchAirportsAction` → `ActionResult<Airport[]>`; the query
@@ -33,6 +35,8 @@ back to its fixture only when its feed has never answered.
 
 ## Services — `/lib/services/`
 - `travel-service.ts` — trip / item / photo / member / share CRUD,
+  `updateTripShareExpiry` (sets only `expires_at`, on a share of the owner's
+  trip that is not revoked; null when none matched),
   `addTripContribution` / `updateTripContribution` / `deleteTripContribution`,
   `buildScope` (one traveller's own view of a shared link), `toPublicItem` (a
   share link's item, field by field: costed as the planner costs it, never the
@@ -58,12 +62,14 @@ back to its fixture only when its feed has never answered.
 - `travel.ts` — `createTripSchema`, `updateTripSchema`, `tripItemBaseSchema` →
   `tripItemSchema` / `updateTripItemSchema` (both carry the `endsAfterStart`
   refinement — a backwards range makes the calendar compute a negative span),
-  `tripPhotoSchema`, `createTripShareSchema`, `tripContributionSchema` /
+  `tripPhotoSchema`, `createTripShareSchema` / `updateTripShareExpirySchema`
+  (an `expiresAt` is null or in the future), `tripContributionSchema` /
   `updateTripContributionSchema`, `setItemStopsSchema`, `setTripMembersSchema`,
   `airportQuerySchema`, `tripChildIdsSchema`. Types are `…Data`; an `…Input`
   (`z.input`) exists only where the schema defaults or coerces
   (`CreateTripInput`, `UpdateTripInput`, `TripItemInput`, `UpdateTripItemInput`,
-  `TripPhotoInput`, `CreateTripShareInput`), and that is what the actions take
+  `TripPhotoInput`, `CreateTripShareInput`, `UpdateTripShareExpiryInput`), and
+  that is what the actions take
 - `sports.ts` — `sportIdSchema` (`z.enum(SPORT_IDS)`), `setSportFavoriteSchema` / `SetSportFavoriteData`
 
 ## Types — `/types/`
@@ -96,6 +102,7 @@ back to its fixture only when its feed has never answered.
 - `components/travel/unit-arithmetic.tsx` — the "$120 / night × 3" line under
   a figure; the planner and the share page both print it from here
 - `components/travel/trip-payments.tsx` — the payment log, per traveller
+- `components/travel/share-expiry.tsx` — a share link's lifetime: `ShareExpiryField` (the create form's *Expires* select) and `ShareExpiryEditor` (the row's "Expires Jan 16" popover, *Extend* on an expired link); the maths is `lib/travel/share-expiry.ts`
 - `components/travel/category.tsx` — the one category table (icon, tint, dot,
   bar); both the itinerary and the public page read it
 - `components/travel/marquee-text.tsx` — a label that walks left on hover, but
@@ -126,7 +133,8 @@ back to its fixture only when its feed has never answered.
 - `trip_items` — activities, bookings, transport, food (optional scheduled dates)
 - `trip_photos` — gallery (uploaded or external URLs)
 - `trip_shares` — share tokens for read-only public access; `member_id` scopes
-  a link to one traveller, `show_prices` / `show_members` gate what it exposes
+  a link to one traveller, `show_prices` / `show_members` gate what it exposes,
+  `expires_at` ends it (null: until revoked)
 - `trip_members` — who is going, with an optional fixed `share_percent`
 - `trip_contributions` — money a traveller has actually handed over
 - `trip_item_stops` — a cruise's day-by-day ports
@@ -142,16 +150,19 @@ from `new Date()` and hydration-failed every evening west of UTC.
 ## Tests
 - `lib/travel/*.test.ts` — Vitest, pure: `calendar` (week packing, lane caps,
   which items really span days), `pricing`, `split`, `item-fields`, `format`,
-  `airports`, `video`
+  `airports`, `video`, `share-expiry` (each choice's instant in the reader's zone)
+- `schemas/travel.test.ts` — Vitest; backwards date ranges, airport queries, a share expiry in the past or missing
 - `lib/services/travel-service.test.ts` — Vitest, mocks `@/db`; covers the CRUD,
-  the query count for `getTripWithRelations`, the scoped-share guards and what
-  a link without prices carries (no price, payment or note)
-- `app/actions/travel.test.ts` — Vitest; covers zod rejection, auth failure and
-  the audit metadata a share records
+  the query count for `getTripWithRelations`, the scoped-share guards, what
+  a link without prices carries (no price, payment or note) and the expiry
+  update's WHERE (this trip, not revoked)
+- `app/actions/travel.test.ts` — Vitest; covers zod rejection, auth failure,
+  the audit metadata a share records, and the expiry update (past dates,
+  ownership, revoked links)
 - `components/travel/*.test.tsx` — Vitest + jsdom; the itinerary, the calendar
   (both versions), the payment log, the traveller bar, the marquee, the share
-  bar's sign-in, the unit arithmetic, and the public page (its client
-  calendar's props, its figures)
+  bar's sign-in, the unit arithmetic, the public page (its client calendar's
+  props, its figures) and the share panel's expiry (default, zone, change, extend)
 - `e2e/trip-lifecycle.spec.ts` — Playwright, real Supabase user
 - `e2e/trip-share-links.spec.ts` — Playwright; opens both kinds of share link in
   a browser with no session, which is the only place the server/client boundary
@@ -565,7 +576,8 @@ from `new Date()` and hydration-failed every evening west of UTC.
 - Conventional Commits scopes: `travel`, `sports`, `entertainment`
 - `/app/trips/[token]` is **public** — verify no PII leaks through the shared route. The share token model in `trip_shares` is the only authz check.
 - **Travel formatting helpers live in [`lib/travel/format.ts`](../../lib/travel/format.ts)** (`parseTripDate`, `formatDateRange`, `tripDays`, `tripDurationLabel`, `formatTripMoney`) — a server-safe module with no `"use client"`. They were previously duplicated per component and exported from the client `trip-detail.tsx`; importing that from the server-rendered `public-trip-view.tsx` turned them into client references and **500'd every public share link**. Never re-export shared helpers from a client module.
-- `getPublicTripByToken` is wrapped in `React.cache()` (like `getTripWithRelations`) so `generateMetadata` + page body share one DB hit. The share panel treats **expired** links as inactive (same as revoked — the public resolver rejects both).
+- `getPublicTripByToken` is wrapped in `React.cache()` (like `getTripWithRelations`) so `generateMetadata` + page body share one DB hit. The share panel treats **expired** links as inactive (same as revoked — the public resolver rejects both); an expired link that was never revoked can be *Extended* back to life, a revoked one cannot.
+- **The owner picks how long a share link lives** — *Until the trip ends*, 1 / 7 / 30 days, a day from the calendar, or *Never* — when it is made and later from its row. A trip with an end date starts on *Until the trip ends*: the last millisecond of its last day in the **reader's** zone (`endOfDayInTimeZone` with `useReaderTimeZone()`), because UTC midnight would end a Costa Rican trip at 6 pm on its final day. An open-ended or finished trip starts on *Never*, which is what every link did before. A preset counts 24-hour days from the click. Whatever the choice, `expires_at` stores one instant, so editing the trip's dates afterwards does not move a link's expiry. The schema refuses an expiry in the past, and the server compares instants only, so no server-side day ever meets the browser's.
 - Itinerary/gallery/calendar hover-revealed controls are always visible below `sm` (no hover on touch) and reveal on keyboard focus.
 - All trip cover photos and gallery thumbnails render through `next/image` (remote hosts whitelisted in [`next.config.ts`](../../next.config.ts)). The blob-URL preview inside `photo-picker.tsx` stays as a CSS background because the optimizer can't process blob URLs.
 - `getTripWithRelations` is wrapped in `React.cache()` so `generateMetadata` and the page body share one DB hit per request.

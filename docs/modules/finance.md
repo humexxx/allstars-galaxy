@@ -1,7 +1,7 @@
 # Finance
 
 > **Status:** Active
-> **Last reviewed:** 2026-09-30
+> **Last reviewed:** 2026-10-18
 
 ## Overview
 Personal financial planning: users build *plans* (scenarios) with incomes,
@@ -28,15 +28,16 @@ calibrated. Health scoring and scenario comparison are part of this module.
 ## Pure finance maths — `/lib/finance/`
 - `projection.ts` — the engine: `projectPlan`, `projectStateAt` (THE "today" figure), `compareDebtStrategies`, `deriveFinanceMood`. Client-safe, so the editor and the server run the same maths
 - `schedule.ts` — `planOccurrences`: every dated occurrence of a plan's lines with overrides applied (skip / amount / reschedule, including moves into another month or period). The engine, the today figure, the sidebar breakdowns and the calendar all read it. `RESCHEDULE_MARGIN_MONTHS` / `rescheduleWithinReach` bound how far one occurrence may move; `monthYearOfKey` turns an occurrence's cadence month into its override key
+- `receivables.ts` — `owedRepayments` (every repayment of an income marked `owedToMe`, walked to its own end date, past the horizon if need be) and `owedAfter` (what is still owed once a day is over). The engine adds it to net worth as `receivables` on every period close and on the today figure
 - `opening-balances.ts` — `changesOpeningBalances` (does an edit change any opening balance, at cent precision) and `restateOpeningSet` (the set restated as of today)
 - `period.ts` — accounting-period helpers (unchanged)
-- `chart-series.ts` — `buildPlanTimeline` / `buildChartSeries` (real past as period closes + projection), `alignTodayPoint`, `buildCompareRows` (compare chart, joined by calendar month), `milestoneCrossings`, and the one debt-free definition (`debtFreeMonthsFromNow`, `describeDebtFree`, `formatDebtFree`, `summaryDebtFree`)
+- `chart-series.ts` — `buildPlanTimeline` / `buildChartSeries` (real past as period closes + projection), `alignTodayPoint`, `buildCompareRows` (compare chart, joined by calendar month), `milestoneCrossings`, and the one debt-free definition (`debtFreeMonthsFromNow`, `describeDebtFree`, `formatDebtFree`, `formatDebtFreeMonth`, `summaryDebtFree`)
 - `scenario.ts` — `compareScenario` (scenario vs base at a shared period; payoff compared as dates)
 - `dashboard.ts` — `buildDashboardFigures` for the dashboard card
 - `debt-payments.ts` — `projectedDebtPayments` / `debtChipAmount`: the calendar's debt chips read the payments the projection made
 - `table-rows.ts` — `densify` (first 12 rows + real Decembers)
 - `milestones.ts` — default milestone list
-- Shared, outside the module: `lib/utils/date.ts` (`todayInTimeZone`, `calendarDayInTimeZone`, `earliestCalendarDay`, `TIME_ZONE_COOKIE`), `lib/utils/request-today.ts` (server: `getRequestToday` / `getRequestTimeZone` from the `tz` cookie), `hooks/use-time-zone-cookie.ts` (written by `AppHeader`), `lib/utils/format.ts` (`roundCents`, `moneySign`, `CENTS_EPSILON`)
+- Shared, outside the module: `lib/utils/date.ts` (`todayInTimeZone`, `calendarDayInTimeZone`, `earliestCalendarDay`, `TIME_ZONE_COOKIE`), `lib/utils/request-today.ts` (server: `getRequestToday` / `getRequestTimeZone` from the `tz` cookie), `hooks/use-time-zone-cookie.ts` (written by `AppHeader`), `lib/utils/format.ts` (`roundCents`, `moneySign`, `CENTS_EPSILON`), `lib/utils/chart-axis.ts` (`niceTicks` / `yAxisWidth`: the Y ticks recharts would draw, passed in so the plan and dashboard charts size their axis to the labels)
 
 ## Schemas — `/schemas/`
 - `finance.ts` — includes `planColorSchema` (colour-only update; restricted to a
@@ -44,6 +45,7 @@ calibrated. Health scoring and scenario comparison are part of this module.
   `style` attribute and an SVG `stroke`)
 - `finance.ts`: `initialSavings` may be negative (a restated overdraft); `lineOverrideSchema` accepts a reschedule date in another month, up to `RESCHEDULE_MARGIN_MONTHS` (2) either side of the override's `monthYear`
 - `finance.ts` also exports `recurrenceTypeSchema`, `planNameSchema`, `cloneFinancePlanSchema` / `CloneFinancePlanData`. Types are `…Data`; `…Input` (`z.input`) only for the schemas with defaults (create/update plan, income, expense, debt)
+- `finance.ts`: income lines take `owedToMe` (default `false`); a recurring one needs an `endDate`, or the amount owed would never stop
 - `finance-snapshot.ts` — `financeSnapshotSourceSchema`
 - `finance-confirmations.ts` — `confirmationSchema` / `ConfirmationData` (monthly actuals payload; shared by the action and `finance-confirmation-service`)
 
@@ -103,7 +105,7 @@ gated on the `showContextAvatar` preference — see [Settings](./settings.md).
 
 ## DB tables — `db/schema.ts`
 - `finance_plans` — user's financial scenarios. `balances_as_of` (date, nullable; migration `0052_faithful_hiroim`) is the calendar day the opening balances were last set on; the same migration dropped `finance_plans_initial_savings_chk` so a restated overdraft can be stored
-- `finance_plan_incomes` — income line items
+- `finance_plan_incomes` — income line items. `owed_to_me` (boolean, default false; migration `0054_superb_smasher`) marks someone paying back money they owe the user
 - `finance_plan_expenses` — expense line items
 - `finance_plan_debts` — tracked debts within a plan
 - `finance_plan_snapshots` — historical plan position snapshots
@@ -113,6 +115,7 @@ gated on the `showContextAvatar` preference — see [Settings](./settings.md).
 
 ## Notes
 - Conventional Commits scope: `finance`
+- **Money owed to you counts in net worth before it lands.** An income marked *Owed to you* is a receivable: every repayment still to come is added to `netWorth` (`receivables` on `ProjectionMonth` / `TodayState`), and when one lands it becomes cash while the receivable drops by the same amount, so net worth does not move. Snapshots store net worth WITHOUT receivables and `getRecentMonthlySnapshots` adds them back from the plan's current lines, so history and forecast always count them the same way, including snapshots taken before the flag existed.
 - **Logic audit (2026-09-11).** The confirmation dialog is mounted only while open, and `confirmedSavings` accepts a negative figure (deficits are carried; the DB check was dropped in migration 0051). The anchored calendar converts `periodRangeFor`'s UTC bounds to local days and opens on today's period; a "Move all" drop turns the line into a `monthly_day` rule. Period-0 snapshots include the portfolio and snapshots grow it at the weighted ROI. Confirming, creating and deleting plans revalidate `/portal`. (Superseded in places by the 2026-09-29 calculation audit below.)
 - Cron job `/api/cron/daily` may write snapshots into this module — keep in sync with [Portfolio](./portfolio.md).
 - All actions wrap their handler in `safe()` from `@/lib/actions/safe` so service errors translate to `{ success: false, error: "Action failed" }` for the client.

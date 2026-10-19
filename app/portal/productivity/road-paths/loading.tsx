@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 export default function RoadPathsLoading() {
   return (
     <>
-      <PageHeaderSkeleton actions={1} descriptionWidth="w-72" />
+      <PageHeaderSkeleton actions={1} description={false} />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
         {Array.from({ length: 3 }).map((_, i) => (
           <Card key={i}>

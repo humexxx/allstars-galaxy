@@ -129,6 +129,7 @@ function buildProjectionMonth(
     investmentsInterest: 0,
     totalDebt: 0,
     portfolioValue: 0,
+    receivables: 0,
     netWorth: 17000,
     preAsOfCashFlow: 0,
     debts: [],
@@ -260,6 +261,24 @@ describe("createConfirmationSnapshot", () => {
     // Confirmation snapshots NEVER consult the idempotency lookup — there
     // should be no select calls (no ownership check either, by design).
     expect(selectImpl).not.toHaveBeenCalled();
+  });
+
+  it("stores net worth without money owed to the user, which is added on read", async () => {
+    getPlanWithLinesMock.mockResolvedValueOnce(
+      buildPlan({ startMonth: new Date(Date.UTC(2026, 0, 1)) })
+    );
+    projectPlanMock.mockReturnValueOnce({
+      months: [
+        buildProjectionMonth({ savings: 100, investments: 200, totalDebt: 50, receivables: 4000, netWorth: 4250 }),
+        buildProjectionMonth({ monthOffset: 1 }),
+      ],
+    });
+    const insertChain = makeInsertChain();
+    insertImpl.mockReturnValueOnce(insertChain);
+
+    await createConfirmationSnapshot(PLAN_ID, USER_ID, new Date(Date.UTC(2026, 1, 15)));
+
+    expect(insertChain.values.mock.calls[0][0]).toMatchObject({ netWorth: "250.00" });
   });
 
   it("writes a per-debt breakdown child row for each debt in the state", async () => {
@@ -582,6 +601,50 @@ describe("getRecentMonthlySnapshots", () => {
     expect(result[1].investments).toBe(400);
     expect(result[1].totalDebt).toBe(50);
     expect(result[1].netWorth).toBe(650);
+  });
+
+  it("adds what is still owed to the user on each snapshot's day", async () => {
+    mockOwnershipOk();
+    getPlanWithLinesMock.mockResolvedValueOnce(
+      buildPlan({
+        incomes: [
+          {
+            id: "father",
+            name: "Padre",
+            monthlyAmount: "4000",
+            kind: "one_time",
+            owedToMe: true,
+            dayOfMonth: null,
+            date: "2026-11-30",
+            startDate: null,
+            endDate: null,
+            recurrenceType: "monthly_day",
+            weekOfMonth: null,
+            dayOfWeek: null,
+            intervalMonths: null,
+            recurrenceStart: null,
+          },
+        ] as never,
+      })
+    );
+    const oct5 = new Date(Date.UTC(2026, 9, 5));
+    const dec5 = new Date(Date.UTC(2026, 11, 5));
+    selectImpl.mockReturnValueOnce(
+      makeSelectChain([
+        // Rows store cash net worth; the repayment landed in between.
+        { date: dec5, savings: "4100", investments: "0", totalDebt: "0", netWorth: "4100" },
+        { date: oct5, savings: "100", investments: "0", totalDebt: "0", netWorth: "100" },
+      ])
+    );
+
+    const result = await getRecentMonthlySnapshots(
+      PLAN_ID,
+      USER_ID,
+      6,
+      new Date(Date.UTC(2026, 11, 15))
+    );
+
+    expect(result.map((r) => r.netWorth)).toEqual([4100, 4100]);
   });
 
   it("buckets by accounting PERIOD (anchorDay) so straddling snapshots collapse per period", async () => {

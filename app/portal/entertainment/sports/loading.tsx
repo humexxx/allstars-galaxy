@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 export default function SportsLoading() {
   return (
     <>
-      <PageHeaderSkeleton actions={1} descriptionWidth="w-full max-w-2xl" />
+      <PageHeaderSkeleton actions={1} description={false} />
       <div className="flex flex-col gap-6" aria-hidden="true">
         <div className="flex gap-2 overflow-hidden">
           {Array.from({ length: 8 }).map((_, i) => (

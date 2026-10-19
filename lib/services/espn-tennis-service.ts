@@ -1,17 +1,25 @@
 import "server-only";
 
+import { TENNIS_DATA } from "@/lib/data/sports/tennis";
 import type {
   BracketMatch,
   BracketRound,
   BracketRoundId,
-  RacquetTour,
+  PlayerRanking,
+  RacquetData,
   RacquetTournament,
   Team,
+  TennisData,
 } from "@/types/sports";
-import { upstreamSignal } from "./upstream";
+import { cachedFeed, upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/tennis";
-export const REVALIDATE_SECONDS = 300;
+const REVALIDATE_SECONDS = 300;
+const RANKING_LIMIT = 20;
+/** Two weeks either side: what just finished, what is on, what is next. */
+const CALENDAR_DAYS = 14;
+
+type EspnTour = "atp" | "wta";
 
 type EspnAthlete = {
   id?: string;
@@ -31,7 +39,7 @@ type EspnCompetitor = {
 type EspnCompetition = {
   id: string;
   date?: string;
-  status?: { type?: { completed?: boolean; description?: string } };
+  status?: { type?: { state?: "pre" | "in" | "post"; completed?: boolean } };
   round?: { displayName?: string };
   competitors?: EspnCompetitor[];
 };
@@ -46,19 +54,34 @@ type EspnEvent = {
   name?: string;
   date?: string;
   endDate?: string;
-  venue?: { fullName?: string; address?: { city?: string } };
-  status?: { type?: { completed?: boolean; description?: string } };
+  venue?: { displayName?: string; fullName?: string; address?: { city?: string } };
   groupings?: EspnGrouping[];
 };
 
-type EspnScoreboard = { events?: EspnEvent[] };
+type EspnScoreboard = {
+  events?: EspnEvent[];
+  leagues?: Array<{ season?: { year?: number } }>;
+};
+
+type EspnRank = {
+  current?: number;
+  previous?: number;
+  points?: number;
+  athlete?: {
+    displayName?: string;
+    shortname?: string;
+    flagAltText?: string;
+    citizenshipCountry?: string;
+  };
+};
+
+type EspnRankings = { rankings?: Array<{ ranks?: EspnRank[] }> };
 
 /**
  * ESPN's round names, mapped onto the ids the bracket already knows.
  *
- * Only the rounds a reader follows: a 128-draw's opening rounds are 64 ties
- * of players nobody has heard of, and the qualifying rounds are not the
- * tournament. Anything unmapped is dropped.
+ * Only the main draw: qualifying is not the tournament. Anything unmapped is
+ * dropped.
  */
 const ROUND_IDS: Record<string, BracketRoundId> = {
   "Round 1": "round-of-128",
@@ -80,23 +103,26 @@ const ROUND_LABELS: Record<string, string> = {
   Final: "Final",
 };
 
-/** ESPN gives a country name; the draw wants a flag. */
+/** ESPN gives a country name; the draw and the rankings want a flag. */
 const FLAGS: Record<string, string> = {
-  Argentina: "🇦🇷", Australia: "🇦🇺", Austria: "🇦🇹", Belgium: "🇧🇪",
-  Brazil: "🇧🇷", Bulgaria: "🇧🇬", Canada: "🇨🇦", Chile: "🇨🇱",
-  China: "🇨🇳", Croatia: "🇭🇷", Czechia: "🇨🇿", Denmark: "🇩🇰",
-  Finland: "🇫🇮", France: "🇫🇷", Germany: "🇩🇪", "Great Britain": "🇬🇧",
-  Greece: "🇬🇷", "Hong Kong": "🇭🇰", Hungary: "🇭🇺", India: "🇮🇳",
+  Argentina: "🇦🇷", Armenia: "🇦🇲", Australia: "🇦🇺", Austria: "🇦🇹",
+  Belarus: "🇧🇾", Belgium: "🇧🇪", Bolivia: "🇧🇴",
+  "Bosnia and Herzegovina": "🇧🇦", Brazil: "🇧🇷", Bulgaria: "🇧🇬",
+  Canada: "🇨🇦", Chile: "🇨🇱", China: "🇨🇳", "China PR": "🇨🇳",
+  "Chinese Taipei": "🇹🇼", Colombia: "🇨🇴", Croatia: "🇭🇷", Cyprus: "🇨🇾",
+  Czechia: "🇨🇿", Denmark: "🇩🇰", Ecuador: "🇪🇨", Egypt: "🇪🇬",
+  Estonia: "🇪🇪", Finland: "🇫🇮", France: "🇫🇷", Georgia: "🇬🇪",
+  Germany: "🇩🇪", "Great Britain": "🇬🇧", Greece: "🇬🇷", "Hong Kong": "🇭🇰",
+  Hungary: "🇭🇺", India: "🇮🇳", Indonesia: "🇮🇩", Israel: "🇮🇱",
   Italy: "🇮🇹", Japan: "🇯🇵", Kazakhstan: "🇰🇿", Latvia: "🇱🇻",
-  Monaco: "🇲🇨", Netherlands: "🇳🇱", Norway: "🇳🇴", Poland: "🇵🇱",
-  Portugal: "🇵🇹", Romania: "🇷🇴", Russia: "🇷🇺", Serbia: "🇷🇸",
-  Slovakia: "🇸🇰", Slovenia: "🇸🇮", "South Africa": "🇿🇦", Spain: "🇪🇸",
-  Sweden: "🇸🇪", Switzerland: "🇨🇭", Taiwan: "🇹🇼", Tunisia: "🇹🇳",
-  Ukraine: "🇺🇦", USA: "🇺🇸", Uruguay: "🇺🇾", Belarus: "🇧🇾",
-  Bolivia: "🇧🇴", Colombia: "🇨🇴", Ecuador: "🇪🇨", Egypt: "🇪🇬",
-  Estonia: "🇪🇪", Georgia: "🇬🇪", Israel: "🇮🇱", Lithuania: "🇱🇹",
-  Mexico: "🇲🇽", Moldova: "🇲🇩", "New Zealand": "🇳🇿", Peru: "🇵🇪",
-  Philippines: "🇵🇭", Turkey: "🇹🇷", Venezuela: "🇻🇪",
+  Lithuania: "🇱🇹", Mexico: "🇲🇽", Moldova: "🇲🇩", Monaco: "🇲🇨",
+  Netherlands: "🇳🇱", "New Zealand": "🇳🇿", Norway: "🇳🇴", Paraguay: "🇵🇾",
+  Peru: "🇵🇪", Philippines: "🇵🇭", Poland: "🇵🇱", Portugal: "🇵🇹",
+  Romania: "🇷🇴", Russia: "🇷🇺", Serbia: "🇷🇸", Slovakia: "🇸🇰",
+  Slovenia: "🇸🇮", "South Africa": "🇿🇦", Spain: "🇪🇸", Sweden: "🇸🇪",
+  Switzerland: "🇨🇭", Taiwan: "🇹🇼", Thailand: "🇹🇭", Tunisia: "🇹🇳",
+  Turkey: "🇹🇷", Türkiye: "🇹🇷", Ukraine: "🇺🇦", USA: "🇺🇸",
+  Uruguay: "🇺🇾", Uzbekistan: "🇺🇿", Venezuela: "🇻🇪",
 };
 
 function playerFrom(c: EspnCompetitor): Team | null {
@@ -150,19 +176,81 @@ function matchFrom(c: EspnCompetition): { match: BracketMatch; players: Team[] }
   };
 }
 
+/**
+ * Where the tournament is in its draw, read off the matches themselves.
+ *
+ * Not the event's own `status`: ESPN reported Ningbo as completed with 27 of
+ * its 45 matches still to play. Qualifying counts — the tournament is on once
+ * its week has started. Without per-match states, the dates decide.
+ */
+function statusOf(
+  event: EspnEvent,
+  competitions: EspnCompetition[],
+  now: number
+): RacquetTournament["status"] {
+  const states = competitions
+    .map((c) => c.status?.type?.state)
+    .filter((s): s is "pre" | "in" | "post" => Boolean(s));
+  if (states.length > 0) {
+    if (states.every((s) => s === "post")) return "completed";
+    return states.some((s) => s !== "pre") ? "live" : "upcoming";
+  }
+  const start = Date.parse(event.date ?? "");
+  const end = Date.parse(event.endDate ?? "");
+  if (!Number.isNaN(end) && end < now) return "completed";
+  if (!Number.isNaN(start) && start > now) return "upcoming";
+  return "live";
+}
+
+/** "Tokyo, Japan" → "Tokyo". */
+function locationOf(event: EspnEvent): string {
+  const place =
+    event.venue?.displayName ?? event.venue?.address?.city ?? event.venue?.fullName;
+  return place?.split(",")[0]?.trim() || "—";
+}
+
+/** Champion and runner-up, once the final has been played. */
+function finalistsOf(
+  competitions: EspnCompetition[]
+): Pick<RacquetTournament, "champion" | "runnerUp"> {
+  const final = competitions.find((c) => c.round?.displayName === "Final");
+  if (final?.status?.type?.state !== "post") return {};
+  const winner = final.competitors?.find((c) => c.winner);
+  const loser = final.competitors?.find((c) => c !== winner);
+  const name = (c?: EspnCompetitor) => c?.athlete?.shortName ?? c?.athlete?.displayName;
+  return winner ? { champion: name(winner), runnerUp: name(loser) } : {};
+}
+
 export type EspnDraw = {
   tournament: RacquetTournament;
   players: Team[];
 };
 
-function drawFrom(event: EspnEvent, slug: string): EspnDraw | null {
-  const grouping = event.groupings?.find((g) => g.grouping?.slug === slug);
-  if (!grouping?.competitions?.length) return null;
+/**
+ * One tournament of a tour, with its main draw when there is one to show.
+ *
+ * Returns null for an event the tour has no singles draw in — ESPN lists the
+ * same city twice when it hosts two events in one week.
+ */
+/**
+ * A slot ESPN cancelled: "post" but never completed, TBD against TBD. Basel
+ * carried three of them beside its real quarter-finals, which added empty
+ * ties to the draw and read the tournament as under way a week early.
+ * Walkovers and retirements are completed, so they stay.
+ */
+function isCancelled(c: EspnCompetition): boolean {
+  return c.status?.type?.state === "post" && c.status.type.completed === false;
+}
 
+function tournamentFrom(event: EspnEvent, slug: string, now = Date.now()): EspnDraw | null {
+  const grouping = event.groupings?.find((g) => g.grouping?.slug === slug);
+  const competitions = (grouping?.competitions ?? []).filter((c) => !isCancelled(c));
+  if (competitions.length === 0) return null;
+
+  const mainDraw = competitions.filter((c) => ROUND_IDS[c.round?.displayName ?? ""]);
   const byRound = new Map<string, EspnCompetition[]>();
-  for (const c of grouping.competitions) {
+  for (const c of mainDraw) {
     const name = c.round?.displayName ?? "";
-    if (!ROUND_IDS[name]) continue;
     byRound.set(name, [...(byRound.get(name) ?? []), c]);
   }
 
@@ -182,54 +270,136 @@ function drawFrom(event: EspnEvent, slug: string): EspnDraw | null {
       rounds.push({ id: ROUND_IDS[name], label: ROUND_LABELS[name] ?? name, matches });
     }
   }
-  if (rounds.length === 0) return null;
 
-  const completed = event.status?.type?.completed === true;
-  const startsAt = event.date ? new Date(event.date).getTime() : NaN;
-  const notStarted = !Number.isNaN(startsAt) && startsAt > Date.now();
   return {
     tournament: {
       id: `espn-${event.id}-${slug}`,
       name: event.name ?? "Tournament",
-      location: event.venue?.address?.city ?? event.venue?.fullName ?? "—",
+      location: locationOf(event),
       startDate: (event.date ?? "").slice(0, 10),
       endDate: (event.endDate ?? event.date ?? "").slice(0, 10),
-      status: completed ? "completed" : notStarted ? "upcoming" : "live",
-      bracket: rounds,
+      status: statusOf(event, competitions, now),
+      ...finalistsOf(competitions),
+      bracket: rounds.length > 0 ? rounds : undefined,
     },
     players: [...players.values()],
   };
 }
 
-async function fetchScoreboard(tour: "atp" | "wta"): Promise<EspnScoreboard> {
-  const res = await fetch(`${BASE_URL}/${tour}/scoreboard`, {
-    signal: upstreamSignal(),
-    next: { revalidate: REVALIDATE_SECONDS },
-  });
-  if (!res.ok) throw new Error(`espn tennis ${res.status} for ${tour}`);
-  return (await res.json()) as EspnScoreboard;
+function rankingFrom(rank: EspnRank): PlayerRanking | null {
+  const athlete = rank.athlete;
+  const name = athlete?.displayName;
+  if (!name || !rank.current) return null;
+  return {
+    position: rank.current,
+    name,
+    shortName: athlete?.shortname ?? name,
+    countryCode: athlete?.citizenshipCountry ?? "",
+    flagEmoji: FLAGS[athlete?.flagAltText ?? ""] ?? "",
+    points: rank.points ?? 0,
+    movement: rank.previous ? rank.previous - rank.current : 0,
+  };
 }
 
 /**
- * The draw of whatever tournament is on, from ESPN's public scoreboard.
+ * A tour's calendar, draws and rankings.
  *
- * No key and no signup — the same endpoint espn.com itself reads. Returns null
- * rather than throwing so a tour without a live event just has no draw.
+ * Tournaments run in date order; on the same day the bigger draw goes first,
+ * so the dashboard's "first live event" is the Masters rather than the 250
+ * that happens to share its week.
  */
-export async function getEspnDraw(tour: RacquetTour): Promise<EspnDraw | null> {
-  const endpoint = tour === "atp" ? "atp" : tour === "wta" ? "wta" : null;
-  if (!endpoint) return null;
-  try {
-    const board = await fetchScoreboard(endpoint);
-    const event = board.events?.[0];
-    if (!event) return null;
-    const slug = endpoint === "atp" ? "mens-singles" : "womens-singles";
-    return drawFrom(event, slug);
-  } catch (error) {
-    console.warn(`espn tennis draw unavailable for ${tour}:`, error);
-    return null;
+function tourFrom(
+  tour: EspnTour,
+  board: EspnScoreboard,
+  rankings: EspnRankings,
+  now = Date.now()
+): RacquetData {
+  const slug = tour === "atp" ? "mens-singles" : "womens-singles";
+  const players = new Map<string, Team>();
+  const entries: Array<{ tournament: RacquetTournament; size: number }> = [];
+  for (const event of board.events ?? []) {
+    const mapped = tournamentFrom(event, slug, now);
+    if (!mapped) continue;
+    for (const p of mapped.players) players.set(p.id, p);
+    const size = mapped.tournament.bracket?.reduce((n, r) => n + r.matches.length, 0) ?? 0;
+    entries.push({ tournament: mapped.tournament, size });
   }
+  entries.sort(
+    (a, b) =>
+      a.tournament.startDate.localeCompare(b.tournament.startDate) || b.size - a.size
+  );
+
+  return {
+    tour,
+    season: board.leagues?.[0]?.season?.year ?? new Date(now).getFullYear(),
+    rankings: (rankings.rankings?.[0]?.ranks ?? [])
+      .map(rankingFrom)
+      .filter((r): r is PlayerRanking => r !== null)
+      .slice(0, RANKING_LIMIT),
+    tournaments: entries.map((e) => e.tournament),
+    drawPlayers: [...players.values()],
+  };
 }
 
+function yyyymmdd(date: Date): string {
+  return date.toISOString().slice(0, 10).replace(/-/g, "");
+}
+
+function calendarRange(now: Date): string {
+  const from = new Date(now);
+  from.setUTCDate(from.getUTCDate() - CALENDAR_DAYS);
+  const to = new Date(now);
+  to.setUTCDate(to.getUTCDate() + CALENDAR_DAYS);
+  return `${yyyymmdd(from)}-${yyyymmdd(to)}`;
+}
+
+async function fetchEspn<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, { signal: upstreamSignal() });
+  if (!res.ok) throw new Error(`espn tennis ${res.status} on ${path}`);
+  return (await res.json()) as T;
+}
+
+/**
+ * Both tours from ESPN's public API — the same endpoints espn.com reads, no key.
+ *
+ * It replaced TheSportsDB, whose free key "3" was switched off: every call
+ * answered 403, so the calendar fell back to the fixture and October showed
+ * Roland Garros as live. ESPN also publishes the rankings, which were a
+ * fixture all along. Four calls: one scoreboard over a date range and one
+ * rankings table per tour.
+ */
+async function fetchTennisFromApi(): Promise<TennisData> {
+  const now = new Date();
+  const range = calendarRange(now);
+  const [atpBoard, atpRankings, wtaBoard, wtaRankings] = await Promise.all([
+    fetchEspn<EspnScoreboard>(`/atp/scoreboard?dates=${range}`),
+    fetchEspn<EspnRankings>(`/atp/rankings`),
+    fetchEspn<EspnScoreboard>(`/wta/scoreboard?dates=${range}`),
+    fetchEspn<EspnRankings>(`/wta/rankings`),
+  ]);
+  const atp = tourFrom("atp", atpBoard, atpRankings, now.getTime());
+  const wta = tourFrom("wta", wtaBoard, wtaRankings, now.getTime());
+  if (atp.rankings.length === 0 && wta.rankings.length === 0) {
+    throw new Error("espn tennis returned no rankings");
+  }
+  return { atp, wta };
+}
+
+export const getTennisData = cachedFeed(
+  "espn tennis",
+  fetchTennisFromApi,
+  () => TENNIS_DATA,
+  ["espn:tennis-data"],
+  { revalidate: REVALIDATE_SECONDS, tags: ["sports:tennis"] }
+);
+
 /** Pure mappers, exported for their tests — nothing here touches the network. */
-export const __testing = { drawFrom, matchFrom, playerFrom, ROUND_IDS };
+export const __testing = {
+  tournamentFrom,
+  matchFrom,
+  playerFrom,
+  rankingFrom,
+  tourFrom,
+  calendarRange,
+  ROUND_IDS,
+};

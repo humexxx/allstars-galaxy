@@ -78,7 +78,7 @@ export function LolView({ data }: LolViewProps) {
             <SelectContent>
               {data.splits.map((s) => (
                 <SelectItem key={s.region} value={s.region}>
-                  {s.region.toUpperCase()} — {s.name}
+                  {s.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -87,7 +87,10 @@ export function LolView({ data }: LolViewProps) {
         tabs={
           <TabsList>
             <TabsTrigger value="matches">Matches</TabsTrigger>
-            <TabsTrigger value="standings">Standings</TabsTrigger>
+            {/* Worlds' Swiss stage publishes no table until it is played. */}
+            {split.standings.length > 0 && (
+              <TabsTrigger value="standings">Standings</TabsTrigger>
+            )}
             {playoffs && <TabsTrigger value="playoffs">Playoffs</TabsTrigger>}
           </TabsList>
         }
@@ -100,9 +103,11 @@ export function LolView({ data }: LolViewProps) {
           </div>
         </TabsContent>
 
-        <TabsContent value="standings">
-          <LolStandings split={split} teamsMap={teamsMap} />
-        </TabsContent>
+        {split.standings.length > 0 && (
+          <TabsContent value="standings">
+            <LolStandings split={split} teamsMap={teamsMap} />
+          </TabsContent>
+        )}
 
         {playoffs && (
           <TabsContent value="playoffs">

@@ -406,3 +406,57 @@ describe("period 0 never starts before the plan's start date (anchor > 1)", () =
     expect(jan.savings).toBe(1100);
   });
 });
+
+describe("money owed to you", () => {
+  it("counts a repayment in net worth from the start, so its landing moves nothing", () => {
+    const p = plan({ startMonth: U(2026, 1), monthsAhead: 6 });
+    const repayment = inc({ kind: "one_time", monthlyAmount: "1000", date: "2026-03-15", owedToMe: true });
+    const owed = projectPlan(p, [repayment], [], []);
+    const plain = projectPlan(p, [{ ...repayment, owedToMe: false }], [], []);
+
+    // Before it lands: the same cash, plus what is owed.
+    expect(owed.months[0].receivables).toBe(1000);
+    expect(owed.months[0].netWorth).toBe(plain.months[0].netWorth + 1000);
+    // The month it lands it becomes cash, and net worth stays put throughout.
+    expect(owed.months[2].receivables).toBe(0);
+    expect(owed.months[2].savings).toBe(1000);
+    expect(owed.months.map((m) => m.netWorth)).toEqual([1000, 1000, 1000, 1000, 1000, 1000]);
+    expect(owed.endingNetWorth).toBe(1000);
+  });
+
+  it("counts repayments due after the horizon", () => {
+    const p = plan({ startMonth: U(2026, 1), monthsAhead: 12 });
+    const repayment = inc({ kind: "one_time", monthlyAmount: "25642", date: "2030-08-15", owedToMe: true });
+    const projection = projectPlan(p, [repayment], [], []);
+
+    expect(projection.months.at(-1)!.receivables).toBe(25642);
+    expect(projection.endingNetWorth).toBe(25642);
+  });
+
+  it("puts what is still owed into today's position", () => {
+    const p = plan({ startMonth: U(2026, 1), monthsAhead: 12 });
+    const incomes = [
+      inc({ kind: "one_time", monthlyAmount: "4000", date: "2026-03-01", owedToMe: true }),
+      inc({ kind: "one_time", monthlyAmount: "600", date: "2026-05-01", owedToMe: true }),
+    ];
+    const today = projectStateAt(p, incomes, [], [], {}, U(2026, 4, 10))!;
+
+    expect(today.savings).toBe(4000);
+    expect(today.receivables).toBe(600);
+    expect(today.netWorth).toBe(4600);
+  });
+
+  it("counts everything owed from the plan's start when it hasn't started yet", () => {
+    const p = plan({ startMonth: U(2026, 6), monthsAhead: 12 });
+    const incomes = [
+      inc({ kind: "one_time", monthlyAmount: "300", date: "2026-05-20", owedToMe: true }),
+      inc({ kind: "one_time", monthlyAmount: "1000", date: "2026-07-01", owedToMe: true }),
+    ];
+    const before = projectStateAt(p, incomes, [], [], {}, U(2026, 4, 10))!;
+
+    expect(before.status).toBe("before-start");
+    // May's repayment predates the plan, so it was never the plan's to count.
+    expect(before.receivables).toBe(1000);
+    expect(before.netWorth).toBe(1000);
+  });
+});

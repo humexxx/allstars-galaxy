@@ -87,7 +87,7 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   role: userRoleEnum("role").default("user"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}).enableRLS();
 
 export const investmentMethods = pgTable(
   "investment_methods",
@@ -117,7 +117,7 @@ export const investmentMethods = pgTable(
   // "Whose methods" is the hot filter for margin, portfolio and allocation
   // reads; every other user-keyed column already carries one.
   (t) => [index("investment_methods_owner_user_id_idx").on(t.ownerUserId)]
-);
+).enableRLS();
 
 /**
  * Where an admin actually deploys the capital raised by a method, and what it
@@ -140,7 +140,7 @@ export const priceAssets = pgTable("price_assets", {
    *  which is the escape hatch for anything the provider doesn't cover. */
   source: text("source").notNull().default("coingecko"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 /**
  * Price history. Append-only: the cron inserts, nothing updates, so a bad
@@ -162,7 +162,7 @@ export const priceQuotes = pgTable(
     // Serves the "newest quote per asset" DISTINCT ON in price-service.
     index("price_quotes_asset_id_fetched_at_idx").on(t.assetId, t.fetchedAt.desc()),
   ]
-);
+).enableRLS();
 
 /**
  * A method's investment policy: what share of incoming money goes to which
@@ -191,7 +191,7 @@ export const methodAllocations = pgTable(
     index("method_allocations_method_id_idx").on(t.methodId),
     uniqueIndex("method_allocations_method_asset_uq").on(t.methodId, t.assetId),
   ]
-);
+).enableRLS();
 
 /**
  * What a single contribution actually bought, priced at the day it landed.
@@ -229,7 +229,7 @@ export const transactionAllocations = pgTable(
     index("transaction_allocations_asset_id_idx").on(t.assetId),
     uniqueIndex("transaction_allocations_tx_asset_uq").on(t.transactionId, t.assetId),
   ]
-);
+).enableRLS();
 
 /**
  * Who is going on a trip.
@@ -270,7 +270,7 @@ export const tripItemStops = pgTable(
     index("trip_item_stops_item_id_idx").on(t.itemId),
     uniqueIndex("trip_item_stops_item_day_uq").on(t.itemId, t.dayNumber),
   ]
-);
+).enableRLS();
 
 export const tripMembers = pgTable(
   "trip_members",
@@ -294,7 +294,7 @@ export const tripMembers = pgTable(
       sql`${t.sharePercent} IS NULL OR (${t.sharePercent} >= 0 AND ${t.sharePercent} <= 100)`
     ),
   ]
-);
+).enableRLS();
 
 /**
  * Who pays for ONE activity, when it is not the trip's usual split.
@@ -331,7 +331,7 @@ export const tripItemAttendees = pgTable(
     index("trip_item_attendees_item_id_idx").on(t.itemId),
     uniqueIndex("trip_item_attendees_item_member_uq").on(t.itemId, t.memberId),
   ]
-);
+).enableRLS();
 
 /** Who splits the cost. See `tripItemAttendees` for who is actually going. */
 export const tripItemPayers = pgTable(
@@ -351,7 +351,7 @@ export const tripItemPayers = pgTable(
     index("trip_item_payers_item_id_idx").on(t.itemId),
     uniqueIndex("trip_item_payers_item_member_uq").on(t.itemId, t.memberId),
   ]
-);
+).enableRLS();
 
 /**
  * Money a member has already put in.
@@ -379,7 +379,7 @@ export const tripContributions = pgTable(
     index("trip_contributions_trip_id_idx").on(t.tripId),
     check("trip_contributions_amount_chk", sql`${t.amount} >= 0`),
   ]
-);
+).enableRLS();
 
 export const portfolios = pgTable("portfolios", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -389,7 +389,7 @@ export const portfolios = pgTable("portfolios", {
     .unique(),
   name: text("name").notNull().default("My Main Portfolio"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+}).enableRLS();
 
 export const transactions = pgTable(
   "transactions",
@@ -427,7 +427,7 @@ export const transactions = pgTable(
     index("transactions_approved_by_idx").on(t.approvedBy),
     index("transactions_rejected_by_idx").on(t.rejectedBy),
   ]
-);
+).enableRLS();
 
 export const portfolioSnapshots = pgTable(
   "portfolio_snapshots",
@@ -445,14 +445,14 @@ export const portfolioSnapshots = pgTable(
     index("portfolio_snapshots_portfolio_id_idx").on(t.portfolioId),
     index("portfolio_snapshots_date_idx").on(t.date),
   ]
-);
+).enableRLS();
 
 export const appState = pgTable("app_state", {
   key: text("key").primaryKey(),
   value: text("value"),
   error: text("error"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}).enableRLS();
 
 // Finance planning: each user can have multiple plans (scenarios) to model
 // future cash flow, debt amortization and net worth.
@@ -553,7 +553,7 @@ export const financePlans = pgTable(
     check("finance_plans_auto_invest_chk", sql`${t.autoInvestPercent} >= 0 AND ${t.autoInvestPercent} <= 1`),
     check("finance_plans_confirmation_day_chk", sql`${t.confirmationDayOfMonth} >= 0 AND ${t.confirmationDayOfMonth} <= 28`),
   ]
-);
+).enableRLS();
 
 export const financePlanIncomes = pgTable(
   "finance_plan_incomes",
@@ -569,6 +569,11 @@ export const financePlanIncomes = pgTable(
       .notNull()
       .default("0"),
     kind: financePlanLineKindEnum("kind").notNull().default("recurring"),
+    // Someone paying back money they owe the user. Until each occurrence lands
+    // it is an asset, so net worth counts it from today rather than on arrival
+    // (see lib/finance/receivables.ts). A recurring one needs an end date, or
+    // the amount owed would be infinite.
+    owedToMe: boolean("owed_to_me").notNull().default(false),
     // For 'recurring': which day of the month the income hits (1..31). Used by
     // the calendar view only — the projection aggregates monthly regardless.
     dayOfMonth: integer("day_of_month"),
@@ -612,7 +617,7 @@ export const financePlanIncomes = pgTable(
       sql`${t.intervalMonths} IS NULL OR (${t.intervalMonths} >= 1 AND ${t.intervalMonths} <= 12)`
     ),
   ]
-);
+).enableRLS();
 
 export const financePlanExpenses = pgTable(
   "finance_plan_expenses",
@@ -662,7 +667,7 @@ export const financePlanExpenses = pgTable(
       sql`${t.intervalMonths} IS NULL OR (${t.intervalMonths} >= 1 AND ${t.intervalMonths} <= 12)`
     ),
   ]
-);
+).enableRLS();
 
 /**
  * Snapshot of a finance plan's projected position at a point in time. Mirrors
@@ -694,7 +699,7 @@ export const financePlanSnapshots = pgTable(
     index("finance_plan_snapshots_plan_id_idx").on(t.planId),
     index("finance_plan_snapshots_date_idx").on(t.date),
   ]
-);
+).enableRLS();
 
 /**
  * Per-debt balance breakdown for a snapshot. Mirrors
@@ -719,7 +724,7 @@ export const financePlanSnapshotDebts = pgTable(
     uniqueIndex("finance_plan_snapshot_debts_uniq").on(t.snapshotId, t.debtId),
     index("finance_plan_snapshot_debts_debt_id_idx").on(t.debtId),
   ]
-);
+).enableRLS();
 
 /**
  * User-confirmed actuals for a given month. The user is prompted on the
@@ -755,7 +760,7 @@ export const financePlanConfirmations = pgTable(
     // savings, and the auto-confirm cron records it as such.
     check("finance_plan_confirmations_investments_chk", sql`${t.confirmedInvestments} >= 0`),
   ]
-);
+).enableRLS();
 
 /**
  * Per-debt confirmed balance at confirmation time. Lets the user say
@@ -778,7 +783,7 @@ export const financePlanDebtConfirmations = pgTable(
     index("finance_plan_debt_confirmations_debt_id_idx").on(t.debtId),
     check("finance_plan_debt_confirmations_balance_chk", sql`${t.confirmedBalance} >= 0`),
   ]
-);
+).enableRLS();
 
 export const financePlanDebts = pgTable(
   "finance_plan_debts",
@@ -844,7 +849,7 @@ export const financePlanDebts = pgTable(
       sql`${t.intervalMonths} IS NULL OR (${t.intervalMonths} >= 1 AND ${t.intervalMonths} <= 12)`
     ),
   ]
-);
+).enableRLS();
 
 /**
  * Per-occurrence overrides for recurring income / expense / debt entries.
@@ -897,7 +902,7 @@ export const financePlanLineOverrides = pgTable(
       sql`(${t.action} <> 'amount') OR (${t.monthlyAmount} IS NOT NULL)`
     ),
   ]
-);
+).enableRLS();
 
 // Audit trail for mutations performed by an admin while impersonating another user.
 export const impersonationLogs = pgTable(
@@ -921,7 +926,7 @@ export const impersonationLogs = pgTable(
     index("impersonation_logs_impersonated_user_id_idx").on(t.impersonatedUserId),
     index("impersonation_logs_created_at_idx").on(t.createdAt),
   ]
-);
+).enableRLS();
 
 // Productivity Feature Tables
 export const boardColumns = pgTable(
@@ -937,7 +942,7 @@ export const boardColumns = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (t) => [index("board_columns_user_id_idx").on(t.userId)]
-);
+).enableRLS();
 
 export const boardTasks = pgTable(
   "board_tasks",
@@ -964,7 +969,7 @@ export const boardTasks = pgTable(
     index("board_tasks_column_id_idx").on(t.columnId),
     index("board_tasks_road_path_id_idx").on(t.roadPathId),
   ]
-);
+).enableRLS();
 
 export const roadPaths = pgTable(
   "road_paths",
@@ -988,7 +993,7 @@ export const roadPaths = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (t) => [index("road_paths_user_id_idx").on(t.userId)]
-);
+).enableRLS();
 
 export const roadPathMilestones = pgTable(
   "road_path_milestones",
@@ -1006,7 +1011,7 @@ export const roadPathMilestones = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (t) => [index("road_path_milestones_road_path_id_idx").on(t.roadPathId)]
-);
+).enableRLS();
 
 export const roadPathProgress = pgTable(
   "road_path_progress",
@@ -1024,7 +1029,7 @@ export const roadPathProgress = pgTable(
     index("road_path_progress_road_path_id_idx").on(t.roadPathId),
     index("road_path_progress_date_idx").on(t.date),
   ]
-);
+).enableRLS();
 
 // Relations
 export const transactionsRelations = relations(transactions, ({ one }) => ({
@@ -1116,7 +1121,7 @@ export const trips = pgTable(
     index("trips_start_date_idx").on(t.startDate),
     check("trips_date_range_chk", sql`${t.endDate} IS NULL OR ${t.endDate} >= ${t.startDate}`),
   ]
-);
+).enableRLS();
 
 // trip_items: planned activities, reservations, transport, food stops, etc.
 // Each item can carry a link (booking URL), a price, and an optional scheduled
@@ -1170,7 +1175,7 @@ export const tripItems = pgTable(
     index("trip_items_scheduled_on_idx").on(t.scheduledOn),
     check("trip_items_price_chk", sql`${t.price} IS NULL OR ${t.price} >= 0`),
   ]
-);
+).enableRLS();
 
 // trip_photos: gallery shots. Both uploaded files (Supabase Storage public URLs)
 // and external URLs land here — the `source` enum just records provenance for
@@ -1199,7 +1204,7 @@ export const tripPhotos = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("trip_photos_trip_id_idx").on(t.tripId)]
-);
+).enableRLS();
 
 // trip_shares: opaque tokens that grant read-only public access to a trip via
 // `/trips/{token}`. The invitee_email column is metadata only — we record who
@@ -1236,7 +1241,7 @@ export const tripShares = pgTable(
     uniqueIndex("trip_shares_token_uniq").on(t.token),
     index("trip_shares_trip_id_idx").on(t.tripId),
   ]
-);
+).enableRLS();
 
 export const tripsRelations = relations(trips, ({ one, many }) => ({
   user: one(users, {
@@ -1310,7 +1315,7 @@ export const f1News = pgTable(
     uniqueIndex("f1_news_article_id_uniq").on(t.articleId),
     index("f1_news_first_seen_at_idx").on(t.firstSeenAt),
   ]
-);
+).enableRLS();
 
 export type F1NewsImage = {
   url: string;
@@ -1334,7 +1339,7 @@ export const userSportsPreferences = pgTable(
     uniqueIndex("user_sports_preferences_user_sport_uniq").on(t.userId, t.sportId),
     index("user_sports_preferences_user_id_idx").on(t.userId),
   ]
-);
+).enableRLS();
 
 // Portal-wide user preferences — one row per user, created lazily on first
 // write. Absence of a row means "all defaults" (the service layer owns the
@@ -1355,4 +1360,4 @@ export const userPreferences = pgTable("user_preferences", {
   financeMilestones: jsonb("finance_milestones").$type<number[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}).enableRLS();

@@ -21,6 +21,7 @@ const projected: TodayState = {
   investments: 610,
   portfolioValue: 0,
   totalDebt: 4100,
+  receivables: 0,
   netWorth: 0,
   debts: [
     { debtId: "a", name: "A", balance: 4100 },

@@ -198,6 +198,11 @@ ad-hoc versions; this is the canonical one.
   mobile-first stat pattern from `responsive-ui`.
 - Delta line uses emerald/rose for positive/negative — never the destructive
   token (that's for irreversible actions, not "you lost money this week").
+- **Beside a chart, the rail goes vertical**: one column of figures on the
+  chart's right, the figure the chart plots first and larger. Switch it on the
+  card's width (`@container` + `@xl:`), not the viewport — the sidebar takes
+  256px from `md`. Narrower, it stacks: that figure, the chart, then the rest in
+  2 columns. See `components/finance/dashboard-finance-card.tsx`.
 
 ### 4. Featured + list hero
 
@@ -683,7 +688,7 @@ this map and link back to the relevant section above.
 
 | Module / Surface | Apply | Notes |
 |---|---|---|
-| **Portal dashboard** (`app/portal/page.tsx`) | KPI rail (§3) + Featured-list hero (§4) | Top: KPIs for total balance / net change / open plans / favorite count. Hero: featured plan or active trip; list: upcoming items |
+| **Portal dashboard** (`app/portal/page.tsx`) | KPI rail (§3) + Featured-list hero (§4) | Top: KPIs for total balance / net change / open plans / favorite count. Hero: featured plan or active trip; list: upcoming items. The finance card is the vertical rail beside its chart (§3) |
 | **Finance — Plans list** (`app/portal/plans/page.tsx`) | Data card grid (§1) | Each plan card: monthly cashflow row, debt row, savings row, footer = updated date + horizon |
 | **Finance — Plan editor** (`components/finance/plan-editor.tsx`) | KPI rail (§3) for projection summary + Sticky right rail (§5) for strategy picker + dense projection table + **Chart §10** for projection | Projection chart drops its Card chrome and uses right-side Y-axis |
 | **Finance — Compare** (`app/portal/plans/compare/page.tsx`) | Side-by-side data cards (§1) with synced row labels + Delta indicator (§7) for plan-to-plan diff | Use a CSS Grid with shared row tracks so labels align across cards |
@@ -704,7 +709,7 @@ this map and link back to the relevant section above.
       where `Card`/`Button`/`Badge`/`Separator` would do.
 - [ ] Every number is `<Mono>` + `tabular-nums`, semantic green/rose for
       direction (never `destructive` for "loss").
-- [ ] KPI rail = 2 cols mobile / 4 cols `sm+`. No 3-col grids.
+- [ ] KPI rail = 2 cols mobile / 4 cols `sm+` (or vertical beside a chart). No 3-col grids.
 - [ ] Featured-list hero stacks cleanly on `< lg` (right list moves below).
 - [ ] Sticky right rail is `top-20` and `lg+`-only; mobile flows in order
       or has a fixed bottom bar.

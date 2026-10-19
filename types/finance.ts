@@ -94,6 +94,9 @@ export type ProjectionMonth = {
   investmentsInterest: number;
   totalDebt: number;
   portfolioValue: number;
+  /** Money owed to the user and not yet repaid at period end. Part of
+   *  `netWorth` — see lib/finance/receivables.ts. */
+  receivables: number;
   netWorth: number;
   /**
    * Net cash flow dated on/before the as-of day (only in the period that
@@ -143,6 +146,8 @@ export type TodayState = {
   investments: number;
   portfolioValue: number;
   totalDebt: number;
+  /** Money owed to the user and not yet repaid on `date`. Part of `netWorth`. */
+  receivables: number;
   netWorth: number;
   debts: { debtId: string; name: string; balance: number }[];
 };

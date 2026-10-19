@@ -73,6 +73,8 @@ export type Match = {
   awayTeamId: string;
   homeScore: number | null;
   awayScore: number | null;
+  /** A shoot-out, kept out of the score itself (status "pen"). */
+  penalties?: { home: number; away: number };
   /** ISO date string, e.g. "2026-03-17T20:00:00Z". */
   kickoff: string;
   status: MatchStatus;
@@ -345,7 +347,8 @@ export type NflData = {
 
 // ---------- League of Legends ----------
 
-export type LolRegion = "lec" | "lcs" | "lck" | "lpl";
+/** The four regional leagues, plus the international events while they run. */
+export type LolRegion = "lec" | "lcs" | "lck" | "lpl" | "worlds" | "msi" | "first-stand";
 
 export type LolStanding = {
   position: number;

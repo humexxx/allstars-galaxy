@@ -1380,6 +1380,11 @@ function ProjectionPanel({
           >
             {formatCurrency(today)}
           </Mono>
+          {todayState && todayState.receivables > 0 && (
+            <Text variant="small" as="p" className="text-2xs">
+              incl. {formatCurrency(todayState.receivables)} owed to you
+            </Text>
+          )}
         </div>
         {nextPoint && next !== undefined && (
           <div>

@@ -27,6 +27,7 @@ vi.mock("@/db", () => ({
 
 import { db } from "@/db";
 import {
+  __testing,
   getDashboardSportCard,
   listUserFavoriteSportIds,
   listUserSportsFavorites,
@@ -245,5 +246,46 @@ describe("getDashboardSportCard", () => {
     expect(card.featured).toBeDefined();
     expect(card.featured?.label).toMatch(/BO[135]$/);
     expect(card.matches.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("swissRecords", () => {
+  const tie = (id: string, home: string | null, away: string | null, winner: string | null = null) => ({
+    id,
+    homeTeamId: home,
+    awayTeamId: away,
+    winnerTeamId: winner,
+    status: winner ? ("ft" as const) : ("scheduled" as const),
+  });
+
+  it("is empty until a match has been decided", () => {
+    const stage = {
+      winsToAdvance: 3,
+      lossesToExit: 3,
+      rounds: [[{ wins: 0, losses: 0, matches: [tie("1", "gen", "ig"), tie("2", "t1", "los")] }]],
+      exits: [],
+    };
+    expect(__testing.swissRecords(stage)).toEqual([]);
+  });
+
+  it("ranks every team by its record so far, best first", () => {
+    const stage = {
+      winsToAdvance: 3,
+      lossesToExit: 3,
+      rounds: [
+        [{ wins: 0, losses: 0, matches: [tie("1", "gen", "ig", "gen"), tie("2", "t1", "los", "t1")] }],
+        [
+          { wins: 1, losses: 0, matches: [tie("3", "gen", "t1", "t1")] },
+          { wins: 0, losses: 1, matches: [tie("4", "ig", "los")] },
+        ],
+      ],
+      exits: [],
+    };
+    expect(__testing.swissRecords(stage).map((r) => [r.teamId, `${r.wins}-${r.losses}`])).toEqual([
+      ["t1", "2-0"],
+      ["gen", "1-1"],
+      ["ig", "0-1"],
+      ["los", "0-1"],
+    ]);
   });
 });

@@ -39,6 +39,7 @@ import type {
   NflData,
   RacquetData,
   SportId,
+  SwissStage,
   Team,
   UserSportsPreference,
 } from "@/types/sports";
@@ -94,6 +95,8 @@ export async function setSportFavorite(
 
 /** Matches listed under a card's featured one. */
 const CARD_MATCHES = 2;
+/** The same, on a card with no table to show. */
+const CARD_MATCHES_ALONE = 5;
 /** Rows of a card's table. */
 const CARD_ROWS = 5;
 
@@ -232,26 +235,58 @@ function lolCard(base: CardBase, data: LolData): DashboardSportCard {
   // Already in display order: live, then the nearest upcoming, then the
   // latest results.
   const [first, ...rest] = split.matches.map((m) => lolCardMatch(m, teams));
+  const tables: DashboardTable[] = [];
+  if (split.standings.length > 0) {
+    tables.push({
+      id: "standings",
+      label: "Standings",
+      rows: split.standings
+        .slice(0, CARD_ROWS)
+        .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.wins}–${s.losses}`)),
+    });
+  } else if (split.swiss) {
+    const records = swissRecords(split.swiss);
+    if (records.length > 0) {
+      tables.push({
+        id: "swiss",
+        label: "Swiss stage",
+        rows: records
+          .slice(0, CARD_ROWS)
+          .map((r, i) => teamRow(i + 1, teams.get(r.teamId), r.teamId, `${r.wins}–${r.losses}`)),
+      });
+    }
+  }
   return {
     ...base,
     context: first?.label ? `${split.name} · ${first.label.split(" · ")[0]}` : split.name,
     featured: first,
-    matches: rest.slice(0, CARD_MATCHES),
-    tables:
-      split.standings.length > 0
-        ? [
-            {
-              id: "standings",
-              label: "Standings",
-              rows: split.standings
-                .slice(0, CARD_ROWS)
-                .map((s) =>
-                  teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.wins}–${s.losses}`)
-                ),
-            },
-          ]
-        : [],
+    // With no table to show, the matches take its room.
+    matches: rest.slice(0, tables.length > 0 ? CARD_MATCHES : CARD_MATCHES_ALONE),
+    tables,
   };
+}
+
+/**
+ * Each team's Swiss record so far, best first. Empty until a match has been
+ * decided: sixteen teams on 0–0 is not a table.
+ */
+function swissRecords(stage: SwissStage): { teamId: string; wins: number; losses: number }[] {
+  const records = new Map<string, { wins: number; losses: number }>();
+  let decided = 0;
+  for (const match of stage.rounds.flat().flatMap((pool) => pool.matches)) {
+    for (const id of [match.homeTeamId, match.awayTeamId]) {
+      if (id && !records.has(id)) records.set(id, { wins: 0, losses: 0 });
+    }
+    if (!match.winnerTeamId || !match.homeTeamId || !match.awayTeamId) continue;
+    decided++;
+    const loser = match.winnerTeamId === match.homeTeamId ? match.awayTeamId : match.homeTeamId;
+    records.get(match.winnerTeamId)!.wins++;
+    records.get(loser)!.losses++;
+  }
+  if (decided === 0) return [];
+  return [...records.entries()]
+    .map(([teamId, r]) => ({ teamId, ...r }))
+    .sort((a, b) => b.wins - a.wins || a.losses - b.losses);
 }
 
 function racquetCard(
@@ -463,3 +498,6 @@ function formatShortDate(iso: string): string {
     day: "numeric",
   });
 }
+
+/** Pure helpers, exported for their tests. */
+export const __testing = { swissRecords };

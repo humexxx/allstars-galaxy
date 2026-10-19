@@ -154,10 +154,23 @@ function SetScores({ scores, opponentScores }: Pick<RowProps, "scores" | "oppone
   );
 }
 
+/**
+ * The seed, in a narrow column of its own left of the name: printed between
+ * the name and the sets it read as a first set ("1 6 6" against "14 2 2").
+ * The column is there for the unseeded too, so the names line up.
+ */
 function Seed({ player }: { player: Team }) {
   const seed = player.code?.trim();
-  if (!seed) return null;
-  return <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">{seed}</span>;
+  return (
+    <span className="w-4 shrink-0 text-right text-2xs tabular-nums text-muted-foreground">
+      {seed ? (
+        <>
+          <span className="sr-only">Seed </span>
+          {seed}
+        </>
+      ) : null}
+    </span>
+  );
 }
 
 function PlayerRow({
@@ -172,6 +185,7 @@ function PlayerRow({
     return (
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span className={cn("shrink-0", withFaces ? "w-6" : "w-5")} />
+        <span className="w-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate">TBD</span>
       </div>
     );
@@ -199,10 +213,10 @@ function PlayerRow({
           {player.name}
         </span>
       )}
+      <Seed player={player} />
       <span className={cn("min-w-0 flex-1 truncate", isWinner && "font-semibold")}>
         {player.shortName}
       </span>
-      <Seed player={player} />
       <SetScores scores={scores} opponentScores={opponentScores} />
     </div>
   );
@@ -213,6 +227,7 @@ function PairRow({ player, scores, opponentScores, isWinner, decided }: RowProps
   if (!player) {
     return (
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="w-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate">TBD</span>
       </div>
     );
@@ -225,6 +240,7 @@ function PairRow({ player, scores, opponentScores, isWinner, decided }: RowProps
         decided && !isWinner && "text-muted-foreground"
       )}
     >
+      <Seed player={player} />
       <span className={cn("flex min-w-0 flex-1 flex-col", isWinner && "font-semibold")}>
         {player.shortName.split(" / ").map((name, i) => (
           <span key={i} className="truncate leading-tight">
@@ -232,7 +248,6 @@ function PairRow({ player, scores, opponentScores, isWinner, decided }: RowProps
           </span>
         ))}
       </span>
-      <Seed player={player} />
       <SetScores scores={scores} opponentScores={opponentScores} />
     </div>
   );

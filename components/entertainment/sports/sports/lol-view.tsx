@@ -84,7 +84,8 @@ export function LolView({ data }: LolViewProps) {
       <SportShell
         emoji="🎮"
         title="League of Legends"
-        subtitle={`${split.name} · ${split.season}`}
+        // "Worlds 2026" already names its year; "LEC Split 3" does not.
+        subtitle={split.name.includes(String(split.season)) ? split.name : `${split.name} · ${split.season}`}
         controls={
           <Select value={region} onValueChange={(v) => setRegion(v as LolRegion)}>
             <SelectTrigger className="w-56" aria-label="Region">

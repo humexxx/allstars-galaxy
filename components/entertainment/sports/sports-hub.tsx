@@ -96,7 +96,7 @@ export function SportsHub({
       {/* No page header: the strip is the first row, and the sport's own bar
           names the page (SportShell). */}
       <div className="flex flex-col gap-4">
-        <div className="flex items-start gap-2">
+        <div className="flex items-start gap-3">
           <SportSelector
             active={loading && target ? target : activeSport}
             favSet={favSet}
@@ -172,8 +172,9 @@ function SportSelector({
   };
   return (
     // Scrolls sideways on its own when the chips outrun a phone; the
-    // favourites button beside it stays put.
-    <nav aria-label="Sports" className="relative -mx-2 min-w-0 flex-1 overflow-x-auto px-2 pb-1">
+    // favourites button beside it stays put. Bled to the left only: bled to
+    // the right too, the chips ran on under the button.
+    <nav aria-label="Sports" className="relative -ml-2 min-w-0 flex-1 overflow-x-auto pb-1 pl-2">
       <ul className="flex gap-2">
         {sports.map((sport) => {
           const isActive = sport.id === active;

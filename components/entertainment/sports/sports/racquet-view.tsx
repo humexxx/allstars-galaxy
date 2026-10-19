@@ -157,6 +157,7 @@ function DrawPanel({
           <KnockoutBracket
             rounds={open.bracket ?? []}
             teams={players}
+            minColumnWidth="11rem"
             renderMatch={(match, teams) => (
               <DrawMatchCard match={match} teams={teams} withFaces={withFaces} />
             )}

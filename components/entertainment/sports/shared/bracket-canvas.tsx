@@ -58,10 +58,13 @@ export function elbow(x1: number, y1: number, x2: number, y2: number): string {
 export function BracketCanvas({
   columns,
   edges,
+  minColumnWidth = "8rem",
   className,
 }: {
   columns: BracketColumn[];
   edges: BracketEdge[];
+  /** A column never narrows past this; a tennis draw's set scores need more. */
+  minColumnWidth?: string;
   className?: string;
 }) {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -106,7 +109,7 @@ export function BracketCanvas({
       <div
         ref={canvasRef}
         className="relative grid w-max min-w-full gap-x-5"
-        style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(8rem, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(${minColumnWidth}, 1fr))` }}
       >
         <svg
           aria-hidden

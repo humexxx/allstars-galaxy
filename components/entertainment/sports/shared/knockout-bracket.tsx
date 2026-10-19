@@ -30,6 +30,8 @@ type KnockoutBracketProps = {
    * tennis passes its own, because a draw wants seeds, flags and set scores.
    */
   renderMatch?: (match: BracketMatch, teams: Map<string, Team>) => ReactNode;
+  /** Passed to the canvas: a column never narrows past this. */
+  minColumnWidth?: string;
 };
 
 /** Rounds on screen at once: a Grand Slam's seven page through, the rest fit. */
@@ -109,7 +111,13 @@ function treeOrder(rounds: BracketRound[]): { rounds: BracketRound[]; paired: bo
  * third-place match stands in a column of its own after the final, with no
  * branch into it — it is fed by the semi-finals' losers, not their winners.
  */
-export function KnockoutBracket({ rounds, teams, className, renderMatch }: KnockoutBracketProps) {
+export function KnockoutBracket({
+  rounds,
+  teams,
+  className,
+  renderMatch,
+  minColumnWidth,
+}: KnockoutBracketProps) {
   const tree = useMemo(() => treeOrder(rounds.filter((r) => r.id !== "third-place")), [rounds]);
   const thirdPlace = rounds.find((r) => r.id === "third-place");
 
@@ -196,7 +204,7 @@ export function KnockoutBracket({ rounds, teams, className, renderMatch }: Knock
           </Button>
         </div>
       )}
-      <BracketCanvas columns={columns} edges={edges} />
+      <BracketCanvas columns={columns} edges={edges} minColumnWidth={minColumnWidth} />
     </div>
   );
 }

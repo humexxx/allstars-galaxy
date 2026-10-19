@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { formatWeekdayDay } from "@/lib/utils/date";
 import type { BracketMatch, Team } from "@/types/sports";
 
+import { BracketDate, MatchHover } from "./bracket-canvas";
 import { Portrait } from "./portrait";
 
 /**
@@ -42,10 +43,31 @@ export function DrawMatchCard({
   const home = match.homeTeamId ? (teams.get(match.homeTeamId) ?? null) : null;
   const away = match.awayTeamId ? (teams.get(match.awayTeamId) ?? null) : null;
   const sets = match.legs ?? [];
+  const decided = !!match.winnerTeamId;
+  const played = sets.filter((s) => s.homeScore !== null && s.awayScore !== null);
 
+  // The bracket's own box: the same border, padding, small print and hover
+  // as every other tie in the hub.
   return (
-    <div className={cn("rounded-lg border bg-card p-3 text-sm", className)}>
-      <div className="flex flex-col gap-1.5">
+    <div className={cn("overflow-hidden rounded-lg border bg-card", className)}>
+      <MatchHover
+        className="flex flex-col gap-1 px-2.5 py-1.5"
+        details={
+          <>
+            <span className="font-semibold">
+              {home?.shortName ?? "TBD"} vs {away?.shortName ?? "TBD"}
+            </span>
+            {match.date && <span>{formatDay(match.date)}</span>}
+            {(played.length > 0 || decided) && (
+              <span className="opacity-70">
+                {[played.map((s) => `${s.homeScore}–${s.awayScore}`).join(" "), decided ? "Final" : null]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            )}
+          </>
+        }
+      >
         <PlayerRow
           player={home}
           scores={sets.map((s) => s.homeScore)}
@@ -62,12 +84,8 @@ export function DrawMatchCard({
           decided={!!match.winnerTeamId}
           withFaces={withFaces}
         />
-      </div>
-      {match.date && (
-        <div className="mt-2 border-t pt-1.5 text-2xs text-muted-foreground">
-          {formatDay(match.date)}
-        </div>
-      )}
+        {match.date && <BracketDate>{formatDay(match.date)}</BracketDate>}
+      </MatchHover>
     </div>
   );
 }
@@ -89,7 +107,7 @@ function PlayerRow({
 }) {
   if (!player) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span className={cn("shrink-0", withFaces ? "w-6" : "w-5")} />
         <span className="min-w-0 flex-1 truncate">TBD</span>
       </div>
@@ -101,7 +119,7 @@ function PlayerRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-2",
+        "flex items-center gap-1.5 text-xs",
         decided && !isWinner && "text-muted-foreground"
       )}
     >
@@ -115,7 +133,7 @@ function PlayerRow({
           fallback={flag}
         />
       ) : (
-        <span aria-hidden className="w-5 shrink-0 text-base leading-none">
+        <span aria-hidden className="w-5 shrink-0 text-sm leading-none">
           {player.name}
         </span>
       )}
@@ -127,12 +145,12 @@ function PlayerRow({
           {seed}
         </span>
       )}
-      <span className="flex shrink-0 items-center gap-1">
+      <span className="flex shrink-0 items-center gap-0.5">
         {scores.map((score, i) => (
           <Mono
             key={i}
             className={cn(
-              "inline-flex h-5 w-5 items-center justify-center rounded-sm text-xs tabular-nums",
+              "inline-flex size-4 items-center justify-center rounded-sm text-2xs tabular-nums",
               // The set a player won is the one worth finding at a glance.
               score !== null &&
                 opponentScores[i] !== null &&

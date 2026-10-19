@@ -17,6 +17,7 @@ import { formatWeekdayDayYear } from "@/lib/utils/date";
 import type { F1Data, F1NewsArticle } from "@/types/sports";
 
 import { NewsList } from "../shared/news-list";
+import { Portrait } from "../shared/portrait";
 import { SportShell } from "../shared/sport-shell";
 import { StatusPill } from "../shared/status-pill";
 import { SportsTh, TableCard } from "../shared/table-primitives";
@@ -37,6 +38,9 @@ const NUM = "px-1 text-right sm:px-2";
 export function F1View({ data, news = [], initialTab }: F1ViewProps) {
   const requested = TABS.find((t) => t === initialTab);
   const defaultTab = requested === "news" && news.length === 0 ? "drivers" : (requested ?? "drivers");
+  // Faces come from ESPN. Without them the table keeps its flags, in a slot
+  // only as wide as a flag.
+  const showsFaces = data.drivers.some((d) => d.imageUrl);
   return (
     <Tabs defaultValue={defaultTab} className="gap-6">
       <SportShell
@@ -73,8 +77,16 @@ export function F1View({ data, news = [], initialTab }: F1ViewProps) {
                         {d.position}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-3">
-                          <span className="text-base leading-none">{d.flagEmoji}</span>
+                        <div className={cn("flex items-center", showsFaces ? "gap-2 sm:gap-3" : "gap-3")}>
+                          {showsFaces ? (
+                            <Portrait
+                              size="table"
+                              subject={{ name: d.shortName, imageUrl: d.imageUrl, flagUrl: d.flagUrl }}
+                              fallback={<span className="text-base leading-none">{d.flagEmoji}</span>}
+                            />
+                          ) : (
+                            <span className="text-base leading-none">{d.flagEmoji}</span>
+                          )}
                           <div className="leading-tight">
                             <Text as="div" weight="medium">{d.shortName}</Text>
                             <Text variant="small" as="div">{d.team}</Text>
@@ -118,13 +130,17 @@ export function F1View({ data, news = [], initialTab }: F1ViewProps) {
                         {c.position}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-3">
-                          <span
-                            aria-hidden
-                            className="h-4 w-1 rounded-sm"
-                            style={{ backgroundColor: c.primaryColor }}
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          {/* The logo, or the livery for a team with none
+                              published yet — the dashboard's badge. */}
+                          <Portrait
+                            size="table"
+                            subject={{ name: c.shortName, logoUrl: c.logoUrl, color: c.primaryColor }}
                           />
-                          <Text as="span" weight="medium">{c.name}</Text>
+                          {/* The short name, as the drivers tab labels the
+                              team: with the logo beside it, "Cadillac F1
+                              Team" pushed Podiums off a phone's screen. */}
+                          <Text as="span" weight="medium">{c.shortName}</Text>
                         </div>
                       </TableCell>
                       <TableCell className={NUM}>

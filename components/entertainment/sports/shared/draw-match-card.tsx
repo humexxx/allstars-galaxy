@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 import { formatWeekdayDay } from "@/lib/utils/date";
 import type { BracketMatch, Team } from "@/types/sports";
 
+import { Portrait } from "./portrait";
+
 /**
  * One tie in a tennis draw.
  *
@@ -12,9 +14,9 @@ import type { BracketMatch, Team } from "@/types/sports";
  * sets: a set is exactly a leg with a different name.
  *
  * A player travels in the `teams` map, where `shortName` is the name, `code`
- * is the seed and `logoUrl` is unused; the flag rides in `primaryColor`'s
- * place as an emoji on `name`. See `playerEntry` below for the one place that
- * shape is built.
+ * is the seed and `logoUrl` the photo, when there is one; the flag rides in
+ * `primaryColor`'s place as an emoji on `name`. See `playerEntry` below for
+ * the one place that shape is built.
  */
 /**
  * A calendar day, read as a calendar day: a match is played on a date, not at
@@ -28,10 +30,13 @@ function formatDay(day: string): string {
 export function DrawMatchCard({
   match,
   teams,
+  withFaces = false,
   className,
 }: {
   match: BracketMatch;
   teams: Map<string, Team>;
+  /** Some player in the draw has a photo, so every row keeps a disc's width. */
+  withFaces?: boolean;
   className?: string;
 }) {
   const home = match.homeTeamId ? (teams.get(match.homeTeamId) ?? null) : null;
@@ -47,6 +52,7 @@ export function DrawMatchCard({
           opponentScores={sets.map((s) => s.awayScore)}
           isWinner={!!match.winnerTeamId && match.winnerTeamId === match.homeTeamId}
           decided={!!match.winnerTeamId}
+          withFaces={withFaces}
         />
         <PlayerRow
           player={away}
@@ -54,6 +60,7 @@ export function DrawMatchCard({
           opponentScores={sets.map((s) => s.homeScore)}
           isWinner={!!match.winnerTeamId && match.winnerTeamId === match.awayTeamId}
           decided={!!match.winnerTeamId}
+          withFaces={withFaces}
         />
       </div>
       {match.date && (
@@ -71,23 +78,26 @@ function PlayerRow({
   opponentScores,
   isWinner,
   decided,
+  withFaces,
 }: {
   player: Team | null;
   scores: Array<number | null>;
   opponentScores: Array<number | null>;
   isWinner: boolean;
   decided: boolean;
+  withFaces: boolean;
 }) {
   if (!player) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span className="w-5 shrink-0" />
+        <span className={cn("shrink-0", withFaces ? "w-6" : "w-5")} />
         <span className="min-w-0 flex-1 truncate">TBD</span>
       </div>
     );
   }
 
   const seed = player.code?.trim();
+  const flag = <span className="text-base leading-none">{player.name}</span>;
   return (
     <div
       className={cn(
@@ -96,10 +106,19 @@ function PlayerRow({
       )}
     >
       {/* The flag sits where a crest would, at the same width, so two rows
-          line up whether or not a player has one. */}
-      <span aria-hidden className="w-5 shrink-0 text-base leading-none">
-        {player.name}
-      </span>
+          line up whether or not a player has one — and a photo, where there
+          is one, at the width every row then keeps. */}
+      {withFaces ? (
+        <Portrait
+          size="sm"
+          subject={{ name: player.shortName, imageUrl: player.logoUrl, flagEmoji: player.name }}
+          fallback={flag}
+        />
+      ) : (
+        <span aria-hidden className="w-5 shrink-0 text-base leading-none">
+          {player.name}
+        </span>
+      )}
       <span className={cn("min-w-0 flex-1 truncate", isWinner && "font-semibold")}>
         {player.shortName}
       </span>
@@ -134,13 +153,18 @@ function PlayerRow({
  * A player in the shape the bracket's `teams` map expects.
  *
  * The map is typed for teams, so the fields are reused rather than widened:
- * `name` carries the flag, `shortName` the player, `code` the seed.
+ * `name` carries the flag, `shortName` the player, `code` the seed and
+ * `logoUrl` the photo.
  */
 export function playerEntry(
   id: string,
   name: string,
   flagEmoji: string,
-  seed?: number
+  seed?: number,
+  photoUrl?: string
 ): [string, Team] {
-  return [id, { id, name: flagEmoji, shortName: name, code: seed ? `${seed}` : "" }];
+  return [
+    id,
+    { id, name: flagEmoji, shortName: name, code: seed ? `${seed}` : "", logoUrl: photoUrl },
+  ];
 }

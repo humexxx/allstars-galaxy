@@ -255,6 +255,10 @@ export type F1Driver = {
   points: number;
   wins: number;
   podiums: number;
+  /** ESPN's headshot, when ESPN lists the driver. */
+  imageUrl?: string;
+  /** ESPN's flag for the driver's country, badged on the headshot. */
+  flagUrl?: string;
 };
 
 export type F1Constructor = {
@@ -265,6 +269,8 @@ export type F1Constructor = {
   wins: number;
   podiums: number;
   primaryColor: string;
+  /** The team's logo, when one is published for it. */
+  logoUrl?: string;
 };
 
 export type F1Race = {
@@ -499,6 +505,15 @@ export type F1StandingRow = {
 export type F1DashboardStandings = {
   drivers: F1StandingRow[];
   constructors: F1StandingRow[];
+};
+
+/** A driver's pictures from ESPN, with what it takes to find him in another feed. */
+export type F1DriverPortrait = {
+  /** The three-letter race code, e.g. "VER". */
+  code?: string;
+  name: string;
+  imageUrl: string;
+  flagUrl?: string;
 };
 
 // ---------- F1 news (RapidAPI, stored daily) ----------

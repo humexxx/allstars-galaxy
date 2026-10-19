@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { __testing } from "./espn-tennis-service";
 
-const { tournamentFrom, matchFrom, playerFrom, rankingFrom, tourFrom, calendarRange } = __testing;
+const { tournamentFrom, matchFrom, playerFrom, rankingFrom, photosById, tourFrom, calendarRange } =
+  __testing;
+
+const headshot = (id: string) => `https://a.espncdn.com/i/headshots/tennis/players/full/${id}.png`;
+const resized = (id: string) =>
+  `https://a.espncdn.com/combiner/i?img=/i/headshots/tennis/players/full/${id}.png&w=96&h=96&scale=crop`;
 
 const NOW = Date.parse("2026-10-18T12:00:00Z");
 
@@ -209,6 +214,41 @@ describe("rankingFrom", () => {
   it("drops a row with nobody in it", () => {
     expect(rankingFrom({ current: 1 })).toBeNull();
   });
+
+  it("carries the photo ESPN sends, resized", () => {
+    const sinner = rankingFrom({
+      current: 1,
+      points: 11000,
+      athlete: { id: "3623", displayName: "Jannik Sinner", headshot: headshot("3623") },
+    });
+    expect(sinner!.photoUrl).toBe(resized("3623"));
+  });
+
+  it("builds no photo from the id when ESPN sends none", () => {
+    // Shelton's id-shaped path is a 404: a broken image where the flag was.
+    const shelton = rankingFrom({
+      current: 4,
+      points: 4680,
+      athlete: { id: "9250", displayName: "Ben Shelton" },
+    });
+    expect(shelton!.photoUrl).toBeUndefined();
+  });
+});
+
+describe("photosById", () => {
+  it("keeps only the players ESPN has a photo of, by athlete id", () => {
+    const photos = photosById({
+      rankings: [
+        {
+          ranks: [
+            { current: 1, athlete: { id: "3623", displayName: "Jannik Sinner", headshot: headshot("3623") } },
+            { current: 4, athlete: { id: "9250", displayName: "Ben Shelton" } },
+          ],
+        },
+      ],
+    });
+    expect([...photos]).toEqual([["3623", resized("3623")]]);
+  });
 });
 
 describe("tourFrom", () => {
@@ -259,6 +299,17 @@ describe("tourFrom", () => {
   it("collects every draw's players for the view's lookup", () => {
     const tour = tourFrom("atp", board as never, { rankings: [] }, NOW);
     expect(tour.drawPlayers!.map((p) => p.id).sort()).toEqual(["a-A", "a-B", "a-TBD"]);
+  });
+
+  it("gives a draw's ranked players their ranking photo", () => {
+    // The scoreboard carries no photo; the rankings do, under the same id.
+    const rankings = {
+      rankings: [{ ranks: [{ current: 1, athlete: { id: "a-A", displayName: "A", headshot: headshot("1") } }] }],
+    };
+    const tour = tourFrom("atp", board as never, rankings, NOW);
+    const byId = new Map(tour.drawPlayers!.map((p) => [p.id, p]));
+    expect(byId.get("a-A")!.logoUrl).toBe(resized("1"));
+    expect(byId.get("a-B")!.logoUrl).toBeUndefined();
   });
 
   it("keeps the top of the rankings", () => {

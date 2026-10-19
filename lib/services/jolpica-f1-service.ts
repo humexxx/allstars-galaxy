@@ -19,8 +19,14 @@ import { cachedFeed, upstreamSignal } from "./upstream";
 
 const JOLPICA_BASE_URL = "https://api.jolpi.ca/ergast/f1";
 const REVALIDATE_SECONDS = 300;
-/** A finished race's classification and last season's winners do not change. */
+/** A settled race's classification and last season's winners do not change. */
 const DAY_SECONDS = 24 * 60 * 60;
+/**
+ * How long after the start a race's result can still move: stewards'
+ * penalties and disqualifications land hours after the flag (both McLarens,
+ * Las Vegas 2025).
+ */
+const SETTLING_MS = 48 * 60 * 60 * 1000;
 
 type JolpicaDriver = {
   driverId: string;
@@ -302,10 +308,9 @@ function driverCode(driver: JolpicaDriver): string {
 /**
  * Hands out at most `limit` starts in any `windowMs`, queueing the rest.
  *
- * Jolpica allows bursts of about four requests a second and a refresh makes
+ * Jolpica allows bursts of about four requests a second and a cold read makes
  * nine, which used to go out at once: the calls past the fourth could come
- * back 429, and the podium steps swallow their failures, so a podium simply
- * went missing.
+ * back 429, and a podium went missing.
  */
 function rateLimiter(limit: number, windowMs: number): () => Promise<void> {
   const starts: number[] = [];
@@ -327,11 +332,11 @@ function rateLimiter(limit: number, windowMs: number): () => Promise<void> {
 const jolpicaSlot = rateLimiter(4, 1_200);
 
 async function fetchJolpica<T>(path: string, revalidate = REVALIDATE_SECONDS): Promise<T> {
+  // Before the queue, not after it: a call that waits for a slot spends the
+  // same budget, so a read still ends inside it however many calls it makes.
+  const signal = upstreamSignal();
   await jolpicaSlot();
-  const res = await fetch(`${JOLPICA_BASE_URL}${path}`, {
-    signal: upstreamSignal(),
-    next: { revalidate },
-  });
+  const res = await fetch(`${JOLPICA_BASE_URL}${path}`, { signal, next: { revalidate } });
   if (!res.ok) throw new Error(`Jolpica ${res.status} on ${path}`);
   return (await res.json()) as T;
 }
@@ -704,132 +709,202 @@ function tallyPodiums(racesWithResults: JolpicaRace[]): {
   return { driverPodiums, constructorPodiums, resultsByRound };
 }
 
-/** A season-wide extra: its races, or none when the call fails. */
-function seasonRaces(path: string): Promise<JolpicaRace[]> {
-  return fetchJolpica<JolpicaAllResultsResponse>(path)
-    .then((res) => res.MRData.RaceTable.Races)
-    .catch((): JolpicaRace[] => []);
-}
+/** The calendar and both championships: what the view cannot do without. */
+type F1Core = {
+  season: number;
+  races: JolpicaRace[];
+  drivers: JolpicaDriverStanding[];
+  constructors: JolpicaConstructorStanding[];
+  portraits: F1DriverPortrait[];
+};
 
-async function fetchF1FromApi(): Promise<F1Data> {
+async function fetchF1Core(): Promise<F1Core> {
   // Alongside Jolpica, not after it. Pictures are an extra: when ESPN fails
   // the table still refreshes, only without faces.
   const portraits = getF1DriverPortraits().catch((error): F1DriverPortrait[] => {
     console.warn("espn f1 portraits unavailable:", error);
     return [];
   });
-  // Two waves under the rate limit: what the view cannot do without first,
-  // and the extras only once that has answered, so a Jolpica outage costs
-  // four calls rather than nine.
-  const [schedule, driverStandings, constructorStandings, winners] = await Promise.all([
+  const [schedule, driverStandings, constructorStandings] = await Promise.all([
     fetchJolpica<JolpicaSeasonRacesResponse>(`/current.json`),
     fetchJolpica<JolpicaDriverStandingsResponse>(`/current/driverStandings.json`),
     fetchJolpica<JolpicaConstructorStandingsResponse>(`/current/constructorStandings.json`),
-    seasonRaces(`/current/results/1.json?limit=100`),
   ]);
 
-  const season = parseInt(schedule.MRData.RaceTable.season, 10);
-
-  const standingsList = driverStandings.MRData.StandingsTable.StandingsLists[0];
-  const constructorList =
-    constructorStandings.MRData.StandingsTable.StandingsLists[0];
-
-  if (!standingsList || !constructorList) {
+  const drivers = driverStandings.MRData.StandingsTable.StandingsLists[0];
+  const constructors = constructorStandings.MRData.StandingsTable.StandingsLists[0];
+  if (!drivers || !constructors) {
     throw new Error("Jolpica returned empty standings");
   }
 
-  const [seconds, thirds, qualifying, fastest, sprints] = await Promise.all([
-    seasonRaces(`/${season}/results/2.json?limit=100`),
-    seasonRaces(`/${season}/results/3.json?limit=100`),
-    seasonRaces(`/${season}/qualifying/1.json?limit=100`),
-    seasonRaces(`/${season}/fastest/1/results.json?limit=100`),
-    seasonRaces(`/${season}/sprint/1.json?limit=100`),
-  ]);
-
-  const podiums = tallyPodiums(mergePodiumSteps([winners, seconds, thirds]));
-
   return {
-    season,
-    drivers: mapDrivers(
-      standingsList.DriverStandings,
-      podiums.driverPodiums,
-      portraitLookup(await portraits),
-    ),
-    constructors: mapConstructors(
-      constructorList.ConstructorStandings,
-      podiums.constructorPodiums,
-    ),
-    races: mapRaces(schedule.MRData.RaceTable.Races, podiums.resultsByRound, {
-      poles: polesByRound(qualifying),
-      fastestLaps: fastestLapsByRound(fastest),
-      sprintWinners: sprintWinnersByRound(sprints),
-    }),
+    season: parseInt(schedule.MRData.RaceTable.season, 10),
+    races: schedule.MRData.RaceTable.Races,
+    drivers: drivers.DriverStandings,
+    constructors: constructors.ConstructorStandings,
+    portraits: await portraits,
   };
 }
 
-export const getF1Data = cachedFeed(
+const getF1Core = cachedFeed(
   "Jolpica F1",
-  fetchF1FromApi,
-  () => F1_DATA,
-  ["jolpica:f1-data"],
+  fetchF1Core,
+  (): F1Core | null => null,
+  ["jolpica:f1-core"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:f1"] },
 );
+
+async function fetchSeasonRaces(path: string): Promise<JolpicaRace[]> {
+  const res = await fetchJolpica<JolpicaAllResultsResponse>(path);
+  return res.MRData.RaceTable.Races;
+}
+
+/**
+ * One season-wide list — a podium step, the poles, the fastest laps, the
+ * sprints — in a cache entry of its own.
+ *
+ * They were caught inside the feed's cache, so a single 429 stored the feed
+ * without that list over the good one for five minutes: every pole gone, or
+ * with the winners' step, every result. Now a list that fails to refresh
+ * keeps its last answer and holds nothing else back; only one never fetched
+ * is missing, and the gap is not stored.
+ */
+const getSeasonRaces = cachedFeed(
+  "Jolpica F1 season list",
+  fetchSeasonRaces,
+  (): JolpicaRace[] => [],
+  ["jolpica:f1-season-races"],
+  { revalidate: REVALIDATE_SECONDS, tags: ["sports:f1"] },
+);
+
+/**
+ * The season as of `now`, put together on every read from the cached parts,
+ * all asked for at once.
+ *
+ * Each race's status is worked out here rather than in a cache: a cache entry
+ * is served stale while it refreshes, so the first visit after a quiet
+ * weekend got Friday's "upcoming" and Sunday's race was still the next one.
+ */
+export async function getF1Data(now: number = Date.now()): Promise<F1Data> {
+  const [core, winners, seconds, thirds, qualifying, fastest, sprints] = await Promise.all([
+    getF1Core(),
+    getSeasonRaces(`/current/results/1.json?limit=100`),
+    getSeasonRaces(`/current/results/2.json?limit=100`),
+    getSeasonRaces(`/current/results/3.json?limit=100`),
+    getSeasonRaces(`/current/qualifying/1.json?limit=100`),
+    getSeasonRaces(`/current/fastest/1/results.json?limit=100`),
+    getSeasonRaces(`/current/sprint/1.json?limit=100`),
+  ]);
+  if (!core) return F1_DATA;
+
+  // Entries refresh on their own, so around a new season one can still hold
+  // the last: its rounds are not this season's.
+  const season = String(core.season);
+  const ofSeason = (races: JolpicaRace[]): JolpicaRace[] => races.filter((r) => r.season === season);
+  const podiums = tallyPodiums(mergePodiumSteps([winners, seconds, thirds].map(ofSeason)));
+
+  return {
+    season: core.season,
+    drivers: mapDrivers(core.drivers, podiums.driverPodiums, portraitLookup(core.portraits)),
+    constructors: mapConstructors(core.constructors, podiums.constructorPodiums),
+    races: mapRaces(
+      core.races,
+      podiums.resultsByRound,
+      {
+        poles: polesByRound(ofSeason(qualifying)),
+        fastestLaps: fastestLapsByRound(ofSeason(fastest)),
+        sprintWinners: sprintWinnersByRound(ofSeason(sprints)),
+      },
+      now,
+    ),
+  };
+}
 
 async function fetchRaceClassification(
   season: number,
   round: number,
 ): Promise<F1RaceClassification | null> {
-  // The fetch keeps the feed's five minutes; the day is the cache below,
-  // which only ever stores a race that had results.
   const res = await fetchJolpica<JolpicaAllResultsResponse>(
     `/${season}/${round}/results.json?limit=100`,
   );
   const results = res.MRData.RaceTable.Races[0]?.Results ?? [];
-  // Thrown, not returned: an empty answer kept for a day would hide results
-  // that land an hour after the flag.
+  // Thrown, not returned: an empty answer kept in the cache would hide
+  // results that land an hour after the flag.
   if (results.length === 0) throw new Error(`Jolpica has no results for ${season} round ${round}`);
   return { season, round, rows: mapClassification(results) };
 }
 
-/**
- * A race's full order, only when somebody opens it (about 13 KB a race, so
- * not for every race in the season feed). Kept for a day: a finished race
- * does not change. Null when Jolpica has nothing or does not answer.
- */
-export const getF1RaceClassification = cachedFeed(
+const recentClassification = cachedFeed(
   "Jolpica F1 classification",
   fetchRaceClassification,
   () => null,
-  ["jolpica:f1-classification"],
+  ["jolpica:f1-classification-recent"],
+  { revalidate: REVALIDATE_SECONDS, tags: ["sports:f1"] },
+);
+
+const settledClassification = cachedFeed(
+  "Jolpica F1 classification",
+  fetchRaceClassification,
+  () => null,
+  ["jolpica:f1-classification-settled"],
   { revalidate: DAY_SECONDS, tags: ["sports:f1"] },
 );
 
-async function fetchCircuitWinner(
+/**
+ * A race's full order, only when somebody opens it (about 13 KB a race, so
+ * not for every race in the season feed). Null when Jolpica has nothing or
+ * does not answer.
+ *
+ * Kept for a day once the race has settled. Until then it is on the feed's
+ * five minutes: a day-old order under the podium the feed has since
+ * corrected would contradict it. A race the calendar cannot place counts as
+ * recent.
+ */
+export async function getF1RaceClassification(
   season: number,
-  circuitId: string,
-): Promise<F1PastWinner | null> {
-  const res = await fetchJolpica<JolpicaAllResultsResponse>(
-    `/${season}/circuits/${encodeURIComponent(circuitId)}/results/1.json`,
-    DAY_SECONDS,
-  );
-  // None for a circuit new to the calendar. Two races at one track in a
-  // season (2020) give the later one.
-  const winner = res.MRData.RaceTable.Races.at(-1)?.Results?.[0];
-  if (!winner) return null;
-  return {
-    season,
-    code: driverCode(winner.Driver),
-    name: driverShortName(winner.Driver),
-    team: shortConstructor(winner.Constructor.name),
-  };
+  round: number,
+  now: number = Date.now(),
+): Promise<F1RaceClassification | null> {
+  const core = await getF1Core();
+  const race =
+    core?.season === season ? core.races.find((r) => r.round === String(round)) : undefined;
+  const start = race ? Date.parse(instant(race.date, race.time) ?? `${race.date}T00:00:00Z`) : NaN;
+  const settled = (core !== null && season < core.season) || now - start > SETTLING_MS;
+  return settled ? settledClassification(season, round) : recentClassification(season, round);
 }
 
-/** Who won at `circuitId` in `season`, for the dashboard's next race. */
-export const getF1CircuitWinner = cachedFeed(
-  "Jolpica F1 circuit winner",
-  fetchCircuitWinner,
-  () => null,
-  ["jolpica:f1-circuit-winner"],
+async function fetchSeasonWinners(season: number): Promise<Record<string, F1PastWinner>> {
+  const res = await fetchJolpica<JolpicaAllResultsResponse>(
+    `/${season}/results/1.json?limit=100`,
+    DAY_SECONDS,
+  );
+  const winners: Record<string, F1PastWinner> = {};
+  // In round order, so a track raced twice in a season (2020) keeps the
+  // later race.
+  for (const race of res.MRData.RaceTable.Races) {
+    const winner = race.Results?.[0];
+    if (winner) {
+      winners[race.Circuit.circuitId] = {
+        season,
+        code: driverCode(winner.Driver),
+        name: driverShortName(winner.Driver),
+        team: shortConstructor(winner.Constructor.name),
+      };
+    }
+  }
+  return winners;
+}
+
+/**
+ * Who won at each circuit in `season`, keyed by circuit, for the dashboard's
+ * next race. One call covers every track, so it can be asked for before the
+ * next race is known. A circuit new to the calendar has nobody.
+ */
+export const getF1SeasonWinners = cachedFeed(
+  "Jolpica F1 season winners",
+  fetchSeasonWinners,
+  (): Record<string, F1PastWinner> => ({}),
+  ["jolpica:f1-season-winners"],
   { revalidate: DAY_SECONDS, tags: ["sports:f1"] },
 );
 

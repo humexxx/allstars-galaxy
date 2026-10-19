@@ -16,7 +16,7 @@ import { TENNIS_DATA } from "@/lib/data/sports/tennis";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
 import { getFootballLeagueData } from "@/lib/services/football-data-service";
-import { getF1CircuitWinner, getF1Data } from "@/lib/services/jolpica-f1-service";
+import { getF1Data, getF1SeasonWinners } from "@/lib/services/jolpica-f1-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
@@ -167,19 +167,25 @@ export async function getDashboardSportCard(sportId: SportId): Promise<Dashboard
 
 /**
  * F1's race for the card that owns it on the dashboard, with its weekend as
- * of this request. The feed is cached; which session is next is worked out
- * here, every time, so it moves on while the feed sits in its cache.
+ * of this request. The feed is cached; which race leads and which session is
+ * next are worked out here, every time, so they move on while the feed sits
+ * in its cache.
  */
 export async function getF1DashboardHighlight(
   now: number = Date.now()
 ): Promise<F1DashboardHighlight | null> {
-  const data = await getF1Data();
+  // A season is a calendar year, so last season's winners can be asked for
+  // alongside the feed rather than after it, which held the card for a
+  // second timeout on a cold cache.
+  const lastSeason = new Date(now).getUTCFullYear() - 1;
+  const [data, winners] = await Promise.all([getF1Data(now), getF1SeasonWinners(lastSeason)]);
   const highlight = f1Highlight(data, now);
-  // The sample means Jolpica just failed; asking it again would only hold the
-  // card for a second timeout.
+  // The sample is not a season anybody raced, so nobody won there last year.
   if (!highlight || highlight.race.status === "completed" || data === F1_DATA) return highlight;
-  // One race's worth, so not in the season feed: its own call, kept a day.
-  const lastYear = await getF1CircuitWinner(data.season - 1, highlight.race.circuitId);
+  // Only around the new year can the feed's season and the calendar's differ.
+  const pastWinners =
+    data.season - 1 === lastSeason ? winners : await getF1SeasonWinners(data.season - 1);
+  const lastYear = pastWinners[highlight.race.circuitId];
   return lastYear ? { ...highlight, race: { ...highlight.race, lastYear } } : highlight;
 }
 

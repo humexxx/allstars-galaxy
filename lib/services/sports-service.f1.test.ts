@@ -3,12 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/db", () => ({ db: {} }));
 vi.mock("@/lib/services/jolpica-f1-service", () => ({
   getF1Data: vi.fn(),
-  getF1CircuitWinner: vi.fn(),
+  getF1SeasonWinners: vi.fn(),
 }));
 
 import { F1_DATA } from "@/lib/data/sports/f1";
-import { getF1CircuitWinner, getF1Data } from "@/lib/services/jolpica-f1-service";
-import type { F1Data, F1Race } from "@/types/sports";
+import { getF1Data, getF1SeasonWinners } from "@/lib/services/jolpica-f1-service";
+import type { F1Data, F1PastWinner, F1Race } from "@/types/sports";
 
 import { __testing, getF1DashboardHighlight } from "./sports-service";
 
@@ -106,18 +106,48 @@ describe("f1Highlight", () => {
 describe("getF1DashboardHighlight", () => {
   it("adds last year's winner at the next race's circuit", async () => {
     vi.mocked(getF1Data).mockResolvedValue(season([singapore, austin, mexico]));
-    vi.mocked(getF1CircuitWinner).mockResolvedValue(lastYear);
+    vi.mocked(getF1SeasonWinners).mockResolvedValue({ americas: lastYear });
 
-    const highlight = await getF1DashboardHighlight(at("2026-10-19T12:00:00Z"));
+    const now = at("2026-10-19T12:00:00Z");
+    const highlight = await getF1DashboardHighlight(now);
 
-    expect(getF1CircuitWinner).toHaveBeenCalledWith(2025, "americas");
+    // The feed's races as of this request, the same moment the weekend is read at.
+    expect(getF1Data).toHaveBeenCalledWith(now);
+    expect(getF1SeasonWinners).toHaveBeenCalledWith(2025);
     expect(highlight?.race).toEqual({ ...austin, lastYear });
     expect(highlight?.nextSession?.kind).toBe("fp1");
   });
 
+  it("asks for last season alongside the feed, not after it", async () => {
+    let answer: (data: F1Data) => void = () => {};
+    vi.mocked(getF1Data).mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    vi.mocked(getF1SeasonWinners).mockResolvedValue({ americas: lastYear });
+
+    const pending = getF1DashboardHighlight(at("2026-10-19T12:00:00Z"));
+    expect(getF1SeasonWinners).toHaveBeenCalledWith(2025);
+
+    answer(season([austin]));
+    expect((await pending)?.race.lastYear).toEqual(lastYear);
+    expect(getF1SeasonWinners).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks again for the right season when the feed's is not the calendar's", async () => {
+    // December, and the feed has moved on to next season's calendar.
+    vi.mocked(getF1Data).mockResolvedValue({ ...season([austin]), season: 2027 });
+    vi.mocked(getF1SeasonWinners).mockImplementation(
+      async (year): Promise<Record<string, F1PastWinner>> =>
+        year === 2026 ? { americas: { ...lastYear, season: 2026 } } : {}
+    );
+
+    const highlight = await getF1DashboardHighlight(at("2026-12-20T12:00:00Z"));
+
+    expect(vi.mocked(getF1SeasonWinners).mock.calls).toEqual([[2025], [2026]]);
+    expect(highlight?.race.lastYear?.season).toBe(2026);
+  });
+
   it("leaves last year out for a circuit new to the calendar", async () => {
     vi.mocked(getF1Data).mockResolvedValue(season([austin]));
-    vi.mocked(getF1CircuitWinner).mockResolvedValue(null);
+    vi.mocked(getF1SeasonWinners).mockResolvedValue({ marina_bay: lastYear });
 
     const highlight = await getF1DashboardHighlight(at("2026-10-19T12:00:00Z"));
 
@@ -125,21 +155,22 @@ describe("getF1DashboardHighlight", () => {
     expect(highlight?.race.lastYear).toBeUndefined();
   });
 
-  it("does not look last year up for a season that is over", async () => {
+  it("names no past winner for a season that is over", async () => {
     vi.mocked(getF1Data).mockResolvedValue(season([singapore]));
+    vi.mocked(getF1SeasonWinners).mockResolvedValue({ marina_bay: lastYear });
 
     const highlight = await getF1DashboardHighlight(at("2026-12-20T12:00:00Z"));
 
     expect(highlight?.race).toBe(singapore);
-    expect(getF1CircuitWinner).not.toHaveBeenCalled();
   });
 
-  it("does not ask Jolpica again when the feed just fell back to the sample", async () => {
+  it("names no past winner for the sample season", async () => {
     vi.mocked(getF1Data).mockResolvedValue(F1_DATA);
+    vi.mocked(getF1SeasonWinners).mockResolvedValue({ imola: lastYear });
 
     const highlight = await getF1DashboardHighlight(at("2026-05-20T12:00:00Z"));
 
     expect(highlight?.race.round).toBe(7);
-    expect(getF1CircuitWinner).not.toHaveBeenCalled();
+    expect(highlight?.race.lastYear).toBeUndefined();
   });
 });

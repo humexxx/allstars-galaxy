@@ -99,12 +99,13 @@ change one, change the others (the separator's `top-18` follows the breathing):
 | Sidebar left inset | `px-2` (8px) | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
 | Sidebar nav row height / gap | `h-8` / `gap-0.5` | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
 | Sidebar width | `--sidebar-width: 12rem` (192px; shadcn's default is 16rem) | [`app/portal/layout.tsx`](../app/portal/layout.tsx) |
-| Sidebar separator | 1px `bg-sidebar-border` hairline, `top-18` to `bottom-6` | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
+| Sidebar separator | 1px `bg-sidebar-border` hairline, `top-18` to `bottom-6`, faded over its outer quarter at each end (`mask-y-from-75%`) | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
 
 The header has **no bottom border** — the shell reads as one flat surface (the
 shadcn-docs look). The sidebar is set off by a **hairline that starts where the
-nav does** (`top-18`, the content's top breathing) and stops short of the bottom:
-a rule beside the links, not a wall from the header down. The sidebar is 12rem
+nav does** (`top-18`, the content's top breathing), stops short of the bottom and
+fades out towards both ends: a rule beside the links, not a wall from the header
+down. The sidebar is 12rem
 because the labels are short and every rem it gives back pulls each page's
 centred column towards the middle of the window.
 The `h-[calc(...)]` on the sidebar is the one sanctioned arbitrary value: it's a

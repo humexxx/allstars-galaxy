@@ -19,23 +19,6 @@ export type SportId = (typeof SPORT_IDS)[number];
 
 export type UserSportsPreference = typeof userSportsPreferences.$inferSelect;
 
-// One compact highlight rendered on the dashboard widget for a single
-// favourited sport. Each entry is a self-contained card the user can scan
-// without leaving the dashboard.
-export type DashboardSportHighlight = {
-  sportId: SportId;
-  emoji: string;
-  label: string;
-  /** Short headline, e.g. "Real Madrid 2 – 1 Arsenal · LIVE 67'". */
-  headline: string;
-  /** Secondary line: league/competition or timing context. */
-  context: string;
-  /** Optional tone for status pill: live games, upcoming, completed. */
-  tone?: "live" | "upcoming" | "result";
-  /** Optional secondary entry under the main headline (e.g. league leader). */
-  secondary?: { label: string; value: string };
-};
-
 /** One side of a match on a dashboard card. */
 export type DashboardSide = {
   name: string;
@@ -396,6 +379,22 @@ export type F1RaceClassification = {
   season: number;
   round: number;
   rows: F1ClassificationRow[];
+};
+
+/**
+ * The race on the dashboard's F1 card, with what the weekend is doing now.
+ * The sessions are decided per request, never inside the cached feed: the
+ * next session moves on while the feed sits in its cache.
+ */
+export type F1DashboardHighlight = {
+  season: number;
+  race: F1Race;
+  /** A session on track right now. */
+  liveSession?: F1Session;
+  /** The first session still to start. */
+  nextSession?: F1Session;
+  /** "in 3h" — how far off `nextSession` is. */
+  nextSessionIn?: string;
 };
 
 export type F1Data = {

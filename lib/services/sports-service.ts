@@ -16,19 +16,20 @@ import { TENNIS_DATA } from "@/lib/data/sports/tennis";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
 import { getFootballLeagueData } from "@/lib/services/football-data-service";
-import { getF1Data } from "@/lib/services/jolpica-f1-service";
+import { getF1CircuitWinner, getF1Data } from "@/lib/services/jolpica-f1-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
+import { leadRace, startsIn, weekendNow } from "@/lib/sports/f1-weekend";
 import { formatDayRange } from "@/lib/utils/date";
 import type {
   BracketMatch,
   DashboardMatch,
   DashboardSide,
   DashboardSportCard,
-  DashboardSportHighlight,
   DashboardTable,
   DashboardTableRow,
+  F1DashboardHighlight,
   F1Data,
   FootballLeagueData,
   LolChampion,
@@ -164,15 +165,22 @@ export async function getDashboardSportCard(sportId: SportId): Promise<Dashboard
   }
 }
 
-/** Just F1's highlight, for the card that owns it on the dashboard. */
-export async function getF1DashboardHighlight(): Promise<DashboardSportHighlight | null> {
-  const meta = SPORTS_BY_ID.get("f1");
-  if (!meta) return null;
-  const data = (await getF1Data()) ?? F1_DATA;
-  return f1Highlight(
-    { sportId: "f1", emoji: meta.emoji, label: meta.label },
-    data
-  );
+/**
+ * F1's race for the card that owns it on the dashboard, with its weekend as
+ * of this request. The feed is cached; which session is next is worked out
+ * here, every time, so it moves on while the feed sits in its cache.
+ */
+export async function getF1DashboardHighlight(
+  now: number = Date.now()
+): Promise<F1DashboardHighlight | null> {
+  const data = await getF1Data();
+  const highlight = f1Highlight(data, now);
+  // The sample means Jolpica just failed; asking it again would only hold the
+  // card for a second timeout.
+  if (!highlight || highlight.race.status === "completed" || data === F1_DATA) return highlight;
+  // One race's worth, so not in the season feed: its own call, kept a day.
+  const lastYear = await getF1CircuitWinner(data.season - 1, highlight.race.circuitId);
+  return lastYear ? { ...highlight, race: { ...highlight.race, lastYear } } : highlight;
 }
 
 function footballCard(base: CardBase, data: FootballLeagueData): DashboardSportCard {
@@ -446,32 +454,18 @@ function racquetCard(
   };
 }
 
-function f1Highlight(base: HighlightBase, data: F1Data): DashboardSportHighlight {
-  // Live first: races are in round order, so looking for "upcoming" first
-  // skipped the race happening right now in favour of the following round.
-  const upcoming =
-    data.races.find((r) => r.status === "live") ??
-    data.races.find((r) => r.status === "upcoming");
-  const last = [...data.races].reverse().find((r) => r.status === "completed");
-  const leader = data.drivers[0];
-
-  const next = upcoming ?? last;
+function f1Highlight(data: F1Data, now: number): F1DashboardHighlight | null {
+  const race = leadRace(data.races);
+  if (!race) return null;
+  const { live, next } = race.status === "completed" ? {} : weekendNow(race, now);
   return {
-    ...base,
-    headline: next
-      ? `${next.flagEmoji} Round ${next.round} · ${next.name}`
-      : `F1 ${data.season}`,
-    context: next
-      ? `${next.circuit} · ${formatShortDate(next.date)}`
-      : `Season ${data.season}`,
-    tone: upcoming ? (upcoming.status === "live" ? "live" : "upcoming") : "result",
-    secondary: leader
-      ? { label: "Drivers' leader", value: `${leader.shortName} · ${leader.points} pts` }
-      : undefined,
+    season: data.season,
+    race,
+    liveSession: live,
+    nextSession: next,
+    nextSessionIn: next ? startsIn(next.startsAt, now) : undefined,
   };
 }
-
-type HighlightBase = Pick<DashboardSportHighlight, "sportId" | "emoji" | "label">;
 
 // ---------- Helpers ----------
 
@@ -622,21 +616,5 @@ function matchTone(match: Match): DashboardMatch["status"] {
   return "result";
 }
 
-/**
- * A `YYYY-MM-DD` read as a calendar day. `new Date("2026-03-08")` is UTC
- * midnight, which anybody west of Greenwich renders as the 7th.
- */
-function dateOnly(iso: string): Date {
-  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
-  return y && m && d ? new Date(y, m - 1, d) : new Date(iso);
-}
-
-function formatShortDate(iso: string): string {
-  return dateOnly(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
 /** Pure helpers, exported for their tests. */
-export const __testing = { lolCard, swissRecords };
+export const __testing = { lolCard, swissRecords, f1Highlight };

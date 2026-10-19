@@ -17,6 +17,7 @@ import { getRequestTimeZone } from "@/lib/utils/request-today";
 import type { DashboardMatch, DashboardSide, SportId } from "@/types/sports";
 
 import { DashboardSportTables } from "./dashboard-sport-tables";
+import { FeatureBox } from "./shared/feature-box";
 import { matchTimeFormat, type MatchTimeFormat } from "./shared/match-time";
 import { StatusPill } from "./shared/status-pill";
 import { TeamBadge } from "./shared/team-badge";
@@ -159,16 +160,11 @@ function FeaturedMatch({
 }) {
   const decided = match.status === "result";
   return (
-    <Link
+    <FeatureBox
       href={href}
-      className="flex flex-col gap-2 rounded-lg border bg-card p-2.5 transition-colors hover:bg-muted/40"
+      label={match.label ?? ""}
+      status={<MatchStatus match={match} format={format} />}
     >
-      <div className="flex items-center justify-between gap-2">
-        <Eyebrow size="sm" as="span" className="min-w-0 truncate">
-          {match.label ?? ""}
-        </Eyebrow>
-        <MatchStatus match={match} format={format} />
-      </div>
       {[match.home, match.away].map((side, i) => (
         <div key={i} className="flex items-center justify-between gap-2 text-sm">
           <span
@@ -187,7 +183,7 @@ function FeaturedMatch({
           )}
         </div>
       ))}
-    </Link>
+    </FeatureBox>
   );
 }
 

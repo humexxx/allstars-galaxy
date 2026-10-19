@@ -19,8 +19,8 @@ import {
   getF1DashboardHighlight,
   listUserFavoriteSportIds,
 } from "@/lib/services/sports-service";
+import { F1NextRace } from "@/components/entertainment/sports/f1-next-race";
 import { F1StandingsTabs } from "@/components/entertainment/sports/f1-standings-tabs";
-import { StatusPill } from "@/components/entertainment/sports/shared/status-pill";
 import { matchTimeFormat } from "@/components/entertainment/sports/shared/match-time";
 import type { F1NewsImage } from "@/db/schema";
 
@@ -71,7 +71,9 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
           </span>
           Formula 1
         </CardTitle>
-        {highlight && <CardDescription className="truncate">{highlight.context}</CardDescription>}
+        {highlight && (
+          <CardDescription className="truncate">{highlight.season} World Championship</CardDescription>
+        )}
         <CardAction>
           <Button variant="outline" size="sm" asChild>
             <Link href={F1_PATH}>
@@ -82,17 +84,7 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
       </CardHeader>
 
       <CardContent className="flex flex-1 flex-col gap-3">
-        {highlight && (
-          <Link
-            href={F1_PATH}
-            className="flex items-start justify-between gap-2 rounded-lg border bg-card p-2.5 transition-colors hover:bg-muted/40"
-          >
-            <span className="min-w-0 text-xs font-semibold leading-snug">
-              {highlight.headline}
-            </span>
-            {highlight.tone === "live" && <StatusPill status="live" />}
-          </Link>
-        )}
+        {highlight && <F1NextRace highlight={highlight} format={format} href={F1_PATH} />}
 
         {standings && (
           <F1StandingsTabs

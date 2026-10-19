@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, CalendarDays, ListOrdered, Minus, Trophy } from "lucide-react";
+import { ArrowDown, ArrowUp, ListOrdered, Minus } from "lucide-react";
 
-import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Select,
@@ -20,41 +19,90 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eyebrow, Mono, Text } from "@/components/ui/typography";
+import { Mono, Text } from "@/components/ui/typography";
+import { currentTournament, drawIsOut } from "@/lib/sports/racquet";
 import { cn } from "@/lib/utils";
-import { formatDayRange } from "@/lib/utils/date";
-import type { RacquetData, Team } from "@/types/sports";
+import type { RacquetData, RacquetTour, RacquetTournament } from "@/types/sports";
 
-import { DrawMatchCard } from "../shared/draw-match-card";
-import { KnockoutBracket } from "../shared/knockout-bracket";
 import { Portrait } from "../shared/portrait";
 import { SportShell } from "../shared/sport-shell";
-import { StatusPill } from "../shared/status-pill";
 import { SportsTh, TableCard } from "../shared/table-primitives";
+import { useSportsToday } from "../shared/time-zone-context";
+import {
+  drawKey,
+  useRacquetDraws,
+  type DrawState,
+  type DrawVariant,
+  type RacquetSport,
+} from "./racquet-draw";
+import { RacquetTournamentSheet } from "./racquet-tournament-sheet";
+import { findTournament, RacquetCurrent, RacquetTournaments } from "./racquet-tournaments";
 
 type TourTab = { value: string; label: string; data: RacquetData };
 
 type RacquetViewProps = {
+  /** Which provider's draws the sheet asks for, and how a tie is drawn. */
+  sport: RacquetSport;
   emoji: string;
   title: string;
   subtitle: string;
   tours: TourTab[];
 };
 
-export function RacquetView({ emoji, title, subtitle, tours }: RacquetViewProps) {
+/** A draw the feed shipped with the page: the featured and the current tournament's. */
+function shippedDraw(t: RacquetTournament, data: RacquetData): DrawState {
+  return {
+    status: "ready",
+    draw: {
+      tournamentId: t.id,
+      rounds: t.bracket ?? [],
+      players: data.drawPlayers ?? [],
+      champion: t.champion,
+      runnerUp: t.runnerUp,
+    },
+  };
+}
+
+export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetViewProps) {
+  const today = useSportsToday();
   const defaultTour = tours[0]?.value ?? "main";
   const [tourValue, setTourValue] = useState<string>(defaultTour);
   const activeTour = tours.find((t) => t.value === tourValue) ?? tours[0];
-  const drawn = activeTour.data.tournaments.filter((t) => t.bracket?.length);
-  // The players travel with the tour as a list so they cross the boundary as
-  // plain data; the lookup is built here.
-  const players = useMemo(
-    () => new Map((activeTour.data.drawPlayers ?? []).map((p) => [p.id, p])),
-    [activeTour.data.drawPlayers]
+  const data = activeTour.data;
+  const variant: DrawVariant = sport === "padel" ? "pair" : "player";
+
+  const current = currentTournament(data.tournaments);
+  const currentDraw = useMemo(
+    (): DrawState => (current ? shippedDraw(current, data) : { status: "pending" }),
+    [current, data]
   );
 
+  const { draws, load } = useRacquetDraws(sport);
+  // Which tournament the sheet shows outlives whether it is open, so the
+  // sheet keeps its content while it slides away.
+  const [opened, setOpened] = useState<{ tour: RacquetTour; id: string } | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const openedData = tours.find((t) => t.data.tour === opened?.tour)?.data;
+  const openedTournament = opened && openedData ? findTournament(openedData, opened.id) : undefined;
+
+  const drawFor = (t: RacquetTournament, tourData: RacquetData): DrawState => {
+    if (t.bracket?.length) return shippedDraw(t, tourData);
+    if (!drawIsOut(t.status, t.startDate, today)) return { status: "pending" };
+    return draws[drawKey(tourData.tour, t.id)] ?? { status: "loading" };
+  };
+
+  const openTournament = (id: string): void => {
+    const t = findTournament(data, id);
+    if (!t) return;
+    setOpened({ tour: data.tour, id });
+    setSheetOpen(true);
+    const known = draws[drawKey(data.tour, id)];
+    const needsLoad = !t.bracket?.length && drawIsOut(t.status, t.startDate, today);
+    if (needsLoad && (!known || known.status === "error")) load(data.tour, id);
+  };
+
   return (
-    <Tabs defaultValue="rankings" className="gap-6">
+    <Tabs defaultValue="current" className="gap-6">
       <SportShell
         emoji={emoji}
         title={title}
@@ -77,94 +125,40 @@ export function RacquetView({ emoji, title, subtitle, tours }: RacquetViewProps)
         }
         tabs={
           <TabsList variant="line">
-            <TabsTrigger value="rankings">Rankings</TabsTrigger>
+            <TabsTrigger value="current">Current</TabsTrigger>
             <TabsTrigger value="tournaments">Tournaments</TabsTrigger>
-            {/* Only when there is a draw to show. A tab that opens on nothing
-                is worse than one that is not there. */}
-            {drawn.length > 0 && <TabsTrigger value="draw">Draw</TabsTrigger>}
+            <TabsTrigger value="rankings">Rankings</TabsTrigger>
           </TabsList>
         }
       >
-        <TabsContent value="rankings">
-          <RankingsTable data={activeTour.data} />
+        <TabsContent value="current">
+          <RacquetCurrent
+            tournament={current}
+            draw={currentDraw}
+            variant={variant}
+            onOpen={openTournament}
+          />
         </TabsContent>
         <TabsContent value="tournaments">
-          <TournamentsList data={activeTour.data} />
+          <RacquetTournaments data={data} variant={variant} onOpen={openTournament} />
         </TabsContent>
-        {drawn.length > 0 && (
-          <TabsContent value="draw">
-            <DrawPanel tournaments={drawn} players={players} />
-          </TabsContent>
-        )}
+        <TabsContent value="rankings">
+          <RankingsTable data={data} />
+        </TabsContent>
       </SportShell>
+      <RacquetTournamentSheet
+        tournament={openedTournament}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        draw={
+          openedTournament && openedData
+            ? drawFor(openedTournament, openedData)
+            : { status: "pending" }
+        }
+        variant={variant}
+        onRetry={() => opened && load(opened.tour, opened.id)}
+      />
     </Tabs>
-  );
-}
-
-/**
- * The draw for one tournament, the way a draw sheet reads: pick the event,
- * then follow the winners across.
- */
-function DrawPanel({
-  tournaments,
-  players,
-}: {
-  tournaments: RacquetData["tournaments"];
-  players: Map<string, Team>;
-}) {
-  // The draw being played, else the one just finished: the list runs in date
-  // order, so its head is a fortnight old.
-  const [openId, setOpenId] = useState(
-    () =>
-      (
-        tournaments.find((t) => t.status === "live") ??
-        tournaments.filter((t) => t.status === "completed").at(-1) ??
-        tournaments[0]
-      )?.id ?? ""
-  );
-  const open = tournaments.find((t) => t.id === openId) ?? tournaments[0];
-  // Only ranked players come with a photo, so most draws are a mix. Once any
-  // player in this draw has one, every row reserves a disc's width and the
-  // names line up.
-  const withFaces = useMemo(
-    () =>
-      (open.bracket ?? []).some((round) =>
-        round.matches.some((m) =>
-          [m.homeTeamId, m.awayTeamId].some((id) => id && players.get(id)?.logoUrl)
-        )
-      ),
-    [open, players]
-  );
-
-  return (
-    <div className="flex flex-col gap-4">
-      {tournaments.length > 1 && (
-        <Select value={open.id} onValueChange={setOpenId}>
-          <SelectTrigger className="w-full sm:w-72" aria-label="Tournament">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {tournaments.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-      <Card size="sm">
-        <CardContent>
-          <KnockoutBracket
-            rounds={open.bracket ?? []}
-            teams={players}
-            minColumnWidth="11rem"
-            renderMatch={(match, teams) => (
-              <DrawMatchCard match={match} teams={teams} withFaces={withFaces} />
-            )}
-          />
-        </CardContent>
-      </Card>
-    </div>
   );
 }
 
@@ -257,47 +251,5 @@ function Movement({ movement }: { movement: number }) {
     <span className="inline-flex items-center gap-0.5 text-xs font-medium text-destructive">
       <ArrowDown className="size-3" aria-label="Down" /> {Math.abs(movement)}
     </span>
-  );
-}
-
-function TournamentsList({ data }: { data: RacquetData }) {
-  if (data.tournaments.length === 0) {
-    return (
-      <EmptyState icon={CalendarDays} title="No tournaments on the calendar for this tour." />
-    );
-  }
-
-  return (
-    <div className="grid gap-2 @xl:grid-cols-2 @4xl:grid-cols-3">
-      {data.tournaments.map((t) => (
-        <Card key={t.id} size="sm">
-          <CardContent className="flex flex-col gap-2">
-            <div className="flex items-start justify-between gap-2">
-              <div className="leading-tight">
-                <Eyebrow size="sm" as="div">{t.surface ?? "Tour"}</Eyebrow>
-                <Text as="div" weight="semibold">{t.name}</Text>
-                <Text variant="small" as="div">{t.location}</Text>
-              </div>
-              <StatusPill status={t.status} />
-            </div>
-            <Mono className="block text-xs text-muted-foreground">
-              {formatDayRange(t.startDate.slice(0, 10), t.endDate.slice(0, 10))}
-            </Mono>
-            {t.champion && (
-              <div className="flex items-center gap-2 border-t pt-2 text-xs">
-                <Trophy className="size-3.5 text-warning" aria-label="Champion" />
-                <span className="font-medium">{t.champion}</span>
-                {t.runnerUp && (
-                  <>
-                    <span className="text-muted-foreground">def.</span>
-                    <span className="text-muted-foreground">{t.runnerUp}</span>
-                  </>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ))}
-    </div>
   );
 }

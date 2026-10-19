@@ -1,17 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
-import Link, { useLinkStatus } from "next/link";
+import { useCallback, useMemo, useState, useTransition, type MouseEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Info, Star } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { SPORTS } from "@/lib/data/sports/registry";
 import type { SportPayload } from "@/lib/sports/payload";
 import type { SportId, SportMeta } from "@/types/sports";
 
+import { SportSkeleton, SportsNavigationContext } from "./sports-navigation";
 import { F1View } from "./sports/f1-view";
 import { FootballView } from "./sports/football-view";
 import { LolView } from "./sports/lol-view";
@@ -37,6 +38,21 @@ export function SportsHub({
   initialTab,
 }: SportsHubProps) {
   const favSet = useMemo(() => new Set(favoriteSportIds), [favoriteSportIds]);
+  const router = useRouter();
+  const [loading, startLoading] = useTransition();
+  const [target, setTarget] = useState<SportId | null>(null);
+
+  // Every move inside the hub — another sport, another league — runs in this
+  // one transition: until the next sport's data is on screen, the content is
+  // a skeleton of it rather than the old sport with a spinner by its control.
+  const navigate = useCallback(
+    (href: string) => {
+      const sport = new URLSearchParams(href.split("?")[1] ?? "").get("sport");
+      setTarget(sport as SportId | null);
+      startLoading(() => router.push(href, { scroll: false }));
+    },
+    [router]
+  );
 
   // Render favourites first so the user lands on their most-watched sports.
   const orderedSports = useMemo(
@@ -50,11 +66,24 @@ export function SportsHub({
   );
 
   return (
-    <div className="flex flex-col gap-6">
-      <SportSelector active={activeSport} favSet={favSet} sports={orderedSports} />
-      {payload.sample && <SampleDataNotice />}
-      <SportContent payload={payload} initialTab={initialTab} />
-    </div>
+    <SportsNavigationContext.Provider value={navigate}>
+      <div className="flex flex-col gap-6">
+        <SportSelector
+          active={loading && target ? target : activeSport}
+          favSet={favSet}
+          sports={orderedSports}
+          onPick={(sport) => navigate(`?sport=${sport}`)}
+        />
+        {loading ? (
+          <SportSkeleton />
+        ) : (
+          <>
+            {payload.sample && <SampleDataNotice />}
+            <SportContent payload={payload} initialTab={initialTab} />
+          </>
+        )}
+      </div>
+    </SportsNavigationContext.Provider>
   );
 }
 
@@ -88,11 +117,20 @@ function SportSelector({
   active,
   favSet,
   sports,
+  onPick,
 }: {
   active: SportId;
   favSet: Set<SportId>;
   sports: SportMeta[];
+  onPick: (sport: SportId) => void;
 }) {
+  // A plain click goes through the hub's transition; a modified one (a new
+  // tab, a new window) stays the link it is.
+  const pick = (event: MouseEvent<HTMLAnchorElement>, sport: SportId) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (sport !== active) onPick(sport);
+  };
   return (
     <nav aria-label="Sports" className="relative -mx-2 overflow-x-auto px-2 pb-1">
       <ul className="flex gap-2">
@@ -102,6 +140,7 @@ function SportSelector({
             <Link
               href={`?sport=${sport.id}`}
               scroll={false}
+              onClick={(event) => pick(event, sport.id)}
               aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
@@ -110,7 +149,9 @@ function SportSelector({
                   : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
-              <SportMark emoji={sport.emoji} />
+              <span aria-hidden className="text-base leading-none">
+                {sport.emoji}
+              </span>
               <span>{sport.shortLabel}</span>
               {favSet.has(sport.id) && (
                 <>
@@ -137,18 +178,6 @@ function SportSelector({
         })}
       </ul>
     </nav>
-  );
-}
-
-/** The sport's emoji, swapped for a spinner while its link is loading. */
-function SportMark({ emoji }: { emoji: string }) {
-  const { pending } = useLinkStatus();
-  return pending ? (
-    <Spinner />
-  ) : (
-    <span aria-hidden className="text-base leading-none">
-      {emoji}
-    </span>
   );
 }
 

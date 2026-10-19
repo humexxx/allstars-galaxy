@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 
 import {
   Select,
@@ -14,7 +13,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow } from "@/components/ui/typography";
 import { Card, CardContent } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
 import { TableCard } from "../shared/table-primitives";
 import type { FootballLeagueData, FootballLeagueId, Team } from "@/types/sports";
 
@@ -22,6 +20,7 @@ import { KnockoutBracket } from "../shared/knockout-bracket";
 import { MatchesByDate } from "../shared/matches-by-date";
 import { SportShell } from "../shared/sport-shell";
 import { StandingsTable } from "../shared/standings-table";
+import { useSportsNavigation } from "../sports-navigation";
 import { WorldCupView } from "./world-cup-view";
 
 type FootballViewProps = {
@@ -55,22 +54,16 @@ function LeaguePicker({
   leagueId: FootballLeagueId;
   options: FootballViewProps["options"];
 }) {
-  const router = useRouter();
-  const [navigating, startNavigation] = useTransition();
-  // The pick shows at once; the league itself arrives with the navigation.
-  const [picked, setPicked] = useState<FootballLeagueId | null>(null);
+  // The hub's own transition: while the league loads, the hub shows a
+  // skeleton of it.
+  const navigate = useSportsNavigation();
   return (
     <div className="flex items-center gap-2">
-      {navigating && <Spinner />}
       <Select
-        value={navigating && picked ? picked : leagueId}
-        onValueChange={(v) => {
-          const next = v as FootballLeagueId;
-          setPicked(next);
-          startNavigation(() => router.push(`?sport=football&league=${next}`, { scroll: false }));
-        }}
+        value={leagueId}
+        onValueChange={(v) => navigate(`?sport=football&league=${v as FootballLeagueId}`)}
       >
-        <SelectTrigger className="w-56" aria-label="League" aria-busy={navigating}>
+        <SelectTrigger className="w-56" aria-label="League">
           <SelectValue placeholder="League" />
         </SelectTrigger>
         <SelectContent>
@@ -118,8 +111,6 @@ function LeagueView({ league, picker }: { league: FootballLeagueData; picker: Re
               Table
             </TabsTrigger>
             {league.league.hasKnockout && (
-        {/* One tab for what Overview and Matches used to split: every match,
-            day by day, with the top of the table beside it. */}
               <TabsTrigger value="knockout" disabled={!hasKnockoutData}>
                 Knockout
               </TabsTrigger>
@@ -127,6 +118,8 @@ function LeagueView({ league, picker }: { league: FootballLeagueData; picker: Re
           </TabsList>
         }
       >
+        {/* One tab for what Overview and Matches used to split: every match,
+            day by day, with the top of the table beside it. */}
         <TabsContent value="overview">
           <OverviewLayout
             matches={<MatchesByDate matches={league.matches} teams={teamsMap} />}

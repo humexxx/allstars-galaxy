@@ -26,17 +26,72 @@ const CONSTRUCTORS: F1Constructor[] = [
   { position: 10, name: "Haas", shortName: "Haas", points: 4, wins: 0, podiums: 0, primaryColor: "#B6BABD" },
 ];
 
+// Rounds 5 to 8 carry a whole weekend (5 and 6 are sprints) and 4 to 6 their
+// results, so the sample exercises the Races tab's featured card, its lists
+// and the race sheet.
 const RACES: F1Race[] = [
-  { id: "r-1", round: 1, name: "Bahrain Grand Prix", circuit: "Bahrain International Circuit", circuitId: "bahrain", location: "Sakhir", flagEmoji: "🇧🇭", date: "2026-03-08", status: "completed", podium: ["ANT", "RUS", "LEC"] },
-  { id: "r-2", round: 2, name: "Saudi Arabian GP", circuit: "Jeddah Corniche", circuitId: "jeddah", location: "Jeddah", flagEmoji: "🇸🇦", date: "2026-03-15", status: "completed", podium: ["ANT", "VER", "RUS"] },
-  { id: "r-3", round: 3, name: "Australian GP", circuit: "Albert Park", circuitId: "albert_park", location: "Melbourne", flagEmoji: "🇦🇺", date: "2026-03-29", status: "completed", podium: ["RUS", "ANT", "PIA"] },
-  { id: "r-4", round: 4, name: "Japanese GP", circuit: "Suzuka", circuitId: "suzuka", location: "Suzuka", flagEmoji: "🇯🇵", date: "2026-04-12", status: "completed", podium: ["ANT", "HAM", "LEC"] },
-  { id: "r-5", round: 5, name: "Chinese GP", circuit: "Shanghai International", circuitId: "shanghai", location: "Shanghai", flagEmoji: "🇨🇳", date: "2026-04-26", status: "completed", podium: ["ANT", "NOR", "LEC"] },
-  { id: "r-6", round: 6, name: "Miami GP", circuit: "Miami International", circuitId: "miami", location: "Miami", flagEmoji: "🇺🇸", date: "2026-05-10", status: "completed", podium: ["VER", "ANT", "HAM"] },
-  { id: "r-7", round: 7, name: "Emilia Romagna GP", circuit: "Imola", circuitId: "imola", location: "Imola", flagEmoji: "🇮🇹", date: "2026-05-24", status: "upcoming" },
-  { id: "r-8", round: 8, name: "Monaco GP", circuit: "Circuit de Monaco", circuitId: "monaco", location: "Monte Carlo", flagEmoji: "🇲🇨", date: "2026-06-07", status: "upcoming" },
-  { id: "r-9", round: 9, name: "Spanish GP", circuit: "Circuit de Barcelona", circuitId: "catalunya", location: "Barcelona", flagEmoji: "🇪🇸", date: "2026-06-14", status: "upcoming" },
-  { id: "r-10", round: 10, name: "Canadian GP", circuit: "Gilles Villeneuve", circuitId: "villeneuve", location: "Montreal", flagEmoji: "🇨🇦", date: "2026-06-21", status: "upcoming" },
+  { id: "r-1", round: 1, name: "Bahrain Grand Prix", circuit: "Bahrain International Circuit", circuitId: "bahrain", location: "Sakhir", country: "Bahrain", flagEmoji: "🇧🇭", date: "2026-03-08", startsAt: "2026-03-08T15:00:00.000Z", status: "completed", podium: ["ANT", "RUS", "LEC"] },
+  { id: "r-2", round: 2, name: "Saudi Arabian GP", circuit: "Jeddah Corniche", circuitId: "jeddah", location: "Jeddah", country: "Saudi Arabia", flagEmoji: "🇸🇦", date: "2026-03-15", startsAt: "2026-03-15T17:00:00.000Z", status: "completed", podium: ["ANT", "VER", "RUS"] },
+  { id: "r-3", round: 3, name: "Australian GP", circuit: "Albert Park", circuitId: "albert_park", location: "Melbourne", country: "Australia", flagEmoji: "🇦🇺", date: "2026-03-29", startsAt: "2026-03-29T04:00:00.000Z", status: "completed", podium: ["RUS", "ANT", "PIA"] },
+  {
+    id: "r-4", round: 4, name: "Japanese GP", circuit: "Suzuka", circuitId: "suzuka", location: "Suzuka", country: "Japan", flagEmoji: "🇯🇵", date: "2026-04-12", startsAt: "2026-04-12T05:00:00.000Z", status: "completed",
+    podium: ["ANT", "HAM", "LEC"], podiumGaps: ["+3.112", "+9.870"],
+    winner: { code: "ANT", team: "Mercedes", time: "1:28:42.610", laps: 53, grid: 1 },
+    pole: { code: "ANT", time: "1:27.064" },
+    fastestLap: { code: "HAM", lap: 49, time: "1:30.965" },
+  },
+  {
+    id: "r-5", round: 5, name: "Chinese GP", circuit: "Shanghai International", circuitId: "shanghai", location: "Shanghai", country: "China", flagEmoji: "🇨🇳", date: "2026-04-26", startsAt: "2026-04-26T07:00:00.000Z", sprint: true, status: "completed",
+    sessions: [
+      { kind: "fp1", startsAt: "2026-04-24T03:30:00.000Z" },
+      { kind: "sprint-qualifying", startsAt: "2026-04-24T07:30:00.000Z" },
+      { kind: "sprint", startsAt: "2026-04-25T03:00:00.000Z" },
+      { kind: "qualifying", startsAt: "2026-04-25T07:00:00.000Z" },
+      { kind: "race", startsAt: "2026-04-26T07:00:00.000Z" },
+    ],
+    podium: ["ANT", "NOR", "LEC"], podiumGaps: ["+5.402", "+11.237"],
+    winner: { code: "ANT", team: "Mercedes", time: "1:32:11.902", laps: 56, grid: 2 },
+    pole: { code: "RUS", time: "1:30.641" },
+    fastestLap: { code: "NOR", lap: 52, time: "1:33.418" },
+    sprintWinner: { code: "RUS", team: "Mercedes" },
+  },
+  {
+    id: "r-6", round: 6, name: "Miami GP", circuit: "Miami International", circuitId: "miami", location: "Miami", country: "USA", flagEmoji: "🇺🇸", date: "2026-05-10", startsAt: "2026-05-10T20:00:00.000Z", sprint: true, status: "completed",
+    sessions: [
+      { kind: "fp1", startsAt: "2026-05-08T16:30:00.000Z" },
+      { kind: "sprint-qualifying", startsAt: "2026-05-08T20:30:00.000Z" },
+      { kind: "sprint", startsAt: "2026-05-09T16:00:00.000Z" },
+      { kind: "qualifying", startsAt: "2026-05-09T20:00:00.000Z" },
+      { kind: "race", startsAt: "2026-05-10T20:00:00.000Z" },
+    ],
+    podium: ["VER", "ANT", "HAM"], podiumGaps: ["+1.874", "+1 lap"],
+    winner: { code: "VER", team: "Red Bull", time: "1:30:05.330", laps: 57, grid: 3 },
+    pole: { code: "ANT", time: "1:26.204" },
+    fastestLap: { code: "VER", lap: 41, time: "1:29.790" },
+    sprintWinner: { code: "NOR", team: "McLaren" },
+  },
+  {
+    id: "r-7", round: 7, name: "Emilia Romagna GP", circuit: "Imola", circuitId: "imola", location: "Imola", country: "Italy", flagEmoji: "🇮🇹", date: "2026-05-24", startsAt: "2026-05-24T13:00:00.000Z", status: "upcoming",
+    sessions: [
+      { kind: "fp1", startsAt: "2026-05-22T11:30:00.000Z" },
+      { kind: "fp2", startsAt: "2026-05-22T15:00:00.000Z" },
+      { kind: "fp3", startsAt: "2026-05-23T10:30:00.000Z" },
+      { kind: "qualifying", startsAt: "2026-05-23T14:00:00.000Z" },
+      { kind: "race", startsAt: "2026-05-24T13:00:00.000Z" },
+    ],
+  },
+  {
+    id: "r-8", round: 8, name: "Monaco GP", circuit: "Circuit de Monaco", circuitId: "monaco", location: "Monte Carlo", country: "Monaco", flagEmoji: "🇲🇨", date: "2026-06-07", startsAt: "2026-06-07T13:00:00.000Z", status: "upcoming",
+    sessions: [
+      { kind: "fp1", startsAt: "2026-06-05T11:30:00.000Z" },
+      { kind: "fp2", startsAt: "2026-06-05T15:00:00.000Z" },
+      { kind: "fp3", startsAt: "2026-06-06T10:30:00.000Z" },
+      { kind: "qualifying", startsAt: "2026-06-06T14:00:00.000Z" },
+      { kind: "race", startsAt: "2026-06-07T13:00:00.000Z" },
+    ],
+  },
+  { id: "r-9", round: 9, name: "Spanish GP", circuit: "Circuit de Barcelona", circuitId: "catalunya", location: "Barcelona", country: "Spain", flagEmoji: "🇪🇸", date: "2026-06-14", startsAt: "2026-06-14T13:00:00.000Z", status: "upcoming" },
+  { id: "r-10", round: 10, name: "Canadian GP", circuit: "Gilles Villeneuve", circuitId: "villeneuve", location: "Montreal", country: "Canada", flagEmoji: "🇨🇦", date: "2026-06-21", startsAt: "2026-06-21T18:00:00.000Z", status: "upcoming" },
 ];
 
 export const F1_DATA: F1Data = {

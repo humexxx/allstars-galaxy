@@ -294,6 +294,49 @@ export type F1Constructor = {
   logoUrl?: string;
 };
 
+export type F1SessionKind =
+  | "fp1"
+  | "fp2"
+  | "fp3"
+  | "sprint-qualifying"
+  | "sprint"
+  | "qualifying"
+  | "race";
+
+/** One session of a race weekend. */
+export type F1Session = {
+  kind: F1SessionKind;
+  /** ISO instant (UTC). */
+  startsAt: string;
+};
+
+export type F1RaceWinner = {
+  code: string;
+  team: string;
+  /** The winner's race time, "1:42:00.785". */
+  time?: string;
+  laps?: number;
+  /** Where the winner started; 0 is the pit lane. */
+  grid?: number;
+};
+
+/** A driver and the lap that earned a mention: pole, the fastest lap. */
+export type F1LapMark = {
+  code: string;
+  /** "1:35.202" */
+  time?: string;
+  /** The lap it was set on (the fastest lap only). */
+  lap?: number;
+};
+
+/** Who won at this circuit the season before, for the dashboard. */
+export type F1PastWinner = {
+  season: number;
+  code: string;
+  name: string;
+  team: string;
+};
+
 export type F1Race = {
   id: string;
   round: number;
@@ -301,13 +344,58 @@ export type F1Race = {
   circuit: string;
   /** Jolpica's key for the track ("monaco", "americas"), which finds its outline. */
   circuitId: string;
+  /** The town ("Austin"). */
   location: string;
+  /** "USA", "Monaco". */
+  country?: string;
   flagEmoji: string;
-  /** ISO date. */
+  /**
+   * The race's day in UTC, which is not the reader's day: Melbourne's 04:00Z
+   * start is the evening before in the Americas. Show `startsAt` when there
+   * is one.
+   */
   date: string;
+  /** The race start as an ISO instant. */
+  startsAt?: string;
+  /** A sprint weekend. */
+  sprint?: boolean;
+  /** Every session of the weekend, the race included, in time order. */
+  sessions?: F1Session[];
   /** Top-3 driver codes when status === "completed". */
   podium?: [string, string, string];
+  /** P2's and P3's gap to the winner, "+7.335" or "+1 lap". */
+  podiumGaps?: [string, string];
+  winner?: F1RaceWinner;
+  pole?: F1LapMark;
+  fastestLap?: F1LapMark;
+  sprintWinner?: { code: string; team: string };
+  /** Only on the dashboard's race, which looks it up on its own. */
+  lastYear?: F1PastWinner;
   status: "completed" | "upcoming" | "live";
+};
+
+/** One car in a race's final order. */
+export type F1ClassificationRow = {
+  /** "1" to "22", or why a car is unplaced: "DNF", "DSQ", "NC"… */
+  position: string;
+  code: string;
+  /** "M. Verstappen" */
+  name: string;
+  team: string;
+  /** Where the car started; 0 is the pit lane. */
+  grid?: number;
+  laps?: number;
+  /** The winner's time, everybody else's gap, "+1 lap", or why the car stopped. */
+  result: string;
+  points: number;
+  /** Set the fastest lap of the race. */
+  fastestLap?: boolean;
+};
+
+export type F1RaceClassification = {
+  season: number;
+  round: number;
+  rows: F1ClassificationRow[];
 };
 
 export type F1Data = {

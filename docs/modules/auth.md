@@ -25,7 +25,7 @@ gates in `lib/services/auth-server.ts` / `lib/services/impersonation.ts`.
   bounced back to `/login` with no explanation.)
 
 ## Server actions — `/app/actions/`
-- `auth.ts` — `signOutAction` (server-side sign-out + redirect to `/login`). Login / signup / password reset still use the Supabase client directly because they depend on `window.location.origin` for redirect URLs.
+- `auth.ts` — `signOutAction` (clears the impersonation cookie, server-side sign-out, redirect to `/login`). Login / signup / password reset still use the Supabase client directly because they depend on `window.location.origin` for redirect URLs.
 
 ## Services
 - `lib/auth/auth-client.ts` — `AuthService`, the **browser** calls (password
@@ -73,6 +73,9 @@ All four use `Alert` for form-level errors and `Field` + `FieldError` with
   change while a session is live, and without the second check a promotion
   would leave the cookie granting admin-as-admin access for the rest of its
   30-minute life.
+- **Signing out ends impersonation.** `signOutAction` deletes `cg_impersonating`
+  itself: Supabase's `signOut` clears only its own cookies, so an admin who
+  signed back in within the cookie's 30 minutes silently resumed impersonating.
 - **Route handlers don't use the `require*` gates.** Their throw reaches the
   client as a 500, and the proxy only redirects signed-out requests off
   `/portal`. A handler calls `getEffectiveContext()` and answers 401 itself, as

@@ -35,8 +35,9 @@ export default async function PortalPage() {
             a card at half the row — one sport among several, not a banner. */}
         {/* Two columns once the content itself is wide enough, not the
             viewport: at 768px the sidebar leaves ~470px, and two sport cards
-            side by side were 230px each. */}
-        <div className="grid auto-rows-min gap-4 @2xl:grid-cols-2">
+            side by side were 230px each. At 1024px it leaves ~672px, less a
+            Windows scrollbar, so the step sits below that (`@xl`, 576px). */}
+        <div className="grid auto-rows-min gap-4 @xl:grid-cols-2">
           <Suspense fallback={<DashboardCardSkeleton rail={5} />}>
             <DashboardFinanceCard userId={userId} />
           </Suspense>

@@ -15,6 +15,9 @@ describe("matchTimeFormat", () => {
 
   it("moves the day with the zone", () => {
     expect(matchTimeFormat("Asia/Tokyo").shortDay(kickoff)).toBe("Jul 6");
+    // An NBA evening tip-off in Costa Rica is already the next day in UTC.
+    expect(matchTimeFormat("America/Costa_Rica").weekdayDay("2026-10-21T01:30:00Z")).toBe("Tue, Oct 20");
+    expect(matchTimeFormat("UTC").weekdayDay("2026-10-21T01:30:00Z")).toBe("Wed, Oct 21");
   });
 
   it("keeps a date-only string on its calendar day in every zone", () => {

@@ -91,6 +91,18 @@ export async function DashboardSportCard({ sportId }: { sportId: SportId }) {
         )}
 
         {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
+
+        {card.note && (
+          <div className="flex flex-col gap-1">
+            <Eyebrow size="sm">{card.note.title}</Eyebrow>
+            {card.note.text && <span className="text-xs font-medium">{card.note.text}</span>}
+            {card.note.when && (
+              <Text variant="small" as="span">
+                {card.note.when.label} {format.weekdayDay(card.note.when.startsAt)}
+              </Text>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactElement } from "react";
 import { Lock } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { NbaConference, NbaData, Team } from "@/types/sports";
 
@@ -22,6 +23,7 @@ import { OverviewSplit } from "../shared/overview-split";
 import { SportShell } from "../shared/sport-shell";
 import { SportsTh, TableCellNum } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
+import { useMatchTime } from "../shared/time-zone-context";
 
 type NbaViewProps = {
   data: NbaData;
@@ -58,7 +60,8 @@ export function NbaView({ data }: NbaViewProps) {
       >
         {/* Games and the table on one tab: day by day on the left, the
             conference table beside them. */}
-        <TabsContent value="overview">
+        <TabsContent value="overview" className="flex flex-col gap-6">
+          <SeasonNote data={data} teamsMap={teamsMap} hasStandings={hasStandings} />
           <OverviewSplit
             matches={
               <MatchesByDate
@@ -84,6 +87,48 @@ export function NbaView({ data }: NbaViewProps) {
         )}
       </SportShell>
     </Tabs>
+  );
+}
+
+/**
+ * Until the opener: who won last season, when this one tips off and, with no
+ * table yet, when there will be one. Gone from the first regular-season game,
+ * when the season's own results and table take over.
+ */
+function SeasonNote({
+  data,
+  teamsMap,
+  hasStandings,
+}: {
+  data: NbaData;
+  teamsMap: Map<string, Team>;
+  hasStandings: boolean;
+}): ReactElement | null {
+  const format = useMatchTime();
+  if (!data.tipOff) return null;
+  const { champion } = data;
+  const team = champion ? teamsMap.get(champion.teamId) : undefined;
+  const detail = [
+    `Tips off ${format.weekdayDay(data.tipOff)}`,
+    !hasStandings && "Standings start with the opener",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <Card size="sm">
+      <CardContent className="flex items-center gap-3">
+        {team && <TeamBadge team={team} size="lg" />}
+        <div className="flex min-w-0 flex-col gap-0.5">
+          {champion && (
+            <Text weight="medium">
+              {champion.season} champions: {champion.summary}
+            </Text>
+          )}
+          <Text variant="small">{detail}</Text>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

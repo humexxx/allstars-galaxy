@@ -1,0 +1,384 @@
+{
+  "sports": [
+    {
+      "leagues": [
+        {
+          "events": [
+            {"date": "2026-04-13T00:30:00Z", "seasonType": "2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "GS", "displayName": "Golden State Warriors", "name": "Warriors", "winner": false, "recordStats": {"playoffSeed": {"value": 10}}},
+              {"homeAway": "home", "abbreviation": "LAC", "displayName": "LA Clippers", "name": "Clippers", "winner": true, "recordStats": {"playoffSeed": {"value": 9}}}
+            ]},
+            {"date": "2026-04-13T00:30:00Z", "seasonType": "2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "SAC", "displayName": "Sacramento Kings", "name": "Kings", "winner": false, "recordStats": {"playoffSeed": {"value": 15}}},
+              {"homeAway": "home", "abbreviation": "POR", "displayName": "Portland Trail Blazers", "name": "Trail Blazers", "winner": true, "recordStats": {"playoffSeed": {"value": 8}}}
+            ]},
+            {"date": "2026-04-14T23:30:00Z", "seasonType": "5", "note": "NBA Play-In - East - 9th Place vs 10th Place", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "MIA", "displayName": "Miami Heat", "name": "Heat", "winner": false, "recordStats": {"playoffSeed": {"value": 15}}},
+              {"homeAway": "home", "abbreviation": "CHA", "displayName": "Charlotte Hornets", "name": "Hornets", "winner": true, "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-04-15T02:00:00Z", "seasonType": "5", "note": "NBA Play-In - West - 7th Place vs 8th Place", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "POR", "displayName": "Portland Trail Blazers", "name": "Trail Blazers", "winner": true, "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "PHX", "displayName": "Phoenix Suns", "name": "Suns", "winner": false, "recordStats": {"playoffSeed": {"value": 15}}}
+            ]},
+            {"date": "2026-04-15T23:30:00Z", "seasonType": "5", "note": "NBA Play-In - East - 7th Place vs 8th Place", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "ORL", "displayName": "Orlando Magic", "name": "Magic", "winner": false, "recordStats": {"playoffSeed": {"value": 15}}},
+              {"homeAway": "home", "abbreviation": "PHI", "displayName": "Philadelphia 76ers", "name": "76ers", "winner": true, "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-04-16T02:00:00Z", "seasonType": "5", "note": "NBA Play-In - West - 9th Place vs 10th Place", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "GS", "displayName": "Golden State Warriors", "name": "Warriors", "winner": true, "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "LAC", "displayName": "LA Clippers", "name": "Clippers", "winner": false, "recordStats": {"playoffSeed": {"value": 15}}}
+            ]},
+            {"date": "2026-04-17T23:30:00Z", "seasonType": "5", "note": "NBA Play-In - East - 8th Seed Game", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "CHA", "displayName": "Charlotte Hornets", "name": "Hornets", "winner": false, "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "ORL", "displayName": "Orlando Magic", "name": "Magic", "winner": true, "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-04-18T02:00:00Z", "seasonType": "5", "note": "NBA Play-In - West - 8th Seed Game", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "GS", "displayName": "Golden State Warriors", "name": "Warriors", "winner": false, "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "PHX", "displayName": "Phoenix Suns", "name": "Suns", "winner": true, "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-04-18T17:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "TOR", "displayName": "Toronto Raptors", "name": "Raptors", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 5}}},
+              {"homeAway": "home", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-04-18T19:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "MIN", "displayName": "Minnesota Timberwolves", "name": "Timberwolves", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 6}}},
+              {"homeAway": "home", "abbreviation": "DEN", "displayName": "Denver Nuggets", "name": "Nuggets", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 3}}}
+            ]},
+            {"date": "2026-04-18T22:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "ATL", "displayName": "Atlanta Hawks", "name": "Hawks", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 6}}},
+              {"homeAway": "home", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 3}}}
+            ]},
+            {"date": "2026-04-19T00:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "HOU", "displayName": "Houston Rockets", "name": "Rockets", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 5}}},
+              {"homeAway": "home", "abbreviation": "LAL", "displayName": "Los Angeles Lakers", "name": "Lakers", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-04-19T17:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "PHI", "displayName": "Philadelphia 76ers", "name": "76ers", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 7}}},
+              {"homeAway": "home", "abbreviation": "BOS", "displayName": "Boston Celtics", "name": "Celtics", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-04-19T19:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "PHX", "displayName": "Phoenix Suns", "name": "Suns", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 8}}},
+              {"homeAway": "home", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-04-19T22:30:00Z", "seasonType": "3", "note": "East 1st Round - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "ORL", "displayName": "Orlando Magic", "name": "Magic", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 8}}},
+              {"homeAway": "home", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-04-20T01:00:00Z", "seasonType": "3", "note": "West 1st Round - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "POR", "displayName": "Portland Trail Blazers", "name": "Trail Blazers", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 7}}},
+              {"homeAway": "home", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-04-20T23:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "TOR", "displayName": "Toronto Raptors", "name": "Raptors", "winner": false, "seriesRecord": "0-2", "recordStats": {"playoffSeed": {"value": 5}}},
+              {"homeAway": "home", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": true, "seriesRecord": "2-0", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-04-21T00:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "ATL", "displayName": "Atlanta Hawks", "name": "Hawks", "winner": true, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 6}}},
+              {"homeAway": "home", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": false, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 3}}}
+            ]},
+            {"date": "2026-04-21T02:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "MIN", "displayName": "Minnesota Timberwolves", "name": "Timberwolves", "winner": true, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 6}}},
+              {"homeAway": "home", "abbreviation": "DEN", "displayName": "Denver Nuggets", "name": "Nuggets", "winner": false, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 3}}}
+            ]},
+            {"date": "2026-04-21T23:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "PHI", "displayName": "Philadelphia 76ers", "name": "76ers", "winner": true, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 7}}},
+              {"homeAway": "home", "abbreviation": "BOS", "displayName": "Boston Celtics", "name": "Celtics", "winner": false, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-04-22T00:00:00Z", "seasonType": "3", "note": "West 1st Round - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "POR", "displayName": "Portland Trail Blazers", "name": "Trail Blazers", "winner": true, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 7}}},
+              {"homeAway": "home", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": false, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-04-22T02:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "HOU", "displayName": "Houston Rockets", "name": "Rockets", "winner": false, "seriesRecord": "0-2", "recordStats": {"playoffSeed": {"value": 5}}},
+              {"homeAway": "home", "abbreviation": "LAL", "displayName": "Los Angeles Lakers", "name": "Lakers", "winner": true, "seriesRecord": "2-0", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-04-22T23:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "ORL", "displayName": "Orlando Magic", "name": "Magic", "winner": false, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 8}}},
+              {"homeAway": "home", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": true, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-04-23T01:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "PHX", "displayName": "Phoenix Suns", "name": "Suns", "winner": false, "seriesRecord": "0-2", "recordStats": {"playoffSeed": {"value": 8}}},
+              {"homeAway": "home", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": true, "seriesRecord": "2-0", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-04-23T23:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": false, "seriesRecord": "1-2", "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "ATL", "displayName": "Atlanta Hawks", "name": "Hawks", "winner": true, "seriesRecord": "2-1", "recordStats": {"playoffSeed": {"value": 6}}}
+            ]},
+            {"date": "2026-04-24T00:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": false, "seriesRecord": "2-1", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "TOR", "displayName": "Toronto Raptors", "name": "Raptors", "winner": true, "seriesRecord": "1-2", "recordStats": {"playoffSeed": {"value": 5}}}
+            ]},
+            {"date": "2026-04-24T01:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "DEN", "displayName": "Denver Nuggets", "name": "Nuggets", "winner": false, "seriesRecord": "1-2", "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "MIN", "displayName": "Minnesota Timberwolves", "name": "Timberwolves", "winner": true, "seriesRecord": "2-1", "recordStats": {"playoffSeed": {"value": 6}}}
+            ]},
+            {"date": "2026-04-24T23:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "BOS", "displayName": "Boston Celtics", "name": "Celtics", "winner": true, "seriesRecord": "2-1", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "PHI", "displayName": "Philadelphia 76ers", "name": "76ers", "winner": false, "seriesRecord": "1-2", "recordStats": {"playoffSeed": {"value": 7}}}
+            ]},
+            {"date": "2026-04-25T00:00:00Z", "seasonType": "3", "note": "West 1st Round - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "LAL", "displayName": "Los Angeles Lakers", "name": "Lakers", "winner": true, "seriesRecord": "3-0", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "HOU", "displayName": "Houston Rockets", "name": "Rockets", "winner": false, "seriesRecord": "0-3", "recordStats": {"playoffSeed": {"value": 5}}}
+            ]},
+            {"date": "2026-04-25T02:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": true, "seriesRecord": "2-1", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "POR", "displayName": "Portland Trail Blazers", "name": "Trail Blazers", "winner": false, "seriesRecord": "1-2", "recordStats": {"playoffSeed": {"value": 7}}}
+            ]},
+            {"date": "2026-04-25T17:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": false, "seriesRecord": "1-2", "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "ORL", "displayName": "Orlando Magic", "name": "Magic", "winner": true, "seriesRecord": "2-1", "recordStats": {"playoffSeed": {"value": 8}}}
+            ]},
+            {"date": "2026-04-25T19:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": true, "seriesRecord": "3-0", "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "PHX", "displayName": "Phoenix Suns", "name": "Suns", "winner": false, "seriesRecord": "0-3", "recordStats": {"playoffSeed": {"value": 8}}}
+            ]},
+            {"date": "2026-04-25T22:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "2-2", "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "ATL", "displayName": "Atlanta Hawks", "name": "Hawks", "winner": false, "seriesRecord": "2-2", "recordStats": {"playoffSeed": {"value": 6}}}
+            ]},
+            {"date": "2026-04-26T00:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "DEN", "displayName": "Denver Nuggets", "name": "Nuggets", "winner": false, "seriesRecord": "1-3", "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "MIN", "displayName": "Minnesota Timberwolves", "name": "Timberwolves", "winner": true, "seriesRecord": "3-1", "recordStats": {"playoffSeed": {"value": 6}}}
+            ]},
+            {"date": "2026-04-26T17:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": false, "seriesRecord": "2-2", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "TOR", "displayName": "Toronto Raptors", "name": "Raptors", "winner": true, "seriesRecord": "2-2", "recordStats": {"playoffSeed": {"value": 5}}}
+            ]},
+            {"date": "2026-04-26T19:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": true, "seriesRecord": "3-1", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "POR", "displayName": "Portland Trail Blazers", "name": "Trail Blazers", "winner": false, "seriesRecord": "1-3", "recordStats": {"playoffSeed": {"value": 7}}}
+            ]},
+            {"date": "2026-04-26T23:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "BOS", "displayName": "Boston Celtics", "name": "Celtics", "winner": true, "seriesRecord": "3-1", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "PHI", "displayName": "Philadelphia 76ers", "name": "76ers", "winner": false, "seriesRecord": "1-3", "recordStats": {"playoffSeed": {"value": 7}}}
+            ]},
+            {"date": "2026-04-27T01:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "LAL", "displayName": "Los Angeles Lakers", "name": "Lakers", "winner": false, "seriesRecord": "3-1", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "HOU", "displayName": "Houston Rockets", "name": "Rockets", "winner": true, "seriesRecord": "1-3", "recordStats": {"playoffSeed": {"value": 5}}}
+            ]},
+            {"date": "2026-04-28T00:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": false, "seriesRecord": "1-3", "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "ORL", "displayName": "Orlando Magic", "name": "Magic", "winner": true, "seriesRecord": "3-1", "recordStats": {"playoffSeed": {"value": 8}}}
+            ]},
+            {"date": "2026-04-28T01:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": true, "seriesRecord": "4-0", "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "PHX", "displayName": "Phoenix Suns", "name": "Suns", "winner": false, "seriesRecord": "0-4", "recordStats": {"playoffSeed": {"value": 8}}}
+            ]},
+            {"date": "2026-04-28T02:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 5", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "MIN", "displayName": "Minnesota Timberwolves", "name": "Timberwolves", "winner": false, "seriesRecord": "3-2", "recordStats": {"playoffSeed": {"value": 6}}},
+              {"homeAway": "home", "abbreviation": "DEN", "displayName": "Denver Nuggets", "name": "Nuggets", "winner": true, "seriesRecord": "2-3", "recordStats": {"playoffSeed": {"value": 3}}}
+            ]},
+            {"date": "2026-04-28T23:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 5", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "PHI", "displayName": "Philadelphia 76ers", "name": "76ers", "winner": true, "seriesRecord": "2-3", "recordStats": {"playoffSeed": {"value": 7}}},
+              {"homeAway": "home", "abbreviation": "BOS", "displayName": "Boston Celtics", "name": "Celtics", "winner": false, "seriesRecord": "3-2", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-04-29T00:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 5", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "ATL", "displayName": "Atlanta Hawks", "name": "Hawks", "winner": false, "seriesRecord": "2-3", "recordStats": {"playoffSeed": {"value": 6}}},
+              {"homeAway": "home", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "3-2", "recordStats": {"playoffSeed": {"value": 3}}}
+            ]},
+            {"date": "2026-04-29T01:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 5", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "POR", "displayName": "Portland Trail Blazers", "name": "Trail Blazers", "winner": false, "seriesRecord": "1-4", "recordStats": {"playoffSeed": {"value": 7}}},
+              {"homeAway": "home", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": true, "seriesRecord": "4-1", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-04-29T23:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 5", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "ORL", "displayName": "Orlando Magic", "name": "Magic", "winner": false, "seriesRecord": "3-2", "recordStats": {"playoffSeed": {"value": 8}}},
+              {"homeAway": "home", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": true, "seriesRecord": "2-3", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-04-29T23:30:00Z", "seasonType": "3", "note": "East 1st Round - Game 5", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "TOR", "displayName": "Toronto Raptors", "name": "Raptors", "winner": false, "seriesRecord": "2-3", "recordStats": {"playoffSeed": {"value": 5}}},
+              {"homeAway": "home", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": true, "seriesRecord": "3-2", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-04-30T02:00:00Z", "seasonType": "3", "note": "West 1st Round - Game 5", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "HOU", "displayName": "Houston Rockets", "name": "Rockets", "winner": true, "seriesRecord": "2-3", "recordStats": {"playoffSeed": {"value": 5}}},
+              {"homeAway": "home", "abbreviation": "LAL", "displayName": "Los Angeles Lakers", "name": "Lakers", "winner": false, "seriesRecord": "3-2", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-04-30T23:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 6", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "4-2", "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "ATL", "displayName": "Atlanta Hawks", "name": "Hawks", "winner": false, "seriesRecord": "2-4", "recordStats": {"playoffSeed": {"value": 6}}}
+            ]},
+            {"date": "2026-05-01T00:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 6", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "BOS", "displayName": "Boston Celtics", "name": "Celtics", "winner": false, "seriesRecord": "3-3", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "PHI", "displayName": "Philadelphia 76ers", "name": "76ers", "winner": true, "seriesRecord": "3-3", "recordStats": {"playoffSeed": {"value": 7}}}
+            ]},
+            {"date": "2026-05-01T01:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 6", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "DEN", "displayName": "Denver Nuggets", "name": "Nuggets", "winner": false, "seriesRecord": "2-4", "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "MIN", "displayName": "Minnesota Timberwolves", "name": "Timberwolves", "winner": true, "seriesRecord": "4-2", "recordStats": {"playoffSeed": {"value": 6}}}
+            ]},
+            {"date": "2026-05-01T23:00:00Z", "seasonType": "3", "note": "East 1st Round - Game 6", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": true, "seriesRecord": "3-3", "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "ORL", "displayName": "Orlando Magic", "name": "Magic", "winner": false, "seriesRecord": "3-3", "recordStats": {"playoffSeed": {"value": 8}}}
+            ]},
+            {"date": "2026-05-01T23:30:00Z", "seasonType": "3", "note": "East 1st Round - Game 6", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": false, "seriesRecord": "3-3", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "TOR", "displayName": "Toronto Raptors", "name": "Raptors", "winner": true, "seriesRecord": "3-3", "recordStats": {"playoffSeed": {"value": 5}}}
+            ]},
+            {"date": "2026-05-02T01:30:00Z", "seasonType": "3", "note": "West 1st Round - Game 6", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "LAL", "displayName": "Los Angeles Lakers", "name": "Lakers", "winner": true, "seriesRecord": "4-2", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "HOU", "displayName": "Houston Rockets", "name": "Rockets", "winner": false, "seriesRecord": "2-4", "recordStats": {"playoffSeed": {"value": 5}}}
+            ]},
+            {"date": "2026-05-02T23:30:00Z", "seasonType": "3", "note": "East 1st Round - Game 7", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "PHI", "displayName": "Philadelphia 76ers", "name": "76ers", "winner": true, "seriesRecord": "4-3", "recordStats": {"playoffSeed": {"value": 7}}},
+              {"homeAway": "home", "abbreviation": "BOS", "displayName": "Boston Celtics", "name": "Celtics", "winner": false, "seriesRecord": "3-4", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-05-03T19:30:00Z", "seasonType": "3", "note": "East 1st Round - Game 7", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "ORL", "displayName": "Orlando Magic", "name": "Magic", "winner": false, "seriesRecord": "3-4", "recordStats": {"playoffSeed": {"value": 8}}},
+              {"homeAway": "home", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": true, "seriesRecord": "4-3", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-05-03T23:30:00Z", "seasonType": "3", "note": "East 1st Round - Game 7", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "TOR", "displayName": "Toronto Raptors", "name": "Raptors", "winner": false, "seriesRecord": "3-4", "recordStats": {"playoffSeed": {"value": 5}}},
+              {"homeAway": "home", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": true, "seriesRecord": "4-3", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-05-05T00:00:00Z", "seasonType": "3", "note": "East Semifinals - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "PHI", "displayName": "Philadelphia 76ers", "name": "76ers", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 7}}},
+              {"homeAway": "home", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 3}}}
+            ]},
+            {"date": "2026-05-05T01:30:00Z", "seasonType": "3", "note": "West Semifinals - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "MIN", "displayName": "Minnesota Timberwolves", "name": "Timberwolves", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 6}}},
+              {"homeAway": "home", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-05-05T23:00:00Z", "seasonType": "3", "note": "East Semifinals - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-05-06T00:30:00Z", "seasonType": "3", "note": "West Semifinals - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "LAL", "displayName": "Los Angeles Lakers", "name": "Lakers", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-05-06T23:00:00Z", "seasonType": "3", "note": "East Semifinals - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "PHI", "displayName": "Philadelphia 76ers", "name": "76ers", "winner": false, "seriesRecord": "0-2", "recordStats": {"playoffSeed": {"value": 7}}},
+              {"homeAway": "home", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "2-0", "recordStats": {"playoffSeed": {"value": 3}}}
+            ]},
+            {"date": "2026-05-07T01:30:00Z", "seasonType": "3", "note": "West Semifinals - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "MIN", "displayName": "Minnesota Timberwolves", "name": "Timberwolves", "winner": false, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 6}}},
+              {"homeAway": "home", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": true, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-05-07T23:00:00Z", "seasonType": "3", "note": "East Semifinals - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": false, "seriesRecord": "0-2", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": true, "seriesRecord": "2-0", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-05-08T01:30:00Z", "seasonType": "3", "note": "West Semifinals - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "LAL", "displayName": "Los Angeles Lakers", "name": "Lakers", "winner": false, "seriesRecord": "0-2", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": true, "seriesRecord": "2-0", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-05-08T23:00:00Z", "seasonType": "3", "note": "East Semifinals - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "3-0", "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "PHI", "displayName": "Philadelphia 76ers", "name": "76ers", "winner": false, "seriesRecord": "0-3", "recordStats": {"playoffSeed": {"value": 7}}}
+            ]},
+            {"date": "2026-05-09T01:30:00Z", "seasonType": "3", "note": "West Semifinals - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": true, "seriesRecord": "2-1", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "MIN", "displayName": "Minnesota Timberwolves", "name": "Timberwolves", "winner": false, "seriesRecord": "1-2", "recordStats": {"playoffSeed": {"value": 6}}}
+            ]},
+            {"date": "2026-05-09T19:00:00Z", "seasonType": "3", "note": "East Semifinals - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": false, "seriesRecord": "2-1", "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": true, "seriesRecord": "1-2", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-05-10T00:30:00Z", "seasonType": "3", "note": "West Semifinals - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": true, "seriesRecord": "3-0", "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "LAL", "displayName": "Los Angeles Lakers", "name": "Lakers", "winner": false, "seriesRecord": "0-3", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-05-10T19:30:00Z", "seasonType": "3", "note": "East Semifinals - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "4-0", "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "PHI", "displayName": "Philadelphia 76ers", "name": "76ers", "winner": false, "seriesRecord": "0-4", "recordStats": {"playoffSeed": {"value": 7}}}
+            ]},
+            {"date": "2026-05-10T23:30:00Z", "seasonType": "3", "note": "West Semifinals - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": false, "seriesRecord": "2-2", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "MIN", "displayName": "Minnesota Timberwolves", "name": "Timberwolves", "winner": true, "seriesRecord": "2-2", "recordStats": {"playoffSeed": {"value": 6}}}
+            ]},
+            {"date": "2026-05-12T00:00:00Z", "seasonType": "3", "note": "East Semifinals - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": false, "seriesRecord": "2-2", "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": true, "seriesRecord": "2-2", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-05-12T02:30:00Z", "seasonType": "3", "note": "West Semifinals - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": true, "seriesRecord": "4-0", "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "LAL", "displayName": "Los Angeles Lakers", "name": "Lakers", "winner": false, "seriesRecord": "0-4", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-05-13T00:00:00Z", "seasonType": "3", "note": "West Semifinals - Game 5", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "MIN", "displayName": "Minnesota Timberwolves", "name": "Timberwolves", "winner": false, "seriesRecord": "2-3", "recordStats": {"playoffSeed": {"value": 6}}},
+              {"homeAway": "home", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": true, "seriesRecord": "3-2", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-05-14T00:00:00Z", "seasonType": "3", "note": "East Semifinals - Game 5", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": true, "seriesRecord": "3-2", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": false, "seriesRecord": "2-3", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-05-15T23:00:00Z", "seasonType": "3", "note": "East Semifinals - Game 6", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": true, "seriesRecord": "3-3", "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": false, "seriesRecord": "3-3", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-05-16T01:30:00Z", "seasonType": "3", "note": "West Semifinals - Game 6", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": true, "seriesRecord": "4-2", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "MIN", "displayName": "Minnesota Timberwolves", "name": "Timberwolves", "winner": false, "seriesRecord": "2-4", "recordStats": {"playoffSeed": {"value": 6}}}
+            ]},
+            {"date": "2026-05-18T00:00:00Z", "seasonType": "3", "note": "East Semifinals - Game 7", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": true, "seriesRecord": "4-3", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "DET", "displayName": "Detroit Pistons", "name": "Pistons", "winner": false, "seriesRecord": "3-4", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-05-19T00:30:00Z", "seasonType": "3", "note": "West Finals - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-05-20T00:00:00Z", "seasonType": "3", "note": "East Finals - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 3}}}
+            ]},
+            {"date": "2026-05-21T00:30:00Z", "seasonType": "3", "note": "West Finals - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": false, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": true, "seriesRecord": "1-1", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-05-22T00:00:00Z", "seasonType": "3", "note": "East Finals - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": false, "seriesRecord": "0-2", "recordStats": {"playoffSeed": {"value": 4}}},
+              {"homeAway": "home", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "2-0", "recordStats": {"playoffSeed": {"value": 3}}}
+            ]},
+            {"date": "2026-05-23T00:30:00Z", "seasonType": "3", "note": "West Finals - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": true, "seriesRecord": "2-1", "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": false, "seriesRecord": "1-2", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-05-24T00:00:00Z", "seasonType": "3", "note": "East Finals - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "3-0", "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": false, "seriesRecord": "0-3", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-05-25T00:00:00Z", "seasonType": "3", "note": "West Finals - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": false, "seriesRecord": "2-2", "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": true, "seriesRecord": "2-2", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-05-26T00:00:00Z", "seasonType": "3", "note": "East Finals - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "4-0", "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "CLE", "displayName": "Cleveland Cavaliers", "name": "Cavaliers", "winner": false, "seriesRecord": "0-4", "recordStats": {"playoffSeed": {"value": 4}}}
+            ]},
+            {"date": "2026-05-27T00:30:00Z", "seasonType": "3", "note": "West Finals - Game 5", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": false, "seriesRecord": "2-3", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": true, "seriesRecord": "3-2", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-05-29T00:30:00Z", "seasonType": "3", "note": "West Finals - Game 6", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": false, "seriesRecord": "3-3", "recordStats": {"playoffSeed": {"value": 1}}},
+              {"homeAway": "home", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": true, "seriesRecord": "3-3", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-05-31T00:00:00Z", "seasonType": "3", "note": "West Finals - Game 7", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": true, "seriesRecord": "4-3", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "OKC", "displayName": "Oklahoma City Thunder", "name": "Thunder", "winner": false, "seriesRecord": "3-4", "recordStats": {"playoffSeed": {"value": 1}}}
+            ]},
+            {"date": "2026-06-04T00:30:00Z", "seasonType": "3", "note": "NBA Finals - Game 1", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "1-0", "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": false, "seriesRecord": "0-1", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-06-06T00:30:00Z", "seasonType": "3", "note": "NBA Finals - Game 2", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "2-0", "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": false, "seriesRecord": "0-2", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]},
+            {"date": "2026-06-09T00:30:00Z", "seasonType": "3", "note": "NBA Finals - Game 3", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": true, "seriesRecord": "1-2", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": false, "seriesRecord": "2-1", "recordStats": {"playoffSeed": {"value": 3}}}
+            ]},
+            {"date": "2026-06-11T00:30:00Z", "seasonType": "3", "note": "NBA Finals - Game 4", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": false, "seriesRecord": "1-3", "recordStats": {"playoffSeed": {"value": 2}}},
+              {"homeAway": "home", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "3-1", "recordStats": {"playoffSeed": {"value": 3}}}
+            ]},
+            {"date": "2026-06-14T00:30:00Z", "seasonType": "3", "note": "NBA Finals - Game 5", "fullStatus": {"type": {"name": "STATUS_FINAL", "state": "post"}}, "competitors": [
+              {"homeAway": "away", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks", "winner": true, "seriesRecord": "4-1", "recordStats": {"playoffSeed": {"value": 3}}},
+              {"homeAway": "home", "abbreviation": "SA", "displayName": "San Antonio Spurs", "name": "Spurs", "winner": false, "seriesRecord": "1-4", "recordStats": {"playoffSeed": {"value": 2}}}
+            ]}
+          ]
+        }
+      ]
+    }
+  ]
+}

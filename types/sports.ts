@@ -196,8 +196,8 @@ export type BracketMatch = {
   winnerTeamId?: string | null;
   /** ISO date for the decisive match. */
   date?: string;
-  /** An esports series' format. */
-  bestOf?: 1 | 3 | 5;
+  /** A series' format: an esports best-of, or an NBA playoff series' seven. */
+  bestOf?: 1 | 3 | 5 | 7;
 };
 
 export type BracketRound = {
@@ -316,6 +316,11 @@ export type NbaData = {
   teams: Team[];
   games: Match[];
   standings: NbaStanding[];
+  /**
+   * The postseason as best-of-seven series, East half first. Empty or absent
+   * while there is no postseason.
+   */
+  playoffs?: BracketRound[];
 };
 
 // ---------- Tennis / Padel rankings ----------

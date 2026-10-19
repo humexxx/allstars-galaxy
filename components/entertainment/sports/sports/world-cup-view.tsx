@@ -38,7 +38,7 @@ export function WorldCupView({ data, controls }: WorldCupViewProps) {
         subtitle={`${data.league.region} · ${data.league.season}`}
         controls={controls}
         tabs={
-          <TabsList>
+          <TabsList variant="line">
             <TabsTrigger value="knockout" disabled={!hasKnockout}>
               Knockout
             </TabsTrigger>

@@ -20,6 +20,7 @@ import { SPORTS } from "@/lib/data/sports/registry";
 import type { SportPayload } from "@/lib/sports/payload";
 import type { SportId, SportMeta } from "@/types/sports";
 
+import { ManageFavoritesSheet } from "./manage-favorites-sheet";
 import { SportsTodayProvider } from "./shared/time-zone-context";
 import { SportSkeleton, SportsNavigationContext } from "./sports-navigation";
 import { F1View } from "./sports/f1-view";
@@ -48,7 +49,7 @@ export function SportsHub({
   payload,
   initialTab,
   today,
-}: SportsHubProps) {
+}: SportsHubProps): React.ReactElement {
   const favSet = useMemo(() => new Set(favoriteSportIds), [favoriteSportIds]);
   const router = useRouter();
   const [loading, startLoading] = useTransition();
@@ -92,13 +93,18 @@ export function SportsHub({
 
   return (
     <SportsNavigationContext.Provider value={navigate}>
-      <div className="flex flex-col gap-6">
-        <SportSelector
-          active={loading && target ? target : activeSport}
-          favSet={favSet}
-          sports={orderedSports}
-          onPick={(sport) => navigate(`?sport=${sport}`)}
-        />
+      {/* No page header: the strip is the first row, and the sport's own bar
+          names the page (SportShell). */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start gap-2">
+          <SportSelector
+            active={loading && target ? target : activeSport}
+            favSet={favSet}
+            sports={orderedSports}
+            onPick={(sport) => navigate(`?sport=${sport}`)}
+          />
+          <ManageFavoritesSheet favoriteSportIds={favoriteSportIds} trigger="icon" />
+        </div>
         {/* The skeleton is aria-hidden; this is what a screen reader hears. */}
         <p role="status" className="sr-only">
           {loading ? `Loading ${loadingLabel ?? "sport"}…` : ""}
@@ -128,7 +134,7 @@ export function SportsHub({
  * a cold cache. Nothing on the page admitted it, which made a stale scoreboard
  * look like a broken live one.
  */
-function SampleDataNotice() {
+function SampleDataNotice(): React.ReactElement {
   return (
     // A standing note, not an alert: nothing happened, so nothing to announce.
     <Alert role="note">
@@ -156,16 +162,18 @@ function SportSelector({
   favSet: Set<SportId>;
   sports: SportMeta[];
   onPick: (sport: SportId) => void;
-}) {
+}): React.ReactElement {
   // A plain click goes through the hub's transition; a modified one (a new
   // tab, a new window) stays the link it is.
-  const pick = (event: MouseEvent<HTMLAnchorElement>, sport: SportId) => {
+  const pick = (event: MouseEvent<HTMLAnchorElement>, sport: SportId): void => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     if (sport !== active) onPick(sport);
   };
   return (
-    <nav aria-label="Sports" className="relative -mx-2 overflow-x-auto px-2 pb-1">
+    // Scrolls sideways on its own when the chips outrun a phone; the
+    // favourites button beside it stays put.
+    <nav aria-label="Sports" className="relative -mx-2 min-w-0 flex-1 overflow-x-auto px-2 pb-1">
       <ul className="flex gap-2">
         {sports.map((sport) => {
           const isActive = sport.id === active;
@@ -220,7 +228,7 @@ function SportContent({
 }: {
   payload: SportPayload;
   initialTab?: string;
-}) {
+}): React.ReactElement {
   switch (payload.sport) {
     case "football":
       return <FootballView league={payload.league} options={payload.options} />;

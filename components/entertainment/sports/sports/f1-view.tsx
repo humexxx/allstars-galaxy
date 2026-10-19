@@ -67,7 +67,7 @@ export function F1View({ data, news = [], initialTab }: F1ViewProps) {
         title="Formula 1"
         subtitle={`${data.season} Season`}
         tabs={
-          <TabsList>
+          <TabsList variant="line">
             <TabsTrigger value="standings">Standings</TabsTrigger>
             <TabsTrigger value="races">Races</TabsTrigger>
             {news.length > 0 && <TabsTrigger value="news">News</TabsTrigger>}

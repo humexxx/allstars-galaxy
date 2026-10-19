@@ -42,7 +42,7 @@ export function NflView({ data }: NflViewProps) {
         title="American Football · NFL"
         subtitle={`Season ${data.season}`}
         tabs={
-          <TabsList>
+          <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             {/* Always there, locked until the postseason: where the bracket
                 will be is worth knowing before it exists. */}

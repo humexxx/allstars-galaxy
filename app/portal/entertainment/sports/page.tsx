@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 
-import { PageHeader } from "@/components/portal/page-header";
-import { ManageFavoritesSheet } from "@/components/entertainment/sports/manage-favorites-sheet";
 import { SportsHub } from "@/components/entertainment/sports/sports-hub";
 import { DEFAULT_SPORT } from "@/lib/data/sports/registry";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
@@ -19,7 +17,7 @@ export default async function SportsPage({
   searchParams,
 }: {
   searchParams: Promise<{ sport?: string; tab?: string; league?: string }>;
-}) {
+}): Promise<React.ReactElement> {
   const ctx = await requireEffectiveContext();
   // Kickoffs are formatted in the reader's zone by the portal-wide
   // ReaderTimeZoneProvider, so the server and the browser print the same time.
@@ -37,19 +35,15 @@ export default async function SportsPage({
   const active = worldCupLink ? "football" : isSportId(sport) ? sport : (favorites[0] ?? DEFAULT_SPORT);
   const payload = await loadSport(active, { league: worldCupLink ? "world-cup" : league });
 
+  // No PageHeader: the sport bar names the page, and the favourites button
+  // sits at the end of the sport strip (SportsHub).
   return (
-    <>
-      <PageHeader
-        title="Sports"
-        actions={<ManageFavoritesSheet favoriteSportIds={favorites} />}
-      />
-      <SportsHub
-        activeSport={active}
-        favoriteSportIds={favorites}
-        payload={payload}
-        initialTab={tab}
-        today={today}
-      />
-    </>
+    <SportsHub
+      activeSport={active}
+      favoriteSportIds={favorites}
+      payload={payload}
+      initialTab={tab}
+      today={today}
+    />
   );
 }

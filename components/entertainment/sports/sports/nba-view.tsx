@@ -45,7 +45,7 @@ export function NbaView({ data }: NbaViewProps) {
         title="NBA"
         subtitle={`Season ${data.season}`}
         tabs={
-          <TabsList>
+          <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             {/* Always there, locked until the play-in week: where the bracket
                 will be is worth knowing before it exists. */}

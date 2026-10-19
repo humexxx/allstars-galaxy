@@ -88,7 +88,7 @@ export function LolView({ data }: LolViewProps) {
           </Select>
         }
         tabs={
-          <TabsList>
+          <TabsList variant="line">
             <TabsTrigger value="matches">Matches</TabsTrigger>
             {/* Worlds' Swiss stage publishes no table until it is played. */}
             {split.standings.length > 0 && (

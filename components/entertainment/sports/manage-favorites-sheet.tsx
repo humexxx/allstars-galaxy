@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Text } from "@/components/ui/typography";
 import { SPORTS } from "@/lib/data/sports/registry";
 import { cn } from "@/lib/utils";
@@ -41,9 +42,17 @@ const COVERAGE: Record<SportId, string> = {
 
 type ManageFavoritesSheetProps = {
   favoriteSportIds: SportId[];
+  /**
+   * `icon`: a round star button with the count on its corner, for the end of
+   * the hub's sport strip. `button` spells out "Manage favorites".
+   */
+  trigger?: "button" | "icon";
 };
 
-export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetProps) {
+export function ManageFavoritesSheet({
+  favoriteSportIds,
+  trigger = "button",
+}: ManageFavoritesSheetProps): React.ReactElement {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<SportId>>(
     () => new Set(favoriteSportIds)
@@ -90,17 +99,43 @@ export function ManageFavoritesSheet({ favoriteSportIds }: ManageFavoritesSheetP
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Star />
-          Manage favorites
-          {count > 0 && (
-            <Badge variant="info" className="tabular-nums">
-              {count}
-            </Badge>
-          )}
-        </Button>
-      </SheetTrigger>
+      {trigger === "icon" ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <SheetTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                className="relative rounded-full"
+                aria-label={count > 0 ? `Manage favorites (${count})` : "Manage favorites"}
+              >
+                <Star />
+                {count > 0 && (
+                  <Badge
+                    aria-hidden
+                    className="pointer-events-none absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 text-2xs tabular-nums"
+                  >
+                    {count}
+                  </Badge>
+                )}
+              </Button>
+            </SheetTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Manage favorites</TooltipContent>
+        </Tooltip>
+      ) : (
+        <SheetTrigger asChild>
+          <Button variant="outline" size="sm">
+            <Star />
+            Manage favorites
+            {count > 0 && (
+              <Badge variant="info" className="tabular-nums">
+                {count}
+              </Badge>
+            )}
+          </Button>
+        </SheetTrigger>
+      )}
       <SheetContent side="right" className="flex flex-col gap-0">
         <SheetHeader>
           <SheetTitle>Favorite sports</SheetTitle>

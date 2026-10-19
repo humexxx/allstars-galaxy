@@ -105,7 +105,7 @@ function LeagueView({ league, picker }: { league: FootballLeagueData; picker: Re
         subtitle={`${league.league.region} · Season ${league.league.season}`}
         controls={picker}
         tabs={
-          <TabsList>
+          <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="table" disabled={league.standings.length === 0}>
               Table

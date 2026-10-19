@@ -76,7 +76,7 @@ export function RacquetView({ emoji, title, subtitle, tours }: RacquetViewProps)
           ) : null
         }
         tabs={
-          <TabsList>
+          <TabsList variant="line">
             <TabsTrigger value="rankings">Rankings</TabsTrigger>
             <TabsTrigger value="tournaments">Tournaments</TabsTrigger>
             {/* Only when there is a draw to show. A tab that opens on nothing

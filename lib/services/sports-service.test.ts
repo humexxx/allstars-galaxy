@@ -26,6 +26,8 @@ vi.mock("@/db", () => ({
 }));
 
 import { db } from "@/db";
+
+import gamesOct18 from "./__fixtures__/balldontlie-nba-games-2026-10-18.json";
 import {
   __testing,
   getDashboardSportCard,
@@ -167,15 +169,32 @@ describe("getDashboardSportCard", () => {
     home_team: nbaTeam(20, "Knicks", "NYK"),
     visitor_team: nbaTeam(2, "Celtics", "BOS"),
   });
-  async function withNbaGames<T>(games: unknown[], run: () => Promise<T>): Promise<T> {
+  /**
+   * The NBA's feeds on a fixed day: balldontlie's page, and ESPN answering
+   * with no table and no preseason.
+   */
+  async function withNbaGames<T>(
+    games: unknown[],
+    run: () => Promise<T>,
+    now = new Date(2026, 9, 21, 12)
+  ): Promise<T> {
     vi.stubEnv("BALLDONTLIE_API_KEY", "test-key");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
     vi.stubGlobal(
       "fetch",
-      vi.fn(() => Promise.resolve(new Response(JSON.stringify({ data: games }), { status: 200 })))
+      vi.fn((url: string) =>
+        Promise.resolve(
+          new Response(JSON.stringify(url.includes("api.balldontlie.io") ? { data: games } : {}), {
+            status: 200,
+          })
+        )
+      )
     );
     try {
       return await run();
     } finally {
+      vi.useRealTimers();
       vi.unstubAllEnvs();
       vi.stubGlobal(
         "fetch",
@@ -209,6 +228,40 @@ describe("getDashboardSportCard", () => {
       expect(table.rows.map((r) => r.position)).toEqual([1, 2, 3, 4, 5]);
       expect(table.rows[0].value).toMatch(/^\d+–\d+$/);
     }
+    expect(card.note).toBeUndefined();
+  });
+
+  it("puts last season's champion where the NBA's table will be, until the opener", async () => {
+    const card = await withNbaGames(
+      gamesOct18.data,
+      () => getDashboardSportCard("nba"),
+      new Date(2026, 9, 18, 12)
+    );
+
+    expect(card?.context).toBe("Season 2026–27");
+    expect(card?.tables).toEqual([]);
+    expect(card?.note).toEqual({
+      title: "2025–26 champions",
+      text: "New York Knicks, 4–1 over San Antonio",
+      when: { label: "Tips off", startsAt: "2026-10-20T19:00:00.000Z" },
+    });
+    // The opener leads the card; June's finals are last season's.
+    expect(card?.featured).toMatchObject({ status: "upcoming", home: { code: "DET" }, away: { code: "BOS" } });
+  });
+
+  it("says when the NBA's table starts when last season's finals are not on the page", async () => {
+    const openers = gamesOct18.data.filter((g) => g.season === 2026);
+    const card = await withNbaGames(openers, () => getDashboardSportCard("nba"), new Date(2026, 9, 18, 12));
+
+    expect(card?.note).toEqual({
+      title: "Standings start with the opener",
+      when: { label: "Tips off", startsAt: "2026-10-20T19:00:00.000Z" },
+    });
+  });
+
+  it("has no NBA note from the opener on", async () => {
+    const card = await withNbaGames([nbaGame(1, "final", 110, 102)], () => getDashboardSportCard("nba"));
+    expect(card?.note).toBeUndefined();
   });
 
   it("reads the NBA from the live feed, not the fixture", async () => {

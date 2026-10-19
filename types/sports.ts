@@ -90,6 +90,12 @@ export type DashboardSportCard = {
   matches: DashboardMatch[];
   /** More than one shows as a toggle (East / West, ATP / WTA). */
   tables: DashboardTable[];
+  /**
+   * In place of a table the sport has none of yet: the NBA's last champion
+   * before the opener. `when` is an instant the card prints in the reader's
+   * zone after its label ("Tips off Tue, Oct 20").
+   */
+  note?: { title: string; text?: string; when?: { label: string; startsAt: string } };
 };
 
 export type SportMeta = {
@@ -311,6 +317,15 @@ export type NbaStanding = Omit<Standing, "form" | "band"> & {
   last10: string;
 };
 
+/** Last season's finals, as the view and the dashboard print them. */
+export type NbaChampion = {
+  /** The season it was won, "2025–26". */
+  season: string;
+  teamId: string;
+  /** "New York Knicks, 4–1 over San Antonio". */
+  summary: string;
+};
+
 export type NbaData = {
   season: string;
   teams: Team[];
@@ -321,6 +336,13 @@ export type NbaData = {
    * while there is no postseason.
    */
   playoffs?: BracketRound[];
+  /** Last season's champion, only until this season's opener. */
+  champion?: NbaChampion;
+  /**
+   * The season's first regular-season game, while it is still ahead: an
+   * instant, or a calendar day when balldontlie has no time for it yet.
+   */
+  tipOff?: string;
 };
 
 // ---------- Tennis / Padel rankings ----------

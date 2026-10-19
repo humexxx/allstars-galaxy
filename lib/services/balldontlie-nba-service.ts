@@ -8,6 +8,7 @@ import type {
   BracketRoundId,
   Match,
   MatchStatus,
+  NbaChampion,
   NbaConference,
   NbaData,
   NbaStanding,
@@ -43,6 +44,7 @@ type BdlTeam = {
   name: string;
   abbreviation: string;
   conference: string;
+  city?: string;
 };
 
 type BdlGame = {
@@ -62,7 +64,8 @@ type BdlGame = {
 
 /**
  * The NBA labels a season by the year it starts in, so "2026" is 2026–27.
- * Before October the season under way (or just finished) is the previous one.
+ * Before October the season under way (or just finished) is the previous one;
+ * it flips on Oct 1, the day ESPN's own season starts.
  */
 function currentSeason(today: Date): number {
   return today.getMonth() >= 9 ? today.getFullYear() : today.getFullYear() - 1;
@@ -196,20 +199,76 @@ async function gamesIn(start: string, end: string): Promise<BdlGame[]> {
 }
 
 /**
- * The last results and the next fixtures, whatever the calendar says.
+ * The last results and the next fixtures, whatever the calendar says, in
+ * kickoff order.
  *
  * In season that is a handful of days either side of today. Out of season the
- * nearest games are months away in both directions — June's finals behind,
- * October's opener ahead — so the window has to be wide enough to catch both,
- * and the trimming happens here rather than in a second request.
+ * nearest games are weeks away — October's opener ahead, a preseason behind
+ * that is ESPN's, not balldontlie's — so the trimming happens here rather than
+ * in a second request.
  */
-function recentAndNext(games: BdlGame[]): BdlGame[] {
-  const sorted = [...games].sort((a, b) => a.date.localeCompare(b.date));
+function recentAndNext(games: Match[]): Match[] {
+  const sorted = [...games].sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff));
   // By state, not by date: on a ten-game night "today's games" filled every
   // recent slot with fixtures that had not tipped off yet.
-  const played = sorted.filter((g) => g.status_state === "final");
-  const ahead = sorted.filter((g) => g.status_state !== "final");
-  return [...played.slice(-6), ...ahead.slice(0, 6)];
+  const played = sorted.filter((g) => g.status === "ft");
+  const ahead = sorted.filter((g) => g.status !== "ft" && g.status !== "cancelled");
+  const kept = new Set([...played.slice(-6), ...ahead.slice(0, 6)]);
+  return sorted.filter((g) => kept.has(g));
+}
+
+/**
+ * When the season's first regular-season game starts, while none of its games
+ * has been played. Undefined from the opener on, which is what closes the
+ * preseason and the champion's line.
+ */
+function tipOffFrom(season: BdlGame[]): string | undefined {
+  if (season.some((g) => g.status_state === "final" || g.status_state === "in")) return undefined;
+  const first = season
+    .filter((g) => !g.postseason && !g.postponed)
+    .sort((a, b) => Date.parse(a.datetime ?? a.date) - Date.parse(b.datetime ?? b.date))[0];
+  // A date-only fallback stays a calendar day; a made-up UTC midnight would
+  // print as the day before anywhere west of Greenwich.
+  return first ? (first.datetime ?? first.date) : undefined;
+}
+
+/**
+ * `season`'s champion, off its last postseason game on the page — no request
+ * of its own. The page starts at June 1 until the new season is a week old
+ * and the finals start in June, so the series is all there; if it is not, the
+ * score is left out rather than printed short.
+ */
+function championFrom(page: BdlGame[], season: number): { champion: NbaChampion; team: BdlTeam } | undefined {
+  const postseason = page
+    .filter((g) => g.season === season && g.postseason && g.status_state === "final")
+    .sort((a, b) => Date.parse(a.datetime ?? a.date) - Date.parse(b.datetime ?? b.date));
+  const last = postseason[postseason.length - 1];
+  if (!last || last.home_team_score === last.visitor_team_score) return undefined;
+  const [winner, loser] =
+    last.home_team_score > last.visitor_team_score
+      ? [last.home_team, last.visitor_team]
+      : [last.visitor_team, last.home_team];
+  const sides = new Set([winner.abbreviation, loser.abbreviation]);
+  const series = postseason.filter(
+    (g) => sides.has(g.home_team.abbreviation) && sides.has(g.visitor_team.abbreviation)
+  );
+  const wins = series.filter((g) =>
+    g.home_team_score > g.visitor_team_score
+      ? g.home_team.abbreviation === winner.abbreviation
+      : g.visitor_team.abbreviation === winner.abbreviation
+  ).length;
+  const beaten = loser.city ?? loser.full_name;
+  return {
+    champion: {
+      season: seasonLabel(season),
+      teamId: winner.abbreviation,
+      summary:
+        wins === WINS_TO_ADVANCE
+          ? `${winner.full_name}, ${wins}–${series.length - wins} over ${beaten}`
+          : `${winner.full_name} over ${beaten}`,
+    },
+    team: winner,
+  };
 }
 
 type EspnStandingEntry = {
@@ -259,6 +318,10 @@ function espnStat(entry: EspnStandingEntry, key: string): { value: number; displ
  * balldontlie's free tier serves no /standings, and deriving a table would
  * take a request per hundred games. ESPN's public standings need no key and
  * cost nothing from balldontlie's five a minute.
+ *
+ * Before the opener ESPN lists all thirty at 0–0 in its own team order, which
+ * put New Orleans top of the West in bold. Nobody has played, so there is no
+ * table: empty, the view says when it starts.
  */
 function standingsFrom(json: EspnStandings): { standings: NbaStanding[]; teams: Team[] } {
   const standings: NbaStanding[] = [];
@@ -310,12 +373,13 @@ function standingsFrom(json: EspnStandings): { standings: NbaStanding[]; teams: 
       .sort((a, b) => (seeded ? a.seed - b.seed : b.row.winPct - a.row.winPct))
       .forEach(({ row }, i) => standings.push({ ...row, position: i + 1 }));
   }
+  if (standings.every((s) => s.played === 0)) return { standings: [], teams: [] };
   return { standings, teams };
 }
 
 /**
- * The table for the season the results belong to. ESPN names a season by the
- * year it ends in (2025–26 is 2026), and `seasontype=2` keeps the preseason's
+ * The table for the season being shown. ESPN names a season by the year it
+ * ends in (2025–26 is 2026), and `seasontype=2` keeps the preseason's
  * exhibition records out of it.
  */
 async function fetchStandings(season: number): Promise<EspnStandings> {
@@ -326,33 +390,37 @@ async function fetchStandings(season: number): Promise<EspnStandings> {
   return (await res.json()) as EspnStandings;
 }
 
-type EspnPlayoffCompetitor = {
+type EspnHeaderCompetitor = {
   homeAway?: "home" | "away";
   abbreviation?: string;
   displayName?: string;
   name?: string;
   winner?: boolean;
+  /** "112"; there from tip-off. */
+  score?: string;
   /** This team's series record once the game is over, "3-1". */
   seriesRecord?: string;
   recordStats?: { playoffSeed?: { value?: number } };
 };
 
-type EspnPlayoffEvent = {
+type EspnHeaderEvent = {
+  id?: string;
   date?: string;
-  /** "2" regular season, "3" postseason, "5" play-in. */
+  /** "1" preseason, "2" regular season, "3" postseason, "5" play-in. */
   seasonType?: string | number;
   /** "East 1st Round - Game 1", "West Semifinals - Game 4", "NBA Finals - Game 7". */
   note?: string;
   fullStatus?: { type?: { name?: string; state?: "pre" | "in" | "post" } };
-  competitors?: EspnPlayoffCompetitor[];
+  competitors?: EspnHeaderCompetitor[];
 };
 
 type EspnScoreboardHeader = {
-  sports?: Array<{ leagues?: Array<{ events?: EspnPlayoffEvent[] }> }>;
+  sports?: Array<{ leagues?: Array<{ events?: EspnHeaderEvent[] }> }>;
 };
 
 type NbaPlayoffs = { rounds: BracketRound[]; teams: Team[] };
 
+const PRESEASON = "1";
 const POSTSEASON = "3";
 const WINS_TO_ADVANCE = 4;
 /**
@@ -361,7 +429,24 @@ const WINS_TO_ADVANCE = 4;
  * then one page holds it all — ~110 postseason games at most.
  */
 const PLAYOFF_DATES = { from: "0410", to: "0731" };
-const PLAYOFF_LIMIT = 300;
+/** Enough for a postseason or a preseason; ESPN answers 500 or more with a 502. */
+const HEADER_LIMIT = 300;
+
+function headerEvents(json: EspnScoreboardHeader): EspnHeaderEvent[] {
+  return (json.sports ?? []).flatMap((s) => s.leagues ?? []).flatMap((l) => l.events ?? []);
+}
+
+/** A side of ESPN's scoreboard as a team, by balldontlie's abbreviation. */
+function headerTeam(c: EspnHeaderCompetitor | undefined, code: string): Team {
+  return {
+    id: code,
+    name: c?.displayName ?? code,
+    shortName: c?.name ?? code,
+    code,
+    logoUrl: logoFor(code),
+    primaryColor: TEAM_COLORS[code],
+  };
+}
 
 const PLAYOFF_ROUNDS: ReadonlyArray<{ id: BracketRoundId; label: string; size: number }> = [
   { id: "round-of-16", label: "First Round", size: 8 },
@@ -380,33 +465,94 @@ const FIRST_ROUND_SLOT: Record<number, number> = { 1: 0, 4: 1, 3: 2, 2: 3 };
  * The year whose postseason to read, or null when there cannot be one — and
  * then there is no request at all.
  *
- * By the calendar, from the regular season's last week to the end of June.
- * Beyond that, only while balldontlie's own page still holds postseason
- * games and nothing later: all summer the finals are the latest results, and
- * the bracket they closed stays with them. Once the next season's games are
- * on the page the bracket is last season's, and the tab locks until the next
- * play-in rather than sitting beside the openers. Their season names the
- * year, because by October the calendar has moved on to the next one.
+ * Only ever the bracket of the season being shown: by the calendar, from the
+ * regular season's last week to the end of June, and beyond that while the
+ * page still holds that season's postseason games — all summer, when the
+ * finals are the season's last results. On Oct 1 the season shown moves on,
+ * and the tab locks until the next play-in. It used to lock once a later
+ * season's openers reached the page, which in August hid the bracket while
+ * the heading still named the season it belonged to.
  */
-function playoffYear(today: Date, page: BdlGame[]): number | null {
-  const seasons = page.filter((g) => g.postseason).map((g) => g.season);
-  if (seasons.length > 0) {
-    const season = Math.max(...seasons);
-    return page.some((g) => g.season > season) ? null : season + 1;
-  }
+function playoffYear(today: Date, page: BdlGame[], season: number): number | null {
+  if (page.some((g) => g.season === season && g.postseason)) return season + 1;
   const month = today.getMonth();
   const inWindow = (month === 3 && today.getDate() >= 10) || month === 4 || month === 5;
-  return inWindow ? today.getFullYear() : null;
+  return inWindow ? season + 1 : null;
 }
 
 async function fetchPlayoffs(year: number): Promise<EspnScoreboardHeader> {
   const dates = `${year}${PLAYOFF_DATES.from}-${year}${PLAYOFF_DATES.to}`;
   const res = await fetch(
-    `${ESPN_SCOREBOARD_URL}?sport=basketball&league=nba&dates=${dates}&limit=${PLAYOFF_LIMIT}`,
+    `${ESPN_SCOREBOARD_URL}?sport=basketball&league=nba&dates=${dates}&limit=${HEADER_LIMIT}`,
     { signal: upstreamSignal() }
   );
   if (!res.ok) throw new Error(`espn nba scoreboard ${res.status}`);
   return (await res.json()) as EspnScoreboardHeader;
+}
+
+type NbaPreseason = { games: Match[]; teams: Team[] };
+
+const NO_PRESEASON: NbaPreseason = { games: [], teams: [] };
+
+/**
+ * The preseason so far, from Oct 1 through tomorrow (a late tip-off is
+ * tomorrow in UTC). balldontlie's free tier has none of it. Never more than a
+ * few weeks: ESPN answers a span much over five months with nothing at all.
+ */
+async function fetchPreseason(season: number, through: Date): Promise<EspnScoreboardHeader> {
+  const dates = `${season}1001-${iso(through).replace(/-/g, "")}`;
+  const res = await fetch(
+    `${ESPN_SCOREBOARD_URL}?sport=basketball&league=nba&dates=${dates}&limit=${HEADER_LIMIT}`,
+    { signal: upstreamSignal() }
+  );
+  if (!res.ok) throw new Error(`espn nba preseason ${res.status}`);
+  return (await res.json()) as EspnScoreboardHeader;
+}
+
+function preseasonStatus(type: { name?: string; state?: string } | undefined): MatchStatus {
+  if (type?.name === "STATUS_CANCELED") return "cancelled";
+  if (type?.name === "STATUS_POSTPONED") return "postponed";
+  if (type?.state === "post") return "ft";
+  if (type?.state === "in") return "live";
+  return "scheduled";
+}
+
+function headerScore(c: EspnHeaderCompetitor | undefined): number | null {
+  const score = Number(c?.score);
+  return c?.score !== undefined && Number.isFinite(score) ? score : null;
+}
+
+/**
+ * ESPN's preseason games as matches. The rest of the range — the opener when
+ * "tomorrow" reaches it — is dropped by season type. A side that is not an
+ * NBA team (the London Lions) has no logo to guess and keeps a monogram.
+ */
+function preseasonFrom(json: EspnScoreboardHeader): NbaPreseason {
+  const games: Match[] = [];
+  const teams = new Map<string, Team>();
+  for (const event of headerEvents(json)) {
+    if (String(event.seasonType) !== PRESEASON || !event.id || !event.date) continue;
+    const home = event.competitors?.find((c) => c.homeAway === "home");
+    const away = event.competitors?.find((c) => c.homeAway === "away");
+    const homeId = playoffTeamId(home);
+    const awayId = playoffTeamId(away);
+    if (!homeId || !awayId) continue;
+    if (!teams.has(homeId)) teams.set(homeId, headerTeam(home, homeId));
+    if (!teams.has(awayId)) teams.set(awayId, headerTeam(away, awayId));
+    const status = preseasonStatus(event.fullStatus?.type);
+    const played = status === "ft" || status === "live";
+    games.push({
+      id: `espn-${event.id}`,
+      homeTeamId: homeId,
+      awayTeamId: awayId,
+      homeScore: played ? headerScore(home) : null,
+      awayScore: played ? headerScore(away) : null,
+      kickoff: event.date,
+      status,
+      stageLabel: "Preseason",
+    });
+  }
+  return { games, teams: [...teams.values()] };
 }
 
 type PlayoffSide = {
@@ -456,13 +602,13 @@ function stageOf(note: string | undefined): Pick<PlayoffGame, "round" | "confere
 }
 
 /** An undecided slot comes back as a "TBD" team. */
-function playoffTeamId(c: EspnPlayoffCompetitor | undefined): string | null {
+function playoffTeamId(c: EspnHeaderCompetitor | undefined): string | null {
   const code = c?.abbreviation;
   if (!code || code === "TBD") return null;
   return ESPN_TO_BDL[code] ?? code;
 }
 
-function sideFrom(c: EspnPlayoffCompetitor | undefined): PlayoffSide {
+function sideFrom(c: EspnHeaderCompetitor | undefined): PlayoffSide {
   const seed = c?.recordStats?.playoffSeed?.value;
   const record = c?.seriesRecord?.match(/^(\d+)-\d+$/);
   return {
@@ -631,10 +777,9 @@ function tieFrom(id: string, slot: Slot, upper: Tie | undefined, lower: Tie | un
  * rounds. The play-in is a season type of its own and never part of it.
  */
 function playoffsFrom(json: EspnScoreboardHeader): NbaPlayoffs {
-  const events = (json.sports ?? []).flatMap((s) => s.leagues ?? []).flatMap((l) => l.events ?? []);
   const games: PlayoffGame[] = [];
   const teams = new Map<string, Team>();
-  for (const event of events) {
+  for (const event of headerEvents(json)) {
     if (String(event.seasonType) !== POSTSEASON || !event.date) continue;
     const stage = stageOf(event.note);
     if (!stage) continue;
@@ -642,15 +787,7 @@ function playoffsFrom(json: EspnScoreboardHeader): NbaPlayoffs {
     const away = event.competitors?.find((c) => c.homeAway === "away");
     for (const c of [home, away]) {
       const code = playoffTeamId(c);
-      if (!code || teams.has(code)) continue;
-      teams.set(code, {
-        id: code,
-        name: c?.displayName ?? code,
-        shortName: c?.name ?? code,
-        code,
-        logoUrl: logoFor(code),
-        primaryColor: TEAM_COLORS[code],
-      });
+      if (code && !teams.has(code)) teams.set(code, headerTeam(c, code));
     }
     const status = event.fullStatus?.type;
     games.push({
@@ -683,51 +820,58 @@ async function fetchNbaFromApi(today: Date): Promise<NbaData> {
   const season = currentSeason(today);
   const { start, end } = gameWindow(today);
   const page = await gamesIn(start, end);
-  const games = recentAndNext(page);
 
-  if (games.length === 0) throw new Error("balldontlie returned no games");
+  if (page.length === 0) throw new Error("balldontlie returned no games");
 
-  const byTeam = new Map<string, Team>();
-  for (const game of games) {
-    for (const t of [game.home_team, game.visitor_team]) {
-      if (!byTeam.has(t.abbreviation)) byTeam.set(t.abbreviation, teamFrom(t));
-    }
-  }
+  // Out of season the page holds two seasons, June's finals and October's
+  // openers, and listing both put the new season's openers under the old
+  // one's heading and table. Everything shown is one season's: from Oct 1 the
+  // new one, until then the old one, which from mid-June is the finals alone.
+  const own = page.filter((g) => g.season === season);
+  const tipOff = tipOffFrom(own);
+  const crowned = tipOff ? championFrom(page, season - 1) : undefined;
 
-  const sorted = [...games].sort((a, b) => a.date.localeCompare(b.date));
-  // Out of season the list holds two: the finals just played and the openers
-  // already scheduled. The heading names the one the RESULTS belong to, since
-  // that is the season a reader is reading; the fixtures carry their own
-  // dates. Falling back to the last game's season labelled June's finals with
-  // next October's year.
-  const played = sorted.filter((g) => g.status_state === "final");
-  const latestSeason =
-    played[played.length - 1]?.season ?? sorted[sorted.length - 1]?.season ?? season;
-
-  // The table and the bracket are extras, not the feed: if ESPN is down the
-  // games still refresh, the table drops away rather than being invented, and
-  // the bracket keeps its last good answer (`getNbaPlayoffs`). Side by side,
-  // so two slow answers cost one timeout, not two.
-  const year = playoffYear(today, page);
-  const [table, bracket] = await Promise.all([
-    fetchStandings(latestSeason)
+  // The table, the bracket and the preseason are extras, not the feed: if
+  // ESPN is down the games still refresh, the table drops away rather than
+  // being invented, and the bracket and the preseason keep their last good
+  // answer. Side by side, so slow answers cost one timeout, not three. The
+  // preseason costs a request only between Oct 1 and the opener.
+  const year = playoffYear(today, page, season);
+  const [table, bracket, preseason] = await Promise.all([
+    fetchStandings(season)
       .then(standingsFrom)
       .catch((error) => {
         console.warn("espn nba standings unavailable:", error);
         return { standings: [] as NbaStanding[], teams: [] as Team[] };
       }),
     year === null ? Promise.resolve(NO_PLAYOFFS) : getNbaPlayoffs(year),
+    tipOff && today.getMonth() >= 9 ? getNbaPreseason(season) : Promise.resolve(NO_PRESEASON),
   ]);
+
+  const games = recentAndNext([...own.map(matchFrom), ...preseason.games]);
+
+  const known = new Map<string, Team>(preseason.teams.map((t) => [t.id, t]));
+  for (const game of own) {
+    for (const t of [game.home_team, game.visitor_team]) known.set(t.abbreviation, teamFrom(t));
+  }
+  if (crowned) known.set(crowned.team.abbreviation, teamFrom(crowned.team));
+  const byTeam = new Map<string, Team>();
+  for (const id of [...games.flatMap((g) => [g.homeTeamId, g.awayTeamId]), crowned?.champion.teamId]) {
+    const team = id ? known.get(id) : undefined;
+    if (team && !byTeam.has(team.id)) byTeam.set(team.id, team);
+  }
   for (const team of [...table.teams, ...bracket.teams]) {
     if (!byTeam.has(team.id)) byTeam.set(team.id, team);
   }
 
   return {
-    season: seasonLabel(latestSeason),
+    season: seasonLabel(season),
     teams: [...byTeam.values()],
-    games: sorted.map(matchFrom),
+    games,
     standings: table.standings,
     playoffs: bracket.rounds,
+    ...(crowned ? { champion: crowned.champion } : {}),
+    ...(tipOff ? { tipOff } : {}),
   };
 }
 
@@ -751,6 +895,19 @@ const getNbaPlayoffs = cachedFeed(
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:nba"] }
 );
 
+/**
+ * The preseason, keyed by its season alone so a failed refresh keeps the last
+ * good answer from one day to the next; each refresh reads through tomorrow.
+ */
+const getNbaPreseason = cachedFeed(
+  "ESPN NBA preseason",
+  async (season: number): Promise<NbaPreseason> =>
+    preseasonFrom(await fetchPreseason(season, shift(new Date(), 1))),
+  (): NbaPreseason => NO_PRESEASON,
+  ["nba-preseason"],
+  { revalidate: REVALIDATE_SECONDS, tags: ["sports:nba"] }
+);
+
 export const getNbaData = cachedFeed(
   "balldontlie NBA",
   () => fetchNbaFromApi(new Date()),
@@ -771,4 +928,7 @@ export const __testing = {
   logoFor,
   playoffYear,
   playoffsFrom,
+  tipOffFrom,
+  championFrom,
+  preseasonFrom,
 };

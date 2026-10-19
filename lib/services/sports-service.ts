@@ -191,13 +191,24 @@ function nbaCard(base: CardBase, data: NbaData): DashboardSportCard {
       .slice(0, CARD_ROWS)
       .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.won}–${s.lost}`)),
   });
+  const tables = [conference("east", "East"), conference("west", "West")].filter((t) => t.rows.length > 0);
   return {
     ...base,
     context: `Season ${data.season}`,
     featured,
     matches,
-    tables: [conference("east", "East"), conference("west", "West")].filter((t) => t.rows.length > 0),
+    tables,
+    note: tables.length === 0 ? nbaNote(data) : undefined,
   };
+}
+
+/** Before the opener there is no table, so who won last season takes its place. */
+function nbaNote(data: NbaData): DashboardSportCard["note"] {
+  if (!data.tipOff) return undefined;
+  const when = { label: "Tips off", startsAt: data.tipOff };
+  return data.champion
+    ? { title: `${data.champion.season} champions`, text: data.champion.summary, when }
+    : { title: "Standings start with the opener", when };
 }
 
 function nflCard(base: CardBase, data: NflData): DashboardSportCard {

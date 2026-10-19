@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { __testing } from "./lolesports-service";
 
-const { buildLolBracket, isBracketStage, isCurrentEvent, pickActiveTournament, withinTournament } =
-  __testing;
+const {
+  buildLolBracket,
+  buildSwissStage,
+  isBracketStage,
+  isCurrentEvent,
+  pickActiveTournament,
+  withinTournament,
+} = __testing;
 
 const team = (code: string, gameWins?: number) => ({
   name: code,
@@ -139,5 +145,105 @@ describe("withinTournament", () => {
 
   it("allows a day either side for time zones", () => {
     expect(withinTournament("2026-09-21T02:00:00Z", split)).toBe(true);
+  });
+});
+
+describe("buildSwissStage", () => {
+  const played = (home: string, away: string, score: [number, number]) => ({
+    id: `${home}-${away}`,
+    state: "completed" as const,
+    teams: [team(home, score[0]), team(away, score[1])],
+  });
+  const pending = (id: string, home = "TBD", away = "TBD") => ({
+    id,
+    state: "unstarted" as const,
+    teams: [team(home, home === "TBD" ? undefined : 0), team(away, away === "TBD" ? undefined : 0)],
+  });
+
+  // Worlds 2025's Swiss stage, in the order the API lists it: round by round,
+  // best record first within a round.
+  const worlds2025 = [
+    played("VKS", "TSW", [0, 1]), played("FNC", "CFO", [0, 1]), played("MKOI", "KT", [0, 1]),
+    played("100T", "BLG", [1, 0]), played("T1", "FLY", [1, 0]), played("AL", "HLE", [1, 0]),
+    played("TES", "G2", [1, 0]), played("PSG", "GEN", [0, 1]),
+    played("TSW", "KT", [0, 1]), played("100T", "TES", [0, 1]), played("T1", "CFO", [0, 1]),
+    played("AL", "GEN", [1, 0]), played("FLY", "VKS", [1, 0]), played("G2", "MKOI", [1, 0]),
+    played("FNC", "BLG", [0, 1]), played("PSG", "HLE", [0, 1]),
+    played("TES", "KT", [0, 2]), played("AL", "CFO", [2, 1]), played("TSW", "FLY", [0, 1]),
+    played("T1", "GEN", [0, 1]), played("G2", "BLG", [1, 0]), played("100T", "HLE", [0, 1]),
+    played("FNC", "MKOI", [1, 2]), played("VKS", "PSG", [2, 1]),
+    played("HLE", "CFO", [2, 0]), played("G2", "FLY", [2, 1]), played("TES", "GEN", [0, 2]),
+    played("TSW", "MKOI", [1, 2]), played("VKS", "BLG", [0, 2]), played("T1", "100T", [2, 0]),
+    played("FLY", "CFO", [0, 2]), played("BLG", "TES", [1, 2]), played("T1", "MKOI", [2, 0]),
+  ];
+
+  const shape = (stage: NonNullable<ReturnType<typeof buildSwissStage>>) =>
+    stage.rounds.map((round) => round.map((p) => `${p.wins}-${p.losses}×${p.matches.length}`));
+
+  it("draws a finished stage as its record pools, and who went through on what", () => {
+    const stage = buildSwissStage(worlds2025)!;
+    expect(stage).toMatchObject({ winsToAdvance: 3, lossesToExit: 3 });
+    expect(shape(stage)).toEqual([
+      ["0-0×8"],
+      ["1-0×4", "0-1×4"],
+      ["2-0×2", "1-1×4", "0-2×2"],
+      ["2-1×3", "1-2×3"],
+      ["2-2×3"],
+    ]);
+    expect(stage.exits.map((e) => [`${e.wins}-${e.losses}`, e.advanced, e.slots, e.teamIds])).toEqual([
+      ["3-0", true, 2, ["kt", "al"]],
+      ["3-1", true, 3, ["hle", "g2", "gen"]],
+      ["3-2", true, 3, ["cfo", "tes", "t1"]],
+      ["2-3", false, 3, ["fly", "blg", "mkoi"]],
+      ["1-3", false, 3, ["tsw", "vks", "100t"]],
+      ["0-3", false, 2, ["fnc", "psg"]],
+    ]);
+    expect(stage.rounds[4][0].matches[2]).toMatchObject({
+      homeTeamId: "t1",
+      awayTeamId: "mkoi",
+      winnerTeamId: "t1",
+      status: "ft",
+    });
+  });
+
+  it("draws a stage nobody has played yet from its first-round pairings", () => {
+    const draw = [
+      pending("r1-1", "GEN", "IG"), pending("r1-2", "TLAW", "CFO"), pending("r1-3", "AL", "KC"),
+      pending("r1-4", "G2", "DK"), pending("r1-5", "HLE", "TES"), pending("r1-6", "LOS", "T1"),
+      pending("r1-7", "TSW", "LYON"), pending("r1-8", "BLG", "MKOI"),
+      ...Array.from({ length: 25 }, (_, i) => pending(`later-${i}`)),
+    ];
+    const schedule = new Map([["r1-1", { date: "2026-10-23T17:00:00Z", bestOf: 1 as const }]]);
+    const stage = buildSwissStage(draw, schedule)!;
+
+    expect(shape(stage)).toEqual([
+      ["0-0×8"],
+      ["1-0×4", "0-1×4"],
+      ["2-0×2", "1-1×4", "0-2×2"],
+      ["2-1×3", "1-2×3"],
+      ["2-2×3"],
+    ]);
+    expect(stage.exits.every((e) => e.teamIds.length === 0)).toBe(true);
+    expect(stage.rounds[0][0].matches[0]).toMatchObject({
+      homeTeamId: "gen",
+      awayTeamId: "ig",
+      status: "scheduled",
+      date: "2026-10-23T17:00:00Z",
+      bestOf: 1,
+    });
+    expect(stage.rounds[1][0].matches[0]).toMatchObject({ homeTeamId: null, awayTeamId: null });
+  });
+
+  it("draws nothing rather than a team in the wrong pool", () => {
+    // A 0-1 team listed among the 1-0 matches: the order is not the one the
+    // pools are read from.
+    const shuffled = [...worlds2025];
+    [shuffled[8], shuffled[12]] = [shuffled[12], shuffled[8]];
+    expect(buildSwissStage(shuffled)).toBeNull();
+  });
+
+  it("draws nothing for a stage that is not a Swiss one", () => {
+    expect(buildSwissStage([])).toBeNull();
+    expect(buildSwissStage(worlds2025.slice(0, 7))).toBeNull();
   });
 });

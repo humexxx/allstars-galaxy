@@ -32,6 +32,7 @@ import type {
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { Last5Form } from "../shared/last-5-form";
 import { SportShell } from "../shared/sport-shell";
+import { SwissBracket } from "../shared/swiss-bracket";
 import { SportsTh, TableCard } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
 import { useMatchTime } from "../shared/time-zone-context";
@@ -56,6 +57,8 @@ export function LolView({ data }: LolViewProps) {
   // on it showed "not drawn yet" as the first thing on the page while the
   // split's actual matches sat one tab away.
   const playoffsDrawn = playoffs !== null && isBracketDrawn(playoffs);
+  // Worlds' main stage until its knockouts are drawn, so it is where to land.
+  const swiss = split.swiss ?? null;
 
   return (
     // Keyed by region: switching to a region without playoffs while on the
@@ -63,7 +66,7 @@ export function LolView({ data }: LolViewProps) {
     // whose trigger/content no longer exist (blank body).
     <Tabs
       key={region}
-      defaultValue={playoffsDrawn ? "playoffs" : "matches"}
+      defaultValue={playoffsDrawn ? "playoffs" : swiss ? "swiss" : "matches"}
       className="gap-6"
     >
       <SportShell
@@ -91,6 +94,7 @@ export function LolView({ data }: LolViewProps) {
             {split.standings.length > 0 && (
               <TabsTrigger value="standings">Standings</TabsTrigger>
             )}
+            {swiss && <TabsTrigger value="swiss">Swiss stage</TabsTrigger>}
             {playoffs && <TabsTrigger value="playoffs">Playoffs</TabsTrigger>}
           </TabsList>
         }
@@ -106,6 +110,16 @@ export function LolView({ data }: LolViewProps) {
         {split.standings.length > 0 && (
           <TabsContent value="standings">
             <LolStandings split={split} teamsMap={teamsMap} />
+          </TabsContent>
+        )}
+
+        {swiss && (
+          <TabsContent value="swiss">
+            <Card size="sm">
+              <CardContent>
+                <SwissBracket stage={swiss} teams={teamsMap} />
+              </CardContent>
+            </Card>
           </TabsContent>
         )}
 

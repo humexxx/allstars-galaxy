@@ -93,6 +93,34 @@ describe("teamFrom", () => {
   it("falls back to ESPN's colour for a team it does not know", () => {
     expect(teamFrom({ abbreviation: "XYZ", color: "123456" })!.primaryColor).toBe("#123456");
   });
+
+  it("takes the scoreboard's logo, at the size it is drawn", () => {
+    // The scoreboard sends a 4096px original — half a megabyte per badge.
+    const packers = teamFrom({
+      ...team("GB", "Packers"),
+      logo: "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/gb.png",
+    });
+    expect(packers!.logoUrl).toBe(
+      "https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500/scoreboard/gb.png&w=96&h=96&scale=crop"
+    );
+  });
+
+  it("takes the standings' default logo, so a team on its bye has one too", () => {
+    const bills = teamFrom({
+      ...team("BUF", "Bills"),
+      logos: [
+        { href: "https://a.espncdn.com/i/teamlogos/nfl/500/buf.png" },
+        { href: "https://a.espncdn.com/i/teamlogos/nfl/500-dark/scoreboard/buf.png" },
+      ],
+    });
+    expect(bills!.logoUrl).toBe(
+      "https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500/buf.png&w=96&h=96&scale=crop"
+    );
+  });
+
+  it("leaves the badge to the colour when ESPN sends no logo", () => {
+    expect(teamFrom(team("KC"))!.logoUrl).toBeUndefined();
+  });
 });
 
 describe("standingsFrom", () => {

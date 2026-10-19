@@ -302,6 +302,28 @@ function splitSectionsByBlock(
 function buildLolBracket(
   sections: PlayoffSection[],
   blockByMatchId: Map<string, string> = new Map(),
+  schedule: Map<string, ScheduledMatch> = new Map(),
+): BracketRound[] {
+  return withSchedule(buildLolRounds(sections, blockByMatchId), schedule);
+}
+
+/** Each tie's day and format, which only the schedule knows. */
+function withSchedule(
+  rounds: BracketRound[],
+  schedule: Map<string, ScheduledMatch>,
+): BracketRound[] {
+  return rounds.map((round) => ({
+    ...round,
+    matches: round.matches.map((match) => {
+      const scheduled = schedule.get(match.id);
+      return scheduled ? { ...match, date: scheduled.date, bestOf: scheduled.bestOf } : match;
+    }),
+  }));
+}
+
+function buildLolRounds(
+  sections: PlayoffSection[],
+  blockByMatchId: Map<string, string>,
 ): BracketRound[] {
   const named = splitSectionsByBlock(sections, blockByMatchId).filter(
     (s): s is { name: string; matches: LolesportsStandingsMatch[] } =>
@@ -766,7 +788,11 @@ async function fetchSplit(
   // schedule's blocks.
   const playoffs =
     standingsRes.playoffSections.length > 0
-      ? buildLolBracket(standingsRes.playoffSections, scheduleRes.blockByMatchId)
+      ? buildLolBracket(
+          standingsRes.playoffSections,
+          scheduleRes.blockByMatchId,
+          scheduleRes.scheduleByMatchId,
+        )
       : undefined;
   const swiss = buildSwissStage(standingsRes.swissMatches, scheduleRes.scheduleByMatchId);
 

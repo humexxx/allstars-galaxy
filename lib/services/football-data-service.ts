@@ -599,12 +599,13 @@ function buildRoundFromStage(
       homeTeamId: homeId,
       awayTeamId: awayId,
       legs: [
-        { homeScore: l1.home, awayScore: l1.away },
-        { homeScore: leg2HomeGoals, awayScore: leg2AwayGoals },
+        { homeScore: l1.home, awayScore: l1.away, date: leg1.utcDate },
+        { homeScore: leg2HomeGoals, awayScore: leg2AwayGoals, date: leg2.utcDate },
       ],
       aggregateHome: aggHome,
       aggregateAway: aggAway,
       winnerTeamId,
+      date: leg2.utcDate,
     });
   }
 
@@ -877,9 +878,15 @@ function competitionFor(id: FootballLeagueId): CompetitionConfig {
   return competition;
 }
 
-/** What the league picker offers, in its order. Names only: nothing is fetched. */
-export const FOOTBALL_COMPETITIONS: ReadonlyArray<{ id: FootballLeagueId; name: string }> =
-  COMPETITIONS.map((c) => ({ id: c.internalId, name: c.name }));
+/**
+ * What the league picker offers, in its order. Names only: nothing is fetched.
+ * The World Cup comes last: a tournament every four years, not a season, and
+ * read by `getWorldCupData` rather than `getFootballLeagueData`.
+ */
+export const FOOTBALL_COMPETITIONS: ReadonlyArray<{ id: FootballLeagueId; name: string }> = [
+  ...COMPETITIONS,
+  WORLD_CUP,
+].map((c) => ({ id: c.internalId, name: c.name }));
 
 /**
  * One competition, cached on its own. The page and the dashboard each ask for

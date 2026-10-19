@@ -1,6 +1,7 @@
 import "server-only";
 
 import { NFL_DATA } from "@/lib/data/sports/nfl";
+import { espnImage } from "@/lib/sports/espn-images";
 import { orderMatchesForDisplay } from "@/lib/sports/match-order";
 import type {
   BracketMatch,
@@ -26,6 +27,10 @@ type EspnTeam = {
   displayName?: string;
   shortDisplayName?: string;
   color?: string;
+  /** The scoreboard's logo. */
+  logo?: string;
+  /** The standings' logos, the default first. */
+  logos?: Array<{ href?: string }>;
 };
 
 type EspnStatus = {
@@ -89,15 +94,19 @@ const POSTSEASON_ROUNDS: Array<{ week: number; id: BracketRoundId; label: string
 /**
  * Club colours by ESPN abbreviation. The scoreboard carries a colour only for
  * teams playing that week, so a team on its bye would lose its badge.
+ *
+ * They sit behind the logo, so the Rams and both New York clubs, whose marks
+ * are drawn in that very colour, take their white instead: on their own blue
+ * and green the logo vanished.
  */
 const TEAM_COLORS: Record<string, string> = {
   ARI: "#97233F", ATL: "#A71930", BAL: "#241773", BUF: "#00338D",
   CAR: "#0085CA", CHI: "#0B162A", CIN: "#FB4F14", CLE: "#311D00",
   DAL: "#003594", DEN: "#FB4F14", DET: "#0076B6", GB: "#203731",
   HOU: "#03202F", IND: "#002C5F", JAX: "#101820", KC: "#E31837",
-  LAC: "#0080C6", LAR: "#003594", LV: "#000000", MIA: "#008E97",
-  MIN: "#4F2683", NE: "#002244", NO: "#D3BC8D", NYG: "#0B2265",
-  NYJ: "#125740", PHI: "#004C54", PIT: "#FFB612", SEA: "#002244",
+  LAC: "#0080C6", LAR: "#FFFFFF", LV: "#000000", MIA: "#008E97",
+  MIN: "#4F2683", NE: "#002244", NO: "#D3BC8D", NYG: "#FFFFFF",
+  NYJ: "#FFFFFF", PHI: "#004C54", PIT: "#FFB612", SEA: "#002244",
   SF: "#AA0000", TB: "#D50A0A", TEN: "#0C2340", WSH: "#5A1414",
 };
 
@@ -115,6 +124,9 @@ function teamFrom(t: EspnTeam | undefined): Team | null {
     name: t.displayName ?? code,
     shortName: t.shortDisplayName ?? t.displayName ?? code,
     code,
+    // The scoreboard's own logo is a 4096px original, half a megabyte for a
+    // 24px badge — hence the resize.
+    logoUrl: espnImage(t.logo ?? t.logos?.[0]?.href),
     primaryColor: TEAM_COLORS[code] ?? (t.color ? `#${t.color}` : undefined),
   };
 }

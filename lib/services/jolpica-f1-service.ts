@@ -5,8 +5,10 @@ import type {
   F1Constructor,
   F1Data,
   F1Driver,
+  F1DriverPortrait,
   F1Race,
 } from "@/types/sports";
+import { getF1DriverPortraits, teamLogo } from "./espn-f1-standings-service";
 import { cachedFeed, upstreamSignal } from "./upstream";
 
 const JOLPICA_BASE_URL = "https://api.jolpi.ca/ergast/f1";
@@ -288,13 +290,59 @@ function deriveRaceStatus(
   return "upcoming";
 }
 
+/** "Nico Hülkenberg" → "nico hulkenberg", so two feeds' spellings meet. */
+function nameKey(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z]+/g, " ")
+    .trim();
+}
+
+function surnameKey(name: string): string {
+  return nameKey(name).split(" ").at(-1) ?? "";
+}
+
+type PortraitLookup = (driver: JolpicaDriver) => F1DriverPortrait | undefined;
+
+/**
+ * ESPN's faces, ready to look Jolpica's drivers up in. Jolpica stays the
+ * table; ESPN only adds the pictures.
+ *
+ * By race code first — both feeds use the same three letters — then by full
+ * name, then by surname: ESPN calls him "Kimi Antonelli", Jolpica "Andrea
+ * Kimi Antonelli". A key two ESPN drivers share matches neither, so a driver
+ * nobody matches keeps no picture rather than somebody else's.
+ */
+function portraitLookup(portraits: F1DriverPortrait[]): PortraitLookup {
+  const unique = (key: (p: F1DriverPortrait) => string | undefined) => {
+    const map = new Map<string, F1DriverPortrait | null>();
+    for (const p of portraits) {
+      const k = key(p);
+      if (k) map.set(k, map.has(k) ? null : p);
+    }
+    return (k: string | undefined) => (k ? (map.get(k) ?? undefined) : undefined);
+  };
+  const byCode = unique((p) => p.code?.toUpperCase());
+  const byName = unique((p) => nameKey(p.name));
+  const bySurname = unique((p) => surnameKey(p.name));
+
+  return (driver) =>
+    byCode(driver.code?.toUpperCase()) ??
+    byName(nameKey(`${driver.givenName} ${driver.familyName}`)) ??
+    bySurname(surnameKey(driver.familyName));
+}
+
 function mapDrivers(
   standings: JolpicaDriverStanding[],
   podiumCounts: Map<string, number>,
+  portraitOf: PortraitLookup = () => undefined,
 ): F1Driver[] {
   return standings.map((row) => {
     const code = driverCode(row.Driver);
     const team = row.Constructors[0]?.name ?? "—";
+    const portrait = portraitOf(row.Driver);
     return {
       position: parseInt(row.position, 10),
       code,
@@ -306,6 +354,8 @@ function mapDrivers(
       points: parseFloat(row.points),
       wins: parseInt(row.wins, 10),
       podiums: podiumCounts.get(code) ?? 0,
+      imageUrl: portrait?.imageUrl,
+      flagUrl: portrait?.flagUrl,
     };
   });
 }
@@ -324,6 +374,8 @@ function mapConstructors(
       wins: parseInt(row.wins, 10),
       podiums: podiumCounts.get(name) ?? 0,
       primaryColor: colorForConstructor(name),
+      // Vendored files, so a constructor's logo does not wait on ESPN.
+      logoUrl: teamLogo(name),
     };
   });
 }
@@ -408,6 +460,12 @@ function tallyPodiums(racesWithResults: JolpicaRace[]): {
 const PODIUM_STEPS = [1, 2, 3] as const;
 
 async function fetchF1FromApi(): Promise<F1Data> {
+  // Alongside Jolpica, not after it. Pictures are an extra: when ESPN fails
+  // the table still refreshes, only without faces.
+  const portraits = getF1DriverPortraits().catch((error): F1DriverPortrait[] => {
+    console.warn("espn f1 portraits unavailable:", error);
+    return [];
+  });
   const [schedule, driverStandings, constructorStandings, ...podiumSteps] =
     await Promise.all([
       fetchJolpica<JolpicaSeasonRacesResponse>(`/current.json`),
@@ -440,7 +498,11 @@ async function fetchF1FromApi(): Promise<F1Data> {
 
   return {
     season,
-    drivers: mapDrivers(standingsList.DriverStandings, podiums.driverPodiums),
+    drivers: mapDrivers(
+      standingsList.DriverStandings,
+      podiums.driverPodiums,
+      portraitLookup(await portraits),
+    ),
     constructors: mapConstructors(
       constructorList.ConstructorStandings,
       podiums.constructorPodiums,
@@ -458,4 +520,11 @@ export const getF1Data = cachedFeed(
 );
 
 /** Pure mappers, exported for their tests — nothing here touches the network. */
-export const __testing = { mergePodiumSteps, tallyPodiums, mapRaces };
+export const __testing = {
+  mergePodiumSteps,
+  tallyPodiums,
+  mapRaces,
+  mapDrivers,
+  mapConstructors,
+  portraitLookup,
+};

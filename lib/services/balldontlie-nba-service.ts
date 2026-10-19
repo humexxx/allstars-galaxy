@@ -1,6 +1,7 @@
 import "server-only";
 
 import { NBA_DATA } from "@/lib/data/sports/nba";
+import { espnImage } from "@/lib/sports/espn-images";
 import type { Match, MatchStatus, NbaConference, NbaData, NbaStanding, Team } from "@/types/sports";
 import { cachedFeed, upstreamSignal } from "./upstream";
 
@@ -103,20 +104,25 @@ async function fetchBdl<T>(path: string): Promise<T> {
 }
 
 /**
- * Team colours, because balldontlie serves no logos.
+ * Team colours, the badge behind each logo and the whole badge for a team
+ * without one.
  *
  * Without them every badge is the same grey monogram and a scoreboard reads as
  * twelve identical circles. Keyed by the abbreviation the API returns.
+ *
+ * Houston, Toronto and Utah draw their mark in the club colour itself — red on
+ * red, purple on navy — and on that disc it vanished. Theirs is white, the
+ * surface ESPN draws its logos for.
  */
 const TEAM_COLORS: Record<string, string> = {
   ATL: "#E03A3E", BOS: "#007A33", BKN: "#000000", CHA: "#1D1160",
   CHI: "#CE1141", CLE: "#860038", DAL: "#00538C", DEN: "#0E2240",
-  DET: "#C8102E", GSW: "#1D428A", HOU: "#CE1141", IND: "#002D62",
+  DET: "#C8102E", GSW: "#1D428A", HOU: "#FFFFFF", IND: "#002D62",
   LAC: "#C8102E", LAL: "#552583", MEM: "#5D76A9", MIA: "#98002E",
   MIL: "#00471B", MIN: "#0C2340", NOP: "#0C2340", NYK: "#006BB6",
   OKC: "#007AC1", ORL: "#0077C0", PHI: "#006BB6", PHX: "#1D1160",
-  POR: "#E03A3E", SAC: "#5A2D81", SAS: "#C4CED4", TOR: "#CE1141",
-  UTA: "#002B5C", WAS: "#002B5C",
+  POR: "#E03A3E", SAC: "#5A2D81", SAS: "#C4CED4", TOR: "#FFFFFF",
+  UTA: "#FFFFFF", WAS: "#002B5C",
 };
 
 /**
@@ -129,6 +135,7 @@ function teamFrom(t: BdlTeam): Team {
     name: t.full_name,
     shortName: t.name,
     code: t.abbreviation,
+    logoUrl: logoFor(t.abbreviation),
     primaryColor: TEAM_COLORS[t.abbreviation],
   };
 }
@@ -202,6 +209,26 @@ const ESPN_TO_BDL: Record<string, string> = {
   GS: "GSW", NO: "NOP", NY: "NYK", SA: "SAS", UTAH: "UTA", WSH: "WAS",
 };
 
+const BDL_TO_ESPN = Object.fromEntries(
+  Object.entries(ESPN_TO_BDL).map(([espn, bdl]) => [bdl, espn])
+);
+
+/**
+ * ESPN's logo for a team, by balldontlie's abbreviation — for the games and
+ * the table alike.
+ *
+ * balldontlie serves no logos. ESPN's files are named after ESPN's own
+ * abbreviation, so the six teams it spells its own way ("gs", "no", "ny",
+ * "sa", "utah", "wsh") go through `BDL_TO_ESPN`; they are the very files
+ * ESPN's standings carry, and all thirty answer. Only for a team in
+ * `TEAM_COLORS`: for anybody else, an exhibition side, the guess would 404.
+ */
+function logoFor(code: string): string | undefined {
+  if (!TEAM_COLORS[code]) return undefined;
+  const slug = (BDL_TO_ESPN[code] ?? code).toLowerCase();
+  return espnImage(`https://a.espncdn.com/i/teamlogos/nba/500/${slug}.png`);
+}
+
 function espnStat(entry: EspnStandingEntry, key: string): { value: number; display: string } {
   const found = entry.stats?.find((s) => s.name === key || s.type === key);
   const display = found?.displayValue ?? "";
@@ -236,6 +263,7 @@ function standingsFrom(json: EspnStandings): { standings: NbaStanding[]; teams: 
           name: entry.team?.displayName ?? code,
           shortName: entry.team?.shortDisplayName ?? code,
           code,
+          logoUrl: logoFor(code),
           primaryColor: TEAM_COLORS[code],
         });
         return {
@@ -343,4 +371,6 @@ export const __testing = {
   statusFrom,
   gameWindow,
   standingsFrom,
+  teamFrom,
+  logoFor,
 };

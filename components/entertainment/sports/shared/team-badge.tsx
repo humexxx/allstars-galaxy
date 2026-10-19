@@ -23,7 +23,7 @@ const sizeMap = {
  * Spurs' silver rendered as white-on-white. Relative luminance per WCAG; the
  * 0.6 threshold is where white text drops under 4.5:1.
  */
-function readableInk(hex: string | undefined): string {
+export function readableInk(hex: string | undefined): string {
   if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return "#fff";
   const channel = (v: number): number => {
     const c = v / 255;

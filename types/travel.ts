@@ -183,5 +183,6 @@ export type DashboardTravelSummary = {
   totalTrips: number;
   upcomingCount: number;
   inProgressCount: number;
-  featured: DashboardTravelFeaturedTrip | null;
+  /** In progress first, then upcoming, then the latest past trip; at most two. */
+  featured: DashboardTravelFeaturedTrip[];
 };

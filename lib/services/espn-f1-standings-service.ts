@@ -1,14 +1,15 @@
 import "server-only";
 
-import type { F1DashboardStandings } from "@/types/sports";
+import { espnImage } from "@/lib/sports/espn-images";
+import type { F1DashboardStandings, F1DriverPortrait } from "@/types/sports";
 
 import { cachedFeed, upstreamSignal } from "./upstream";
 
 const URL = "https://site.api.espn.com/apis/v2/sports/racing/f1/standings";
 const REVALIDATE_SECONDS = 300;
-/** ESPN's own headshot path for racing. */
+/** ESPN's own headshot path for racing, at the size it is drawn. */
 const HEADSHOT = (id: string): string =>
-  `https://a.espncdn.com/i/headshots/rpm/players/full/${id}.png`;
+  espnImage(`https://a.espncdn.com/i/headshots/rpm/players/full/${id}.png`)!;
 
 /**
  * Team logos, vendored under `public/f1/teams/`.
@@ -27,9 +28,11 @@ const HEADSHOT = (id: string): string =>
  * Red Bull's fills the badge instead of floating in it. Every mark then reads
  * on both surfaces with no plate at all.
  *
- * Keyed by the team name ESPN reports, lower-cased. Two teams joined the grid
- * for 2026 and have no logo published yet; they fall through to the livery
- * badge, which is why that fallback stays.
+ * Keyed by the team name ESPN reports, lower-cased; the F1 page looks its
+ * constructors up here by Jolpica's name, which adds " F1 Team" and calls
+ * Racing Bulls "RB". Two teams joined the grid for 2026 and have no logo
+ * published yet; they fall through to the livery badge, which is why that
+ * fallback stays.
  */
 const TEAM_LOGOS: Record<string, string> = {
   mercedes: "mercedes",
@@ -37,14 +40,17 @@ const TEAM_LOGOS: Record<string, string> = {
   mclaren: "mclaren",
   "red bull": "red-bull-racing",
   "racing bulls": "racing-bulls",
+  rb: "racing-bulls",
   alpine: "alpine",
   haas: "haas",
   williams: "williams",
   "aston martin": "aston-martin",
 };
 
-function teamLogo(name: string | undefined): string | undefined {
-  const slug = name ? TEAM_LOGOS[name.trim().toLowerCase()] : undefined;
+/** The vendored logo for a team, by ESPN's name or Jolpica's. */
+export function teamLogo(name: string | undefined): string | undefined {
+  const key = name?.trim().toLowerCase().replace(/\s+f1 team$/, "");
+  const slug = key ? TEAM_LOGOS[key] : undefined;
   return slug ? `/f1/teams/${slug}.png` : undefined;
 }
 
@@ -102,6 +108,22 @@ function rank(entry: EspnEntry, index: number): number {
   return r > 0 ? r : index + 1;
 }
 
+async function fetchEspnStandings(): Promise<EspnStandings> {
+  const res = await fetch(URL, {
+    signal: upstreamSignal(),
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (!res.ok) throw new Error(`espn f1 standings ${res.status}`);
+  return (await res.json()) as EspnStandings;
+}
+
+function table(json: EspnStandings, needle: string): EspnEntry[] {
+  return (
+    json.children?.find((c) => c.name?.toLowerCase().includes(needle))?.standings?.entries ??
+    []
+  );
+}
+
 /**
  * The championship's top few, with faces.
  *
@@ -115,28 +137,19 @@ function rank(entry: EspnEntry, index: number): number {
  * with none yet falls back to its livery colour and code.
  */
 async function fetchStandings(top: number): Promise<F1DashboardStandings> {
-  const res = await fetch(URL, {
-    signal: upstreamSignal(),
-    next: { revalidate: REVALIDATE_SECONDS },
-  });
-  if (!res.ok) throw new Error(`espn f1 standings ${res.status}`);
-  const json = (await res.json()) as EspnStandings;
+  const json = await fetchEspnStandings();
 
-  const table = (needle: string) =>
-    json.children?.find((c) => c.name?.toLowerCase().includes(needle))?.standings
-      ?.entries ?? [];
-
-  const drivers = table("driver")
+  const drivers = table(json, "driver")
     .slice(0, top)
     .map((e, i) => ({
       position: rank(e, i),
       name: e.athlete?.shortName ?? e.athlete?.displayName ?? "—",
       points: stat(e, "championshipPts", "points"),
       imageUrl: e.athlete?.id ? HEADSHOT(e.athlete.id) : undefined,
-      flagUrl: e.athlete?.flag?.href,
+      flagUrl: espnImage(e.athlete?.flag?.href),
     }));
 
-  const constructors = table("constructor")
+  const constructors = table(json, "constructor")
     .slice(0, top)
     .map((e, i) => ({
       position: rank(e, i),
@@ -153,6 +166,32 @@ async function fetchStandings(top: number): Promise<F1DashboardStandings> {
   return { drivers, constructors };
 }
 
+/** Every driver ESPN lists with a face, keyed for matching onto Jolpica's table. */
+function driverPortraits(json: EspnStandings): F1DriverPortrait[] {
+  return table(json, "driver").flatMap((e) => {
+    const athlete = e.athlete;
+    if (!athlete?.id || !athlete.displayName) return [];
+    return [
+      {
+        code: athlete.abbreviation,
+        name: athlete.displayName,
+        imageUrl: HEADSHOT(athlete.id),
+        flagUrl: espnImage(athlete.flag?.href),
+      },
+    ];
+  });
+}
+
+/**
+ * The whole grid's faces and flags, for the F1 page.
+ *
+ * Throws when ESPN does: the caller decides what a page without pictures
+ * looks like. Uncached on its own — it runs inside the F1 feed's cache.
+ */
+export async function getF1DriverPortraits(): Promise<F1DriverPortrait[]> {
+  return driverPortraits(await fetchEspnStandings());
+}
+
 /** Top of both championships, or null when ESPN is unreachable. */
 export const getF1DashboardStandings = cachedFeed<[top?: number], F1DashboardStandings | null>(
   "espn f1 standings",
@@ -163,4 +202,4 @@ export const getF1DashboardStandings = cachedFeed<[top?: number], F1DashboardSta
 );
 
 /** Pure helpers, exported for their tests — nothing here touches the network. */
-export const __testing = { stat, teamCode, teamLogo };
+export const __testing = { stat, teamCode, teamLogo, driverPortraits };

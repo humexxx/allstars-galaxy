@@ -46,6 +46,24 @@ describe("DrawMatchCard", () => {
     expect(screen.getByText("J. Sinner").className).not.toContain("font-semibold");
   });
 
+  it("shows a player's photo, and keeps the flag for one without", () => {
+    const photo = "https://a.espncdn.com/combiner/i?img=/i/headshots/tennis/players/full/3782.png&w=96&h=96&scale=crop";
+    const withPhoto = new Map([
+      playerEntry("alcaraz", "C. Alcaraz", "🇪🇸", 2, photo),
+      playerEntry("sinner", "J. Sinner", "🇮🇹", 1),
+    ]);
+    const { container } = render(<DrawMatchCard match={final} teams={withPhoto} withFaces />);
+    expect([...container.querySelectorAll("img")].map((i) => i.getAttribute("src"))).toEqual([photo]);
+    // The flag rides on the photo as a badge, and stands alone without one.
+    expect(screen.getByText("🇪🇸")).toBeInTheDocument();
+    expect(screen.getByText("🇮🇹")).toBeInTheDocument();
+  });
+
+  it("draws no photos in a draw without any", () => {
+    const { container } = render(<DrawMatchCard match={final} teams={players} />);
+    expect(container.querySelector("img")).toBeNull();
+  });
+
   it("renders an undecided tie without inventing a player", () => {
     render(
       <DrawMatchCard

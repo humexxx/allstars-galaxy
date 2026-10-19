@@ -7,7 +7,6 @@ import type { F1NewsImage, userSportsPreferences } from "@/db/schema";
 /** The single list of sport keys — `sportIdSchema` validates against it. */
 export const SPORT_IDS = [
   "football",
-  "worldcup",
   "padel",
   "f1",
   "nba",
@@ -35,6 +34,62 @@ export type DashboardSportHighlight = {
   tone?: "live" | "upcoming" | "result";
   /** Optional secondary entry under the main headline (e.g. league leader). */
   secondary?: { label: string; value: string };
+};
+
+/** One side of a match on a dashboard card. */
+export type DashboardSide = {
+  name: string;
+  code: string;
+  logoUrl?: string;
+  color?: string;
+  score: number | null;
+  winner: boolean;
+};
+
+export type DashboardMatch = {
+  id: string;
+  home: DashboardSide;
+  away: DashboardSide;
+  status: "live" | "upcoming" | "result";
+  /** An instant; the card formats it in the reader's zone. */
+  startsAt: string;
+  /** "Matchday 3", "Swiss · BO1". */
+  label?: string;
+  /** Football's live minute. */
+  minute?: number;
+};
+
+export type DashboardTableRow = {
+  position: number;
+  name: string;
+  /** A team's logo is fitted inside the disc; a player's photo fills it. */
+  image?: { url: string; kind: "logo" | "photo" };
+  code?: string;
+  color?: string;
+  flagEmoji?: string;
+  /** "6 pts", "60–22", "9,880". */
+  value: string;
+};
+
+export type DashboardTable = { id: string; label: string; rows: DashboardTableRow[] };
+
+/**
+ * One favourite sport's dashboard card: what is on now or next, what follows,
+ * and the top of the table. The same shape for every sport, so they share one
+ * card.
+ */
+export type DashboardSportCard = {
+  sportId: SportId;
+  label: string;
+  emoji: string;
+  /** The line under the title: the competition, its stage. */
+  context: string;
+  featured?: DashboardMatch;
+  /** Racquet sports have tournaments rather than matches on the dashboard. */
+  event?: { name: string; detail: string; status: "live" | "upcoming" | "completed" };
+  matches: DashboardMatch[];
+  /** More than one shows as a toggle (East / West, ATP / WTA). */
+  tables: DashboardTable[];
 };
 
 export type SportMeta = {
@@ -132,8 +187,8 @@ export type BracketMatch = {
   id: string;
   homeTeamId: string | null;
   awayTeamId: string | null;
-  /** When the tie is two-legged, leg scores live here. */
-  legs?: Array<{ homeScore: number | null; awayScore: number | null }>;
+  /** When the tie is two-legged, leg scores live here (a tennis draw's sets). */
+  legs?: Array<{ homeScore: number | null; awayScore: number | null; date?: string }>;
   homeScore?: number | null;
   awayScore?: number | null;
   aggregateHome?: number | null;
@@ -141,6 +196,8 @@ export type BracketMatch = {
   winnerTeamId?: string | null;
   /** ISO date for the decisive match. */
   date?: string;
+  /** An esports series' format. */
+  bestOf?: 1 | 3 | 5;
 };
 
 export type BracketRound = {
@@ -198,6 +255,10 @@ export type F1Driver = {
   points: number;
   wins: number;
   podiums: number;
+  /** ESPN's headshot, when ESPN lists the driver. */
+  imageUrl?: string;
+  /** ESPN's flag for the driver's country, badged on the headshot. */
+  flagUrl?: string;
 };
 
 export type F1Constructor = {
@@ -208,6 +269,8 @@ export type F1Constructor = {
   wins: number;
   podiums: number;
   primaryColor: string;
+  /** The team's logo, when one is published for it. */
+  logoUrl?: string;
 };
 
 export type F1Race = {
@@ -375,7 +438,6 @@ export type LolMatch = {
 /** One match of a Swiss round. Its teams are null until the pairing is drawn. */
 export type SwissMatch = BracketMatch & {
   status: MatchStatus;
-  bestOf?: 1 | 3 | 5;
 };
 
 /** Everyone on one record plays one match a round: the "1-0" pool. */
@@ -443,6 +505,15 @@ export type F1StandingRow = {
 export type F1DashboardStandings = {
   drivers: F1StandingRow[];
   constructors: F1StandingRow[];
+};
+
+/** A driver's pictures from ESPN, with what it takes to find him in another feed. */
+export type F1DriverPortrait = {
+  /** The three-letter race code, e.g. "VER". */
+  code?: string;
+  name: string;
+  imageUrl: string;
+  flagUrl?: string;
 };
 
 // ---------- F1 news (RapidAPI, stored daily) ----------

@@ -5,8 +5,7 @@ import { PortalPageContainer } from "@/components/portal/page-container";
 import { DashboardCardSkeleton } from "@/components/portal/dashboard-card-skeleton";
 import { DashboardFinanceCard } from "@/components/finance/dashboard-finance-card";
 import { DashboardConfirmationHost } from "@/components/finance/dashboard-confirmation-host";
-import { DashboardF1Card } from "@/components/entertainment/sports/dashboard-f1-card";
-import { DashboardSportsCard } from "@/components/entertainment/sports/dashboard-sports-card";
+import { DashboardSportCards } from "@/components/entertainment/sports/dashboard-sport-cards";
 import { DashboardTravelCard } from "@/components/travel/dashboard-travel-card";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 
@@ -32,9 +31,8 @@ export default async function PortalPage() {
         {/* The cards are the page: a visible title and tagline only pushed
             them down. The outline still needs its h1. */}
         <h1 className="sr-only">Dashboard</h1>
-        {/* Two columns, and every card but F1's spans both. F1's takes one, so
-            it sits at half the row — one sport among several rather than a
-            banner. */}
+        {/* Two columns. Finance and travel span both; each favourite sport gets
+            a card at half the row — one sport among several, not a banner. */}
         <div className="grid auto-rows-min gap-4 md:grid-cols-2">
           <Suspense fallback={<DashboardCardSkeleton rail={5} />}>
             <DashboardFinanceCard userId={userId} />
@@ -42,11 +40,8 @@ export default async function PortalPage() {
           <Suspense fallback={<DashboardCardSkeleton tiles={3} />}>
             <DashboardTravelCard userId={userId} />
           </Suspense>
-          <Suspense fallback={<DashboardCardSkeleton tiles={3} />}>
-            <DashboardSportsCard userId={userId} />
-          </Suspense>
           <Suspense fallback={<DashboardCardSkeleton tiles={2} className="col-span-1" />}>
-            <DashboardF1Card userId={userId} />
+            <DashboardSportCards userId={userId} />
           </Suspense>
         </div>
         <Suspense fallback={null}>

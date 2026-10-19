@@ -2,7 +2,6 @@ import type { SportId, SportMeta } from "@/types/sports";
 
 export const SPORTS: SportMeta[] = [
   { id: "football", label: "Football", shortLabel: "Football", emoji: "⚽" },
-  { id: "worldcup", label: "FIFA World Cup 2026", shortLabel: "World Cup", emoji: "🏆" },
   // A paddle, not a tennis ball: padel and tennis both had 🎾 and the two
   // tabs were told apart only by reading them.
   { id: "padel", label: "Padel", shortLabel: "Padel", emoji: "🏓" },

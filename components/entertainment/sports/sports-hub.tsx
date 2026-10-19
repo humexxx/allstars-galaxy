@@ -19,7 +19,6 @@ import { NbaView } from "./sports/nba-view";
 import { NflView } from "./sports/nfl-view";
 import { PadelView } from "./sports/padel-view";
 import { TennisView } from "./sports/tennis-view";
-import { WorldCupView } from "./sports/world-cup-view";
 
 type SportsHubProps = {
   activeSport: SportId;
@@ -163,8 +162,6 @@ function SportContent({
   switch (payload.sport) {
     case "football":
       return <FootballView league={payload.league} options={payload.options} />;
-    case "worldcup":
-      return <WorldCupView data={payload.data} />;
     case "f1":
       return <F1View data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "nba":

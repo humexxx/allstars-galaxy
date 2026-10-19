@@ -902,11 +902,11 @@ describe("getDashboardTravelSummary", () => {
       totalTrips: 0,
       upcomingCount: 0,
       inProgressCount: 0,
-      featured: null,
+      featured: [],
     });
   });
 
-  it("picks an in-progress trip as featured and folds item prices into a total", async () => {
+  it("features the in-progress trip, then the next one, and folds item prices into a total", async () => {
     // Pin "today" so the date-comparison branches in the service are deterministic.
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-05T12:00:00Z"));
@@ -936,11 +936,12 @@ describe("getDashboardTravelSummary", () => {
     expect(out.totalTrips).toBe(3);
     expect(out.inProgressCount).toBe(1);
     expect(out.upcomingCount).toBe(1);
-    expect(out.featured).not.toBeNull();
-    expect(out.featured?.id).toBe("ip-1");
-    expect(out.featured?.state).toBe("in_progress");
-    expect(out.featured?.itemCount).toBe(4);
-    expect(out.featured?.totalEstimate).toBeCloseTo(150);
+    expect(out.featured.map((t) => [t.id, t.state])).toEqual([
+      ["ip-1", "in_progress"],
+      ["up-1", "upcoming"],
+    ]);
+    expect(out.featured[0].itemCount).toBe(4);
+    expect(out.featured[0].totalEstimate).toBeCloseTo(150);
 
     vi.useRealTimers();
   });
@@ -964,11 +965,12 @@ describe("getDashboardTravelSummary", () => {
     // not started yet.
     const out = await getDashboardTravelSummary(USER_ID, "2026-09-30");
 
-    expect(out.featured?.state).toBe("upcoming");
-    expect(out.featured?.totalEstimate).toBe(120 * 2 + 95 * 4);
+    expect(out.featured).toHaveLength(1);
+    expect(out.featured[0].state).toBe("upcoming");
+    expect(out.featured[0].totalEstimate).toBe(120 * 2 + 95 * 4);
   });
 
-  it("falls back to the next upcoming trip when nothing is in progress", async () => {
+  it("leads with the next upcoming trip and fills the second slot with the latest past one", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-15T12:00:00Z"));
 
@@ -989,15 +991,17 @@ describe("getDashboardTravelSummary", () => {
 
     expect(out.inProgressCount).toBe(0);
     expect(out.upcomingCount).toBe(1);
-    expect(out.featured?.id).toBe("up-1");
-    expect(out.featured?.state).toBe("upcoming");
-    expect(out.featured?.itemCount).toBe(0);
-    expect(out.featured?.totalEstimate).toBe(0);
+    expect(out.featured.map((t) => [t.id, t.state])).toEqual([
+      ["up-1", "upcoming"],
+      ["past-1", "past"],
+    ]);
+    expect(out.featured[0].itemCount).toBe(0);
+    expect(out.featured[0].totalEstimate).toBe(0);
 
     vi.useRealTimers();
   });
 
-  it("falls back to the most recent past trip when nothing is upcoming", async () => {
+  it("shows the most recent past trips when nothing is upcoming", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-15T12:00:00Z"));
 
@@ -1016,8 +1020,8 @@ describe("getDashboardTravelSummary", () => {
 
     const out = await getDashboardTravelSummary(USER_ID);
 
-    expect(out.featured?.id).toBe("past-new");
-    expect(out.featured?.state).toBe("past");
+    expect(out.featured.map((t) => t.id)).toEqual(["past-new", "past-old"]);
+    expect(out.featured[0].state).toBe("past");
 
     vi.useRealTimers();
   });

@@ -21,11 +21,13 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
+import { cn } from "@/lib/utils";
 import { formatDayRange } from "@/lib/utils/date";
 import type { RacquetData, Team } from "@/types/sports";
 
 import { DrawMatchCard } from "../shared/draw-match-card";
 import { KnockoutBracket } from "../shared/knockout-bracket";
+import { Portrait } from "../shared/portrait";
 import { SportShell } from "../shared/sport-shell";
 import { StatusPill } from "../shared/status-pill";
 import { SportsTh, TableCard } from "../shared/table-primitives";
@@ -121,6 +123,18 @@ function DrawPanel({
       )?.id ?? ""
   );
   const open = tournaments.find((t) => t.id === openId) ?? tournaments[0];
+  // Only ranked players come with a photo, so most draws are a mix. Once any
+  // player in this draw has one, every row reserves a disc's width and the
+  // names line up.
+  const withFaces = useMemo(
+    () =>
+      (open.bracket ?? []).some((round) =>
+        round.matches.some((m) =>
+          [m.homeTeamId, m.awayTeamId].some((id) => id && players.get(id)?.logoUrl)
+        )
+      ),
+    [open, players]
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -143,8 +157,9 @@ function DrawPanel({
           <KnockoutBracket
             rounds={open.bracket ?? []}
             teams={players}
+            minColumnWidth="11rem"
             renderMatch={(match, teams) => (
-              <DrawMatchCard match={match} teams={teams} />
+              <DrawMatchCard match={match} teams={teams} withFaces={withFaces} />
             )}
           />
         </CardContent>
@@ -158,6 +173,9 @@ function RankingsTable({ data }: { data: RacquetData }) {
   // stack of "— 0" down the whole table. A column that never says anything is
   // better left out than filled with a placeholder.
   const showsMovement = data.rankings.some((p) => p.movement !== 0);
+  // Without a single photo the table keeps its flags, in a slot only as wide
+  // as a flag.
+  const showsFaces = data.rankings.some((p) => p.photoUrl);
 
   if (data.rankings.length === 0) {
     return <EmptyState icon={ListOrdered} title="No rankings published for this tour yet." />;
@@ -191,8 +209,16 @@ function RankingsTable({ data }: { data: RacquetData }) {
                   {p.position}
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-2.5">
-                    <span aria-hidden className="text-base leading-none">{p.flagEmoji}</span>
+                  <div className={cn("flex items-center", showsFaces ? "gap-2 sm:gap-2.5" : "gap-2.5")}>
+                    {showsFaces ? (
+                      <Portrait
+                        size="table"
+                        subject={{ name: p.shortName, imageUrl: p.photoUrl, flagEmoji: p.flagEmoji }}
+                        fallback={<span className="text-base leading-none">{p.flagEmoji}</span>}
+                      />
+                    ) : (
+                      <span aria-hidden className="text-base leading-none">{p.flagEmoji}</span>
+                    )}
                     <Text as="span" weight="medium">{p.shortName}</Text>
                   </div>
                 </TableCell>

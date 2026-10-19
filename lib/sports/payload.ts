@@ -26,7 +26,6 @@ export type SportPayload = (
       /** What the picker offers, by name; the other leagues are not loaded. */
       options: ReadonlyArray<{ id: FootballLeagueId; name: string }>;
     }
-  | { sport: "worldcup"; data: FootballLeagueData }
   | { sport: "f1"; data: F1Data; news: F1NewsArticle[] }
   | { sport: "lol"; data: LolData }
   | { sport: "padel"; data: PadelData }

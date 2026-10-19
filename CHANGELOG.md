@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.0](https://github.com/humexxx/allstars-galaxy/compare/v0.9.1...v0.10.0) (2026-10-19)
+
+
+### Features
+
+* **entertainment:** draw every knockout like the Swiss stage ([72d6c80](https://github.com/humexxx/allstars-galaxy/commit/72d6c80d19c38e6d78647e87adbdd97ad6f9cbed))
+* **entertainment:** give every favourite sport its own dashboard card ([a87b33f](https://github.com/humexxx/allstars-galaxy/commit/a87b33f182e54b72307b3713de14b2550e7d66ff))
+* **entertainment:** give Swiss stage matches a tooltip and their day ([56e8544](https://github.com/humexxx/allstars-galaxy/commit/56e8544a637270d9622abc7f7e25a92f392212ef))
+* **entertainment:** move the World Cup into football ([588ef57](https://github.com/humexxx/allstars-galaxy/commit/588ef57f93d489d34a12cb2cfbea5a32a404a74b))
+* **entertainment:** put tennis draws in the shared bracket box ([e360054](https://github.com/humexxx/allstars-galaxy/commit/e360054638f1165718c4b47e040fe0c037da2a27))
+* **entertainment:** show team logos and player faces across the sports hub ([7457cdd](https://github.com/humexxx/allstars-galaxy/commit/7457cddda92d045530fd51d96078a7ad7717cf30))
+* **travel:** show the next two trips on the dashboard ([164cf88](https://github.com/humexxx/allstars-galaxy/commit/164cf88087521a4c1191b6480d34ccc8fe567390))
+
 ## [0.9.1](https://github.com/humexxx/allstars-galaxy/compare/v0.9.0...v0.9.1) (2026-10-19)
 
 

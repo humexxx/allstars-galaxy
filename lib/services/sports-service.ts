@@ -22,6 +22,7 @@ import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
 import { formatDayRange } from "@/lib/utils/date";
 import type {
+  BracketMatch,
   DashboardMatch,
   DashboardSide,
   DashboardSportCard,
@@ -30,8 +31,11 @@ import type {
   DashboardTableRow,
   F1Data,
   FootballLeagueData,
+  LolChampion,
   LolData,
   LolMatch,
+  LolRegion,
+  LolSplit,
   Match,
   NbaConference,
   NbaData,
@@ -95,10 +99,25 @@ export async function setSportFavorite(
 
 /** Matches listed under a card's featured one. */
 const CARD_MATCHES = 2;
-/** The same, on a card with no table to show. */
-const CARD_MATCHES_ALONE = 5;
+/**
+ * LoL lists more: a day of an event is several series back to back, and two
+ * did not reach the end of one.
+ */
+const LOL_CARD_MATCHES = 4;
+/** The same, on a LoL card with no table to show. */
+const LOL_CARD_MATCHES_ALONE = 6;
 /** Rows of a card's table. */
 const CARD_ROWS = 5;
+
+const LOL_LEAGUE: Record<LolRegion, string> = {
+  worlds: "Worlds",
+  msi: "MSI",
+  "first-stand": "First Stand",
+  lec: "LEC",
+  lcs: "LCS",
+  lck: "LCK",
+  lpl: "LPL",
+};
 
 type CardBase = Pick<DashboardSportCard, "sportId" | "label" | "emoji">;
 
@@ -239,41 +258,116 @@ function nflCard(base: CardBase, data: NflData): DashboardSportCard {
   };
 }
 
+/** The first split the feed lists: the international event while it leads, else the split on now. */
 function lolCard(base: CardBase, data: LolData): DashboardSportCard {
   const split = data.splits[0];
   if (!split) return { ...base, context: "No event on", matches: [], tables: [] };
   const teams = teamsById(split.teams);
-  // Already in display order: live, then the nearest upcoming, then the
-  // latest results.
-  const [first, ...rest] = split.matches.map((m) => lolCardMatch(m, teams));
-  const tables: DashboardTable[] = [];
-  if (split.standings.length > 0) {
-    tables.push({
-      id: "standings",
-      label: "Standings",
-      rows: split.standings
-        .slice(0, CARD_ROWS)
-        .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.wins}–${s.losses}`)),
-    });
-  } else if (split.swiss) {
-    const records = swissRecords(split.swiss);
-    if (records.length > 0) {
-      tables.push({
-        id: "swiss",
-        label: "Swiss stage",
-        rows: records
-          .slice(0, CARD_ROWS)
-          .map((r, i) => teamRow(i + 1, teams.get(r.teamId), r.teamId, `${r.wins}–${r.losses}`)),
-      });
-    }
+  if (split.international && split.champion) {
+    return lolOffSeasonCard(base, data, { ...split, champion: split.champion }, teams);
   }
+  // Already in display order: live, then the nearest upcoming, then the
+  // latest results. So the cap keeps what is next and fills the rest with
+  // what just finished.
+  const [first, ...rest] = split.matches.map((m) => lolCardMatch(m, teams));
+  const tables = lolTables(split, teams);
   return {
     ...base,
-    context: first?.label ? `${split.name} · ${first.label.split(" · ")[0]}` : split.name,
+    context: lolContext(split, first),
     featured: first,
     // With no table to show, the matches take its room.
-    matches: rest.slice(0, tables.length > 0 ? CARD_MATCHES : CARD_MATCHES_ALONE),
+    matches: rest.slice(0, tables.length > 0 ? LOL_CARD_MATCHES : LOL_CARD_MATCHES_ALONE),
     tables,
+  };
+}
+
+/** "Worlds 2026 · Swiss": the split and the stage its featured match is in. */
+function lolContext(split: LolSplit, featured: DashboardMatch | undefined): string {
+  return featured?.label ? `${split.name} · ${featured.label.split(" · ")[0]}` : split.name;
+}
+
+function lolTables(split: LolSplit, teams: Map<string, Team>): DashboardTable[] {
+  if (split.standings.length > 0) {
+    return [
+      {
+        id: "standings",
+        label: "Standings",
+        rows: split.standings
+          .slice(0, CARD_ROWS)
+          .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.wins}–${s.losses}`)),
+      },
+    ];
+  }
+  // Only while the stage is being played: through the knockouts it was a
+  // stale table under "Finals".
+  if (split.swiss && !swissFinished(split.swiss)) {
+    const records = swissRecords(split.swiss);
+    if (records.length > 0) {
+      return [
+        {
+          id: "swiss",
+          label: "Swiss stage",
+          rows: records
+            .slice(0, CARD_ROWS)
+            .map((r, i) => teamRow(i + 1, teams.get(r.teamId), r.teamId, `${r.wins}–${r.losses}`)),
+        },
+      ];
+    }
+  }
+  return [];
+}
+
+/** Every record that ends the stage is full: nobody is left to play. */
+function swissFinished(stage: SwissStage): boolean {
+  return stage.exits.length > 0 && stage.exits.every((exit) => exit.teamIds.length >= exit.slots);
+}
+
+/**
+ * After an international final, until the next split starts: the final, the
+ * rest of the knockouts, and the season's champions.
+ */
+function lolOffSeasonCard(
+  base: CardBase,
+  data: LolData,
+  event: LolSplit & { champion: LolChampion },
+  teams: Map<string, Team>
+): DashboardSportCard {
+  const knockouts = (event.playoffs ?? [])
+    .flatMap((round) => round.matches.map((match) => lolBracketCardMatch(match, round.label, teams)))
+    .filter((m) => m !== null)
+    .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime());
+  const featured = knockouts.find((m) => m.id === event.champion.final.id) ?? knockouts[0];
+  const champions = lolChampionsTable(data, event);
+  return {
+    ...base,
+    context: lolContext(event, featured),
+    featured,
+    matches: knockouts
+      .filter((m) => m !== featured)
+      .slice(0, champions ? LOL_CARD_MATCHES : LOL_CARD_MATCHES_ALONE),
+    tables: champions ? [champions] : [],
+  };
+}
+
+/**
+ * The event's champion, then each region's from the same season, in the
+ * feed's order. Each is the winner of its round named "Finals" (`findChampion`
+ * in the Lolesports service).
+ */
+function lolChampionsTable(data: LolData, event: LolSplit): DashboardTable | null {
+  const winners = data.splits.flatMap((s) =>
+    s.champion && (s.region === event.region || (!s.international && s.season === event.season))
+      ? [{ split: s, teamId: s.champion.teamId }]
+      : []
+  );
+  if (winners.length === 0) return null;
+  return {
+    id: "champions",
+    label: `${event.season} champions`,
+    unranked: true,
+    rows: winners.map(({ split, teamId }, i) =>
+      teamRow(i + 1, split.teams.find((t) => t.id === teamId), teamId, LOL_LEAGUE[split.region])
+    ),
   };
 }
 
@@ -475,6 +569,33 @@ function lolCardMatch(match: LolMatch, teams: Map<string, Team>): DashboardMatch
   };
 }
 
+/** A knockout read off the bracket. Null until it is drawn, or when the schedule never dated it. */
+function lolBracketCardMatch(
+  match: BracketMatch,
+  round: string,
+  teams: Map<string, Team>
+): DashboardMatch | null {
+  if (!match.date || !match.homeTeamId || !match.awayTeamId) return null;
+  return {
+    id: match.id,
+    home: side(
+      teams.get(match.homeTeamId),
+      match.homeTeamId,
+      match.homeScore ?? null,
+      match.winnerTeamId === match.homeTeamId
+    ),
+    away: side(
+      teams.get(match.awayTeamId),
+      match.awayTeamId,
+      match.awayScore ?? null,
+      match.winnerTeamId === match.awayTeamId
+    ),
+    status: match.winnerTeamId ? "result" : "upcoming",
+    startsAt: match.date,
+    label: match.bestOf ? `${round} · BO${match.bestOf}` : round,
+  };
+}
+
 /**
  * Pick the most "interesting" match to surface: live > next scheduled > most
  * recent finished. Returns null when the list is empty.
@@ -515,4 +636,4 @@ function formatShortDate(iso: string): string {
 }
 
 /** Pure helpers, exported for their tests. */
-export const __testing = { swissRecords };
+export const __testing = { lolCard, swissRecords };

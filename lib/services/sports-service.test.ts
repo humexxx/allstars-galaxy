@@ -26,8 +26,10 @@ vi.mock("@/db", () => ({
 }));
 
 import { db } from "@/db";
+import type { DashboardMatch, DashboardSportCard } from "@/types/sports";
 
 import gamesOct18 from "./__fixtures__/balldontlie-nba-games-2026-10-18.json";
+import { fakeLolesports } from "./__fixtures__/lolesports";
 import {
   __testing,
   getDashboardSportCard,
@@ -298,7 +300,98 @@ describe("getDashboardSportCard", () => {
 
     expect(card.featured).toBeDefined();
     expect(card.featured?.label).toMatch(/BO[135]$/);
-    expect(card.matches.length).toBeLessThanOrEqual(2);
+    expect(card.matches.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("the LoL card across a season", () => {
+  async function lolCardOn(now: string): Promise<DashboardSportCard> {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(now));
+    vi.stubGlobal("fetch", vi.fn(fakeLolesports(now)));
+    return (await getDashboardSportCard("lol"))!;
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new Error("fetch is disabled in unit tests")))
+    );
+  });
+
+  const line = (m: DashboardMatch) => `${m.home.code} v ${m.away.code} ${m.status}`;
+  const table = (card: DashboardSportCard) =>
+    card.tables.map((t) => ({ label: t.label, rows: t.rows.map((r) => `${r.name} ${r.value}`) }));
+
+  it("during the Swiss stage: the next match, four more and the records so far", async () => {
+    const card = await lolCardOn("2026-10-23T23:00:00Z");
+
+    expect(card.context).toBe("Worlds 2026 · Swiss");
+    expect(line(card.featured!)).toBe("T1 v FLY upcoming");
+    // "Up next" first, the latest result filling the rest.
+    expect(card.matches.map(line)).toEqual([
+      "AL v HLE upcoming",
+      "TES v G2 upcoming",
+      "PSG v GEN upcoming",
+      "100T v BLG result",
+    ]);
+    expect(card.tables.map((t) => t.id)).toEqual(["swiss"]);
+    expect(card.tables[0].rows.slice(0, 4).map((r) => r.value)).toEqual(["1–0", "1–0", "1–0", "1–0"]);
+  });
+
+  it("through the knockouts: no stale Swiss table, and six matches in its room", async () => {
+    const card = await lolCardOn("2026-11-04T12:00:00Z");
+
+    expect(card.context).toBe("Worlds 2026 · Quarterfinals");
+    expect(card.tables).toEqual([]);
+    expect(line(card.featured!)).toBe("AL v T1 upcoming");
+    expect(card.matches.map(line)).toEqual([
+      "HLE v CFO upcoming",
+      "G2 v GEN upcoming",
+      "KT v TES result",
+      "T1 v MKOI result",
+      "BLG v TES result",
+      "FLY v CFO result",
+    ]);
+  });
+
+  for (const day of ["2026-11-20", "2026-12-10", "2027-01-05"]) {
+    it(`after the final (${day}): the final, the other knockouts and the season's champions`, async () => {
+      const card = await lolCardOn(`${day}T12:00:00Z`);
+
+      expect(card.context).toBe("Worlds 2026 · Finals");
+      expect(card.featured).toMatchObject({
+        status: "result",
+        label: "Finals · BO5",
+        startsAt: "2026-11-14T19:00:00Z",
+        home: { code: "T1", score: 3, winner: true },
+        away: { code: "GEN", score: 2, winner: false },
+      });
+      expect(card.matches.map(line)).toEqual([
+        "HLE v GEN result",
+        "KT v T1 result",
+        "G2 v GEN result",
+        "HLE v CFO result",
+      ]);
+      // Each region's from its Finals: LPL's last round (IG) is not its final.
+      expect(table(card)).toEqual([
+        {
+          label: "2026 champions",
+          rows: ["T1 Worlds", "Team Liquid LCS", "G2 Esports LEC", "Anyone's Legend LPL", "Gen.G LCK"],
+        },
+      ]);
+      expect(card.tables[0].unranked).toBe(true);
+    });
+  }
+
+  it("once LCK's new season starts: its next match, its results and its table", async () => {
+    const card = await lolCardOn("2027-01-14T12:00:00Z");
+
+    expect(card.context).toBe("LCK Split 1 · Week 1");
+    expect(line(card.featured!)).toBe("HLE v BFX upcoming");
+    expect(card.matches.map(line)).toEqual(["T1 v GEN result", "DK v KT result"]);
+    expect(table(card)).toEqual([{ label: "Standings", rows: ["DK 1–0", "KT 0–1"] }]);
   });
 });
 

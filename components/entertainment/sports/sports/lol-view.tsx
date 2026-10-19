@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactElement } from "react";
+import { CalendarX, Trophy } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Select,
   SelectContent,
@@ -18,14 +20,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eyebrow, Mono } from "@/components/ui/typography";
+import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { isBracketDrawn } from "@/lib/sports/bracket";
 import type {
+  LolChampion,
   LolData,
   LolMatch,
   LolRegion,
   LolSplit,
+  LolUpcoming,
   Team,
 } from "@/types/sports";
 
@@ -59,6 +63,14 @@ export function LolView({ data }: LolViewProps) {
   const playoffsDrawn = playoffs !== null && isBracketDrawn(playoffs);
   // Worlds' main stage until its knockouts are drawn, so it is where to land.
   const swiss = split.swiss ?? null;
+  const hasMatches = split.matches.length > 0;
+  const opening = playoffsDrawn
+    ? "playoffs"
+    : swiss
+      ? "swiss"
+      : !hasMatches && split.standings.length > 0
+        ? "standings"
+        : "matches";
 
   return (
     // Keyed by region: switching to a region without playoffs while on the
@@ -66,7 +78,7 @@ export function LolView({ data }: LolViewProps) {
     // whose trigger/content no longer exist (blank body).
     <Tabs
       key={region}
-      defaultValue={playoffsDrawn ? "playoffs" : swiss ? "swiss" : "matches"}
+      defaultValue={opening}
       className="gap-6"
     >
       <SportShell
@@ -99,41 +111,129 @@ export function LolView({ data }: LolViewProps) {
           </TabsList>
         }
       >
-        <TabsContent value="matches">
-          <div className="grid gap-2 @xl:grid-cols-2">
-            {split.matches.map((m) => (
-              <LolMatchCard key={m.id} match={m} teams={teamsMap} />
-            ))}
-          </div>
-        </TabsContent>
+        <div className="flex flex-col gap-4">
+          {split.champion && (
+            <LolSeasonEnd
+              split={split}
+              champion={split.champion}
+              teams={teamsMap}
+              upcoming={data.upcoming ?? []}
+            />
+          )}
 
-        {split.standings.length > 0 && (
-          <TabsContent value="standings">
-            <LolStandings split={split} teamsMap={teamsMap} />
+          <TabsContent value="matches">
+            {hasMatches ? (
+              <div className="grid gap-2 @xl:grid-cols-2">
+                {split.matches.map((m) => (
+                  <LolMatchCard key={m.id} match={m} teams={teamsMap} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                icon={CalendarX}
+                title="No matches to show"
+                description="Lolesports has not sent this split's schedule."
+              />
+            )}
           </TabsContent>
-        )}
 
-        {swiss && (
-          <TabsContent value="swiss">
-            <Card size="sm">
-              <CardContent>
-                <SwissBracket stage={swiss} teams={teamsMap} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
+          {split.standings.length > 0 && (
+            <TabsContent value="standings">
+              <LolStandings split={split} teamsMap={teamsMap} />
+            </TabsContent>
+          )}
 
-        {playoffs && (
-          <TabsContent value="playoffs">
-            <Card size="sm">
-              <CardContent>
-                <KnockoutBracket rounds={playoffs} teams={teamsMap} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
+          {swiss && (
+            <TabsContent value="swiss">
+              <Card size="sm">
+                <CardContent>
+                  <SwissBracket stage={swiss} teams={teamsMap} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {playoffs && (
+            <TabsContent value="playoffs">
+              <Card size="sm">
+                <CardContent>
+                  <KnockoutBracket rounds={playoffs} teams={teamsMap} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+        </div>
       </SportShell>
     </Tabs>
+  );
+}
+
+/**
+ * Who won the split on screen, and when each league is back. After Worlds the
+ * hub opened on a finished bracket with nothing saying the season was over.
+ */
+function LolSeasonEnd({
+  split,
+  champion,
+  teams,
+  upcoming,
+}: {
+  split: LolSplit;
+  champion: LolChampion;
+  teams: Map<string, Team>;
+  upcoming: LolUpcoming[];
+}): ReactElement {
+  const format = useMatchTime();
+  const { teamId, final } = champion;
+  const atHome = final.homeTeamId === teamId;
+  const winner = teams.get(teamId);
+  const runnerUpId = atHome ? final.awayTeamId : final.homeTeamId;
+  const runnerUp = runnerUpId ? teams.get(runnerUpId) : undefined;
+  const won = atHome ? final.homeScore : final.awayScore;
+  const lost = atHome ? final.awayScore : final.homeScore;
+  const result =
+    runnerUp && won != null && lost != null
+      ? `Beat ${runnerUp.shortName} ${won}–${lost} in the final`
+      : "Won the final";
+
+  return (
+    <Card size="sm">
+      <CardContent className="flex flex-col gap-4 @2xl:flex-row @2xl:items-center @2xl:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          {winner && <TeamBadge team={winner} size="lg" />}
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <Eyebrow size="sm" as="div" className="flex items-center gap-1.5">
+              <Trophy aria-hidden className="size-3.5 text-warning" />
+              {split.name} champions
+            </Eyebrow>
+            <Heading level="h5" as="p" className="truncate">
+              {winner?.name ?? teamId}
+            </Heading>
+            <Text variant="small" as="div">
+              {final.date ? `${result} · ${format.shortDay(final.date)}` : result}
+            </Text>
+          </div>
+        </div>
+        {/* Only once Lolesports lists them: before that there is no date to give. */}
+        {upcoming.length > 0 && (
+          <div className="flex flex-col gap-1.5 border-t pt-3 @2xl:min-w-64 @2xl:border-t-0 @2xl:border-l @2xl:pt-0 @2xl:pl-4">
+            <Eyebrow size="sm" as="div">
+              Next up
+            </Eyebrow>
+            <ul className="flex flex-col gap-1">
+              {upcoming.map((u) => (
+                <li key={u.region} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="truncate font-medium">{u.name}</span>
+                  <Mono className="shrink-0 text-2xs text-muted-foreground">
+                    {format.day(u.startDate)}
+                  </Mono>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -37,7 +37,7 @@ export async function DashboardSportCard({ sportId }: { sportId: SportId }) {
   // Rica is that evening, not tomorrow.
   const format = matchTimeFormat(timeZone);
   const href = `${SPORTS_PATH}?sport=${card.sportId}`;
-  const listLabel = card.matches[0]?.status === "result" ? "Latest results" : "Up next";
+  const groups = groupCardMatches(card.matches);
 
   return (
     <Card className="flex flex-col">
@@ -79,16 +79,16 @@ export async function DashboardSportCard({ sportId }: { sportId: SportId }) {
           </Link>
         )}
 
-        {card.matches.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <Eyebrow size="sm">{listLabel}</Eyebrow>
+        {groups.map((group) => (
+          <div key={group.label} className="flex flex-col gap-1.5">
+            <Eyebrow size="sm">{group.label}</Eyebrow>
             <ul className="flex flex-col gap-1">
-              {card.matches.map((m) => (
+              {group.matches.map((m) => (
                 <MatchLine key={m.id} match={m} format={format} />
               ))}
             </ul>
           </div>
-        )}
+        ))}
 
         {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
 
@@ -106,6 +106,22 @@ export async function DashboardSportCard({ sportId }: { sportId: SportId }) {
       </CardContent>
     </Card>
   );
+}
+
+type MatchGroup = { label: string; matches: DashboardMatch[] };
+
+/**
+ * The list under the featured match, one labelled group per kind, each in
+ * the order the service sent. The list was named after its first match, so a
+ * fixture on top put the results under it beneath "Up next".
+ */
+export function groupCardMatches(matches: DashboardMatch[]): MatchGroup[] {
+  const groups: MatchGroup[] = [
+    { label: "Live", matches: matches.filter((m) => m.status === "live") },
+    { label: "Up next", matches: matches.filter((m) => m.status === "upcoming") },
+    { label: "Latest results", matches: matches.filter((m) => m.status === "result") },
+  ];
+  return groups.filter((group) => group.matches.length > 0);
 }
 
 function badgeTeam(side: DashboardSide) {

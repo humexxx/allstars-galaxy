@@ -71,7 +71,13 @@ export type DashboardTableRow = {
   value: string;
 };
 
-export type DashboardTable = { id: string; label: string; rows: DashboardTableRow[] };
+export type DashboardTable = {
+  id: string;
+  label: string;
+  rows: DashboardTableRow[];
+  /** A list rather than a ranking (LoL's champions): no position column. */
+  unranked?: boolean;
+};
 
 /**
  * One favourite sport's dashboard card: what is on now or next, what follows,

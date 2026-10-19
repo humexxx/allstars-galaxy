@@ -28,6 +28,7 @@ import { leadRace, startsIn, weekendNow } from "@/lib/sports/f1-weekend";
 import { formatDayRange } from "@/lib/utils/date";
 import type {
   BracketMatch,
+  DashboardCompetitions,
   DashboardMatch,
   DashboardSide,
   DashboardSportCard,
@@ -355,10 +356,11 @@ function nflCard(base: CardBase, data: NflData): DashboardSportCard {
  */
 function lolCard(base: CardBase, data: LolData, region: LolRegion | null = null): DashboardSportCard {
   const chosen = region ? data.splits.find((s) => s.region === region) : undefined;
-  const competitions = {
+  const competitions: DashboardCompetitions = {
     value: chosen ? chosen.region : null,
     automatic: LOL_AUTOMATIC,
     options: data.splits.map((s) => ({ id: s.region, label: s.name })),
+    waiting: region && !chosen ? { id: region, label: LOL_LEAGUE[region] } : undefined,
   };
   return { ...lolSplitCard(base, data, chosen ?? data.splits[0]), competitions };
 }

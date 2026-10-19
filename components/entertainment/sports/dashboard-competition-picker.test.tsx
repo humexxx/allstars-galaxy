@@ -136,6 +136,39 @@ describe("DashboardCompetitionPicker", () => {
     await act(async () => save.resolve({ success: true }));
   });
 
+  it("ticks a stored event that is not on, and clears it for the card's own pick", async () => {
+    const save = deferred();
+    render(
+      <DashboardCompetitionPicker
+        sportId="lol"
+        label="Worlds 2026 · Swiss"
+        competitions={{
+          value: null,
+          automatic: "Follow what's on",
+          options: [{ id: "worlds", label: "Worlds 2026" }],
+          waiting: { id: "msi", label: "MSI" },
+        }}
+      />
+    );
+
+    open();
+    const waiting = screen.getByRole("option", { name: "MSI · when it's on" });
+    expect(waiting).toHaveAttribute("data-state", "checked");
+    expect(waiting).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("option", { name: "Follow what's on" })).toHaveAttribute(
+      "data-state",
+      "unchecked"
+    );
+
+    // The card already follows what's on, but the row still holds MSI and
+    // would switch back to it when it returns.
+    fireEvent.click(screen.getByRole("option", { name: "Follow what's on" }));
+
+    expect(setSportCompetitionAction).toHaveBeenCalledWith({ sportId: "lol", competition: null });
+    expect(trigger()).toHaveTextContent("Follow what's on");
+    await act(async () => save.resolve({ success: true }));
+  });
+
   it("saves nothing when the choice is the one already shown", () => {
     render(<DashboardCompetitionPicker sportId="tennis" label="Both tours" competitions={TENNIS} />);
 

@@ -35,8 +35,12 @@ export function DashboardCompetitionPicker({
   label: string;
   competitions: DashboardCompetitions;
 }): ReactElement {
+  const { waiting } = competitions;
   const [pending, startTransition] = useTransition();
-  const [value, setValue] = useOptimistic(competitions.value);
+  // What is stored, not what the card honoured: a waiting choice is ticked so
+  // that the card's own pick is a change (Radix reports none for the ticked
+  // item), and choosing it clears the old choice instead of keeping it.
+  const [value, setValue] = useOptimistic(waiting?.id ?? competitions.value);
 
   const choose = (next: string): void => {
     const competition = next === AUTOMATIC ? null : next;
@@ -76,6 +80,11 @@ export function DashboardCompetitionPicker({
             {option.label}
           </SelectItem>
         ))}
+        {waiting && value === waiting.id && (
+          <SelectItem value={waiting.id} disabled>
+            {waiting.label} · when it&apos;s on
+          </SelectItem>
+        )}
       </SelectContent>
     </Select>
   );

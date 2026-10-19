@@ -98,6 +98,12 @@ export type DashboardCompetitions = {
   value: string | null;
   automatic?: string;
   options: { id: string; label: string }[];
+  /**
+   * A choice the favourite holds that the card cannot show today (a LoL event
+   * not in the feed). It still stands — the card goes back to it when the
+   * event returns — so the picker ticks it, and choosing `automatic` clears it.
+   */
+  waiting?: { id: string; label: string };
 };
 
 /** A favourite sport and the championship its dashboard card is set to. */

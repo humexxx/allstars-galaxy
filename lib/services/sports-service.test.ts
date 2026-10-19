@@ -563,6 +563,13 @@ describe("the LoL card across a season", () => {
     expect(card.context).toBe("Worlds 2026 · Swiss");
     expect(card.competitions?.value).toBeNull();
     expect(card.competitions?.options.map((o) => o.id)).not.toContain("msi");
+    // Still stored, and back when MSI is: the picker ticks it so it can be cleared.
+    expect(card.competitions?.waiting).toEqual({ id: "msi", label: "MSI" });
+  });
+
+  it("has nothing waiting when the stored split is on, or none is stored", async () => {
+    expect((await lolCardOn("2026-10-23T23:00:00Z", "lck")).competitions?.waiting).toBeUndefined();
+    expect((await lolCardOn("2026-10-23T23:00:00Z")).competitions?.waiting).toBeUndefined();
   });
 
   it("once LCK's new season starts: its next match, its results and its table", async () => {

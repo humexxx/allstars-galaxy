@@ -19,7 +19,7 @@ import { TableCard } from "../shared/table-primitives";
 import type { FootballLeagueData, FootballLeagueId, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
-import { ScoreCard } from "../shared/score-card";
+import { MatchesByDate } from "../shared/matches-by-date";
 import { SportShell } from "../shared/sport-shell";
 import { StandingsTable } from "../shared/standings-table";
 import { WorldCupView } from "./world-cup-view";
@@ -29,7 +29,7 @@ type FootballViewProps = {
   options: ReadonlyArray<{ id: FootballLeagueId; name: string }>;
 };
 
-type TabKey = "overview" | "matches" | "table" | "knockout";
+type TabKey = "overview" | "table" | "knockout";
 
 /**
  * One competition, picked through the URL (`?league=`) rather than client
@@ -114,13 +114,12 @@ function LeagueView({ league, picker }: { league: FootballLeagueData; picker: Re
         tabs={
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="matches" disabled={league.matches.length === 0}>
-              Matches
-            </TabsTrigger>
             <TabsTrigger value="table" disabled={league.standings.length === 0}>
               Table
             </TabsTrigger>
             {league.league.hasKnockout && (
+        {/* One tab for what Overview and Matches used to split: every match,
+            day by day, with the top of the table beside it. */}
               <TabsTrigger value="knockout" disabled={!hasKnockoutData}>
                 Knockout
               </TabsTrigger>
@@ -130,31 +129,17 @@ function LeagueView({ league, picker }: { league: FootballLeagueData; picker: Re
       >
         <TabsContent value="overview">
           <OverviewLayout
-            matches={
-              <MatchesGrid
-                league={league}
-                teamsMap={teamsMap}
-                limit={6}
-              />
-            }
+            matches={<MatchesByDate matches={league.matches} teams={teamsMap} />}
             standings={
               <TableCard>
                 <StandingsTable
-                  standings={league.standings.slice(0, 6)}
+                  standings={league.standings.slice(0, 8)}
                   teams={teamsMap}
                   variant="compact"
                 />
               </TableCard>
             }
           />
-        </TabsContent>
-
-        <TabsContent value="matches">
-          {league.matches.length === 0 ? (
-            <EmptyState title="No matches available yet" />
-          ) : (
-            <MatchesGrid league={league} teamsMap={teamsMap} />
-          )}
         </TabsContent>
 
         <TabsContent value="table">
@@ -189,11 +174,8 @@ function OverviewLayout({
   standings: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-6 @4xl:grid-cols-[2fr_1fr]">
-      <section className="flex min-w-0 flex-col gap-3">
-        <Eyebrow>Matches</Eyebrow>
-        {matches}
-      </section>
+    <div className="grid items-start gap-6 @4xl:grid-cols-[2fr_1fr]">
+      {matches}
       <section className="flex min-w-0 flex-col gap-3">
         <Eyebrow>Table</Eyebrow>
         {standings}
@@ -201,37 +183,3 @@ function OverviewLayout({
     </div>
   );
 }
-
-function MatchesGrid({
-  league,
-  teamsMap,
-  limit,
-}: {
-  league: FootballLeagueData;
-  teamsMap: Map<string, Team>;
-  limit?: number;
-}) {
-  const matches = limit ? league.matches.slice(0, limit) : league.matches;
-  const grouped = matches.reduce<Record<string, typeof matches>>((acc, m) => {
-    const key = m.stageLabel ?? "Matches";
-    (acc[key] ??= []).push(m);
-    return acc;
-  }, {});
-
-  return (
-    <div className="flex flex-col gap-4">
-      {Object.entries(grouped).map(([label, group]) => (
-        <div key={label} className="flex flex-col gap-2">
-          <Eyebrow size="sm">{label}</Eyebrow>
-          <div className="grid gap-2 @xl:grid-cols-2">
-            {group.map((match) => (
-              // The group heading already names the stage.
-              <ScoreCard key={match.id} match={match} teams={teamsMap} hideStage />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-

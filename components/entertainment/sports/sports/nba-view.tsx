@@ -1,10 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarX } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -18,7 +16,7 @@ import { Eyebrow } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { NbaConference, NbaData, Team } from "@/types/sports";
 
-import { ScoreCard } from "../shared/score-card";
+import { MatchesByDate } from "../shared/matches-by-date";
 import { SportShell } from "../shared/sport-shell";
 import { SportsTh, TableCellNum } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
@@ -32,63 +30,40 @@ export function NbaView({ data }: NbaViewProps) {
     () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
     [data.teams],
   );
+  // ESPN's table rides along with balldontlie's games; a table invented next
+  // to real scores is worse than none, so without it the games fill the row.
   const hasStandings = data.standings.length > 0;
-  const played = useMemo(
-    () => data.games.filter((g) => g.status !== "scheduled"),
-    [data.games]
-  );
-  const upcoming = useMemo(
-    () => data.games.filter((g) => g.status === "scheduled"),
-    [data.games]
-  );
 
   return (
-    <Tabs defaultValue="games" className="gap-6">
+    <Tabs defaultValue="overview" className="gap-6">
       <SportShell
         emoji="🏀"
         title="NBA"
         subtitle={`Season ${data.season}`}
         tabs={
           <TabsList>
-            <TabsTrigger value="games">Games</TabsTrigger>
-            {/* balldontlie's free tier does not serve /standings, and a table
-                invented next to real scores is worse than no table. */}
-            {hasStandings && <TabsTrigger value="standings">Standings</TabsTrigger>}
+            <TabsTrigger value="overview">Overview</TabsTrigger>
           </TabsList>
         }
       >
-        <TabsContent value="games">
-          {data.games.length === 0 ? (
-            <EmptyState icon={CalendarX} title="No games scheduled right now." />
-          ) : (
-            /* Split, not one undifferentiated grid: out of season the list is
-               half finished finals and half fixtures months away, and the two
-               were rendering as the same thing. */
-            <div className="flex flex-col gap-6">
-              {([
-                ["Results", played],
-                ["Upcoming", upcoming],
-              ] as const).map(([label, list]) =>
-                list.length === 0 ? null : (
-                  <section key={label} className="flex flex-col gap-2">
-                    <Eyebrow>{label}</Eyebrow>
-                    <div className="grid gap-2 @xl:grid-cols-2">
-                      {list.map((g) => (
-                        <ScoreCard key={g.id} match={g} teams={teamsMap} />
-                      ))}
-                    </div>
-                  </section>
-                )
-              )}
-            </div>
-          )}
+        {/* Games and the table on one tab: day by day on the left, the
+            conference table beside them. */}
+        <TabsContent value="overview">
+          <div className={cn("grid items-start gap-6", hasStandings && "@4xl:grid-cols-[2fr_1fr]")}>
+            <MatchesByDate
+              matches={data.games}
+              teams={teamsMap}
+              label="Games"
+              emptyTitle="No games scheduled right now."
+            />
+            {hasStandings && (
+              <section className="flex min-w-0 flex-col gap-3">
+                <Eyebrow>Standings</Eyebrow>
+                <NbaStandings data={data} teamsMap={teamsMap} />
+              </section>
+            )}
+          </div>
         </TabsContent>
-
-        {hasStandings && (
-          <TabsContent value="standings">
-            <NbaStandings data={data} teamsMap={teamsMap} />
-          </TabsContent>
-        )}
       </SportShell>
     </Tabs>
   );
@@ -117,8 +92,8 @@ function NbaStandings({
           onValueChange={(v) => v && setConf(v as NbaConference)}
           aria-label="Conference"
         >
-          <ToggleGroupItem value="east">Eastern Conference</ToggleGroupItem>
-          <ToggleGroupItem value="west">Western Conference</ToggleGroupItem>
+          <ToggleGroupItem value="east">East</ToggleGroupItem>
+          <ToggleGroupItem value="west">West</ToggleGroupItem>
         </ToggleGroup>
         <Table>
           <TableHeader>
@@ -136,16 +111,7 @@ function NbaStandings({
                 L
               </SportsTh>
               <SportsTh className="text-center">
-                PCT
-              </SportsTh>
-              <SportsTh className="text-center">
                 GB
-              </SportsTh>
-              <SportsTh className="text-center">
-                STRK
-              </SportsTh>
-              <SportsTh className="text-center">
-                Last 10
               </SportsTh>
             </TableRow>
           </TableHeader>
@@ -168,10 +134,7 @@ function NbaStandings({
                   </TableCell>
                   <TableCellNum value={row.won} />
                   <TableCellNum value={row.lost} />
-                  <TableCellNum value={row.winPct.toFixed(3)} />
                   <TableCellNum value={row.gamesBehind === 0 ? "—" : row.gamesBehind} />
-                  <TableCellNum value={row.streak} />
-                  <TableCellNum value={row.last10} />
                 </TableRow>
               );
             })}

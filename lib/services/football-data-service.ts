@@ -599,12 +599,13 @@ function buildRoundFromStage(
       homeTeamId: homeId,
       awayTeamId: awayId,
       legs: [
-        { homeScore: l1.home, awayScore: l1.away },
-        { homeScore: leg2HomeGoals, awayScore: leg2AwayGoals },
+        { homeScore: l1.home, awayScore: l1.away, date: leg1.utcDate },
+        { homeScore: leg2HomeGoals, awayScore: leg2AwayGoals, date: leg2.utcDate },
       ],
       aggregateHome: aggHome,
       aggregateAway: aggAway,
       winnerTeamId,
+      date: leg2.utcDate,
     });
   }
 

@@ -187,8 +187,8 @@ export type BracketMatch = {
   id: string;
   homeTeamId: string | null;
   awayTeamId: string | null;
-  /** When the tie is two-legged, leg scores live here. */
-  legs?: Array<{ homeScore: number | null; awayScore: number | null }>;
+  /** When the tie is two-legged, leg scores live here (a tennis draw's sets). */
+  legs?: Array<{ homeScore: number | null; awayScore: number | null; date?: string }>;
   homeScore?: number | null;
   awayScore?: number | null;
   aggregateHome?: number | null;
@@ -196,6 +196,8 @@ export type BracketMatch = {
   winnerTeamId?: string | null;
   /** ISO date for the decisive match. */
   date?: string;
+  /** An esports series' format. */
+  bestOf?: 1 | 3 | 5;
 };
 
 export type BracketRound = {
@@ -430,7 +432,6 @@ export type LolMatch = {
 /** One match of a Swiss round. Its teams are null until the pairing is drawn. */
 export type SwissMatch = BracketMatch & {
   status: MatchStatus;
-  bestOf?: 1 | 3 | 5;
 };
 
 /** Everyone on one record plays one match a round: the "1-0" pool. */

@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 export default function TravelPlannerLoading() {
   return (
     <div className="flex flex-col gap-6" aria-hidden="true">
-      <PageHeaderSkeleton actions={1} descriptionWidth="w-96" />
+      <PageHeaderSkeleton actions={1} description={false} />
       <Skeleton className="h-10 w-48" />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => (

@@ -9,6 +9,7 @@ import {
   debtFreeMonthsFromNow,
   describeDebtFree,
   formatDebtFree,
+  formatDebtFreeMonth,
   historyToClosePoints,
   milestoneCrossings,
   summaryDebtFree,
@@ -476,6 +477,7 @@ describe("debt-free: one definition (F8 / F18)", () => {
     const status = describeDebtFree(p, 1, today);
     expect(status).toEqual({ kind: "on-track", months: 4, date: utc(2026, 11, 1) });
     expect(formatDebtFree(status)).toBe("Debt-free in 4 mo · Dec 2026");
+    expect(formatDebtFreeMonth(utc(2026, 11, 1))).toBe("Dec 2026");
   });
 
   it("debts that all start at $0 read 'No debt', not 'Beyond horizon' (F18)", () => {

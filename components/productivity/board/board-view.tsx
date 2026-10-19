@@ -426,7 +426,6 @@ export function BoardView({ initialColumns, initialTasks }: BoardViewProps): Rea
       <PageHeader
         className={cn(isExpanded && "px-4 sm:px-8 lg:px-12")}
         title="Task board"
-        description="Manage your tasks with a visual board."
         badge={
           isSyncing ? (
             <Badge variant="secondary" role="status">

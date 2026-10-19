@@ -15,7 +15,7 @@ export default function PortfolioLoading() {
   return (
     <PortalPageContainer>
       <section className="flex flex-col gap-6" aria-hidden="true">
-        <PageHeaderSkeleton size="compact" actions={3} descriptionWidth="w-80" />
+        <PageHeaderSkeleton size="compact" actions={3} description={false} />
 
         {/* Tab strip */}
         <Skeleton className="h-10 w-72 rounded-lg" />

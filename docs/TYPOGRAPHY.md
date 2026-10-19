@@ -144,6 +144,13 @@ the title, never an absolutely positioned arrow that overflows on a phone.
 `size="compact"` renders the title at `h3` (still an `<h1>`) for dense data
 surfaces — the plan editor and the portfolio. Its `loading.tsx` counterpart is
 `PageHeaderSkeleton` with the same props, so the swap does not shift the page.
+A `description` earns its line only when it says something the page doesn't:
+index pages whose content explains itself (plans, trips, sports, road paths,
+the board, the portfolio) keep the title and its actions and drop it —
+`PageHeaderSkeleton description={false}` to match. A page whose content names
+itself and has no header actions (the dashboard, settings, more apps, the admin
+tables) drops `PageHeader` altogether and keeps an `<h1 className="sr-only">`,
+so the outline still has its heading.
 
 ### Code, IDs, and numerics — use `<Code>` / `<Mono>`
 

@@ -17,8 +17,8 @@ export default function PlansLoading() {
       <span role="status" className="sr-only">
         Loading plans…
       </span>
-      {/* PageHeader: title + description on the left, "New plan" on the right */}
-      <PageHeaderSkeleton actions={1} descriptionWidth="w-80" />
+      {/* PageHeader: the title on the left, "New plan" on the right */}
+      <PageHeaderSkeleton actions={1} description={false} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Projection comparison */}

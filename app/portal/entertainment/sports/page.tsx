@@ -35,7 +35,6 @@ export default async function SportsPage({
     <>
       <PageHeader
         title="Sports"
-        description="Live scores, tables, tournaments and brackets across football, the World Cup, F1, NBA, tennis, padel, NFL and League of Legends."
         actions={<ManageFavoritesSheet favoriteSportIds={favorites} />}
       />
       <SportsHub

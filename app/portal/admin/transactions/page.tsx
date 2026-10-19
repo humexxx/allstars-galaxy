@@ -3,7 +3,6 @@ import { getAdminTransactions } from "@/lib/services/admin-service";
 import { DataTable } from "@/components/admin/transactions/data-table";
 import { TransactionFilters } from "@/components/admin/transactions/filters";
 import { requireAdminOrRedirect } from "@/lib/services/auth-server";
-import { PageHeader } from "@/components/portal/page-header";
 import { adminTransactionFiltersSchema } from "@/schemas/admin";
 
 export const metadata: Metadata = {
@@ -27,10 +26,7 @@ export default async function AdminTransactionsPage({
 
   return (
     <section className="space-y-6">
-      <PageHeader
-        title="Transaction management"
-        description="Approve or reject transactions. Filter by user, status, or type."
-      />
+      <h1 className="sr-only">Transaction management</h1>
       <TransactionFilters />
       <DataTable data={data} />
     </section>

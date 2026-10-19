@@ -31,13 +31,13 @@ calibrated. Health scoring and scenario comparison are part of this module.
 - `receivables.ts` — `owedRepayments` (every repayment of an income marked `owedToMe`, walked to its own end date, past the horizon if need be) and `owedAfter` (what is still owed once a day is over). The engine adds it to net worth as `receivables` on every period close and on the today figure
 - `opening-balances.ts` — `changesOpeningBalances` (does an edit change any opening balance, at cent precision) and `restateOpeningSet` (the set restated as of today)
 - `period.ts` — accounting-period helpers (unchanged)
-- `chart-series.ts` — `buildPlanTimeline` / `buildChartSeries` (real past as period closes + projection), `alignTodayPoint`, `buildCompareRows` (compare chart, joined by calendar month), `milestoneCrossings`, and the one debt-free definition (`debtFreeMonthsFromNow`, `describeDebtFree`, `formatDebtFree`, `summaryDebtFree`)
+- `chart-series.ts` — `buildPlanTimeline` / `buildChartSeries` (real past as period closes + projection), `alignTodayPoint`, `buildCompareRows` (compare chart, joined by calendar month), `milestoneCrossings`, and the one debt-free definition (`debtFreeMonthsFromNow`, `describeDebtFree`, `formatDebtFree`, `formatDebtFreeMonth`, `summaryDebtFree`)
 - `scenario.ts` — `compareScenario` (scenario vs base at a shared period; payoff compared as dates)
 - `dashboard.ts` — `buildDashboardFigures` for the dashboard card
 - `debt-payments.ts` — `projectedDebtPayments` / `debtChipAmount`: the calendar's debt chips read the payments the projection made
 - `table-rows.ts` — `densify` (first 12 rows + real Decembers)
 - `milestones.ts` — default milestone list
-- Shared, outside the module: `lib/utils/date.ts` (`todayInTimeZone`, `calendarDayInTimeZone`, `earliestCalendarDay`, `TIME_ZONE_COOKIE`), `lib/utils/request-today.ts` (server: `getRequestToday` / `getRequestTimeZone` from the `tz` cookie), `hooks/use-time-zone-cookie.ts` (written by `AppHeader`), `lib/utils/format.ts` (`roundCents`, `moneySign`, `CENTS_EPSILON`)
+- Shared, outside the module: `lib/utils/date.ts` (`todayInTimeZone`, `calendarDayInTimeZone`, `earliestCalendarDay`, `TIME_ZONE_COOKIE`), `lib/utils/request-today.ts` (server: `getRequestToday` / `getRequestTimeZone` from the `tz` cookie), `hooks/use-time-zone-cookie.ts` (written by `AppHeader`), `lib/utils/format.ts` (`roundCents`, `moneySign`, `CENTS_EPSILON`), `lib/utils/chart-axis.ts` (`niceTicks` / `yAxisWidth`: the Y ticks recharts would draw, passed in so the plan and dashboard charts size their axis to the labels)
 
 ## Schemas — `/schemas/`
 - `finance.ts` — includes `planColorSchema` (colour-only update; restricted to a

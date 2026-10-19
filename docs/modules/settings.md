@@ -1,7 +1,7 @@
 # Settings
 
 > **Status:** Active
-> **Last reviewed:** 2026-09-29
+> **Last reviewed:** 2026-10-18
 
 ## Overview
 Personal portal preferences. Today it holds a single appearance toggle — the

@@ -436,7 +436,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           size="compact"
           title={data.portfolio.name}
           badge={<Badge variant="secondary">Default</Badge>}
-          description="Snapshot of every approved buy and withdrawal across your investment methods."
           actions={
             <>
               <Tooltip>

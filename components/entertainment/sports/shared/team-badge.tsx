@@ -17,6 +17,18 @@ const sizeMap = {
 };
 
 /**
+ * A logo sits inset in its disc, not edge to edge. Logos are drawn on a
+ * square: a wordmark (the Lakers) or a wide crest (the Pelicans) reaches the
+ * square's sides, and the disc's curve sliced them off. Inset, every one
+ * shows whole and centred, the club colour a ring around it.
+ */
+const logoInset = {
+  sm: "p-0.5",
+  md: "p-1",
+  lg: "p-1.5",
+};
+
+/**
  * Black or white, whichever can actually be read on that background.
  *
  * Team colours are whatever the league uses, and some are nearly white — the
@@ -44,6 +56,7 @@ export function TeamBadge({ team, size = "md", className }: TeamBadgeProps) {
       className={cn(
         "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold leading-none ring-1 ring-black/10",
         sizeMap[size],
+        team.logoUrl && logoInset[size],
         className,
       )}
       style={{ backgroundColor: background, color: readableInk(team.primaryColor) }}
@@ -51,7 +64,7 @@ export function TeamBadge({ team, size = "md", className }: TeamBadgeProps) {
     >
       {team.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={team.logoUrl} alt="" className="h-full w-full rounded-full object-cover" />
+        <img src={team.logoUrl} alt="" className="size-full object-contain" />
       ) : (
         team.code.slice(0, 3)
       )}

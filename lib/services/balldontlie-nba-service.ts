@@ -110,16 +110,16 @@ async function fetchBdl<T>(path: string): Promise<T> {
  * Without them every badge is the same grey monogram and a scoreboard reads as
  * twelve identical circles. Keyed by the abbreviation the API returns.
  *
- * Houston, Toronto and Utah draw their mark in the club colour itself — red on
- * red, purple on navy — and on that disc it vanished. Theirs is white, the
- * surface ESPN draws its logos for.
+ * Houston, Toronto, Utah and New Orleans draw their mark in the club colour
+ * itself — red on red, purple on navy, navy on navy — and on that disc it
+ * vanished. Theirs is white, the surface ESPN draws its logos for.
  */
 const TEAM_COLORS: Record<string, string> = {
   ATL: "#E03A3E", BOS: "#007A33", BKN: "#000000", CHA: "#1D1160",
   CHI: "#CE1141", CLE: "#860038", DAL: "#00538C", DEN: "#0E2240",
   DET: "#C8102E", GSW: "#1D428A", HOU: "#FFFFFF", IND: "#002D62",
   LAC: "#C8102E", LAL: "#552583", MEM: "#5D76A9", MIA: "#98002E",
-  MIL: "#00471B", MIN: "#0C2340", NOP: "#0C2340", NYK: "#006BB6",
+  MIL: "#00471B", MIN: "#0C2340", NOP: "#FFFFFF", NYK: "#006BB6",
   OKC: "#007AC1", ORL: "#0077C0", PHI: "#006BB6", PHX: "#1D1160",
   POR: "#E03A3E", SAC: "#5A2D81", SAS: "#C4CED4", TOR: "#FFFFFF",
   UTA: "#FFFFFF", WAS: "#002B5C",

@@ -51,6 +51,7 @@ import {
   periodIndexForDate,
   periodLengthDays,
 } from "./period";
+import { owedAfter, owedRepayments } from "./receivables";
 import { dayIndexInPeriod, planOccurrences, type Occurrence } from "./schedule";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -237,6 +238,12 @@ function runEngine(
 
   const first = periods[0];
   const last = periods[periods.length - 1];
+  // Repayments of money owed to the user, walked to their own end date. What
+  // is still to come on a given day is an asset, so it counts in net worth.
+  const repayments = owedRepayments(
+    { startMonth: new Date(plan.startMonth), incomes, overrides: options.overrides ?? [] },
+    planStartDate(plan)
+  );
   const occurrences = planOccurrences(
     {
       startMonth: new Date(plan.startMonth),
@@ -373,6 +380,7 @@ function runEngine(
       // the savings/investment interest haven't happened yet.
       const savings = round2(state.savings + appliedCash);
       const totalDebt = state.debts.reduce((s, d) => s + d.balance, 0);
+      const receivables = owedAfter(repayments, stopAt!);
       return {
         projection: emptyProjection(months),
         partial: {
@@ -384,7 +392,8 @@ function runEngine(
           investments: state.investments,
           portfolioValue: state.portfolio,
           totalDebt,
-          netWorth: savings + state.investments + state.portfolio - totalDebt,
+          receivables,
+          netWorth: savings + state.investments + state.portfolio + receivables - totalDebt,
           debts: state.debts.map((d) => ({ debtId: d.id, name: d.name, balance: d.balance })),
         },
       };
@@ -440,7 +449,8 @@ function runEngine(
     }
 
     const totalDebt = state.debts.reduce((s, d) => s + d.balance, 0);
-    const netWorth = state.savings + state.investments + state.portfolio - totalDebt;
+    const receivables = owedAfter(repayments, period.end);
+    const netWorth = state.savings + state.investments + state.portfolio + receivables - totalDebt;
     if (monthsToDebtFree === null && hadDebt && totalDebt <= DEBT_PAID_EPS) {
       monthsToDebtFree = m + 1;
       debtFreeDate = period.start;
@@ -463,6 +473,7 @@ function runEngine(
       investmentsInterest,
       totalDebt,
       portfolioValue: state.portfolio,
+      receivables,
       netWorth,
       preAsOfCashFlow: preAsOf,
       debts: state.debts.map((d) => {
@@ -488,7 +499,12 @@ function runEngine(
       endingSavings: state.savings,
       endingInvestments: state.investments,
       endingDebt,
-      endingNetWorth: state.savings + state.investments + state.portfolio - endingDebt,
+      endingNetWorth:
+        state.savings +
+        state.investments +
+        state.portfolio +
+        owedAfter(repayments, last.end) -
+        endingDebt,
       monthsToDebtFree,
       debtFreeDate,
       hadDebt,
@@ -542,6 +558,13 @@ export function projectStateAt(
     const investments = Math.max(0, num(plan.initialInvestments));
     const portfolio = Math.max(0, options.portfolioValue ?? 0);
     const totalDebt = debtRows.reduce((s, d) => s + d.balance, 0);
+    const receivables = owedAfter(
+      owedRepayments(
+        { startMonth: new Date(plan.startMonth), incomes, overrides: options.overrides ?? [] },
+        planStartDate(plan)
+      ),
+      day
+    );
     return {
       status: "before-start",
       date: day,
@@ -551,7 +574,8 @@ export function projectStateAt(
       investments,
       portfolioValue: portfolio,
       totalDebt,
-      netWorth: savings + investments + portfolio - totalDebt,
+      receivables,
+      netWorth: savings + investments + portfolio + receivables - totalDebt,
       debts: debtRows,
     };
   }
@@ -568,6 +592,7 @@ export function projectStateAt(
       investments: close.investments,
       portfolioValue: close.portfolioValue,
       totalDebt: close.totalDebt,
+      receivables: close.receivables,
       netWorth: close.netWorth,
       debts: close.debts.map((d) => ({ debtId: d.debtId, name: d.name, balance: d.balance })),
     };

@@ -109,6 +109,7 @@ function buildProjectionMonth(): ProjectionMonth {
     investmentsInterest: 0,
     totalDebt: 0,
     portfolioValue: 0,
+    receivables: 0,
     netWorth: 17000,
     preAsOfCashFlow: 0,
     debts: [],
@@ -125,6 +126,7 @@ function buildTodayState(): TodayState {
     investments: 5000,
     portfolioValue: 0,
     totalDebt: 0,
+    receivables: 0,
     netWorth: 17000,
     debts: [],
   };

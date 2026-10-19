@@ -569,6 +569,11 @@ export const financePlanIncomes = pgTable(
       .notNull()
       .default("0"),
     kind: financePlanLineKindEnum("kind").notNull().default("recurring"),
+    // Someone paying back money they owe the user. Until each occurrence lands
+    // it is an asset, so net worth counts it from today rather than on arrival
+    // (see lib/finance/receivables.ts). A recurring one needs an end date, or
+    // the amount owed would be infinite.
+    owedToMe: boolean("owed_to_me").notNull().default(false),
     // For 'recurring': which day of the month the income hits (1..31). Used by
     // the calendar view only — the projection aggregates monthly regardless.
     dayOfMonth: integer("day_of_month"),

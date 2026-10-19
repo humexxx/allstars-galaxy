@@ -451,6 +451,7 @@ describe("alignTodayPoint", () => {
     investments: 0,
     portfolioValue: 0,
     totalDebt: 9800,
+    receivables: 0,
     netWorth: -7000,
     debts: [],
   });

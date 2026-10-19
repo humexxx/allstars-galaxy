@@ -288,4 +288,23 @@ describe("swissRecords", () => {
       ["los", "0-1"],
     ]);
   });
+
+  it("does not count a series still being played, even with a leader", () => {
+    const live = { ...tie("3", "gen", "t1", "t1"), status: "live" as const };
+    const stage = {
+      winsToAdvance: 3,
+      lossesToExit: 3,
+      rounds: [
+        [{ wins: 0, losses: 0, matches: [tie("1", "gen", "ig", "gen"), tie("2", "t1", "los", "t1")] }],
+        [{ wins: 1, losses: 0, matches: [live] }],
+      ],
+      exits: [],
+    };
+    expect(__testing.swissRecords(stage).map((r) => [r.teamId, `${r.wins}-${r.losses}`])).toEqual([
+      ["gen", "1-0"],
+      ["t1", "1-0"],
+      ["ig", "0-1"],
+      ["los", "0-1"],
+    ]);
+  });
 });

@@ -14,13 +14,12 @@ import {
 } from "@/components/ui/select";
 import { Eyebrow } from "@/components/ui/typography";
 import { matchDays } from "@/lib/sports/match-days";
-import { todayInTimeZone } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
 import type { Match, Team } from "@/types/sports";
 
 import { ScoreCard } from "./score-card";
 import { TeamBadge } from "./team-badge";
-import { useMatchTime } from "./time-zone-context";
+import { useMatchTime, useSportsToday } from "./time-zone-context";
 
 const ALL_TEAMS = "all";
 
@@ -29,9 +28,10 @@ const ALL_TEAMS = "all";
  * heading in the reader's zone, opening on today. A team filter narrows it to
  * one team's fixtures and results.
  *
- * From `md` the list scrolls on its own, so the table beside it stays put. On
- * a phone the document is the scroller (see SPACING.md), and a second one
- * inside it would trap the thumb.
+ * Once the table sits beside it (`@4xl`, the views' split) the list scrolls on
+ * its own, so the table stays put. Narrower, the table is below the list and
+ * the page is the scroller (see SPACING.md): a box that stopped the wheel at
+ * its end would keep the reader from reaching it.
  */
 export function MatchesByDate({
   matches,
@@ -64,7 +64,7 @@ export function MatchesByDate({
     [matches, team, timeZone]
   );
 
-  const today = todayInTimeZone(timeZone).toISOString().slice(0, 10);
+  const today = useSportsToday();
   const opening = days.find((d) => d.day >= today)?.day ?? days.at(-1)?.day;
 
   // Open on today rather than on the oldest result: what is next is what the
@@ -74,7 +74,7 @@ export function MatchesByDate({
     if (!scroller || scroller.scrollHeight <= scroller.clientHeight || !opening) return;
     const target = scroller.querySelector<HTMLElement>(`[data-day="${opening}"]`);
     scroller.scrollTop = target ? target.offsetTop : 0;
-  }, [opening]);
+  }, [opening, team]);
 
   const heading = (day: string): string => {
     const name = format.longDay(day);
@@ -108,7 +108,11 @@ export function MatchesByDate({
       ) : (
         <div
           ref={scrollerRef}
-          className="relative flex flex-col gap-4 md:max-h-160 md:overflow-y-auto md:overscroll-contain md:pr-1"
+          // Focusable so a keyboard can scroll it too: nothing inside is.
+          tabIndex={0}
+          role="region"
+          aria-label={label}
+          className="relative flex flex-col gap-4 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50 @4xl:max-h-160 @4xl:overflow-y-auto @4xl:overscroll-contain @4xl:pr-1"
         >
           {days.map(({ day, matches: list }) => (
             <div key={day} data-day={day} className="flex flex-col gap-2">
@@ -116,7 +120,7 @@ export function MatchesByDate({
                 size="sm"
                 as="div"
                 className={cn(
-                  "md:sticky md:top-0 md:z-10 md:bg-background md:py-1",
+                  "@4xl:sticky @4xl:top-0 @4xl:z-10 @4xl:bg-background @4xl:py-1",
                   day === today && "text-foreground"
                 )}
               >

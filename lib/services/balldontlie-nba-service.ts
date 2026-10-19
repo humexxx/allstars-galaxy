@@ -705,8 +705,9 @@ async function fetchNbaFromApi(today: Date): Promise<NbaData> {
     played[played.length - 1]?.season ?? sorted[sorted.length - 1]?.season ?? season;
 
   // The table and the bracket are extras, not the feed: if ESPN is down the
-  // games still refresh, and the view drops a tab rather than inventing one.
-  // Side by side, so two slow answers cost one timeout, not two.
+  // games still refresh, the table drops away rather than being invented, and
+  // the bracket keeps its last good answer (`getNbaPlayoffs`). Side by side,
+  // so two slow answers cost one timeout, not two.
   const year = playoffYear(today, page);
   const [table, bracket] = await Promise.all([
     fetchStandings(latestSeason)
@@ -715,14 +716,7 @@ async function fetchNbaFromApi(today: Date): Promise<NbaData> {
         console.warn("espn nba standings unavailable:", error);
         return { standings: [] as NbaStanding[], teams: [] as Team[] };
       }),
-    year === null
-      ? Promise.resolve<NbaPlayoffs>({ rounds: [], teams: [] })
-      : fetchPlayoffs(year)
-          .then(playoffsFrom)
-          .catch((error): NbaPlayoffs => {
-            console.warn("espn nba playoffs unavailable:", error);
-            return { rounds: [], teams: [] };
-          }),
+    year === null ? Promise.resolve(NO_PLAYOFFS) : getNbaPlayoffs(year),
   ]);
   for (const team of [...table.teams, ...bracket.teams]) {
     if (!byTeam.has(team.id)) byTeam.set(team.id, team);
@@ -741,6 +735,22 @@ async function fetchNbaFromApi(today: Date): Promise<NbaData> {
  * Live NBA games, falling back to the mock fixture when there is no last good
  * answer to serve.
  */
+const NO_PLAYOFFS: NbaPlayoffs = { rounds: [], teams: [] };
+
+/**
+ * The bracket in a cache entry of its own, keyed by its year. Caught inside
+ * the games' feed, one failed ESPN call was cached as `[]` for five minutes,
+ * and the view read that as "no postseason yet" and locked the tab in the
+ * middle of the playoffs. Here a failed refresh keeps the last good bracket.
+ */
+const getNbaPlayoffs = cachedFeed(
+  "ESPN NBA playoffs",
+  async (year: number): Promise<NbaPlayoffs> => playoffsFrom(await fetchPlayoffs(year)),
+  (): NbaPlayoffs => NO_PLAYOFFS,
+  ["nba-playoffs"],
+  { revalidate: REVALIDATE_SECONDS, tags: ["sports:nba"] }
+);
+
 export const getNbaData = cachedFeed(
   "balldontlie NBA",
   () => fetchNbaFromApi(new Date()),

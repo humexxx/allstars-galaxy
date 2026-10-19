@@ -277,7 +277,11 @@ function swissRecords(stage: SwissStage): { teamId: string; wins: number; losses
     for (const id of [match.homeTeamId, match.awayTeamId]) {
       if (id && !records.has(id)) records.set(id, { wins: 0, losses: 0 });
     }
-    if (!match.winnerTeamId || !match.homeTeamId || !match.awayTeamId) continue;
+    // A live best-of-three already names its leader as the winner; only a
+    // finished series moves a record.
+    if (match.status !== "ft" || !match.winnerTeamId || !match.homeTeamId || !match.awayTeamId) {
+      continue;
+    }
     decided++;
     const loser = match.winnerTeamId === match.homeTeamId ? match.awayTeamId : match.homeTeamId;
     records.get(match.winnerTeamId)!.wins++;

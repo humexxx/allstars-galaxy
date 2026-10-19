@@ -7,6 +7,7 @@ import { DEFAULT_SPORT } from "@/lib/data/sports/registry";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { listUserFavoriteSportIds } from "@/lib/services/sports-service";
 import { loadSport } from "@/lib/sports/load";
+import { getRequestTodayIso } from "@/lib/utils/request-today";
 import { isSportId } from "@/lib/sports/payload";
 
 export const metadata: Metadata = {
@@ -22,9 +23,10 @@ export default async function SportsPage({
   const ctx = await requireEffectiveContext();
   // Kickoffs are formatted in the reader's zone by the portal-wide
   // ReaderTimeZoneProvider, so the server and the browser print the same time.
-  const [favorites, { sport, tab, league }] = await Promise.all([
+  const [favorites, { sport, tab, league }, today] = await Promise.all([
     listUserFavoriteSportIds(ctx.effectiveUserId),
     searchParams,
+    getRequestTodayIso(),
   ]);
 
   // The sport is in the URL, so a refresh keeps it, Back walks between sports,
@@ -46,6 +48,7 @@ export default async function SportsPage({
         favoriteSportIds={favorites}
         payload={payload}
         initialTab={tab}
+        today={today}
       />
     </>
   );

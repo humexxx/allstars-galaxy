@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { __testing } from "./espn-tennis-service";
 
-const { drawFrom, matchFrom, playerFrom } = __testing;
+const { tournamentFrom, matchFrom, playerFrom, rankingFrom, tourFrom, calendarRange } = __testing;
+
+const NOW = Date.parse("2026-10-18T12:00:00Z");
 
 const competitor = (
   name: string,
@@ -17,6 +19,14 @@ const competitor = (
   curatedRank: seed ? { current: seed } : undefined,
   linescores: sets.map((v) => ({ value: v })),
 });
+
+const competition = (
+  id: string,
+  round: string,
+  state: "pre" | "in" | "post",
+  competitors = [competitor("TBD", ""), competitor("TBD", "")],
+  completed = state === "post"
+) => ({ id, round: { displayName: round }, status: { type: { state, completed } }, competitors });
 
 describe("playerFrom", () => {
   it("carries the flag and the seed where the draw card reads them", () => {
@@ -64,54 +74,208 @@ describe("matchFrom", () => {
   });
 });
 
-describe("drawFrom", () => {
-  const event = {
-    id: "401",
-    name: "US Open",
-    date: "2026-08-24T04:00Z",
-    endDate: "2026-09-14T03:59Z",
-    venue: { address: { city: "New York" } },
-    status: { type: { completed: false } },
-    groupings: [
-      {
-        grouping: { slug: "mens-singles" },
-        competitions: [
-          {
-            id: "r1",
-            round: { displayName: "Round 1" },
-            competitors: [
-              competitor("Paul", "USA", 20, [6, 6, 6, 6], true),
-              competitor("Wong", "Hong Kong", undefined, [7, 1, 3, 3]),
-            ],
-          },
-          {
-            id: "q1",
-            round: { displayName: "Qualifying 1st Round" },
-            competitors: [competitor("X", "Spain"), competitor("Y", "France")],
-          },
-          {
-            id: "f",
-            round: { displayName: "Final" },
-            competitors: [competitor("TBD", ""), competitor("TBD", "")],
-          },
-        ],
-      },
-    ],
-  };
+describe("tournamentFrom", () => {
+  // Trimmed from ESPN's real Shanghai payload: the place lives in
+  // `venue.displayName`, and the event's own status is not to be trusted.
+  const event = (competitions: unknown[]) => ({
+    id: "315-2026",
+    name: "Rolex Shanghai Masters",
+    date: "2026-10-05T04:00Z",
+    endDate: "2026-10-19T03:59Z",
+    venue: { displayName: "Shanghai, China PR" },
+    status: { type: { completed: true } },
+    groupings: [{ grouping: { slug: "mens-singles" }, competitions }],
+  });
 
-  it("keeps the rounds a reader follows and drops qualifying", () => {
-    // Qualifying is not the tournament, and a 128-draw's opening rounds are
-    // long enough without it.
-    const draw = drawFrom(event as never, "mens-singles")!;
+  const played = [
+    competition("r1", "Round 1", "post", [
+      competitor("Paul", "USA", 20, [6, 6], true),
+      competitor("Wong", "Hong Kong", undefined, [3, 4]),
+    ]),
+    competition("q1", "Qualifying 1st Round", "post", [
+      competitor("X", "Spain"),
+      competitor("Y", "France"),
+    ]),
+  ];
+
+  it("keeps the main draw and drops qualifying", () => {
+    const draw = tournamentFrom(
+      event([...played, competition("f", "Final", "pre")]) as never,
+      "mens-singles",
+      NOW
+    )!;
     expect(draw.tournament.bracket!.map((r) => r.label)).toEqual(["Round 1", "Final"]);
   });
 
-  it("reads a tournament still being played as live", () => {
-    expect(drawFrom(event as never, "mens-singles")!.tournament.status).toBe("live");
-    expect(drawFrom(event as never, "mens-singles")!.tournament.location).toBe("New York");
+  it("reads the state off the matches, not the event", () => {
+    // ESPN marked Ningbo "completed" with 27 of its 45 matches still to play.
+    const draw = tournamentFrom(
+      event([...played, competition("f", "Final", "pre")]) as never,
+      "mens-singles",
+      NOW
+    )!;
+    expect(draw.tournament.status).toBe("live");
+  });
+
+  it("is under way once qualifying has started", () => {
+    const draw = tournamentFrom(
+      event([
+        competition("q1", "Qualifying 1st Round", "post"),
+        competition("r1", "Round 1", "pre"),
+      ]) as never,
+      "mens-singles",
+      NOW
+    )!;
+    expect(draw.tournament.status).toBe("live");
+  });
+
+  it("drops the slots ESPN cancelled", () => {
+    // Basel, a week out: three cancelled TBD quarter-finals beside the real
+    // four, all "post" and none completed.
+    const { tournament } = tournamentFrom(
+      event([
+        ...["1", "2", "3", "4"].map((n) => competition(`q${n}`, "Quarterfinal", "pre")),
+        ...["5", "6", "7"].map((n) =>
+          competition(`x${n}`, "Quarterfinal", "post", undefined, false)
+        ),
+      ]) as never,
+      "mens-singles",
+      NOW
+    )!;
+    expect(tournament.status).toBe("upcoming");
+    expect(tournament.bracket![0].matches).toHaveLength(4);
+  });
+
+  it("is upcoming while every match is still to be played", () => {
+    const draw = tournamentFrom(
+      event([competition("f", "Final", "pre")]) as never,
+      "mens-singles",
+      NOW
+    )!;
+    expect(draw.tournament.status).toBe("upcoming");
+  });
+
+  it("names the champion and the runner-up once the final is over", () => {
+    const final = competition("f", "Final", "post", [
+      competitor("R. Jodar", "Spain", undefined, [6, 6, 4]),
+      competitor("A. Davidovich Fokina", "Spain", undefined, [1, 7, 6], true),
+    ]);
+    const { tournament } = tournamentFrom(
+      event([...played, final]) as never,
+      "mens-singles",
+      NOW
+    )!;
+    expect(tournament.status).toBe("completed");
+    expect(tournament.champion).toBe("A. Davidovich Fokina");
+    expect(tournament.runnerUp).toBe("R. Jodar");
+  });
+
+  it("takes the city from the venue's display name", () => {
+    const { tournament } = tournamentFrom(event(played) as never, "mens-singles", NOW)!;
+    expect(tournament.location).toBe("Shanghai");
+    expect(tournament.startDate).toBe("2026-10-05");
   });
 
   it("returns nothing for a grouping that is not there", () => {
-    expect(drawFrom(event as never, "womens-singles")).toBeNull();
+    expect(tournamentFrom(event(played) as never, "womens-singles", NOW)).toBeNull();
+  });
+});
+
+describe("rankingFrom", () => {
+  it("maps ESPN's ranking row, movement included", () => {
+    expect(
+      rankingFrom({
+        current: 8,
+        previous: 11,
+        points: 3480,
+        athlete: {
+          displayName: "Novak Djokovic",
+          shortname: "N. Djokovic",
+          flagAltText: "Serbia",
+          citizenshipCountry: "SER",
+        },
+      })
+    ).toEqual({
+      position: 8,
+      name: "Novak Djokovic",
+      shortName: "N. Djokovic",
+      countryCode: "SER",
+      flagEmoji: "🇷🇸",
+      points: 3480,
+      movement: 3,
+    });
+  });
+
+  it("drops a row with nobody in it", () => {
+    expect(rankingFrom({ current: 1 })).toBeNull();
+  });
+});
+
+describe("tourFrom", () => {
+  const board = {
+    leagues: [{ season: { year: 2026 } }],
+    events: [
+      {
+        id: "250",
+        name: "Almaty Open",
+        date: "2026-10-12T04:00Z",
+        venue: { displayName: "Almaty, Kazakhstan" },
+        groupings: [
+          {
+            grouping: { slug: "mens-singles" },
+            competitions: [competition("a1", "Final", "pre")],
+          },
+        ],
+      },
+      {
+        id: "1000",
+        name: "Shanghai Masters",
+        date: "2026-10-12T04:00Z",
+        venue: { displayName: "Shanghai, China PR" },
+        groupings: [
+          {
+            grouping: { slug: "mens-singles" },
+            competitions: [
+              competition("s1", "Semifinal", "post", [
+                competitor("A", "Italy", 1, [6, 6], true),
+                competitor("B", "Spain", 2, [4, 4]),
+              ]),
+              competition("s2", "Semifinal", "pre"),
+              competition("s3", "Final", "pre"),
+            ],
+          },
+        ],
+      },
+      { id: "wta-only", name: "Ningbo", groupings: [{ grouping: { slug: "womens-singles" } }] },
+    ],
+  };
+
+  it("runs in date order, the bigger draw first on the same day", () => {
+    const tour = tourFrom("atp", board as never, { rankings: [] }, NOW);
+    expect(tour.tournaments.map((t) => t.name)).toEqual(["Shanghai Masters", "Almaty Open"]);
+    expect(tour.season).toBe(2026);
+  });
+
+  it("collects every draw's players for the view's lookup", () => {
+    const tour = tourFrom("atp", board as never, { rankings: [] }, NOW);
+    expect(tour.drawPlayers!.map((p) => p.id).sort()).toEqual(["a-A", "a-B", "a-TBD"]);
+  });
+
+  it("keeps the top of the rankings", () => {
+    const ranks = Array.from({ length: 30 }, (_, i) => ({
+      current: i + 1,
+      previous: i + 1,
+      points: 1000 - i,
+      athlete: { displayName: `Player ${i + 1}` },
+    }));
+    const tour = tourFrom("atp", board as never, { rankings: [{ ranks }] }, NOW);
+    expect(tour.rankings).toHaveLength(20);
+    expect(tour.rankings[0]).toMatchObject({ position: 1, movement: 0 });
+  });
+});
+
+describe("calendarRange", () => {
+  it("asks for two weeks either side of today", () => {
+    expect(calendarRange(new Date(NOW))).toBe("20261004-20261101");
   });
 });

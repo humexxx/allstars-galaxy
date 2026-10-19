@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { __testing } from "./balldontlie-nba-service";
 
-const { currentSeason, seasonLabel, recentAndNext, statusFrom } = __testing;
+const { currentSeason, seasonLabel, recentAndNext, statusFrom, gameWindow, standingsFrom } =
+  __testing;
 
 const game = (date: string, final = false) => ({
     id: 1,
@@ -64,5 +65,93 @@ describe("statusFrom", () => {
     expect(statusFrom(game("2026-10-20") as never)).toBe("scheduled");
     expect(statusFrom({ ...game("2026-10-20"), status_state: "in" } as never)).toBe("live");
     expect(statusFrom({ ...game("2026-10-20"), postponed: true } as never)).toBe("postponed");
+  });
+});
+
+describe("gameWindow", () => {
+  it("asks for a few nights either side of today in season", () => {
+    // One page is the OLDEST hundred games in the range. ±130 days in
+    // December would have stopped at the season's first fortnight.
+    expect(gameWindow(new Date(2026, 11, 15, 12))).toEqual({
+      start: "2026-12-11",
+      end: "2026-12-19",
+    });
+  });
+
+  it("starts at the finals out of season, never on a March night", () => {
+    expect(gameWindow(new Date(2026, 6, 1, 12))).toEqual({
+      start: "2026-06-01",
+      end: "2026-11-08",
+    });
+  });
+
+  it("keeps the finals in view until the new season has a week of games", () => {
+    expect(gameWindow(new Date(2026, 9, 18, 12)).start).toBe("2026-06-01");
+    expect(gameWindow(new Date(2026, 9, 28, 12))).toEqual({
+      start: "2026-10-24",
+      end: "2026-11-01",
+    });
+  });
+
+  it("stays narrow while the finals are still being played", () => {
+    expect(gameWindow(new Date(2026, 5, 10, 12)).start).toBe("2026-06-06");
+  });
+});
+
+describe("standingsFrom", () => {
+  // ESPN's 2025–26 table, trimmed: stats arrive by `name`, except "Last Ten
+  // Games", which is only findable by its `type`.
+  const entry = (abbreviation: string, stats: Record<string, string>) => ({
+    team: { abbreviation, displayName: `${abbreviation} full`, shortDisplayName: abbreviation },
+    stats: Object.entries(stats).map(([key, displayValue]) =>
+      key === "lasttengames"
+        ? { name: "Last Ten Games", type: "lasttengames", displayValue }
+        : { name: key, type: key.toLowerCase(), displayValue, value: Number(displayValue) }
+    ),
+  });
+
+  const table = {
+    children: [
+      {
+        abbreviation: "East",
+        standings: {
+          entries: [
+            entry("NY", { playoffSeed: "2", wins: "53", losses: "29", winPercent: ".646", gamesBehind: "7", streak: "L1", lasttengames: "6-4" }),
+            entry("DET", { playoffSeed: "1", wins: "60", losses: "22", winPercent: ".732", gamesBehind: "-", streak: "W3", lasttengames: "8-2" }),
+          ],
+        },
+      },
+      {
+        abbreviation: "West",
+        standings: {
+          entries: [
+            entry("GS", { playoffSeed: "1", wins: "50", losses: "32", winPercent: ".610", gamesBehind: "-", streak: "W1", lasttengames: "7-3" }),
+          ],
+        },
+      },
+    ],
+  };
+
+  it("joins ESPN's abbreviations onto balldontlie's teams", () => {
+    // NY / GS on ESPN are NYK / GSW on balldontlie — the games' team ids.
+    const { standings, teams } = standingsFrom(table);
+    expect(standings.map((s) => s.teamId)).toEqual(["DET", "NYK", "GSW"]);
+    expect(teams.find((t) => t.id === "NYK")?.primaryColor).toBe("#006BB6");
+  });
+
+  it("maps the columns the table shows", () => {
+    const [detroit, newYork] = standingsFrom(table).standings;
+    expect(detroit).toMatchObject({
+      position: 1,
+      conference: "east",
+      won: 60,
+      lost: 22,
+      played: 82,
+      winPct: 0.732,
+      gamesBehind: 0,
+      streak: "W3",
+      last10: "8-2",
+    });
+    expect(newYork.gamesBehind).toBe(7);
   });
 });

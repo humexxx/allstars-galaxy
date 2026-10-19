@@ -4,6 +4,7 @@ vi.mock("@/db", () => ({ db: {} }));
 
 import { getFootballLeague } from "@/lib/data/sports/football";
 import { NFL_DATA } from "@/lib/data/sports/nfl";
+import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
 
 import { footballLeagueFrom, loadSport } from "./load";
 
@@ -12,9 +13,12 @@ describe("footballLeagueFrom", () => {
     expect(footballLeagueFrom("serie-a")).toBe("serie-a");
   });
 
+  it("offers the World Cup among football's competitions", () => {
+    expect(footballLeagueFrom("world-cup")).toBe("world-cup");
+  });
+
   it("falls back to the first league for anything else", () => {
     expect(footballLeagueFrom(undefined)).toBe("uefa-champions-league");
-    expect(footballLeagueFrom("world-cup")).toBe("uefa-champions-league");
     expect(footballLeagueFrom("nope")).toBe("uefa-champions-league");
   });
 });
@@ -126,7 +130,16 @@ describe("loadSport", () => {
       "la-liga",
       "premier-league",
       "serie-a",
+      "world-cup",
     ]);
+  });
+
+  it("reads the World Cup from its own feed when football picks it", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const payload = await loadSport("football", { league: "world-cup" });
+    if (payload.sport !== "football") throw new Error("not football");
+    expect(payload.league).toBe(WORLD_CUP_DATA);
+    expect(payload.sample).toBe(true);
   });
 
   it("flags a league that is showing its fixture", async () => {

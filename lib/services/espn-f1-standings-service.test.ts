@@ -56,6 +56,56 @@ describe("teamLogo", () => {
     expect(__testing.teamLogo("Cadillac")).toBeUndefined();
     expect(__testing.teamLogo(undefined)).toBeUndefined();
   });
+
+  it("maps the names Jolpica reports too, for the F1 page", () => {
+    // Jolpica appends the entry name and calls Racing Bulls "RB".
+    expect(__testing.teamLogo("RB F1 Team")).toBe("/f1/teams/racing-bulls.png");
+    expect(__testing.teamLogo("Haas F1 Team")).toBe("/f1/teams/haas.png");
+    expect(__testing.teamLogo("Alpine F1 Team")).toBe("/f1/teams/alpine.png");
+    expect(__testing.teamLogo("Cadillac F1 Team")).toBeUndefined();
+  });
+});
+
+describe("driverPortraits", () => {
+  // ESPN's 2026 standings, trimmed to what the mapper reads.
+  const standings = {
+    children: [
+      {
+        name: "Driver Standings",
+        standings: {
+          entries: [
+            {
+              athlete: {
+                id: "5829",
+                displayName: "Kimi Antonelli",
+                abbreviation: "ANT",
+                flag: { href: "https://a.espncdn.com/i/teamlogos/countries/500/ita.png" },
+              },
+            },
+            { athlete: { displayName: "Nobody Without An Id" } },
+          ],
+        },
+      },
+      { name: "Constructor Standings", standings: { entries: [{ team: { displayName: "Mercedes" } }] } },
+    ],
+  };
+
+  it("carries the race code and the name to match on, and resized pictures", () => {
+    expect(__testing.driverPortraits(standings)).toEqual([
+      {
+        code: "ANT",
+        name: "Kimi Antonelli",
+        imageUrl:
+          "https://a.espncdn.com/combiner/i?img=/i/headshots/rpm/players/full/5829.png&w=96&h=96&scale=crop",
+        flagUrl:
+          "https://a.espncdn.com/combiner/i?img=/i/teamlogos/countries/500/ita.png&w=96&h=96&scale=crop",
+      },
+    ]);
+  });
+
+  it("is empty when ESPN sends no driver table", () => {
+    expect(__testing.driverPortraits({ children: [] })).toEqual([]);
+  });
 });
 
 describe("the vendored logo files", () => {

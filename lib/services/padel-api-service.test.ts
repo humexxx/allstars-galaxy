@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { __testing } from "./padel-api-service";
 
-const { mapStatus, mapTournament, shortNameFor, tournamentsPath } = __testing;
+const { mapStatus, mapTournament, mapRanking, shortNameFor, photoFor, tournamentsPath } = __testing;
 
 // Milano P1 2026 as the API returns it, trimmed to what the mapper reads.
 const milano = {
@@ -65,6 +65,52 @@ describe("shortNameFor", () => {
   it("leaves a single surname alone", () => {
     expect(shortNameFor("Agustin Tapia")).toBe("A. Tapia");
     expect(shortNameFor("Momo")).toBe("Momo");
+  });
+});
+
+describe("photoFor", () => {
+  it("spells the address the player record serves as photo_url", () => {
+    // `/players/66` answers photo_url ".../player-api/agustin-tapia.webp".
+    expect(photoFor("Agustin Tapia")).toBe(
+      "https://media.padelapi.org/player-api/agustin-tapia.webp"
+    );
+  });
+
+  it("keeps both surnames and particles, and drops accents", () => {
+    expect(photoFor("Gemma Triay Pons")).toBe(
+      "https://media.padelapi.org/player-api/gemma-triay-pons.webp"
+    );
+    expect(photoFor("Alejandra Alonso De Villa")).toBe(
+      "https://media.padelapi.org/player-api/alejandra-alonso-de-villa.webp"
+    );
+    expect(photoFor("Agustín Tapia")).toBe(
+      "https://media.padelapi.org/player-api/agustin-tapia.webp"
+    );
+  });
+
+  it("has nothing for a blank name", () => {
+    expect(photoFor("  ")).toBeUndefined();
+  });
+});
+
+describe("mapRanking", () => {
+  it("puts the photo on the ranking row", () => {
+    // The rankings row as the API returns it, trimmed.
+    const row = mapRanking({
+      id: 66,
+      name: "Agustin Tapia",
+      category: "men",
+      nationality: "AR",
+      ranking: 1,
+      ranking_diff: 0,
+      points: 19840,
+    });
+    expect(row).toMatchObject({
+      position: 1,
+      shortName: "A. Tapia",
+      flagEmoji: "🇦🇷",
+      photoUrl: "https://media.padelapi.org/player-api/agustin-tapia.webp",
+    });
   });
 });
 

@@ -915,6 +915,48 @@ function buildScope(
  * (in-progress wins, then the next upcoming, then the most recent past) and
  * folds its items into a count + estimate so the card avoids a second query.
  */
+/** One trip as the dashboard card shows it: its state, items and estimate. */
+async function featuredTrip(pick: Trip, today: string): Promise<DashboardTravelFeaturedTrip> {
+  const [items, partySize, attendees] = await Promise.all([
+    db
+      .select({
+        id: tripItems.id,
+        price: tripItems.price,
+        priceMax: tripItems.priceMax,
+        priceUnit: tripItems.priceUnit,
+        scheduledOn: tripItems.scheduledOn,
+        endsOn: tripItems.endsOn,
+      })
+      .from(tripItems)
+      .where(eq(tripItems.tripId, pick.id)),
+    db.$count(tripMembers, eq(tripMembers.tripId, pick.id)),
+    // Who each item is for: a per-person price multiplies by its own
+    // attendees, not the whole party — a guided hike for two of four
+    // travellers is two tickets, and the card was charging four.
+    db
+      .select({ itemId: tripItemAttendees.itemId, memberId: tripItemAttendees.memberId })
+      .from(tripItemAttendees)
+      .innerJoin(tripItems, eq(tripItemAttendees.itemId, tripItems.id))
+      .where(eq(tripItems.tripId, pick.id)),
+  ]);
+  const attendeesByItem = groupByItem(attendees ?? []);
+  // Same maths as the trip page: summing the raw column reported a
+  // three-night hotel at one night's price and a per-person fare once.
+  const totalEstimate = tripCost(
+    items.map((i) => ({ ...i, attendeeIds: attendeesByItem.get(i.id) ?? [] })),
+    Math.max(1, partySize)
+  ).low;
+  return {
+    ...pick,
+    state: tripState(pick, today),
+    itemCount: items.length,
+    totalEstimate,
+  };
+}
+
+/** How many trips the dashboard card shows. */
+const FEATURED_TRIPS = 2;
+
 export async function getDashboardTravelSummary(
   userId: string,
   /**
@@ -931,7 +973,7 @@ export async function getDashboardTravelSummary(
     .orderBy(asc(trips.startDate));
 
   if (all.length === 0) {
-    return { totalTrips: 0, upcomingCount: 0, inProgressCount: 0, featured: null };
+    return { totalTrips: 0, upcomingCount: 0, inProgressCount: 0, featured: [] };
   }
 
   const today = readerToday ?? todayIso();
@@ -939,50 +981,11 @@ export async function getDashboardTravelSummary(
   const upcoming = all.filter((t) => tripState(t, today) === "upcoming");
   const past = all.filter((t) => tripState(t, today) === "past");
 
-  const pick =
-    inProgress[0] ??
-    upcoming[0] ??
-    past[past.length - 1] ??
-    null;
+  // What is happening, then what is next, then the latest memory to fill the
+  // second slot: the card shows two side by side on a wide screen.
+  const picks = [...inProgress, ...upcoming, ...past.reverse()].slice(0, FEATURED_TRIPS);
 
-  let featured: DashboardTravelFeaturedTrip | null = null;
-  if (pick) {
-    const [items, partySize, attendees] = await Promise.all([
-      db
-        .select({
-          id: tripItems.id,
-          price: tripItems.price,
-          priceMax: tripItems.priceMax,
-          priceUnit: tripItems.priceUnit,
-          scheduledOn: tripItems.scheduledOn,
-          endsOn: tripItems.endsOn,
-        })
-        .from(tripItems)
-        .where(eq(tripItems.tripId, pick.id)),
-      db.$count(tripMembers, eq(tripMembers.tripId, pick.id)),
-      // Who each item is for: a per-person price multiplies by its own
-      // attendees, not the whole party — a guided hike for two of four
-      // travellers is two tickets, and the card was charging four.
-      db
-        .select({ itemId: tripItemAttendees.itemId, memberId: tripItemAttendees.memberId })
-        .from(tripItemAttendees)
-        .innerJoin(tripItems, eq(tripItemAttendees.itemId, tripItems.id))
-        .where(eq(tripItems.tripId, pick.id)),
-    ]);
-    const attendeesByItem = groupByItem(attendees ?? []);
-    // Same maths as the trip page: summing the raw column reported a
-    // three-night hotel at one night's price and a per-person fare once.
-    const totalEstimate = tripCost(
-      items.map((i) => ({ ...i, attendeeIds: attendeesByItem.get(i.id) ?? [] })),
-      Math.max(1, partySize)
-    ).low;
-    featured = {
-      ...pick,
-      state: tripState(pick, today),
-      itemCount: items.length,
-      totalEstimate,
-    };
-  }
+  const featured = await Promise.all(picks.map((pick) => featuredTrip(pick, today)));
 
   return {
     totalTrips: all.length,

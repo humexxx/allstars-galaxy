@@ -1,6 +1,7 @@
 import "server-only";
 
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
+import { espnImage } from "@/lib/sports/espn-images";
 import type {
   BracketMatch,
   BracketRound,
@@ -68,10 +69,14 @@ type EspnRank = {
   previous?: number;
   points?: number;
   athlete?: {
+    /** The same id the scoreboard gives a draw's competitor. */
+    id?: string;
     displayName?: string;
     shortname?: string;
     flagAltText?: string;
     citizenshipCountry?: string;
+    /** Present only for a player ESPN has a photo of. */
+    headshot?: string;
   };
 };
 
@@ -286,6 +291,15 @@ function tournamentFrom(event: EspnEvent, slug: string, now = Date.now()): EspnD
   };
 }
 
+/**
+ * A player's photo, from the field ESPN sends with it — never built from the
+ * id. The id-shaped path 404s for every player without one (close to half of
+ * the top twenty), which would put a broken image where the flag used to be.
+ */
+function photoOf(rank: EspnRank): string | undefined {
+  return espnImage(rank.athlete?.headshot);
+}
+
 function rankingFrom(rank: EspnRank): PlayerRanking | null {
   const athlete = rank.athlete;
   const name = athlete?.displayName;
@@ -298,7 +312,24 @@ function rankingFrom(rank: EspnRank): PlayerRanking | null {
     flagEmoji: FLAGS[athlete?.flagAltText ?? ""] ?? "",
     points: rank.points ?? 0,
     movement: rank.previous ? rank.previous - rank.current : 0,
+    photoUrl: photoOf(rank),
   };
+}
+
+/**
+ * Photos for a draw's players, by athlete id.
+ *
+ * The scoreboard names its competitors but carries no photo, while the
+ * rankings already fetched carry one for each of the top 150 ESPN has a
+ * picture of — and key them by the same id. Anybody else keeps the flag.
+ */
+function photosById(rankings: EspnRankings): Map<string, string> {
+  const photos = new Map<string, string>();
+  for (const rank of rankings.rankings?.[0]?.ranks ?? []) {
+    const photo = photoOf(rank);
+    if (rank.athlete?.id && photo) photos.set(rank.athlete.id, photo);
+  }
+  return photos;
 }
 
 /**
@@ -315,12 +346,17 @@ function tourFrom(
   now = Date.now()
 ): RacquetData {
   const slug = tour === "atp" ? "mens-singles" : "womens-singles";
+  const photos = photosById(rankings);
   const players = new Map<string, Team>();
   const entries: Array<{ tournament: RacquetTournament; size: number }> = [];
   for (const event of board.events ?? []) {
     const mapped = tournamentFrom(event, slug, now);
     if (!mapped) continue;
-    for (const p of mapped.players) players.set(p.id, p);
+    for (const p of mapped.players) {
+      // The draw card reads `logoUrl` as the player's photo.
+      const photo = photos.get(p.id);
+      players.set(p.id, photo ? { ...p, logoUrl: photo } : p);
+    }
     const size = mapped.tournament.bracket?.reduce((n, r) => n + r.matches.length, 0) ?? 0;
     entries.push({ tournament: mapped.tournament, size });
   }
@@ -399,6 +435,7 @@ export const __testing = {
   matchFrom,
   playerFrom,
   rankingFrom,
+  photosById,
   tourFrom,
   calendarRange,
   ROUND_IDS,

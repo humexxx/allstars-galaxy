@@ -11,6 +11,7 @@ import type {
 import { cachedFeed, upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://padelapi.org/api";
+const PHOTO_BASE_URL = "https://media.padelapi.org/player-api";
 const REVALIDATE_SECONDS = 300;
 const RANKING_LIMIT = 15;
 /** Premier Padel's own tiers; FIP events run alongside every week and drowned them. */
@@ -86,6 +87,26 @@ function mapStatus(s: PadelApiTournament["status"]): RacquetTournament["status"]
   return "upcoming";
 }
 
+/**
+ * A player's photo on the provider's media host, spelled from the name.
+ *
+ * The rankings carry no photo; the player record does, as `photo_url`, and it
+ * is named after the player: "Agustin Tapia" is `agustin-tapia.webp`. Reading
+ * fifteen records per category on every refresh would spend thirty of the
+ * month's requests on an address the name already in hand spells. Both top
+ * fifteens answered in full when this was checked (October 2026); a photo
+ * that ever 404s falls back to the flag in the view.
+ */
+function photoFor(name: string): string | undefined {
+  const slug = name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return slug ? `${PHOTO_BASE_URL}/${slug}.webp` : undefined;
+}
+
 function mapRanking(player: PadelApiPlayer): PlayerRanking {
   return {
     position: player.ranking,
@@ -95,6 +116,7 @@ function mapRanking(player: PadelApiPlayer): PlayerRanking {
     flagEmoji: flagFromIso2(player.nationality),
     points: player.points,
     movement: -(player.ranking_diff ?? 0),
+    photoUrl: photoFor(player.name),
   };
 }
 
@@ -188,4 +210,11 @@ export const getPadelData = cachedFeed(
 );
 
 /** Pure mappers, exported for their tests — nothing here touches the network. */
-export const __testing = { mapStatus, mapTournament, mapRanking, shortNameFor, tournamentsPath };
+export const __testing = {
+  mapStatus,
+  mapTournament,
+  mapRanking,
+  shortNameFor,
+  photoFor,
+  tournamentsPath,
+};

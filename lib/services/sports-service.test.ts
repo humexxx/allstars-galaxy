@@ -27,7 +27,7 @@ vi.mock("@/db", () => ({
 
 import { db } from "@/db";
 import {
-  getDashboardSportsSummary,
+  getDashboardSportCard,
   listUserFavoriteSportIds,
   listUserSportsFavorites,
   setSportFavorite,
@@ -144,123 +144,36 @@ describe("setSportFavorite", () => {
 
 // ---------- getDashboardSportsSummary ----------
 
-describe("getDashboardSportsSummary", () => {
-  it("returns one highlight per favourited sport, preserving order", async () => {
-    mockSelect([
-      { id: "a", userId: USER_ID, sportId: "football", createdAt: new Date() },
-      { id: "b", userId: USER_ID, sportId: "f1", createdAt: new Date() },
-      { id: "c", userId: USER_ID, sportId: "nba", createdAt: new Date() },
-    ]);
-
-    const highlights = await getDashboardSportsSummary(USER_ID);
-
-    expect(highlights).toHaveLength(3);
-    expect(highlights.map((h) => h.sportId)).toEqual(["football", "f1", "nba"]);
+describe("getDashboardSportCard", () => {
+  const nbaTeam = (id: number, name: string, abbreviation: string) => ({
+    id,
+    full_name: `${name} full`,
+    name,
+    abbreviation,
+    conference: "East",
   });
-
-  it("returns an empty list when the user has no favourites", async () => {
-    mockSelect([]);
-    await expect(getDashboardSportsSummary(USER_ID)).resolves.toEqual([]);
+  const nbaGame = (id: number, state: string, home: number, visitor: number) => ({
+    id,
+    date: "2026-10-20",
+    datetime: "2026-10-20T23:00:00Z",
+    season: 2026,
+    status: state === "final" ? "Final" : "2026-10-20T23:00:00Z",
+    status_state: state,
+    postseason: false,
+    postponed: false,
+    home_team_score: home,
+    visitor_team_score: visitor,
+    home_team: nbaTeam(20, "Knicks", "NYK"),
+    visitor_team: nbaTeam(2, "Celtics", "BOS"),
   });
-
-  it("attaches sport metadata (label + emoji) to each highlight", async () => {
-    mockSelect([
-      { id: "a", userId: USER_ID, sportId: "f1", createdAt: new Date() },
-    ]);
-
-    const [h] = await getDashboardSportsSummary(USER_ID);
-
-    expect(h.sportId).toBe("f1");
-    expect(h.label).toBe("Formula 1");
-    expect(h.emoji).toBe("🏎️");
-  });
-
-  it("uses upcoming tone + a secondary line for F1", async () => {
-    mockSelect([
-      { id: "a", userId: USER_ID, sportId: "f1", createdAt: new Date() },
-    ]);
-
-    const [h] = await getDashboardSportsSummary(USER_ID);
-
-    // F1 mock fixture has at least one upcoming race + a points leader.
-    expect(h.tone).toBe("upcoming");
-    expect(h.secondary?.label).toBe("Drivers' leader");
-    expect(h.secondary?.value).toMatch(/pts$/);
-  });
-
-  it("renders football highlight headline using team short names", async () => {
-    mockSelect([
-      { id: "a", userId: USER_ID, sportId: "football", createdAt: new Date() },
-    ]);
-
-    const [h] = await getDashboardSportsSummary(USER_ID);
-
-    expect(h.label).toBe("Football");
-    // pickFeaturedMatch falls through to a finished UCL R16 leg-2 tie, so the
-    // headline must include both team short names plus a hyphen / dash.
-    expect(h.headline).toMatch(/–|-/);
-    expect(h.context).toBeTruthy();
-  });
-
-  it("computes NBA secondary with W–L for the East leader", async () => {
-    mockSelect([
-      { id: "a", userId: USER_ID, sportId: "nba", createdAt: new Date() },
-    ]);
-
-    const [h] = await getDashboardSportsSummary(USER_ID);
-
-    expect(h.label).toBe("NBA");
-    expect(h.secondary?.label).toBe("East leader");
-    // Format is "<Team> · <W>–<L>" with an em-dash style separator.
-    expect(h.secondary?.value).toMatch(/^.+ · \d+[–-]\d+$/);
-  });
-
-  it("reads the NBA highlight from the live feed, not the fixture", async () => {
-    // The view went live on balldontlie while this card kept reading NBA_DATA.
-    mockSelect([
-      { id: "a", userId: USER_ID, sportId: "nba", createdAt: new Date() },
-    ]);
-    const nbaTeam = (id: number, name: string, abbreviation: string) => ({
-      id,
-      full_name: `${name} full`,
-      name,
-      abbreviation,
-      conference: "East",
-    });
+  async function withNbaGames<T>(games: unknown[], run: () => Promise<T>): Promise<T> {
     vi.stubEnv("BALLDONTLIE_API_KEY", "test-key");
     vi.stubGlobal(
       "fetch",
-      vi.fn(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify({
-              data: [
-                {
-                  id: 1,
-                  date: "2026-10-20",
-                  datetime: "2026-10-20T23:00:00Z",
-                  season: 2026,
-                  status: "2026-10-20T23:00:00Z",
-                  status_state: "scheduled",
-                  postseason: false,
-                  postponed: false,
-                  home_team_score: 0,
-                  visitor_team_score: 0,
-                  home_team: nbaTeam(20, "Knicks", "NYK"),
-                  visitor_team: nbaTeam(2, "Celtics", "BOS"),
-                },
-              ],
-            }),
-            { status: 200 }
-          )
-        )
-      )
+      vi.fn(() => Promise.resolve(new Response(JSON.stringify({ data: games }), { status: 200 })))
     );
-
     try {
-      const [h] = await getDashboardSportsSummary(USER_ID);
-      expect(h.headline).toBe("Knicks vs Celtics");
-      expect(h.tone).toBe("upcoming");
+      return await run();
     } finally {
       vi.unstubAllEnvs();
       vi.stubGlobal(
@@ -268,17 +181,69 @@ describe("getDashboardSportsSummary", () => {
         vi.fn(() => Promise.reject(new Error("fetch is disabled in unit tests")))
       );
     }
+  }
+
+  it("has no card for F1, which owns its own, or for sports it does not know", async () => {
+    await expect(getDashboardSportCard("f1")).resolves.toBeNull();
+    await expect(getDashboardSportCard("totally-unknown" as never)).resolves.toBeNull();
   });
 
-  it("skips unknown sportIds defensively without throwing", async () => {
-    mockSelect([
-      { id: "a", userId: USER_ID, sportId: "totally-unknown", createdAt: new Date() },
-      { id: "b", userId: USER_ID, sportId: "nba", createdAt: new Date() },
-    ]);
+  it("gives football the Champions League's featured match, what follows and its table", async () => {
+    const card = (await getDashboardSportCard("football"))!;
 
-    const highlights = await getDashboardSportsSummary(USER_ID);
+    expect(card).toMatchObject({ sportId: "football", label: "Football", emoji: "⚽" });
+    expect(card.context).toMatch(/Champions League/);
+    expect(card.featured).toBeDefined();
+    expect(card.matches.length).toBeLessThanOrEqual(2);
+    expect(card.tables.map((t) => t.id)).toEqual(["table"]);
+    expect(card.tables[0].rows).toHaveLength(5);
+    expect(card.tables[0].rows[0]).toMatchObject({ position: 1, value: expect.stringMatching(/ pts$/) });
+  });
 
-    expect(highlights).toHaveLength(1);
-    expect(highlights[0].sportId).toBe("nba");
+  it("gives the NBA both conferences, each a W–L table", async () => {
+    const card = (await getDashboardSportCard("nba"))!;
+
+    expect(card.tables.map((t) => t.label)).toEqual(["East", "West"]);
+    for (const table of card.tables) {
+      expect(table.rows.map((r) => r.position)).toEqual([1, 2, 3, 4, 5]);
+      expect(table.rows[0].value).toMatch(/^\d+–\d+$/);
+    }
+  });
+
+  it("reads the NBA from the live feed, not the fixture", async () => {
+    const card = await withNbaGames([nbaGame(1, "scheduled", 0, 0)], () => getDashboardSportCard("nba"));
+
+    expect(card?.featured).toMatchObject({
+      status: "upcoming",
+      home: { name: "Knicks", score: null },
+      away: { name: "Celtics", score: null },
+    });
+  });
+
+  it("marks the winner of a finished game, and nobody's before it is played", async () => {
+    const card = await withNbaGames([nbaGame(1, "final", 110, 102)], () => getDashboardSportCard("nba"));
+
+    expect(card?.featured).toMatchObject({
+      status: "result",
+      home: { name: "Knicks", score: 110, winner: true },
+      away: { name: "Celtics", score: 102, winner: false },
+    });
+  });
+
+  it("gives tennis its tournament and both tours' rankings, with flags for the players", async () => {
+    const card = (await getDashboardSportCard("tennis"))!;
+
+    expect(card.featured).toBeUndefined();
+    expect(card.tables.map((t) => t.label)).toEqual(["ATP", "WTA"]);
+    expect(card.tables[0].rows[0]).toMatchObject({ position: 1, flagEmoji: expect.any(String) });
+    expect(card.tables[0].rows[0].code).toBeUndefined();
+  });
+
+  it("features LoL's first match in display order and lists the next ones", async () => {
+    const card = (await getDashboardSportCard("lol"))!;
+
+    expect(card.featured).toBeDefined();
+    expect(card.featured?.label).toMatch(/BO[135]$/);
+    expect(card.matches.length).toBeLessThanOrEqual(2);
   });
 });

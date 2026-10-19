@@ -2,8 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import { __testing } from "./balldontlie-nba-service";
 
-const { currentSeason, seasonLabel, recentAndNext, statusFrom, gameWindow, standingsFrom } =
-  __testing;
+const {
+  currentSeason,
+  seasonLabel,
+  recentAndNext,
+  statusFrom,
+  gameWindow,
+  standingsFrom,
+  teamFrom,
+  logoFor,
+} = __testing;
+
+const logo = (slug: string) =>
+  `https://a.espncdn.com/combiner/i?img=/i/teamlogos/nba/500/${slug}.png&w=96&h=96&scale=crop`;
 
 const game = (date: string, final = false) => ({
     id: 1,
@@ -139,6 +150,11 @@ describe("standingsFrom", () => {
     expect(teams.find((t) => t.id === "NYK")?.primaryColor).toBe("#006BB6");
   });
 
+  it("gives the table's teams the same logos as the games'", () => {
+    const { teams } = standingsFrom(table);
+    expect(teams.map((t) => t.logoUrl)).toEqual([logo("ny"), logo("det"), logo("gs")]);
+  });
+
   it("maps the columns the table shows", () => {
     const [detroit, newYork] = standingsFrom(table).standings;
     expect(detroit).toMatchObject({
@@ -153,5 +169,39 @@ describe("standingsFrom", () => {
       last10: "8-2",
     });
     expect(newYork.gamesBehind).toBe(7);
+  });
+});
+
+describe("logoFor", () => {
+  it("names the file the way ESPN names the team", () => {
+    // The six balldontlie spells differently; ESPN's files go by ESPN's
+    // abbreviation, and the naive "nop" / "uta" are 404s.
+    expect(logoFor("GSW")).toBe(logo("gs"));
+    expect(logoFor("NOP")).toBe(logo("no"));
+    expect(logoFor("NYK")).toBe(logo("ny"));
+    expect(logoFor("SAS")).toBe(logo("sa"));
+    expect(logoFor("UTA")).toBe(logo("utah"));
+    expect(logoFor("WAS")).toBe(logo("wsh"));
+  });
+
+  it("lower-cases everybody else's own abbreviation", () => {
+    expect(logoFor("LAL")).toBe(logo("lal"));
+    expect(logoFor("BKN")).toBe(logo("bkn"));
+  });
+
+  it("guesses nothing for a team it does not know", () => {
+    expect(logoFor("EST")).toBeUndefined();
+  });
+
+  it("puts the logo on a game's teams", () => {
+    // balldontlie's own team object, trimmed.
+    const team = teamFrom({
+      id: 10,
+      full_name: "Golden State Warriors",
+      name: "Warriors",
+      abbreviation: "GSW",
+      conference: "West",
+    });
+    expect(team).toMatchObject({ id: "GSW", logoUrl: logo("gs"), primaryColor: "#1D428A" });
   });
 });

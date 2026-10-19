@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,9 +16,11 @@ import { TableCard } from "../shared/table-primitives";
 
 type WorldCupViewProps = {
   data: FootballLeagueData;
+  /** Football's competition picker: the World Cup is one of its leagues. */
+  controls?: ReactNode;
 };
 
-export function WorldCupView({ data }: WorldCupViewProps) {
+export function WorldCupView({ data, controls }: WorldCupViewProps) {
   const teamsMap = useMemo(
     () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
     [data],
@@ -34,6 +36,7 @@ export function WorldCupView({ data }: WorldCupViewProps) {
         emoji="🏆"
         title={data.league.name}
         subtitle={`${data.league.region} · ${data.league.season}`}
+        controls={controls}
         tabs={
           <TabsList>
             <TabsTrigger value="knockout" disabled={!hasKnockout}>

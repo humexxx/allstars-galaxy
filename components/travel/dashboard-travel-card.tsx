@@ -16,6 +16,7 @@ import { formatDayRange } from "@/lib/utils/date";
 import { getDashboardTravelSummary } from "@/lib/services/travel-service";
 import { formatTripMoney } from "@/lib/travel/format";
 import { daysBetween } from "@/lib/travel/calendar";
+import { cn } from "@/lib/utils";
 import { getRequestTodayIso } from "@/lib/utils/request-today";
 import type { DashboardTravelFeaturedTrip, DashboardTravelTripState } from "@/types/travel";
 
@@ -32,7 +33,7 @@ export async function DashboardTravelCard({ userId }: DashboardTravelCardProps) 
   const today = await getRequestTodayIso();
   const summary = await getDashboardTravelSummary(userId, today);
 
-  if (!summary.featured) {
+  if (summary.featured.length === 0) {
     return (
       <Card className="col-span-full">
         <CardHeader>
@@ -75,8 +76,20 @@ export async function DashboardTravelCard({ userId }: DashboardTravelCardProps) 
           </Button>
         </CardAction>
       </CardHeader>
-      <CardContent>
-        <FeaturedTripCard trip={featured} today={today} />
+      {/* Laid out on the card's width: two trips side by side when there is
+          room for both, and only the first one on a phone, where a second
+          cover photo would double the card's height. */}
+      <CardContent className="@container">
+        <div className="grid gap-3 @3xl:grid-cols-2">
+          {featured.map((trip, i) => (
+            <FeaturedTripCard
+              key={trip.id}
+              trip={trip}
+              today={today}
+              className={cn(i > 0 && "hidden @3xl:block")}
+            />
+          ))}
+        </div>
       </CardContent>
     </Card>
   );
@@ -85,18 +98,25 @@ export async function DashboardTravelCard({ userId }: DashboardTravelCardProps) 
 function FeaturedTripCard({
   trip,
   today,
+  className,
 }: {
   trip: DashboardTravelFeaturedTrip;
   today: string;
+  className?: string;
 }) {
   return (
     <Link
       href={`${TRAVEL_PATH}/${trip.id}`}
-      className="group block overflow-hidden rounded-lg border bg-card transition-colors hover:bg-muted/40"
+      className={cn(
+        "@container group block overflow-hidden rounded-lg border bg-card transition-colors hover:bg-muted/40",
+        className
+      )}
     >
-      <div className="grid sm:grid-cols-[200px_1fr]">
+      {/* Sized by the tile, not the viewport: half a row on a desktop is
+          narrower than the whole card on a tablet. */}
+      <div className="grid @sm:grid-cols-[9rem_1fr] @xl:grid-cols-[12.5rem_1fr]">
         <div
-          className="relative aspect-video sm:aspect-auto sm:h-full sm:min-h-35"
+          className="relative aspect-video @sm:aspect-auto @sm:h-full @sm:min-h-35"
           // The trip colour under the photo too: it is what shows if the
           // cover link has died.
           style={{ backgroundColor: trip.color }}

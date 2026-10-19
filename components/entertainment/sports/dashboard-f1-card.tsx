@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Flag } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -37,10 +37,10 @@ function thumbnail(images: F1NewsImage[]): F1NewsImage | null {
 /**
  * Formula 1 on the dashboard: the next race and the wire, in one card.
  *
- * It owns F1 outright — the general sports card excludes it — because the
- * same race printed in two cards side by side is the same race twice. Sized
- * to a grid column rather than the full row: it is one sport among several,
- * not a banner.
+ * Its own card rather than `DashboardSportCard`, because F1 is a calendar of
+ * races and a news feed, not fixtures between two teams. Sized to a grid
+ * column rather than the full row: it is one sport among several, not a
+ * banner.
  *
  * Gated on the favourite, like everything else on this dashboard. A motorsport
  * feed on the desk of somebody who does not follow it is noise.
@@ -64,10 +64,11 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
     // Half the row: one sport among several, beside whatever comes next.
     <Card className="flex flex-col">
       <CardHeader>
-        {/* A lucide mark like the other dashboard cards (the hub itself
-            keeps the sport emoji). */}
+        {/* The hub's emoji, like the other sport cards. */}
         <CardTitle as="h2" className="flex items-center gap-2">
-          <Flag className="size-5" aria-hidden />
+          <span aria-hidden className="text-lg leading-none">
+            🏎️
+          </span>
           Formula 1
         </CardTitle>
         {highlight && <CardDescription className="truncate">{highlight.context}</CardDescription>}

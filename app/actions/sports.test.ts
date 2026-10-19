@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/cache", () => ({
+  refresh: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
@@ -14,7 +15,7 @@ vi.mock("@/lib/services/sports-service", () => ({
   setSportCompetition: vi.fn(),
 }));
 
-import { revalidatePath } from "next/cache";
+import { refresh, revalidatePath } from "next/cache";
 import {
   logImpersonatedMutation,
   requireEffectiveContext,
@@ -169,9 +170,10 @@ describe("setSportCompetitionAction", () => {
       entityId: ROW.id,
       metadata: { sportId: "tennis", competition: "wta" },
     });
-    // The sports page takes its league from the URL; only the dashboard shows the choice.
-    expect(revalidatePath).toHaveBeenCalledWith("/portal");
-    expect(revalidatePath).toHaveBeenCalledTimes(1);
+    // Re-rendered, not revalidated: expiring /portal would expire the cached
+    // provider feeds the dashboard reads along with it.
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("stores null to hand the card back its own pick", async () => {
@@ -192,7 +194,7 @@ describe("setSportCompetitionAction", () => {
 
     expect(result).toEqual({ success: false, error: "Unknown championship" });
     expect(setSportCompetition).not.toHaveBeenCalled();
-    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("says so when the sport is not a favourite, and refreshes nothing", async () => {
@@ -202,7 +204,7 @@ describe("setSportCompetitionAction", () => {
 
     expect(result).toEqual({ success: false, error: "Add this sport to your favorites first" });
     expect(logImpersonatedMutation).not.toHaveBeenCalled();
-    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("turns an unauthenticated request into the generic error, before validating", async () => {
@@ -220,7 +222,7 @@ describe("setSportCompetitionAction", () => {
     const result = await setSportCompetitionAction({ sportId: "tennis", competition: "atp" });
 
     expect(result).toEqual({ success: false, error: "Action failed" });
-    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("sets the impersonated user's card, not the admin's", async () => {

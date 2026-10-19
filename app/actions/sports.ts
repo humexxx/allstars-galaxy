@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refresh, revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
 import {
@@ -68,7 +68,12 @@ export async function setSportCompetitionAction(
       entityId: row.id,
       metadata: { sportId, competition },
     });
-    revalidatePath(DASHBOARD_PATH);
+    // refresh(), not revalidatePath: the choice is an uncached row, so a
+    // re-render is all the dashboard needs. Expiring /portal would also expire
+    // every provider feed it reads (the path is one of their soft tags), for
+    // every user, and a reader flipping leagues would spend football-data's
+    // ten calls a minute and get the sample tables.
+    refresh();
     return { success: true };
   });
 }

@@ -37,9 +37,10 @@ back to its fixture only when its feed has never answered.
   `buildScope` (one traveller's own view of a shared link), `toPublicItem` (a
   share link's item, field by field: costed as the planner costs it, never the
   raw price, and no figure or note on a link that hides money) and
-  `getDashboardTravelSummary(userId, readerToday)` (featured trip with state
-  badge + counts for the dashboard card; costs per-person items by their
-  attendees, not the whole party). `ensureMemberBelongsToTrip` guards anything that names a
+  `getDashboardTravelSummary(userId, readerToday)` (up to two featured trips —
+  in progress, then upcoming, then the latest past — with state badge + counts
+  for the dashboard card; costs per-person items by their attendees, not the
+  whole party). `ensureMemberBelongsToTrip` guards anything that names a
   member: the foreign key proves the row exists, not which trip it is on.
   `updateTrip` / `deleteTrip` scope the WHERE by owner and `updateTrip` throws
   when no row matched
@@ -99,7 +100,7 @@ back to its fixture only when its feed has never answered.
   bar); both the itinerary and the public page read it
 - `components/travel/marquee-text.tsx` — a label that walks left on hover, but
   only when it does not fit
-- `components/travel/dashboard-travel-card.tsx` — server-component card mounted on `/portal`: featured trip (in-progress wins → next upcoming → most recent past) with cover photo, state badge, items count and estimated total
+- `components/travel/dashboard-travel-card.tsx` — server-component card mounted on `/portal`: two featured trips side by side once the card is `@3xl` wide, only the first on a phone (in progress → next upcoming → most recent past), each with cover photo, state badge, items count and estimated total
 - `components/entertainment/sports/sports-hub.tsx` — client tab strip + per-sport view switcher; stars favourites and pins them first
 - `components/entertainment/sports/manage-favorites-sheet.tsx` — sheet with per-sport switches, optimistic updates via `setSportFavoriteAction`
 - `components/entertainment/sports/dashboard-sports-card.tsx` — server-component card mounted on `/portal` showing one highlight per favourited sport

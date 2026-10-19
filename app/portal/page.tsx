@@ -27,13 +27,16 @@ export default async function PortalPage() {
 
   return (
     <PortalPageContainer>
-      <section className="flex flex-col gap-6">
+      <section className="@container flex flex-col gap-6">
         {/* The cards are the page: a visible title and tagline only pushed
             them down. The outline still needs its h1. */}
         <h1 className="sr-only">Dashboard</h1>
         {/* Two columns. Finance and travel span both; each favourite sport gets
             a card at half the row — one sport among several, not a banner. */}
-        <div className="grid auto-rows-min gap-4 md:grid-cols-2">
+        {/* Two columns once the content itself is wide enough, not the
+            viewport: at 768px the sidebar leaves ~470px, and two sport cards
+            side by side were 230px each. */}
+        <div className="grid auto-rows-min gap-4 @2xl:grid-cols-2">
           <Suspense fallback={<DashboardCardSkeleton rail={5} />}>
             <DashboardFinanceCard userId={userId} />
           </Suspense>

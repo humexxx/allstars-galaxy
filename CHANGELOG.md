@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0](https://github.com/humexxx/allstars-galaxy/compare/v0.8.0...v0.9.0) (2026-10-19)
+
+
+### Features
+
+* **entertainment:** draw Worlds' Swiss stage as a bracket ([3c6d4db](https://github.com/humexxx/allstars-galaxy/commit/3c6d4db12c269ffbf492576063b4de29f6b00c50))
+* **finance:** stack net worth's parts in the dashboard chart ([5c5e17e](https://github.com/humexxx/allstars-galaxy/commit/5c5e17e9e6e7e39399e00a1cd5fc033af9439b66))
+
 ## [0.8.0](https://github.com/humexxx/allstars-galaxy/compare/v0.7.0...v0.8.0) (2026-10-19)
 
 

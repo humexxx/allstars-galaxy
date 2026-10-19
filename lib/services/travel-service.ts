@@ -6,7 +6,7 @@ import { cache } from "react";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm";
 
 import { db } from "@/db";
-import { tripCost } from "@/lib/travel/pricing";
+import { itemCost, tripCost } from "@/lib/travel/pricing";
 
 /** `[{ itemId, memberId }]` → `Map<itemId, memberId[]>`, for payers and attendees alike. */
 function groupByItem(rows: { itemId: string; memberId: string }[]): Map<string, string[]> {
@@ -36,6 +36,7 @@ import type {
   DashboardTravelFeaturedTrip,
   DashboardTravelSummary,
   DashboardTravelTripState,
+  PublicTripItem,
   PublicTripScope,
   PublicTripView,
   Trip,
@@ -626,11 +627,13 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
   const [trip] = await db.select().from(trips).where(eq(trips.id, share.tripId));
   if (!trip) return null;
 
+  const scopedTo = share.memberId;
+
   // Everything the page needs in one round of queries. The scope's members
   // and payments do not depend on the items or the photos, so awaiting them
   // afterwards would have cost a second round trip for no ordering reason —
   // and at ~86ms each that is the whole budget of a small page.
-  const [items, photos, stops, payers, attendees, scopeRows] = await Promise.all([
+  const [items, photos, stops, payers, attendees, scopeRows, memberCount] = await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -671,7 +674,14 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
       .from(tripItemAttendees)
       .innerJoin(tripItems, eq(tripItemAttendees.itemId, tripItems.id))
       .where(eq(tripItems.tripId, trip.id)),
-    share.memberId ? loadScopeRows(trip.id, share.memberId) : null,
+    // The scope is a bill, so a link without prices has none — and does not
+    // read the payments it would only have to hide.
+    scopedTo && share.showPrices ? loadScopeRows(trip.id, scopedTo) : null,
+    // A whole-trip figure sizes a per-person fare by the party, as the
+    // planner does. Only the count is read.
+    !scopedTo && share.showPrices
+      ? db.$count(tripMembers, eq(tripMembers.tripId, trip.id))
+      : null,
   ]);
 
   const stopsByItem = new Map<string, typeof stops>();
@@ -703,36 +713,102 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
   // A link made for one traveller shows that traveller's trip: Ana's flight
   // from Mexico is not a $0 line on Jafet's page, it is not on his page at
   // all. Narrowed on who is ON the item, not who pays for it — the festival
-  // is all four travellers' even though two of them cover it. The split above
+  // is all four travellers' even though two of them cover it. The split
   // still runs over every item, so the totals are unaffected.
-  const scopedTo = share.memberId;
-  const scope = scopeRows && scopedTo ? buildScope(scopeRows, enriched, scopedTo) : null;
-  // The member lists did their work above; they do not cross the boundary.
-  // A public link is unauthenticated, and `payerIds`/`attendeeIds` are raw
-  // trip_members UUIDs — enough to count and correlate the other travellers a
-  // scoped link exists to hide.
+  //
+  // Built from the items already in hand rather than fetched again — and
+  // from the enriched ones, or a scoped link would split a festival ticket
+  // among people who are not going to it.
+  const scoped = scopeRows && scopedTo ? buildScope(scopeRows, enriched, scopedTo) : null;
+  const pricing: PublicPricing | null = !share.showPrices
+    ? null
+    : scoped
+      ? { lines: scoped.lines }
+      : // A scoped link whose traveller is gone falls back to the trip, and
+        // its party is the members loaded for the split.
+        { partySize: Math.max(1, memberCount ?? scopeRows?.members.length ?? 0) };
   const visible = (
     scopedTo
       ? enriched.filter((i) => itemConcerns(i.attendeeIds, scopedTo))
       : enriched
-  ).map((item) => {
-    const { payerIds, attendeeIds, ...rest } = item;
-    void payerIds;
-    void attendeeIds;
-    return rest;
-  });
+  ).map((item) => toPublicItem(item, pricing));
 
   return {
     trip,
     items: visible,
     photos: photos.filter((p) => !p.itemId),
     share,
-    // Built from the items already in hand rather than fetched again — and
-    // from the enriched ones, or a scoped link would split a festival ticket
-    // among people who are not going to it.
-    scope,
+    scope: scoped?.scope ?? null,
   };
 });
+
+/**
+ * How a link that shows money costs its items: the scoped traveller's share
+ * of each (`lines`, from `buildScope`), or each item whole, sized by the
+ * party the way the planner sizes it.
+ */
+type PublicPricing =
+  | { lines: Map<string, { low: number; high: number }> }
+  | { partySize: number };
+
+/**
+ * One item as a public link may carry it — see `PublicTripItem`.
+ *
+ * Field by field, so a column added to `trip_items` stays on the server until
+ * somebody decides a link may show it. The member lists did their work in the
+ * narrowing and the split; they never cross. A link without prices (`pricing`
+ * null) loses the money and the notes here, not in the renderer:
+ * `share.showPrices` only ever gated what was drawn, and View Source still
+ * showed every figure.
+ *
+ * A whole item is costed exactly as the planner costs it, attendees over the
+ * party, so a shared "trip total" is the planner's. The arithmetic travels as
+ * numbers — the unit price, the unit and how many times it applies — and on a
+ * scoped link not at all: that figure is a share, and the fare behind it is
+ * everybody else's as well.
+ */
+function toPublicItem(
+  item: TripItemWithStops,
+  pricing: PublicPricing | null
+): PublicTripItem {
+  let cost: PublicTripItem["cost"] = null;
+  let rate: PublicTripItem["rate"] = null;
+  if (pricing && item.price !== null) {
+    if ("lines" in pricing) {
+      cost = pricing.lines.get(item.id) ?? { low: 0, high: 0 };
+    } else {
+      const c = itemCost(item, pricing.partySize);
+      cost = { low: c.low, high: c.high };
+      if (item.priceUnit !== "total") {
+        const low = c.unitLow ?? 0;
+        rate = {
+          low,
+          high: Math.max(low, c.unitHigh ?? low),
+          unit: item.priceUnit,
+          times: c.times,
+        };
+      }
+    }
+  }
+
+  return {
+    id: item.id,
+    title: item.title,
+    category: item.category,
+    link: item.link,
+    videoUrl: item.videoUrl,
+    fromCode: item.fromCode,
+    toCode: item.toCode,
+    roundTrip: item.roundTrip,
+    scheduledOn: item.scheduledOn,
+    endsOn: item.endsOn,
+    stops: item.stops,
+    photos: item.photos,
+    cost,
+    rate,
+    notes: pricing ? item.notes : null,
+  };
+}
 
 /**
  * The rows a scoped link needs, fetched alongside everything else.
@@ -781,12 +857,15 @@ async function loadScopeRows(
  * are returned. Sending the full member list to the page and filtering there
  * would put the other travellers' names and balances in the payload of a link
  * created specifically to hide them.
+ *
+ * `lines` is what each item costs this traveller, for `toPublicItem` to put
+ * on the item in place of the item's own price.
  */
 function buildScope(
   rows: ScopeRows,
   items: TripItemWithStops[],
   memberId: string
-): PublicTripScope | null {
+): { scope: PublicTripScope; lines: Map<string, { low: number; high: number }> } | null {
   const { members, paidRows } = rows;
 
   const me = members.find((m) => m.id === memberId);
@@ -819,11 +898,13 @@ function buildScope(
   if (!mine) return null;
 
   return {
-    memberName: me.name,
-    lines: mine.lines.map((l) => ({ itemId: l.itemId, low: l.low, high: l.high })),
-    owedLow: mine.owedLow,
-    owedHigh: mine.owedHigh,
-    paid: paidRows.reduce((sum, r) => sum + parseFloat(r.amount ?? "0"), 0),
+    scope: {
+      memberName: me.name,
+      owedLow: mine.owedLow,
+      owedHigh: mine.owedHigh,
+      paid: paidRows.reduce((sum, r) => sum + parseFloat(r.amount ?? "0"), 0),
+    },
+    lines: new Map(mine.lines.map((l) => [l.itemId, { low: l.low, high: l.high }])),
   };
 }
 

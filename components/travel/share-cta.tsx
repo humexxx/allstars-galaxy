@@ -11,6 +11,12 @@ type ShareCtaProps = {
   currentUserEmail: string | null;
   /** Token from the URL; we pass it back through ?next= so post-login lands here. */
   shareToken: string;
+  /**
+   * `signupsAllowed()`, read by the layout because it is server-only. While
+   * signups are closed a sign-up button lands on the closed notice, so the bar
+   * offers only the way back in.
+   */
+  signupsOpen: boolean;
 };
 
 /**
@@ -20,7 +26,12 @@ type ShareCtaProps = {
  * buttons standing between somebody and the thing they were sent to look at.
  * Whoever shared the link wanted the trip read, not the product pitched.
  */
-export function ShareCta({ inviteeEmail, currentUserEmail, shareToken }: ShareCtaProps) {
+export function ShareCta({
+  inviteeEmail,
+  currentUserEmail,
+  shareToken,
+  signupsOpen,
+}: ShareCtaProps) {
   const nextPath = `/trips/${shareToken}`;
 
   // Signed in already → no signup nudge. Quietly point them at their planner.
@@ -44,7 +55,7 @@ export function ShareCta({ inviteeEmail, currentUserEmail, shareToken }: ShareCt
       {/* The label the link was created with, so signing up does not ask for
           an address the sender already knew. Hidden on a phone, where the bar
           has room for the buttons and nothing else. */}
-      {inviteeEmail && (
+      {signupsOpen && inviteeEmail && (
         <Text variant="small" className="mr-2 hidden truncate sm:block">
           Invited as{" "}
           <Text as="span" weight="medium" className="text-foreground">
@@ -55,12 +66,14 @@ export function ShareCta({ inviteeEmail, currentUserEmail, shareToken }: ShareCt
       <Button asChild size="sm" variant="ghost">
         <Link href={loginHref}>Sign in</Link>
       </Button>
-      <Button asChild size="sm">
-        <Link href={signupHref}>
-          {inviteeEmail ? "Continue" : "Sign up"}
-          <ArrowRight />
-        </Link>
-      </Button>
+      {signupsOpen && (
+        <Button asChild size="sm">
+          <Link href={signupHref}>
+            {inviteeEmail ? "Continue" : "Sign up"}
+            <ArrowRight />
+          </Link>
+        </Button>
+      )}
     </div>
   );
 }

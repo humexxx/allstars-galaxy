@@ -34,7 +34,9 @@ back to its fixture only when its feed has never answered.
 ## Services — `/lib/services/`
 - `travel-service.ts` — trip / item / photo / member / share CRUD,
   `addTripContribution` / `updateTripContribution` / `deleteTripContribution`,
-  `buildScope` (one traveller's own view of a shared link) and
+  `buildScope` (one traveller's own view of a shared link), `toPublicItem` (a
+  share link's item, field by field: costed as the planner costs it, never the
+  raw price, and no figure or note on a link that hides money) and
   `getDashboardTravelSummary` (featured trip with state badge + counts for the
   dashboard card). `ensureMemberBelongsToTrip` guards anything that names a
   member: the foreign key proves the row exists, not which trip it is on.
@@ -65,10 +67,10 @@ back to its fixture only when its feed has never answered.
 ## Types — `/types/`
 - `travel.ts` — `Trip`, `TripItem`, `TripPhoto`, `TripShare`,
   `TripContribution`, `TripMemberView`, `TripItemStop`, `TripItemWithStops`,
-  `TripWithRelations`, `PublicTripView` + `PublicTripScope`, plus
-  `DashboardTravelSummary` / `DashboardTravelFeaturedTrip` /
-  `DashboardTravelTripState`, and `CalendarTrip` (what the month view needs,
-  shared by the owner and public pages)
+  `TripWithRelations`, `PublicTripView` + `PublicTripScope` + `PublicTripItem`,
+  plus `DashboardTravelSummary` / `DashboardTravelFeaturedTrip` /
+  `DashboardTravelTripState`, `CalendarTrip` (the planner's month) and
+  `SharedCalendarTrip` (a share link's month: dates, names and figures only)
 - `sports.ts` — `SPORT_IDS` (the one list `SportId` derives from), `F1StandingRow` / `F1DashboardStandings`, `F1NewsArticle`, and the full domain shapes for matches, standings, brackets, F1/NBA/NFL/LoL specifics, plus `UserSportsPreference` and `DashboardSportHighlight`. `SportId` includes `worldcup`; `FootballLeagueId` includes `world-cup`; `FootballLeagueData.groups?: FootballGroupStandings[]` carries per-group cup tables; `Match.penalties` holds a shoot-out outside the score; `LolRegion` includes `worlds` / `msi` / `first-stand`
 
 ## Components
@@ -79,7 +81,11 @@ back to its fixture only when its feed has never answered.
 - `app/portal/entertainment/travel-planner/{,new/,[id]/}loading.tsx` — one
   skeleton per page shape; a non-uuid `[id]` is a `notFound()`
 - `components/travel/trip-calendar.tsx` — the month view behind the List /
-  Calendar tabs; bars laid over the day grid by `lib/travel/calendar.ts`
+  Calendar tabs; bars laid over the day grid by `lib/travel/calendar.ts`.
+  `TripCalendar` (planner, editable) and `SharedTripCalendar` (share links,
+  read-only) wrap the same month grid
+- `components/travel/unit-arithmetic.tsx` — the "$120 / night × 3" line under
+  a figure; the planner and the share page both print it from here
 - `components/travel/trip-payments.tsx` — the payment log, per traveller
 - `components/travel/category.tsx` — the one category table (icon, tint, dot,
   bar); both the itinerary and the public page read it
@@ -114,11 +120,14 @@ back to its fixture only when its feed has never answered.
   which items really span days), `pricing`, `split`, `item-fields`, `format`,
   `airports`, `video`
 - `lib/services/travel-service.test.ts` — Vitest, mocks `@/db`; covers the CRUD,
-  the query count for `getTripWithRelations` and the scoped-share guards
+  the query count for `getTripWithRelations`, the scoped-share guards and what
+  a link without prices carries (no price, payment or note)
 - `app/actions/travel.test.ts` — Vitest; covers zod rejection, auth failure and
   the audit metadata a share records
-- `components/travel/*.test.tsx` — Vitest + jsdom; the itinerary, the calendar,
-  the payment log, the traveller bar and the marquee
+- `components/travel/*.test.tsx` — Vitest + jsdom; the itinerary, the calendar
+  (both versions), the payment log, the traveller bar, the marquee, the share
+  bar's sign-in, the unit arithmetic, and the public page (its client
+  calendar's props, its figures)
 - `e2e/trip-lifecycle.spec.ts` — Playwright, real Supabase user
 - `e2e/trip-share-links.spec.ts` — Playwright; opens both kinds of share link in
   a browser with no session, which is the only place the server/client boundary
@@ -201,7 +210,7 @@ back to its fixture only when its feed has never answered.
   is unknown. `PublicTripViews` owns the page layout rather than a slot inside
   it, because that one piece of state spans the banner and the column below
   the grid — so the banner, the list and the aside arrive as slots.
-- **The shared page offers the calendar too**, mounted `readOnly`: the month
+- **The shared page offers the calendar too**, as `SharedTripCalendar`: the month
   arrows stay, because reading a plan means looking at the days around it, but
   the bars stop being handles and `ItemForm` is a dynamic import that a
   visitor never fetches.
@@ -214,7 +223,10 @@ back to its fixture only when its feed has never answered.
   layout exists so the invitation can be token-specific: sign-up prefills the
   address the link was labelled with and returns the reader to the trip. It
   was a card above the itinerary, which is a lot of furniture in front of the
-  thing somebody was sent to look at.
+  thing somebody was sent to look at. While signups are closed
+  (`signupsAllowed()`, read by the layout) the bar offers only *Sign in*, and
+  the dead-link page drops *Plan your own trip* — both would land on the
+  closed notice.
 - **`Still to go` is a range** on the shared page, like everything else that
   is still an estimate. Only what has been paid is one figure: that money
   either moved or it did not.
@@ -341,8 +353,24 @@ back to its fixture only when its feed has never answered.
 - **`ensureMemberBelongsToTrip` is not redundant with the foreign key.** The FK
   proves the member row exists; it says nothing about *which* trip it is on.
   Both the scoped share and the contribution go through it.
-- **The public renderer now reads `showPrices`.** It never did — the column has
-  always defaulted to false and the page published the costs regardless.
+- **`showPrices` is applied in the service, not the renderer.** The renderer
+  first never read it, then read it only to decide what to draw — while the
+  rows still went to the browser whole, so View Source on a link "without
+  prices" (the whole-trip default) showed every price and note.
+  `toPublicItem` now builds each item field by field: the raw price never
+  crosses (an item carries `cost`, the figure for whoever holds the link — a
+  scoped traveller's share, never the fare everybody splits), and a link that
+  hides money gets no figure, unit or note, and no scope, so its payments are
+  not even read.
+- **A whole-trip link with prices costs each item as the planner does.** A
+  per-person fare counts once per attendee, or once per traveller when nobody
+  is named. The page used to cost it for one reader, so its "trip total" sat
+  under the planner's — the direction that makes a trip look affordable. The
+  party crosses only as a count (`rate.times`, from a `$count` read only for
+  such links), never as member ids. The line under each figure is the
+  planner's ("$120 / night × 3", `UnitArithmetic`): the page printed a stay's
+  total over a bare "/ night", which reads as the nightly rate. A scoped link
+  shows a share and no arithmetic, because the fare per unit is everybody's.
 - **Category icons are tinted, and the tint lives on `CATEGORIES` in
   [`category.tsx`](../../components/travel/category.tsx)** — one list feeding
   the picker, the itinerary rows and the calendar through `CategoryIcon`, so

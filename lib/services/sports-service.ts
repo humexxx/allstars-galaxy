@@ -353,6 +353,9 @@ function lolOffSeasonCard(
  * The event's champion, then each region's from the same season, in the
  * feed's order. Each is the winner of its round named "Finals" (`findChampion`
  * in the Lolesports service).
+ *
+ * Only Worlds closes a season. After MSI or First Stand the regions' winners
+ * are those of the split before it, which are not the year's champions.
  */
 function lolChampionsTable(data: LolData, event: LolSplit): DashboardTable | null {
   const winners = data.splits.flatMap((s) =>
@@ -363,7 +366,7 @@ function lolChampionsTable(data: LolData, event: LolSplit): DashboardTable | nul
   if (winners.length === 0) return null;
   return {
     id: "champions",
-    label: `${event.season} champions`,
+    label: event.region === "worlds" ? `${event.season} champions` : "Latest champions",
     unranked: true,
     rows: winners.map(({ split, teamId }, i) =>
       teamRow(i + 1, split.teams.find((t) => t.id === teamId), teamId, LOL_LEAGUE[split.region])

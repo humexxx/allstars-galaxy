@@ -26,7 +26,14 @@ vi.mock("@/db", () => ({
 }));
 
 import { db } from "@/db";
-import type { DashboardMatch, DashboardSportCard } from "@/types/sports";
+import type {
+  BracketMatch,
+  DashboardMatch,
+  DashboardSportCard,
+  LolRegion,
+  LolSplit,
+  Team,
+} from "@/types/sports";
 
 import gamesOct18 from "./__fixtures__/balldontlie-nba-games-2026-10-18.json";
 import { fakeLolesports } from "./__fixtures__/lolesports";
@@ -392,6 +399,57 @@ describe("the LoL card across a season", () => {
     expect(line(card.featured!)).toBe("HLE v BFX upcoming");
     expect(card.matches.map(line)).toEqual(["T1 v GEN result", "DK v KT result"]);
     expect(table(card)).toEqual([{ label: "Standings", rows: ["DK 1–0", "KT 0–1"] }]);
+  });
+});
+
+describe("the LoL card after MSI or First Stand", () => {
+  const base = { sportId: "lol", label: "League of Legends", emoji: "🎮" } as const;
+  const team = (code: string): Team => ({ id: code.toLowerCase(), name: code, shortName: code, code });
+  function finished(
+    region: LolRegion,
+    name: string,
+    [winner, loser]: [string, string],
+    date: string
+  ): LolSplit {
+    const final: BracketMatch = {
+      id: `${region}-final`,
+      homeTeamId: winner.toLowerCase(),
+      awayTeamId: loser.toLowerCase(),
+      homeScore: 3,
+      awayScore: 1,
+      winnerTeamId: winner.toLowerCase(),
+      date,
+      bestOf: 5,
+    };
+    return {
+      region,
+      name,
+      season: "2027",
+      ...(region === "msi" || region === "first-stand" ? { international: true } : {}),
+      teams: [team(winner), team(loser)],
+      standings: [],
+      matches: [],
+      playoffs: [{ id: "final", label: "Finals", matches: [final] }],
+      champion: { teamId: final.winnerTeamId!, final },
+    };
+  }
+
+  it.each([
+    ["first-stand", "First Stand 2027"],
+    ["msi", "MSI 2027"],
+  ] as const)("after %s's final the split winners are the latest champions, not the season's", (region, name) => {
+    const card = __testing.lolCard(base, {
+      splits: [
+        finished(region, name, ["GEN", "BLG"], "2027-03-22T12:00:00Z"),
+        finished("lck", "LCK Split 1", ["HLE", "T1"], "2027-03-01T08:00:00Z"),
+        finished("lec", "LEC Split 1", ["G2", "FNC"], "2027-03-08T16:00:00Z"),
+      ],
+    });
+
+    expect(card.context).toBe(`${name} · Finals`);
+    expect(card.tables.map((t) => ({ label: t.label, rows: t.rows.map((r) => `${r.code} ${r.value}`) }))).toEqual([
+      { label: "Latest champions", rows: [`GEN ${region === "msi" ? "MSI" : "First Stand"}`, "HLE LCK", "G2 LEC"] },
+    ]);
   });
 });
 

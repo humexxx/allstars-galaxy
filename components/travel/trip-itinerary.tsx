@@ -26,13 +26,13 @@ import type {
 
 import {
   dayGroupLabel,
-  formatTripMoney,
   moneyRange,
   runsUntil,
 } from "@/lib/travel/format";
 import { ActivityVideo } from "@/components/travel/activity-video";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
-import { itemCost, unitSuffix } from "@/lib/travel/pricing";
+import { UnitArithmetic } from "@/components/travel/unit-arithmetic";
+import { itemCost } from "@/lib/travel/pricing";
 import { formatShortDay } from "@/lib/utils/date";
 import { CategoryIcon, categoryMeta } from "@/components/travel/category";
 import { ItemForm } from "@/components/travel/item-form";
@@ -282,24 +282,13 @@ function ItemRow({
                   of {moneyRange(cost.low, cost.high, currency)}
                 </Mono>
               ) : (
-                <>
-                  {/* Show the arithmetic. A hotel that reads $400 when you
-                      typed $200 looks wrong until you can see the x2. */}
-                  {cost.times > 1 && (
-                    <Mono className="block whitespace-nowrap text-2xs text-muted-foreground">
-                      {formatTripMoney(cost.unitLow ?? 0, currency)}
-                      {cost.unitHigh !== null && cost.unitHigh > (cost.unitLow ?? 0) && (
-                        <>–{formatTripMoney(cost.unitHigh, currency)}</>
-                      )}{" "}
-                      {unitSuffix(item.priceUnit)} × {cost.times}
-                    </Mono>
-                  )}
-                  {cost.times === 1 && item.priceUnit !== "total" && (
-                    <Mono className="block text-2xs text-muted-foreground">
-                      {unitSuffix(item.priceUnit)}
-                    </Mono>
-                  )}
-                </>
+                <UnitArithmetic
+                  low={cost.unitLow ?? 0}
+                  high={cost.unitHigh ?? 0}
+                  unit={item.priceUnit}
+                  times={cost.times}
+                  currency={currency}
+                />
               )}
             </span>
           )}

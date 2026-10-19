@@ -34,8 +34,8 @@ NBA and NFL still use mocks.
 - `travel-service.ts` — trip / item / photo / member / share CRUD,
   `addTripContribution` / `updateTripContribution` / `deleteTripContribution`,
   `buildScope` (one traveller's own view of a shared link), `toPublicItem` (a
-  share link's item, field by field: never the raw price, and no figure or note
-  on a link that hides money) and
+  share link's item, field by field: costed as the planner costs it, never the
+  raw price, and no figure or note on a link that hides money) and
   `getDashboardTravelSummary` (featured trip with state badge + counts for the
   dashboard card). `ensureMemberBelongsToTrip` guards anything that names a
   member: the foreign key proves the row exists, not which trip it is on.
@@ -81,6 +81,8 @@ NBA and NFL still use mocks.
   Calendar tabs; bars laid over the day grid by `lib/travel/calendar.ts`.
   `TripCalendar` (planner, editable) and `SharedTripCalendar` (share links,
   read-only) wrap the same month grid
+- `components/travel/unit-arithmetic.tsx` — the "$120 / night × 3" line under
+  a figure; the planner and the share page both print it from here
 - `components/travel/trip-payments.tsx` — the payment log, per traveller
 - `components/travel/category.tsx` — the one category table (icon, tint, dot,
   bar); both the itinerary and the public page read it
@@ -121,7 +123,8 @@ NBA and NFL still use mocks.
   the audit metadata a share records
 - `components/travel/*.test.tsx` — Vitest + jsdom; the itinerary, the calendar
   (both versions), the payment log, the traveller bar, the marquee, the share
-  bar's sign-in, and the props the public page hands its client calendar
+  bar's sign-in, the unit arithmetic, and the public page (its client
+  calendar's props, its figures)
 - `e2e/trip-lifecycle.spec.ts` — Playwright, real Supabase user
 - `e2e/trip-share-links.spec.ts` — Playwright; opens both kinds of share link in
   a browser with no session, which is the only place the server/client boundary
@@ -353,6 +356,15 @@ NBA and NFL still use mocks.
   scoped traveller's share, never the fare everybody splits), and a link that
   hides money gets no figure, unit or note, and no scope, so its payments are
   not even read.
+- **A whole-trip link with prices costs each item as the planner does.** A
+  per-person fare counts once per attendee, or once per traveller when nobody
+  is named. The page used to cost it for one reader, so its "trip total" sat
+  under the planner's — the direction that makes a trip look affordable. The
+  party crosses only as a count (`rate.times`, from a `$count` read only for
+  such links), never as member ids. The line under each figure is the
+  planner's ("$120 / night × 3", `UnitArithmetic`): the page printed a stay's
+  total over a bare "/ night", which reads as the nightly rate. A scoped link
+  shows a share and no arithmetic, because the fare per unit is everybody's.
 - **Category icons are tinted, and the tint lives on `CATEGORIES` in
   [`category.tsx`](../../components/travel/category.tsx)** — one list feeding
   the picker, the itinerary rows and the calendar through `CategoryIcon`, so

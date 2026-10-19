@@ -633,7 +633,7 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
   // and payments do not depend on the items or the photos, so awaiting them
   // afterwards would have cost a second round trip for no ordering reason —
   // and at ~86ms each that is the whole budget of a small page.
-  const [items, photos, stops, payers, attendees, scopeRows] = await Promise.all([
+  const [items, photos, stops, payers, attendees, scopeRows, memberCount] = await Promise.all([
     db
       .select()
       .from(tripItems)
@@ -677,6 +677,11 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
     // The scope is a bill, so a link without prices has none — and does not
     // read the payments it would only have to hide.
     scopedTo && share.showPrices ? loadScopeRows(trip.id, scopedTo) : null,
+    // A whole-trip figure sizes a per-person fare by the party, as the
+    // planner does. Only the count is read.
+    !scopedTo && share.showPrices
+      ? db.$count(tripMembers, eq(tripMembers.tripId, trip.id))
+      : null,
   ]);
 
   const stopsByItem = new Map<string, typeof stops>();
@@ -715,11 +720,18 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
   // from the enriched ones, or a scoped link would split a festival ticket
   // among people who are not going to it.
   const scoped = scopeRows && scopedTo ? buildScope(scopeRows, enriched, scopedTo) : null;
+  const pricing: PublicPricing | null = !share.showPrices
+    ? null
+    : scoped
+      ? { lines: scoped.lines }
+      : // A scoped link whose traveller is gone falls back to the trip, and
+        // its party is the members loaded for the split.
+        { partySize: Math.max(1, memberCount ?? scopeRows?.members.length ?? 0) };
   const visible = (
     scopedTo
       ? enriched.filter((i) => itemConcerns(i.attendeeIds, scopedTo))
       : enriched
-  ).map((item) => toPublicItem(item, share.showPrices, scoped?.lines ?? null));
+  ).map((item) => toPublicItem(item, pricing));
 
   return {
     trip,
@@ -731,40 +743,52 @@ export const getPublicTripByToken = cache(async function getPublicTripByToken(
 });
 
 /**
+ * How a link that shows money costs its items: the scoped traveller's share
+ * of each (`lines`, from `buildScope`), or each item whole, sized by the
+ * party the way the planner sizes it.
+ */
+type PublicPricing =
+  | { lines: Map<string, { low: number; high: number }> }
+  | { partySize: number };
+
+/**
  * One item as a public link may carry it — see `PublicTripItem`.
  *
  * Field by field, so a column added to `trip_items` stays on the server until
  * somebody decides a link may show it. The member lists did their work in the
- * narrowing and the split; they never cross. A link without prices loses the
- * money and the notes here, not in the renderer: `share.showPrices` only ever
- * gated what was drawn, and View Source still showed every figure.
+ * narrowing and the split; they never cross. A link without prices (`pricing`
+ * null) loses the money and the notes here, not in the renderer:
+ * `share.showPrices` only ever gated what was drawn, and View Source still
+ * showed every figure.
  *
- * `lines` is the scoped traveller's share of each item. Without them the
- * figure is the item's own, costed for one reader and without the attendee
- * list: a link has no party to size a per-person fare by, so the unit goes
- * along to say what the figure is.
+ * A whole item is costed exactly as the planner costs it, attendees over the
+ * party, so a shared "trip total" is the planner's. The arithmetic travels as
+ * numbers — the unit price, the unit and how many times it applies — and on a
+ * scoped link not at all: that figure is a share, and the fare behind it is
+ * everybody else's as well.
  */
 function toPublicItem(
   item: TripItemWithStops,
-  showPrices: boolean,
-  lines: Map<string, { low: number; high: number }> | null
+  pricing: PublicPricing | null
 ): PublicTripItem {
-  const priced = showPrices && item.price !== null;
   let cost: PublicTripItem["cost"] = null;
-  if (priced && lines) {
-    cost = lines.get(item.id) ?? { low: 0, high: 0 };
-  } else if (priced) {
-    const { low, high } = itemCost(
-      {
-        price: item.price,
-        priceMax: item.priceMax,
-        priceUnit: item.priceUnit,
-        scheduledOn: item.scheduledOn,
-        endsOn: item.endsOn,
-      },
-      1
-    );
-    cost = { low, high };
+  let rate: PublicTripItem["rate"] = null;
+  if (pricing && item.price !== null) {
+    if ("lines" in pricing) {
+      cost = pricing.lines.get(item.id) ?? { low: 0, high: 0 };
+    } else {
+      const c = itemCost(item, pricing.partySize);
+      cost = { low: c.low, high: c.high };
+      if (item.priceUnit !== "total") {
+        const low = c.unitLow ?? 0;
+        rate = {
+          low,
+          high: Math.max(low, c.unitHigh ?? low),
+          unit: item.priceUnit,
+          times: c.times,
+        };
+      }
+    }
   }
 
   return {
@@ -781,8 +805,8 @@ function toPublicItem(
     stops: item.stops,
     photos: item.photos,
     cost,
-    priceUnit: priced && !lines ? item.priceUnit : null,
-    notes: showPrices ? item.notes : null,
+    rate,
+    notes: pricing ? item.notes : null,
   };
 }
 

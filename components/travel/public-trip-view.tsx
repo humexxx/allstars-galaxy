@@ -26,10 +26,10 @@ import {
   moneyRange,
   runsUntil,
 } from "@/lib/travel/format";
-import { unitSuffix } from "@/lib/travel/pricing";
 // One category table, not a second copy that drifts: this page once labelled
 // flights and cruises "Other" because they were missing from its own list.
 import { CategoryIcon, categoryMeta } from "@/components/travel/category";
+import { UnitArithmetic } from "@/components/travel/unit-arithmetic";
 import { PublicTripViews } from "@/components/travel/public-trip-views";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
 import { ActivityVideo } from "@/components/travel/activity-video";
@@ -245,10 +245,8 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                                     <Mono className="block whitespace-nowrap text-xs font-medium">
                                       {moneyRange(item.cost.low, item.cost.high, trip.currency)}
                                     </Mono>
-                                    {item.priceUnit && item.priceUnit !== "total" && (
-                                      <Mono className="block whitespace-nowrap text-2xs text-muted-foreground">
-                                        {unitSuffix(item.priceUnit)}
-                                      </Mono>
+                                    {item.rate && (
+                                      <UnitArithmetic {...item.rate} currency={trip.currency} />
                                     )}
                                   </span>
                                 )}

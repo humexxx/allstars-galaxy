@@ -822,7 +822,24 @@ function playoffsFrom(json: EspnScoreboardHeader): NbaPlayoffs {
   return { rounds, teams: [...teams.values()] };
 }
 
-async function fetchNbaFromApi(today: Date): Promise<NbaData> {
+/**
+ * balldontlie's games and ESPN's table for the season shown: the part of the
+ * feed with one cache entry. The bracket and the preseason are joined in by
+ * `getNbaData`, each from a cache of its own.
+ */
+type NbaFeed = {
+  season: number;
+  /** The season's games, untrimmed: the preseason is merged in before trimming. */
+  games: Match[];
+  teams: Team[];
+  standings: NbaStanding[];
+  champion?: NbaChampion;
+  tipOff?: string;
+  /** The year whose bracket to read, or null when there cannot be one. */
+  playoffYear: number | null;
+};
+
+async function fetchNbaFromApi(today: Date): Promise<NbaFeed> {
   const season = currentSeason(today);
   const { start, end } = gameWindow(today);
   const page = await gamesIn(start, end);
@@ -837,54 +854,58 @@ async function fetchNbaFromApi(today: Date): Promise<NbaData> {
   const tipOff = tipOffFrom(own, season, start);
   const crowned = tipOff ? championFrom(page, season - 1) : undefined;
 
-  // The table, the bracket and the preseason are extras, not the feed: if
-  // ESPN is down the games still refresh, the table drops away rather than
-  // being invented, and the bracket and the preseason keep their last good
-  // answer. Side by side, so slow answers cost one timeout, not three. The
-  // preseason costs a request only between Oct 1 and the opener.
-  const year = playoffYear(today, page, season);
-  const [table, bracket, preseason] = await Promise.all([
-    fetchStandings(season)
-      .then(standingsFrom)
-      .catch((error) => {
-        console.warn("espn nba standings unavailable:", error);
-        return { standings: [] as NbaStanding[], teams: [] as Team[] };
-      }),
-    year === null ? Promise.resolve(NO_PLAYOFFS) : getNbaPlayoffs(year),
-    tipOff ? getNbaPreseason(season) : Promise.resolve(NO_PRESEASON),
-  ]);
+  // The table is an extra, not the feed: if ESPN is down the games still
+  // refresh and the table drops away rather than being invented.
+  const table = await fetchStandings(season)
+    .then(standingsFrom)
+    .catch((error) => {
+      console.warn("espn nba standings unavailable:", error);
+      return { standings: [] as NbaStanding[], teams: [] as Team[] };
+    });
 
-  const games = recentAndNext([...own.map(matchFrom), ...preseason.games]);
-
-  const known = new Map<string, Team>(preseason.teams.map((t) => [t.id, t]));
+  const teams = new Map<string, Team>();
   for (const game of own) {
-    for (const t of [game.home_team, game.visitor_team]) known.set(t.abbreviation, teamFrom(t));
+    for (const t of [game.home_team, game.visitor_team]) teams.set(t.abbreviation, teamFrom(t));
   }
-  if (crowned) known.set(crowned.team.abbreviation, teamFrom(crowned.team));
+  if (crowned) teams.set(crowned.team.abbreviation, teamFrom(crowned.team));
+  for (const team of table.teams) if (!teams.has(team.id)) teams.set(team.id, team);
+
+  return {
+    season,
+    games: own.map(matchFrom),
+    teams: [...teams.values()],
+    standings: table.standings,
+    ...(crowned ? { champion: crowned.champion } : {}),
+    ...(tipOff ? { tipOff } : {}),
+    playoffYear: playoffYear(today, page, season),
+  };
+}
+
+/** The feed with its extras joined in, trimmed to what the view lists. */
+function nbaDataFrom(feed: NbaFeed, bracket: NbaPlayoffs, preseason: NbaPreseason): NbaData {
+  const games = recentAndNext([...feed.games, ...preseason.games]);
+  const known = new Map<string, Team>(preseason.teams.map((t) => [t.id, t]));
+  for (const team of feed.teams) known.set(team.id, team);
   const byTeam = new Map<string, Team>();
-  for (const id of [...games.flatMap((g) => [g.homeTeamId, g.awayTeamId]), crowned?.champion.teamId]) {
+  for (const id of [...games.flatMap((g) => [g.homeTeamId, g.awayTeamId]), feed.champion?.teamId]) {
     const team = id ? known.get(id) : undefined;
     if (team && !byTeam.has(team.id)) byTeam.set(team.id, team);
   }
-  for (const team of [...table.teams, ...bracket.teams]) {
+  for (const team of [...feed.teams.filter((t) => feed.standings.some((s) => s.teamId === t.id)), ...bracket.teams]) {
     if (!byTeam.has(team.id)) byTeam.set(team.id, team);
   }
 
   return {
-    season: seasonLabel(season),
+    season: seasonLabel(feed.season),
     teams: [...byTeam.values()],
     games,
-    standings: table.standings,
+    standings: feed.standings,
     playoffs: bracket.rounds,
-    ...(crowned ? { champion: crowned.champion } : {}),
-    ...(tipOff ? { tipOff } : {}),
+    ...(feed.champion ? { champion: feed.champion } : {}),
+    ...(feed.tipOff ? { tipOff: feed.tipOff } : {}),
   };
 }
 
-/**
- * Live NBA games, falling back to the mock fixture when there is no last good
- * answer to serve.
- */
 const NO_PLAYOFFS: NbaPlayoffs = { rounds: [], teams: [] };
 
 /**
@@ -914,13 +935,34 @@ const getNbaPreseason = cachedFeed(
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:nba"] }
 );
 
-export const getNbaData = cachedFeed(
+const getNbaFeed = cachedFeed(
   "balldontlie NBA",
   () => fetchNbaFromApi(new Date()),
-  () => NBA_DATA,
-  ["nba-data"],
+  (): NbaFeed | null => null,
+  ["nba-feed"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:nba"] }
 );
+
+/**
+ * Live NBA games, falling back to the mock fixture when there is no last good
+ * answer to serve.
+ *
+ * The bracket and the preseason are read out here, never inside the feed's
+ * cached function: Next bypasses the read of an `unstable_cache` nested in
+ * another, so their own entries would never serve and a failed call would be
+ * stored with the games, empty, for five minutes. The preseason costs a
+ * request only between Oct 1 and the opener. Side by side, so two slow
+ * answers cost one timeout, not two.
+ */
+export async function getNbaData(): Promise<NbaData> {
+  const feed = await getNbaFeed();
+  if (!feed) return NBA_DATA;
+  const [bracket, preseason] = await Promise.all([
+    feed.playoffYear === null ? Promise.resolve(NO_PLAYOFFS) : getNbaPlayoffs(feed.playoffYear),
+    feed.tipOff ? getNbaPreseason(feed.season) : Promise.resolve(NO_PRESEASON),
+  ]);
+  return nbaDataFrom(feed, bracket, preseason);
+}
 
 /** Pure helpers, exported for their tests — nothing here touches the network. */
 export const __testing = {

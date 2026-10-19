@@ -9,6 +9,7 @@ import { SportsHub } from "./sports-hub";
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("@/app/actions/sports", () => ({ setSportFavoriteAction: vi.fn() }));
+vi.mock("@/app/actions/racquet", () => ({ getRacquetDrawAction: vi.fn() }));
 
 function renderHub(): ReturnType<typeof render> {
   return render(

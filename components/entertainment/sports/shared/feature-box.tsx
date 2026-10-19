@@ -8,7 +8,10 @@ import { cn } from "@/lib/utils";
  * The boxed lead of a dashboard sport card — football's featured match, F1's
  * next race: a label and a status over whatever the sport leads with.
  *
- * One frame for both, so two cards side by side open on the same box.
+ * One frame for every sport, at least as tall as F1's (the fullest lead), so
+ * the box is one size on any card; beside another card it also stretches to
+ * the row it shares (`dashboard-card-rows.ts`). What a sport leads with sits
+ * centred in whatever room the label leaves.
  */
 export function FeatureBox({
   href,
@@ -28,7 +31,7 @@ export function FeatureBox({
     <Link
       href={href}
       className={cn(
-        "flex flex-col gap-2 rounded-lg border bg-card p-2.5 transition-colors hover:bg-muted/40",
+        "flex h-full min-h-28 flex-col gap-2 rounded-lg border bg-card p-2.5 transition-colors hover:bg-muted/40",
         className
       )}
     >
@@ -38,7 +41,7 @@ export function FeatureBox({
         </Eyebrow>
         {status}
       </div>
-      {children}
+      <div className="flex flex-1 flex-col justify-center gap-2">{children}</div>
     </Link>
   );
 }

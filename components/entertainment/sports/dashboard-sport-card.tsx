@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardAction,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -14,9 +13,15 @@ import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { getDashboardSportCard } from "@/lib/services/sports-service";
 import { cn } from "@/lib/utils";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
-import type { DashboardMatch, DashboardSide, SportId } from "@/types/sports";
+import type {
+  DashboardMatch,
+  DashboardSide,
+  DashboardSportCard as DashboardSportCardData,
+  SportId,
+} from "@/types/sports";
 
 import { DashboardSportTables } from "./dashboard-sport-tables";
+import { SPORT_CARD_HEADER, SPORT_CARD_ROWS, SPORT_CARD_SECTION } from "./shared/dashboard-card-rows";
 import { FeatureBox } from "./shared/feature-box";
 import { matchTimeFormat, type MatchTimeFormat } from "./shared/match-time";
 import { StatusPill } from "./shared/status-pill";
@@ -41,8 +46,8 @@ export async function DashboardSportCard({ sportId }: { sportId: SportId }) {
   const groups = groupCardMatches(card.matches);
 
   return (
-    <Card className="flex flex-col">
-      <CardHeader>
+    <Card className={SPORT_CARD_ROWS}>
+      <CardHeader className={SPORT_CARD_HEADER}>
         {/* The hub's emoji: lucide has no ball for most of these sports. */}
         <CardTitle as="h2" className="flex items-center gap-2">
           <span aria-hidden className="text-lg leading-none">
@@ -60,26 +65,13 @@ export async function DashboardSportCard({ sportId }: { sportId: SportId }) {
         </CardAction>
       </CardHeader>
 
-      <CardContent className="flex flex-1 flex-col gap-3">
+      {/* Three rows, always all three: the lead, the matches, the tables. */}
+      <div className={SPORT_CARD_SECTION}>
         {card.featured && <FeaturedMatch match={card.featured} format={format} href={href} />}
+        {card.event && <FeaturedEvent event={card.event} href={href} />}
+      </div>
 
-        {card.event && (
-          <Link
-            href={href}
-            className="flex items-start justify-between gap-2 rounded-lg border bg-card p-2.5 transition-colors hover:bg-muted/40"
-          >
-            <span className="min-w-0">
-              <span className="block truncate text-xs font-semibold leading-snug">
-                {card.event.name}
-              </span>
-              <Text variant="small" as="span" className="block truncate">
-                {card.event.detail}
-              </Text>
-            </span>
-            <StatusPill status={card.event.status} />
-          </Link>
-        )}
-
+      <div className={SPORT_CARD_SECTION}>
         {groups.map((group) => (
           <div key={group.label} className="flex flex-col gap-1.5">
             <Eyebrow size="sm">{group.label}</Eyebrow>
@@ -90,7 +82,9 @@ export async function DashboardSportCard({ sportId }: { sportId: SportId }) {
             </ul>
           </div>
         ))}
+      </div>
 
+      <div className={SPORT_CARD_SECTION}>
         {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
 
         {card.note && (
@@ -104,7 +98,7 @@ export async function DashboardSportCard({ sportId }: { sportId: SportId }) {
             )}
           </div>
         )}
-      </CardContent>
+      </div>
     </Card>
   );
 }
@@ -149,6 +143,13 @@ function MatchStatus({ match, format }: { match: DashboardMatch; format: MatchTi
   );
 }
 
+/** For a match its league gives no label to (the NBA's, the NFL's off week). */
+const MATCH_LABEL: Record<DashboardMatch["status"], string> = {
+  live: "Live now",
+  upcoming: "Next up",
+  result: "Latest result",
+};
+
 function FeaturedMatch({
   match,
   format,
@@ -162,7 +163,7 @@ function FeaturedMatch({
   return (
     <FeatureBox
       href={href}
-      label={match.label ?? ""}
+      label={match.label ?? MATCH_LABEL[match.status]}
       status={<MatchStatus match={match} format={format} />}
     >
       {[match.home, match.away].map((side, i) => (
@@ -183,6 +184,30 @@ function FeaturedMatch({
           )}
         </div>
       ))}
+    </FeatureBox>
+  );
+}
+
+const EVENT_LABEL: Record<NonNullable<DashboardSportCardData["event"]>["status"], string> = {
+  live: "On now",
+  upcoming: "Next up",
+  completed: "Just finished",
+};
+
+/** A tournament (tennis, padel) in the same box as a match or a race. */
+function FeaturedEvent({
+  event,
+  href,
+}: {
+  event: NonNullable<DashboardSportCardData["event"]>;
+  href: string;
+}) {
+  return (
+    <FeatureBox href={href} label={EVENT_LABEL[event.status]} status={<StatusPill status={event.status} />}>
+      <span className="truncate text-sm font-semibold">{event.name}</span>
+      <Text variant="small" as="span" className="truncate">
+        {event.detail}
+      </Text>
     </FeatureBox>
   );
 }

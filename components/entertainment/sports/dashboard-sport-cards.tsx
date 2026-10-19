@@ -56,7 +56,9 @@ export async function DashboardSportCards({ userId }: { userId: string }) {
       {favorites.map((sportId) => (
         <Suspense
           key={sportId}
-          fallback={<DashboardCardSkeleton tiles={2} className="col-span-1" />}
+          // Four rows tall like the card it stands in for, or the cards
+          // after it would take its rows (`dashboard-card-rows.ts`).
+          fallback={<DashboardCardSkeleton tiles={2} className="col-span-1 @xl:row-span-4" />}
         >
           {sportId === "f1" ? (
             <DashboardF1Card userId={userId} />

@@ -278,6 +278,8 @@ export type F1Race = {
   round: number;
   name: string;
   circuit: string;
+  /** Jolpica's key for the track ("monaco", "americas"), which finds its outline. */
+  circuitId: string;
   location: string;
   flagEmoji: string;
   /** ISO date. */

@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { formatWeekdayDayYear } from "@/lib/utils/date";
 import type { F1Constructor, F1Data, F1Driver, F1NewsArticle, F1Race } from "@/types/sports";
 
+import { F1CircuitOutline } from "../f1-circuit-outline";
 import { NewsList } from "../shared/news-list";
 import { Portrait } from "../shared/portrait";
 import { SportShell } from "../shared/sport-shell";
@@ -233,13 +234,18 @@ function RaceCard({ race }: { race: F1Race }) {
           </div>
           <StatusPill status={race.status} />
         </div>
-        <Text variant="small" as="div">
-          {race.circuit} · {race.location}
-        </Text>
-        {/* A calendar day: only the YYYY-MM-DD part, read local. */}
-        <Mono className="block text-xs text-muted-foreground">
-          {formatWeekdayDayYear(race.date.slice(0, 10))}
-        </Mono>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-col gap-2">
+            <Text variant="small" as="div">
+              {race.circuit} · {race.location}
+            </Text>
+            {/* A calendar day: only the YYYY-MM-DD part, read local. */}
+            <Mono className="block text-xs text-muted-foreground">
+              {formatWeekdayDayYear(race.date.slice(0, 10))}
+            </Mono>
+          </div>
+          <F1CircuitOutline circuitId={race.circuitId} className="size-12 text-muted-foreground" />
+        </div>
         {race.podium && (
           <div className="mt-1 flex items-center gap-2 border-t pt-2 text-xs">
             <Trophy className="size-3.5 text-warning" aria-label="Podium" />

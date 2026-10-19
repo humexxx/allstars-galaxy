@@ -18,7 +18,11 @@ const race = (round: string, results: Array<[string, string, string]>) => ({
   round,
   raceName: `Race ${round}`,
   date: "2026-10-11",
-  Circuit: { circuitName: "Marina Bay", Location: { locality: "Singapore", country: "Singapore" } },
+  Circuit: {
+    circuitId: "marina_bay",
+    circuitName: "Marina Bay",
+    Location: { locality: "Singapore", country: "Singapore" },
+  },
   Results: results.map(([position, code, team]) => ({
     position,
     Driver: driver(code),
@@ -68,6 +72,11 @@ describe("mapRaces", () => {
     const { resultsByRound } = tallyPodiums(mergePodiumSteps([steps[0], steps[1]] as never));
     const [singapore] = mapRaces([race("17", [])] as never, resultsByRound);
     expect(singapore.podium).toBeUndefined();
+  });
+
+  it("keeps Jolpica's circuit key, which finds the track's outline", () => {
+    const [singapore] = mapRaces([race("17", [])] as never, new Map());
+    expect(singapore).toMatchObject({ circuitId: "marina_bay", circuit: "Marina Bay" });
   });
 });
 

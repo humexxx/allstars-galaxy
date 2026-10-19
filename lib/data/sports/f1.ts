@@ -27,16 +27,16 @@ const CONSTRUCTORS: F1Constructor[] = [
 ];
 
 const RACES: F1Race[] = [
-  { id: "r-1", round: 1, name: "Bahrain Grand Prix", circuit: "Bahrain International Circuit", location: "Sakhir", flagEmoji: "🇧🇭", date: "2026-03-08", status: "completed", podium: ["ANT", "RUS", "LEC"] },
-  { id: "r-2", round: 2, name: "Saudi Arabian GP", circuit: "Jeddah Corniche", location: "Jeddah", flagEmoji: "🇸🇦", date: "2026-03-15", status: "completed", podium: ["ANT", "VER", "RUS"] },
-  { id: "r-3", round: 3, name: "Australian GP", circuit: "Albert Park", location: "Melbourne", flagEmoji: "🇦🇺", date: "2026-03-29", status: "completed", podium: ["RUS", "ANT", "PIA"] },
-  { id: "r-4", round: 4, name: "Japanese GP", circuit: "Suzuka", location: "Suzuka", flagEmoji: "🇯🇵", date: "2026-04-12", status: "completed", podium: ["ANT", "HAM", "LEC"] },
-  { id: "r-5", round: 5, name: "Chinese GP", circuit: "Shanghai International", location: "Shanghai", flagEmoji: "🇨🇳", date: "2026-04-26", status: "completed", podium: ["ANT", "NOR", "LEC"] },
-  { id: "r-6", round: 6, name: "Miami GP", circuit: "Miami International", location: "Miami", flagEmoji: "🇺🇸", date: "2026-05-10", status: "completed", podium: ["VER", "ANT", "HAM"] },
-  { id: "r-7", round: 7, name: "Emilia Romagna GP", circuit: "Imola", location: "Imola", flagEmoji: "🇮🇹", date: "2026-05-24", status: "upcoming" },
-  { id: "r-8", round: 8, name: "Monaco GP", circuit: "Circuit de Monaco", location: "Monte Carlo", flagEmoji: "🇲🇨", date: "2026-06-07", status: "upcoming" },
-  { id: "r-9", round: 9, name: "Spanish GP", circuit: "Circuit de Barcelona", location: "Barcelona", flagEmoji: "🇪🇸", date: "2026-06-14", status: "upcoming" },
-  { id: "r-10", round: 10, name: "Canadian GP", circuit: "Gilles Villeneuve", location: "Montreal", flagEmoji: "🇨🇦", date: "2026-06-21", status: "upcoming" },
+  { id: "r-1", round: 1, name: "Bahrain Grand Prix", circuit: "Bahrain International Circuit", circuitId: "bahrain", location: "Sakhir", flagEmoji: "🇧🇭", date: "2026-03-08", status: "completed", podium: ["ANT", "RUS", "LEC"] },
+  { id: "r-2", round: 2, name: "Saudi Arabian GP", circuit: "Jeddah Corniche", circuitId: "jeddah", location: "Jeddah", flagEmoji: "🇸🇦", date: "2026-03-15", status: "completed", podium: ["ANT", "VER", "RUS"] },
+  { id: "r-3", round: 3, name: "Australian GP", circuit: "Albert Park", circuitId: "albert_park", location: "Melbourne", flagEmoji: "🇦🇺", date: "2026-03-29", status: "completed", podium: ["RUS", "ANT", "PIA"] },
+  { id: "r-4", round: 4, name: "Japanese GP", circuit: "Suzuka", circuitId: "suzuka", location: "Suzuka", flagEmoji: "🇯🇵", date: "2026-04-12", status: "completed", podium: ["ANT", "HAM", "LEC"] },
+  { id: "r-5", round: 5, name: "Chinese GP", circuit: "Shanghai International", circuitId: "shanghai", location: "Shanghai", flagEmoji: "🇨🇳", date: "2026-04-26", status: "completed", podium: ["ANT", "NOR", "LEC"] },
+  { id: "r-6", round: 6, name: "Miami GP", circuit: "Miami International", circuitId: "miami", location: "Miami", flagEmoji: "🇺🇸", date: "2026-05-10", status: "completed", podium: ["VER", "ANT", "HAM"] },
+  { id: "r-7", round: 7, name: "Emilia Romagna GP", circuit: "Imola", circuitId: "imola", location: "Imola", flagEmoji: "🇮🇹", date: "2026-05-24", status: "upcoming" },
+  { id: "r-8", round: 8, name: "Monaco GP", circuit: "Circuit de Monaco", circuitId: "monaco", location: "Monte Carlo", flagEmoji: "🇲🇨", date: "2026-06-07", status: "upcoming" },
+  { id: "r-9", round: 9, name: "Spanish GP", circuit: "Circuit de Barcelona", circuitId: "catalunya", location: "Barcelona", flagEmoji: "🇪🇸", date: "2026-06-14", status: "upcoming" },
+  { id: "r-10", round: 10, name: "Canadian GP", circuit: "Gilles Villeneuve", circuitId: "villeneuve", location: "Montreal", flagEmoji: "🇨🇦", date: "2026-06-21", status: "upcoming" },
 ];
 
 export const F1_DATA: F1Data = {

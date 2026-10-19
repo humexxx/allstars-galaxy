@@ -56,6 +56,7 @@ type JolpicaRace = {
   date: string;
   time?: string;
   Circuit: {
+    circuitId: string;
     circuitName: string;
     Location: {
       locality: string;
@@ -400,6 +401,7 @@ function mapRaces(
       round: parseInt(race.round, 10),
       name: race.raceName,
       circuit: race.Circuit.circuitName,
+      circuitId: race.Circuit.circuitId,
       location: race.Circuit.Location.locality,
       flagEmoji: flagForCountry(race.Circuit.Location.country),
       date: race.date,

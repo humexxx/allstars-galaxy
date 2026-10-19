@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 export default function BoardLoading() {
   return (
     <>
-      <PageHeaderSkeleton actions={3} descriptionWidth="w-64" />
+      <PageHeaderSkeleton actions={3} description={false} />
       <div className="flex min-h-0 flex-1 gap-3 overflow-hidden" aria-hidden="true">
         {Array.from({ length: 3 }).map((_, col) => (
           <div

@@ -1,7 +1,7 @@
 # Productivity
 
 > **Status:** Active
-> **Last reviewed:** 2026-10-01
+> **Last reviewed:** 2026-10-18
 
 ## Overview
 Two surfaces: a personal kanban *board* for day-to-day tasks, and *road paths*

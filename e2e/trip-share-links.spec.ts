@@ -93,6 +93,10 @@ test.describe("Travel planner — share links", () => {
       expect(anyoneText).toContain("Share link spec");
       expect(anyoneText).not.toMatch(/\$/);
       expect(anyoneText).not.toMatch(/Bruno|Jason/);
+      // Nor in the source. The text above was clean while every price rode
+      // along in the RSC payload, readable with View Source.
+      const anyoneSource = await (await anon.request.get(anyoneLink)).text();
+      expect(anyoneSource).not.toMatch(/600\.00|800\.00|1900\.00/);
 
       const guest2 = await anon.newPage();
       await guest2.goto(brunoLink);
@@ -107,6 +111,9 @@ test.describe("Travel planner — share links", () => {
       expect(brunoText).toContain("$1,900");
       // The other traveller is the whole reason this link is scoped.
       expect(brunoText).not.toMatch(/jason/i);
+      // His half of the flight crosses, never the fare he splits with Jason.
+      const brunoSource = await (await anon.request.get(brunoLink)).text();
+      expect(brunoSource).not.toMatch(/600\.00|800\.00/);
     } finally {
       await browser.close();
     }

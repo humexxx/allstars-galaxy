@@ -110,7 +110,16 @@ function DrawPanel({
   tournaments: RacquetData["tournaments"];
   players: Map<string, Team>;
 }) {
-  const [openId, setOpenId] = useState(tournaments[0]?.id ?? "");
+  // The draw being played, else the one just finished: the list runs in date
+  // order, so its head is a fortnight old.
+  const [openId, setOpenId] = useState(
+    () =>
+      (
+        tournaments.find((t) => t.status === "live") ??
+        tournaments.filter((t) => t.status === "completed").at(-1) ??
+        tournaments[0]
+      )?.id ?? ""
+  );
   const open = tournaments.find((t) => t.id === openId) ?? tournaments[0];
 
   return (

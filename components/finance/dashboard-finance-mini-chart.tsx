@@ -1,11 +1,12 @@
 "use client";
 
-import { Area, AreaChart, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import type { DashboardPoint } from "@/lib/finance/dashboard";
 import { cn } from "@/lib/utils";
-import { formatCurrency, moneySign } from "@/lib/utils/format";
+import { niceTicks, yAxisWidth } from "@/lib/utils/chart-axis";
+import { formatCurrency, formatCurrencyCompact, moneySign } from "@/lib/utils/format";
 import type { ChartConfig } from "@/types/chart";
 
 const chartConfig = {
@@ -44,26 +45,42 @@ function MiniTooltip({
   );
 }
 
+/**
+ * `aspect-auto` drops ChartContainer's 16:9 default: beside the card's figure
+ * rail the chart stretches to the rail's height, and an aspect ratio would
+ * size it from its width instead.
+ */
 export function DashboardFinanceMiniChart({
   data,
   color,
+  className,
 }: {
   data: DashboardPoint[];
   /** The plan's own colour token, as on its plan page. */
   color?: string;
+  className?: string;
 }) {
   if (data.length === 0) return null;
   const stroke = color || "var(--color-netWorth)";
+  const ticks = niceTicks(data.map((d) => d.netWorth));
   return (
-    <ChartContainer config={chartConfig} className="h-36 w-full">
+    <ChartContainer config={chartConfig} className={cn("aspect-auto h-48 w-full", className)}>
       <AreaChart data={data} margin={{ left: 0, right: 0, top: 8, bottom: 0 }}>
+        <CartesianGrid vertical={false} strokeOpacity={0.25} />
         <XAxis
           dataKey="month"
           tickLine={false}
           axisLine={false}
           minTickGap={20}
         />
-        <YAxis hide />
+        <YAxis
+          tickLine={false}
+          axisLine={false}
+          width={yAxisWidth(ticks.map(formatCurrencyCompact))}
+          ticks={ticks}
+          domain={[ticks[0], ticks[ticks.length - 1]]}
+          tickFormatter={formatCurrencyCompact}
+        />
         <ChartTooltip content={<MiniTooltip />} />
         <Area
           dataKey="netWorth"

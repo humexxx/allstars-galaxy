@@ -42,6 +42,7 @@ export type EditorLine = {
   dayOfWeek?: number | null;
   intervalMonths?: number | null;
   recurrenceStart?: string | null;
+  owedToMe?: boolean;
 };
 
 type PlanLineEditorProps = {
@@ -178,12 +179,16 @@ function LineRow({
         <span className="block text-xs font-normal text-muted-foreground sm:hidden">
           {line.kind === "recurring" ? "Recurring" : "One-time"} ·{" "}
           <ScheduleSummary line={line} variant={variant} />
+          {line.owedToMe && " · Owed to you"}
         </span>
       </TableCell>
       <TableCell className="hidden sm:table-cell">
-        <Badge variant={line.kind === "recurring" ? "secondary" : "outline"}>
-          {line.kind === "recurring" ? "Recurring" : "One-time"}
-        </Badge>
+        <div className="flex flex-wrap gap-1">
+          <Badge variant={line.kind === "recurring" ? "secondary" : "outline"}>
+            {line.kind === "recurring" ? "Recurring" : "One-time"}
+          </Badge>
+          {line.owedToMe && <Badge variant="info">Owed to you</Badge>}
+        </div>
       </TableCell>
       <TableCell className="text-right font-mono tabular-nums sm:text-left">
         {formatCurrency(Number(line.monthlyAmount))}

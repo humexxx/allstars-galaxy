@@ -7,6 +7,7 @@ import {
   lineOverrideSchema,
   planDebtSchema,
   updateFinancePlanSchema,
+  planIncomeSchema,
 } from "./finance";
 
 describe("lineOverrideSchema: reschedules may cross months", () => {
@@ -97,6 +98,8 @@ describe("rate bounds", () => {
   });
 });
 
+
+
 describe("createFinancePlanSchema — messages the plan form shows per field", () => {
   const base = {
     name: "Plan",
@@ -117,5 +120,40 @@ describe("createFinancePlanSchema — messages the plan form shows per field", (
     expect(messageFor({ confirmationDayOfMonth: 31 }, "confirmationDayOfMonth")).toMatch(
       /1 to 28/
     );
+  });
+});
+
+describe("money owed to you", () => {
+  const owedRecurring = {
+    name: "Padre",
+    monthlyAmount: "6000",
+    kind: "recurring" as const,
+    owedToMe: true,
+    recurrenceType: "every_n_months" as const,
+    intervalMonths: 6,
+    dayOfMonth: 31,
+  };
+
+  it("defaults to an ordinary income", () => {
+    const parsed = planIncomeSchema.parse({ name: "Salary", monthlyAmount: "3000" });
+    expect(parsed.owedToMe).toBe(false);
+  });
+
+  it("needs an end date when it repeats, or it would be owed forever", () => {
+    const result = planIncomeSchema.safeParse(owedRecurring);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(["endDate"]);
+    expect(planIncomeSchema.safeParse({ ...owedRecurring, endDate: "2030-02-01" }).success).toBe(true);
+  });
+
+  it("takes a one-time repayment with just its date", () => {
+    const result = planIncomeSchema.safeParse({
+      name: "Hermana",
+      monthlyAmount: "600",
+      kind: "one_time",
+      date: "2026-12-31",
+      owedToMe: true,
+    });
+    expect(result.success).toBe(true);
   });
 });

@@ -30,6 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { niceTicks, yAxisWidth } from "@/lib/utils/chart-axis";
 import {
   formatCurrency,
   formatCurrencyCompact,
@@ -101,6 +102,10 @@ const LABEL_HEIGHT = 18;
 // Tailwind's `sm` breakpoint, applied to the CHART's width, not the viewport —
 // the chart also narrows inside the desktop 3/4-column layout.
 const NARROW_CONTAINER = 640;
+// Shared by the chart and its Y-axis width: the tick labels end
+// `Y_TICK_MARGIN` short of the plot, and the left margin is room they can use.
+const CHART_MARGIN = { left: 10, right: 20, top: 30, bottom: 0 };
+const Y_TICK_MARGIN = 8;
 
 function MilestoneLabel(props: {
   milestone: number;
@@ -390,7 +395,7 @@ export const ProjectionChart = memo(function ProjectionChart({
   // instead of snapping to the nearest data point. That avoids two milestones
   // collapsing onto the same month when both cross between the same pair of
   // points.
-  const { data, crossings } = useMemo(() => {
+  const { data, crossings, yTicks } = useMemo(() => {
     const rows: ChartRow[] = points.map((p, i) => {
       const value = Number(p.netWorth.toFixed(2));
       const isPast = i < pastCount;
@@ -434,7 +439,11 @@ export const ProjectionChart = memo(function ProjectionChart({
       tooltip: `${formatMoneyTick(c.milestone)} — ${formatTimeGap(c.monthsFromToday)}`,
     }));
 
-    return { data: rows, crossings: cross };
+    // Every plotted series counts toward the axis, as it does for recharts.
+    const plotted = rows.flatMap((r) => [r.rawValue, r.ghostValue, r.portfolioRaw]);
+    const ticks = niceTicks(plotted.filter((v): v is number => v !== null));
+
+    return { data: rows, crossings: cross, yTicks: ticks };
   }, [points, pastCount, ghostValues, portfolioValues, milestones, todayLabel]);
 
   const xMax = Math.max(0, data.length - 1);
@@ -456,15 +465,10 @@ export const ProjectionChart = memo(function ProjectionChart({
 
   const isNarrow = containerWidth !== null && containerWidth < NARROW_CONTAINER;
   const labelWidthPx = isNarrow ? LABEL_WIDTH_NARROW : LABEL_WIDTH;
-  const yAxisWidth = useMemo(
-    () =>
-      yAxisWidthFor([
-        ...data.map((r) => r.rawValue),
-        ...(ghostValues ?? []),
-        ...(portfolioValues ?? []),
-      ]),
-    [data, ghostValues, portfolioValues]
-  );
+  const axisWidth = yAxisWidth(yTicks.map(formatMoneyTick), {
+    tickMargin: Y_TICK_MARGIN,
+    marginLeft: CHART_MARGIN.left,
+  });
 
   // Every crossing gets a label, all on one row at the same height. There is
   // deliberately no stagger and no drop: the milestone list is user-configured
@@ -511,7 +515,7 @@ export const ProjectionChart = memo(function ProjectionChart({
         <LineChart
           accessibilityLayer
           data={data}
-          margin={{ left: 10, right: 20, top: 30, bottom: 0 }}
+          margin={CHART_MARGIN}
           className={onSelectIndex ? "cursor-pointer" : undefined}
           onMouseMove={(state) => {
             const raw = state?.activeTooltipIndex;
@@ -552,8 +556,10 @@ export const ProjectionChart = memo(function ProjectionChart({
           <YAxis
             tickLine={false}
             axisLine={false}
-            tickMargin={8}
-            width={yAxisWidth}
+            tickMargin={Y_TICK_MARGIN}
+            width={axisWidth}
+            ticks={yTicks}
+            domain={[yTicks[0], yTicks[yTicks.length - 1]]}
             tickFormatter={formatMoneyTick}
           />
           <ReferenceLine

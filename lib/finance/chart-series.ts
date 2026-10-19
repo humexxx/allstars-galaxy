@@ -364,6 +364,11 @@ const DEBT_FREE_MONTH = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
+/** "Jan 2027": the payoff month, read in UTC like the projection that dated it. */
+export function formatDebtFreeMonth(date: Date): string {
+  return DEBT_FREE_MONTH.format(date);
+}
+
 /** "No debt" · "Debt-free" · "Debt-free in 4 mo · Jan 2027" · "Beyond horizon". */
 export function formatDebtFree(status: DebtFreeStatus): string {
   switch (status.kind) {
@@ -372,7 +377,7 @@ export function formatDebtFree(status: DebtFreeStatus): string {
     case "debt-free":
       return "Debt-free";
     case "on-track":
-      return `Debt-free in ${status.months} mo · ${DEBT_FREE_MONTH.format(status.date)}`;
+      return `Debt-free in ${status.months} mo · ${formatDebtFreeMonth(status.date)}`;
     case "beyond-horizon":
       return "Beyond horizon";
   }

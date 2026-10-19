@@ -28,7 +28,9 @@ function formatStatus(match: Match): string | null {
     case "aet":
       return "AET";
     case "pen":
-      return "PEN";
+      return match.penalties
+        ? `PEN ${match.penalties.home}–${match.penalties.away}`
+        : "PEN";
     case "live":
       return match.minute ? `${match.minute}'` : "Live";
     case "scheduled":
@@ -46,14 +48,16 @@ export function ScoreCard({ match, teams, hideStage = false, className }: ScoreC
   const away = teams.get(match.awayTeamId);
   if (!home || !away) return null;
 
-  const homeWon =
+  // Level after 120 minutes, the shoot-out decides who goes through.
+  const [homeFor, awayFor] =
     match.homeScore !== null &&
     match.awayScore !== null &&
-    match.homeScore > match.awayScore;
-  const awayWon =
-    match.homeScore !== null &&
-    match.awayScore !== null &&
-    match.awayScore > match.homeScore;
+    match.homeScore === match.awayScore &&
+    match.penalties
+      ? [match.penalties.home, match.penalties.away]
+      : [match.homeScore, match.awayScore];
+  const homeWon = homeFor !== null && awayFor !== null && homeFor > awayFor;
+  const awayWon = homeFor !== null && awayFor !== null && awayFor > homeFor;
   const isLive = match.status === "live";
   const scheduled = match.status === "scheduled";
   const status = formatStatus(match);

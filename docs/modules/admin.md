@@ -1,7 +1,7 @@
 # Admin
 
 > **Status:** Active
-> **Last reviewed:** 2026-10-01
+> **Last reviewed:** 2026-10-18
 
 ## Overview
 Admin-only operations: user management, transaction approval queue, and

@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils"
 type PageHeaderSkeletonProps = {
   /** How many action buttons sit on the right of the real header. */
   actions?: number
+  /** False for a header that is a title alone. */
+  description?: boolean
   /** Width class for the description line; pages differ in how long theirs runs. */
   descriptionWidth?: string
   /** Mirrors `PageHeader`'s `size`. */
@@ -19,6 +21,7 @@ type PageHeaderSkeletonProps = {
  */
 export function PageHeaderSkeleton({
   actions = 0,
+  description = true,
   descriptionWidth = "w-72",
   size = "default",
   back = false,
@@ -34,7 +37,7 @@ export function PageHeaderSkeleton({
               size === "compact" ? "h-7 sm:h-8" : "h-9 sm:h-10"
             )}
           />
-          <Skeleton className={cn("h-5 max-w-full", descriptionWidth)} />
+          {description && <Skeleton className={cn("h-5 max-w-full", descriptionWidth)} />}
         </div>
         {actions > 0 && (
           <div className="flex shrink-0 items-center gap-2">

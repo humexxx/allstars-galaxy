@@ -29,7 +29,6 @@ export default async function TravelPlannerPage() {
     <section className="flex flex-col gap-6">
       <PageHeader
         title="Travel Planner"
-        description="Plan your upcoming trips, attach links and prices, share with a private link."
         actions={
           <Button asChild>
             <Link href="/portal/entertainment/travel-planner/new">

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 import {
   Select,
@@ -13,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow } from "@/components/ui/typography";
 import { Card, CardContent } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
 import { TableCard } from "../shared/table-primitives";
 import type { FootballLeagueData, FootballLeagueId, Team } from "@/types/sports";
 
@@ -22,20 +24,23 @@ import { SportShell } from "../shared/sport-shell";
 import { StandingsTable } from "../shared/standings-table";
 
 type FootballViewProps = {
-  leagues: FootballLeagueData[];
+  league: FootballLeagueData;
+  options: ReadonlyArray<{ id: FootballLeagueId; name: string }>;
 };
 
 type TabKey = "overview" | "matches" | "table" | "knockout";
 
-export function FootballView({ leagues }: FootballViewProps) {
-  const [leagueId, setLeagueId] = useState<FootballLeagueId>(
-    leagues[0]?.league.id ?? "uefa-champions-league",
-  );
-
-  const league = useMemo(
-    () => leagues.find((l) => l.league.id === leagueId) ?? leagues[0],
-    [leagues, leagueId],
-  );
+/**
+ * One league, picked through the URL (`?league=`) rather than client state:
+ * the page fetches only the league on screen, so a refresh keeps it, Back
+ * returns to the last one, and a link can point at one.
+ */
+export function FootballView({ league, options }: FootballViewProps) {
+  const router = useRouter();
+  const [navigating, startNavigation] = useTransition();
+  // The pick shows at once; the league itself arrives with the navigation.
+  const [picked, setPicked] = useState<FootballLeagueId | null>(null);
+  const leagueId = league.league.id;
 
   const teamsMap = useMemo(
     () => new Map<string, Team>(league.teams.map((t) => [t.id, t])),
@@ -60,21 +65,30 @@ export function FootballView({ leagues }: FootballViewProps) {
         title={league.league.name}
         subtitle={`${league.league.region} · Season ${league.league.season}`}
         controls={
-          <Select
-            value={leagueId}
-            onValueChange={(v) => setLeagueId(v as FootballLeagueId)}
-          >
-            <SelectTrigger className="w-56" aria-label="League">
-              <SelectValue placeholder="League" />
-            </SelectTrigger>
-            <SelectContent>
-              {leagues.map((l) => (
-                <SelectItem key={l.league.id} value={l.league.id}>
-                  {l.league.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            {navigating && <Spinner />}
+            <Select
+              value={navigating && picked ? picked : leagueId}
+              onValueChange={(v) => {
+                const next = v as FootballLeagueId;
+                setPicked(next);
+                startNavigation(() =>
+                  router.push(`?sport=football&league=${next}`, { scroll: false })
+                );
+              }}
+            >
+              <SelectTrigger className="w-56" aria-label="League" aria-busy={navigating}>
+                <SelectValue placeholder="League" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         }
         tabs={
           <TabsList>

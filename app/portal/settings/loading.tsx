@@ -1,13 +1,11 @@
-import { PageHeaderSkeleton } from "@/components/skeletons/page-header-skeleton"
 import { PortalPageContainer } from "@/components/portal/page-container"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
-/** Mirrors the settings page: header, the category rail, then one pane. */
+/** Mirrors the settings page: the category rail, then one pane. */
 export default function SettingsLoading() {
   return (
     <PortalPageContainer>
-      <PageHeaderSkeleton descriptionWidth="w-80" />
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6" aria-hidden="true">
         <div className="flex gap-1.5 lg:w-52 lg:shrink-0 lg:flex-col">
           {Array.from({ length: 2 }).map((_, i) => (

@@ -56,7 +56,6 @@ export default async function RoadPathsPage({
     <>
       <PageHeader
         title="Road paths"
-        description="Track your long-term goals and progress."
         actions={roadPaths.length > 0 ? <CreateRoadPathDialog /> : undefined}
       />
       {roadPaths.length === 0 ? (

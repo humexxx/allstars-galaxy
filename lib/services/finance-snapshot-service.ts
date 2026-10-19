@@ -37,10 +37,12 @@ import {
 } from "@/lib/finance/period";
 import {
   deriveFinanceMood,
+  planStartDate,
   projectPlan,
   projectStateAt,
   type ProjectOptions,
 } from "@/lib/finance/projection";
+import { owedAfter, owedRepayments, type OwedRepayment } from "@/lib/finance/receivables";
 import { isoDay, monthKeyOf, parseIsoDay } from "@/lib/finance/schedule";
 import { calendarDayInTimeZone, earliestCalendarDay } from "@/lib/utils/date";
 import {
@@ -263,6 +265,23 @@ function viewOf(
   return { baseline, options: projectOptions, projection, today: todayState };
 }
 
+/** Every repayment of money owed to the user that the plan's lines schedule. */
+function planRepayments(plan: FinancePlanWithLines): OwedRepayment[] {
+  return owedRepayments(
+    { startMonth: new Date(plan.startMonth), incomes: plan.incomes, overrides: plan.overrides },
+    planStartDate(plan)
+  );
+}
+
+/**
+ * The day a plan's opening balances describe: its as-of day, or the day
+ * before it starts. A repayment dated on or before it is already cash.
+ */
+function openingDay(plan: FinancePlanWithLines): Date {
+  const dayBeforeStart = new Date(planStartDate(plan).getTime() - 24 * 60 * 60 * 1000);
+  return plan.asOf && plan.asOf.getTime() > dayBeforeStart.getTime() ? plan.asOf : dayBeforeStart;
+}
+
 /**
  * Projected position for a calendar date, from the calibrated plan.
  *
@@ -302,6 +321,7 @@ async function computeStateAt(
     );
     const savings = parseFloat(calibrated.initialSavings);
     const investments = parseFloat(calibrated.initialInvestments);
+    const receivables = owedAfter(planRepayments(calibrated), openingDay(calibrated));
     return {
       monthOffset: -1,
       date: targetDate,
@@ -321,7 +341,8 @@ async function computeStateAt(
       // The portfolio exists on day one too; leaving it out made the
       // confirmation-day snapshot drop a cliff the size of the portfolio.
       portfolioValue,
-      netWorth: savings + investments + portfolioValue - totalDebt,
+      receivables,
+      netWorth: savings + investments + portfolioValue + receivables - totalDebt,
       preAsOfCashFlow: 0,
       debts: calibrated.debts.map((d) => ({
         debtId: d.id,
@@ -501,7 +522,10 @@ async function createSnapshotForPlan(
       savings: state.savings.toFixed(2),
       investments: state.investments.toFixed(2),
       totalDebt: state.totalDebt.toFixed(2),
-      netWorth: state.netWorth.toFixed(2),
+      // Without money owed to the user: `getRecentMonthlySnapshots` adds it
+      // back from the plan's current lines, so history and forecast always
+      // count it the same way — including snapshots taken before it existed.
+      netWorth: (state.netWorth - state.receivables).toFixed(2),
       source,
     })
     .returning({ id: financePlanSnapshots.id });
@@ -543,6 +567,7 @@ export async function getRecentMonthlySnapshots(
   anchorDay: number = 1
 ): Promise<HistoryPoint[]> {
   await ensurePlanOwnership(planId, userId);
+  const plan = await getPlanWithLines(planId, userId);
 
   const rows = await db
     .select(HISTORY_COLUMNS)
@@ -555,7 +580,21 @@ export async function getRecentMonthlySnapshots(
     )
     .orderBy(desc(financePlanSnapshots.date));
 
-  return latestPerPeriod(rows, anchorDay);
+  return withReceivables(latestPerPeriod(rows, anchorDay), plan);
+}
+
+/**
+ * Snapshots store net worth without money owed to the user (see
+ * createSnapshotForPlan); this adds back what was still owed on each point's
+ * day, from the plan's current lines, so history and forecast agree.
+ */
+function withReceivables(
+  points: HistoryPoint[],
+  plan: FinancePlanWithLines | null
+): HistoryPoint[] {
+  const repayments = plan ? planRepayments(plan) : [];
+  if (repayments.length === 0) return points;
+  return points.map((p) => ({ ...p, netWorth: p.netWorth + owedAfter(repayments, p.date) }));
 }
 
 /** One recorded point of a plan's history, as the chart plots it. */
@@ -642,9 +681,12 @@ async function recentSnapshotsForPlans(
   return new Map(
     plans.map((p) => [
       p.id,
-      latestPerPeriod(
-        rows.filter((r) => r.planId === p.id),
-        p.confirmationDayOfMonth
+      withReceivables(
+        latestPerPeriod(
+          rows.filter((r) => r.planId === p.id),
+          p.confirmationDayOfMonth
+        ),
+        p
       ),
     ])
   );
@@ -830,6 +872,7 @@ export async function restateOpeningBalances(
     investments: parseFloat(baseline.initialInvestments),
     portfolioValue: 0,
     totalDebt: 0,
+    receivables: 0,
     netWorth: 0,
     debts: baseline.debts.map((d) => ({
       debtId: d.id,

@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 export default function RoadPathsLoading() {
   return (
     <>
-      <PageHeaderSkeleton actions={1} descriptionWidth="w-72" />
+      <PageHeaderSkeleton actions={1} description={false} />
       <div className="@container" aria-hidden="true">
       <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @4xl:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, ListOrdered, Minus } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
@@ -72,11 +72,6 @@ export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetVie
   const variant: DrawVariant = sport === "padel" ? "pair" : "player";
 
   const current = currentTournament(data.tournaments);
-  const currentDraw = useMemo(
-    (): DrawState => (current ? shippedDraw(current, data) : { status: "pending" }),
-    [current, data]
-  );
-
   const { draws, load } = useRacquetDraws(sport);
   // Which tournament the sheet shows outlives whether it is open, so the
   // sheet keeps its content while it slides away.
@@ -90,6 +85,18 @@ export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetVie
     if (!drawIsOut(t.status, t.startDate, today)) return { status: "pending" };
     return draws[drawKey(tourData.tour, t.id)] ?? { status: "loading" };
   };
+
+  // The feed ships the current draw when it can; when it could not (the
+  // provider failed that refresh), Current asks for it like the sheet does,
+  // instead of standing on an empty draw.
+  const currentKey = current ? drawKey(data.tour, current.id) : null;
+  const currentNeedsLoad =
+    current !== undefined && !current.bracket?.length && drawIsOut(current.status, current.startDate, today);
+  const currentKnown = currentKey ? draws[currentKey] : undefined;
+  useEffect(() => {
+    if (current && currentNeedsLoad && !currentKnown) load(data.tour, current.id);
+  }, [current, currentNeedsLoad, currentKnown, data.tour, load]);
+  const currentDraw: DrawState = current ? drawFor(current, data) : { status: "pending" };
 
   const openTournament = (id: string): void => {
     const t = findTournament(data, id);
@@ -137,6 +144,7 @@ export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetVie
             draw={currentDraw}
             variant={variant}
             onOpen={openTournament}
+            onRetry={() => current && load(data.tour, current.id)}
           />
         </TabsContent>
         <TabsContent value="tournaments">

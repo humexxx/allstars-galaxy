@@ -468,11 +468,13 @@ export function RacquetCurrent({
   draw,
   variant,
   onOpen,
+  onRetry,
 }: {
   tournament: RacquetTournament | undefined;
   draw: DrawState;
   variant: DrawVariant;
   onOpen: (id: string) => void;
+  onRetry?: () => void;
 }) {
   if (!t) {
     return (
@@ -516,7 +518,7 @@ export function RacquetCurrent({
       )}
       <Card size="sm">
         <CardContent>
-          <DrawBody tournament={t} state={draw} variant={variant} />
+          <DrawBody tournament={t} state={draw} variant={variant} onRetry={onRetry} />
         </CardContent>
       </Card>
     </div>

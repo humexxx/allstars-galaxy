@@ -368,15 +368,21 @@ describe("RacquetView, tennis", () => {
   };
   const tennis: TennisData = { atp, wta: { ...atp, tour: "wta", tournaments: [] } };
 
-  it("features the event being played, with last year's champion", () => {
+  it("features the event being played, with last year's champion", async () => {
+    vi.mocked(getRacquetDrawAction).mockResolvedValue({
+      success: true,
+      data: { tournamentId: "espn-vienna", rounds: [], players: [] },
+    });
     render(
       <SportsTodayProvider today="2026-10-19">
         <TennisView data={tennis} />
       </SportsTodayProvider>
     );
-    // Current opens on the tournament being played, not on last week's final.
+    // Current opens on the tournament being played, not on last week's final,
+    // and asks for its draw when the feed did not ship one.
     expect(screen.getByRole("heading", { name: "Erste Bank Open" })).toBeInTheDocument();
-    expect(screen.getByText("The draw has not been published")).toBeInTheDocument();
+    expect(await screen.findByText("The draw has not been published")).toBeInTheDocument();
+    expect(getRacquetDrawAction).toHaveBeenCalledTimes(1);
     openTab("Tournaments");
     expect(screen.getByText("On now")).toBeInTheDocument();
     expect(screen.getByText("defends the title", { exact: false })).toBeInTheDocument();

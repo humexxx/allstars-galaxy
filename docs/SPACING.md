@@ -88,7 +88,8 @@ Never fork the padding string — change the width, not the gutters.
 
 ## App-shell offsets (header + sidebar)
 
-These three values are coupled — change one, change the others:
+The header height, the sidebar's top offset and its top breathing are coupled —
+change one, change the others (the separator's `top-18` follows the breathing):
 
 | Piece | Value | Where |
 | --- | --- | --- |
@@ -97,9 +98,15 @@ These three values are coupled — change one, change the others:
 | Sidebar content top breathing | `pt-18` (72px) | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
 | Sidebar left inset | `px-2` (8px) | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
 | Sidebar nav row height / gap | `h-8` / `gap-0.5` | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
+| Sidebar width | `--sidebar-width: 12rem` (192px; shadcn's default is 16rem) | [`app/portal/layout.tsx`](../app/portal/layout.tsx) |
+| Sidebar separator | 1px `bg-sidebar-border` hairline, `top-18` to `bottom-6` | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
 
-The header has **no bottom border** and the sidebar has **no right border** — the
-shell reads as one flat surface (the shadcn-docs look), separated only by space.
+The header has **no bottom border** — the shell reads as one flat surface (the
+shadcn-docs look). The sidebar is set off by a **hairline that starts where the
+nav does** (`top-18`, the content's top breathing) and stops short of the bottom:
+a rule beside the links, not a wall from the header down. The sidebar is 12rem
+because the labels are short and every rem it gives back pulls each page's
+centred column towards the middle of the window.
 The `h-[calc(...)]` on the sidebar is the one sanctioned arbitrary value: it's a
 computed height, not a spacing step.
 

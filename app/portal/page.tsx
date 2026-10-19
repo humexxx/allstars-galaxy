@@ -34,9 +34,9 @@ export default async function PortalPage() {
         {/* Two columns. Finance and travel span both; each favourite sport gets
             a card at half the row — one sport among several, not a banner. */}
         {/* Two columns once the content itself is wide enough, not the
-            viewport: at 768px the sidebar leaves ~470px, and two sport cards
-            side by side were 230px each. At 1024px it leaves ~672px, less a
-            Windows scrollbar, so the step sits below that (`@xl`, 576px). */}
+            viewport: at 768px the sidebar leaves 512px, too little for two
+            sport cards side by side. At 1024px it leaves ~736px, less a
+            Windows scrollbar, so the step sits between (`@xl`, 576px). */}
         <div className="grid auto-rows-min gap-4 @xl:grid-cols-2">
           <Suspense fallback={<DashboardCardSkeleton rail={5} />}>
             <DashboardFinanceCard userId={userId} />

@@ -34,7 +34,13 @@ export default async function PortalLayout({
 
   return (
     <ReaderTimeZoneProvider timeZone={timeZone}>
-      <SidebarProvider defaultOpen={true}>
+      {/* 12rem, not shadcn's 16rem: the labels are short, and every rem the
+          sidebar gives back pulls the page's centred column towards the
+          middle of the window. */}
+      <SidebarProvider
+        defaultOpen={true}
+        style={{ "--sidebar-width": "12rem" } as React.CSSProperties}
+      >
         <DevToolsProvider>
           {/* On a phone the DOCUMENT scrolls, so the browser's own pull-to-refresh
             works — it only fires when the root scroller is overscrolled at the

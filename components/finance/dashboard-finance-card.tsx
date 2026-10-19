@@ -154,7 +154,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
         </CardAction>
       </CardHeader>
       {/* Laid out on the card's width, not the viewport's: from `md` the
-          sidebar takes 256px, so this card is narrower at 800px than at 700px.
+          sidebar takes 192px, so this card is narrower at 800px than at 700px.
           Wide, the chart fills the left and the figures stack in a rail on the
           right; narrow, net worth heads the chart it plots and the breakdown
           follows. */}

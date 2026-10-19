@@ -56,8 +56,8 @@ export function SettingsShell({ preferences }: { preferences: UserPreferences })
     // Real tabs: the rail switches a panel in place, it does not navigate, so
     // `aria-current="page"` was the wrong thing to say. A vertical rail from
     // lg up (System Settings); a horizontal scroll rail below that. From `md`
-    // the app sidebar already takes 256px, and a second 208px rail beside it
-    // left the pane a 220px column with its descriptions six lines deep.
+    // the app sidebar already takes 192px, and a second 208px rail beside it
+    // left the pane a narrow column with its descriptions six lines deep.
     <Tabs
       value={activeId}
       onValueChange={setActiveId}

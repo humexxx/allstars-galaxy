@@ -37,9 +37,9 @@ export function RoadPathDetail({ detail, timeZone }: RoadPathDetailProps) {
 
   return (
     // Sized by the room the page actually has, not the viewport: from `md`
-    // the sidebar takes 256px, and the viewport breakpoints split a 456px
-    // column into three stat cards and two 216px panels — a progress note
-    // wrapped one letter per line.
+    // the sidebar takes 192px, and viewport breakpoints split what was left
+    // into three stat cards and two narrow panels — a progress note wrapped
+    // one letter per line.
     <div className="@container flex flex-col gap-6">
       <div className="grid grid-cols-1 gap-4 @xl:grid-cols-3">
         <StatCard

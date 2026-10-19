@@ -7,11 +7,13 @@ import type {
   BracketRound,
   BracketRoundId,
   FormResult,
+  LolChampion,
   LolData,
   LolMatch,
   LolRegion,
   LolSplit,
   LolStanding,
+  LolUpcoming,
   MatchStatus,
   SwissExit,
   SwissPool,
@@ -30,9 +32,9 @@ const REVALIDATE_SECONDS = 300;
 type TargetLeague = { slug: string; region: LolRegion; international?: boolean };
 
 /**
- * International events first: while one is on it is the only LoL anyone is
- * watching, and the regional splits behind it are weeks old. Worlds was not on
- * the list at all, so October showed September's finals.
+ * The leagues on the strip. Worlds was not on it at all, so October showed
+ * September's finals. Which one leads is `orderSplits`' call; this order only
+ * breaks its ties.
  */
 const TARGET_LEAGUES: TargetLeague[] = [
   { slug: "worlds", region: "worlds", international: true },
@@ -44,8 +46,8 @@ const TARGET_LEAGUES: TargetLeague[] = [
   { slug: "lpl", region: "lpl" },
 ];
 
-/** How long an international event stays on the strip after its final. */
-const INTERNATIONAL_GRACE_DAYS = 21;
+/** How many pages of a league's schedule to read looking for its tournament. */
+const SCHEDULE_PAGES = 3;
 
 /**
  * Lolesports draws its logos for a dark background, so every logo sits on
@@ -76,6 +78,12 @@ type LolesportsTournament = {
   slug: string;
   startDate: string;
   endDate: string;
+};
+
+/** A league's tournament on now (or last played), and the next one it lists. */
+type LeagueTournaments = {
+  current: LolesportsTournament | null;
+  next: LolesportsTournament | null;
 };
 
 type LolesportsTeamRef = {
@@ -132,6 +140,11 @@ type LolesportsStage = {
 
 type LolesportsStandingsEntry = { stages: LolesportsStage[] };
 
+type LolesportsSchedulePage = {
+  pages?: { older?: string | null; newer?: string | null };
+  events: LolesportsEvent[];
+};
+
 async function fetchLolesports<T>(path: string): Promise<T> {
   const url = `${LOLESPORTS_BASE_URL}${path}${path.includes("?") ? "&" : "?"}hl=en-US`;
   const res = await fetch(url, {
@@ -168,6 +181,10 @@ function toMatchStatus(state: LolesportsEvent["state"]): MatchStatus {
   return "scheduled";
 }
 
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 /**
  * Pick the tournament that's currently happening; if none, the most recently
  * ended one. Never pick a future tournament — those exist in the API (e.g.
@@ -175,7 +192,7 @@ function toMatchStatus(state: LolesportsEvent["state"]): MatchStatus {
  */
 function pickActiveTournament(
   tournaments: LolesportsTournament[],
-  today = new Date().toISOString().slice(0, 10),
+  today = todayIso(),
 ): LolesportsTournament | null {
   if (tournaments.length === 0) return null;
   const active = tournaments.find(
@@ -188,6 +205,18 @@ function pickActiveTournament(
       (a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime(),
     );
   return past[0] ?? null;
+}
+
+/** The soonest tournament that has not started yet. */
+function pickNextTournament(
+  tournaments: LolesportsTournament[],
+  today = todayIso(),
+): LolesportsTournament | null {
+  return (
+    tournaments
+      .filter((t) => t.startDate > today)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ?? null
+  );
 }
 
 function deriveFormFromMatches(
@@ -215,25 +244,34 @@ function deriveFormFromMatches(
   });
 }
 
-/** On now, or finished recently enough that its results are still news. */
+/**
+ * Whether an international event is still the one to show: from its start
+ * until the first regional tournament that starts after its final is under
+ * way. Nothing else is played in between, and a fixed three weeks of grace
+ * had December falling back to LEC's September final. With no regional
+ * tournament listed after it yet, it stays.
+ *
+ * `regionalStarts` are the start days of the regional tournaments on now or
+ * last played: one that started after the final has begun by definition.
+ */
 function isCurrentEvent(
   tournament: LolesportsTournament | null,
-  today = new Date().toISOString().slice(0, 10),
+  regionalStarts: string[],
+  today = todayIso(),
 ): tournament is LolesportsTournament {
   if (!tournament || tournament.startDate > today) return false;
-  const until = new Date(`${tournament.endDate}T00:00:00Z`);
-  until.setUTCDate(until.getUTCDate() + INTERNATIONAL_GRACE_DAYS);
-  return today <= until.toISOString().slice(0, 10);
+  return !regionalStarts.some((start) => start > tournament.endDate && start <= today);
 }
 
-async function getCurrentTournament(
-  leagueId: string,
-): Promise<LolesportsTournament | null> {
+async function getLeagueTournaments(leagueId: string, today: string): Promise<LeagueTournaments> {
   const data = await fetchLolesports<{
     data: { leagues: Array<{ tournaments: LolesportsTournament[] }> };
   }>(`/getTournamentsForLeague?leagueId=${leagueId}`);
   const tournaments = data.data.leagues[0]?.tournaments ?? [];
-  return pickActiveTournament(tournaments);
+  return {
+    current: pickActiveTournament(tournaments, today),
+    next: pickNextTournament(tournaments, today),
+  };
 }
 
 const REGULAR_STAGE_SLUGS = new Set([
@@ -414,6 +452,25 @@ function toBracketMatch(
     awayScore: hasScore ? awayWins : null,
     winnerTeamId: winnerCode ? teamIdFromCode(winnerCode) : null,
   };
+}
+
+const FINAL_ROUND = /^(grand )?finals?$/i;
+
+/**
+ * Who won the round named "Finals". Not the bracket's last round: LPL plays
+ * a "Regional Qualifier" after its final, whose winner (IG) was not the
+ * champion (AL).
+ *
+ * A bracket match names whoever leads as its winner, so a final at 1–0 would
+ * crown somebody mid-series: the winner must have taken the majority of its
+ * best-of, a best-of-five when the schedule never said.
+ */
+function findChampion(playoffs: BracketRound[] | undefined): LolChampion | null {
+  const final = playoffs?.find((round) => FINAL_ROUND.test(round.label.trim()))?.matches.at(-1);
+  if (!final?.winnerTeamId) return null;
+  const wins = final.winnerTeamId === final.homeTeamId ? final.homeScore : final.awayScore;
+  if ((wins ?? 0) < Math.ceil((final.bestOf ?? 5) / 2)) return null;
+  return { teamId: final.winnerTeamId, final };
 }
 
 type PlayoffSection = { name: string | null; matches: LolesportsStandingsMatch[] };
@@ -694,6 +751,79 @@ function withinTournament(
   return shiftDay(tournament.startDate, -1) <= day && day <= shiftDay(tournament.endDate, 1);
 }
 
+async function fetchSchedulePage(
+  leagueId: string,
+  pageToken?: string,
+): Promise<LolesportsSchedulePage> {
+  const page = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "";
+  const data = await fetchLolesports<{ data: { schedule: LolesportsSchedulePage } }>(
+    `/getSchedule?leagueId=${leagueId}${page}`,
+  );
+  return data.data.schedule;
+}
+
+/**
+ * The tournament's events: off the league's schedule, or failing that its
+ * completed events, so a split with standings always has its matches too.
+ */
+async function getTournamentEvents(
+  leagueId: string,
+  tournament: LolesportsTournament | null,
+): Promise<LolesportsEvent[]> {
+  const scheduled = await findInSchedule(leagueId, tournament);
+  if (scheduled.length > 0 || !tournament) return scheduled;
+  // Lolesports lists only the matches with a VOD here (four of LPL's split 3
+  // 2026, none of its final), so it is the last resort, not the source.
+  return getCompletedEvents(tournament.id).catch((err: unknown) => {
+    console.warn(`Lolesports completed events failed for ${tournament.slug}:`, err);
+    return [];
+  });
+}
+
+/** Every completed event of a tournament. They come without a type or state. */
+async function getCompletedEvents(tournamentId: string): Promise<LolesportsEvent[]> {
+  const data = await fetchLolesports<{
+    data: { schedule: { events: Omit<LolesportsEvent, "type" | "state">[] } };
+  }>(`/getCompletedEvents?tournamentId=${tournamentId}`);
+  return data.data.schedule.events.map((e) => ({ ...e, type: "match", state: "completed" }));
+}
+
+/**
+ * The tournament's events off the league's schedule.
+ *
+ * The first page is the league's newest. Once next season is scheduled it can
+ * hold nothing but next season, and the split on screen — the one that last
+ * ended — kept its standings and lost every match. So while a page has none of
+ * the tournament and starts after it ended, the page before it is read too.
+ */
+async function findInSchedule(
+  leagueId: string,
+  tournament: LolesportsTournament | null,
+): Promise<LolesportsEvent[]> {
+  let page = await fetchSchedulePage(leagueId);
+  for (let read = 1; ; read++) {
+    const events = page.events.filter((e) => withinTournament(e.startTime, tournament));
+    if (events.length > 0 || !tournament || read >= SCHEDULE_PAGES) return events;
+    const earliest = page.events.reduce<string | null>(
+      (min, e) => (min === null || e.startTime < min ? e.startTime : min),
+      null,
+    );
+    // A page that reaches back past the tournament without any of it means
+    // there is none of it to find.
+    if (!earliest || earliest.slice(0, 10) <= tournament.endDate || !page.pages?.older) {
+      return events;
+    }
+    // An older page that fails ends the search, not the split: the completed
+    // events stand in, and the standings and bracket stand regardless.
+    const older = await fetchSchedulePage(leagueId, page.pages.older).catch((err: unknown) => {
+      console.warn(`Lolesports older schedule page failed for ${leagueId}:`, err);
+      return null;
+    });
+    if (!older) return events;
+    page = older;
+  }
+}
+
 async function getSchedule(
   leagueId: string,
   tournament: LolesportsTournament | null,
@@ -703,18 +833,15 @@ async function getSchedule(
   blockByMatchId: Map<string, string>;
   scheduleByMatchId: Map<string, ScheduledMatch>;
 }> {
-  const data = await fetchLolesports<{
-    data: { schedule: { events: LolesportsEvent[] } };
-  }>(`/getSchedule?leagueId=${leagueId}`);
+  const events = await getTournamentEvents(leagueId, tournament);
 
   const teamsMap = new Map<string, Team>();
   const matches: LolMatch[] = [];
   const blockByMatchId = new Map<string, string>();
   const scheduleByMatchId = new Map<string, ScheduledMatch>();
 
-  for (const event of data.data.schedule.events) {
+  for (const event of events) {
     if (event.type !== "match" || !event.match) continue;
-    if (!withinTournament(event.startTime, tournament)) continue;
     if (event.blockName) blockByMatchId.set(event.match.id, event.blockName);
     scheduleByMatchId.set(event.match.id, {
       date: event.startTime,
@@ -772,15 +899,27 @@ function prettifyTournamentSlug(slug: string): string {
     .join(" ");
 }
 
+function seasonOf(tournament: LolesportsTournament | null): string {
+  return tournament?.startDate.slice(0, 4) ?? String(new Date().getFullYear());
+}
+
+/** "Worlds 2026", "LEC Split 3". */
+function tournamentName(
+  target: TargetLeague,
+  league: LolesportsLeague,
+  tournament: LolesportsTournament | null,
+): string {
+  if (target.international) return `${league.name} ${seasonOf(tournament)}`;
+  return tournament
+    ? `${target.slug.toUpperCase()} ${prettifyTournamentSlug(tournament.slug)}`
+    : `${target.slug.toUpperCase()} ${seasonOf(tournament)}`;
+}
+
 async function fetchSplit(
   target: TargetLeague,
   league: LolesportsLeague,
-): Promise<LolSplit | null> {
-  const tournament = await getCurrentTournament(league.id);
-  // An international event is only worth a slot while it is on or just over;
-  // the rest of the year it would be last season's results under this year.
-  if (target.international && !isCurrentEvent(tournament)) return null;
-
+  tournament: LolesportsTournament | null,
+): Promise<LolSplit> {
   const noStandings = {
     teams: [] as Team[],
     standings: [] as LolStanding[],
@@ -816,47 +955,104 @@ async function fetchSplit(
     form: deriveFormFromMatches(scheduleRes.matches, row.teamId),
   }));
 
-  const seasonYear = tournament?.startDate.slice(0, 4) ?? String(new Date().getFullYear());
-  const splitName = target.international
-    ? `${league.name} ${seasonYear}`
-    : tournament
-      ? `${target.slug.toUpperCase()} ${prettifyTournamentSlug(tournament.slug)}`
-      : `${target.slug.toUpperCase()} ${seasonYear}`;
+  const champion = findChampion(playoffs);
 
   return {
     region: target.region,
-    name: splitName,
-    season: seasonYear,
+    name: tournamentName(target, league, tournament),
+    season: seasonOf(tournament),
+    ...(target.international ? { international: true } : {}),
     teams,
     standings: standingsWithForm,
     matches: scheduleRes.matches.slice(0, 24),
     ...(swiss ? { swiss } : {}),
     playoffs,
+    ...(champion ? { champion } : {}),
   };
 }
 
+type FetchedSplit = { split: LolSplit; tournament: LolesportsTournament | null };
+
+/**
+ * The current international event, then the regional splits being played
+ * today, then the rest by how recently they ended. The dashboard card shows
+ * the first: in a fixed league order it would have kept LEC's September final
+ * up after LCK and LPL had started the new season.
+ */
+function orderSplits(fetched: FetchedSplit[], today = todayIso()): LolSplit[] {
+  const rank = ({ split, tournament }: FetchedSplit): number => {
+    if (split.international) return 0;
+    if (tournament && tournament.startDate <= today && today <= tournament.endDate) return 1;
+    return 2;
+  };
+  return [...fetched]
+    .sort(
+      (a, b) =>
+        rank(a) - rank(b) ||
+        (rank(a) === 2
+          ? (b.tournament?.endDate ?? "").localeCompare(a.tournament?.endDate ?? "")
+          : 0),
+    )
+    .map(({ split }) => split);
+}
+
 async function fetchLolDataFromApi(): Promise<LolData> {
+  const today = todayIso();
   // One leagues list for every target; it was being fetched once per region.
   const leagues = await fetchLolesports<{ data: { leagues: LolesportsLeague[] } }>(
     "/getLeagues",
   );
-  const splits = await Promise.all(
-    TARGET_LEAGUES.map((target) => {
-      const league = leagues.data.leagues.find(
-        (l) => l.slug.toLowerCase() === target.slug,
-      );
-      if (!league) return null;
-      return fetchSplit(target, league).catch((err) => {
+  const targets = TARGET_LEAGUES.flatMap((target) => {
+    const league = leagues.data.leagues.find((l) => l.slug.toLowerCase() === target.slug);
+    return league ? [{ target, league }] : [];
+  });
+  // Every league's tournaments before any split: whether an international
+  // event is still the one to show depends on when the regional ones start.
+  const listed = (
+    await Promise.all(
+      targets.map(({ target, league }) =>
+        getLeagueTournaments(league.id, today).then(
+          (tournaments) => ({ target, league, ...tournaments }),
+          (err: unknown) => {
+            console.warn(`Lolesports fetch failed for ${target.slug}:`, err);
+            return null;
+          },
+        ),
+      ),
+    )
+  ).filter((l) => l !== null);
+  const regionalStarts = listed.flatMap((l) =>
+    !l.target.international && l.current ? [l.current.startDate] : [],
+  );
+
+  const fetched = await Promise.all(
+    listed.map(async ({ target, league, current }): Promise<FetchedSplit | null> => {
+      // Out of season an international event would be last year's results
+      // under this year's name.
+      if (target.international && !isCurrentEvent(current, regionalStarts, today)) return null;
+      try {
+        return { split: await fetchSplit(target, league, current), tournament: current };
+      } catch (err) {
         console.warn(`Lolesports fetch failed for ${target.slug}:`, err);
         return null;
-      });
+      }
     }),
   );
-  const live = splits.filter((s): s is LolSplit => s !== null && s.teams.length > 0);
+  const live = fetched.filter(
+    (f): f is FetchedSplit => f !== null && f.split.teams.length > 0,
+  );
   if (live.length === 0) {
     throw new Error("Lolesports returned no splits");
   }
-  return { splits: live };
+
+  const upcoming = listed
+    .flatMap(({ target, league, next }): LolUpcoming[] =>
+      next
+        ? [{ region: target.region, name: tournamentName(target, league, next), startDate: next.startDate }]
+        : [],
+    )
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  return { splits: orderSplits(live, today), upcoming };
 }
 
 export const getLolData = cachedFeed(
@@ -871,9 +1067,12 @@ export const getLolData = cachedFeed(
 export const __testing = {
   buildLolBracket,
   buildSwissStage,
+  findChampion,
   isBracketStage,
   isCurrentEvent,
+  orderSplits,
   pickActiveTournament,
+  pickNextTournament,
   toTeam,
   withinTournament,
 };

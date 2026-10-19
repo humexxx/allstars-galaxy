@@ -497,20 +497,43 @@ export type SwissStage = {
   exits: SwissExit[];
 };
 
+/** Who won a split's final, read off the round named "Finals". */
+export type LolChampion = {
+  teamId: string;
+  /** The final itself, from the bracket: the score, the day, the format. */
+  final: BracketMatch;
+};
+
+/** A league's next tournament, once Lolesports lists it. */
+export type LolUpcoming = {
+  region: LolRegion;
+  /** "LCK Split 1", "First Stand 2027". */
+  name: string;
+  /** `YYYY-MM-DD`, a calendar day. */
+  startDate: string;
+};
+
 export type LolSplit = {
   region: LolRegion;
   name: string;
   season: string;
+  /** Worlds, MSI or First Stand rather than a regional league. */
+  international?: boolean;
   teams: Team[];
   standings: LolStanding[];
   matches: LolMatch[];
   /** Worlds' Swiss stage, between the play-ins and the knockouts. */
   swiss?: SwissStage;
   playoffs?: BracketRound[];
+  /** Once the final is decided. */
+  champion?: LolChampion;
 };
 
 export type LolData = {
+  /** The current international event, the splits on today, then the rest by end date. */
   splits: LolSplit[];
+  /** Each league's next tournament, soonest first. */
+  upcoming?: LolUpcoming[];
 };
 
 // ---------- F1 standings (ESPN) ----------

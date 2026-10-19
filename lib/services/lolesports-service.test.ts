@@ -1,13 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { __testing } from "./lolesports-service";
+import type { LolData, LolRegion, LolSplit } from "@/types/sports";
+
+import { fakeLolesports, type FakeLolesportsOptions } from "./__fixtures__/lolesports";
+import { __testing, getLolData } from "./lolesports-service";
 
 const {
   buildLolBracket,
   buildSwissStage,
+  findChampion,
   isBracketStage,
   isCurrentEvent,
+  orderSplits,
   pickActiveTournament,
+  pickNextTournament,
   toTeam,
   withinTournament,
 } = __testing;
@@ -122,19 +128,132 @@ describe("isBracketStage", () => {
 
 describe("isCurrentEvent", () => {
   const worlds = { id: "w", slug: "worlds_2026", startDate: "2026-10-15", endDate: "2026-11-15" };
+  // The splits on now or last played: 2026's, then LCK's and LPL's 2027 ones.
+  const season2026 = ["2026-07-23", "2026-07-25", "2026-07-28", "2026-07-21"];
+  const lck2027Live = ["2026-07-23", "2026-07-25", "2027-01-13", "2027-01-13"];
 
   it("shows an international event while it is on", () => {
-    expect(isCurrentEvent(worlds, "2026-10-18")).toBe(true);
+    expect(isCurrentEvent(worlds, season2026, "2026-10-18")).toBe(true);
   });
 
-  it("keeps it for three weeks after the final, then lets it go", () => {
-    expect(isCurrentEvent(worlds, "2026-12-06")).toBe(true);
-    expect(isCurrentEvent(worlds, "2026-12-07")).toBe(false);
+  it("keeps it after the final, however long, until a regional split starts after it", () => {
+    expect(isCurrentEvent(worlds, season2026, "2026-11-20")).toBe(true);
+    // The old 21-day grace let it go on December 7.
+    expect(isCurrentEvent(worlds, season2026, "2026-12-10")).toBe(true);
+    expect(isCurrentEvent(worlds, season2026, "2027-01-05")).toBe(true);
+  });
+
+  it("lets it go the day the first regional split after it begins", () => {
+    expect(isCurrentEvent(worlds, lck2027Live, "2027-01-12")).toBe(true);
+    expect(isCurrentEvent(worlds, lck2027Live, "2027-01-13")).toBe(false);
+  });
+
+  it("counts only a split that starts after the final", () => {
+    // MSI 2026 ended July 12; LPL's split 3 began on the 21st.
+    const msi = { id: "m", slug: "msi_2026", startDate: "2026-06-27", endDate: "2026-07-12" };
+    expect(isCurrentEvent(msi, ["2026-03-31"], "2026-07-15")).toBe(true);
+    expect(isCurrentEvent(msi, season2026, "2026-10-18")).toBe(false);
   });
 
   it("never shows one that has not started", () => {
-    expect(isCurrentEvent(worlds, "2026-10-14")).toBe(false);
-    expect(isCurrentEvent(null, "2026-10-18")).toBe(false);
+    expect(isCurrentEvent(worlds, season2026, "2026-10-14")).toBe(false);
+    expect(isCurrentEvent(null, season2026, "2026-10-18")).toBe(false);
+  });
+});
+
+describe("pickNextTournament", () => {
+  const lec = [
+    { id: "3", slug: "lec_split_3_2026", startDate: "2026-07-23", endDate: "2026-09-20" },
+    { id: "5", slug: "lec_split_2_2027", startDate: "2027-03-27", endDate: "2027-06-07" },
+    { id: "4", slug: "lec_split_1_2027", startDate: "2027-01-16", endDate: "2027-03-01" },
+  ];
+
+  it("is the soonest tournament that has not started", () => {
+    expect(pickNextTournament(lec, "2027-01-05")?.slug).toBe("lec_split_1_2027");
+  });
+
+  it("is nothing once the last one listed has started", () => {
+    expect(pickNextTournament(lec, "2027-04-01")).toBeNull();
+  });
+});
+
+describe("findChampion", () => {
+  const round = (label: string, ...matches: ReturnType<typeof tie>[]) => ({ label, matches });
+  const rounds = (...list: ReturnType<typeof round>[]) =>
+    buildLolBracket(
+      list.map((r) => ({ name: r.label, matches: r.matches })),
+      new Map(list.flatMap((r) => r.matches.map((m) => [m.id, r.label] as const)))
+    );
+
+  it("reads the winner of the round named Finals, not of the last round", () => {
+    // LPL Split 3 2026: AL won the final; IG won the Regional Qualifier after it.
+    const lpl = rounds(
+      round("Playoffs", tie("p", "IG", "AL", [2, 3])),
+      round("Finals", tie("f", "AL", "BLG", [3, 1])),
+      round("Regional Qualifier", tie("rq", "JDG", "IG", [1, 3]))
+    );
+    expect(findChampion(lpl)).toMatchObject({
+      teamId: "al",
+      final: { homeTeamId: "al", awayTeamId: "blg", homeScore: 3, awayScore: 1 },
+    });
+  });
+
+  it("crowns nobody while the final is still being played", () => {
+    const live = (score: [number, number], bestOf?: 1 | 3 | 5) =>
+      findChampion(
+        buildLolBracket(
+          [{ name: "Finals", matches: [tie("f", "T1", "GEN", score)] }],
+          new Map(),
+          bestOf ? new Map([["f", { date: "2026-11-14T19:00:00Z", bestOf }]]) : new Map()
+        )
+      );
+    // T1 lead the best-of-five 2–1: that is not a title.
+    expect(live([2, 1], 5)).toBeNull();
+    expect(live([3, 1], 5)?.teamId).toBe("t1");
+    // Without the schedule, a final is a best-of-five.
+    expect(live([2, 0])).toBeNull();
+    expect(live([3, 2])?.teamId).toBe("t1");
+    expect(live([2, 0], 3)?.teamId).toBe("t1");
+  });
+
+  it("is nobody until the final is decided, or without a round named Finals", () => {
+    expect(findChampion(rounds(round("Finals", tie("f", "TBD", "TBD"))))).toBeNull();
+    expect(findChampion(rounds(round("Playoffs", tie("p", "GEN", "HLE", [3, 1]))))).toBeNull();
+    expect(findChampion(undefined)).toBeNull();
+  });
+});
+
+describe("orderSplits", () => {
+  const split = (region: LolRegion, international?: boolean) =>
+    ({ region, international, name: region, season: "2026", teams: [], standings: [], matches: [] }) as LolSplit;
+  const tournament = (startDate: string, endDate: string) => ({ id: startDate, slug: "t", startDate, endDate });
+  const regions = (splits: LolSplit[]) => splits.map((s) => s.region);
+
+  it("leads with the international event, then the rest by how recently they ended", () => {
+    const ordered = orderSplits(
+      [
+        { split: split("worlds", true), tournament: tournament("2026-10-15", "2026-11-15") },
+        { split: split("lec"), tournament: tournament("2026-07-23", "2026-09-20") },
+        { split: split("lcs"), tournament: tournament("2026-07-25", "2026-10-05") },
+        { split: split("lck"), tournament: tournament("2026-07-28", "2026-09-13") },
+        { split: split("lpl"), tournament: tournament("2026-07-21", "2026-09-19") },
+      ],
+      "2026-11-20"
+    );
+    expect(regions(ordered)).toEqual(["worlds", "lcs", "lec", "lpl", "lck"]);
+  });
+
+  it("puts the splits being played today ahead of the finished ones", () => {
+    const ordered = orderSplits(
+      [
+        { split: split("lec"), tournament: tournament("2026-07-23", "2026-09-20") },
+        { split: split("lcs"), tournament: tournament("2026-07-25", "2026-10-05") },
+        { split: split("lck"), tournament: tournament("2027-01-13", "2027-03-01") },
+        { split: split("lpl"), tournament: tournament("2027-01-13", "2027-03-08") },
+      ],
+      "2027-01-14"
+    );
+    expect(regions(ordered)).toEqual(["lck", "lpl", "lcs", "lec"]);
   });
 });
 
@@ -261,5 +380,129 @@ describe("buildSwissStage", () => {
   it("draws nothing for a stage that is not a Swiss one", () => {
     expect(buildSwissStage([])).toBeNull();
     expect(buildSwissStage(worlds2025.slice(0, 7))).toBeNull();
+  });
+});
+
+describe("getLolData across the end of a season", () => {
+  async function lolDataOn(now: string, options?: FakeLolesportsOptions): Promise<LolData> {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(now));
+    vi.stubGlobal("fetch", vi.fn(fakeLolesports(now, options)));
+    return getLolData();
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new Error("fetch is disabled in unit tests")))
+    );
+  });
+
+  const regions = (data: LolData) => data.splits.map((s) => s.region);
+  const split = (data: LolData, region: LolRegion) => data.splits.find((s) => s.region === region)!;
+  const champions = (data: LolData) =>
+    Object.fromEntries(data.splits.map((s) => [s.region, s.champion?.teamId ?? null]));
+
+  it("leads with Worlds during its Swiss stage, the splits behind it by end date", async () => {
+    const data = await lolDataOn("2026-10-23T23:00:00Z");
+
+    expect(regions(data)).toEqual(["worlds", "lcs", "lec", "lpl", "lck"]);
+    const worlds = split(data, "worlds");
+    expect(worlds).toMatchObject({ name: "Worlds 2026", international: true });
+    expect(worlds.champion).toBeUndefined();
+    expect(worlds.swiss?.rounds[0][0].matches.filter((m) => m.status === "ft")).toHaveLength(4);
+    expect(data.upcoming).toEqual([]);
+  });
+
+  it("keeps a finished Worlds first, with its champion and each region's", async () => {
+    const data = await lolDataOn("2026-11-20T12:00:00Z");
+
+    expect(regions(data)[0]).toBe("worlds");
+    // LPL's last round is its Regional Qualifier, which IG won.
+    expect(champions(data)).toEqual({ worlds: "t1", lcs: "tlaw", lec: "g2", lpl: "al", lck: "gen" });
+    expect(split(data, "worlds").champion?.final).toMatchObject({
+      homeTeamId: "t1",
+      awayTeamId: "gen",
+      homeScore: 3,
+      awayScore: 2,
+      date: "2026-11-14T19:00:00Z",
+      bestOf: 5,
+    });
+  });
+
+  it("still leads with Worlds in December, when the old three weeks were up", async () => {
+    const data = await lolDataOn("2026-12-10T12:00:00Z");
+
+    expect(regions(data)[0]).toBe("worlds");
+    expect(data.upcoming).toEqual([]);
+  });
+
+  it("lists next season's splits once they are scheduled, and keeps the last ones' matches", async () => {
+    const data = await lolDataOn("2027-01-05T12:00:00Z");
+
+    expect(regions(data)[0]).toBe("worlds");
+    expect(data.upcoming).toEqual([
+      { region: "lck", name: "LCK Split 1", startDate: "2027-01-13" },
+      { region: "lpl", name: "LPL Split 1", startDate: "2027-01-13" },
+      { region: "lec", name: "LEC Split 1", startDate: "2027-01-16" },
+      { region: "lcs", name: "LCS Split 1", startDate: "2027-01-24" },
+    ]);
+    // LEC's newest schedule page is all 2027; its split 3 matches are a page back.
+    const lec = split(data, "lec");
+    expect(lec.name).toBe("LEC Split 3");
+    expect(lec.standings.length).toBeGreaterThan(0);
+    expect(lec.matches.map((m) => m.stageLabel)).toEqual(["Finals", "Playoffs"]);
+    const scheduleCalls = vi
+      .mocked(fetch)
+      .mock.calls.map(([url]) => String(url))
+      .filter((url) => url.includes("getSchedule?leagueId=lec"));
+    expect(scheduleCalls).toHaveLength(2);
+    expect(scheduleCalls[1]).toContain("pageToken=older-1");
+  });
+
+  it("falls back to the tournament's completed events when the older page fails", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const data = await lolDataOn("2027-01-05T12:00:00Z", { olderPagesFail: true });
+
+    const lec = split(data, "lec");
+    expect(lec.name).toBe("LEC Split 3");
+    expect(lec.matches.map((m) => [m.stageLabel, m.status])).toEqual([
+      ["Finals", "ft"],
+      ["Playoffs", "ft"],
+    ]);
+    // Still named and dated off those events, so the champion still reads.
+    expect(lec.playoffs?.map((r) => r.label)).toEqual(["Playoffs", "Finals"]);
+    expect(lec.champion?.teamId).toBe("g2");
+    vi.mocked(console.warn).mockRestore();
+  });
+
+  it("keeps a split's standings and bracket when its matches cannot be found at all", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const data = await lolDataOn("2027-01-05T12:00:00Z", {
+      olderPagesFail: true,
+      completedEventsFail: true,
+    });
+
+    // Never next season's matches under last season's name.
+    const lec = split(data, "lec");
+    expect(lec.matches).toEqual([]);
+    expect(lec.standings.length).toBeGreaterThan(0);
+    expect(lec.playoffs?.flatMap((r) => r.matches)).toHaveLength(2);
+    vi.mocked(console.warn).mockRestore();
+  });
+
+  it("lets Worlds go once LCK's new season is under way, and leads with the live splits", async () => {
+    const data = await lolDataOn("2027-01-14T12:00:00Z");
+
+    expect(regions(data)).toEqual(["lck", "lpl", "lcs", "lec"]);
+    const lck = split(data, "lck");
+    expect(lck).toMatchObject({ name: "LCK Split 1", season: "2027" });
+    expect(lck.matches.map((m) => [m.id, m.status])).toEqual([
+      ["lck27-3", "scheduled"],
+      ["lck27-2", "ft"],
+      ["lck27-1", "ft"],
+    ]);
+    expect(data.upcoming?.map((u) => u.region)).toEqual(["lec", "lcs"]);
   });
 });

@@ -65,7 +65,8 @@ type PadelApiTournament = {
   status?: "pending" | "live" | "finished" | "in_progress" | "completed";
   start_date: string;
   end_date: string;
-  winners?: Partial<Record<PadelCategory, Array<{ name: string }>>> | null;
+  /** Each pair either way round: Tapia then Coello one week, Coello then Tapia the next. */
+  winners?: Partial<Record<PadelCategory, Array<{ id?: number; name: string }>>> | null;
   venue?: { name?: string | null } | null;
   photo_url?: string | null;
   prize?: { amount?: number | null; currency?: string | null } | null;
@@ -186,11 +187,18 @@ function mapRanking(player: PadelApiPlayer): PlayerRanking {
   };
 }
 
-/** The pair that won this category, as "A. Coello / A. Tapia". */
+/**
+ * The pair that won this category, as "A. Coello / A. Tapia": in player-id
+ * order, the way `pairOf` names the same pair in the draw, or the card's
+ * champion and the final under it would print one pair two ways.
+ */
 function championOf(t: PadelApiTournament, category: PadelCategory): string | undefined {
   const pair = t.winners?.[category];
   if (!pair?.length) return undefined;
-  return pair.map((p) => shortNameFor(p.name)).join(" / ");
+  return [...pair]
+    .sort((a, b) => (a.id ?? 0) - (b.id ?? 0))
+    .map((p) => shortNameFor(p.name))
+    .join(" / ");
 }
 
 function mapTournament(t: PadelApiTournament, category: PadelCategory): RacquetTournament {
@@ -463,13 +471,9 @@ function tournamentsPath(now: Date): string {
 }
 
 /**
- * Rankings, calendar and the draws worth having, for both categories.
- *
- * Budget (10 a minute, 2,000 a day): three calls every five minutes, plus the
- * featured draw's while it is being played. The just-finished draws are read
- * for their finals' runners-up through the day-long cache, so they cost one
- * call a day each — never seven draws every five minutes, which alone would
- * be 2,016 a day.
+ * Rankings and the season for both categories, without a single draw: three
+ * calls every five minutes, 864 a day. The draws are joined in by
+ * `getPadelData`, each through its own cache.
  */
 async function fetchPadelFromApi(): Promise<PadelData> {
   const now = new Date();
@@ -491,61 +495,30 @@ async function fetchPadelFromApi(): Promise<PadelData> {
   }
 
   const season = [...tournamentsRes.data].sort((a, b) => a.start_date.localeCompare(b.start_date));
-  const listed = season.map((t) => ({
-    raw: t,
+  const recentFrom = addDays(today, -CALENDAR_LOOKBACK_DAYS);
+  // The last results stay listed through the winter break, when the most
+  // recent final is older than the window.
+  const dated = season.map((t) => ({
     id: `padelapi-${t.id}`,
     status: mapStatus(t.status),
     startDate: t.start_date,
     endDate: t.end_date,
   }));
-  const featured = featuredTournament(listed);
-  const wanted = [
-    ...(featured && drawIsOut(featured.status, featured.startDate, today) ? [featured] : []),
-    ...[currentTournament(listed), ...justFinished(listed, JUST_FINISHED)].filter(
-      (t): t is (typeof listed)[number] => Boolean(t)
-    ),
-  ];
-  const unique = [...new Map(wanted.map((t) => [t.id, t])).values()];
-  const draws = new Map(
-    await Promise.all(
-      unique.map(async (t) => [t.id, await drawsFor(t.raw.id, t.status)] as const)
-    )
-  );
-  const shipped = drawsShipped(listed);
-  const recentFrom = addDays(today, -CALENDAR_LOOKBACK_DAYS);
-  // The last results stay listed through the winter break, when the most
-  // recent final is older than the window.
-  const recent = new Set(justFinished(listed, JUST_FINISHED).map((t) => t.id));
+  const recent = new Set(justFinished(dated, JUST_FINISHED).map((t) => t.id));
+  const listed = season.filter((t) => t.end_date >= recentFrom || recent.has(`padelapi-${t.id}`));
 
   const buildSection = (
     rankings: PadelApiPlayer[],
     tour: RacquetTour,
     category: PadelCategory,
-  ): RacquetData => {
-    const players = new Map<string, Team>();
-    const tournaments = season
-      .filter((t) => t.end_date >= recentFrom || recent.has(`padelapi-${t.id}`))
-      .map((t): RacquetTournament => {
-        const base = mapTournament(t, category);
-        const draw = draws.get(base.id)?.[category];
-        const bracket = shipped.has(base.id) && draw?.rounds.length ? draw.rounds : undefined;
-        if (bracket) for (const p of draw!.players) players.set(p.id, p);
-        return {
-          ...base,
-          champion: base.champion ?? draw?.champion,
-          runnerUp: draw?.runnerUp,
-          bracket,
-        };
-      });
-    return {
-      tour,
-      season: now.getUTCFullYear(),
-      rankings: rankings.map(mapRanking),
-      tournaments,
-      calendar: season.map((t) => calendarEntry(t, category)),
-      drawPlayers: [...players.values()],
-    };
-  };
+  ): RacquetData => ({
+    tour,
+    season: now.getUTCFullYear(),
+    rankings: rankings.map(mapRanking),
+    tournaments: listed.map((t) => mapTournament(t, category)),
+    calendar: season.map((t) => calendarEntry(t, category)),
+    drawPlayers: [],
+  });
 
   return {
     men: buildSection(menRanks.data, "wpt-men", "men"),
@@ -553,13 +526,92 @@ async function fetchPadelFromApi(): Promise<PadelData> {
   };
 }
 
-export const getPadelData = cachedFeed(
+const getPadelFeed = cachedFeed(
   "padel-api",
   fetchPadelFromApi,
   () => PADEL_DATA,
   ["padel-api:padel-data"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:padel"] },
 );
+
+/** The provider's number behind a feed id: 747 from "padelapi-747". */
+function providerId(tournamentId: string): number | null {
+  const id = /^padelapi-(\d+)$/.exec(tournamentId)?.[1];
+  return id ? Number(id) : null;
+}
+
+/**
+ * The draws worth reading with the feed: the featured one's once it can
+ * exist, the current one's, and the just-finished ones' for their finals'
+ * runners-up. The same in both categories — one call holds both.
+ */
+function drawsWanted(tournaments: RacquetTournament[], today: string): RacquetTournament[] {
+  const featured = featuredTournament(tournaments);
+  const wanted = [
+    ...(featured && drawIsOut(featured.status, featured.startDate, today) ? [featured] : []),
+    ...[currentTournament(tournaments), ...justFinished(tournaments, JUST_FINISHED)].filter(
+      (t): t is RacquetTournament => Boolean(t)
+    ),
+  ];
+  return [...new Map(wanted.map((t) => [t.id, t])).values()];
+}
+
+/**
+ * One category with its draws joined in: the featured and current
+ * tournaments carry their brackets, every draw read lends its final's pairs.
+ */
+function sectionWithDraws(
+  section: RacquetData,
+  category: PadelCategory,
+  draws: Map<string, PadelDraws | null>,
+): RacquetData {
+  const shipped = drawsShipped(section.tournaments);
+  const players = new Map<string, Team>();
+  const tournaments = section.tournaments.map((t): RacquetTournament => {
+    const draw = draws.get(t.id)?.[category];
+    if (!draw) return t;
+    const bracket = shipped.has(t.id) && draw.rounds.length ? draw.rounds : undefined;
+    if (bracket) for (const p of draw.players) players.set(p.id, p);
+    return {
+      ...t,
+      // The final's own winner, named as the bracket names it.
+      champion: draw.champion ?? t.champion,
+      runnerUp: draw.runnerUp ?? t.runnerUp,
+      bracket,
+    };
+  });
+  return { ...section, tournaments, drawPlayers: [...players.values()] };
+}
+
+/**
+ * Rankings, calendar and the draws worth having, for both categories.
+ *
+ * The draws are read out here, never inside the feed's cached function:
+ * Next skips the read of an `unstable_cache` nested in another, so the
+ * day-long cache of a finished draw would never have served, and every
+ * five-minute refresh would have fetched every draw again — 2,016 calls a day
+ * at seven, past the 2,000 allowed. Read here, a finished draw costs one call
+ * a day and the live one 288, so a live week stays under 1,200; and a draw
+ * that fails is missing from this one answer instead of from the cached feed.
+ */
+export async function getPadelData(): Promise<PadelData> {
+  const feed = await getPadelFeed();
+  if (feed === PADEL_DATA) return feed;
+  const today = new Date().toISOString().slice(0, 10);
+  const wanted = drawsWanted(feed.men.tournaments, today);
+  const draws = new Map(
+    await Promise.all(
+      wanted.map(async (t) => {
+        const id = providerId(t.id);
+        return [t.id, id === null ? null : await drawsFor(id, t.status)] as const;
+      })
+    )
+  );
+  return {
+    men: sectionWithDraws(feed.men, "men", draws),
+    women: sectionWithDraws(feed.women, "women", draws),
+  };
+}
 
 /**
  * One tournament's draw for the details sheet, by the id the view knows it by.
@@ -573,9 +625,9 @@ export async function getPadelDraw(
   tour: "wpt-men" | "wpt-women",
   tournamentId: string,
 ): Promise<RacquetDraw | null> {
-  const id = /^padelapi-(\d+)$/.exec(tournamentId)?.[1];
-  if (!id) return null;
-  const data = await getPadelData();
+  const id = providerId(tournamentId);
+  if (id === null) return null;
+  const data = await getPadelFeed();
   const section = tour === "wpt-men" ? data.men : data.women;
   const known =
     section.calendar?.find((t) => t.id === tournamentId) ??
@@ -585,7 +637,7 @@ export async function getPadelDraw(
   if (!drawIsOut(known.status, known.startDate, today)) {
     return { tournamentId, rounds: [], players: [] };
   }
-  const draws = await drawsFor(Number(id), known.status);
+  const draws = await drawsFor(id, known.status);
   const draw = draws?.[tour === "wpt-men" ? "men" : "women"];
   if (!draw) return null;
   return { ...draw, champion: draw.champion ?? known.champion };

@@ -435,7 +435,7 @@ function calendarWith(
 }
 
 /**
- * A tour's calendar, draws and rankings.
+ * A tour's fortnight of tournaments, their draws and the rankings.
  *
  * Tournaments run in date order; on the same day the bigger draw goes first,
  * so the dashboard's "first live event" is the Masters rather than the 250
@@ -447,8 +447,7 @@ function tourFrom(
   tour: EspnTour,
   board: EspnScoreboard,
   rankings: EspnRankings,
-  now = Date.now(),
-  seeds: CalendarSeed[] = []
+  now = Date.now()
 ): RacquetData {
   const slug = SLUGS[tour];
   const photos = photosById(rankings);
@@ -480,9 +479,13 @@ function tourFrom(
       .filter((r): r is PlayerRanking => r !== null)
       .slice(0, RANKING_LIMIT),
     tournaments,
-    calendar: calendarWith(seeds, tournaments, new Date(now).toISOString().slice(0, 10)),
     drawPlayers: [...players.values()],
   };
+}
+
+/** A tour with its season's calendar joined in. */
+function withCalendar(data: RacquetData, seeds: CalendarSeed[], today: string): RacquetData {
+  return { ...data, calendar: calendarWith(seeds, data.tournaments, today) };
 }
 
 /**
@@ -573,37 +576,58 @@ const getTennisCalendar = cachedFeed<[EspnTour, number], CalendarSeed[]>(
  * answered 403, so the calendar fell back to the fixture and October showed
  * Roland Garros as live. ESPN also publishes the rankings, which were a
  * fixture all along. Four calls: one scoreboard over a date range and one
- * rankings table per tour — plus each tour's season calendar, a day-long
- * cache of its own.
+ * rankings table per tour. The season's calendar is joined in by
+ * `getTennisData`, from a cache of its own.
  */
 async function fetchTennisFromApi(): Promise<TennisData> {
   const now = new Date();
   const range = calendarRange(now);
-  const year = now.getUTCFullYear();
-  const [atpBoard, atpRankings, wtaBoard, wtaRankings, atpCalendar, wtaCalendar] =
-    await Promise.all([
-      fetchEspn<EspnScoreboard>(`/atp/scoreboard?dates=${range}`),
-      fetchEspn<EspnRankings>(`/atp/rankings`),
-      fetchEspn<EspnScoreboard>(`/wta/scoreboard?dates=${range}`),
-      fetchEspn<EspnRankings>(`/wta/rankings`),
-      getTennisCalendar("atp", year),
-      getTennisCalendar("wta", year),
-    ]);
-  const atp = tourFrom("atp", atpBoard, atpRankings, now.getTime(), atpCalendar);
-  const wta = tourFrom("wta", wtaBoard, wtaRankings, now.getTime(), wtaCalendar);
+  const [atpBoard, atpRankings, wtaBoard, wtaRankings] = await Promise.all([
+    fetchEspn<EspnScoreboard>(`/atp/scoreboard?dates=${range}`),
+    fetchEspn<EspnRankings>(`/atp/rankings`),
+    fetchEspn<EspnScoreboard>(`/wta/scoreboard?dates=${range}`),
+    fetchEspn<EspnRankings>(`/wta/rankings`),
+  ]);
+  const atp = tourFrom("atp", atpBoard, atpRankings, now.getTime());
+  const wta = tourFrom("wta", wtaBoard, wtaRankings, now.getTime());
   if (atp.rankings.length === 0 && wta.rankings.length === 0) {
     throw new Error("espn tennis returned no rankings");
   }
   return { atp, wta };
 }
 
-export const getTennisData = cachedFeed(
+const getTennisFeed = cachedFeed(
   "espn tennis",
   fetchTennisFromApi,
   () => TENNIS_DATA,
   ["espn:tennis-data"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:tennis"] }
 );
+
+/**
+ * Both tours, each with its season's calendar.
+ *
+ * The calendars are read out here, never inside the feed's cached function:
+ * Next skips the read of an `unstable_cache` nested in another, so the
+ * day-long calendar cache would never have served — two more calls on every
+ * five-minute refresh, four in January — and a calendar that failed once
+ * would have been stored with the feed, empty, for five minutes.
+ */
+export async function getTennisData(): Promise<TennisData> {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const [feed, atpSeeds, wtaSeeds] = await Promise.all([
+    getTennisFeed(),
+    getTennisCalendar("atp", year),
+    getTennisCalendar("wta", year),
+  ]);
+  if (feed === TENNIS_DATA) return feed;
+  const today = now.toISOString().slice(0, 10);
+  return {
+    atp: withCalendar(feed.atp, atpSeeds, today),
+    wta: withCalendar(feed.wta, wtaSeeds, today),
+  };
+}
 
 /**
  * One event's draw, read off the scoreboard for one of its days.
@@ -700,6 +724,7 @@ export const __testing = {
   calendarRange,
   calendarFrom,
   calendarWith,
+  withCalendar,
   eventFrom,
   espnDay,
   fetchCalendarFromApi,

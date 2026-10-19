@@ -12,6 +12,7 @@ const {
   calendarRange,
   calendarFrom,
   calendarWith,
+  withCalendar,
   eventFrom,
   espnDay,
   fetchCalendarFromApi,
@@ -346,7 +347,7 @@ describe("tourFrom", () => {
       { id: "espn-1000-mens-singles", name: "Shanghai Masters", startDate: "2026-10-12", endDate: "2026-10-18" },
       { id: "espn-99-2026-mens-singles", name: "Australian Open", startDate: "2026-01-11", endDate: "2026-02-01" },
     ];
-    const tour = tourFrom("atp", board as never, { rankings: [] }, NOW, seeds);
+    const tour = withCalendar(tourFrom("atp", board as never, { rankings: [] }, NOW), seeds, "2026-10-18");
     expect(tour.calendar).toEqual([
       { ...seeds[0], status: "live", champion: undefined },
       { ...seeds[1], status: "completed" },

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarX } from "lucide-react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { CalendarX, ChevronUp } from "lucide-react";
 
 import { useReaderTimeZone } from "@/components/reader-time-zone";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Select,
@@ -13,9 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Eyebrow } from "@/components/ui/typography";
-import { matchDays } from "@/lib/sports/match-days";
+import { matchDays, type MatchDay } from "@/lib/sports/match-days";
 import { cn } from "@/lib/utils";
-import type { Match, Team } from "@/types/sports";
+import type { Match, MatchStatus, Team } from "@/types/sports";
 
 import { ScoreCard } from "./score-card";
 import { TeamBadge } from "./team-badge";
@@ -23,15 +24,30 @@ import { useMatchTime, useSportsToday } from "./time-zone-context";
 
 const ALL_TEAMS = "all";
 
+const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "pen"]);
+
+/**
+ * Where the list opens: the latest day up to today with a result in it, so
+ * the freshest results lead and what is next follows. A season with no
+ * result yet opens on its first day.
+ */
+export function openingDayIndex(days: MatchDay[], today: string): number {
+  for (let i = days.length - 1; i >= 0; i--) {
+    const { day, matches } = days[i];
+    if (day <= today && matches.some((m) => FINISHED.has(m.status))) return i;
+  }
+  return 0;
+}
+
 /**
  * Every match, one day at a time: oldest first, each day under its own
- * heading in the reader's zone, opening on today. A team filter narrows it to
- * one team's fixtures and results.
+ * heading in the reader's zone. A team filter narrows it to one team's
+ * fixtures and results.
  *
- * Once the table sits beside it (`@4xl`, the views' split) the list scrolls on
- * its own, so the table stays put. Narrower, the table is below the list and
- * the page is the scroller (see SPACING.md): a box that stopped the wheel at
- * its end would keep the reader from reaching it.
+ * The page is the only scroller. The list opens on its freshest results
+ * rather than scrolling to them, with the days before behind "Earlier
+ * results": a scroll on load never ran on a phone, where the list had no
+ * box of its own to scroll.
  */
 export function MatchesByDate({
   matches,
@@ -45,11 +61,14 @@ export function MatchesByDate({
   label?: string;
   emptyTitle?: string;
   className?: string;
-}) {
+}): React.ReactElement {
   const timeZone = useReaderTimeZone();
   const format = useMatchTime();
+  const today = useSportsToday();
   const [team, setTeam] = useState(ALL_TEAMS);
-  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [showEarlier, setShowEarlier] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const revealed = useRef<string | null>(null);
 
   const options = useMemo(() => {
     const ids = new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]));
@@ -64,17 +83,32 @@ export function MatchesByDate({
     [matches, team, timeZone]
   );
 
-  const today = useSportsToday();
-  const opening = days.find((d) => d.day >= today)?.day ?? days.at(-1)?.day;
+  const earlier = showEarlier ? 0 : openingDayIndex(days, today);
+  const shown = days.slice(earlier);
 
-  // Open on today rather than on the oldest result: what is next is what the
-  // reader came for, and the results are a scroll up away.
-  useEffect(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller || scroller.scrollHeight <= scroller.clientHeight || !opening) return;
-    const target = scroller.querySelector<HTMLElement>(`[data-day="${opening}"]`);
-    scroller.scrollTop = target ? target.offsetTop : 0;
-  }, [opening, team]);
+  // The older days go in above the button. Bring the newest of them into view
+  // and give it focus, so the list reads on upward from where the button was
+  // instead of jumping to the season's first day, and a keyboard is not left
+  // on <body> when the button goes.
+  useLayoutEffect(() => {
+    const day = revealed.current;
+    revealed.current = null;
+    const target = day ? listRef.current?.querySelector<HTMLElement>(`[data-day="${day}"]`) : null;
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    if (typeof target.scrollIntoView === "function") target.scrollIntoView({ block: "start" });
+  }, [showEarlier]);
+
+  const revealEarlier = (): void => {
+    revealed.current = days[earlier - 1]?.day ?? null;
+    setShowEarlier(true);
+  };
+
+  // Another team opens on its own freshest results, as the list did.
+  const pickTeam = (value: string): void => {
+    setTeam(value);
+    setShowEarlier(false);
+  };
 
   const heading = (day: string): string => {
     const name = format.longDay(day);
@@ -87,7 +121,7 @@ export function MatchesByDate({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Eyebrow>{label}</Eyebrow>
         {options.length > 1 && (
-          <Select value={team} onValueChange={setTeam}>
+          <Select value={team} onValueChange={pickTeam}>
             <SelectTrigger size="sm" className="w-48" aria-label="Filter by team">
               <SelectValue />
             </SelectTrigger>
@@ -106,21 +140,27 @@ export function MatchesByDate({
       {days.length === 0 ? (
         <EmptyState icon={CalendarX} title={emptyTitle} />
       ) : (
-        <div
-          ref={scrollerRef}
-          // Focusable so a keyboard can scroll it too: nothing inside is.
-          tabIndex={0}
-          role="region"
-          aria-label={label}
-          className="relative flex flex-col gap-4 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50 @4xl:max-h-160 @4xl:overflow-y-auto @4xl:overscroll-contain @4xl:pr-1"
-        >
-          {days.map(({ day, matches: list }) => (
-            <div key={day} data-day={day} className="flex flex-col gap-2">
+        <div ref={listRef} className="flex flex-col gap-4">
+          {earlier > 0 && (
+            <Button variant="ghost" size="sm" className="self-center" onClick={revealEarlier}>
+              <ChevronUp />
+              Earlier results ({earlier} {earlier === 1 ? "day" : "days"})
+            </Button>
+          )}
+          {shown.map(({ day, matches: list }) => (
+            // The scroll margin and the heading's offset clear the sport bar
+            // (and on a phone the app header above it): SPACING.md.
+            <div
+              key={day}
+              data-day={day}
+              tabIndex={-1}
+              className="flex scroll-mt-26 flex-col gap-2 outline-none md:scroll-mt-12"
+            >
               <Eyebrow
                 size="sm"
                 as="div"
                 className={cn(
-                  "@4xl:sticky @4xl:top-0 @4xl:z-10 @4xl:bg-background @4xl:py-1",
+                  "sticky top-26 z-10 bg-background py-1 md:top-12",
                   day === today && "text-foreground"
                 )}
               >

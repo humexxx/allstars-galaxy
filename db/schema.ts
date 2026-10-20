@@ -938,10 +938,16 @@ export const boardColumns = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     order: real("order").notNull(),
+    // The column a task is finished in. A flag, not the name: "Hecho" or
+    // "Shipped" is as done as "Done", and a regex over names guessed wrong.
+    isDone: boolean("is_done").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
-  (t) => [index("board_columns_user_id_idx").on(t.userId)]
+  (t) => [
+    index("board_columns_user_id_idx").on(t.userId),
+    uniqueIndex("board_columns_user_done_uq").on(t.userId).where(sql`${t.isDone}`),
+  ]
 ).enableRLS();
 
 export const boardTasks = pgTable(
@@ -958,9 +964,15 @@ export const boardTasks = pgTable(
     title: text("title").notNull(),
     description: text("description"),
     priority: taskPriorityEnum("priority"),
+    // Position inside its column ON ITS DAY: each day's board is its own list.
     order: real("order").notNull(),
+    // The day's board the task sits on, a calendar day in the reader's zone.
+    // The default only serves writers that predate the daily board.
+    boardDate: date("board_date").notNull().default(sql`CURRENT_DATE`),
     dueDate: timestamp("due_date", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    // Offered to carry over and left where it was: not asked about again.
+    carryOverDeclinedAt: timestamp("carry_over_declined_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
@@ -968,6 +980,11 @@ export const boardTasks = pgTable(
     index("board_tasks_user_id_idx").on(t.userId),
     index("board_tasks_column_id_idx").on(t.columnId),
     index("board_tasks_road_path_id_idx").on(t.roadPathId),
+    index("board_tasks_user_board_date_idx").on(t.userId, t.boardDate),
+    // One task per habit per day, however many tabs load the board at once.
+    uniqueIndex("board_tasks_road_path_day_uq")
+      .on(t.roadPathId, t.boardDate)
+      .where(sql`${t.roadPathId} IS NOT NULL`),
   ]
 ).enableRLS();
 
@@ -985,8 +1002,17 @@ export const roadPaths = pgTable(
     unit: text("unit"),
     startDate: timestamp("start_date", { withTimezone: true }).notNull(),
     targetDate: timestamp("target_date", { withTimezone: true }),
+    // Superseded by `scheduleDays`; kept until production stops reading them.
     autoCreateTasks: boolean("auto_create_tasks").notNull().default(false),
     taskFrequency: roadPathFrequencyEnum("task_frequency"),
+    // Weekdays the habit is due, 0 = Sunday … 6 = Saturday. Null or empty: a
+    // goal with no schedule, which never puts a task on the board.
+    scheduleDays: integer("schedule_days").array(),
+    // The day the current schedule took effect. Earlier days are judged by
+    // check-ins only, so changing the schedule never invents past misses.
+    scheduleSince: date("schedule_since"),
+    // When the board last generated this path's task. Its day in the reader's
+    // zone is what stops a deleted task from being generated again that day.
     lastTaskCreatedAt: timestamp("last_task_created_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -1028,6 +1054,27 @@ export const roadPathProgress = pgTable(
   (t) => [
     index("road_path_progress_road_path_id_idx").on(t.roadPathId),
     index("road_path_progress_date_idx").on(t.date),
+  ]
+).enableRLS();
+
+/**
+ * A day a road path's habit was done. Written when its board task reaches the
+ * Done column, removed when it leaves it; deleting the task keeps the record.
+ */
+export const roadPathCheckIns = pgTable(
+  "road_path_check_ins",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roadPathId: uuid("road_path_id")
+      .notNull()
+      .references(() => roadPaths.id, { onDelete: "cascade" }),
+    day: date("day").notNull(),
+    taskId: uuid("task_id").references(() => boardTasks.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("road_path_check_ins_path_day_uq").on(t.roadPathId, t.day),
+    index("road_path_check_ins_task_id_idx").on(t.taskId),
   ]
 ).enableRLS();
 
@@ -1074,6 +1121,18 @@ export const roadPathsRelations = relations(roadPaths, ({ one, many }) => ({
   milestones: many(roadPathMilestones),
   progress: many(roadPathProgress),
   tasks: many(boardTasks),
+  checkIns: many(roadPathCheckIns),
+}));
+
+export const roadPathCheckInsRelations = relations(roadPathCheckIns, ({ one }) => ({
+  roadPath: one(roadPaths, {
+    fields: [roadPathCheckIns.roadPathId],
+    references: [roadPaths.id],
+  }),
+  task: one(boardTasks, {
+    fields: [roadPathCheckIns.taskId],
+    references: [boardTasks.id],
+  }),
 }));
 
 export const roadPathMilestonesRelations = relations(roadPathMilestones, ({ one }) => ({

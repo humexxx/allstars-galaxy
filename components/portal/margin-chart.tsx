@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, Legend, ReferenceLine, XAxis, YAxis } from "recharts";
 import { ChartLine, SlidersHorizontal } from "lucide-react";
 
@@ -49,9 +49,12 @@ const CONFIG = {
 export function MarginChart({
   input,
   hideValues = false,
+  status,
 }: {
   input: MarginHistoryInput;
   hideValues?: boolean;
+  /** Rendered in the chart's bottom-right corner — the price freshness. */
+  status?: ReactNode;
 }) {
   const [investorId, setInvestorId] = useState<string | null>(null);
   const [methodId, setMethodId] = useState<string | null>(null);
@@ -268,10 +271,13 @@ export function MarginChart({
         </AreaChart>
       </ChartContainer>
 
-      <Text variant="small" className="text-2xs">
-        Where Allocations sits below Owed, the promised return is being covered out
-        of pocket.
-      </Text>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <Text variant="small" className="text-2xs">
+          Where Allocations sits below Owed, the promised return is being covered out
+          of pocket.
+        </Text>
+        {status}
+      </div>
     </section>
   );
 }

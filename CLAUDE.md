@@ -132,7 +132,10 @@ reader's zone — `formatDay(value, useReaderTimeZone())` — or the server (UTC
 and the browser render different days every evening west of Greenwich and
 hydration fails. Server code gets "today" from `getRequestToday()` /
 `getRequestTodayIso()` (`lib/utils/request-today.ts`, the `tz` cookie), never
-from `new Date()` passed down to a client.
+from `new Date()` passed down to a client. Until the browser has written that
+cookie (a device's first request) "today" is UTC's; the header writes it and
+refreshes once. A render that WRITES by "today" checks `readRequestTimeZone()`
+first and only reads while it is null.
 
 ### Chart colours
 `--chart-1..5` in [`app/globals.css`](app/globals.css) are a **categorical**

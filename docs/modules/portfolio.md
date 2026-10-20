@@ -145,12 +145,18 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
   somebody else's movements into a personal log makes the running totals of
   both meaningless. The owner's own rows are excluded from the second table
   because they already appear in the first.
-- **Transactions default to approved only, and the Status column is hidden.**
-  A column reading "approved" on every line is a column of noise. Pending and
-  rejected rows matter, but they are the exception you go looking for, not the
-  default reading of a history — a count of what is hidden sits above the
-  table so nothing disappears silently. **Detailed view** (top right) brings
-  back both the other statuses and the column.
+- **Transactions hide rejected rows, and the Status column shows only when
+  needed.** A rejected row moved no money (the admin queue keeps it); a column
+  reading "approved" on every line is noise, so it appears only when a row is
+  pending or closed. The **Detailed view** toggle was removed (2026-10-19):
+  the owner reads the default view, and the investors' detail now lives in
+  their rows.
+- **Each investor opens to their movements** (chevron on the name): the
+  summary row expands into that person's `TransactionsTable`, rejected rows
+  left out, so the movement count matches what opens. A name filter sits to
+  the right of the Investors heading (case- and accent-insensitive: "maria"
+  finds "María"). **Export CSV** stays enabled for an owner with no movements
+  of their own, since the file carries the investors' rows.
 - **Every transaction row shows the position it created** — units at that
   day's price (`Bought`), what they are worth now, and the P/L. A contribution
   is otherwise just an amount, and the whole point of the model is that the

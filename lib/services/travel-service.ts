@@ -170,11 +170,22 @@ export async function listUserTrips(userId: string): Promise<Trip[]> {
  * body within the same request hit the DB once. Args are part of the cache
  * key, so the per-user filter remains safe.
  */
-export const getTripWithRelations = cache(async function getTripWithRelations(
+export const getTripWithRelations = cache(
+  (tripId: string, userId: string): Promise<TripWithRelations | null> =>
+    loadTripWithRelations(db, tripId, userId)
+);
+
+/**
+ * The trip as the page draws it, read through `exec` — the database, or an
+ * open transaction, which is how the travel assistant shows a proposal as the
+ * trip would look with it applied.
+ */
+export async function loadTripWithRelations(
+  exec: typeof db | Tx,
   tripId: string,
   userId: string
 ): Promise<TripWithRelations | null> {
-  const [trip] = await db
+  const [trip] = await exec
     .select()
     .from(trips)
     .where(and(eq(trips.id, tripId), eq(trips.userId, userId)));
@@ -182,17 +193,17 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
 
   const [items, photos, shares, stops, members, contributions, payers, attendees] =
     await Promise.all([
-    db
+    exec
       .select()
       .from(tripItems)
       .where(eq(tripItems.tripId, tripId))
       .orderBy(asc(tripItems.scheduledOn), asc(tripItems.sortOrder), asc(tripItems.createdAt)),
-    db
+    exec
       .select()
       .from(tripPhotos)
       .where(eq(tripPhotos.tripId, tripId))
       .orderBy(asc(tripPhotos.sortOrder), asc(tripPhotos.createdAt)),
-    db
+    exec
       .select()
       .from(tripShares)
       .where(eq(tripShares.tripId, tripId))
@@ -200,7 +211,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     // Every stop for this trip in one query, attached to its item below. A
     // query per item would be N+1 for something that is at most a couple of
     // dozen rows.
-    db
+    exec
       .select({
         id: tripItemStops.id,
         itemId: tripItemStops.itemId,
@@ -213,7 +224,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       .innerJoin(tripItems, eq(tripItemStops.itemId, tripItems.id))
       .where(eq(tripItems.tripId, tripId))
       .orderBy(asc(tripItemStops.dayNumber)),
-    db
+    exec
       .select({
         id: tripMembers.id,
         name: tripMembers.name,
@@ -223,7 +234,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       .from(tripMembers)
       .where(eq(tripMembers.tripId, tripId))
       .orderBy(asc(tripMembers.sortOrder), asc(tripMembers.createdAt)),
-    db
+    exec
       .select()
       .from(tripContributions)
       .where(eq(tripContributions.tripId, tripId))
@@ -233,13 +244,13 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     // Who covers what, in one query for the trip. `splitTrip` has honoured
     // this since it was written; nothing ever loaded it, so every item was
     // divided among everybody.
-    db
+    exec
       .select({ itemId: tripItemPayers.itemId, memberId: tripItemPayers.memberId })
       .from(tripItemPayers)
       .innerJoin(tripItems, eq(tripItemPayers.itemId, tripItems.id))
       .where(eq(tripItems.tripId, tripId)),
     // And who is actually ON each item, which is a different question.
-    db
+    exec
       .select({ itemId: tripItemAttendees.itemId, memberId: tripItemAttendees.memberId })
       .from(tripItemAttendees)
       .innerJoin(tripItems, eq(tripItemAttendees.itemId, tripItems.id))
@@ -283,7 +294,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       sharePercent: m.sharePercent === null ? null : Number(m.sharePercent),
     })),
   };
-});
+}
 
 export async function createTrip(
   userId: string,

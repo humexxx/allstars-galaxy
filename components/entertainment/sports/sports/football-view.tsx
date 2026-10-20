@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 
 import {
   Select,
@@ -11,17 +10,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Eyebrow } from "@/components/ui/typography";
 import { Card, CardContent } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
 import { TableCard } from "../shared/table-primitives";
 import type { FootballLeagueData, FootballLeagueId, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
-import { ScoreCard } from "../shared/score-card";
+import { MatchesByDate } from "../shared/matches-by-date";
+import { OverviewSplit } from "../shared/overview-split";
 import { SportShell } from "../shared/sport-shell";
 import { StandingsTable } from "../shared/standings-table";
+import { useSportsNavigation } from "../sports-navigation";
 import { WorldCupView } from "./world-cup-view";
 
 type FootballViewProps = {
@@ -29,7 +27,7 @@ type FootballViewProps = {
   options: ReadonlyArray<{ id: FootballLeagueId; name: string }>;
 };
 
-type TabKey = "overview" | "matches" | "table" | "knockout";
+type TabKey = "overview" | "knockout";
 
 /**
  * One competition, picked through the URL (`?league=`) rather than client
@@ -39,7 +37,7 @@ type TabKey = "overview" | "matches" | "table" | "knockout";
  * The World Cup is one of them, laid out as the tournament it is: a bracket,
  * fixtures and group tables rather than a season's single table.
  */
-export function FootballView({ league, options }: FootballViewProps) {
+export function FootballView({ league, options }: FootballViewProps): React.ReactElement {
   const picker = <LeaguePicker leagueId={league.league.id} options={options} />;
   return league.league.id === "world-cup" ? (
     <WorldCupView data={league} controls={picker} />
@@ -54,23 +52,17 @@ function LeaguePicker({
 }: {
   leagueId: FootballLeagueId;
   options: FootballViewProps["options"];
-}) {
-  const router = useRouter();
-  const [navigating, startNavigation] = useTransition();
-  // The pick shows at once; the league itself arrives with the navigation.
-  const [picked, setPicked] = useState<FootballLeagueId | null>(null);
+}): React.ReactElement {
+  // The hub's own transition: while the league loads, the hub shows a
+  // skeleton of it.
+  const navigate = useSportsNavigation();
   return (
     <div className="flex items-center gap-2">
-      {navigating && <Spinner />}
       <Select
-        value={navigating && picked ? picked : leagueId}
-        onValueChange={(v) => {
-          const next = v as FootballLeagueId;
-          setPicked(next);
-          startNavigation(() => router.push(`?sport=football&league=${next}`, { scroll: false }));
-        }}
+        value={leagueId}
+        onValueChange={(v) => navigate(`?sport=football&league=${v as FootballLeagueId}`)}
       >
-        <SelectTrigger className="w-56" aria-label="League" aria-busy={navigating}>
+        <SelectTrigger className="w-56" aria-label="League">
           <SelectValue placeholder="League" />
         </SelectTrigger>
         <SelectContent>
@@ -85,7 +77,13 @@ function LeaguePicker({
   );
 }
 
-function LeagueView({ league, picker }: { league: FootballLeagueData; picker: React.ReactNode }) {
+function LeagueView({
+  league,
+  picker,
+}: {
+  league: FootballLeagueData;
+  picker: React.ReactNode;
+}): React.ReactElement {
   const leagueId = league.league.id;
 
   const teamsMap = useMemo(
@@ -94,14 +92,10 @@ function LeagueView({ league, picker }: { league: FootballLeagueData; picker: Re
   );
 
   const hasKnockoutData = !!league.knockout && league.knockout.length > 0;
-  const defaultTab: TabKey = hasKnockoutData
-    ? "knockout"
-    : league.league.hasKnockout
-      ? "overview"
-      : "table";
+  const defaultTab: TabKey = hasKnockoutData ? "knockout" : "overview";
 
   return (
-    // Keyed by league: leagues differ in which tabs exist (knockout vs table),
+    // Keyed by league: leagues differ in which tabs exist (a knockout or not),
     // and an uncontrolled Tabs keeps its old value when the active trigger
     // unmounts — switching UCL→La Liga stranded the view on a blank "knockout"
     // tab. Remounting re-resolves defaultTab for the new league.
@@ -112,14 +106,8 @@ function LeagueView({ league, picker }: { league: FootballLeagueData; picker: Re
         subtitle={`${league.league.region} · Season ${league.league.season}`}
         controls={picker}
         tabs={
-          <TabsList>
+          <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="matches" disabled={league.matches.length === 0}>
-              Matches
-            </TabsTrigger>
-            <TabsTrigger value="table" disabled={league.standings.length === 0}>
-              Table
-            </TabsTrigger>
             {league.league.hasKnockout && (
               <TabsTrigger value="knockout" disabled={!hasKnockoutData}>
                 Knockout
@@ -128,43 +116,19 @@ function LeagueView({ league, picker }: { league: FootballLeagueData; picker: Re
           </TabsList>
         }
       >
+        {/* Every match day by day, and the whole table beside them: a Table
+            tab of its own only repeated it with more columns. */}
         <TabsContent value="overview">
-          <OverviewLayout
-            matches={
-              <MatchesGrid
-                league={league}
-                teamsMap={teamsMap}
-                limit={6}
-              />
-            }
-            standings={
-              <TableCard>
-                <StandingsTable
-                  standings={league.standings.slice(0, 6)}
-                  teams={teamsMap}
-                  variant="compact"
-                />
-              </TableCard>
+          <OverviewSplit
+            matches={<MatchesByDate matches={league.matches} teams={teamsMap} />}
+            table={
+              league.standings.length > 0 && (
+                <TableCard>
+                  <StandingsTable standings={league.standings} teams={teamsMap} variant="compact" />
+                </TableCard>
+              )
             }
           />
-        </TabsContent>
-
-        <TabsContent value="matches">
-          {league.matches.length === 0 ? (
-            <EmptyState title="No matches available yet" />
-          ) : (
-            <MatchesGrid league={league} teamsMap={teamsMap} />
-          )}
-        </TabsContent>
-
-        <TabsContent value="table">
-          {league.standings.length === 0 ? (
-            <EmptyState title="No standings available yet" />
-          ) : (
-            <TableCard>
-              <StandingsTable standings={league.standings} teams={teamsMap} />
-            </TableCard>
-          )}
         </TabsContent>
 
         {league.league.hasKnockout && league.knockout && (
@@ -180,58 +144,3 @@ function LeagueView({ league, picker }: { league: FootballLeagueData; picker: Re
     </Tabs>
   );
 }
-
-function OverviewLayout({
-  matches,
-  standings,
-}: {
-  matches: React.ReactNode;
-  standings: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-6 @4xl:grid-cols-[2fr_1fr]">
-      <section className="flex min-w-0 flex-col gap-3">
-        <Eyebrow>Matches</Eyebrow>
-        {matches}
-      </section>
-      <section className="flex min-w-0 flex-col gap-3">
-        <Eyebrow>Table</Eyebrow>
-        {standings}
-      </section>
-    </div>
-  );
-}
-
-function MatchesGrid({
-  league,
-  teamsMap,
-  limit,
-}: {
-  league: FootballLeagueData;
-  teamsMap: Map<string, Team>;
-  limit?: number;
-}) {
-  const matches = limit ? league.matches.slice(0, limit) : league.matches;
-  const grouped = matches.reduce<Record<string, typeof matches>>((acc, m) => {
-    const key = m.stageLabel ?? "Matches";
-    (acc[key] ??= []).push(m);
-    return acc;
-  }, {});
-
-  return (
-    <div className="flex flex-col gap-4">
-      {Object.entries(grouped).map(([label, group]) => (
-        <div key={label} className="flex flex-col gap-2">
-          <Eyebrow size="sm">{label}</Eyebrow>
-          <div className="grid gap-2 @xl:grid-cols-2">
-            {group.map((match) => (
-              // The group heading already names the stage.
-              <ScoreCard key={match.id} match={match} teams={teamsMap} hideStage />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-

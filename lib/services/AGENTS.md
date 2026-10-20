@@ -232,6 +232,25 @@ outside the cache, so a mock is never stored. Catching inside the cached
 function cached the mock as if it were data for the whole revalidate window —
 one 429 was five minutes of fixtures.
 
+Never call a `cachedFeed` / `unstable_cache` reader inside another cached
+function's `fetchLive`. Next bypasses the read of a nested `unstable_cache`, so
+the inner cache never serves — every outer refresh refetches it — and the inner
+fallback is stored in the outer entry for its whole window. Cache the base feed
+alone and join the extras in a plain exported function outside it, each from
+its own cache, as `getNbaData`, `getPadelData` and `getTennisData` do.
+
+```typescript
+// ❌ DON'T — the draw's day-long cache is skipped on every feed refresh
+const getFeed = cachedFeed("padel", async () => ({ ...base, draw: await getDraw(id) }), …);
+
+// ✅ DO — read the feed's cache, then the extra's
+export async function getData(): Promise<Data> {
+  const feed = await getFeed();
+  if (feed === FIXTURE) return feed;
+  return { ...feed, draw: await getDraw(feed.drawId) };
+}
+```
+
 Read-only getters that several components resolve during one render
 (`getUserPortfolio`, `getMainPlan`, `getUserPreferences`, …) are wrapped in
 React's `cache()` so the second call is free. Never wrap a getter that an action

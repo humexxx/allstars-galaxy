@@ -30,8 +30,17 @@ import {
   deleteTripShareAction,
   revokeTripShareAction,
 } from "@/app/actions/travel";
+import { useReaderTimeZone } from "@/components/reader-time-zone";
+import { defaultShareExpiry, type ShareExpiryDraft } from "@/lib/travel/share-expiry";
 import { formatShortDay } from "@/lib/utils/date";
 import type { TripShare, TripWithRelations } from "@/types/travel";
+
+import {
+  ShareExpiryEditor,
+  ShareExpiryField,
+  expiryToSave,
+  type ShareExpiryContext,
+} from "./share-expiry";
 
 type TripSharePanelProps = {
   trip: TripWithRelations;
@@ -76,6 +85,22 @@ export function TripSharePanel({
   const [scopeId, setScopeId] = useState<string>(scopeToMemberId ?? EVERYONE);
   const scopeName = trip.members.find((m) => m.id === scopeId)?.name ?? null;
 
+  // Snapshot "now" once per mount: render-pure, and every row agrees on what
+  // has passed. A link that runs out while the dialog is open stays listed
+  // until it reopens, which is minutes stale at most.
+  const [now] = useState(() => Date.now());
+  // Days are the reader's (the `tz` cookie), never the runtime's. The server
+  // renders in UTC, and "until the trip ends" means the end of that day here.
+  const timeZone = useReaderTimeZone();
+  const expiryContext: ShareExpiryContext = {
+    trip: { endDate: trip.endDate },
+    timeZone,
+    now,
+  };
+  const [expiry, setExpiry] = useState<ShareExpiryDraft>(() =>
+    defaultShareExpiry(expiryContext.trip, timeZone, now)
+  );
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = email.trim();
@@ -83,10 +108,16 @@ export function TripSharePanel({
       toast.error("Enter a valid email or leave it blank");
       return;
     }
+    const target = expiryToSave(expiry, expiryContext);
+    if ("error" in target) {
+      toast.error(target.error);
+      return;
+    }
     startCreate(async () => {
       const res = await createTripShareAction(trip.id, {
         inviteeEmail: trimmed || null,
         memberId: scopeId === EVERYONE ? null : scopeId,
+        expiresAt: target.expiresAt,
       });
       if (!res.success) {
         toast.error(res.error);
@@ -119,13 +150,12 @@ export function TripSharePanel({
 
   // Expired links are rejected by the public resolver exactly like revoked
   // ones — listing them as "Active" hands the owner a copyable dead link.
-  // Snapshot "now" once per mount: render-pure, and expiry granularity is
-  // days, so a stale-by-minutes comparison is irrelevant.
-  const [now] = useState(() => Date.now());
   const isExpired = (s: TripShare): boolean =>
     s.expiresAt !== null && new Date(s.expiresAt).getTime() < now;
   const active = trip.shares.filter((s) => s.revokedAt === null && !isExpired(s));
   const revoked = trip.shares.filter((s) => s.revokedAt !== null || isExpired(s));
+  const memberNameOf = (s: TripShare): string | null =>
+    trip.members.find((m) => m.id === s.memberId)?.name ?? null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -149,6 +179,19 @@ export function TripSharePanel({
               </SelectGroup>
             </SelectContent>
           </Select>
+        </Field>
+
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor="share-expiry" className="text-xs">
+            Expires
+          </FieldLabel>
+          <ShareExpiryField
+            id="share-expiry"
+            value={expiry}
+            onChange={setExpiry}
+            context={expiryContext}
+            disabled={creating}
+          />
         </Field>
 
         <Field className="gap-1.5">
@@ -208,9 +251,8 @@ export function TripSharePanel({
                 share={share}
                 baseUrl={baseUrl}
                 copied={copiedToken === share.token}
-                memberName={
-                  trip.members.find((m) => m.id === share.memberId)?.name ?? null
-                }
+                memberName={memberNameOf(share)}
+                expiryContext={expiryContext}
                 onCopy={() => handleCopy(share.token)}
                 onRemoved={refocus}
               />
@@ -226,23 +268,40 @@ export function TripSharePanel({
           </summary>
           <ul className="mt-2 flex flex-col gap-1">
             {revoked.map((share) => (
-              <li key={share.id} className="flex items-center justify-between rounded border bg-muted/30 px-2 py-1">
-                <Text as="span" variant="small">
-                  {share.inviteeEmail ?? "Anonymous"} ·{" "}
-                  {share.revokedAt ? (
-                    <Mono>{formatShortDay(share.revokedAt)}</Mono>
-                  ) : share.expiresAt ? (
-                    <Mono>expired {formatShortDay(share.expiresAt)}</Mono>
-                  ) : (
-                    ""
+              <li key={share.id} className="flex items-center justify-between gap-2 rounded border bg-muted/30 px-2 py-1">
+                {/* The email gives way, never the date: a long address
+                    pushed Extend past the phone sheet's edge. */}
+                <Text as="span" variant="small" className="flex min-w-0 items-baseline gap-1">
+                  <span className="truncate">{share.inviteeEmail ?? "Anonymous"}</span>
+                  {(share.revokedAt || share.expiresAt) && (
+                    <span aria-hidden="true" className="shrink-0">·</span>
                   )}
+                  {share.revokedAt ? (
+                    <Mono className="shrink-0">{formatShortDay(share.revokedAt, timeZone)}</Mono>
+                  ) : share.expiresAt ? (
+                    <Mono className="shrink-0">expired {formatShortDay(share.expiresAt, timeZone)}</Mono>
+                  ) : null}
                 </Text>
-                <DeleteRevokedButton
-                  tripId={trip.id}
-                  shareId={share.id}
-                  label={share.inviteeEmail ?? "anonymous link"}
-                  onRemoved={refocus}
-                />
+                <div className="flex shrink-0 items-center gap-1">
+                  {/* Only a link that ran out. A revoked one stays revoked —
+                      the server refuses to move its expiry too. */}
+                  {share.revokedAt === null && (
+                    <ShareExpiryEditor
+                      tripId={trip.id}
+                      share={share}
+                      context={expiryContext}
+                      expired
+                      who={share.inviteeEmail ?? memberNameOf(share) ?? "anyone"}
+                      onExtended={refocus}
+                    />
+                  )}
+                  <DeleteRevokedButton
+                    tripId={trip.id}
+                    shareId={share.id}
+                    label={share.inviteeEmail ?? "anonymous link"}
+                    onRemoved={refocus}
+                  />
+                </div>
               </li>
             ))}
           </ul>
@@ -258,6 +317,7 @@ function ShareRow({
   baseUrl,
   copied,
   memberName,
+  expiryContext,
   onCopy,
   onRemoved,
 }: {
@@ -267,12 +327,14 @@ function ShareRow({
   copied: boolean;
   /** Traveller this link is scoped to, or null for the whole trip. */
   memberName: string | null;
+  expiryContext: ShareExpiryContext;
   onCopy: () => void;
   onRemoved: () => void;
 }) {
   const [busy, startTransition] = useTransition();
   const [showQr, setShowQr] = useState(false);
   const url = shareUrl(baseUrl, share.token);
+  const who = share.inviteeEmail ?? memberName ?? "anyone";
 
   const handleRevoke = () => {
     startTransition(async () => {
@@ -312,11 +374,20 @@ function ShareRow({
           className="text-destructive hover:text-destructive"
           onClick={handleRevoke}
           disabled={busy}
-          aria-label={`Revoke link for ${share.inviteeEmail ?? memberName ?? "anyone"}`}
+          aria-label={`Revoke link for ${who}`}
         >
           {busy ? <Spinner /> : <Trash2 />}
         </Button>
       </div>
+      {/* How long it lasts is the third thing that tells two links apart, and
+          the only one that changes after the link is handed out. */}
+      <ShareExpiryEditor
+        tripId={tripId}
+        share={share}
+        context={expiryContext}
+        expired={false}
+        who={who}
+      />
       {/* One control instead of a box that looks like a field sitting next to
           a button that is not part of it. The link stays selectable, and the
           thing you actually want — copy — is inside it. */}

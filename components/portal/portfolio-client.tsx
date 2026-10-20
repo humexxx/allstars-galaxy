@@ -813,7 +813,7 @@ function PortfolioKpiGrid({
   return (
     <div className="@container">
       {/* Columns follow the width the grid actually has, not the viewport: at
-         1024px the sidebar leaves ~670px, and four cards there clipped every
+         1024px the sidebar leaves ~736px, and four cards there clipped every
          figure mid-number. */}
       <div className="grid gap-4 @md:grid-cols-2 @4xl:grid-cols-4">
         <StatCard

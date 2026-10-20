@@ -56,6 +56,7 @@ import type {
   TripPhotoData,
   UpdateTripData,
   UpdateTripItemData,
+  UpdateTripShareExpiryData,
   MoveTripItemData,
 } from "@/schemas/travel";
 
@@ -524,6 +525,36 @@ export async function deleteTripShare(
   await db
     .delete(tripShares)
     .where(and(eq(tripShares.id, shareId), eq(tripShares.tripId, tripId)));
+}
+
+/**
+ * Sets when a link stops working, and touches nothing else on it.
+ *
+ * An expired link may be given a future expiry, which brings it back. A
+ * revoked one may not: revoking is the owner saying the link is finished,
+ * and a later edit to its expiry must not quietly reopen it. So the revoked
+ * filter is in the WHERE rather than in a read before it.
+ *
+ * Returns null when no live share with that id is on this trip.
+ */
+export async function updateTripShareExpiry(
+  userId: string,
+  tripId: string,
+  data: UpdateTripShareExpiryData
+): Promise<TripShare | null> {
+  await ensureTripOwnership(tripId, userId);
+  const [row] = await db
+    .update(tripShares)
+    .set({ expiresAt: data.expiresAt })
+    .where(
+      and(
+        eq(tripShares.id, data.shareId),
+        eq(tripShares.tripId, tripId),
+        isNull(tripShares.revokedAt)
+      )
+    )
+    .returning();
+  return row ?? null;
 }
 
 // ---------- contributions ----------

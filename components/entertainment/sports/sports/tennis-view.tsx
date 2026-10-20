@@ -11,6 +11,7 @@ type TennisViewProps = {
 export function TennisView({ data }: TennisViewProps) {
   return (
     <RacquetView
+      sport="tennis"
       emoji="🎾"
       title="Tennis"
       subtitle={`Season ${data.atp.season}`}

@@ -46,7 +46,9 @@ export function DashboardSportTables({ tables }: { tables: DashboardTable[] }) {
             key={`${table.id}-${row.position}-${row.name}`}
             className="flex items-center gap-2 rounded-md px-1.5 py-1 odd:bg-muted/40"
           >
-            <Mono className="w-4 shrink-0 text-2xs text-muted-foreground">{row.position}</Mono>
+            {!table.unranked && (
+              <Mono className="w-4 shrink-0 text-2xs text-muted-foreground">{row.position}</Mono>
+            )}
             <RowImage row={row} />
             <span className="min-w-0 flex-1 truncate text-xs font-medium">{row.name}</span>
             <Mono className="shrink-0 text-xs">{row.value}</Mono>

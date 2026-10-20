@@ -1,0 +1,1 @@
+ALTER TABLE "user_sports_preferences" ADD COLUMN "competition" text;

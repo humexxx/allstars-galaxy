@@ -15,23 +15,35 @@ import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
-import { getFootballLeagueData } from "@/lib/services/football-data-service";
-import { getF1Data } from "@/lib/services/jolpica-f1-service";
+import {
+  FOOTBALL_COMPETITIONS,
+  getFootballLeagueData,
+  getWorldCupData,
+} from "@/lib/services/football-data-service";
+import { getF1Data, getF1SeasonWinners } from "@/lib/services/jolpica-f1-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
+import { leadRace, startsIn, weekendNow } from "@/lib/sports/f1-weekend";
 import { formatDayRange } from "@/lib/utils/date";
 import type {
+  BracketMatch,
+  DashboardCompetitions,
   DashboardMatch,
   DashboardSide,
   DashboardSportCard,
-  DashboardSportHighlight,
   DashboardTable,
   DashboardTableRow,
+  F1DashboardHighlight,
   F1Data,
+  FavoriteSport,
   FootballLeagueData,
+  FootballLeagueId,
+  LolChampion,
   LolData,
   LolMatch,
+  LolRegion,
+  LolSplit,
   Match,
   NbaConference,
   NbaData,
@@ -39,8 +51,15 @@ import type {
   NflData,
   RacquetData,
   SportId,
+  SwissStage,
   Team,
   UserSportsPreference,
+} from "@/types/sports";
+import {
+  FOOTBALL_COMPETITION_IDS,
+  LOL_REGIONS,
+  PADEL_CATEGORIES,
+  TENNIS_TOURS,
 } from "@/types/sports";
 
 // ---------- Favourite CRUD ----------
@@ -56,14 +75,21 @@ export async function listUserSportsFavorites(
 }
 
 /**
- * Request-cached: the dashboard's sports card, its F1 card and the summary
- * builder all ask for the same list during one render.
+ * Request-cached: the dashboard's sport cards and its F1 card ask for the same
+ * rows during one render.
  */
+export const listUserFavoriteSports = cache(async function listUserFavoriteSports(
+  userId: string
+): Promise<FavoriteSport[]> {
+  const rows = await listUserSportsFavorites(userId);
+  return rows.map((row) => ({ sportId: row.sportId as SportId, competition: row.competition }));
+});
+
 export const listUserFavoriteSportIds = cache(async function listUserFavoriteSportIds(
   userId: string
 ): Promise<SportId[]> {
-  const rows = await listUserSportsFavorites(userId);
-  return rows.map((row) => row.sportId as SportId);
+  const favorites = await listUserFavoriteSports(userId);
+  return favorites.map((favorite) => favorite.sportId);
 });
 
 export async function setSportFavorite(
@@ -90,67 +116,154 @@ export async function setSportFavorite(
     );
 }
 
+/**
+ * Sets the championship a favourite's dashboard card shows (null: the card's
+ * own pick). Only the caller's own favourite row is touched; null when the
+ * sport is not one of their favourites, since a card exists only for those.
+ */
+export async function setSportCompetition(
+  userId: string,
+  sportId: SportId,
+  competition: string | null
+): Promise<UserSportsPreference | null> {
+  const [row] = await db
+    .update(userSportsPreferences)
+    .set({ competition })
+    .where(
+      and(
+        eq(userSportsPreferences.userId, userId),
+        eq(userSportsPreferences.sportId, sportId)
+      )
+    )
+    .returning();
+  return row ?? null;
+}
+
 // ---------- Dashboard cards ----------
 
 /** Matches listed under a card's featured one. */
 const CARD_MATCHES = 2;
+/**
+ * LoL lists more: a day of an event is several series back to back, and two
+ * did not reach the end of one.
+ */
+const LOL_CARD_MATCHES = 4;
+/** The same, on a LoL card with no table to show. */
+const LOL_CARD_MATCHES_ALONE = 6;
 /** Rows of a card's table. */
 const CARD_ROWS = 5;
+
+const LOL_LEAGUE: Record<LolRegion, string> = {
+  worlds: "Worlds",
+  msi: "MSI",
+  "first-stand": "First Stand",
+  lec: "LEC",
+  lcs: "LCS",
+  lck: "LCK",
+  lpl: "LPL",
+};
+
+/** Football's card with nothing chosen. */
+const DEFAULT_FOOTBALL: FootballLeagueId = "uefa-champions-league";
+const LOL_AUTOMATIC = "Follow what's on";
 
 type CardBase = Pick<DashboardSportCard, "sportId" | "label" | "emoji">;
 
 /**
  * One favourite sport's dashboard card, read from the same cached feed as its
- * view.
+ * view, for the championship it is set to (`competition`, null for the
+ * card's own pick).
  *
  * Null for F1, whose card also carries the news (`DashboardF1Card`), and for
- * anything without a card. Football reads the Champions League alone, so the
- * dashboard spends two of football-data's ten requests a minute, not eight.
+ * anything without a card. Football reads the one league the card shows, so
+ * the dashboard spends two of football-data's ten requests a minute, not
+ * eight. A stored choice the sport no longer offers (a league dropped, a LoL
+ * event over) falls back to the card's own pick rather than failing it.
  */
-export async function getDashboardSportCard(sportId: SportId): Promise<DashboardSportCard | null> {
+export async function getDashboardSportCard(
+  sportId: SportId,
+  competition: string | null = null
+): Promise<DashboardSportCard | null> {
   const meta = SPORTS_BY_ID.get(sportId);
   if (!meta) return null;
   const base: CardBase = { sportId, label: meta.label, emoji: meta.emoji };
 
   switch (sportId) {
     case "football": {
-      const ucl = await getFootballLeagueData("uefa-champions-league");
-      return footballCard(base, ucl ?? getFootballLeague("uefa-champions-league"));
+      const id = oneOf(FOOTBALL_COMPETITION_IDS, competition) ?? DEFAULT_FOOTBALL;
+      // The World Cup has a feed of its own: one call for its groups,
+      // fixtures and bracket.
+      const data = id === "world-cup" ? await getWorldCupData() : await getFootballLeagueData(id);
+      return {
+        ...footballCard(base, data ?? getFootballLeague(id)),
+        competitions: {
+          value: id,
+          options: FOOTBALL_COMPETITIONS.map((c) => ({ id: c.id, label: c.name })),
+        },
+      };
     }
     case "nba":
       return nbaCard(base, (await getNbaData()) ?? NBA_DATA);
     case "nfl":
       return nflCard(base, (await getNflData()) ?? NFL_DATA);
     case "lol":
-      return lolCard(base, (await getLolData()) ?? LOL_DATA);
+      return lolCard(base, (await getLolData()) ?? LOL_DATA, oneOf(LOL_REGIONS, competition));
     case "tennis": {
       const data = (await getTennisData()) ?? TENNIS_DATA;
-      return racquetCard(base, [
-        { id: "atp", label: "ATP", data: data.atp },
-        { id: "wta", label: "WTA", data: data.wta },
-      ]);
+      return racquetCard(
+        base,
+        [
+          { id: "atp", label: "ATP", data: data.atp },
+          { id: "wta", label: "WTA", data: data.wta },
+        ],
+        oneOf(TENNIS_TOURS, competition),
+        "Both tours"
+      );
     }
     case "padel": {
       const data = (await getPadelData()) ?? PADEL_DATA;
-      return racquetCard(base, [
-        { id: "men", label: "Men", data: data.men },
-        { id: "women", label: "Women", data: data.women },
-      ]);
+      return racquetCard(
+        base,
+        [
+          { id: "men", label: "Men", data: data.men },
+          { id: "women", label: "Women", data: data.women },
+        ],
+        oneOf(PADEL_CATEGORIES, competition),
+        "Men and women"
+      );
     }
     default:
       return null;
   }
 }
 
-/** Just F1's highlight, for the card that owns it on the dashboard. */
-export async function getF1DashboardHighlight(): Promise<DashboardSportHighlight | null> {
-  const meta = SPORTS_BY_ID.get("f1");
-  if (!meta) return null;
-  const data = (await getF1Data()) ?? F1_DATA;
-  return f1Highlight(
-    { sportId: "f1", emoji: meta.emoji, label: meta.label },
-    data
-  );
+/** `value` when it is one of `choices`, else null. */
+function oneOf<T extends string>(choices: readonly T[], value: string | null): T | null {
+  return choices.find((choice) => choice === value) ?? null;
+}
+
+/**
+ * F1's race for the card that owns it on the dashboard, with its weekend as
+ * of this request. The feed is cached; which race leads and which session is
+ * next are worked out here, every time, so they move on while the feed sits
+ * in its cache.
+ */
+export async function getF1DashboardHighlight(
+  now: number = Date.now()
+): Promise<F1DashboardHighlight | null> {
+  // A season is a calendar year, so last season's winners can be asked for
+  // alongside the feed rather than after it, which held the card for a
+  // second timeout on a cold cache.
+  const lastSeason = new Date(now).getUTCFullYear() - 1;
+  const [data, winners] = await Promise.all([getF1Data(now), getF1SeasonWinners(lastSeason)]);
+  const highlight = f1Highlight(data, now);
+  // The sample is not a season anybody raced, so nobody won there last year.
+  if (!highlight || highlight.race.status === "completed" || data === F1_DATA) return highlight;
+  // Only around the new year can the feed's season and the calendar's differ.
+  const pastWinners =
+    data.season - 1 === lastSeason ? winners : await getF1SeasonWinners(data.season - 1);
+  const lastYear = pastWinners[highlight.race.circuitId];
+  return lastYear ? { ...highlight, race: { ...highlight.race, lastYear } } : highlight;
 }
 
 function footballCard(base: CardBase, data: FootballLeagueData): DashboardSportCard {
@@ -188,13 +301,24 @@ function nbaCard(base: CardBase, data: NbaData): DashboardSportCard {
       .slice(0, CARD_ROWS)
       .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.won}–${s.lost}`)),
   });
+  const tables = [conference("east", "East"), conference("west", "West")].filter((t) => t.rows.length > 0);
   return {
     ...base,
     context: `Season ${data.season}`,
     featured,
     matches,
-    tables: [conference("east", "East"), conference("west", "West")].filter((t) => t.rows.length > 0),
+    tables,
+    note: tables.length === 0 ? nbaNote(data) : undefined,
   };
+}
+
+/** Before the opener there is no table, so who won last season takes its place. */
+function nbaNote(data: NbaData): DashboardSportCard["note"] {
+  if (!data.tipOff) return undefined;
+  const when = { label: "Tips off", startsAt: data.tipOff };
+  return data.champion
+    ? { title: `${data.champion.season} champions`, text: data.champion.summary, when }
+    : { title: "Standings start with the opener", when };
 }
 
 function nflCard(base: CardBase, data: NflData): DashboardSportCard {
@@ -225,40 +349,177 @@ function nflCard(base: CardBase, data: NflData): DashboardSportCard {
   };
 }
 
-function lolCard(base: CardBase, data: LolData): DashboardSportCard {
-  const split = data.splits[0];
+/**
+ * The split the card is set to, or with none chosen (or one no longer in the
+ * feed) the first the feed lists: the international event while it leads,
+ * else the split on now.
+ */
+function lolCard(base: CardBase, data: LolData, region: LolRegion | null = null): DashboardSportCard {
+  const chosen = region ? data.splits.find((s) => s.region === region) : undefined;
+  const competitions: DashboardCompetitions = {
+    value: chosen ? chosen.region : null,
+    automatic: LOL_AUTOMATIC,
+    options: data.splits.map((s) => ({ id: s.region, label: s.name })),
+    waiting: region && !chosen ? { id: region, label: LOL_LEAGUE[region] } : undefined,
+  };
+  return { ...lolSplitCard(base, data, chosen ?? data.splits[0]), competitions };
+}
+
+function lolSplitCard(base: CardBase, data: LolData, split: LolSplit | undefined): DashboardSportCard {
   if (!split) return { ...base, context: "No event on", matches: [], tables: [] };
   const teams = teamsById(split.teams);
+  if (split.international && split.champion) {
+    return lolOffSeasonCard(base, data, { ...split, champion: split.champion }, teams);
+  }
   // Already in display order: live, then the nearest upcoming, then the
-  // latest results.
+  // latest results. So the cap keeps what is next and fills the rest with
+  // what just finished.
   const [first, ...rest] = split.matches.map((m) => lolCardMatch(m, teams));
+  const tables = lolTables(split, teams);
   return {
     ...base,
-    context: first?.label ? `${split.name} · ${first.label.split(" · ")[0]}` : split.name,
+    context: lolContext(split, first),
     featured: first,
-    matches: rest.slice(0, CARD_MATCHES),
-    tables:
-      split.standings.length > 0
-        ? [
-            {
-              id: "standings",
-              label: "Standings",
-              rows: split.standings
-                .slice(0, CARD_ROWS)
-                .map((s) =>
-                  teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.wins}–${s.losses}`)
-                ),
-            },
-          ]
-        : [],
+    // With no table to show, the matches take its room.
+    matches: rest.slice(0, tables.length > 0 ? LOL_CARD_MATCHES : LOL_CARD_MATCHES_ALONE),
+    tables,
   };
 }
 
+/** "Worlds 2026 · Swiss": the split and the stage its featured match is in. */
+function lolContext(split: LolSplit, featured: DashboardMatch | undefined): string {
+  return featured?.label ? `${split.name} · ${featured.label.split(" · ")[0]}` : split.name;
+}
+
+function lolTables(split: LolSplit, teams: Map<string, Team>): DashboardTable[] {
+  if (split.standings.length > 0) {
+    return [
+      {
+        id: "standings",
+        label: "Standings",
+        rows: split.standings
+          .slice(0, CARD_ROWS)
+          .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.wins}–${s.losses}`)),
+      },
+    ];
+  }
+  // Only while the stage is being played: through the knockouts it was a
+  // stale table under "Finals".
+  if (split.swiss && !swissFinished(split.swiss)) {
+    const records = swissRecords(split.swiss);
+    if (records.length > 0) {
+      return [
+        {
+          id: "swiss",
+          label: "Swiss stage",
+          rows: records
+            .slice(0, CARD_ROWS)
+            .map((r, i) => teamRow(i + 1, teams.get(r.teamId), r.teamId, `${r.wins}–${r.losses}`)),
+        },
+      ];
+    }
+  }
+  return [];
+}
+
+/** Every record that ends the stage is full: nobody is left to play. */
+function swissFinished(stage: SwissStage): boolean {
+  return stage.exits.length > 0 && stage.exits.every((exit) => exit.teamIds.length >= exit.slots);
+}
+
+/**
+ * After an international final, until the next split starts: the final, the
+ * rest of the knockouts, and the season's champions.
+ */
+function lolOffSeasonCard(
+  base: CardBase,
+  data: LolData,
+  event: LolSplit & { champion: LolChampion },
+  teams: Map<string, Team>
+): DashboardSportCard {
+  const knockouts = (event.playoffs ?? [])
+    .flatMap((round) => round.matches.map((match) => lolBracketCardMatch(match, round.label, teams)))
+    .filter((m) => m !== null)
+    .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime());
+  const featured = knockouts.find((m) => m.id === event.champion.final.id) ?? knockouts[0];
+  const champions = lolChampionsTable(data, event);
+  return {
+    ...base,
+    context: lolContext(event, featured),
+    featured,
+    matches: knockouts
+      .filter((m) => m !== featured)
+      .slice(0, champions ? LOL_CARD_MATCHES : LOL_CARD_MATCHES_ALONE),
+    tables: champions ? [champions] : [],
+  };
+}
+
+/**
+ * The event's champion, then each region's from the same season, in the
+ * feed's order. Each is the winner of its round named "Finals" (`findChampion`
+ * in the Lolesports service).
+ *
+ * Only Worlds closes a season. After MSI or First Stand the regions' winners
+ * are those of the split before it, which are not the year's champions.
+ */
+function lolChampionsTable(data: LolData, event: LolSplit): DashboardTable | null {
+  const winners = data.splits.flatMap((s) =>
+    s.champion && (s.region === event.region || (!s.international && s.season === event.season))
+      ? [{ split: s, teamId: s.champion.teamId }]
+      : []
+  );
+  if (winners.length === 0) return null;
+  return {
+    id: "champions",
+    label: event.region === "worlds" ? `${event.season} champions` : "Latest champions",
+    unranked: true,
+    rows: winners.map(({ split, teamId }, i) =>
+      teamRow(i + 1, split.teams.find((t) => t.id === teamId), teamId, LOL_LEAGUE[split.region])
+    ),
+  };
+}
+
+/**
+ * Each team's Swiss record so far, best first. Empty until a match has been
+ * decided: sixteen teams on 0–0 is not a table.
+ */
+function swissRecords(stage: SwissStage): { teamId: string; wins: number; losses: number }[] {
+  const records = new Map<string, { wins: number; losses: number }>();
+  let decided = 0;
+  for (const match of stage.rounds.flat().flatMap((pool) => pool.matches)) {
+    for (const id of [match.homeTeamId, match.awayTeamId]) {
+      if (id && !records.has(id)) records.set(id, { wins: 0, losses: 0 });
+    }
+    // A live best-of-three already names its leader as the winner; only a
+    // finished series moves a record.
+    if (match.status !== "ft" || !match.winnerTeamId || !match.homeTeamId || !match.awayTeamId) {
+      continue;
+    }
+    decided++;
+    const loser = match.winnerTeamId === match.homeTeamId ? match.awayTeamId : match.homeTeamId;
+    records.get(match.winnerTeamId)!.wins++;
+    records.get(loser)!.losses++;
+  }
+  if (decided === 0) return [];
+  return [...records.entries()]
+    .map(([teamId, r]) => ({ teamId, ...r }))
+    .sort((a, b) => b.wins - a.wins || a.losses - b.losses);
+}
+
+/**
+ * The tournament on or next and the rankings, across both tours or only the
+ * one the card is set to. The line under the title names that choice: the
+ * lead box already says whether the tournament is on now or next.
+ */
 function racquetCard(
   base: CardBase,
-  tours: { id: string; label: string; data: RacquetData }[]
+  tours: { id: string; label: string; data: RacquetData }[],
+  chosen: string | null,
+  automatic: string
 ): DashboardSportCard {
-  const tournaments = tours.flatMap((t) => t.data.tournaments);
+  const pick = tours.find((t) => t.id === chosen);
+  const shown = pick ? [pick] : tours;
+  const tournaments = shown.flatMap((t) => t.data.tournaments);
   const event =
     tournaments.find((t) => t.status === "live") ??
     tournaments
@@ -266,11 +527,7 @@ function racquetCard(
       .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
   return {
     ...base,
-    context: event
-      ? event.status === "live"
-        ? "On now"
-        : "Next up"
-      : `Season ${tours[0]?.data.season ?? ""}`.trim(),
+    context: pick?.label ?? automatic,
     event: event
       ? {
           name: event.name,
@@ -281,7 +538,7 @@ function racquetCard(
         }
       : undefined,
     matches: [],
-    tables: tours
+    tables: shown
       .map((t) => ({
         id: t.id,
         label: t.label,
@@ -296,35 +553,26 @@ function racquetCard(
         ),
       }))
       .filter((t) => t.rows.length > 0),
+    competitions: {
+      value: pick?.id ?? null,
+      automatic,
+      options: tours.map((t) => ({ id: t.id, label: t.label })),
+    },
   };
 }
 
-function f1Highlight(base: HighlightBase, data: F1Data): DashboardSportHighlight {
-  // Live first: races are in round order, so looking for "upcoming" first
-  // skipped the race happening right now in favour of the following round.
-  const upcoming =
-    data.races.find((r) => r.status === "live") ??
-    data.races.find((r) => r.status === "upcoming");
-  const last = [...data.races].reverse().find((r) => r.status === "completed");
-  const leader = data.drivers[0];
-
-  const next = upcoming ?? last;
+function f1Highlight(data: F1Data, now: number): F1DashboardHighlight | null {
+  const race = leadRace(data.races);
+  if (!race) return null;
+  const { live, next } = race.status === "completed" ? {} : weekendNow(race, now);
   return {
-    ...base,
-    headline: next
-      ? `${next.flagEmoji} Round ${next.round} · ${next.name}`
-      : `F1 ${data.season}`,
-    context: next
-      ? `${next.circuit} · ${formatShortDate(next.date)}`
-      : `Season ${data.season}`,
-    tone: upcoming ? (upcoming.status === "live" ? "live" : "upcoming") : "result",
-    secondary: leader
-      ? { label: "Drivers' leader", value: `${leader.shortName} · ${leader.points} pts` }
-      : undefined,
+    season: data.season,
+    race,
+    liveSession: live,
+    nextSession: next,
+    nextSessionIn: next ? startsIn(next.startsAt, now) : undefined,
   };
 }
-
-type HighlightBase = Pick<DashboardSportHighlight, "sportId" | "emoji" | "label">;
 
 // ---------- Helpers ----------
 
@@ -425,6 +673,33 @@ function lolCardMatch(match: LolMatch, teams: Map<string, Team>): DashboardMatch
   };
 }
 
+/** A knockout read off the bracket. Null until it is drawn, or when the schedule never dated it. */
+function lolBracketCardMatch(
+  match: BracketMatch,
+  round: string,
+  teams: Map<string, Team>
+): DashboardMatch | null {
+  if (!match.date || !match.homeTeamId || !match.awayTeamId) return null;
+  return {
+    id: match.id,
+    home: side(
+      teams.get(match.homeTeamId),
+      match.homeTeamId,
+      match.homeScore ?? null,
+      match.winnerTeamId === match.homeTeamId
+    ),
+    away: side(
+      teams.get(match.awayTeamId),
+      match.awayTeamId,
+      match.awayScore ?? null,
+      match.winnerTeamId === match.awayTeamId
+    ),
+    status: match.winnerTeamId ? "result" : "upcoming",
+    startsAt: match.date,
+    label: match.bestOf ? `${round} · BO${match.bestOf}` : round,
+  };
+}
+
 /**
  * Pick the most "interesting" match to surface: live > next scheduled > most
  * recent finished. Returns null when the list is empty.
@@ -448,18 +723,5 @@ function matchTone(match: Match): DashboardMatch["status"] {
   return "result";
 }
 
-/**
- * A `YYYY-MM-DD` read as a calendar day. `new Date("2026-03-08")` is UTC
- * midnight, which anybody west of Greenwich renders as the 7th.
- */
-function dateOnly(iso: string): Date {
-  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
-  return y && m && d ? new Date(y, m - 1, d) : new Date(iso);
-}
-
-function formatShortDate(iso: string): string {
-  return dateOnly(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
+/** Pure helpers, exported for their tests. */
+export const __testing = { lolCard, racquetCard, swissRecords, f1Highlight };

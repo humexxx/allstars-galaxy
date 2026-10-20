@@ -5,8 +5,8 @@
  * The services previously sorted plain descending by date, which put fixtures
  * 60 days away at the TOP of every list (and a `find(scheduled)` on that order
  * picked the furthest-away match as the dashboard "Upcoming" highlight). With
- * this order, `slice(0, max)` naturally keeps what users care about: anything
- * live, the next few fixtures, and the freshest results.
+ * this order, a cap keeps what users care about: anything live, then the
+ * next fixtures and the freshest results, half the room each.
  */
 export function orderMatchesForDisplay<T>(
   matches: T[],
@@ -31,5 +31,18 @@ export function orderMatchesForDisplay<T>(
     return ra === 1 ? ta - tb : tb - ta;
   });
 
-  return max !== undefined ? sorted.slice(0, max) : sorted;
+  if (max === undefined) return sorted;
+  // A cap shares its room between fixtures and results. Filling it in rank
+  // order let a 60-day window of fixtures take every slot, so a league's list
+  // had no results at all and the afternoon's finished games vanished.
+  const live = sorted.filter((m) => rank(m) === 0).slice(0, max);
+  const upcoming = sorted.filter((m) => rank(m) === 1);
+  const results = sorted.filter((m) => rank(m) === 2);
+  const room = max - live.length;
+  const forUpcoming = Math.min(
+    upcoming.length,
+    Math.max(Math.ceil(room / 2), room - results.length)
+  );
+  const forResults = Math.min(results.length, room - forUpcoming);
+  return [...live, ...upcoming.slice(0, forUpcoming), ...results.slice(0, forResults)];
 }

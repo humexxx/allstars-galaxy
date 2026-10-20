@@ -88,7 +88,8 @@ Never fork the padding string — change the width, not the gutters.
 
 ## App-shell offsets (header + sidebar)
 
-These three values are coupled — change one, change the others:
+The header height, the sidebar's top offset and its top breathing are coupled —
+change one, change the others (the separator's `top-18` follows the breathing):
 
 | Piece | Value | Where |
 | --- | --- | --- |
@@ -97,11 +98,38 @@ These three values are coupled — change one, change the others:
 | Sidebar content top breathing | `pt-18` (72px) | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
 | Sidebar left inset | `px-2` (8px) | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
 | Sidebar nav row height / gap | `h-8` / `gap-0.5` | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
+| Sidebar width | `--sidebar-width: 12rem` (192px; shadcn's default is 16rem) | [`app/portal/layout.tsx`](../app/portal/layout.tsx) |
+| Sidebar separator | 1px `bg-sidebar-border` hairline, `top-18` to `bottom-6`, faded over its outer quarter at each end (`mask-y-from-75%`) | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
 
-The header has **no bottom border** and the sidebar has **no right border** — the
-shell reads as one flat surface (the shadcn-docs look), separated only by space.
+The header has **no bottom border** — the shell reads as one flat surface (the
+shadcn-docs look). The sidebar is set off by a **hairline that starts where the
+nav does** (`top-18`, the content's top breathing), stops short of the bottom and
+fades out towards both ends: a rule beside the links, not a wall from the header
+down. The sidebar is 12rem
+because the labels are short and every rem it gives back pulls each page's
+centred column towards the middle of the window.
 The `h-[calc(...)]` on the sidebar is the one sanctioned arbitrary value: it's a
 computed height, not a spacing step.
+
+### Sticky inside a page
+
+What scrolls under the header changes at `md` (see
+[`app/portal/layout.tsx`](../app/portal/layout.tsx)). Below it the document
+scrolls beneath the sticky header, so anything sticky inside a page sits at
+**`top-14`** to clear it; from `md` the header is outside the scrolling
+`<main>`, and the same element sits at **`top-0`**. Write both
+(`top-14 md:top-0`) and stack later offsets on them.
+
+The sports hub is the one user so far — a single page scroll, no inner
+scrollers:
+
+| Piece | Value | Where |
+| --- | --- | --- |
+| Sport bar (the tabs row; the name row above it scrolls away) | `h-12` (48px) at `top-14 md:top-0`, `z-20`, opaque `bg-background` + `border-b` | [`sport-shell.tsx`](../components/entertainment/sports/shared/sport-shell.tsx) |
+| Day headings | `top-26 md:top-12` (header + bar, then the bar alone), `z-10`; days `scroll-mt-26 md:scroll-mt-12` | [`matches-by-date.tsx`](../components/entertainment/sports/shared/matches-by-date.tsx) |
+| Overview side table (`@4xl` only) | `top-12` (the bar, its label level with a stuck day heading); `bottom-6 self-end` once taller than the room below the bar | [`overview-split.tsx`](../components/entertainment/sports/shared/overview-split.tsx) |
+
+Change the bar's height and move the two rows under it by the same amount.
 
 ## Cards & sections
 

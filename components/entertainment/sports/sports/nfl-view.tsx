@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Lock } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -16,7 +17,8 @@ import { cn } from "@/lib/utils";
 import type { NflConference, NflData, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
-import { ScoreCard } from "../shared/score-card";
+import { MatchesByDate } from "../shared/matches-by-date";
+import { OverviewSplit } from "../shared/overview-split";
 import { SportShell } from "../shared/sport-shell";
 import { SportsTh, TableCellNum } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
@@ -25,7 +27,7 @@ type NflViewProps = {
   data: NflData;
 };
 
-export function NflView({ data }: NflViewProps) {
+export function NflView({ data }: NflViewProps): React.ReactElement {
   const teamsMap = useMemo(
     () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
     [data.teams],
@@ -34,29 +36,36 @@ export function NflView({ data }: NflViewProps) {
   const hasPlayoffs = data.playoffs.length > 0;
 
   return (
-    <Tabs defaultValue={hasPlayoffs ? "playoffs" : "games"} className="gap-6">
+    <Tabs defaultValue={hasPlayoffs ? "playoffs" : "overview"} className="gap-6">
       <SportShell
         emoji="🏈"
         title="American Football · NFL"
         subtitle={`Season ${data.season}`}
         tabs={
-          <TabsList>
-            <TabsTrigger value="games">Games</TabsTrigger>
-            <TabsTrigger value="standings">Standings</TabsTrigger>
-            {hasPlayoffs && <TabsTrigger value="playoffs">Playoffs</TabsTrigger>}
+          <TabsList variant="line">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            {/* Always there, locked until the postseason: where the bracket
+                will be is worth knowing before it exists. */}
+            <TabsTrigger value="playoffs" disabled={!hasPlayoffs}>
+              {!hasPlayoffs && <Lock aria-hidden />}
+              Playoffs
+            </TabsTrigger>
           </TabsList>
         }
       >
-        <TabsContent value="games">
-          <div className="grid gap-2 @xl:grid-cols-2">
-            {data.games.map((g) => (
-              <ScoreCard key={g.id} match={g} teams={teamsMap} />
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="standings">
-          <NflStandings data={data} teamsMap={teamsMap} />
+        {/* The week's games and the table on one tab. */}
+        <TabsContent value="overview">
+          <OverviewSplit
+            matches={
+              <MatchesByDate
+                matches={data.games}
+                teams={teamsMap}
+                emptyTitle="No games this week."
+              />
+            }
+            table={<NflStandings data={data} teamsMap={teamsMap} />}
+            tableLabel="Standings"
+          />
         </TabsContent>
 
         {hasPlayoffs && (
@@ -79,7 +88,7 @@ function NflStandings({
 }: {
   data: NflData;
   teamsMap: Map<string, Team>;
-}) {
+}): React.ReactElement {
   const [conf, setConf] = useState<NflConference>("afc");
   const rows = data.standings
     .filter((s) => s.conference === conf)
@@ -117,18 +126,6 @@ function NflStandings({
               <SportsTh className="text-center">
                 T
               </SportsTh>
-              <SportsTh className="text-center">
-                PCT
-              </SportsTh>
-              <SportsTh className="text-center">
-                PF
-              </SportsTh>
-              <SportsTh className="text-center">
-                PA
-              </SportsTh>
-              <SportsTh className="text-center">
-                STRK
-              </SportsTh>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -151,10 +148,6 @@ function NflStandings({
                   <TableCellNum value={row.wins} />
                   <TableCellNum value={row.losses} />
                   <TableCellNum value={row.ties} />
-                  <TableCellNum value={row.pct.toFixed(3)} />
-                  <TableCellNum value={row.pointsFor} />
-                  <TableCellNum value={row.pointsAgainst} />
-                  <TableCellNum value={row.streak} />
                 </TableRow>
               );
             })}

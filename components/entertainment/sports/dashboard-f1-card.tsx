@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardAction,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -19,8 +18,13 @@ import {
   getF1DashboardHighlight,
   listUserFavoriteSportIds,
 } from "@/lib/services/sports-service";
+import { F1NextRace } from "@/components/entertainment/sports/f1-next-race";
 import { F1StandingsTabs } from "@/components/entertainment/sports/f1-standings-tabs";
-import { StatusPill } from "@/components/entertainment/sports/shared/status-pill";
+import {
+  SPORT_CARD_HEADER,
+  SPORT_CARD_ROWS,
+  SPORT_CARD_SECTION,
+} from "@/components/entertainment/sports/shared/dashboard-card-rows";
 import { matchTimeFormat } from "@/components/entertainment/sports/shared/match-time";
 import type { F1NewsImage } from "@/db/schema";
 
@@ -61,9 +65,10 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
   if (!highlight && news.length === 0) return null;
 
   return (
-    // Half the row: one sport among several, beside whatever comes next.
-    <Card className="flex flex-col">
-      <CardHeader>
+    // Half the row: one sport among several, its rows lined up with the
+    // card beside it (`dashboard-card-rows.ts`).
+    <Card className={SPORT_CARD_ROWS}>
+      <CardHeader className={SPORT_CARD_HEADER}>
         {/* The hub's emoji, like the other sport cards. */}
         <CardTitle as="h2" className="flex items-center gap-2">
           <span aria-hidden className="text-lg leading-none">
@@ -71,7 +76,9 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
           </span>
           Formula 1
         </CardTitle>
-        {highlight && <CardDescription className="truncate">{highlight.context}</CardDescription>}
+        {highlight && (
+          <CardDescription className="truncate">{highlight.season} World Championship</CardDescription>
+        )}
         <CardAction>
           <Button variant="outline" size="sm" asChild>
             <Link href={F1_PATH}>
@@ -81,28 +88,22 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
         </CardAction>
       </CardHeader>
 
-      <CardContent className="flex flex-1 flex-col gap-3">
-        {highlight && (
-          <Link
-            href={F1_PATH}
-            className="flex items-start justify-between gap-2 rounded-lg border bg-card p-2.5 transition-colors hover:bg-muted/40"
-          >
-            <span className="min-w-0 text-xs font-semibold leading-snug">
-              {highlight.headline}
-            </span>
-            {highlight.tone === "live" && <StatusPill status="live" />}
-          </Link>
-        )}
+      <div className={SPORT_CARD_SECTION}>
+        {highlight && <F1NextRace highlight={highlight} format={format} href={F1_PATH} />}
+      </div>
 
+      <div className={SPORT_CARD_SECTION}>
         {standings && (
           <F1StandingsTabs
             drivers={standings.drivers}
             constructors={standings.constructors}
           />
         )}
+      </div>
 
+      <div className={SPORT_CARD_SECTION}>
         {news.length > 0 && (
-          <div className="flex flex-1 flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5">
             <Eyebrow size="sm">Latest news</Eyebrow>
             {/* Scroll-snap rather than a carousel library: the card is narrow,
                 a swipe is the gesture people already use here, and it adds no
@@ -142,7 +143,7 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
             </div>
           </div>
         )}
-      </CardContent>
+      </div>
     </Card>
   );
 }

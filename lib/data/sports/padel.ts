@@ -1,4 +1,9 @@
-import type { PadelData, PlayerRanking, RacquetTournament } from "@/types/sports";
+import type {
+  PadelData,
+  PlayerRanking,
+  RacquetCalendarEntry,
+  RacquetTournament,
+} from "@/types/sports";
 
 const MEN_RANKINGS: PlayerRanking[] = [
   { position: 1, name: "Arturo Coello", shortName: "A. Coello", countryCode: "ESP", flagEmoji: "🇪🇸", points: 11250, movement: 0 },
@@ -27,22 +32,34 @@ const WOMEN_RANKINGS: PlayerRanking[] = [
 ];
 
 const MEN_TOURNAMENTS: RacquetTournament[] = [
-  { id: "wpt-m-doha", name: "Qatar Major", location: "Doha", startDate: "2026-02-23", endDate: "2026-03-01", status: "completed", champion: "Coello / Tapia", runnerUp: "Galán / Chingotto" },
-  { id: "wpt-m-riyadh", name: "Riyadh P1", location: "Riyadh", startDate: "2026-03-16", endDate: "2026-03-22", status: "completed", champion: "Galán / Chingotto", runnerUp: "Coello / Tapia" },
-  { id: "wpt-m-buenosaires", name: "Buenos Aires P1", location: "Buenos Aires", startDate: "2026-04-06", endDate: "2026-04-12", status: "completed", champion: "Coello / Tapia", runnerUp: "Lebrón / Di Nenno" },
-  { id: "wpt-m-madrid", name: "Madrid Master", location: "Madrid", startDate: "2026-05-04", endDate: "2026-05-10", status: "completed", champion: "Coello / Tapia", runnerUp: "Galán / Chingotto" },
-  { id: "wpt-m-rome", name: "Rome P1", location: "Rome", startDate: "2026-05-18", endDate: "2026-05-24", status: "live" },
-  { id: "wpt-m-paris", name: "Paris Major", location: "Paris", startDate: "2026-06-08", endDate: "2026-06-14", status: "upcoming" },
+  { id: "wpt-m-doha", name: "Qatar Major", tier: "Major", location: "Doha", venue: "Khalifa International Tennis and Squash Complex", startDate: "2026-02-23", endDate: "2026-03-01", status: "completed", champion: "Coello / Tapia", runnerUp: "Galán / Chingotto" },
+  { id: "wpt-m-riyadh", name: "Riyadh P1", tier: "P1", location: "Riyadh", startDate: "2026-03-16", endDate: "2026-03-22", status: "completed", champion: "Galán / Chingotto", runnerUp: "Coello / Tapia" },
+  { id: "wpt-m-buenosaires", name: "Buenos Aires P1", tier: "P1", location: "Buenos Aires", startDate: "2026-04-06", endDate: "2026-04-12", status: "completed", champion: "Coello / Tapia", runnerUp: "Lebrón / Di Nenno" },
+  { id: "wpt-m-madrid", name: "Madrid Master", tier: "P1", location: "Madrid", startDate: "2026-05-04", endDate: "2026-05-10", status: "completed", champion: "Coello / Tapia", runnerUp: "Galán / Chingotto" },
+  { id: "wpt-m-rome", name: "Rome P1", tier: "P1", location: "Rome", venue: "Foro Italico", startDate: "2026-05-18", endDate: "2026-05-24", status: "live" },
+  { id: "wpt-m-paris", name: "Paris Major", tier: "Major", location: "Paris", venue: "Roland Garros", prize: { amount: 1050000, currency: "EUR" }, startDate: "2026-06-08", endDate: "2026-06-14", status: "upcoming" },
 ];
 
 const WOMEN_TOURNAMENTS: RacquetTournament[] = [
-  { id: "wpt-w-doha", name: "Qatar Major", location: "Doha", startDate: "2026-02-23", endDate: "2026-03-01", status: "completed", champion: "Triay / Brea", runnerUp: "González / Fernández" },
-  { id: "wpt-w-riyadh", name: "Riyadh P1", location: "Riyadh", startDate: "2026-03-16", endDate: "2026-03-22", status: "completed", champion: "Triay / Brea", runnerUp: "Sánchez / Josemaría" },
-  { id: "wpt-w-buenosaires", name: "Buenos Aires P1", location: "Buenos Aires", startDate: "2026-04-06", endDate: "2026-04-12", status: "completed", champion: "González / Fernández", runnerUp: "Triay / Brea" },
-  { id: "wpt-w-madrid", name: "Madrid Master", location: "Madrid", startDate: "2026-05-04", endDate: "2026-05-10", status: "completed", champion: "Triay / Brea", runnerUp: "González / Fernández" },
-  { id: "wpt-w-rome", name: "Rome P1", location: "Rome", startDate: "2026-05-18", endDate: "2026-05-24", status: "live" },
-  { id: "wpt-w-paris", name: "Paris Major", location: "Paris", startDate: "2026-06-08", endDate: "2026-06-14", status: "upcoming" },
+  { id: "wpt-w-doha", name: "Qatar Major", tier: "Major", location: "Doha", venue: "Khalifa International Tennis and Squash Complex", startDate: "2026-02-23", endDate: "2026-03-01", status: "completed", champion: "Triay / Brea", runnerUp: "González / Fernández" },
+  { id: "wpt-w-riyadh", name: "Riyadh P1", tier: "P1", location: "Riyadh", startDate: "2026-03-16", endDate: "2026-03-22", status: "completed", champion: "Triay / Brea", runnerUp: "Sánchez / Josemaría" },
+  { id: "wpt-w-buenosaires", name: "Buenos Aires P1", tier: "P1", location: "Buenos Aires", startDate: "2026-04-06", endDate: "2026-04-12", status: "completed", champion: "González / Fernández", runnerUp: "Triay / Brea" },
+  { id: "wpt-w-madrid", name: "Madrid Master", tier: "P1", location: "Madrid", startDate: "2026-05-04", endDate: "2026-05-10", status: "completed", champion: "Triay / Brea", runnerUp: "González / Fernández" },
+  { id: "wpt-w-rome", name: "Rome P1", tier: "P1", location: "Rome", venue: "Foro Italico", startDate: "2026-05-18", endDate: "2026-05-24", status: "live" },
+  { id: "wpt-w-paris", name: "Paris Major", tier: "Major", location: "Paris", venue: "Roland Garros", prize: { amount: 1050000, currency: "EUR" }, startDate: "2026-06-08", endDate: "2026-06-14", status: "upcoming" },
 ];
+
+/** The season's lines, as the live feed lists them beside its tournaments. */
+function calendarOf(tournaments: RacquetTournament[]): RacquetCalendarEntry[] {
+  return tournaments.map(({ id, name, startDate, endDate, status, champion }) => ({
+    id,
+    name,
+    startDate,
+    endDate,
+    status,
+    champion,
+  }));
+}
 
 export const PADEL_DATA: PadelData = {
   men: {
@@ -50,11 +67,13 @@ export const PADEL_DATA: PadelData = {
     season: 2026,
     rankings: MEN_RANKINGS,
     tournaments: MEN_TOURNAMENTS,
+    calendar: calendarOf(MEN_TOURNAMENTS),
   },
   women: {
     tour: "wpt-women",
     season: 2026,
     rankings: WOMEN_RANKINGS,
     tournaments: WOMEN_TOURNAMENTS,
+    calendar: calendarOf(WOMEN_TOURNAMENTS),
   },
 };

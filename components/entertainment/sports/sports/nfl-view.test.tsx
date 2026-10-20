@@ -15,9 +15,9 @@ describe("NflView", () => {
   });
 
   it("puts the standings beside the games, in the shared split", () => {
-    render(<NflView data={{ ...NFL_DATA, playoffs: [] }} />);
+    const { container } = render(<NflView data={{ ...NFL_DATA, playoffs: [] }} />);
     const standings = screen.getByText("Standings").closest("section")!;
-    const games = screen.getByText("Games").closest("section")!;
+    const games = container.querySelector("[data-day]")!.closest("section")!;
 
     expect(standings.parentElement).toBe(games.parentElement);
     expect(standings.parentElement).toHaveClass("@4xl:grid-cols-[2fr_1fr]");

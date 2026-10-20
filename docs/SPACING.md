@@ -135,7 +135,7 @@ scrollers:
 | --- | --- | --- |
 | Sport bar (the tabs row; the name row above it scrolls away) | `h-12` (48px) at `top-14 md:top-0`, `z-20`, opaque `bg-background` + `border-b` | [`sport-shell.tsx`](../components/entertainment/sports/shared/sport-shell.tsx) |
 | Day headings | `top-26 md:top-12` (header + bar, then the bar alone), `z-10`; days `scroll-mt-26 md:scroll-mt-12` | [`matches-by-date.tsx`](../components/entertainment/sports/shared/matches-by-date.tsx) |
-| Overview side table (`@4xl` only) | `top-18` (the bar + 24px); `bottom-6 self-end` once taller than the room below the bar | [`overview-split.tsx`](../components/entertainment/sports/shared/overview-split.tsx) |
+| Overview side table (`@4xl` only) | `top-12` (the bar, its label level with a stuck day heading); `bottom-6 self-end` once taller than the room below the bar | [`overview-split.tsx`](../components/entertainment/sports/shared/overview-split.tsx) |
 
 Change the bar's height and move the two rows under it by the same amount.
 

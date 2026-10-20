@@ -49,6 +49,18 @@ describe("FootballView", () => {
     expect(screen.queryByRole("table")).toBeNull();
   });
 
+  it("keeps the team filter in the sport bar, and only while Overview is open", () => {
+    renderLeague("uefa-champions-league");
+    const filter = (): HTMLElement | null => screen.queryByRole("combobox", { name: "Filter by team" });
+    expect(openTab()).toBe("Knockout");
+    expect(filter()).toBeNull();
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Overview" }), { button: 0 });
+
+    expect(filter()!.closest(".sticky")).toContainElement(screen.getByRole("tablist"));
+    expect(screen.getByRole("tabpanel")).not.toContainElement(filter());
+  });
+
   it("is headed by the competition's name", () => {
     renderLeague("la-liga");
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("La Liga");

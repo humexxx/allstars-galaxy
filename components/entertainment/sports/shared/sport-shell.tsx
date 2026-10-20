@@ -1,10 +1,33 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import { createPortal } from "react-dom";
+
 import { cn } from "@/lib/utils";
 import { Heading, Text } from "@/components/ui/typography";
 
 import { scrollByFrom } from "./scroll";
+
+const BarEndContext = createContext<HTMLElement | null>(null);
+
+/**
+ * Puts its children at the right end of the sticky tabs row: a control that
+ * belongs to one tab (the Overview's team filter) rendered from inside that
+ * tab's panel. Radix unmounts a panel that is not open, so the control comes
+ * and goes with its tab. Nothing without a tabs row.
+ */
+export function SportBarEnd({ children }: { children: ReactNode }): React.ReactPortal | null {
+  const slot = useContext(BarEndContext);
+  return slot ? createPortal(children, slot) : null;
+}
 
 type SportShellProps = {
   /** Big emoji or logo shown at the top-left next to the title. */
@@ -47,6 +70,7 @@ export function SportShell({
   const tabsRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const [barEnd, setBarEnd] = useState<HTMLDivElement | null>(null);
   const hasTabs = Boolean(tabs);
   const titleGone = useScrolledAway(titleRef, hasTabs);
 
@@ -132,10 +156,12 @@ export function SportShell({
           >
             {tabs}
           </div>
+          {/* `SportBarEnd`'s slot, level with the tab labels. */}
+          <div ref={setBarEnd} className="mb-1 flex shrink-0 items-center empty:hidden" />
         </div>
       )}
       <div ref={contentRef} className="min-w-0 pt-6">
-        {children}
+        <BarEndContext.Provider value={barEnd}>{children}</BarEndContext.Provider>
       </div>
     </div>
   );

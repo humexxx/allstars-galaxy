@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CalendarX, ChevronUp } from "lucide-react";
+import { CalendarX, History, ListFilter } from "lucide-react";
 
 import { useReaderTimeZone } from "@/components/reader-time-zone";
 import { Button } from "@/components/ui/button";
@@ -13,12 +13,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Eyebrow } from "@/components/ui/typography";
 import { matchDays, type MatchDay } from "@/lib/sports/match-days";
 import { cn } from "@/lib/utils";
 import type { Match, MatchStatus, Team } from "@/types/sports";
 
 import { ScoreCard } from "./score-card";
+import { scrollParent } from "./scroll";
+import { SportBarEnd } from "./sport-shell";
 import { TeamBadge } from "./team-badge";
 import { useMatchTime, useSportsToday } from "./time-zone-context";
 
@@ -41,24 +44,26 @@ export function openingDayIndex(days: MatchDay[], today: string): number {
 
 /**
  * Every match, one day at a time: oldest first, each day under its own
- * heading in the reader's zone. A team filter narrows it to one team's
- * fixtures and results.
+ * heading in the reader's zone. A team filter, at the end of the sport bar,
+ * narrows it to one team's fixtures and results.
  *
  * The page is the only scroller. The list opens on its freshest results
- * rather than scrolling to them, with the days before behind "Earlier
- * results": a scroll on load never ran on a phone, where the list had no
- * box of its own to scroll.
+ * rather than scrolling to them, with the days before behind a clock on the
+ * first day's heading: a scroll on load never ran on a phone, where the list
+ * had no box of its own to scroll.
+ *
+ * It opens on a day heading, not a label of its own, so that a column beside
+ * it which opens on a line like one (`OverviewSplit`'s table) starts its card
+ * level with the first match.
  */
 export function MatchesByDate({
   matches,
   teams,
-  label = "Matches",
   emptyTitle = "No matches available yet",
   className,
 }: {
   matches: Match[];
   teams: Map<string, Team>;
-  label?: string;
   emptyTitle?: string;
   className?: string;
 }): React.ReactElement {
@@ -69,6 +74,7 @@ export function MatchesByDate({
   const [showEarlier, setShowEarlier] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const revealed = useRef<string | null>(null);
+  const picked = useRef(false);
 
   const options = useMemo(() => {
     const ids = new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]));
@@ -86,10 +92,10 @@ export function MatchesByDate({
   const earlier = showEarlier ? 0 : openingDayIndex(days, today);
   const shown = days.slice(earlier);
 
-  // The older days go in above the button. Bring the newest of them into view
-  // and give it focus, so the list reads on upward from where the button was
-  // instead of jumping to the season's first day, and a keyboard is not left
-  // on <body> when the button goes.
+  // The older days go in above the first heading. Bring the newest of them
+  // into view and give it focus, so the list reads on upward from where the
+  // clock was instead of jumping to the season's first day, and a keyboard is
+  // not left on <body> when the button goes.
   useLayoutEffect(() => {
     const day = revealed.current;
     revealed.current = null;
@@ -99,6 +105,16 @@ export function MatchesByDate({
     if (typeof target.scrollIntoView === "function") target.scrollIntoView({ block: "start" });
   }, [showEarlier]);
 
+  // The filter sits in the stuck bar, so a team can be picked deep in the
+  // list, which left the new, shorter list starting above the screen. Put
+  // its first day back under the bar; a list already in view stays put.
+  useLayoutEffect(() => {
+    if (!picked.current) return;
+    picked.current = false;
+    const first = listRef.current?.querySelector<HTMLElement>("[data-day]");
+    if (first && hiddenUnderBar(first)) first.scrollIntoView({ block: "start" });
+  }, [team]);
+
   const revealEarlier = (): void => {
     revealed.current = days[earlier - 1]?.day ?? null;
     setShowEarlier(true);
@@ -106,9 +122,12 @@ export function MatchesByDate({
 
   // Another team opens on its own freshest results, as the list did.
   const pickTeam = (value: string): void => {
+    picked.current = true;
     setTeam(value);
     setShowEarlier(false);
   };
+
+  const earlierLabel = `Earlier results, ${earlier} ${earlier === 1 ? "day" : "days"}`;
 
   const heading = (day: string): string => {
     const name = format.longDay(day);
@@ -119,42 +138,17 @@ export function MatchesByDate({
   return (
     // Its own container, so the columns follow the list's width: beside a
     // table it is two-thirds of the row, alone it is all of it.
-    <section className={cn("@container flex min-w-0 flex-col gap-3", className)}>
-      <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
-        <Eyebrow>{label}</Eyebrow>
-        {options.length > 1 && (
-          <Select value={team} onValueChange={pickTeam}>
-            <SelectTrigger size="sm" className="w-48" aria-label="Filter by team">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_TEAMS}>All teams</SelectItem>
-              {options.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  <TeamBadge team={t} size="sm" className="size-5" />
-                  {t.shortName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
+    <section className={cn("@container flex min-w-0 flex-col", className)}>
+      {options.length > 1 && (
+        <SportBarEnd>
+          <TeamFilter team={team} options={options} onPick={pickTeam} />
+        </SportBarEnd>
+      )}
       {days.length === 0 ? (
         <EmptyState icon={CalendarX} title={emptyTitle} />
       ) : (
         <div ref={listRef} className="flex flex-col gap-4">
-          {earlier > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="-ml-2 self-start text-muted-foreground"
-              onClick={revealEarlier}
-            >
-              <ChevronUp />
-              Earlier results ({earlier} {earlier === 1 ? "day" : "days"})
-            </Button>
-          )}
-          {shown.map(({ day, matches: list }) => (
+          {shown.map(({ day, matches: list }, i) => (
             // The scroll margin and the heading's offset clear the sport bar
             // (and on a phone the app header above it): SPACING.md.
             <div
@@ -167,11 +161,30 @@ export function MatchesByDate({
                 size="sm"
                 as="div"
                 className={cn(
-                  "sticky top-26 z-10 bg-background py-1 md:top-12",
+                  "sticky top-26 z-10 flex items-center justify-between gap-2 bg-background py-1 md:top-12",
                   day === today && "text-foreground"
                 )}
               >
                 {heading(day)}
+                {i === 0 && earlier > 0 && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      {/* A 24px target in a 22px line: the negative margins
+                          keep the line, and the table's label beside it, as
+                          they are. */}
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="-my-1.5 -mr-1 text-muted-foreground"
+                        aria-label={earlierLabel}
+                        onClick={revealEarlier}
+                      >
+                        <History className="size-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{earlierLabel}</TooltipContent>
+                  </Tooltip>
+                )}
               </Eyebrow>
               <div className="grid gap-2 @xl:grid-cols-2 @5xl:grid-cols-3">
                 {list.map((match) => (
@@ -183,5 +196,56 @@ export function MatchesByDate({
         </div>
       )}
     </section>
+  );
+}
+
+/** Whether `day`'s top is up under the sport bar, which its scroll margin clears. */
+function hiddenUnderBar(day: HTMLElement): boolean {
+  const scrollerTop = scrollParent(day)?.getBoundingClientRect().top ?? 0;
+  const margin = Number.parseFloat(getComputedStyle(day).scrollMarginTop) || 0;
+  return day.getBoundingClientRect().top < scrollerTop + margin;
+}
+
+/**
+ * The team filter, quiet in the sport bar: a filter icon or the picked
+ * team's crest, with the name and the chevron beside it once the bar has
+ * room. On a phone it is the icon alone, so a stuck bar keeps room for the
+ * sport's name and its tabs.
+ */
+function TeamFilter({
+  team,
+  options,
+  onPick,
+}: {
+  team: string;
+  options: Team[];
+  onPick: (team: string) => void;
+}): React.ReactElement {
+  const picked = options.find((t) => t.id === team);
+  return (
+    <Select value={team} onValueChange={onPick}>
+      <SelectTrigger
+        size="sm"
+        aria-label="Filter by team"
+        className={cn(
+          "border-transparent bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground @max-md:px-2 @max-md:[&>svg]:hidden dark:bg-transparent dark:hover:bg-muted/50",
+          picked && "text-foreground"
+        )}
+      >
+        <SelectValue>
+          {picked ? <TeamBadge team={picked} size="sm" className="size-5" /> : <ListFilter />}
+          <span className="sr-only @md:not-sr-only">{picked?.shortName ?? "All teams"}</span>
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent position="popper" align="end">
+        <SelectItem value={ALL_TEAMS}>All teams</SelectItem>
+        {options.map((t) => (
+          <SelectItem key={t.id} value={t.id}>
+            <TeamBadge team={t} size="sm" className="size-5" />
+            {t.shortName}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

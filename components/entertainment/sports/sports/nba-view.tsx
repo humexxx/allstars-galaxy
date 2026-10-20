@@ -67,7 +67,6 @@ export function NbaView({ data }: NbaViewProps) {
               <MatchesByDate
                 matches={data.games}
                 teams={teamsMap}
-                label="Games"
                 emptyTitle="No games scheduled right now."
               />
             }

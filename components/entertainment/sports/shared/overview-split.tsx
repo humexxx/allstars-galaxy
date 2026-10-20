@@ -20,11 +20,14 @@ type OverviewSplitProps = {
  * An Overview tab's two columns (football, the NBA, the NFL): every match on
  * the left and the table beside them from `@4xl`, stacked below that.
  *
+ * The table opens on a label set like a day heading, so its card starts level
+ * with the first match card and the two columns read as one layout.
+ *
  * Beside the matches the table rides along with the page, just under the
- * sport bar. One taller than the room left there (football's full twenty)
- * would hide its last rows for good stuck by its top, so it sticks by its
- * foot instead: it scrolls with the page until its last row is in view, then
- * stays.
+ * sport bar, its label on the line of the stuck day heading. One taller than
+ * the room left there (football's full twenty) would hide its last rows for
+ * good stuck by its top, so it sticks by its foot instead: it scrolls with the
+ * page until its last row is in view, then stays.
  */
 export function OverviewSplit({
   matches,
@@ -40,15 +43,14 @@ export function OverviewSplit({
         <section
           ref={tableRef}
           className={cn(
-            "flex min-w-0 flex-col gap-3 @4xl:sticky",
-            tall ? "@4xl:bottom-6 @4xl:self-end" : "@4xl:top-18"
+            "flex min-w-0 flex-col gap-2 @4xl:sticky",
+            tall ? "@4xl:bottom-6 @4xl:self-end" : "@4xl:top-12"
           )}
         >
-          {/* As tall as the matches' label row, whose team filter sets its
-              height, so the two labels sit on one line. */}
-          <div className="flex h-8 items-center">
-            <Eyebrow>{tableLabel}</Eyebrow>
-          </div>
+          {/* The size, padding and gap of a day heading in MatchesByDate. */}
+          <Eyebrow size="sm" as="div" className="py-1">
+            {tableLabel}
+          </Eyebrow>
           {table}
         </section>
       ) : null}

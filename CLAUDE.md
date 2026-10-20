@@ -132,7 +132,10 @@ reader's zone — `formatDay(value, useReaderTimeZone())` — or the server (UTC
 and the browser render different days every evening west of Greenwich and
 hydration fails. Server code gets "today" from `getRequestToday()` /
 `getRequestTodayIso()` (`lib/utils/request-today.ts`, the `tz` cookie), never
-from `new Date()` passed down to a client.
+from `new Date()` passed down to a client. Until the browser has written that
+cookie (a device's first request) "today" is UTC's; the header writes it and
+refreshes once. A render that WRITES by "today" checks `readRequestTimeZone()`
+first and only reads while it is null.
 
 ### Chart colours
 `--chart-1..5` in [`app/globals.css`](app/globals.css) are a **categorical**
@@ -218,6 +221,17 @@ will cancel a long-running `ALTER COLUMN ... USING (...)` mid-flight.
 
 The pre-flight check in `drizzle.config.ts` will refuse to run if `DIRECT_URL`
 is missing and `DATABASE_URL` points at the transaction pooler.
+
+**Two branches with migrations: apply the older one first.** The migrator runs
+only migrations whose journal `when` is later than the newest row in
+`drizzle.__drizzle_migrations` — it never compares names or hashes. Apply a
+branch's migration generated at 3 pm, and another branch's from 1 pm is
+skipped without a word when that branch migrates. Whichever goes second must
+be generated after the first was applied (renumber it if needed).
+
+**The database is shared with production**, which runs the code on `main`. A
+migration applied ahead of its release must keep that code working: add, never
+drop or rename, and give new `NOT NULL` columns a default.
 
 ### Security
 - Every server action opens with an auth gate — never trust the caller:

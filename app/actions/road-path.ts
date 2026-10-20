@@ -7,9 +7,11 @@ import {
   requireEffectiveContext,
   logImpersonatedMutation,
 } from "@/lib/services/impersonation";
+import { getRequestTodayIso } from "@/lib/utils/request-today";
 import {
   getRoadPath,
   createRoadPath,
+  updateRoadPath,
   deleteRoadPath,
   createRoadPathMilestone,
   updateRoadPathMilestone,
@@ -18,14 +20,15 @@ import {
   createRoadPathProgress,
   deleteRoadPathProgress,
 } from "@/lib/services/road-path-service";
-import { createAutomatedTasksForRoadPath } from "@/lib/services/task-automation-service";
 import { idSchema } from "@/schemas/common";
 import {
   createRoadPathSchema,
+  updateRoadPathSchema,
   createRoadPathMilestoneSchema,
   updateRoadPathMilestoneSchema,
   createRoadPathProgressSchema,
   type CreateRoadPathInput,
+  type UpdateRoadPathInput,
   type CreateRoadPathMilestoneData,
   type UpdateRoadPathMilestoneInput,
   type CreateRoadPathProgressInput,
@@ -43,26 +46,11 @@ export async function createRoadPathAction(
     const ctx = await requireEffectiveContext();
     const parsed = createRoadPathSchema.safeParse(data);
     if (!parsed.success) {
-      return { success: false, error: "Invalid input" };
+      return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
     }
-    const { createFirstTask, ...roadPathData } = parsed.data;
 
-    const path = await createRoadPath(ctx.effectiveUserId, {
-      ...roadPathData,
-      autoCreateTasks: roadPathData.autoCreateTasks ?? false,
-    });
-
-    // The path is saved either way; a failed first task is worth saying, not
-    // worth failing the whole create over.
-    let message: string | undefined;
-    if (createFirstTask && path.autoCreateTasks && path.taskFrequency) {
-      try {
-        await createAutomatedTasksForRoadPath(ctx.effectiveUserId, path.id);
-      } catch (error) {
-        console.error("Failed to create first task:", error);
-        message = "Road path created, but its first task could not be added";
-      }
-    }
+    // A path due today gets today's task the next time the board opens.
+    const path = await createRoadPath(ctx.effectiveUserId, parsed.data, await getRequestTodayIso());
 
     await logImpersonatedMutation({
       action: "roadPath.create",
@@ -70,7 +58,42 @@ export async function createRoadPathAction(
       entityId: path.id,
     });
     revalidatePath(PATH, "layout");
-    return { success: true, data: path, message };
+    return { success: true, data: path };
+  });
+}
+
+export async function updateRoadPathAction(
+  data: UpdateRoadPathInput
+): Promise<ActionResult<RoadPath>> {
+  return safe("road-path", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = updateRoadPathSchema.safeParse(data);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+    }
+    const { id, ...updateData } = parsed.data;
+
+    const before = ctx.isImpersonating
+      ? await getRoadPath(id, ctx.effectiveUserId)
+      : undefined;
+
+    const path = await updateRoadPath(
+      id,
+      ctx.effectiveUserId,
+      updateData,
+      await getRequestTodayIso()
+    );
+    if (!path) return { success: false, error: "Road path not found" };
+
+    await logImpersonatedMutation({
+      action: "roadPath.update",
+      entityTable: "road_paths",
+      entityId: path.id,
+      before,
+      after: path,
+    });
+    revalidatePath(PATH, "layout");
+    return { success: true, data: path };
   });
 }
 

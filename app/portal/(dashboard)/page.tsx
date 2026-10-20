@@ -9,6 +9,7 @@ import { DashboardFinanceCard } from "@/components/finance/dashboard-finance-car
 import { DashboardConfirmationHost } from "@/components/finance/dashboard-confirmation-host";
 import { DashboardSportCards } from "@/components/entertainment/sports/dashboard-sport-cards";
 import { DashboardTravelCard } from "@/components/travel/dashboard-travel-card";
+import { DashboardProductivityCard } from "@/components/productivity/dashboard-productivity-card";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 
 export const metadata: Metadata = {
@@ -36,6 +37,9 @@ export default async function PortalPage() {
         <div className={DASHBOARD_GRID}>
           <Suspense fallback={<DashboardCardSkeleton rail={5} />}>
             <DashboardFinanceCard userId={userId} />
+          </Suspense>
+          <Suspense fallback={<DashboardCardSkeleton tiles={2} />}>
+            <DashboardProductivityCard userId={userId} />
           </Suspense>
           <Suspense fallback={<DashboardCardSkeleton trips />}>
             <DashboardTravelCard userId={userId} />

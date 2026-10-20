@@ -4,8 +4,9 @@ import Link from "next/link";
 import { Route } from "lucide-react";
 
 import { PageHeader } from "@/components/portal/page-header";
-import { CreateRoadPathDialog } from "@/components/productivity/road-paths/create-road-path-dialog";
+import { RoadPathDialog } from "@/components/productivity/road-paths/road-path-dialog";
 import { RoadPathDetail } from "@/components/productivity/road-paths/road-path-detail";
+import { RoadPathMenu } from "@/components/productivity/road-paths/road-path-menu";
 import { RoadPathDetailSkeleton } from "@/components/productivity/road-paths/road-path-detail-skeleton";
 import { RoadPathsView } from "@/components/productivity/road-paths/road-paths-view";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -13,8 +14,7 @@ import { Button } from "@/components/ui/button";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { getRoadPathDetail, getUserRoadPaths } from "@/lib/services/road-path-service";
 import { idSchema } from "@/schemas/common";
-import { getRequestTimeZone } from "@/lib/utils/request-today";
-import { dayKey } from "@/components/productivity/zoned-date";
+import { getRequestTimeZone, getRequestTodayIso } from "@/lib/utils/request-today";
 
 export const metadata: Metadata = {
   title: "Road Paths",
@@ -47,27 +47,28 @@ export default async function RoadPathsPage({
   }
 
   const ctx = await requireEffectiveContext();
-  const [roadPaths, timeZone] = await Promise.all([
+  const [roadPaths, timeZone, today] = await Promise.all([
     getUserRoadPaths(ctx.effectiveUserId),
     getRequestTimeZone(),
+    getRequestTodayIso(),
   ]);
 
   return (
     <>
       <PageHeader
         title="Road paths"
-        actions={roadPaths.length > 0 ? <CreateRoadPathDialog /> : undefined}
+        actions={roadPaths.length > 0 ? <RoadPathDialog /> : undefined}
       />
       {roadPaths.length === 0 ? (
         <EmptyState
           variant="card"
           icon={Route}
           title="No road paths yet"
-          description="Set up a long-term goal and log your progress towards it."
-          action={<CreateRoadPathDialog />}
+          description="Pick a habit and the days it repeats on — it shows up on your board by itself."
+          action={<RoadPathDialog />}
         />
       ) : (
-        <RoadPathsView roadPaths={roadPaths} today={dayKey(new Date(), timeZone)} />
+        <RoadPathsView roadPaths={roadPaths} today={today} timeZone={timeZone} />
       )}
     </>
   );
@@ -75,10 +76,10 @@ export default async function RoadPathsPage({
 
 async function RoadPathDetailScreen({ id }: { id: string }) {
   const ctx = await requireEffectiveContext();
-  const [detail, timeZone] = await Promise.all([
-    idSchema.safeParse(id).success ? getRoadPathDetail(id, ctx.effectiveUserId) : null,
-    getRequestTimeZone(),
-  ]);
+  const [timeZone, today] = await Promise.all([getRequestTimeZone(), getRequestTodayIso()]);
+  const detail = idSchema.safeParse(id).success
+    ? await getRoadPathDetail(id, ctx.effectiveUserId, today, timeZone)
+    : null;
 
   // Deleted, or somebody else's link.
   if (!detail) {
@@ -103,8 +104,11 @@ async function RoadPathDetailScreen({ id }: { id: string }) {
         back={{ href: LIST_HREF, label: "Road paths" }}
         title={detail.roadPath.title}
         description={detail.roadPath.description ?? undefined}
+        actions={
+          <RoadPathMenu roadPath={detail.roadPath} variant="header" afterDeleteHref={LIST_HREF} />
+        }
       />
-      <RoadPathDetail detail={detail} timeZone={timeZone} />
+      <RoadPathDetail detail={detail} today={today} timeZone={timeZone} />
     </>
   );
 }

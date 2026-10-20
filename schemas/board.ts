@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { idSchema } from "@/schemas/common";
+import { idSchema, isoDateSchema } from "@/schemas/common";
 
 export const taskPrioritySchema = z.enum(["low", "medium", "high"]);
 
@@ -19,36 +19,44 @@ export const updateBoardColumnSchema = z.object({
 
 export type UpdateBoardColumnData = z.infer<typeof updateBoardColumnSchema>;
 
+// No `roadPathId`: a habit's task is put on the board by its schedule, and a
+// client-chosen one was never checked to be the caller's.
 export const createBoardTaskSchema = z.object({
   columnId: idSchema,
-  roadPathId: idSchema.nullable().optional(),
+  /** The day's board it goes on. */
+  boardDate: isoDateSchema,
   title: z.string().trim().min(1, "Task title is required").max(200, "Task title too long"),
   description: z.string().max(2000, "Description too long").nullable().optional(),
   priority: taskPrioritySchema.nullable().optional(),
-  order: z.number().min(0).optional(),
   dueDate: z.date().nullable().optional(),
 });
 
 export type CreateBoardTaskData = z.infer<typeof createBoardTaskSchema>;
 
+/** What the task form edits. Moving to another column is a move, done by the service. */
 export const updateBoardTaskSchema = z.object({
   id: idSchema,
   columnId: idSchema.optional(),
   title: z.string().trim().min(1, "Task title is required").max(200, "Task title too long").optional(),
   description: z.string().max(2000, "Description too long").nullable().optional(),
   priority: taskPrioritySchema.nullable().optional(),
-  order: z.number().min(0).optional(),
   dueDate: z.date().nullable().optional(),
-  completedAt: z.date().nullable().optional(),
 });
 
 export type UpdateBoardTaskData = z.infer<typeof updateBoardTaskSchema>;
 
 export const reorderTasksSchema = z.object({
   taskId: idSchema,
-  sourceColumnId: idSchema,
   destinationColumnId: idSchema,
-  order: z.number().min(0),
+  order: z.number().int().min(0),
 });
 
 export type ReorderTasksData = z.infer<typeof reorderTasksSchema>;
+
+/** The answer to "move them to today?": each offered task is moved or left. */
+export const carryOverSchema = z.object({
+  moveIds: z.array(idSchema).max(500),
+  leaveIds: z.array(idSchema).max(500),
+});
+
+export type CarryOverData = z.infer<typeof carryOverSchema>;

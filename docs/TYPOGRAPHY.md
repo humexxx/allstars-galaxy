@@ -144,6 +144,9 @@ the title, never an absolutely positioned arrow that overflows on a phone.
 `size="compact"` renders the title at `h3` (still an `<h1>`) for dense data
 surfaces — the plan editor and the portfolio. Its `loading.tsx` counterpart is
 `PageHeaderSkeleton` with the same props, so the swap does not shift the page.
+The task board is the exception: its header is the same on every board, so
+its `loading.tsx` renders the real `PageHeader` (actions disabled) and only
+the cards pulse.
 A `description` earns its line only when it says something the page doesn't:
 index pages whose content explains itself (plans, trips, road paths,
 the board, the portfolio) keep the title and its actions and drop it —

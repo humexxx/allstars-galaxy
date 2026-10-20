@@ -106,7 +106,11 @@ getter actions were deleted — pages read through the services.
 - **The board drags from a grip button** with a `KeyboardSensor`, and a failed
   mutation rolls back only that change, not a whole-board snapshot.
 - `board/loading.tsx` and `road-paths/loading.tsx` draw their own page;
-  `app/portal/productivity/error.tsx` is the module error boundary.
+  `app/portal/productivity/error.tsx` is the module error boundary. The
+  board's draws what every board has for real — `PageHeader` with its
+  buttons disabled, the day arrows, the column frames and their header strip —
+  and pulses only the cards inside the frames (the owner's call: structure is
+  never a skeleton). Changing the day keeps the current board up instead.
 - **Dates are read in the reader's zone, passed from the server.** The board
   and road-path pages read the `tz` cookie (`getRequestTimeZone`) and hand the
   zone — and today's `YYYY-MM-DD` in it — down to the cards. Formatting with the

@@ -17,6 +17,8 @@ back to its fixture only when its feed has never answered.
 - `/portal/entertainment/travel-planner` — list of trips (authenticated)
 - `/portal/entertainment/travel-planner/new` — create trip
 - `/portal/entertainment/travel-planner/[id]` — trip detail + editor
+- `/portal/entertainment/travel-planner/preview` — a trip the assistant's open proposal would create, drawn from the preview before it exists (client-only: a reload has nothing to show)
+- `/api/travel/assistant` — the travel assistant's chat, `POST`, streamed as NDJSON (`TravelAssistantEvent` per line); admins only, 120s max
 - `/trips/[token]` — **public** shared trip view (top-level, no auth); `loading.tsx` paints the shell before the trip resolves
 - `/portal/entertainment/sports` — sports hub, no `PageHeader`: the sport strip (manage-favourites button at its end), then the sport's own sticky bar, which is the page's `<h1>`; `?sport=` picks the sport, `?league=` the football league, `?tab=news` opens F1 on its news (the article page's "All news"); F1's other tabs are `standings` and `races`, and the old `drivers` / `constructors` open Standings on that table
 - `/news/f1/[id]` — **public** F1 article page (top-level, no auth; see *Notes*); `loading.tsx` paints its shell
@@ -36,6 +38,8 @@ back to its fixture only when its feed has never answered.
 - `sports.ts` — `setSportFavoriteAction` toggles a sport favourite for the current user (`ActionResult`); `setSportCompetitionAction({ sportId, competition })` sets the championship a favourite's dashboard card shows (null: the card's own pick) — `requireEffectiveContext()`, `setSportCompetitionSchema`, "Add this sport to your favorites first" when it is not one, then `refresh()` re-renders the dashboard rather than revalidating `/portal` (see *Notes*; the hub takes its league from the URL)
 - `racquet.ts` — `getRacquetDrawAction({ sport, tour, tournamentId })` → `ActionResult<RacquetDraw>`: one padel or tennis draw the feed did not ship, for the Current tab and the tournament sheet. `requireAuth()` (not anybody's data, but every miss spends a provider's daily budget), `racquetDrawSchema`, then `getPadelDraw` / `getTennisDraw`; null from either is "The draw could not be loaded"
 - `f1.ts` — `getF1RaceClassificationAction({ season, round })` → `ActionResult<F1RaceClassification>`: one finished race's whole field, for its sheet. Inside `safe()`: `requireAuth()` (public data, but every call spends Jolpica's rate limit), `f1RaceRefSchema`, then `getF1RaceClassification`; null is "The classification isn't available yet"
+
+- `travel-assistant.ts` — `applyTravelChangesAction` (re-validates a proposal the user approved and applies it in one transaction → lines + signed undo receipt) and `undoTravelChangesAction`; admins only, both revalidate every Travel page and `/portal`
 
 ## Services — `/lib/services/`
 - `travel-service.ts` — trip / item / photo / member / share CRUD,
@@ -63,6 +67,8 @@ back to its fixture only when its feed has never answered.
 - `balldontlie-nba-service.ts` — `getNbaData()` shows ONE season, S = `currentSeason(today)` (it flips on Oct 1, as ESPN's does), joined from three caches. `getNbaFeed` (5 min) holds one page of balldontlie games (`BALLDONTLIE_API_KEY`; today ±4 days in season, June 1 → +130 days out of it — `gameWindow`) filtered to S, ESPN's regular-season table for S (`season=S+1&seasontype=2`, `standingsFrom`; teams keyed by abbreviation so the two join; `[]` while every row is 0–0), and until the opener `tipOff` (`tipOffFrom`: S's first regular-season game, read only off a page that starts before Oct 1 of S) and last season's `champion` (`championFrom`, off the finals already on the page; the series score is left out when it is not all there). Outside that cache (see *Notes*) come the bracket — `getNbaPlayoffs`, keyed by year, only while `playoffYear` names one (S+1 while the page holds S's postseason games, or Apr 10 → Jun 30): ONE call to ESPN's scoreboard header (`site.web.api.espn.com/apis/v2/scoreboard/header`, Apr 10 → Jul 31 — the site API's `/scoreboard` 400s on date ranges), grouped by `playoffsFrom` into best-of-seven series (wins from ESPN's `seriesRecord`, first round placed by seed 1v8/4v5/3v6/2v7, East half first, later rounds TBD until drawn, play-in left out) — and, while `tipOff` is set, the preseason: `getNbaPreseason`, keyed by season, the same header from Oct 1 through tomorrow (`limit=300`), whose season-type-1 games `preseasonFrom` lists as "Preseason" (a side outside the NBA, the London Lions, keeps a monogram). `recentAndNext` then trims both providers' games to the last six results and the next six. Either extra keeps its last good answer through a failed refresh; only a cold cache gives `playoffs: []`. `NBA_DATA` only when the games have never answered. Every team's logo, games and table alike, comes off ESPN's CDN by ESPN's abbreviation (`logoFor`: `gs`, `no`, `ny`, `sa`, `utah`, `wsh` for the six balldontlie spells differently)
 - `espn-nfl-service.ts` — `getNflData()` reads ESPN's public NFL API (no key): this week's scoreboard, `standings?level=3` (conference seed + division), and in the postseason one scoreboard per round for the bracket (`roundFrom`). Cached 5 min via `cachedFeed`, `NFL_DATA` only when cold. `team.logo` (scoreboard) / `team.logos[0]` (standings) → `Team.logoUrl`
 
+- `travel-assistant-service.ts` — the assistant's reads (`listAssistantTrips`, `getAssistantTrip`) and its one write path, `runChanges`: `previewTravelChanges` runs it in a transaction it rolls back, `applyTravelChanges` commits it, `undoTravelChanges` replays the signed inverse (see *Notes*). `travel-service.ts` exports `tripRowValues` / `itemRowValues` / `setItemMembers` so the forms and the assistant save the same way, and `loadTripWithRelations(exec, …)` (what `getTripWithRelations` caches) so a preview can read the trip inside its own transaction
+
 ## Schemas — `/schemas/`
 - `travel.ts` — `createTripSchema`, `updateTripSchema`, `tripItemBaseSchema` →
   `tripItemSchema` / `updateTripItemSchema` (both carry the `endsAfterStart`
@@ -79,6 +85,8 @@ back to its fixture only when its feed has never answered.
 - `racquet.ts` — `racquetDrawSchema` / `RacquetDrawData`: a union on `sport` — padel (`wpt-men|wpt-women`, `padelapi-<n>`) or tennis (`atp|wta`, `espn-<n>-<yyyy>-(mens|womens)-singles`) — so an id not in the feed's own shape is refused before it costs a provider request. The view runs it in the browser too, so a fixture's ids never reach the server
 - `f1.ts` — `f1RaceRefSchema` / `F1RaceRefData`: an integer season 1950–2100 and round 1–40, so nothing but a round number reaches Jolpica's URL
 
+- `travel-assistant.ts` — `travelChangeSetSchema` (`summary` + 1–60 `changes`: `create_trip` with a `ref`, `update_trip` (cover included), `delete_trip`, `add_item` by `tripId` or `tripRef`, `update_item`, `delete_item`, `add_member` / `update_member` / `remove_member`, `add_photo` / `remove_photo`, `add_payment` / `update_payment` / `remove_payment`; fields are patches, and items and payments can name their travellers with `attendeeNames` / `payerNames` / `memberName`) and `travelUndoTokenSchema`
+
 ## Types — `/types/`
 - `travel.ts` — `Trip`, `TripItem`, `TripPhoto`, `TripShare`,
   `TripContribution`, `TripMemberView`, `TripItemStop`, `TripItemWithStops`,
@@ -88,11 +96,17 @@ back to its fixture only when its feed has never answered.
   `SharedCalendarTrip` (a share link's month: dates, names and figures only)
 - `sports.ts` — `SPORT_IDS` (the one list `SportId` derives from), `SPORT_COMPETITIONS` (what each sport's dashboard card can be set to: `FOOTBALL_COMPETITION_IDS`, which `FootballLeagueId` derives from, `LOL_REGIONS`, which `LolRegion` derives from, `TENNIS_TOURS`, `PADEL_CATEGORIES`), `DashboardSportCard.competitions?` (`DashboardCompetitions`: `value`, `automatic?`, `options`, `waiting?` — a stored choice the card cannot show today), `FavoriteSport` (`sportId` + `competition`), `F1StandingRow` / `F1DashboardStandings`, `F1DriverPortrait` (ESPN's pictures for the F1 feed; `F1Driver.imageUrl` / `flagUrl`, `F1Constructor.logoUrl`), `F1Race.circuitId` (Jolpica's track key, which finds the race's outline), `F1Race.startsAt` (the start as an instant; `date` is the UTC day, see *Notes*), `country`, `sprint`, `sessions` (`F1Session`: an `F1SessionKind` and an instant), `winner` (`F1RaceWinner`), `podiumGaps`, `pole` / `fastestLap` (`F1LapMark`), `sprintWinner` and, on the dashboard's race only, `lastYear` (`F1PastWinner`); `F1RaceClassification` (`F1ClassificationRow[]`), `F1DashboardHighlight` (`season`, `race`, `liveSession?`, `nextSession?`, `nextSessionIn?`), `F1NewsArticle`, and the full domain shapes for matches, standings, brackets, F1/NBA/NFL/LoL specifics, plus `UserSportsPreference`. `SportId` no longer includes `worldcup` (the World Cup is a football competition; `?sport=worldcup` links land on it); `FootballLeagueId` includes `world-cup`; `DashboardSportCard` / `DashboardMatch` / `DashboardTable` shape every sport's dashboard card; `FootballLeagueData.groups?: FootballGroupStandings[]` carries per-group cup tables; `Match.penalties` holds a shoot-out outside the score; `LolRegion` includes `worlds` / `msi` / `first-stand`; `LolSplit.swiss` is a `SwissStage` (`SwissPool` / `SwissMatch` / `SwissExit`); `LolSplit.international?` / `LolSplit.champion?` (`LolChampion`: `teamId` + the `final` as a `BracketMatch`) and `LolData.upcoming?` (`LolUpcoming`: region, name, a `YYYY-MM-DD` start); `NbaChampion` (season label, `teamId`, `summary`), `NbaData.champion?` / `NbaData.tipOff?` (both only until the opener; the tip-off an instant, or a calendar day); `DashboardSportCard.note?` (`{ title, text?, when?: { label, startsAt } }`, printed in place of the tables) and `DashboardTable.unranked?` (a list, not a ranking: no position column); `RacquetTournament.tier?` / `imageUrl?` / `venue?` / `prize?` / `defendingChampion?` (its `bracket` shipped only for the featured and current tournament), `RacquetCalendarEntry` + `RacquetData.calendar?`, `RacquetDraw` (`rounds`, `players`, `champion?`, `runnerUp?`, `resultsHidden?`); `BracketMatch.legs[]` carry `homeTiebreak` / `awayTiebreak`, and `BracketMatch.outcome?` is `walkover | retired`
 
+- `travel-assistant.ts` — `TravelChangeLine`, `TravelProposal`, `AppliedTravelChanges`, `TravelAssistantMessage`, `TravelAssistantEvent`
+
 ## Components
-- `components/travel/` — trip list/detail, item editors, photo gallery, share panel.
+- `components/travel/` — trip list/detail, item editors, banner photos, share panel.
+- `lib/travel/banner-slides.ts` — `bannerSlides` (the cover, then the trip's own photos) and `BannerSlide`; a plain module because the shared page, a server component, calls it and cannot call a client module's function
+- `components/travel/banner-photos.tsx` — the banner carousel shared by the trip page and the public view: `useBannerCarousel` (a turn every 5s, restarted by a hand-picked dot; still under reduced motion; only the marked slides while a proposal marks some), `BannerSlides` (crossfading layers) and `BannerDots`; `BannerPhotos` puts the two together. `banner-photos-dialog.tsx` — `BannerPhotosDialog`, adding and removing the trip's own photos from the banner's Photos button (the cover is still set from Edit)
+- `components/travel/assistant/` — `TravelAssistant` (corner button + chat: a floating, non-modal window on wide screens, a full-screen sheet on phones; mounted by `app/portal/entertainment/travel-planner/layout.tsx` when `canUseTravelAssistant`; attaches images through `lib/travel/photo-upload.ts`, the upload `PhotoPicker` uses too), `ProposalCard` (Apply / Cancel, then the receipt with Undo on the newest one), `ChangeTimeline` (the card's strip of the trip's days: dashed where things were, solid where they go), `pending-preview.tsx` (the open proposal as context: `useTripPreview`, `PendingMarks` / `usePendingMark` (`PendingMarks` also scrolls the first `data-pending` badge into view when a proposal lands), `PendingBadge`, `pendingRowClass`, `reviveTrip`), `PendingReviewBar` (Apply / Discard / back to the chat, floating over any page while a proposal waits and the chat is closed), `NewTripPreview` and `VoiceButton` (Web Speech dictation into the message box, ES / EN, with a live level meter; absent where the browser has no speech recognition)
   List/Calendar switches are `ToggleGroup` (they own no tab panels); dates are
   picked with `DateField`; the airport picker is `Popover` + `Command`; the
   trip form takes `onCancel` / `onSaved` so the edit dialog closes on both
+- `TripDetail` draws a trip the open proposal touches as the proposal would leave it (`TripPreview.trip`) and locks its content until the user decides; `TripItinerary`, `TravellerBar`, `TripPayments` and the banner (a photo added or removed becomes the slide on show, badged "New photo" / "Removing photo") light up new and changed rows (blue, sliding in one after another), show what changed (old price struck, "moved from"), and keep removed ones on screen, crossed out in red and out of every total
 - `components/travel/trip-photo.tsx` — every trip/item photo and cover; a
   dead link shows a muted tile (covers fall back to the trip colour) instead of
   the browser's broken-image glyph
@@ -156,7 +170,7 @@ back to its fixture only when its feed has never answered.
 ## DB tables — `db/schema.ts`
 - `trips` — user-owned trips (date-based, no timezone)
 - `trip_items` — activities, bookings, transport, food (optional scheduled dates)
-- `trip_photos` — gallery (uploaded or external URLs)
+- `trip_photos` — uploaded or external URLs; with `item_id` on an activity, without it one of the photos taking turns on the trip's banner
 - `trip_shares` — share tokens for read-only public access; `member_id` scopes
   a link to one traveller, `show_prices` / `show_members` gate what it exposes,
   `expires_at` ends it (null: until revoked)
@@ -190,6 +204,8 @@ from `new Date()` and hydration-failed every evening west of UTC.
   trip), the payment log, the traveller bar, the marquee, the share
   bar's sign-in, the unit arithmetic, the public page (its client calendar's
   props, its figures) and the share panel's expiry (default, zone, change, extend)
+- Travel assistant — Vitest: `schemas/travel-assistant.test.ts` (refs, money), `lib/travel/assistant/{converse,undo-token,stream}.test.ts` (the tool loop against a fake client, web search status and paused turns, signed receipts, NDJSON), `lib/services/travel-assistant-service.test.ts` (apply, merge, ownership, travellers by name, removing one and undoing it, photos, preview, undo), `app/actions/travel-assistant.test.ts`, `app/api/travel/assistant/route.test.ts`, `components/travel/assistant/{travel-assistant,change-timeline}.test.tsx` (stream, card, Apply note, Undo, attachments, dictation, the timeline, following the assistant to a trip, the floating window staying open on desktop and making way on a phone, the review bar), `components/travel/assistant/pending-preview.test.tsx` (new, changed and removed rows on the itinerary, totals without the removed, scrolling to the first change)
+- Banner — Vitest: `components/travel/banner-photos.test.tsx` (a turn every five seconds and back to the first, a hand-picked photo's full five, only the marked photos while a proposal waits, no dots for one photo, `bannerSlides`' order)
 - `e2e/trip-lifecycle.spec.ts` — Playwright, real Supabase user
 - `e2e/trip-share-links.spec.ts` — Playwright; opens both kinds of share link in
   a browser with no session, which is the only place the server/client boundary
@@ -220,6 +236,7 @@ from `new Date()` and hydration-failed every evening west of UTC.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **The travel assistant proposes; the user applies.** The model (picked by an admin in Settings → AI, Claude Opus 5.5 by default; effort medium, `fallbacks: "default"` except on Haiku, which has none; every call's tokens recorded in `ai_usage`) reads with `list_trips` / `get_trip` and writes only through `propose_changes`, which runs the real write path in a rolled-back transaction, so the card shows what the database actually said, and a bad date or someone else's trip fails before the user sees it. Apply re-validates and commits; what the user did with a card reaches the model as a note on their next message. Undo replays a signed inverse (a deleted trip comes back with all nine of its tables), keyed off `CRON_SECRET`, bound to the user, valid 24h; only the newest receipt offers it. The browser keeps the API transcript and sends it back unchanged (append-only), and the date and open trip arrive as mid-conversation system notes so the system prompt stays cached. Admins only (`lib/travel/assistant/access.ts`): every message spends the owner's API credit. It can also add, edit and remove travellers (removing one revokes links scoped to them, as `setTripMembers` does, and Undo restores them with their payments), set the cover and add or remove photos (the row only, so Undo has a file to point at), and look up prices with Anthropic's web search (`max_uses` 3, $0.01 a search). Attached images go to the trip-photos bucket first, then to Claude as URL image blocks, with a note giving each one's `storagePath` so it can be kept as a photo. Payments are logged records (nothing is charged); only the trip's owner can apply them, like everything else. The proposal is decided on the page, not in the chat: the preview also reads each touched trip before and after inside its rolled-back transaction (`TripPreview`), the assistant opens that trip (`open_trip`, or `/preview` for a new one), the page draws it and scrolls to the first change. On a wide screen the chat floats in a corner and stays open beside the page (clicking the page does not close it), and its card decides; on a phone the chat closes and the review bar decides. Applying offers Undo in a toast.
 - **Logic audit (2026-09-11).** Travel: `TripCalendar` takes `showPrices` and the public calendar tab honours the link's setting; removing a traveller revokes their scoped share links (the FK would have widened them to the whole trip); `defaultShares` scales fixed shares up when they total under 100 with nobody flexible; a per-person item whose named payers are a subset of its attendees charges the payers for the other seats; the dashboard estimate uses `tripCost` with the party size; a hidden end date is not saved; stops renumber on save and "Add day" continues from the highest day; the public payload omits the owner's user id and shows item notes only on priced links. Sports: F1 picks a live race first and derives `live` from the race time; NBA live games carry scores and "recent" means finals; an ESPN tennis event that has not started is `upcoming`; F1 news dedupes a batch by article id and orders with a tiebreaker; date-only strings are read as calendar days; the dashboard card counts followed sports.
 - **`setTripMembers` scopes every member update to the trip.** A member id
   borrowed from somebody else's trip used to be overwritten and re-parented.
@@ -288,8 +305,22 @@ from `new Date()` and hydration-failed every evening west of UTC.
   becomes a `Date`, somebody west of Greenwich gets yesterday.
 - **Photos attach to an item** (`trip_photos.item_id`, which had existed
   unused since the table did). A photo picked before the item exists waits in
-  the form and is attached once the insert returns an id. The gallery holds
-  only the trip's own photos; the rest travel with their item.
+  the form and is attached once the insert returns an id. The trip's own
+  photos (no item) take turns on the banner; the rest travel with their item.
+- **No gallery: the banner is the trip's only picture.** A photo of something
+  done belongs on that activity, so the Gallery card went (planner and shared
+  page alike) and the trip's own photos became banner slides after the cover,
+  crossfading every five seconds with dots along the bottom edge, inside the
+  padding so they never meet the dates. No migration: they were already the
+  rows without an `item_id`.
+- **The payments column is sticky** (`lg:sticky lg:top-6 lg:self-start`) on
+  the planner and the shared page, so the money stays beside the days as they
+  scroll. `self-start` matters: a grid stretches its items to the row, and a
+  column as tall as the itinerary has nothing to stick against.
+- **The banner's buttons are dark glass with white text** (the traveller
+  pill's `bg-black/60 ring-white/20`), not `secondary`: that variant is a pale
+  grey with blue text, which over a photograph read as a light patch. Delete
+  turns red on hover rather than carrying a red icon a dark surface swallows.
 - **The shared page's view switcher sits on the banner**, opposite the total,
   dark and ringed for the same reason the pill is: the photograph underneath
   is unknown. `PublicTripViews` owns the page layout rather than a slot inside
@@ -383,9 +414,10 @@ from `new Date()` and hydration-failed every evening west of UTC.
   [`e2e/trip-share-links.spec.ts`](../../e2e/trip-share-links.spec.ts) opens
   both kinds of link in a browser with no session.
 - **Both grid columns carry `min-w-0`.** An `fr` track still takes an automatic
-  minimum from its content, so the gallery's photo rail widened its own column
-  and crushed the itinerary to one word per line. The rail scrolls; the column
-  has to be allowed to be narrower than it.
+  minimum from its content, so the old gallery's photo rail (gone since) widened
+  its own column and crushed the itinerary to one word per line. Any row that
+  scrolls sideways does the same; the column has to be allowed to be narrower
+  than it.
 - **The banner is `min-h-72` below `sm`.** At 21/9 a 390px phone gives 167px,
   and the traveller pill, the buttons and the title all landed on top of each
   other. Its three overlays are now one `justify-between` column.
@@ -417,8 +449,8 @@ from `new Date()` and hydration-failed every evening west of UTC.
   the delete button used to hold space at the right of every row, which is what
   pushed each amount off the card's edge.
 - **Icon buttons are `size-9 sm:size-7`** — 36px on touch, 28px on a pointer.
-  Several were 20–24px, and the gallery's delete was both the smallest and the
-  only destructive one visible without hovering.
+  Several were 20–24px, and the old gallery's photo delete was both the
+  smallest and the only destructive one visible without hovering.
 - **`space-y-*` stays.** The shadcn skill prefers `gap-*`, but
   [`docs/SPACING.md`](../SPACING.md) mandates `space-y-4`/`space-y-6` for
   stacked blocks, and a blanket swap would silently do nothing wherever the
@@ -616,8 +648,8 @@ from `new Date()` and hydration-failed every evening west of UTC.
 - **Travel formatting helpers live in [`lib/travel/format.ts`](../../lib/travel/format.ts)** (`parseTripDate`, `formatDateRange`, `tripDays`, `tripDurationLabel`, `formatTripMoney`) — a server-safe module with no `"use client"`. They were previously duplicated per component and exported from the client `trip-detail.tsx`; importing that from the server-rendered `public-trip-view.tsx` turned them into client references and **500'd every public share link**. Never re-export shared helpers from a client module.
 - `getPublicTripByToken` is wrapped in `React.cache()` (like `getTripWithRelations`) so `generateMetadata` + page body share one DB hit. The share panel treats **expired** links as inactive (same as revoked — the public resolver rejects both); an expired link that was never revoked can be *Extended* back to life, a revoked one cannot.
 - **The owner picks how long a share link lives** — *Until the trip ends*, 1 / 7 / 30 days, a day from the calendar, or *Never* — when it is made and later from its row. A trip with an end date starts on *Until the trip ends*: the last millisecond of its last day in the **reader's** zone (`endOfDayInTimeZone` with `useReaderTimeZone()`), because UTC midnight would end a Costa Rican trip at 6 pm on its final day. An open-ended or finished trip starts on *Never*, which is what every link did before. A preset counts 24-hour days from the click. Whatever the choice, `expires_at` stores one instant, so editing the trip's dates afterwards does not move a link's expiry. The schema refuses an expiry in the past, and the server compares instants only, so no server-side day ever meets the browser's.
-- Itinerary/gallery/calendar hover-revealed controls are always visible below `sm` (no hover on touch) and reveal on keyboard focus.
-- All trip cover photos and gallery thumbnails render through `next/image` (remote hosts whitelisted in [`next.config.ts`](../../next.config.ts)). The blob-URL preview inside `photo-picker.tsx` stays as a CSS background because the optimizer can't process blob URLs.
+- Itinerary/banner-photos/calendar hover-revealed controls are always visible below `sm` (no hover on touch) and reveal on keyboard focus.
+- All trip banner photos and thumbnails render through `next/image` (remote hosts whitelisted in [`next.config.ts`](../../next.config.ts)). The blob-URL preview inside `photo-picker.tsx` stays as a CSS background because the optimizer can't process blob URLs.
 - `getTripWithRelations` is wrapped in `React.cache()` so `generateMetadata` and the page body share one DB hit per request.
 - Each route ships its own `loading.tsx` (the trip list's sits in `travel-planner/(list)/` with its page, so it does not wrap the new-trip and trip routes); `app/portal/entertainment/travel-planner/[id]/not-found.tsx` and `app/portal/entertainment/error.tsx` give the module its 404 / error boundaries.
 - **Sports data — sources (as of 2026-10-19):**

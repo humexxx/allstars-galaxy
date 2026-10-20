@@ -62,7 +62,8 @@ pnpm db:seed        # Seed database
   and mocks `@/db` at the import boundary — no real Supabase needed. See
   [`vitest.config.ts`](vitest.config.ts) and [`vitest.setup.ts`](vitest.setup.ts)
   (the setup stubs the `server-only` marker so server modules can be imported
-  from the test runner).
+  from the test runner, and gives jsdom a `matchMedia` that matches nothing —
+  a wide screen with motion allowed; a test that needs a phone stubs its own).
 - **Playwright** (`e2e/*.spec.ts`) drives the real app at `http://localhost:3010`.
   Requires a dedicated Supabase test user — copy [`.env.test.example`](.env.test.example)
   to `.env.test` and fill `TEST_USER_EMAIL` / `TEST_USER_PASSWORD`. The auth
@@ -361,6 +362,13 @@ PADEL_API_KEY           # Premier Padel + FIP tournaments, last 6 months of
 RAPIDAPI_KEY            # Refreshes the stored F1 news archive on the daily
                         # cron. Unset = no refresh (not a cron failure); the
                         # articles already stored keep reading.
+
+# travel assistant
+ANTHROPIC_API_KEY       # Claude API key for the Travel Planner's AI chat.
+                        # Unset = no assistant button. Admins only, since
+                        # every message spends API credit. A Max plan's
+                        # monthly API credit covers it (claim it by linking a
+                        # Console organization from claude.ai Billing).
 
 # DORMANT — kept for reference, not used by any service today:
 API_SPORTS_KEY          # Free tier hard-locked to seasons 2022-2024, unusable

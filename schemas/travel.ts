@@ -144,10 +144,11 @@ export const moveTripItemSchema = z
 
 export const tripPhotoSchema = z.object({
   /**
-   * Attaches the photo to one item instead of the trip's gallery.
+   * Attaches the photo to one item; without it, the photo takes turns on
+   * the trip's banner.
    *
    * The column has existed since the table did; nothing ever sent it, so
-   * every photo landed in the gallery whatever it was of.
+   * every photo landed on the trip whatever it was of.
    */
   itemId: idSchema.nullable().optional(),
   url: z.url().max(2000),

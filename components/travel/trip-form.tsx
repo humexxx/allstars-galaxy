@@ -19,20 +19,12 @@ import {
   type CreateTripData,
   type CreateTripInput,
 } from "@/schemas/travel";
+import { TRIP_COLORS } from "@/lib/travel/trip-colors";
 import type { Trip } from "@/types/travel";
 
 import { PhotoPicker } from "./photo-picker";
 
 const TRIP_LIST_PATH = "/portal/entertainment/travel-planner";
-
-/** Categorical slots, in order — see "Chart colours" in CLAUDE.md. */
-const COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-];
 
 export function TripForm({
   trip,
@@ -85,7 +77,7 @@ export function TripForm({
       endDate: trip?.endDate ?? null,
       coverPhotoUrl: trip?.coverPhotoUrl ?? null,
       currency: trip?.currency ?? "USD",
-      color: trip?.color ?? COLORS[0],
+      color: trip?.color ?? TRIP_COLORS[0],
     },
   });
 
@@ -249,14 +241,14 @@ export function TripForm({
               onValueChange={(v) => v && field.onChange(v)}
               className="gap-2"
             >
-              {COLORS.map((c, i) => (
+              {TRIP_COLORS.map((c, i) => (
                 <ToggleGroupItem
                   key={c}
                   value={c}
                   aria-label={`Color ${i + 1}`}
                   className="size-7 min-w-0 flex-none rounded-full border-2 border-transparent p-0 shadow-none data-[state=on]:border-foreground"
                   // The swatch IS the value; a token class per slot would
-                  // have to be kept in step with COLORS by hand.
+                  // have to be kept in step with TRIP_COLORS by hand.
                   style={{ backgroundColor: c }}
                 />
               ))}

@@ -37,6 +37,14 @@ import { CategoryIcon, categoryMeta } from "@/components/travel/category";
 import { ItemForm } from "@/components/travel/item-form";
 import { TripPhoto } from "@/components/travel/trip-photo";
 import { readerCost, viewerItems, type ItineraryViewer } from "@/lib/travel/viewer";
+import { cn } from "@/lib/utils";
+import {
+  PendingBadge,
+  pendingDelay,
+  pendingRowClass,
+  usePendingMark,
+  usePendingTrip,
+} from "@/components/travel/assistant/pending-preview";
 export type { ItineraryViewer };
 
 import { Badge } from "@/components/ui/badge";
@@ -53,7 +61,9 @@ const NO_DATE_KEY = "__no_date__";
 function groupByDay(
   items: TripItemWithStops[],
   partySize: number,
-  viewer: ItineraryViewer | null
+  viewer: ItineraryViewer | null,
+  /** Rows on show that do not count: ones a previewed proposal removes. */
+  ghosts: ReadonlySet<string> = new Set()
 ): Array<{
   key: string;
   label: string;
@@ -79,7 +89,7 @@ function groupByDay(
     let low = 0;
     let high = 0;
     for (const item of arr) {
-      if (item.price === null) continue;
+      if (item.price === null || ghosts.has(item.id)) continue;
       const cost = readerCost(item, partySize, viewer);
       low += cost.low;
       high += cost.high;
@@ -105,12 +115,24 @@ export function TripItinerary({
   viewer = null,
 }: TripItineraryProps) {
   const [adding, setAdding] = useState(false);
+  // A previewed proposal's removals stay on the page, crossed out, where
+  // they were — and out of every total.
+  const pending = usePendingTrip();
+  const removed = useMemo(() => pending?.removed.items ?? [], [pending]);
+  const ghostIds = useMemo(() => new Set(removed.map((i) => i.id)), [removed]);
   /** Only what the selected traveller is part of; the whole plan otherwise. */
-  const items = useMemo(() => viewerItems(trip.items, viewer), [trip.items, viewer]);
-  const groups = useMemo(
-    () => groupByDay(items, partySize, viewer),
-    [items, partySize, viewer]
+  const items = useMemo(
+    () => viewerItems([...trip.items, ...removed], viewer),
+    [trip.items, removed, viewer]
   );
+  const groups = useMemo(
+    () => groupByDay(items, partySize, viewer, ghostIds),
+    [items, partySize, viewer, ghostIds]
+  );
+  const pendingCount = pending
+    ? items.filter((i) => pending.marks[i.id]).length
+    : 0;
+  let row = 0;
 
   return (
     <Card>
@@ -125,9 +147,14 @@ export function TripItinerary({
           <span className="flex items-center gap-2">
             Itinerary
             {/* The count belongs with the thing it counts, not in the banner. */}
-            {items.length > 0 && (
+            {items.length - ghostIds.size > 0 && (
               <Badge variant="secondary" className="text-2xs font-normal">
-                {items.length}
+                {items.length - ghostIds.size}
+              </Badge>
+            )}
+            {pendingCount > 0 && (
+              <Badge variant="info" className="text-2xs font-normal">
+                {pendingCount} pending
               </Badge>
             )}
           </span>
@@ -175,6 +202,7 @@ export function TripItinerary({
               {group.items.map((item) => (
                 <ItemRow
                   key={item.id}
+                  index={pending?.marks[item.id] ? row++ : 0}
                   tripId={trip.id}
                   item={item}
                   currency={trip.currency}
@@ -213,6 +241,7 @@ export function TripItinerary({
 }
 
 function ItemRow({
+  index,
   tripId,
   item,
   currency,
@@ -220,6 +249,8 @@ function ItemRow({
   viewer,
   travellers,
 }: {
+  /** Its place among the previewed rows, so they come in one after another. */
+  index: number;
   tripId: string;
   item: TripItemWithStops;
   currency: string;
@@ -229,6 +260,9 @@ function ItemRow({
   travellers: { id: string; name: string }[];
 }) {
   const [editing, setEditing] = useState(false);
+  const pending = usePendingMark(item.id);
+  const before = pending?.mark === "change" ? pending.before : undefined;
+  const moved = (field: string): boolean => Boolean(before && pending?.fields.includes(field));
   const meta = categoryMeta(item.category);
   const cost = itemCost(item, partySize);
   // The row leads with whatever the day subtotal is adding up, or the two
@@ -258,7 +292,12 @@ function ItemRow({
     <li
       // Padded, not just spaced: the row is a target now, and a hover
       // tint that stops at the text reads as a highlight rather than a row.
-      className="group relative flex cursor-pointer items-start gap-3 rounded-md px-2 py-3 transition-colors before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:h-px before:bg-border first:before:hidden hover:bg-muted/40"
+      className={cn(
+        "group relative flex cursor-pointer items-start gap-3 rounded-md px-2 py-3 transition-colors before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:h-px before:bg-border first:before:hidden hover:bg-muted/40",
+        pendingRowClass(pending?.mark),
+        pending?.mark === "remove" && "opacity-70"
+      )}
+      style={pending ? pendingDelay(index) : undefined}
       onClick={openEditor}
     >
       <CategoryIcon category={item.category} />
@@ -278,13 +317,40 @@ function ItemRow({
             // second one on the title reads as a link to somewhere else.
             className="col-span-2 row-start-1 min-w-0 cursor-pointer rounded-sm text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring sm:col-span-1"
           >
-            <span className="line-clamp-2 break-words">{item.title}</span>
+            <span
+              className={cn(
+                "line-clamp-2 break-words",
+                pending?.mark === "remove" && "line-through decoration-destructive"
+              )}
+            >
+              {item.title}
+            </span>
+            {pending && <PendingBadge mark={pending.mark} className="mt-1" />}
+            {moved("title") && (
+              <span className="block text-xs font-normal text-muted-foreground line-through">
+                {before!.title}
+              </span>
+            )}
           </button>
           {item.price && (
             <span className="col-start-2 row-start-2 text-right sm:row-span-2 sm:row-start-1">
-              <Mono className="block whitespace-nowrap text-xs font-medium">
+              <Mono
+                className={cn(
+                  "block whitespace-nowrap text-xs font-medium",
+                  (moved("price") || moved("priceMax") || moved("priceUnit")) &&
+                    "rounded bg-primary px-1 text-primary-foreground"
+                )}
+              >
                 {moneyRange(mine.low, mine.high, currency)}
               </Mono>
+              {(moved("price") || moved("priceMax") || moved("priceUnit")) && before!.price && (
+                <Mono className="block whitespace-nowrap text-2xs text-muted-foreground line-through">
+                  {(() => {
+                    const was = readerCost(before!, partySize, viewer);
+                    return moneyRange(was.low, was.high, currency);
+                  })()}
+                </Mono>
+              )}
               {viewer ? (
                 // Their share leads, but the booking price is what you would
                 // actually see on the hotel's site, so it stays in view.
@@ -304,6 +370,11 @@ function ItemRow({
           )}
         <div className="col-start-1 row-start-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
           <span className="capitalize">{meta.label}</span>
+          {(moved("scheduledOn") || moved("endsOn")) && (
+            <span className="rounded bg-primary/10 px-1.5 text-primary">
+              moved from {before!.scheduledOn ? formatShortDay(before!.scheduledOn) : "no date"}
+            </span>
+          )}
           {(item.fromCode || item.toCode) && (
             <Mono className="text-2xs font-medium">
               {item.fromCode ?? "?"}

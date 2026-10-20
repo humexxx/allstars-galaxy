@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 /**
  * A trip opens on a photo hero, not a `PageHeader`: the back link and view
  * switch above it, the banner (full bleed on a phone, 21/9 from `sm`), then
- * the itinerary beside the payments and gallery column.
+ * the itinerary beside the payments.
  */
 export default function TripDetailLoading() {
   return (
@@ -33,14 +33,6 @@ export default function TripDetailLoading() {
             <CardContent className="flex flex-col gap-3">
               <Skeleton className="h-8 w-32" />
               <Skeleton className="h-1.5 w-full" />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-20" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-28 w-full" />
             </CardContent>
           </Card>
         </div>

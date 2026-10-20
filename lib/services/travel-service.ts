@@ -20,7 +20,7 @@ function groupByItem(rows: { itemId: string; memberId: string }[]): Map<string, 
 }
 
 /** The handle inside `db.transaction`, which is the same shape as `db`. */
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 import {
   trips,
   tripContributions,
@@ -113,6 +113,46 @@ function tripState(trip: Trip, today: string): DashboardTravelTripState {
   if (lastDay < today) return "past";
   if (trip.startDate > today) return "upcoming";
   return "in_progress";
+}
+
+/**
+ * A trip's columns from validated input — one mapping for the trip form and
+ * the travel assistant, so the two can never save the same input differently.
+ */
+export function tripRowValues(
+  data: CreateTripData
+): Omit<typeof trips.$inferInsert, "id" | "userId" | "createdAt" | "updatedAt"> {
+  return {
+    title: data.title,
+    destination: data.destination ?? null,
+    description: data.description ?? null,
+    startDate: data.startDate,
+    endDate: data.endDate ?? null,
+    coverPhotoUrl: data.coverPhotoUrl ?? null,
+    currency: data.currency,
+    color: data.color,
+  };
+}
+
+/** An item's columns from validated input; see `tripRowValues`. */
+export function itemRowValues(
+  data: TripItemData
+): Omit<typeof tripItems.$inferInsert, "id" | "tripId" | "sortOrder" | "createdAt" | "updatedAt"> {
+  return {
+    title: data.title,
+    category: data.category,
+    link: data.link ?? null,
+    videoUrl: data.videoUrl ?? null,
+    fromCode: data.fromCode ?? null,
+    toCode: data.toCode ?? null,
+    roundTrip: data.roundTrip ?? false,
+    priceMax: data.priceMax ?? null,
+    priceUnit: data.priceUnit ?? "total",
+    endsOn: data.endsOn ?? null,
+    price: data.price ?? null,
+    scheduledOn: data.scheduledOn ?? null,
+    notes: data.notes ?? null,
+  };
 }
 
 // ---------- trip CRUD ----------
@@ -251,17 +291,7 @@ export async function createTrip(
 ): Promise<Trip> {
   const [trip] = await db
     .insert(trips)
-    .values({
-      userId,
-      title: data.title,
-      destination: data.destination ?? null,
-      description: data.description ?? null,
-      startDate: data.startDate,
-      endDate: data.endDate ?? null,
-      coverPhotoUrl: data.coverPhotoUrl ?? null,
-      currency: data.currency,
-      color: data.color,
-    })
+    .values({ userId, ...tripRowValues(data) })
     .returning();
   return trip;
 }
@@ -273,17 +303,7 @@ export async function updateTrip(
   await ensureTripOwnership(data.id, userId);
   const [trip] = await db
     .update(trips)
-    .set({
-      title: data.title,
-      destination: data.destination ?? null,
-      description: data.description ?? null,
-      startDate: data.startDate,
-      endDate: data.endDate ?? null,
-      coverPhotoUrl: data.coverPhotoUrl ?? null,
-      currency: data.currency,
-      color: data.color,
-      updatedAt: new Date(),
-    })
+    .set({ ...tripRowValues(data), updatedAt: new Date() })
     // Owner in the WHERE as well as the pre-check: the check and the write are
     // two statements, and the write must not trust what was true between them.
     .where(and(eq(trips.id, data.id), eq(trips.userId, userId)))
@@ -310,7 +330,7 @@ export async function deleteTrip(userId: string, tripId: string): Promise<void> 
  * Takes the table because payers and attendees differ in nothing else, and two
  * copies of this drift the moment one of them is fixed.
  */
-async function setItemMembers(
+export async function setItemMembers(
   table: typeof tripItemPayers | typeof tripItemAttendees,
   tx: Tx,
   tripId: string,
@@ -343,23 +363,7 @@ export async function addTripItem(
   return db.transaction(async (tx) => {
   const [row] = await tx
     .insert(tripItems)
-    .values({
-      tripId,
-      title: data.title,
-      category: data.category,
-      link: data.link ?? null,
-      videoUrl: data.videoUrl ?? null,
-      fromCode: data.fromCode ?? null,
-      toCode: data.toCode ?? null,
-      roundTrip: data.roundTrip ?? false,
-      priceMax: data.priceMax ?? null,
-      priceUnit: data.priceUnit ?? "total",
-      endsOn: data.endsOn ?? null,
-      price: data.price ?? null,
-      scheduledOn: data.scheduledOn ?? null,
-      notes: data.notes ?? null,
-      sortOrder: data.sortOrder ?? 0,
-    })
+    .values({ tripId, ...itemRowValues(data), sortOrder: data.sortOrder ?? 0 })
     .returning();
   // A brand-new row has nothing to clear, so only a named list is worth a
   // round trip here. On update it is unconditional — clearing is meaningful.
@@ -382,23 +386,7 @@ export async function updateTripItem(
   return db.transaction(async (tx) => {
   const [row] = await tx
     .update(tripItems)
-    .set({
-      title: data.title,
-      category: data.category,
-      link: data.link ?? null,
-      videoUrl: data.videoUrl ?? null,
-      fromCode: data.fromCode ?? null,
-      toCode: data.toCode ?? null,
-      roundTrip: data.roundTrip ?? false,
-      priceMax: data.priceMax ?? null,
-      priceUnit: data.priceUnit ?? "total",
-      endsOn: data.endsOn ?? null,
-      price: data.price ?? null,
-      scheduledOn: data.scheduledOn ?? null,
-      notes: data.notes ?? null,
-      sortOrder: data.sortOrder,
-      updatedAt: new Date(),
-    })
+    .set({ ...itemRowValues(data), sortOrder: data.sortOrder, updatedAt: new Date() })
     .where(and(eq(tripItems.id, data.id), eq(tripItems.tripId, tripId)))
     .returning();
   // The item can be gone — deleted in another tab while this dialog was open.

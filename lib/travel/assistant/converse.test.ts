@@ -7,9 +7,10 @@ vi.mock("@/lib/services/travel-assistant-service", () => {
     TravelChangeError,
     listAssistantTrips: vi.fn(async () => [{ id: "t1", title: "Orlando" }]),
     getAssistantTrip: vi.fn(async () => ({ id: TRIP, title: "Orlando", items: [] })),
-    previewTravelChanges: vi.fn(async () => [
-      { action: "add", subject: "item", tripTitle: "Orlando", title: "Universal Studios" },
-    ]),
+    previewTravelChanges: vi.fn(async () => ({
+      lines: [{ action: "add", subject: "item", tripTitle: "Orlando", title: "Universal Studios" }],
+      previews: [],
+    })),
   };
 });
 
@@ -110,12 +111,12 @@ describe("converse", () => {
     expect(previewTravelChanges).toHaveBeenCalledOnce();
     expect(events).toContainEqual({
       type: "proposal",
-      proposal: { id: "toolu_9", set, lines: [expect.objectContaining({ title: "Universal Studios" })] },
+      proposal: { id: "toolu_9", set, lines: [expect.objectContaining({ title: "Universal Studios" })], previews: [] },
     });
     const result = (added[1].content as Anthropic.Beta.BetaToolResultBlockParam[])[0];
     expect(result).toMatchObject({ tool_use_id: "toolu_9" });
     expect(result.is_error).toBeUndefined();
-    expect(result.content).toMatch(/Nothing is saved until they apply it/);
+    expect(result.content).toMatch(/Nothing is saved until they apply them/);
   });
 
   it("hands an invalid proposal back to the model to fix", async () => {

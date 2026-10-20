@@ -5,8 +5,9 @@ import { getEffectiveContext } from "@/lib/services/impersonation";
 import { canUseTravelAssistant } from "@/lib/travel/assistant/access";
 
 /**
- * Every Travel Planner page, plus the assistant's corner button. In the layout
- * so the conversation survives moving between the trip list and a trip.
+ * Every Travel Planner page, wrapped by the assistant when it is on: in the
+ * layout so the conversation survives moving between trips, and around the
+ * pages so they can draw a proposal waiting on the user.
  */
 export default async function TravelPlannerLayout({
   children,
@@ -14,10 +15,5 @@ export default async function TravelPlannerLayout({
   children: ReactNode;
 }): Promise<ReactNode> {
   const ctx = await getEffectiveContext();
-  return (
-    <>
-      {children}
-      {ctx && canUseTravelAssistant(ctx) && <TravelAssistant />}
-    </>
-  );
+  return ctx && canUseTravelAssistant(ctx) ? <TravelAssistant>{children}</TravelAssistant> : children;
 }

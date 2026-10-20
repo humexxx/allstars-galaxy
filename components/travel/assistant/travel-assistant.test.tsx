@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const TRIP = "22222222-2222-4222-8222-222222222222";
 
-vi.mock("next/navigation", () => ({ useParams: () => ({ id: TRIP }) }));
+const router = { push: vi.fn(), refresh: vi.fn() };
+vi.mock("next/navigation", () => ({
+  useParams: () => ({ id: TRIP }),
+  useRouter: () => router,
+  usePathname: () => `/portal/entertainment/travel-planner/${TRIP}`,
+}));
 vi.mock("@/app/actions/travel-assistant", () => ({
   applyTravelChangesAction: vi.fn(),
   undoTravelChangesAction: vi.fn(),
@@ -33,6 +38,7 @@ const PROPOSAL: TravelProposal = {
   lines: [
     { action: "add", subject: "item", tripTitle: "Orlando", title: "Universal Studios", category: "activity", detail: "Jan 18, 2027" },
   ],
+  previews: [],
 };
 
 /** A fetch whose every call streams the next scripted list of events. */
@@ -88,7 +94,8 @@ describe("TravelAssistant", () => {
       context: { tripId: TRIP },
     });
     expect(await screen.findByText("Te propongo esto:")).toBeInTheDocument();
-    expect(screen.getByText("Universal on the 18th")).toBeInTheDocument();
+    // On the card in the chat, and on the bar that decides it from the page.
+    expect(screen.getAllByText("Universal on the 18th")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
   });
 
@@ -207,5 +214,58 @@ describe("TravelAssistant dictation", () => {
     expect(box).toHaveValue("En Orlando agregá un parque");
     fireEvent.click(screen.getByRole("button", { name: "Stop dictation" }));
     expect(screen.getByRole("button", { name: /Dictate/ })).toBeInTheDocument();
+  });
+});
+
+describe("TravelAssistant on the page", () => {
+  const OTHER = "33333333-3333-4333-8333-333333333333";
+  const ON_PAGE: TravelProposal = {
+    ...PROPOSAL,
+    previews: [
+      {
+        tripId: OTHER,
+        trip: null,
+        isNew: false,
+        marks: {},
+        fields: {},
+        itemsBefore: {},
+        removed: { items: [], members: [], photos: [], payments: [] },
+        before: null,
+      },
+    ],
+  };
+
+  it("opens the trip the proposal changes and steps the chat aside for it", async () => {
+    stream([{ type: "proposal", proposal: ON_PAGE }, { type: "text", text: "Mirá la página" }]);
+    await say("Cambiá el otro viaje");
+
+    expect(router.push).toHaveBeenCalledWith(`/portal/entertainment/travel-planner/${OTHER}`);
+    // The decision moves to the page: a bar with the summary and the buttons.
+    const bar = screen.getByRole("region", { name: "Changes to review" });
+    expect(bar).toHaveTextContent("Universal on the 18th");
+    expect(bar).toHaveTextContent("1 change waiting for you");
+    // The bar carries the way back to the chat; the corner button steps aside.
+    expect(screen.getByRole("button", { name: "Open the travel assistant" })).toHaveClass("hidden");
+  });
+
+  it("applies from the bar, and offers to undo", async () => {
+    stream([{ type: "proposal", proposal: ON_PAGE }]);
+    vi.mocked(applyTravelChangesAction).mockResolvedValue({
+      success: true,
+      data: { lines: PROPOSAL.lines, undoToken: "receipt" },
+    });
+    await say("Cambiá el otro viaje");
+    const bar = screen.getByRole("region", { name: "Changes to review" });
+    await act(async () => {
+      fireEvent.click(within(bar).getByRole("button", { name: "Apply" }));
+    });
+    expect(applyTravelChangesAction).toHaveBeenCalledWith(PROPOSAL.set);
+    expect(screen.queryByRole("region", { name: "Changes to review" })).toBeNull();
+  });
+
+  it("follows the assistant when it opens a trip", async () => {
+    stream([{ type: "navigate", href: `/portal/entertainment/travel-planner/${OTHER}` }, { type: "text", text: "Listo" }]);
+    await say("Vamos a Islandia");
+    expect(router.push).toHaveBeenCalledWith(`/portal/entertainment/travel-planner/${OTHER}`);
   });
 });

@@ -198,6 +198,35 @@ const removePhotoChange = z.object({
   photoId: idSchema,
 });
 
+/**
+ * Money a traveller has already handed over — logged here, not moved: the app
+ * keeps the record, the transfer happens wherever it happens.
+ */
+const paymentFields = z.object({
+  memberId: idSchema.optional().describe("Who paid"),
+  memberName: z.string().trim().min(1).optional().describe("Or name who paid"),
+  amount: money.describe("How much, in the trip's currency"),
+  paidOn: isoDateSchema.nullable().optional().describe("The day they paid; today when unsaid"),
+  note: z.string().max(500).nullable().optional(),
+});
+
+const addPaymentChange = z.object({ op: z.literal("add_payment"), ...tripTarget, payment: paymentFields });
+
+const updatePaymentChange = z.object({
+  op: z.literal("update_payment"),
+  tripId: idSchema,
+  paymentId: idSchema,
+  // Not who paid: moving a payment rewrites two balances at once. Remove it
+  // and log it again instead, as the app's own form insists.
+  changes: paymentFields.pick({ amount: true, paidOn: true, note: true }).partial(),
+});
+
+const removePaymentChange = z.object({
+  op: z.literal("remove_payment"),
+  tripId: idSchema,
+  paymentId: idSchema,
+});
+
 export const travelChangeSchema = z.discriminatedUnion("op", [
   createTripChange,
   updateTripChange,
@@ -210,6 +239,9 @@ export const travelChangeSchema = z.discriminatedUnion("op", [
   removeMemberChange,
   addPhotoChange,
   removePhotoChange,
+  addPaymentChange,
+  updatePaymentChange,
+  removePaymentChange,
 ]);
 
 export const travelChangeSetSchema = z
@@ -231,7 +263,15 @@ export const travelChangeSetSchema = z
         }
         refs.add(change.ref);
       }
-      if (change.op === "add_item" || change.op === "add_member" || change.op === "add_photo") {
+      if (change.op === "add_payment" && Boolean(change.payment.memberId) === Boolean(change.payment.memberName)) {
+        ctx.addIssue({ code: "custom", path: ["changes", index, "payment"], message: "A payment needs either memberId or memberName" });
+      }
+      if (
+        change.op === "add_item" ||
+        change.op === "add_member" ||
+        change.op === "add_photo" ||
+        change.op === "add_payment"
+      ) {
         // Exactly one, and a ref only once it exists: changes run in order.
         if (Boolean(change.tripId) === Boolean(change.tripRef)) {
           ctx.addIssue({ code: "custom", path: ["changes", index], message: `${change.op} needs either tripId or tripRef` });

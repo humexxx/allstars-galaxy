@@ -50,11 +50,14 @@ vi.mock("@/db", () => {
 vi.mock("@/lib/services/travel-service", async (importActual) => ({
   ...(await importActual<typeof import("@/lib/services/travel-service")>()),
   setItemMembers: vi.fn(async () => undefined),
+  // The trip as the page draws it, before and after: its own loader has its
+  // own tests, and here only which trips it is asked for matters.
+  loadTripWithRelations: vi.fn(async (_tx: unknown, tripId: string) => ({ id: tripId, title: "Orlando", items: [], members: [], photos: [], contributions: [] })),
 }));
 
 import { trips, tripItems, tripMembers, tripItemStops, tripPhotos, tripShares } from "@/db/schema";
 import { readUndo, signUndo } from "@/lib/travel/assistant/undo-token";
-import { setItemMembers } from "@/lib/services/travel-service";
+import { loadTripWithRelations, setItemMembers } from "@/lib/services/travel-service";
 
 import {
   applyTravelChanges,
@@ -305,13 +308,18 @@ describe("previewTravelChanges", () => {
   it("returns what would happen and keeps none of it", async () => {
     selects.push([], [tripRow()]);
     inserts.push([itemRow()]);
-    const lines = await previewTravelChanges(USER, {
+    const { lines, previews } = await previewTravelChanges(USER, {
       summary: "Tickets",
       changes: [{ op: "add_item", tripId: TRIP, item: { title: "Universal Studios", category: "activity" } }],
     });
     expect(lines).toEqual([
-      expect.objectContaining({ action: "add", title: "Universal Studios", tripTitle: "Orlando", tripId: undefined }),
+      expect.objectContaining({ action: "add", title: "Universal Studios", tripTitle: "Orlando", entityId: ITEM }),
     ]);
+    // The trip it touches, as it would be, with the new row marked.
+    expect(previews).toEqual([
+      expect.objectContaining({ tripId: TRIP, isNew: false, marks: { [ITEM]: "add" } }),
+    ]);
+    expect(loadTripWithRelations).toHaveBeenCalledTimes(2);
   });
 });
 

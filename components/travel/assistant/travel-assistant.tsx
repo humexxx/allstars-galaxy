@@ -1,7 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { useParams } from "next/navigation";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { ArrowUp, Paperclip, RotateCcw, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -30,6 +37,8 @@ import type {
 type TravelAssistantContent = Exclude<TravelAssistantMessage["content"], string>[number];
 
 import { TripPhoto } from "../trip-photo";
+import { PendingProposalProvider, type PendingProposal } from "./pending-preview";
+import { PendingReviewBar } from "./pending-review-bar";
 import { ProposalCard, type ProposalState } from "./proposal-card";
 import { VoiceButton } from "./voice-button";
 
@@ -58,6 +67,8 @@ const SUGGESTIONS = [
 let nextId = 0;
 const newId = (): string => `entry-${++nextId}`;
 
+const TRAVEL = "/portal/entertainment/travel-planner";
+
 /**
  * The travel assistant: a corner button on the Travel pages that opens a chat.
  *
@@ -69,12 +80,21 @@ const newId = (): string => `entry-${++nextId}`;
  * Nothing the assistant proposes is written until the user presses Apply, and
  * what the user did with a card reaches the model as a note on their next
  * message — the model would otherwise go on assuming its changes were saved.
+ *
+ * It wraps the Travel pages so they can draw the open proposal on themselves:
+ * when one arrives, the assistant opens the trip it touches, steps the chat
+ * aside, and the page shows the trip as it would be, with a bar to apply or
+ * discard it.
  */
-export function TravelAssistant() {
+export function TravelAssistant({ children }: { children?: ReactNode }) {
   const params = useParams<{ id?: string }>();
   const tripId = typeof params.id === "string" && params.id !== "new" ? params.id : null;
+  const router = useRouter();
+  const pathname = usePathname();
 
   const [open, setOpen] = useState(false);
+  /** The chat said something after it stepped aside for a proposal. */
+  const [unread, setUnread] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -157,6 +177,7 @@ export function TravelAssistant() {
 
     // A new assistant bubble after every card, so text never lands above one.
     let assistantId = newId();
+    let proposed: TravelProposal | null = null;
     try {
       const response = await fetch("/api/travel/assistant", {
         method: "POST",
@@ -178,11 +199,18 @@ export function TravelAssistant() {
             break;
           case "proposal":
             setStatus(null);
+            proposed = event.proposal;
             setEntries((all) => [
-              ...all,
+              // A newer proposal replaces one still waiting: the page shows one.
+              ...all.map((e) =>
+                e.kind === "proposal" && e.state === "open" ? { ...e, state: "cancelled" as const } : e
+              ),
               { kind: "proposal", id: newId(), proposal: event.proposal, state: "open" },
             ]);
             assistantId = newId();
+            break;
+          case "navigate":
+            if (event.href !== pathname) router.push(event.href);
             break;
           case "turn":
             transcript.current = [...history, ...event.messages];
@@ -199,6 +227,18 @@ export function TravelAssistant() {
       setStatus(null);
       setBusy(false);
     }
+    if (proposed) showOnPage(proposed);
+  }
+
+  /** Opens the page the proposal changes and steps the chat aside for it. */
+  function showOnPage(proposal: TravelProposal): void {
+    const fresh = proposal.previews.find((p) => p.isNew);
+    const first = proposal.previews[0];
+    const target = fresh ? `${TRAVEL}/preview` : first ? `${TRAVEL}/${first.tripId}` : null;
+    if (!target) return;
+    if (target !== pathname) router.push(target);
+    setOpen(false);
+    setUnread(true);
   }
 
   async function apply(entry: ProposalEntry): Promise<void> {
@@ -209,17 +249,28 @@ export function TravelAssistant() {
       notes.current.push(`[Note: the user pressed Apply on "${entry.proposal.set.summary}" but it failed: ${result.error}. Nothing was saved.]`);
       return;
     }
-    update(entry.id, { state: "applied", applied: result.data.lines, undoToken: result.data.undoToken });
-    const created = result.data.lines
-      .filter((l) => l.subject === "trip" && l.action === "add" && l.tripId)
-      .map((l) => ` The new trip "${l.title}" has id ${l.tripId}.`)
-      .join("");
+    const { lines, undoToken } = result.data;
+    update(entry.id, { state: "applied", applied: lines, undoToken });
+    const createdTrips = lines.filter((l) => l.subject === "trip" && l.action === "add" && l.tripId);
+    const created = createdTrips.map((l) => ` The new trip "${l.title}" has id ${l.tripId}.`).join("");
     notes.current.push(`[Note: the user applied "${entry.proposal.set.summary}"; it is saved.${created}]`);
+
+    // The preview page was a stand-in; the trip has a page of its own now.
+    // A trip that is gone leaves the user on the list.
+    if (createdTrips[0]?.tripId) router.push(`${TRAVEL}/${createdTrips[0].tripId}`);
+    else if (lines.some((l) => l.subject === "trip" && l.action === "remove" && pathname.endsWith(l.entityId ?? "-")))
+      router.push(TRAVEL);
+    toast.success("Changes applied", {
+      action: undoToken
+        ? { label: "Undo", onClick: () => void undo({ ...entry, state: "applied", applied: lines, undoToken }) }
+        : undefined,
+    });
   }
 
   function cancel(entry: ProposalEntry): void {
     update(entry.id, { state: "cancelled" });
     notes.current.push(`[Note: the user cancelled "${entry.proposal.set.summary}"; nothing was saved.]`);
+    if (pathname === `${TRAVEL}/preview`) router.push(TRAVEL);
   }
 
   async function undo(entry: ProposalEntry): Promise<void> {
@@ -232,6 +283,12 @@ export function TravelAssistant() {
     }
     update(entry.id, { state: "undone" });
     notes.current.push(`[Note: the user undid "${entry.proposal.set.summary}"; those changes are reverted.]`);
+    // A trip the undo removed again has no page to stay on.
+    const createdHere = entry.applied?.some(
+      (l) => l.subject === "trip" && l.action === "add" && l.tripId && pathname.endsWith(l.tripId)
+    );
+    if (createdHere) router.push(TRAVEL);
+    else router.refresh();
   }
 
   function reset(): void {
@@ -252,22 +309,46 @@ export function TravelAssistant() {
     }
   };
 
+  const waiting = entries.findLast(
+    (e): e is ProposalEntry => e.kind === "proposal" && (e.state === "open" || e.state === "applying")
+  );
+  const pending: PendingProposal | null = waiting
+    ? {
+        id: waiting.id,
+        summary: waiting.proposal.set.summary,
+        previews: waiting.proposal.previews,
+        count: waiting.proposal.lines.length,
+        applying: waiting.state === "applying",
+        apply: () => void apply(waiting),
+        discard: () => cancel(waiting),
+      }
+    : null;
+
   // Only the newest receipt can be undone: undoing an older one would put
   // back fields a later change has since moved on from.
   const lastApplied = entries.findLast(
     (e): e is ProposalEntry => e.kind === "proposal" && (e.state === "applied" || e.state === "undoing")
   )?.id;
 
+  const openChat = (): void => {
+    setOpen(true);
+    setUnread(false);
+  };
+
   return (
-    <>
+    <PendingProposalProvider value={pending}>
+      {children}
+      {waiting && <PendingReviewBar proposal={pending!} onOpenChat={openChat} unread={unread} />}
       <Button
         size="icon-lg"
         aria-label="Open the travel assistant"
-        onClick={() => setOpen(true)}
+        onClick={openChat}
         className={cn(
           "fixed right-4 z-40 size-12 rounded-full shadow-lg",
           // Clear of the dev-tools wrench, which only exists in development.
-          process.env.NODE_ENV === "development" ? "bottom-16" : "bottom-4"
+          process.env.NODE_ENV === "development" ? "bottom-16" : "bottom-4",
+          // The review bar carries its own way back to the chat.
+          waiting && "hidden"
         )}
       >
         <Sparkles />
@@ -436,6 +517,6 @@ export function TravelAssistant() {
           </form>
         </SheetContent>
       </Sheet>
-    </>
+    </PendingProposalProvider>
   );
 }

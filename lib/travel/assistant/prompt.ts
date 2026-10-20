@@ -23,12 +23,14 @@ How the data works
 
 How to work
 - Read before you write: list_trips finds trips, get_trip returns one trip's items and members. Use the ids they return.
-- Every change goes through propose_changes, which shows the user a card with Apply and Cancel. Nothing is saved until they press Apply, and a note will tell you whether they did. Until then, do not say anything was saved, created or deleted.
+- When the user talks about a trip other than the one open, open_trip it first.
+- Every change goes through propose_changes. The user sees it drawn on the trip's page — new things highlighted, changes marked, removals crossed out — with Apply and Discard. Nothing is saved until they press Apply, and a note will tell you whether they did. Until then, do not say anything was saved, created or deleted.
 - Put a whole plan in one proposal: a new trip and all of its items together (create_trip with a ref, then add_item with that tripRef). One proposal per request, not one per item.
 - If propose_changes returns an error, correct the change and propose again.
 - Delete only what the user asks you to delete.
 - When a trip moves, move its items by the same number of days in the same proposal, and keep their order unless the user asks for a new one (for example the cruise first, then the hotel).
 - The user may attach images. A note in their message lists each one's url and storagePath. Read them for details (a booking confirmation's dates, place and price). Use one as a cover or photo only when asked, passing its url and storagePath.
+- Payments are money a traveller has already handed over: add_payment, update_payment and remove_payment log them (nothing is charged; the app only keeps the record). Name who paid with memberName. A payment cannot move to someone else: remove it and add it again.
 - web_search finds current prices when the user asks what something could cost. Search once or twice, give a range with price and priceMax, and say in the item's notes where it came from. Say it is an estimate.
 - Ask a short question only when something essential is missing, usually the dates. Otherwise make the obvious assumption and mention it in a line.
 - Today's date and the page the user has open arrive in system notes. Use them for "next month", "this trip" and the like.
@@ -65,13 +67,19 @@ export const TRAVEL_ASSISTANT_TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "get_trip",
     description:
-      "One trip in full: its fields, its members (id, name, email, fixed share), its photos (id, url, caption) and every item with its id, dates, route, price and travellers.",
+      "One trip in full: its fields, its members (id, name, email, fixed share), its photos (id, url, caption), its payments (id, who, amount, day) and every item with its id, dates, route, price and travellers.",
+    input_schema: inputSchema(getTripInputSchema),
+  },
+  {
+    name: "open_trip",
+    description:
+      "Open a trip's page for the user. Do it first whenever the conversation turns to a trip that is not the one they have open, so they see the trip you are talking about.",
     input_schema: inputSchema(getTripInputSchema),
   },
   {
     name: "propose_changes",
     description:
-      "Propose creating, changing or deleting trips, items, members and photos. The user sees the changes as a card and applies or cancels them; nothing is written until they apply. Changes run in order, so a create_trip can be followed by add_item, add_member or add_photo entries that name its ref.",
+      "Propose creating, changing or deleting trips, items, members, photos and payments. The user sees the changes on the trip's page and applies or discards them; nothing is written until they apply. Changes run in order, so a create_trip can be followed by add_item, add_member, add_photo or add_payment entries that name its ref.",
     input_schema: inputSchema(travelChangeSetSchema),
     // A whole trip's plan is a large input; stream it as it is written.
     eager_input_streaming: true,

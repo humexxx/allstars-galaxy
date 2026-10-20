@@ -64,6 +64,13 @@ type TripView = "list" | "calendar";
 import { TripGallery } from "./trip-gallery";
 import { TripPhoto } from "./trip-photo";
 import { TripPayments } from "./trip-payments";
+import {
+  PendingBadge,
+  PendingMarks,
+  reviveTrip,
+  useTripPreview,
+} from "./assistant/pending-preview";
+import { cn } from "@/lib/utils";
 import { tripCost } from "@/lib/travel/pricing";
 import { TravellerBar } from "@/components/travel/traveller-bar";
 // Behind a dialog nobody opens on most visits, and it carries the QR encoder.
@@ -88,12 +95,22 @@ type TripDetailProps = {
 };
 
 export function TripDetail({
-  trip,
+  trip: saved,
   baseUrl,
   currentUserEmail,
   currentUserName,
 }: TripDetailProps) {
   const router = useRouter();
+  // A proposal from the assistant waiting on this trip: the page draws the
+  // trip as it would be, and every row the proposal touches lights up.
+  const preview = useTripPreview(saved.id);
+  const trip = useMemo(
+    () => (preview?.trip ? reviveTrip(preview.trip) : saved),
+    [preview, saved]
+  );
+  const tripMark = preview?.marks[saved.id];
+  const deleting = tripMark === "remove";
+  const tripFields = preview?.fields[saved.id] ?? [];
   // A trip with nobody on it is still planned for one.
   const partySize = Math.max(1, trip.members.length);
   const [membersOpen, setMembersOpen] = useState(false);
@@ -153,6 +170,14 @@ export function TripDetail({
     () => tripCost(trip.items, partySize),
     [trip.items, partySize]
   );
+  /** What the trip comes to today, while a proposal shows another figure. */
+  const estimateBefore = useMemo(
+    () =>
+      preview?.before && !preview.isNew
+        ? tripCost(preview.before.items, Math.max(1, preview.before.members.length))
+        : null,
+    [preview]
+  );
 
   /**
    * The selected traveller's own view of the plan, item by item.
@@ -186,6 +211,7 @@ export function TripDetail({
   };
 
   return (
+    <PendingMarks preview={preview}>
     <section className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-2">
         {/* The same back link as \`PageHeader\`'s — this page has a photo hero
@@ -230,7 +256,20 @@ export function TripDetail({
           cropping the cover on both sides for no gain — a photograph wants the
           screen. `-mx-4` cancels exactly that padding; from `sm` up the card
           sits back inside it with its border and corners. */}
-      <header className="-mx-4 overflow-hidden border-y sm:mx-0 sm:rounded-xl sm:border">
+      {/* Read-only while a proposal waits — the header and the content, not
+          the way out or the view switch: its rows do not exist yet, and an
+          edit underneath would be decided against a picture about to change.
+          The review bar is the way forward. */}
+      <header
+        inert={preview !== null}
+        className={cn(
+          "-mx-4 overflow-hidden border-y sm:mx-0 sm:rounded-xl sm:border",
+          tripMark === "add" && "animate-in fade-in zoom-in-95 duration-500",
+          (tripMark === "add" || tripMark === "change") &&
+            "ring-2 ring-primary ring-offset-2 ring-offset-background",
+          deleting && "opacity-60 ring-2 ring-destructive ring-offset-2 ring-offset-background grayscale"
+        )}
+      >
         <div
           // 21/9 leaves 167px on a 390px phone, and the pill, the buttons and
           // the title all landed on top of each other. The floor wins on a
@@ -275,6 +314,13 @@ export function TripDetail({
               }))}
               total={estimate.low}
               totalHigh={estimate.high}
+              totalBefore={
+                estimateBefore &&
+                (estimateBefore.low !== estimate.low || estimateBefore.high !== estimate.high)
+                  ? estimateBefore
+                  : null
+              }
+              ghosts={preview?.removed.members.map((m) => ({ id: m.id, name: m.name })) ?? []}
               currency={trip.currency}
               selected={selected}
               onSelect={setSelected}
@@ -332,9 +378,21 @@ export function TripDetail({
               {/* \`hero\`, not \`h1\`: a trip name is long by nature ("Islandia,
                   Finlandia & Tomorrowland Winter"), and at the h1's 30px it ran
                   to two lines and owned the banner on a phone. */}
-              <Heading level="hero" className="text-white text-shadow-sm">
+              {tripMark && (
+                <PendingBadge
+                  mark={tripMark}
+                  className="self-start bg-background/90 backdrop-blur-sm"
+                />
+              )}
+              <Heading
+                level="hero"
+                className={cn("text-white text-shadow-sm", deleting && "line-through")}
+              >
                 {trip.title}
               </Heading>
+              {tripFields.includes("title") && preview?.before && (
+                <span className="text-sm text-white/70 line-through">{preview.before.title}</span>
+              )}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
                 {trip.destination && (
                   <span className="inline-flex items-center gap-1.5">
@@ -343,7 +401,20 @@ export function TripDetail({
                 )}
                 <span className="inline-flex items-center gap-1.5">
                   <CalendarDays className="size-4 shrink-0" />
-                  <Mono>{formatDateRange(trip.startDate, trip.endDate)}</Mono>
+                  <Mono
+                    className={cn(
+                      (tripFields.includes("startDate") || tripFields.includes("endDate")) &&
+                        "rounded bg-primary px-1 text-primary-foreground"
+                    )}
+                  >
+                    {formatDateRange(trip.startDate, trip.endDate)}
+                  </Mono>
+                  {(tripFields.includes("startDate") || tripFields.includes("endDate")) &&
+                    preview?.before && (
+                      <Mono className="text-white/60 line-through">
+                        {formatDateRange(preview.before.startDate, preview.before.endDate)}
+                      </Mono>
+                    )}
                 </span>
               </div>
             </div>
@@ -357,7 +428,7 @@ export function TripDetail({
           widening its own column and crushing the itinerary to a word per
           line. The rail scrolls; the column must be allowed to be narrower
           than it. */}
-      <div className="grid gap-6 lg:grid-cols-[5fr_3fr]">
+      <div className="grid gap-6 lg:grid-cols-[5fr_3fr]" inert={preview !== null}>
         <div className="flex flex-col gap-6 min-w-0">
           {view === "list" ? (
             <TripItinerary trip={trip} partySize={partySize} viewer={viewer} />
@@ -460,5 +531,6 @@ export function TripDetail({
         </AlertDialogContent>
       </AlertDialog>
     </section>
+    </PendingMarks>
   );
 }

@@ -183,15 +183,25 @@ async function runTool(
           return failed(tool, `The proposal is not valid. ${issues.join("; ")}`);
         }
         send({ type: "status", label: "Checking the changes" });
-        const lines = await previewTravelChanges(userId, parsed.data);
+        const { lines, previews } = await previewTravelChanges(userId, parsed.data);
         send({
           type: "proposal",
-          proposal: { id: tool.id, set: tool.input as TravelChangeSetInput, lines },
+          proposal: { id: tool.id, set: tool.input as TravelChangeSetInput, lines, previews },
         });
         return ok(
           tool,
-          "The user now sees these changes on a card with Apply and Cancel. Nothing is saved until they apply it; a note will say whether they did."
+          "The user now sees these changes drawn on the trip's page, with Apply and Discard. Nothing is saved until they apply them; a note will say whether they did."
         );
+      }
+
+      case "open_trip": {
+        const input = getTripInputSchema.safeParse(tool.input);
+        if (!input.success) return failed(tool, "tripId must be a trip id from list_trips");
+        const trips = await listAssistantTrips(userId);
+        const trip = trips.find((t) => t.id === input.data.tripId);
+        if (!trip) return failed(tool, "No trip of the user's has that id");
+        send({ type: "navigate", href: `/portal/entertainment/travel-planner/${trip.id}` });
+        return ok(tool, `The user now has "${trip.title}" open.`);
       }
 
       default:

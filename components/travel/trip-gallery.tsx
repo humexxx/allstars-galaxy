@@ -16,12 +16,17 @@ import type { TripWithRelations } from "@/types/travel";
 
 import { PhotoPicker } from "./photo-picker";
 import { TripPhoto } from "./trip-photo";
+import { cn } from "@/lib/utils";
+import { PendingBadge, pendingDelay, usePendingMark, usePendingTrip } from "./assistant/pending-preview";
 
 type TripGalleryProps = {
   trip: TripWithRelations;
 };
 
 export function TripGallery({ trip }: TripGalleryProps) {
+  // Photos a previewed proposal takes out stay in the row, crossed out.
+  const removed = (usePendingTrip()?.removed.photos ?? []).filter((p) => !p.itemId);
+  const photos = [...trip.photos, ...removed];
   const [isPending, startTransition] = useTransition();
   /** Focus lands here after a delete: the button that had it is gone. */
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -68,7 +73,7 @@ export function TripGallery({ trip }: TripGalleryProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {trip.photos.length === 0 ? (
+        {photos.length === 0 ? (
           <EmptyState
             icon={Images}
             title="No photos yet"
@@ -79,9 +84,9 @@ export function TripGallery({ trip }: TripGalleryProps) {
           // three photos and pushed everything below it down the page; a rail
           // costs the same height whether the trip has four photos or forty.
           <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1">
-            {trip.photos.map((photo, i) => (
+            {photos.map((photo, i) => (
+              <PendingPhoto key={photo.id} id={photo.id} index={i}>
               <div
-                key={photo.id}
                 className="group relative aspect-square w-28 shrink-0 snap-start overflow-hidden rounded-md border bg-muted"
               >
                 <TripPhoto
@@ -104,6 +109,7 @@ export function TripGallery({ trip }: TripGalleryProps) {
                   <Trash2 />
                 </Button>
               </div>
+              </PendingPhoto>
             ))}
           </div>
         )}
@@ -116,5 +122,23 @@ export function TripGallery({ trip }: TripGalleryProps) {
         />
       </CardContent>
     </Card>
+  );
+}
+
+/** A photo the previewed proposal adds (ringed) or removes (faded, struck). */
+function PendingPhoto({ id, index, children }: { id: string; index: number; children: React.ReactNode }) {
+  const pending = usePendingMark(id);
+  if (!pending) return <>{children}</>;
+  return (
+    <div
+      className={cn(
+        "relative shrink-0 animate-in fade-in fill-mode-both zoom-in-90 rounded-lg ring-2 ring-offset-2 ring-offset-card duration-500",
+        pending.mark === "remove" ? "opacity-50 ring-destructive grayscale" : "ring-primary"
+      )}
+      style={pendingDelay(index)}
+    >
+      {children}
+      <PendingBadge mark={pending.mark} className="absolute bottom-1 left-1" />
+    </div>
   );
 }

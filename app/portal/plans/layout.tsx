@@ -24,16 +24,14 @@ export default async function PlansLayout({
   const ctx = await requireEffectiveContext();
   const { showContextAvatar } = await getUserPreferences(ctx.effectiveUserId);
 
-  // Declared once here so every plans route (index, new, [id], compare) shares
-  // the wide data layout without the container knowing about routes.
   if (!showContextAvatar) {
-    return <PortalPageContainer width="wide">{children}</PortalPageContainer>;
+    return <PortalPageContainer>{children}</PortalPageContainer>;
   }
 
   const mood = await getFinanceMood(ctx.effectiveUserId);
 
   return (
-    <PortalPageContainer width="wide">
+    <PortalPageContainer>
       {children}
       <ContextAvatar variant="finance" mood={mood} />
     </PortalPageContainer>

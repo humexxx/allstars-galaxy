@@ -60,9 +60,10 @@ export default async function PublicTripLayout({
       </header>
       {/* The portal's own container, so a shared trip sits in the same gutters
           as the planner it mirrors (and the banner's phone bleed, which
-          cancels exactly those 16px, lines up). */}
+          cancels exactly those 16px, lines up). Narrowed to the bar's
+          `max-w-5xl` so the page lines up under it. */}
       <main className="flex flex-1 flex-col">
-        <PortalPageContainer>{children}</PortalPageContainer>
+        <PortalPageContainer className="max-w-5xl">{children}</PortalPageContainer>
       </main>
     </>
   );

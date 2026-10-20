@@ -5,35 +5,25 @@ import { cn } from "@/lib/utils";
 /**
  * The single source of truth for portal page padding and width.
  *
- * Each route renders its own container and declares the width it needs. This
- * used to live in `app/portal/layout.tsx` and sniff `usePathname()` to widen
- * `/portal/plans` — which meant the shared shell carried a hardcoded list of
- * special routes, and the whole container had to be a client component just to
- * read the path. Declaring it at the route removes both problems.
+ * Every portal page shares one width, `max-w-7xl` — the room the finance plans
+ * chart + rail were laid out in. Routes used to choose between that and a
+ * `max-w-5xl` reading width, so the column jumped every time the reader moved
+ * between modules. Pages that want a narrower measure (a form, a long text)
+ * constrain that block inside the container, not the page.
  *
- * Add the container in a segment `layout.tsx` when several routes under it
- * share a width (see `app/portal/plans/layout.tsx`), otherwise in the page.
+ * Each route renders its own container. This used to live in
+ * `app/portal/layout.tsx` and sniff `usePathname()` to widen `/portal/plans`,
+ * which made the whole shell a client component just to read the path. Add it
+ * in a segment `layout.tsx` when several routes under it share it (see
+ * `app/portal/plans/layout.tsx`), otherwise in the page.
  */
-export type PortalPageWidth = "default" | "wide" | "full";
-
-const MAX_WIDTH: Record<PortalPageWidth, string> = {
-  /** Reading width for text- and form-heavy pages. */
-  default: "max-w-5xl",
-  /** Data surfaces that need the room — the finance plans chart + rail. */
-  wide: "max-w-7xl",
-  /** Edge to edge; the route handles its own bounds. */
-  full: "max-w-none",
-};
-
 type PortalPageContainerProps = {
   children: ReactNode;
-  width?: PortalPageWidth;
   className?: string;
 };
 
 export function PortalPageContainer({
   children,
-  width = "default",
   className,
 }: PortalPageContainerProps) {
   return (
@@ -42,8 +32,7 @@ export function PortalPageContainer({
         // Mobile-first: the base step is the phone value, sm+ pins the desktop
         // gutters. 24px side gutters ate 13% of a 375px screen — 16px gives
         // dense finance tables and card rails the room back.
-        "mx-auto flex w-full flex-1 flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8 lg:px-12",
-        MAX_WIDTH[width],
+        "mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8 lg:px-12",
         className
       )}
     >

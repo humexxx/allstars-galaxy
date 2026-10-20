@@ -67,7 +67,7 @@ export default async function PortalLayout({
                 sidebar's width instead of scrolling inside its own card. */}
               <SidebarInset className="min-w-0">
                 {/* No container here: each route renders its own
-                  `PortalPageContainer` and declares the width it needs. */}
+                  `PortalPageContainer`. */}
                 <main
                   id="main-content"
                   tabIndex={-1}

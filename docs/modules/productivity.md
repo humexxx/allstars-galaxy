@@ -25,7 +25,9 @@ getter actions were deleted — pages read through the services.
 - `board-service.ts` — every positional write is scoped to (column, day); `getBoardTasksForDay`, `setDoneColumn`, `getCarryOverCandidates`, `carryOverTasks`, `moveTaskToDay`; a move into / out of the Done column sets `completedAt` and writes / removes the habit's check-in. `updateBoardColumn` / `updateBoardTask` return `null` when nothing matched
 - `road-path-service.ts` — every write is scoped by owner or parent row;
   `getRoadPathDetail(id, userId, today, timeZone)` feeds the server-rendered detail view, `computeRoadPathStats` adds the habit figures
-- `task-automation-service.ts` — `ensureHabitTasksForDay(userId, day, timeZone)`: today's habit tasks, called by the board page
+- `task-automation-service.ts` — `ensureHabitTasksForDay(userId, day, timeZone)`: today's habit tasks, called by the board page and the dashboard card
+- `productivity-dashboard-service.ts` — `getDashboardProductivity(userId, today, timeZone | null)`: generates today's habit tasks (zone known only), then reads the board, carry-over count and road paths
+- `lib/productivity/dashboard.ts` — `buildDashboardProductivity`: today's done / total, open tasks in board order, habits sorted due → done → next
 - `lib/productivity/habit.ts` — pure habit maths on `YYYY-MM-DD` days: `isDueOn`, `dayStatus`, `habitStats` (streaks, completion), `habitOf`, `scheduleLabel`, `isCalendarDay`
 
 ## Schemas — `/schemas/`
@@ -40,7 +42,8 @@ getter actions were deleted — pages read through the services.
 - `zoned-date.ts` — day keys and labels in the reader's zone (`tz` cookie), plus `calendarDayKey` / `formatCalendarDay` for road-path days stored as UTC midnight
 - `board/due-date.ts` — `dueTone` (overdue / today / tomorrow)
 - `board/board-day-nav.tsx` — previous / next day links and "Back to today"
-- `board/carry-over-dialog.tsx` — "You didn't finish some things. Move them to today?"
+- `board/carry-over-dialog.tsx` — "You didn't finish some things. Move them to today?"; a task named like one already on today's board starts unticked
+- `dashboard-productivity-card.tsx` — the dashboard's card (between finance and travel): today's board and each scheduled habit with its week and streak
 - `road-paths/road-path-dialog.tsx` — create and edit (weekday toggles, dates, target, completed); `road-path-menu.tsx` — edit / delete for the card and the detail header
 - `road-paths/habit-days.tsx` — `HabitCalendar` (a month, paged back to the start) and `HabitWeek` (the card's row of seven)
 - `road-paths/format.ts` — `formatAmount` ("7,250.5"), `parseAmount`
@@ -64,7 +67,7 @@ getter actions were deleted — pages read through the services.
 - **Logic audit (2026-09-11).** `deleteBoardTask` closes the `order` gap so the positional reorder maths stays right; a new column from the task dialog is a move, which `updateBoardTask` runs through `reorderTask` (end of the list, gap closed). Road-path `currentValue` follows the newest entry by date (and resets to 0 when none remain); `totalProgress` is clamped to 0–100. `MonthPicker` builds dates from parts so the 31st never rolls over.
 - **The board is daily.** A task belongs to one day (`board_date`, a calendar day in the reader's zone) and its `order` is its place in its column on that day. Opening today's board first puts the day's habit tasks on it, then offers every open task from earlier days that is not a habit's and not already answered: moved ones go to the top of their own column, left ones get `carry_over_declined_at` and stay in that day's history. Finished tasks stay on the day they were finished. Closing the prompt without answering asks again next time.
 - **Nothing is written before the reader's zone is known.** A device's first request has no `tz` cookie, so "today" is UTC's day (tomorrow, on a Costa Rica evening); generating then put tomorrow's habit tasks on the board and stamped the paths, so the reader's own day never got its tasks. The board checks `readRequestTimeZone()` and only reads until the header has written the cookie and refreshed; the carry-over prompt is keyed on what it offers, so it opens when the list arrives with that refresh.
-- **Habit tasks are generated on page load, not by the cron.** The cron ran at 00:00 UTC — 6 pm the evening before in Costa Rica — so Monday's task appeared on Sunday, dated Sunday, and read as overdue. `lastTaskCreatedAt`'s day in the reader's zone stops a deleted task coming back; the unique (road path, day) index stops two tabs writing it twice. A habit's task never carries over or moves to another day: the next due day gets its own, and the one it was for reads as missed.
+- **Habit tasks are generated on page load — the board's and the dashboard's, where the app opens — not by the cron.** The cron ran at 00:00 UTC — 6 pm the evening before in Costa Rica — so Monday's task appeared on Sunday, dated Sunday, and read as overdue. `lastTaskCreatedAt`'s day in the reader's zone stops a deleted task coming back; the unique (road path, day) index stops two tabs writing it twice. A habit's task never carries over or moves to another day: the next due day gets its own, and the one it was for reads as missed.
 - **A schedule change takes effect today** (`schedule_since`). Days before it count check-ins only, so moving from MWF to every day does not paint last week's Tuesdays as missed. A new path is judged from the later of its start day and today, since past days cannot be checked in. A streak counts due days in a row; today, still open, does not break it.
 - Board UI keeps optimistic state locally with explicit rollback on error (not via React 19's `useOptimistic`) because the DnD reorder queue depends on a stable local state model.
 - **A server action reports failure in its return value; only a crash throws.**

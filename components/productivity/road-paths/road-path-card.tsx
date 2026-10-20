@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import { habitOf, habitStats, hasSchedule, scheduleLabel } from "@/lib/productivity/habit";
+import { dayStatus, habitOf, habitStats, hasSchedule, scheduleLabel } from "@/lib/productivity/habit";
 import type { RoadPathWithCheckIns } from "@/types";
 
 import { calendarDayKey, formatCalendarDay } from "../zoned-date";
@@ -49,6 +49,7 @@ export function RoadPathCard({ roadPath, today, timeZone }: RoadPathCardProps) {
   const checkIns = roadPath.checkIns.map((c) => c.day);
   const scheduled = hasSchedule(habit);
   const stats = scheduled ? habitStats(habit, checkIns, today) : null;
+  const dueToday = scheduled && dayStatus(habit, today, new Set(checkIns), today) === "due";
 
   return (
     // The title is the link; its ::after stretches over the whole card so the
@@ -111,7 +112,7 @@ export function RoadPathCard({ roadPath, today, timeZone }: RoadPathCardProps) {
               </Text>
               <Text variant="small" as="span">
                 {stats.completionRate === null ? (
-                  "Nothing due yet"
+                  dueToday ? "Due today" : "Nothing due yet"
                 ) : (
                   <>
                     <Mono>{Math.round(stats.completionRate * 100)}%</Mono> done

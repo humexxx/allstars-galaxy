@@ -56,6 +56,7 @@ import {
   addMonths,
   isoDay,
   daysBetween,
+  laneCount,
   layOutWeek,
   monthWeeks,
   shiftDay,
@@ -193,8 +194,7 @@ function MonthCalendar({
         // week's row grows to fit rather than trading the tail for a "+3"
         // that has to be opened somewhere else to be read.
         const segments = layOutWeek(week, items);
-        const lanes = segments.reduce((n, seg) => Math.max(n, seg.lane + 1), 0);
-        return { week, segments, lanes };
+        return { week, segments, lanes: laneCount(segments) };
       }),
     [weeks, items]
   );

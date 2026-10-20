@@ -136,7 +136,9 @@ export function MatchesByDate({
   };
 
   return (
-    <section className={cn("flex min-w-0 flex-col", className)}>
+    // Its own container, so the columns follow the list's width: beside a
+    // table it is two-thirds of the row, alone it is all of it.
+    <section className={cn("@container flex min-w-0 flex-col", className)}>
       {options.length > 1 && (
         <SportBarEnd>
           <TeamFilter team={team} options={options} onPick={pickTeam} />
@@ -184,7 +186,7 @@ export function MatchesByDate({
                   </Tooltip>
                 )}
               </Eyebrow>
-              <div className="grid gap-2 @xl:grid-cols-2">
+              <div className="grid gap-2 @xl:grid-cols-2 @5xl:grid-cols-3">
                 {list.map((match) => (
                   <ScoreCard key={match.id} match={match} teams={teams} />
                 ))}

@@ -5,8 +5,8 @@ import { PageHeaderSkeleton } from "@/components/skeletons/page-header-skeleton"
 /**
  * Mirrors the PlansWorkspace silhouette: page header with its action, then the
  * hero grid — the projection-comparison card across 2/3 and the plan rail on
- * the right third. The generic PageSkeleton promised a four-card grid, so the
- * swap to the real layout read as a jump rather than content filling in.
+ * the right third. A generic four-card grid made the swap to the real layout
+ * read as a jump rather than content filling in.
  *
  * Keep the grid, the chart height and the rail row height in sync with
  * `components/finance/plans-workspace.tsx`.

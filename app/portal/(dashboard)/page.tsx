@@ -3,6 +3,8 @@ import { Suspense } from "react";
 
 import { PortalPageContainer } from "@/components/portal/page-container";
 import { DashboardCardSkeleton } from "@/components/portal/dashboard-card-skeleton";
+import { DASHBOARD_GRID, DASHBOARD_SECTION } from "@/components/portal/dashboard-layout";
+import { DashboardSportCardSkeleton } from "@/components/entertainment/sports/dashboard-sport-card-skeleton";
 import { DashboardFinanceCard } from "@/components/finance/dashboard-finance-card";
 import { DashboardConfirmationHost } from "@/components/finance/dashboard-confirmation-host";
 import { DashboardSportCards } from "@/components/entertainment/sports/dashboard-sport-cards";
@@ -27,24 +29,26 @@ export default async function PortalPage() {
 
   return (
     <PortalPageContainer>
-      <section className="@container flex flex-col gap-6">
+      <section className={DASHBOARD_SECTION}>
         {/* The cards are the page: a visible title and tagline only pushed
             them down. The outline still needs its h1. */}
         <h1 className="sr-only">Dashboard</h1>
-        {/* Two columns. Finance and travel span both; each favourite sport gets
-            a card at half the row — one sport among several, not a banner. */}
-        {/* Two columns once the content itself is wide enough, not the
-            viewport: at 768px the sidebar leaves 512px, too little for two
-            sport cards side by side. At 1024px it leaves ~736px, less a
-            Windows scrollbar, so the step sits between (`@xl`, 576px). */}
-        <div className="grid auto-rows-min gap-4 @xl:grid-cols-2">
+        <div className={DASHBOARD_GRID}>
           <Suspense fallback={<DashboardCardSkeleton rail={5} />}>
             <DashboardFinanceCard userId={userId} />
           </Suspense>
-          <Suspense fallback={<DashboardCardSkeleton tiles={3} />}>
+          <Suspense fallback={<DashboardCardSkeleton trips />}>
             <DashboardTravelCard userId={userId} />
           </Suspense>
-          <Suspense fallback={<DashboardCardSkeleton tiles={2} className="col-span-1" />}>
+          {/* Two sport cards, a row: the favourites are not known yet. */}
+          <Suspense
+            fallback={
+              <>
+                <DashboardSportCardSkeleton />
+                <DashboardSportCardSkeleton />
+              </>
+            }
+          >
             <DashboardSportCards userId={userId} />
           </Suspense>
         </div>

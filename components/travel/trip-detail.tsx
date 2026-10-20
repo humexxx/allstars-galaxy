@@ -7,6 +7,7 @@ import { Suspense, useMemo, useState, useTransition } from "react";
 import {
   ArrowLeft,
   CalendarDays,
+  Images,
   List as ListIcon,
   MapPin,
   Pencil,
@@ -61,9 +62,16 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 /** Which reading of the plan is on screen. */
 type TripView = "list" | "calendar";
-import { TripGallery } from "./trip-gallery";
-import { TripPhoto } from "./trip-photo";
+import { bannerSlides, type BannerSlide } from "@/lib/travel/banner-slides";
+import { BannerDots, BannerSlides, useBannerCarousel } from "./banner-photos";
 import { TripPayments } from "./trip-payments";
+import {
+  PendingBadge,
+  PendingMarks,
+  reviveTrip,
+  useTripPreview,
+} from "./assistant/pending-preview";
+import { cn } from "@/lib/utils";
 import { tripCost } from "@/lib/travel/pricing";
 import { TravellerBar } from "@/components/travel/traveller-bar";
 // Behind a dialog nobody opens on most visits, and it carries the QR encoder.
@@ -71,6 +79,17 @@ const TripSharePanel = dynamic(
   () => import("./trip-share-panel").then((m) => m.TripSharePanel),
   { loading: () => <Skeleton className="h-64 w-full" /> }
 );
+
+const BannerPhotosDialog = dynamic(() =>
+  import("./banner-photos-dialog").then((m) => ({ default: m.BannerPhotosDialog }))
+);
+
+/**
+ * The banner's buttons: dark glass with white text, whatever the photo. The
+ * theme's `secondary` is a pale grey with blue text, and over a photograph it
+ * read as a stray light patch.
+ */
+const ON_PHOTO = "bg-black/60 text-white ring-1 ring-white/20 backdrop-blur-sm hover:bg-black/75 hover:text-white dark:hover:bg-black/75";
 
 const MembersDialog = dynamic(
   () => import("@/components/travel/members-dialog").then((m) => ({
@@ -88,12 +107,22 @@ type TripDetailProps = {
 };
 
 export function TripDetail({
-  trip,
+  trip: saved,
   baseUrl,
   currentUserEmail,
   currentUserName,
 }: TripDetailProps) {
   const router = useRouter();
+  // A proposal from the assistant waiting on this trip: the page draws the
+  // trip as it would be, and every row the proposal touches lights up.
+  const preview = useTripPreview(saved.id);
+  const trip = useMemo(
+    () => (preview?.trip ? reviveTrip(preview.trip) : saved),
+    [preview, saved]
+  );
+  const tripMark = preview?.marks[saved.id];
+  const deleting = tripMark === "remove";
+  const tripFields = preview?.fields[saved.id] ?? [];
   // A trip with nobody on it is still planned for one.
   const partySize = Math.max(1, trip.members.length);
   const [membersOpen, setMembersOpen] = useState(false);
@@ -102,6 +131,31 @@ export function TripDetail({
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<TripView>("list");
   const [shareOpen, setShareOpen] = useState(false);
+  const [photosOpen, setPhotosOpen] = useState(false);
+
+  /** The banner's photos, each with what the open proposal does to it. */
+  const slides = useMemo((): BannerSlide[] => {
+    // A trip the proposal creates is new all over; marking each slide too
+    // would only narrow the rotation to all of them.
+    const marks = tripMark === "add" ? {} : (preview?.marks ?? {});
+    const coverChanged = tripMark === "change" && Boolean(preview?.fields[saved.id]?.includes("coverPhotoUrl"));
+    const removed = (preview?.removed.photos ?? []).filter((p) => !p.itemId);
+    return [
+      ...bannerSlides(trip).map((slide) => ({
+        ...slide,
+        mark:
+          slide.id === "cover" ? (coverChanged ? ("change" as const) : undefined) : marks[slide.id],
+      })),
+      ...removed.map((p) => ({
+        id: p.id,
+        url: p.url,
+        alt: p.caption ?? `${trip.title} photo`,
+        mark: "remove" as const,
+      })),
+    ];
+  }, [trip, preview, tripMark, saved.id]);
+  const carousel = useBannerCarousel(slides);
+  const slide = slides[carousel.index];
 
   /** The traveller who is the signed-in owner, matched by name or email. */
   const youId = useMemo(() => {
@@ -153,6 +207,14 @@ export function TripDetail({
     () => tripCost(trip.items, partySize),
     [trip.items, partySize]
   );
+  /** What the trip comes to today, while a proposal shows another figure. */
+  const estimateBefore = useMemo(
+    () =>
+      preview?.before && !preview.isNew
+        ? tripCost(preview.before.items, Math.max(1, preview.before.members.length))
+        : null,
+    [preview]
+  );
 
   /**
    * The selected traveller's own view of the plan, item by item.
@@ -186,6 +248,7 @@ export function TripDetail({
   };
 
   return (
+    <PendingMarks preview={preview}>
     <section className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-2">
         {/* The same back link as \`PageHeader\`'s — this page has a photo hero
@@ -230,7 +293,20 @@ export function TripDetail({
           cropping the cover on both sides for no gain — a photograph wants the
           screen. `-mx-4` cancels exactly that padding; from `sm` up the card
           sits back inside it with its border and corners. */}
-      <header className="-mx-4 overflow-hidden border-y sm:mx-0 sm:rounded-xl sm:border">
+      {/* Read-only while a proposal waits — the header and the content, not
+          the way out or the view switch: its rows do not exist yet, and an
+          edit underneath would be decided against a picture about to change.
+          The review bar is the way forward. */}
+      <header
+        inert={preview !== null}
+        className={cn(
+          "-mx-4 overflow-hidden border-y sm:mx-0 sm:rounded-xl sm:border",
+          tripMark === "add" && "animate-in fade-in zoom-in-95 duration-500",
+          (tripMark === "add" || tripMark === "change") &&
+            "ring-2 ring-primary ring-offset-2 ring-offset-background",
+          deleting && "opacity-60 ring-2 ring-destructive ring-offset-2 ring-offset-background grayscale"
+        )}
+      >
         <div
           // 21/9 leaves 167px on a 390px phone, and the pill, the buttons and
           // the title all landed on top of each other. The floor wins on a
@@ -240,15 +316,7 @@ export function TripDetail({
           // cover link has died.
           style={{ backgroundColor: trip.color }}
         >
-          {trip.coverPhotoUrl && (
-            <TripPhoto
-              src={trip.coverPhotoUrl}
-              alt={`${trip.title} cover photo`}
-              priority
-              sizes="(max-width: 1024px) 100vw, 1024px"
-              fallback="none"
-            />
-          )}
+          <BannerSlides slides={slides} index={carousel.index} />
           {/* Deeper through the middle than it was (/20): a long name runs
               two or three lines up into the photo, and over a snowfield its
               top line was white on pale grey. The controls up top carry
@@ -275,6 +343,13 @@ export function TripDetail({
               }))}
               total={estimate.low}
               totalHigh={estimate.high}
+              totalBefore={
+                estimateBefore &&
+                (estimateBefore.low !== estimate.low || estimateBefore.high !== estimate.high)
+                  ? estimateBefore
+                  : null
+              }
+              ghosts={preview?.removed.members.map((m) => ({ id: m.id, name: m.name })) ?? []}
               currency={trip.currency}
               selected={selected}
               onSelect={setSelected}
@@ -297,7 +372,8 @@ export function TripDetail({
                     and the name comes back from `sm` up. */}
                 <Button
                   size="sm"
-                  variant="secondary"
+                  variant="ghost"
+                  className={ON_PHOTO}
                   onClick={() => setShareOpen(true)}
                   aria-label="Share this trip"
                 >
@@ -306,20 +382,30 @@ export function TripDetail({
                 </Button>
                 <Button
                   size="sm"
-                  variant="secondary"
+                  variant="ghost"
+                  className={ON_PHOTO}
                   onClick={() => setEditOpen(true)}
                   aria-label="Edit this trip"
                 >
                   <Pencil />
                   <span className="hidden lg:inline">Edit</span>
                 </Button>
-                {/* Same solid surface as its neighbours, red only in the icon:
-                    the tinted \`destructive\` variant is translucent, and over
-                    an unknown photograph it disappears. */}
                 <Button
                   size="sm"
-                  variant="secondary"
-                  className="text-destructive"
+                  variant="ghost"
+                  className={ON_PHOTO}
+                  onClick={() => setPhotosOpen(true)}
+                  aria-label="Banner photos"
+                >
+                  <Images />
+                </Button>
+                {/* Same surface as its neighbours, red only on hover: the
+                    tinted \`destructive\` variant is translucent, and over an
+                    unknown photograph it disappears. */}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className={cn(ON_PHOTO, "hover:bg-destructive dark:hover:bg-destructive")}
                   onClick={() => setConfirmDelete(true)}
                   aria-label="Delete trip"
                 >
@@ -332,9 +418,35 @@ export function TripDetail({
               {/* \`hero\`, not \`h1\`: a trip name is long by nature ("Islandia,
                   Finlandia & Tomorrowland Winter"), and at the h1's 30px it ran
                   to two lines and owned the banner on a phone. */}
-              <Heading level="hero" className="text-white text-shadow-sm">
+              {(tripMark || slide?.mark) && (
+                <div className="flex flex-wrap gap-2">
+                  {tripMark && (
+                    <PendingBadge mark={tripMark} className="bg-background/90 backdrop-blur-sm" />
+                  )}
+                  {slide?.mark && (
+                    <PendingBadge
+                      mark={slide.mark}
+                      label={
+                        slide.id === "cover"
+                          ? "New cover"
+                          : slide.mark === "remove"
+                            ? "Removing photo"
+                            : "New photo"
+                      }
+                      className="bg-background/90 backdrop-blur-sm"
+                    />
+                  )}
+                </div>
+              )}
+              <Heading
+                level="hero"
+                className={cn("text-white text-shadow-sm", deleting && "line-through")}
+              >
                 {trip.title}
               </Heading>
+              {tripFields.includes("title") && preview?.before && (
+                <span className="text-sm text-white/70 line-through">{preview.before.title}</span>
+              )}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/90">
                 {trip.destination && (
                   <span className="inline-flex items-center gap-1.5">
@@ -343,21 +455,33 @@ export function TripDetail({
                 )}
                 <span className="inline-flex items-center gap-1.5">
                   <CalendarDays className="size-4 shrink-0" />
-                  <Mono>{formatDateRange(trip.startDate, trip.endDate)}</Mono>
+                  <Mono
+                    className={cn(
+                      (tripFields.includes("startDate") || tripFields.includes("endDate")) &&
+                        "rounded bg-primary px-1 text-primary-foreground"
+                    )}
+                  >
+                    {formatDateRange(trip.startDate, trip.endDate)}
+                  </Mono>
+                  {(tripFields.includes("startDate") || tripFields.includes("endDate")) &&
+                    preview?.before && (
+                      <Mono className="text-white/60 line-through">
+                        {formatDateRange(preview.before.startDate, preview.before.endDate)}
+                      </Mono>
+                    )}
                 </span>
               </div>
             </div>
           </div>
+          <BannerDots slides={slides} index={carousel.index} onShow={carousel.show} />
         </div>
       </header>
 
 
       {/* min-w-0 on both columns: a grid track sized in `fr` still takes an
-          automatic minimum from its content, so the gallery's photo rail was
-          widening its own column and crushing the itinerary to a word per
-          line. The rail scrolls; the column must be allowed to be narrower
-          than it. */}
-      <div className="grid gap-6 lg:grid-cols-[5fr_3fr]">
+          automatic minimum from its content, and a wide row in either column
+          would otherwise crush the other one to a word per line. */}
+      <div className="grid gap-6 lg:grid-cols-[5fr_3fr]" inert={preview !== null}>
         <div className="flex flex-col gap-6 min-w-0">
           {view === "list" ? (
             <TripItinerary trip={trip} partySize={partySize} viewer={viewer} />
@@ -365,7 +489,10 @@ export function TripDetail({
             <TripCalendar trip={trip} partySize={partySize} viewer={viewer} />
           )}
         </div>
-        <div className="flex flex-col gap-6 min-w-0">
+        {/* Sticky beside the itinerary: the money stays in view while the
+            days scroll past. `self-start`, or the grid stretches the column
+            to the itinerary's height and there is nothing left to stick. */}
+        <div className="flex min-w-0 flex-col gap-6 lg:sticky lg:top-6 lg:self-start">
           <TripPayments
             tripId={trip.id}
             currency={trip.currency}
@@ -379,9 +506,10 @@ export function TripDetail({
             contributions={trip.contributions}
             selected={selected}
           />
-          <TripGallery trip={trip} />
         </div>
       </div>
+
+      {photosOpen && <BannerPhotosDialog trip={saved} onClose={() => setPhotosOpen(false)} />}
 
       {membersOpen && (
         <MembersDialog
@@ -460,5 +588,6 @@ export function TripDetail({
         </AlertDialogContent>
       </AlertDialog>
     </section>
+    </PendingMarks>
   );
 }

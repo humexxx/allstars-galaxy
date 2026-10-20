@@ -19,23 +19,6 @@ export type SportId = (typeof SPORT_IDS)[number];
 
 export type UserSportsPreference = typeof userSportsPreferences.$inferSelect;
 
-// One compact highlight rendered on the dashboard widget for a single
-// favourited sport. Each entry is a self-contained card the user can scan
-// without leaving the dashboard.
-export type DashboardSportHighlight = {
-  sportId: SportId;
-  emoji: string;
-  label: string;
-  /** Short headline, e.g. "Real Madrid 2 – 1 Arsenal · LIVE 67'". */
-  headline: string;
-  /** Secondary line: league/competition or timing context. */
-  context: string;
-  /** Optional tone for status pill: live games, upcoming, completed. */
-  tone?: "live" | "upcoming" | "result";
-  /** Optional secondary entry under the main headline (e.g. league leader). */
-  secondary?: { label: string; value: string };
-};
-
 /** One side of a match on a dashboard card. */
 export type DashboardSide = {
   name: string;
@@ -71,7 +54,13 @@ export type DashboardTableRow = {
   value: string;
 };
 
-export type DashboardTable = { id: string; label: string; rows: DashboardTableRow[] };
+export type DashboardTable = {
+  id: string;
+  label: string;
+  rows: DashboardTableRow[];
+  /** A list rather than a ranking (LoL's champions): no position column. */
+  unranked?: boolean;
+};
 
 /**
  * One favourite sport's dashboard card: what is on now or next, what follows,
@@ -90,7 +79,35 @@ export type DashboardSportCard = {
   matches: DashboardMatch[];
   /** More than one shows as a toggle (East / West, ATP / WTA). */
   tables: DashboardTable[];
+  /**
+   * In place of a table the sport has none of yet: the NBA's last champion
+   * before the opener. `when` is an instant the card prints in the reader's
+   * zone after its label ("Tips off Tue, Oct 20").
+   */
+  note?: { title: string; text?: string; when?: { label: string; startsAt: string } };
+  /** The championship picker, on a sport that has a choice (`SPORT_COMPETITIONS`). */
+  competitions?: DashboardCompetitions;
 };
+
+/**
+ * What a card is set to and what else it could show. `value` is the choice
+ * the card honoured, or null for the sport's own pick, named `automatic`.
+ * Football has no such pick: its default is the Champions League itself.
+ */
+export type DashboardCompetitions = {
+  value: string | null;
+  automatic?: string;
+  options: { id: string; label: string }[];
+  /**
+   * A choice the favourite holds that the card cannot show today (a LoL event
+   * not in the feed). It still stands — the card goes back to it when the
+   * event returns — so the picker ticks it, and choosing `automatic` clears it.
+   */
+  waiting?: { id: string; label: string };
+};
+
+/** A favourite sport and the championship its dashboard card is set to. */
+export type FavoriteSport = { sportId: SportId; competition: string | null };
 
 export type SportMeta = {
   id: SportId;
@@ -188,7 +205,16 @@ export type BracketMatch = {
   homeTeamId: string | null;
   awayTeamId: string | null;
   /** When the tie is two-legged, leg scores live here (a tennis draw's sets). */
-  legs?: Array<{ homeScore: number | null; awayScore: number | null; date?: string }>;
+  legs?: Array<{
+    homeScore: number | null;
+    awayScore: number | null;
+    date?: string;
+    /** A racquet set's tie-break points, where it went to one: 7–6(3). */
+    homeTiebreak?: number | null;
+    awayTiebreak?: number | null;
+  }>;
+  /** A racquet tie decided without being played out. */
+  outcome?: "walkover" | "retired";
   homeScore?: number | null;
   awayScore?: number | null;
   aggregateHome?: number | null;
@@ -196,8 +222,8 @@ export type BracketMatch = {
   winnerTeamId?: string | null;
   /** ISO date for the decisive match. */
   date?: string;
-  /** An esports series' format. */
-  bestOf?: 1 | 3 | 5;
+  /** A series' format: an esports best-of, or an NBA playoff series' seven. */
+  bestOf?: 1 | 3 | 5 | 7;
 };
 
 export type BracketRound = {
@@ -208,12 +234,16 @@ export type BracketRound = {
 
 // ---------- Football leagues ----------
 
-export type FootballLeagueId =
-  | "uefa-champions-league"
-  | "la-liga"
-  | "premier-league"
-  | "serie-a"
-  | "world-cup";
+/** Every football competition, the World Cup included — `FootballLeagueId` derives from it. */
+export const FOOTBALL_COMPETITION_IDS = [
+  "uefa-champions-league",
+  "la-liga",
+  "premier-league",
+  "serie-a",
+  "world-cup",
+] as const;
+
+export type FootballLeagueId = (typeof FOOTBALL_COMPETITION_IDS)[number];
 
 export type FootballLeague = {
   id: FootballLeagueId;
@@ -273,18 +303,124 @@ export type F1Constructor = {
   logoUrl?: string;
 };
 
+export type F1SessionKind =
+  | "fp1"
+  | "fp2"
+  | "fp3"
+  | "sprint-qualifying"
+  | "sprint"
+  | "qualifying"
+  | "race";
+
+/** One session of a race weekend. */
+export type F1Session = {
+  kind: F1SessionKind;
+  /** ISO instant (UTC). */
+  startsAt: string;
+};
+
+export type F1RaceWinner = {
+  code: string;
+  team: string;
+  /** The winner's race time, "1:42:00.785". */
+  time?: string;
+  laps?: number;
+  /** Where the winner started; 0 is the pit lane. */
+  grid?: number;
+};
+
+/** A driver and the lap that earned a mention: pole, the fastest lap. */
+export type F1LapMark = {
+  code: string;
+  /** "1:35.202" */
+  time?: string;
+  /** The lap it was set on (the fastest lap only). */
+  lap?: number;
+};
+
+/** Who won at this circuit the season before, for the dashboard. */
+export type F1PastWinner = {
+  season: number;
+  code: string;
+  name: string;
+  team: string;
+};
+
 export type F1Race = {
   id: string;
   round: number;
   name: string;
   circuit: string;
+  /** Jolpica's key for the track ("monaco", "americas"), which finds its outline. */
+  circuitId: string;
+  /** The town ("Austin"). */
   location: string;
+  /** "USA", "Monaco". */
+  country?: string;
   flagEmoji: string;
-  /** ISO date. */
+  /**
+   * The race's day in UTC, which is not the reader's day: Melbourne's 04:00Z
+   * start is the evening before in the Americas. Show `startsAt` when there
+   * is one.
+   */
   date: string;
+  /** The race start as an ISO instant. */
+  startsAt?: string;
+  /** A sprint weekend. */
+  sprint?: boolean;
+  /** Every session of the weekend, the race included, in time order. */
+  sessions?: F1Session[];
   /** Top-3 driver codes when status === "completed". */
   podium?: [string, string, string];
+  /** P2's and P3's gap to the winner, "+7.335" or "+1 lap". */
+  podiumGaps?: [string, string];
+  winner?: F1RaceWinner;
+  pole?: F1LapMark;
+  fastestLap?: F1LapMark;
+  sprintWinner?: { code: string; team: string };
+  /** Only on the dashboard's race, which looks it up on its own. */
+  lastYear?: F1PastWinner;
   status: "completed" | "upcoming" | "live";
+};
+
+/** One car in a race's final order. */
+export type F1ClassificationRow = {
+  /** "1" to "22", or why a car is unplaced: "DNF", "DSQ", "NC"… */
+  position: string;
+  code: string;
+  /** "M. Verstappen" */
+  name: string;
+  team: string;
+  /** Where the car started; 0 is the pit lane. */
+  grid?: number;
+  laps?: number;
+  /** The winner's time, everybody else's gap, "+1 lap", or why the car stopped. */
+  result: string;
+  points: number;
+  /** Set the fastest lap of the race. */
+  fastestLap?: boolean;
+};
+
+export type F1RaceClassification = {
+  season: number;
+  round: number;
+  rows: F1ClassificationRow[];
+};
+
+/**
+ * The race on the dashboard's F1 card, with what the weekend is doing now.
+ * The sessions are decided per request, never inside the cached feed: the
+ * next session moves on while the feed sits in its cache.
+ */
+export type F1DashboardHighlight = {
+  season: number;
+  race: F1Race;
+  /** A session on track right now. */
+  liveSession?: F1Session;
+  /** The first session still to start. */
+  nextSession?: F1Session;
+  /** "in 3h" — how far off `nextSession` is. */
+  nextSessionIn?: string;
 };
 
 export type F1Data = {
@@ -309,11 +445,32 @@ export type NbaStanding = Omit<Standing, "form" | "band"> & {
   last10: string;
 };
 
+/** Last season's finals, as the view and the dashboard print them. */
+export type NbaChampion = {
+  /** The season it was won, "2025–26". */
+  season: string;
+  teamId: string;
+  /** "New York Knicks, 4–1 over San Antonio". */
+  summary: string;
+};
+
 export type NbaData = {
   season: string;
   teams: Team[];
   games: Match[];
   standings: NbaStanding[];
+  /**
+   * The postseason as best-of-seven series, East half first. Empty or absent
+   * while there is no postseason.
+   */
+  playoffs?: BracketRound[];
+  /** Last season's champion, only until this season's opener. */
+  champion?: NbaChampion;
+  /**
+   * The season's first regular-season game, while it is still ahead: an
+   * instant, or a calendar day when balldontlie has no time for it yet.
+   */
+  tipOff?: string;
 };
 
 // ---------- Tennis / Padel rankings ----------
@@ -345,15 +502,57 @@ export type RacquetTournament = {
   /** Champion player short name (e.g. "C. Alcaraz"). */
   champion?: string;
   runnerUp?: string;
-  /** Optional rendered bracket for the final stages. */
+  /**
+   * The draw, shipped only for the featured and the current tournament; any
+   * other one loads on demand (`getRacquetDrawAction`).
+   */
   bracket?: BracketRound[];
+  /** "Grand Slam", "Major", "P1". */
+  tier?: string;
+  /** The event's poster, where the provider publishes one. */
+  imageUrl?: string;
+  /** The arena or the full place name: "Allianz Cloud Milano". */
+  venue?: string;
+  prize?: { amount: number; currency: string };
+  /** Last edition's champion — the name to beat before this one has a final. */
+  defendingChampion?: string;
+};
+
+/** One line of a tour's season calendar: no draw, just enough to list it and open it. */
+export type RacquetCalendarEntry = {
+  /** The same id the tour's `tournaments` use, so a calendar row opens the same sheet. */
+  id: string;
+  name: string;
+  /** Calendar days, `YYYY-MM-DD`. */
+  startDate: string;
+  endDate: string;
+  status: RacquetTournament["status"];
+  champion?: string;
+};
+
+/** One tournament's draw as the details sheet loads it. */
+export type RacquetDraw = {
+  tournamentId: string;
+  rounds: BracketRound[];
+  /** Everyone in `rounds`, as plain data; the view builds the lookup. */
+  players: Team[];
+  champion?: string;
+  runnerUp?: string;
+  /**
+   * The provider withholds this draw's results — Padel API's free plan, for
+   * events older than about six months — so only the champions can be shown.
+   */
+  resultsHidden?: boolean;
 };
 
 export type RacquetData = {
   tour: RacquetTour;
   season: number;
   rankings: PlayerRanking[];
+  /** What just finished, what is on and what is next, in date order. */
   tournaments: RacquetTournament[];
+  /** The whole season, in date order. */
+  calendar?: RacquetCalendarEntry[];
   /**
    * Everyone appearing in any of this tour's draws.
    *
@@ -411,7 +610,9 @@ export type NflData = {
 // ---------- League of Legends ----------
 
 /** The four regional leagues, plus the international events while they run. */
-export type LolRegion = "lec" | "lcs" | "lck" | "lpl" | "worlds" | "msi" | "first-stand";
+export const LOL_REGIONS = ["lec", "lcs", "lck", "lpl", "worlds", "msi", "first-stand"] as const;
+
+export type LolRegion = (typeof LOL_REGIONS)[number];
 
 export type LolStanding = {
   position: number;
@@ -468,20 +669,43 @@ export type SwissStage = {
   exits: SwissExit[];
 };
 
+/** Who won a split's final, read off the round named "Finals". */
+export type LolChampion = {
+  teamId: string;
+  /** The final itself, from the bracket: the score, the day, the format. */
+  final: BracketMatch;
+};
+
+/** A league's next tournament, once Lolesports lists it. */
+export type LolUpcoming = {
+  region: LolRegion;
+  /** "LCK Split 1", "First Stand 2027". */
+  name: string;
+  /** `YYYY-MM-DD`, a calendar day. */
+  startDate: string;
+};
+
 export type LolSplit = {
   region: LolRegion;
   name: string;
   season: string;
+  /** Worlds, MSI or First Stand rather than a regional league. */
+  international?: boolean;
   teams: Team[];
   standings: LolStanding[];
   matches: LolMatch[];
   /** Worlds' Swiss stage, between the play-ins and the knockouts. */
   swiss?: SwissStage;
   playoffs?: BracketRound[];
+  /** Once the final is decided. */
+  champion?: LolChampion;
 };
 
 export type LolData = {
+  /** The current international event, the splits on today, then the rest by end date. */
   splits: LolSplit[];
+  /** Each league's next tournament, soonest first. */
+  upcoming?: LolUpcoming[];
 };
 
 // ---------- F1 standings (ESPN) ----------
@@ -525,4 +749,24 @@ export type F1NewsArticle = {
   link: string | null;
   images: F1NewsImage[];
   firstSeenAt: Date;
+};
+
+// ---------- Dashboard competitions ----------
+
+/** The tours a tennis card can narrow to: `TennisData`'s keys. */
+export const TENNIS_TOURS = ["atp", "wta"] as const satisfies readonly (keyof TennisData)[];
+
+/** The categories a padel card can narrow to: `PadelData`'s keys. */
+export const PADEL_CATEGORIES = ["men", "women"] as const satisfies readonly (keyof PadelData)[];
+
+/**
+ * What each sport's dashboard card can be set to
+ * (`user_sports_preferences.competition`, null for the card's own pick). A
+ * sport missing here has nothing to choose.
+ */
+export const SPORT_COMPETITIONS: Partial<Record<SportId, readonly string[]>> = {
+  football: FOOTBALL_COMPETITION_IDS,
+  lol: LOL_REGIONS,
+  tennis: TENNIS_TOURS,
+  padel: PADEL_CATEGORIES,
 };

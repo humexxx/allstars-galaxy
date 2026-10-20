@@ -10,7 +10,12 @@ import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
 import { getManagedOverview } from "@/lib/services/margin-service";
 import { getAllocationsByTransaction } from "@/lib/services/allocation-service";
 import { listAllInvestmentMethods } from "@/lib/services/investment-method-service";
-import { getLatestPrices, listPriceAssets } from "@/lib/services/price-service";
+import {
+  getHeldQuotes,
+  getLatestPrices,
+  listPriceAssets,
+  priceCronSchedule,
+} from "@/lib/services/price-service";
 import { getAllUsers } from "@/lib/services/user-service";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import type { ChartDataPoint } from "@/types/chart";
@@ -42,6 +47,9 @@ export default async function PortfolioPage() {
   const managedOverviewPromise = getManagedOverview(userId);
   const investorTxPromise = getInvestorTransactions(userId);
   const priceAssetsPromise = listPriceAssets();
+  // The prices behind the owner's margin, and how old they are. Empty for
+  // anyone who runs no method: an investor's value is a fixed return.
+  const heldQuotesPromise = getHeldQuotes(userId);
   const [
     portfolio,
     methods,
@@ -50,6 +58,7 @@ export default async function PortfolioPage() {
     managedOverview,
     priceAssets,
     investorTransactions,
+    heldQuotes,
   ] = await Promise.all([
     getUserPortfolio(userId),
     // ALL methods, enabled or not: the Methods tab renders
@@ -62,6 +71,7 @@ export default async function PortfolioPage() {
     managedOverviewPromise,
     priceAssetsPromise,
     investorTxPromise,
+    heldQuotesPromise,
   ]);
 
   let stats = null;
@@ -173,6 +183,14 @@ export default async function PortfolioPage() {
       name: a.name,
       source: a.source,
     })),
+    priceFreshness: {
+      quotes: heldQuotes.map((q) => ({
+        symbol: q.symbol,
+        source: q.source,
+        fetchedAt: q.fetchedAt?.toISOString() ?? null,
+      })),
+      schedule: priceCronSchedule(),
+    },
     currentUserId: userId,
   };
 

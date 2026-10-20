@@ -21,6 +21,7 @@ vi.mock("@/lib/services/travel-service", () => ({
   revokeTripShare: vi.fn(),
   updateTrip: vi.fn(),
   updateTripItem: vi.fn(),
+  updateTripShareExpiry: vi.fn(),
 }));
 
 import { revalidatePath } from "next/cache";
@@ -40,6 +41,7 @@ import {
   revokeTripShare,
   updateTrip,
   updateTripItem,
+  updateTripShareExpiry,
 } from "@/lib/services/travel-service";
 
 import {
@@ -54,6 +56,7 @@ import {
   revokeTripShareAction,
   updateTripAction,
   updateTripItemAction,
+  updateTripShareExpiryAction,
 } from "./travel";
 
 const USER_ID = "00000000-0000-4000-8000-000000000001";
@@ -388,16 +391,207 @@ describe("createTripShareAction", () => {
         action: "tripShare.create",
         entityTable: "trip_shares",
         entityId: SHARE_ID,
-        // Which traveller a link exposes, and whether it carries money, are
-        // the two things an audit entry about a share needs to record.
+        // Which traveller a link exposes, whether it carries money and how
+        // long it lasts are what an audit entry about a share needs.
         metadata: {
           inviteeEmail: "guest@example.com",
           memberId: null,
           showPrices: false,
+          expiresAt: null,
         },
       })
     );
     expect(revalidatePath).toHaveBeenCalledWith(tripPath(TRIP_ID));
+  });
+
+  describe("with an expiry", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ now: new Date("2026-10-18T12:00:00Z"), toFake: ["Date"] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("hands the service the instant and records it", async () => {
+      const expiresAt = new Date("2027-01-17T07:59:59.999Z");
+      vi.mocked(createTripShare).mockResolvedValueOnce({
+        id: SHARE_ID,
+        showPrices: false,
+        expiresAt,
+      } as unknown as Awaited<ReturnType<typeof createTripShare>>);
+
+      const result = await createTripShareAction(TRIP_ID, {
+        expiresAt: expiresAt.toISOString(),
+      });
+
+      expect(result.success).toBe(true);
+      expect(createTripShare).toHaveBeenCalledWith(
+        USER_ID,
+        TRIP_ID,
+        expect.objectContaining({ expiresAt })
+      );
+      expect(logImpersonatedMutation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ expiresAt }),
+        })
+      );
+    });
+
+    it("refuses an expiry in the past and says why", async () => {
+      const result = await createTripShareAction(TRIP_ID, {
+        expiresAt: "2026-10-18T11:59:59.000Z",
+      });
+
+      expect(result).toEqual({ success: false, error: "Pick an expiry in the future" });
+      expect(createTripShare).not.toHaveBeenCalled();
+      expect(revalidatePath).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("updateTripShareExpiryAction", () => {
+  const LATER = new Date("2026-11-17T12:00:00.000Z");
+  const shareRow = (expiresAt: Date | null) =>
+    ({ id: SHARE_ID, tripId: TRIP_ID, expiresAt, revokedAt: null }) as unknown as Awaited<
+      ReturnType<typeof updateTripShareExpiry>
+    >;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date("2026-10-18T12:00:00Z"), toFake: ["Date"] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("moves the expiry on a share of the caller's trip, logs it and refreshes the trip", async () => {
+    vi.mocked(updateTripShareExpiry).mockResolvedValueOnce(shareRow(LATER));
+
+    const result = await updateTripShareExpiryAction(TRIP_ID, {
+      shareId: SHARE_ID,
+      // What a Date may arrive as from the browser.
+      expiresAt: LATER.toISOString(),
+    });
+
+    expect(result).toEqual({ success: true, data: shareRow(LATER) });
+    expect(updateTripShareExpiry).toHaveBeenCalledWith(USER_ID, TRIP_ID, {
+      shareId: SHARE_ID,
+      expiresAt: LATER,
+    });
+    expect(logImpersonatedMutation).toHaveBeenCalledWith({
+      action: "tripShare.updateExpiry",
+      entityTable: "trip_shares",
+      entityId: SHARE_ID,
+      metadata: { expiresAt: LATER },
+    });
+    expect(revalidatePath).toHaveBeenCalledWith(tripPath(TRIP_ID));
+    // Shares are not on the dashboard's travel card.
+    expect(revalidatePath).not.toHaveBeenCalledWith("/portal");
+  });
+
+  it("lets a link stop expiring", async () => {
+    vi.mocked(updateTripShareExpiry).mockResolvedValueOnce(shareRow(null));
+
+    const result = await updateTripShareExpiryAction(TRIP_ID, {
+      shareId: SHARE_ID,
+      expiresAt: null,
+    });
+
+    expect(result.success).toBe(true);
+    expect(updateTripShareExpiry).toHaveBeenCalledWith(USER_ID, TRIP_ID, {
+      shareId: SHARE_ID,
+      expiresAt: null,
+    });
+  });
+
+  it("acts as the impersonated user, not the admin behind them", async () => {
+    vi.mocked(requireEffectiveContext).mockResolvedValueOnce({
+      realUser: { id: "admin-id" } as never,
+      realRole: "admin",
+      impersonatedUser: { id: USER_ID } as never,
+      effectiveUserId: USER_ID,
+      isImpersonating: true,
+    });
+    vi.mocked(updateTripShareExpiry).mockResolvedValueOnce(shareRow(LATER));
+
+    await updateTripShareExpiryAction(TRIP_ID, { shareId: SHARE_ID, expiresAt: LATER });
+
+    expect(updateTripShareExpiry).toHaveBeenCalledWith(USER_ID, TRIP_ID, expect.anything());
+  });
+
+  it("does nothing for a caller who is not signed in", async () => {
+    vi.mocked(requireEffectiveContext).mockRejectedValueOnce(new Error("Unauthorized"));
+
+    const result = await updateTripShareExpiryAction(TRIP_ID, {
+      shareId: SHARE_ID,
+      expiresAt: LATER,
+    });
+
+    expect(result).toEqual({ success: false, error: "Action failed" });
+    expect(updateTripShareExpiry).not.toHaveBeenCalled();
+  });
+
+  it("changes nothing on somebody else's trip", async () => {
+    // The service's ownership check throws the same error for a missing trip
+    // and for one that belongs to another user.
+    vi.mocked(updateTripShareExpiry).mockRejectedValueOnce(new Error("Trip not found"));
+
+    const result = await updateTripShareExpiryAction(TRIP_ID, {
+      shareId: SHARE_ID,
+      expiresAt: LATER,
+    });
+
+    expect(result).toEqual({ success: false, error: "Action failed" });
+    expect(logImpersonatedMutation).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("says so when the link was revoked or is not on this trip", async () => {
+    vi.mocked(updateTripShareExpiry).mockResolvedValueOnce(null);
+
+    const result = await updateTripShareExpiryAction(TRIP_ID, {
+      shareId: SHARE_ID,
+      expiresAt: LATER,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "That link was revoked or no longer exists",
+    });
+    expect(logImpersonatedMutation).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("refuses an expiry in the past before reaching the service", async () => {
+    const result = await updateTripShareExpiryAction(TRIP_ID, {
+      shareId: SHARE_ID,
+      expiresAt: "2026-10-17T12:00:00.000Z",
+    });
+
+    expect(result).toEqual({ success: false, error: "Pick an expiry in the future" });
+    expect(updateTripShareExpiry).not.toHaveBeenCalled();
+  });
+
+  it("refuses malformed ids and a missing expiry", async () => {
+    const badTrip = await updateTripShareExpiryAction("nope", {
+      shareId: SHARE_ID,
+      expiresAt: LATER,
+    });
+    expect(badTrip).toEqual({ success: false, error: "Invalid input" });
+
+    const badShare = await updateTripShareExpiryAction(TRIP_ID, {
+      shareId: "nope",
+      expiresAt: LATER,
+    });
+    expect(badShare.success).toBe(false);
+
+    const noExpiry = await updateTripShareExpiryAction(TRIP_ID, {
+      shareId: SHARE_ID,
+    } as unknown as Parameters<typeof updateTripShareExpiryAction>[1]);
+    expect(noExpiry.success).toBe(false);
+
+    expect(updateTripShareExpiry).not.toHaveBeenCalled();
   });
 });
 

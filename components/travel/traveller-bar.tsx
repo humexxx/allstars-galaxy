@@ -12,6 +12,8 @@ import { Mono, Text } from "@/components/ui/typography";
 import { moneyRange } from "@/lib/travel/format";
 import { cn } from "@/lib/utils";
 
+import { usePendingMark } from "./assistant/pending-preview";
+
 export type TravellerView = {
   id: string;
   name: string;
@@ -52,6 +54,8 @@ export function TravellerBar({
   travellers,
   total,
   totalHigh,
+  totalBefore = null,
+  ghosts = [],
   currency,
   selected,
   onSelect,
@@ -61,6 +65,10 @@ export function TravellerBar({
   total: number;
   /** Upper end when the trip's estimate is a range. */
   totalHigh: number;
+  /** What the trip came to before a proposal the page is previewing. */
+  totalBefore?: { low: number; high: number } | null;
+  /** Travellers the previewed proposal removes, shown crossed out. */
+  ghosts?: { id: string; name: string }[];
   currency: string;
   /** Traveller whose share is showing, or null for the whole trip. */
   selected: string | null;
@@ -96,7 +104,15 @@ export function TravellerBar({
           {amount}
         </Mono>
         {/* Fixed line so the box height never moves between captions. */}
-        <Text className="truncate text-2xs leading-tight text-white/70">{caption}</Text>
+        <Text className="truncate text-2xs leading-tight text-white/70">
+          {totalBefore && !active ? (
+            <>
+              was <span className="line-through">{moneyRange(totalBefore.low, totalBefore.high, currency)}</span>
+            </>
+          ) : (
+            caption
+          )}
+        </Text>
       </div>
 
       {travellers.length > 0 && (
@@ -126,7 +142,8 @@ export function TravellerBar({
             /* Two initials cannot tell Jason from Jafet, or Ana from
                Alejandra. A native `title` said so but never showed on a
                phone, which is where the chips are smallest. */
-            <Tooltip key={t.id}>
+            <PendingFace key={t.id} id={t.id}>
+            <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
@@ -156,6 +173,16 @@ export function TravellerBar({
                 </span>
               </TooltipContent>
             </Tooltip>
+            </PendingFace>
+          ))}
+          {ghosts.map((g) => (
+            <span
+              key={g.id}
+              aria-label={`${g.name} (leaving the trip)`}
+              className="grid size-8 animate-in fade-in place-items-center rounded-full bg-destructive/70 text-2xs font-semibold text-white line-through ring-2 ring-destructive"
+            >
+              {initials(g.name)}
+            </span>
           ))}
         </div>
       )}
@@ -181,5 +208,17 @@ export function TravellerBar({
         <TooltipContent side="bottom">Manage travellers</TooltipContent>
       </Tooltip>
     </div>
+  );
+}
+
+/** A face the previewed proposal adds or changes: ringed, and it pops in. */
+function PendingFace({ id, children }: { id: string; children: React.ReactNode }) {
+  const pending = usePendingMark(id);
+  if (!pending) return <>{children}</>;
+  return (
+    <span className="relative grid animate-in zoom-in-50 fade-in rounded-full ring-2 ring-primary ring-offset-2 ring-offset-black/40 duration-500">
+      {children}
+      <span aria-hidden className="absolute -top-0.5 -right-0.5 size-2.5 animate-pulse rounded-full bg-primary ring-2 ring-white" />
+    </span>
   );
 }

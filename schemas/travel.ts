@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EXPIRY_IN_PAST } from "@/lib/travel/share-expiry";
 import { embeddedVideo } from "@/lib/travel/video";
 import { tripItemCategoryEnum, tripPriceUnitEnum } from "@/db/schema";
 import { idSchema, isoDateSchema, moneySchema } from "@/schemas/common";
@@ -143,10 +144,11 @@ export const moveTripItemSchema = z
 
 export const tripPhotoSchema = z.object({
   /**
-   * Attaches the photo to one item instead of the trip's gallery.
+   * Attaches the photo to one item; without it, the photo takes turns on
+   * the trip's banner.
    *
    * The column has existed since the table did; nothing ever sent it, so
-   * every photo landed in the gallery whatever it was of.
+   * every photo landed on the trip whatever it was of.
    */
   itemId: idSchema.nullable().optional(),
   url: z.url().max(2000),
@@ -158,10 +160,23 @@ export const tripPhotoSchema = z.object({
 
 // ---------- shares ----------
 
+/**
+ * When a link stops working, or null for never (until it is revoked).
+ *
+ * Never in the past: a link born expired is a dead link the owner did not
+ * mean to hand out. An instant carries no zone, so comparing it with the
+ * server's clock is safe; the reader's day only matters where the panel turns
+ * a day into an instant.
+ */
+const shareExpirySchema = z.coerce
+  .date()
+  .refine((d) => d.getTime() > Date.now(), EXPIRY_IN_PAST)
+  .nullable();
+
 export const createTripShareSchema = z.object({
   inviteeEmail: z.email().max(200).nullable().optional(),
-  // Optional expiration. When null, the link is valid until revoked.
-  expiresAt: z.coerce.date().nullable().optional(),
+  // Null or absent: the link is valid until revoked.
+  expiresAt: shareExpirySchema.optional(),
   // Scopes the link to one traveller. The service still checks the member
   // belongs to this trip — a foreign key alone would happily accept a member
   // id borrowed from somebody else's trip.
@@ -170,6 +185,17 @@ export const createTripShareSchema = z.object({
   // outright what the recipient may see rather than inheriting a default that
   // contradicts the reason for the link.
   showPrices: z.boolean().optional(),
+});
+
+/**
+ * A new lifetime for an existing link, and nothing else about it.
+ *
+ * `expiresAt` is required: this exists only to set it, and an absent value
+ * would have to mean either "never" or "leave it", which are opposites.
+ */
+export const updateTripShareExpirySchema = z.object({
+  shareId: idSchema,
+  expiresAt: shareExpirySchema,
 });
 
 // ---------- contributions ----------
@@ -211,6 +237,8 @@ export type TripPhotoData = z.infer<typeof tripPhotoSchema>;
 export type TripPhotoInput = z.input<typeof tripPhotoSchema>;
 export type CreateTripShareData = z.infer<typeof createTripShareSchema>;
 export type CreateTripShareInput = z.input<typeof createTripShareSchema>;
+export type UpdateTripShareExpiryData = z.infer<typeof updateTripShareExpirySchema>;
+export type UpdateTripShareExpiryInput = z.input<typeof updateTripShareExpirySchema>;
 export type TripContributionData = z.infer<typeof tripContributionSchema>;
 export type UpdateTripContributionData = z.infer<typeof updateTripContributionSchema>;
 

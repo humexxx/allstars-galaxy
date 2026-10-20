@@ -420,6 +420,11 @@ describe("historyToClosePoints", () => {
       ["2026-09-01", 3],
     ]);
   });
+
+  it("keeps what was still owed to the user, which the dashboard draws apart", () => {
+    const [pt] = historyToClosePoints([{ ...snap(utc(2026, 8, 3), 4100), receivables: 4000 }], 1);
+    expect(pt.receivables).toBe(4000);
+  });
 });
 
 describe("buildPlanTimeline", () => {

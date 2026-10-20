@@ -1,0 +1,374 @@
+{
+  "sports": [
+    {
+      "leagues": [
+        {
+          "events": [
+            {
+              "id": "401902644",
+              "date": "2026-10-03T23:00:00Z",
+              "season": 2027,
+              "seasonType": "1",
+              "note": "NBA Canada Games 2026",
+              "fullStatus": {
+                "type": {
+                  "name": "STATUS_FINAL",
+                  "state": "post"
+                }
+              },
+              "competitors": [
+                {
+                  "homeAway": "away",
+                  "abbreviation": "MIA",
+                  "displayName": "Miami Heat",
+                  "name": "Heat",
+                  "winner": true,
+                  "score": "129"
+                },
+                {
+                  "homeAway": "home",
+                  "abbreviation": "TOR",
+                  "displayName": "Toronto Raptors",
+                  "name": "Raptors",
+                  "winner": false,
+                  "score": "105"
+                }
+              ]
+            },
+            {
+              "id": "401898395",
+              "date": "2026-10-09T12:00:00Z",
+              "season": 2027,
+              "seasonType": "1",
+              "note": "NBA China Game",
+              "fullStatus": {
+                "type": {
+                  "name": "STATUS_FINAL",
+                  "state": "post"
+                }
+              },
+              "competitors": [
+                {
+                  "homeAway": "away",
+                  "abbreviation": "HOU",
+                  "displayName": "Houston Rockets",
+                  "name": "Rockets",
+                  "winner": true,
+                  "score": "135"
+                },
+                {
+                  "homeAway": "home",
+                  "abbreviation": "DAL",
+                  "displayName": "Dallas Mavericks",
+                  "name": "Mavericks",
+                  "winner": false,
+                  "score": "117"
+                }
+              ]
+            },
+            {
+              "id": "401914130",
+              "date": "2026-10-12T20:00:00Z",
+              "season": 2027,
+              "seasonType": "1",
+              "fullStatus": {
+                "type": {
+                  "name": "STATUS_FINAL",
+                  "state": "post"
+                }
+              },
+              "competitors": [
+                {
+                  "homeAway": "away",
+                  "abbreviation": "LON",
+                  "displayName": "London Lions",
+                  "name": "Lions",
+                  "winner": false,
+                  "score": "66"
+                },
+                {
+                  "homeAway": "home",
+                  "abbreviation": "POR",
+                  "displayName": "Portland Trail Blazers",
+                  "name": "Trail Blazers",
+                  "winner": true,
+                  "score": "119"
+                }
+              ]
+            },
+            {
+              "id": "401914126",
+              "date": "2026-10-16T23:00:00Z",
+              "season": 2027,
+              "seasonType": "1",
+              "fullStatus": {
+                "type": {
+                  "name": "STATUS_FINAL",
+                  "state": "post"
+                }
+              },
+              "competitors": [
+                {
+                  "homeAway": "away",
+                  "abbreviation": "MIL",
+                  "displayName": "Milwaukee Bucks",
+                  "name": "Bucks",
+                  "winner": true,
+                  "score": "128"
+                },
+                {
+                  "homeAway": "home",
+                  "abbreviation": "IND",
+                  "displayName": "Indiana Pacers",
+                  "name": "Pacers",
+                  "winner": false,
+                  "score": "127"
+                }
+              ]
+            },
+            {
+              "id": "401898408",
+              "date": "2026-10-17T00:00:00Z",
+              "season": 2027,
+              "seasonType": "1",
+              "fullStatus": {
+                "type": {
+                  "name": "STATUS_FINAL",
+                  "state": "post"
+                }
+              },
+              "competitors": [
+                {
+                  "homeAway": "away",
+                  "abbreviation": "ATL",
+                  "displayName": "Atlanta Hawks",
+                  "name": "Hawks",
+                  "winner": true,
+                  "score": "135"
+                },
+                {
+                  "homeAway": "home",
+                  "abbreviation": "DAL",
+                  "displayName": "Dallas Mavericks",
+                  "name": "Mavericks",
+                  "winner": false,
+                  "score": "111"
+                }
+              ]
+            },
+            {
+              "id": "401898843",
+              "date": "2026-10-17T00:00:00Z",
+              "season": 2027,
+              "seasonType": "1",
+              "fullStatus": {
+                "type": {
+                  "name": "STATUS_FINAL",
+                  "state": "post"
+                }
+              },
+              "competitors": [
+                {
+                  "homeAway": "away",
+                  "abbreviation": "SAC",
+                  "displayName": "Sacramento Kings",
+                  "name": "Kings",
+                  "winner": false,
+                  "score": "97"
+                },
+                {
+                  "homeAway": "home",
+                  "abbreviation": "SA",
+                  "displayName": "San Antonio Spurs",
+                  "name": "Spurs",
+                  "winner": true,
+                  "score": "126"
+                }
+              ]
+            },
+            {
+              "id": "401901822",
+              "date": "2026-10-17T00:00:00Z",
+              "season": 2027,
+              "seasonType": "1",
+              "fullStatus": {
+                "type": {
+                  "name": "STATUS_FINAL",
+                  "state": "post"
+                }
+              },
+              "competitors": [
+                {
+                  "homeAway": "away",
+                  "abbreviation": "CHA",
+                  "displayName": "Charlotte Hornets",
+                  "name": "Hornets",
+                  "winner": false,
+                  "score": "98"
+                },
+                {
+                  "homeAway": "home",
+                  "abbreviation": "MEM",
+                  "displayName": "Memphis Grizzlies",
+                  "name": "Grizzlies",
+                  "winner": true,
+                  "score": "116"
+                }
+              ]
+            },
+            {
+              "id": "401906509",
+              "date": "2026-10-17T00:00:00Z",
+              "season": 2027,
+              "seasonType": "1",
+              "fullStatus": {
+                "type": {
+                  "name": "STATUS_FINAL",
+                  "state": "post"
+                }
+              },
+              "competitors": [
+                {
+                  "homeAway": "away",
+                  "abbreviation": "WSH",
+                  "displayName": "Washington Wizards",
+                  "name": "Wizards",
+                  "winner": false,
+                  "score": "106"
+                },
+                {
+                  "homeAway": "home",
+                  "abbreviation": "NO",
+                  "displayName": "New Orleans Pelicans",
+                  "name": "Pelicans",
+                  "winner": true,
+                  "score": "107"
+                }
+              ]
+            },
+            {
+              "id": "401908943",
+              "date": "2026-10-17T00:00:00Z",
+              "season": 2027,
+              "seasonType": "1",
+              "fullStatus": {
+                "type": {
+                  "name": "STATUS_FINAL",
+                  "state": "post"
+                }
+              },
+              "competitors": [
+                {
+                  "homeAway": "away",
+                  "abbreviation": "MIN",
+                  "displayName": "Minnesota Timberwolves",
+                  "name": "Timberwolves",
+                  "winner": false,
+                  "score": "116"
+                },
+                {
+                  "homeAway": "home",
+                  "abbreviation": "CHI",
+                  "displayName": "Chicago Bulls",
+                  "name": "Bulls",
+                  "winner": true,
+                  "score": "133"
+                }
+              ]
+            },
+            {
+              "id": "401898409",
+              "date": "2026-10-17T02:00:00Z",
+              "season": 2027,
+              "seasonType": "1",
+              "fullStatus": {
+                "type": {
+                  "name": "STATUS_FINAL",
+                  "state": "post"
+                }
+              },
+              "competitors": [
+                {
+                  "homeAway": "away",
+                  "abbreviation": "POR",
+                  "displayName": "Portland Trail Blazers",
+                  "name": "Trail Blazers",
+                  "winner": false,
+                  "score": "118"
+                },
+                {
+                  "homeAway": "home",
+                  "abbreviation": "GS",
+                  "displayName": "Golden State Warriors",
+                  "name": "Warriors",
+                  "winner": true,
+                  "score": "128"
+                }
+              ]
+            },
+            {
+              "id": "401908948",
+              "date": "2026-10-17T02:00:00Z",
+              "season": 2027,
+              "seasonType": "1",
+              "fullStatus": {
+                "type": {
+                  "name": "STATUS_FINAL",
+                  "state": "post"
+                }
+              },
+              "competitors": [
+                {
+                  "homeAway": "away",
+                  "abbreviation": "UTAH",
+                  "displayName": "Utah Jazz",
+                  "name": "Jazz",
+                  "winner": true,
+                  "score": "119"
+                },
+                {
+                  "homeAway": "home",
+                  "abbreviation": "PHX",
+                  "displayName": "Phoenix Suns",
+                  "name": "Suns",
+                  "winner": false,
+                  "score": "116"
+                }
+              ]
+            },
+            {
+              "id": "401898719",
+              "date": "2026-10-17T02:30:00Z",
+              "season": 2027,
+              "seasonType": "1",
+              "fullStatus": {
+                "type": {
+                  "name": "STATUS_FINAL",
+                  "state": "post"
+                }
+              },
+              "competitors": [
+                {
+                  "homeAway": "away",
+                  "abbreviation": "DEN",
+                  "displayName": "Denver Nuggets",
+                  "name": "Nuggets",
+                  "winner": true,
+                  "score": "121"
+                },
+                {
+                  "homeAway": "home",
+                  "abbreviation": "LAL",
+                  "displayName": "Los Angeles Lakers",
+                  "name": "Lakers",
+                  "winner": false,
+                  "score": "106"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -83,8 +83,11 @@ export function occupiedRuns(
       ];
 }
 
-export type WeekSegment = {
-  item: CalendarItem;
+/** Any run of whole days, whatever it belongs to. */
+export type DayRun<T> = { value: T; from: string; to: string };
+
+export type PackedRun<T> = {
+  value: T;
   /** 0–6 within the week. */
   start: number;
   span: number;
@@ -93,6 +96,10 @@ export type WeekSegment = {
   closesRun: boolean;
   /** Which stacked row inside the week this bar sits on. */
   lane: number;
+};
+
+export type WeekSegment = Omit<PackedRun<unknown>, "value"> & {
+  item: CalendarItem;
   /**
    * Which half of a there-and-back this is.
    *
@@ -105,37 +112,36 @@ export type WeekSegment = {
 };
 
 /**
- * Lays a week's bars out in lanes so two runs never draw on top of each other.
+ * Lays a week's runs out in lanes so two of them never draw on top of each
+ * other.
  *
  * Greedy first-fit over runs sorted by start day, which is what every calendar
  * does: the earliest thing takes the top lane, and anything that would overlap
- * it drops to the next one.
+ * it drops to the next one. Lanes are decided per week, so a run that wraps
+ * can sit on a different lane in the next row — Google Calendar does the same.
  */
-export function layOutWeek(week: string[], items: CalendarItem[]): WeekSegment[] {
+export function packWeek<T>(week: string[], source: DayRun<T>[]): PackedRun<T>[] {
   const first = week[0];
   const last = week[6];
 
-  const runs: Omit<WeekSegment, "lane">[] = [];
-  for (const item of items) {
-    for (const run of occupiedRuns(item)) {
-      if (run.to < first || run.from > last) continue;
-      const from = run.from < first ? first : run.from;
-      const to = run.to > last ? last : run.to;
-      const start = week.indexOf(from);
-      const span = week.indexOf(to) - start + 1;
-      // A range stored backwards would compute a negative span, which loses
-      // the column class entirely and records a lane as ending before it
-      // starts. Data that nonsensical is dropped rather than drawn.
-      if (start < 0 || span < 1) continue;
-      runs.push({
-        item,
-        start,
-        span,
-        opensRun: run.from >= first,
-        closesRun: run.to <= last,
-        leg: run.leg,
-      });
-    }
+  const runs: Omit<PackedRun<T>, "lane">[] = [];
+  for (const run of source) {
+    if (run.to < first || run.from > last) continue;
+    const from = run.from < first ? first : run.from;
+    const to = run.to > last ? last : run.to;
+    const start = week.indexOf(from);
+    const span = week.indexOf(to) - start + 1;
+    // A range stored backwards would compute a negative span, which loses
+    // the column class entirely and records a lane as ending before it
+    // starts. Data that nonsensical is dropped rather than drawn.
+    if (start < 0 || span < 1) continue;
+    runs.push({
+      value: run.value,
+      start,
+      span,
+      opensRun: run.from >= first,
+      closesRun: run.to <= last,
+    });
   }
 
   runs.sort((a, b) => a.start - b.start || b.span - a.span);
@@ -147,4 +153,28 @@ export function layOutWeek(week: string[], items: CalendarItem[]): WeekSegment[]
     laneEnds[lane] = run.start + run.span;
     return { ...run, lane };
   });
+}
+
+/** How many lanes a packed week needs. */
+export function laneCount(runs: { lane: number }[]): number {
+  return runs.reduce((n, run) => Math.max(n, run.lane + 1), 0);
+}
+
+/** A trip's bars on one week: the trip itself is the run, start to end. */
+export function layOutTrips<T extends { startDate: string; endDate: string | null }>(
+  week: string[],
+  trips: T[]
+): PackedRun<T>[] {
+  return packWeek(
+    week,
+    trips.map((trip) => ({ value: trip, from: trip.startDate, to: trip.endDate ?? trip.startDate }))
+  );
+}
+
+/** An item's bars on one week, each half of a there-and-back on its own. */
+export function layOutWeek(week: string[], items: CalendarItem[]): WeekSegment[] {
+  const runs = items.flatMap((item) =>
+    occupiedRuns(item).map((run) => ({ value: { item, leg: run.leg }, from: run.from, to: run.to }))
+  );
+  return packWeek(week, runs).map(({ value, ...seg }) => ({ ...seg, ...value }));
 }

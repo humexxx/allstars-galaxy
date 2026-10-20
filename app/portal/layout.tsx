@@ -6,8 +6,11 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { DevToolsProvider } from "@/components/dev-tools/dev-tools-context";
 import { DevToolsDrawer } from "@/components/dev-tools/dev-tools-drawer";
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
+import { AiKeyExpiryNotice } from "@/components/portal/ai-key-expiry-notice";
+import { keyExpiryWarning, type KeyExpiryWarning } from "@/lib/ai/key-expiry";
+import { getAiSettings } from "@/lib/services/ai-service";
 import { getEffectiveContext } from "@/lib/services/impersonation";
-import { getRequestTimeZone } from "@/lib/utils/request-today";
+import { getRequestTimeZone, getRequestTodayIso } from "@/lib/utils/request-today";
 
 /**
  * Topology matches the shadcn docs site: sticky full-width header on top,
@@ -32,9 +35,18 @@ export default async function PortalLayout({
     redirect("/login");
   }
 
+  // Admins only, and only once the key's date has been entered in Settings.
+  const keyExpiry = ctx.realRole === "admin" ? await aiKeyExpiry() : null;
+
   return (
     <ReaderTimeZoneProvider timeZone={timeZone}>
-      <SidebarProvider defaultOpen={true}>
+      {/* 12rem, not shadcn's 16rem: the labels are short, and every rem the
+          sidebar gives back pulls the page's centred column towards the
+          middle of the window. */}
+      <SidebarProvider
+        defaultOpen={true}
+        style={{ "--sidebar-width": "12rem" } as React.CSSProperties}
+      >
         <DevToolsProvider>
           {/* On a phone the DOCUMENT scrolls, so the browser's own pull-to-refresh
             works — it only fires when the root scroller is overscrolled at the
@@ -61,7 +73,7 @@ export default async function PortalLayout({
                 sidebar's width instead of scrolling inside its own card. */}
               <SidebarInset className="min-w-0">
                 {/* No container here: each route renders its own
-                  `PortalPageContainer` and declares the width it needs. */}
+                  `PortalPageContainer`. */}
                 <main
                   id="main-content"
                   tabIndex={-1}
@@ -73,8 +85,16 @@ export default async function PortalLayout({
             </div>
           </div>
           <DevToolsDrawer />
+          {keyExpiry && <AiKeyExpiryNotice {...keyExpiry} />}
         </DevToolsProvider>
       </SidebarProvider>
     </ReaderTimeZoneProvider>
   );
+}
+
+/** The reminder an admin is due, if any. */
+async function aiKeyExpiry(): Promise<{ warning: KeyExpiryWarning; expiresOn: string } | null> {
+  const [{ apiKeyExpiresOn }, today] = await Promise.all([getAiSettings(), getRequestTodayIso()]);
+  const warning = keyExpiryWarning(apiKeyExpiresOn, today);
+  return warning && apiKeyExpiresOn ? { warning, expiresOn: apiKeyExpiresOn } : null;
 }

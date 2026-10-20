@@ -18,6 +18,8 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 export type MatchTimeFormat = {
   /** "Jul 5" */
   shortDay: (value: string | Date) => string;
+  /** "Sun, Jul 5" */
+  weekdayDay: (value: string | Date) => string;
   /** "Jul 5, 2026" */
   day: (value: string | Date) => string;
   /** "Wednesday, September 30, 2026" */
@@ -29,6 +31,7 @@ export type MatchTimeFormat = {
 };
 
 const SHORT_DAY: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+const WEEKDAY_DAY: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" };
 const DAY: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
 const LONG_DAY: Intl.DateTimeFormatOptions = {
   weekday: "long",
@@ -83,6 +86,7 @@ export function matchTimeFormat(timeZone?: string): MatchTimeFormat {
 
   const format: MatchTimeFormat = {
     shortDay: make(SHORT_DAY),
+    weekdayDay: make(WEEKDAY_DAY),
     day: make(DAY),
     longDay: make(LONG_DAY),
     time: make(TIME),

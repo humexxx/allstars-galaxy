@@ -21,15 +21,34 @@ vi.mock("@/db", () => ({
   db: {
     select: vi.fn(),
     insert: vi.fn(),
+    update: vi.fn(),
     delete: vi.fn(),
   },
 }));
 
 import { db } from "@/db";
+import { getFootballLeague } from "@/lib/data/sports/football";
+import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
+import type {
+  BracketMatch,
+  DashboardMatch,
+  DashboardSportCard,
+  LolRegion,
+  LolSplit,
+  RacquetData,
+  RacquetTournament,
+  Team,
+} from "@/types/sports";
+
+import gamesOct18 from "./__fixtures__/balldontlie-nba-games-2026-10-18.json";
+import { fakeLolesports } from "./__fixtures__/lolesports";
 import {
+  __testing,
   getDashboardSportCard,
   listUserFavoriteSportIds,
+  listUserFavoriteSports,
   listUserSportsFavorites,
+  setSportCompetition,
   setSportFavorite,
 } from "./sports-service";
 
@@ -65,6 +84,16 @@ function mockInsert() {
   return thenable;
 }
 
+function mockUpdate(rows: unknown[]) {
+  const thenable = {
+    set: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    returning: vi.fn().mockResolvedValue(rows),
+  };
+  dbMock.update.mockReturnValue(thenable as never);
+  return thenable;
+}
+
 function mockDelete() {
   const thenable = {
     where: vi.fn().mockResolvedValue(undefined),
@@ -93,6 +122,20 @@ describe("listUserSportsFavorites", () => {
     expect(chain.from).toHaveBeenCalledOnce();
     expect(chain.where).toHaveBeenCalledOnce();
     expect(chain.orderBy).toHaveBeenCalledOnce();
+  });
+});
+
+describe("listUserFavoriteSports", () => {
+  it("carries each favourite's championship, null where none is set", async () => {
+    mockSelect([
+      { id: "a", userId: USER_ID, sportId: "lol", competition: "lck", createdAt: new Date() },
+      { id: "b", userId: USER_ID, sportId: "nba", competition: null, createdAt: new Date() },
+    ]);
+
+    await expect(listUserFavoriteSports(USER_ID)).resolves.toEqual([
+      { sportId: "lol", competition: "lck" },
+      { sportId: "nba", competition: null },
+    ]);
   });
 });
 
@@ -142,6 +185,37 @@ describe("setSportFavorite", () => {
   });
 });
 
+// ---------- setSportCompetition ----------
+
+describe("setSportCompetition", () => {
+  it("updates only the caller's favourite row for that sport and hands it back", async () => {
+    const row = { id: "a", userId: USER_ID, sportId: "tennis", competition: "wta", createdAt: new Date() };
+    const chain = mockUpdate([row]);
+
+    await expect(setSportCompetition(USER_ID, "tennis", "wta")).resolves.toEqual(row);
+
+    expect(dbMock.update).toHaveBeenCalledOnce();
+    expect(chain.set).toHaveBeenCalledWith({ competition: "wta" });
+    expect(chain.where).toHaveBeenCalledOnce();
+    // Never an insert: a card, and so a choice, exists only for a favourite.
+    expect(dbMock.insert).not.toHaveBeenCalled();
+  });
+
+  it("stores null for the card's own pick", async () => {
+    const chain = mockUpdate([{ id: "a" }]);
+
+    await setSportCompetition(USER_ID, "lol", null);
+
+    expect(chain.set).toHaveBeenCalledWith({ competition: null });
+  });
+
+  it("is null when the sport is not one of the caller's favourites", async () => {
+    mockUpdate([]);
+
+    await expect(setSportCompetition(USER_ID, "padel", "women")).resolves.toBeNull();
+  });
+});
+
 // ---------- getDashboardSportsSummary ----------
 
 describe("getDashboardSportCard", () => {
@@ -166,15 +240,32 @@ describe("getDashboardSportCard", () => {
     home_team: nbaTeam(20, "Knicks", "NYK"),
     visitor_team: nbaTeam(2, "Celtics", "BOS"),
   });
-  async function withNbaGames<T>(games: unknown[], run: () => Promise<T>): Promise<T> {
+  /**
+   * The NBA's feeds on a fixed day: balldontlie's page, and ESPN answering
+   * with no table and no preseason.
+   */
+  async function withNbaGames<T>(
+    games: unknown[],
+    run: () => Promise<T>,
+    now = new Date(2026, 9, 21, 12)
+  ): Promise<T> {
     vi.stubEnv("BALLDONTLIE_API_KEY", "test-key");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
     vi.stubGlobal(
       "fetch",
-      vi.fn(() => Promise.resolve(new Response(JSON.stringify({ data: games }), { status: 200 })))
+      vi.fn((url: string) =>
+        Promise.resolve(
+          new Response(JSON.stringify(url.includes("api.balldontlie.io") ? { data: games } : {}), {
+            status: 200,
+          })
+        )
+      )
     );
     try {
       return await run();
     } finally {
+      vi.useRealTimers();
       vi.unstubAllEnvs();
       vi.stubGlobal(
         "fetch",
@@ -208,6 +299,40 @@ describe("getDashboardSportCard", () => {
       expect(table.rows.map((r) => r.position)).toEqual([1, 2, 3, 4, 5]);
       expect(table.rows[0].value).toMatch(/^\d+–\d+$/);
     }
+    expect(card.note).toBeUndefined();
+  });
+
+  it("puts last season's champion where the NBA's table will be, until the opener", async () => {
+    const card = await withNbaGames(
+      gamesOct18.data,
+      () => getDashboardSportCard("nba"),
+      new Date(2026, 9, 18, 12)
+    );
+
+    expect(card?.context).toBe("Season 2026–27");
+    expect(card?.tables).toEqual([]);
+    expect(card?.note).toEqual({
+      title: "2025–26 champions",
+      text: "New York Knicks, 4–1 over San Antonio",
+      when: { label: "Tips off", startsAt: "2026-10-20T19:00:00.000Z" },
+    });
+    // The opener leads the card; June's finals are last season's.
+    expect(card?.featured).toMatchObject({ status: "upcoming", home: { code: "DET" }, away: { code: "BOS" } });
+  });
+
+  it("says when the NBA's table starts when last season's finals are not on the page", async () => {
+    const openers = gamesOct18.data.filter((g) => g.season === 2026);
+    const card = await withNbaGames(openers, () => getDashboardSportCard("nba"), new Date(2026, 9, 18, 12));
+
+    expect(card?.note).toEqual({
+      title: "Standings start with the opener",
+      when: { label: "Tips off", startsAt: "2026-10-20T19:00:00.000Z" },
+    });
+  });
+
+  it("has no NBA note from the opener on", async () => {
+    const card = await withNbaGames([nbaGame(1, "final", 110, 102)], () => getDashboardSportCard("nba"));
+    expect(card?.note).toBeUndefined();
   });
 
   it("reads the NBA from the live feed, not the fixture", async () => {
@@ -239,11 +364,364 @@ describe("getDashboardSportCard", () => {
     expect(card.tables[0].rows[0].code).toBeUndefined();
   });
 
+  it("offers football's leagues, the Champions League shown when none is chosen", async () => {
+    const card = (await getDashboardSportCard("football"))!;
+
+    expect(card.competitions).toEqual({
+      value: "uefa-champions-league",
+      options: [
+        { id: "uefa-champions-league", label: "UEFA Champions League" },
+        { id: "la-liga", label: "LaLiga" },
+        { id: "premier-league", label: "Premier League" },
+        { id: "serie-a", label: "Serie A" },
+        { id: "world-cup", label: "FIFA World Cup 2026" },
+      ],
+    });
+  });
+
+  it("reads the league football's card is set to", async () => {
+    const card = (await getDashboardSportCard("football", "la-liga"))!;
+
+    expect(card.context).toBe(getFootballLeague("la-liga").league.name);
+    expect(card.competitions?.value).toBe("la-liga");
+    expect(card.tables[0].rows).toHaveLength(5);
+  });
+
+  it("reads the World Cup from its own feed", async () => {
+    const card = (await getDashboardSportCard("football", "world-cup"))!;
+
+    expect(card.context).toBe(WORLD_CUP_DATA.league.name);
+    expect(card.competitions?.value).toBe("world-cup");
+    expect(card.featured).toBeDefined();
+  });
+
+  it("falls back to the Champions League for a league football no longer offers", async () => {
+    const card = (await getDashboardSportCard("football", "bundesliga"))!;
+
+    expect(card.context).toMatch(/Champions League/);
+    expect(card.competitions?.value).toBe("uefa-champions-league");
+  });
+
+  it("narrows tennis to the tour it is set to, and names it under the title", async () => {
+    const both = (await getDashboardSportCard("tennis"))!;
+    const wta = (await getDashboardSportCard("tennis", "wta"))!;
+
+    expect(both.context).toBe("Both tours");
+    expect(both.competitions).toEqual({
+      value: null,
+      automatic: "Both tours",
+      options: [
+        { id: "atp", label: "ATP" },
+        { id: "wta", label: "WTA" },
+      ],
+    });
+    expect(wta.context).toBe("WTA");
+    expect(wta.competitions?.value).toBe("wta");
+    expect(wta.tables.map((t) => t.label)).toEqual(["WTA"]);
+    expect(wta.tables[0].rows[0].name).toBe("I. Świątek");
+  });
+
+  it("narrows padel to the category it is set to", async () => {
+    const card = (await getDashboardSportCard("padel", "women"))!;
+
+    expect(card.context).toBe("Women");
+    expect(card.tables.map((t) => t.label)).toEqual(["Women"]);
+    expect(card.competitions).toMatchObject({ value: "women", automatic: "Men and women" });
+  });
+
+  it("ignores a stored value that is not the sport's: tennis with padel's category", async () => {
+    const card = (await getDashboardSportCard("tennis", "women"))!;
+
+    expect(card.tables.map((t) => t.label)).toEqual(["ATP", "WTA"]);
+    expect(card.competitions?.value).toBeNull();
+  });
+
+  it("offers no choice for the NBA, whatever is stored", async () => {
+    const card = (await getDashboardSportCard("nba", "east"))!;
+
+    expect(card.competitions).toBeUndefined();
+    expect(card.tables.map((t) => t.label)).toEqual(["East", "West"]);
+  });
+
   it("features LoL's first match in display order and lists the next ones", async () => {
     const card = (await getDashboardSportCard("lol"))!;
 
     expect(card.featured).toBeDefined();
     expect(card.featured?.label).toMatch(/BO[135]$/);
-    expect(card.matches.length).toBeLessThanOrEqual(2);
+    expect(card.matches.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("the LoL card across a season", () => {
+  async function lolCardOn(now: string, competition: string | null = null): Promise<DashboardSportCard> {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(now));
+    vi.stubGlobal("fetch", vi.fn(fakeLolesports(now)));
+    return (await getDashboardSportCard("lol", competition))!;
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new Error("fetch is disabled in unit tests")))
+    );
+  });
+
+  const line = (m: DashboardMatch) => `${m.home.code} v ${m.away.code} ${m.status}`;
+  const table = (card: DashboardSportCard) =>
+    card.tables.map((t) => ({ label: t.label, rows: t.rows.map((r) => `${r.name} ${r.value}`) }));
+
+  it("during the Swiss stage: the next match, four more and the records so far", async () => {
+    const card = await lolCardOn("2026-10-23T23:00:00Z");
+
+    expect(card.context).toBe("Worlds 2026 · Swiss");
+    expect(line(card.featured!)).toBe("T1 v FLY upcoming");
+    // "Up next" first, the latest result filling the rest.
+    expect(card.matches.map(line)).toEqual([
+      "AL v HLE upcoming",
+      "TES v G2 upcoming",
+      "PSG v GEN upcoming",
+      "100T v BLG result",
+    ]);
+    expect(card.tables.map((t) => t.id)).toEqual(["swiss"]);
+    expect(card.tables[0].rows.slice(0, 4).map((r) => r.value)).toEqual(["1–0", "1–0", "1–0", "1–0"]);
+  });
+
+  it("through the knockouts: no stale Swiss table, and six matches in its room", async () => {
+    const card = await lolCardOn("2026-11-04T12:00:00Z");
+
+    expect(card.context).toBe("Worlds 2026 · Quarterfinals");
+    expect(card.tables).toEqual([]);
+    expect(line(card.featured!)).toBe("AL v T1 upcoming");
+    expect(card.matches.map(line)).toEqual([
+      "HLE v CFO upcoming",
+      "G2 v GEN upcoming",
+      "KT v TES result",
+      "T1 v MKOI result",
+      "BLG v TES result",
+      "FLY v CFO result",
+    ]);
+  });
+
+  for (const day of ["2026-11-20", "2026-12-10", "2027-01-05"]) {
+    it(`after the final (${day}): the final, the other knockouts and the season's champions`, async () => {
+      const card = await lolCardOn(`${day}T12:00:00Z`);
+
+      expect(card.context).toBe("Worlds 2026 · Finals");
+      expect(card.featured).toMatchObject({
+        status: "result",
+        label: "Finals · BO5",
+        startsAt: "2026-11-14T19:00:00Z",
+        home: { code: "T1", score: 3, winner: true },
+        away: { code: "GEN", score: 2, winner: false },
+      });
+      expect(card.matches.map(line)).toEqual([
+        "HLE v GEN result",
+        "KT v T1 result",
+        "G2 v GEN result",
+        "HLE v CFO result",
+      ]);
+      // Each region's from its Finals: LPL's last round (IG) is not its final.
+      expect(table(card)).toEqual([
+        {
+          label: "2026 champions",
+          rows: ["T1 Worlds", "Team Liquid LCS", "G2 Esports LEC", "Anyone's Legend LPL", "Gen.G LCK"],
+        },
+      ]);
+      expect(card.tables[0].unranked).toBe(true);
+    });
+  }
+
+  it("offers the events in today's feed, following what's on until one is chosen", async () => {
+    const card = await lolCardOn("2026-10-23T23:00:00Z");
+
+    expect(card.competitions?.value).toBeNull();
+    expect(card.competitions?.automatic).toBe("Follow what's on");
+    // The feed's order: the event on, then the splits by how recently they ended.
+    expect(card.competitions?.options).toEqual([
+      { id: "worlds", label: "Worlds 2026" },
+      { id: "lcs", label: "LCS Split 3" },
+      { id: "lec", label: "LEC Split 3" },
+      { id: "lpl", label: "LPL Split 3" },
+      { id: "lck", label: "LCK Split 3" },
+    ]);
+  });
+
+  it("shows the split it is set to, during Worlds too", async () => {
+    const card = await lolCardOn("2026-10-23T23:00:00Z", "lck");
+
+    expect(card.competitions?.value).toBe("lck");
+    expect(card.context).toBe("LCK Split 3 · Finals");
+    expect(card.tables.map((t) => t.label)).toEqual(["Standings"]);
+  });
+
+  it("follows what's on when the event it was set to is not in today's feed", async () => {
+    // MSI is over: out of season the feed lists no international event but Worlds.
+    const card = await lolCardOn("2026-10-23T23:00:00Z", "msi");
+
+    expect(card.context).toBe("Worlds 2026 · Swiss");
+    expect(card.competitions?.value).toBeNull();
+    expect(card.competitions?.options.map((o) => o.id)).not.toContain("msi");
+    // Still stored, and back when MSI is: the picker ticks it so it can be cleared.
+    expect(card.competitions?.waiting).toEqual({ id: "msi", label: "MSI" });
+  });
+
+  it("has nothing waiting when the stored split is on, or none is stored", async () => {
+    expect((await lolCardOn("2026-10-23T23:00:00Z", "lck")).competitions?.waiting).toBeUndefined();
+    expect((await lolCardOn("2026-10-23T23:00:00Z")).competitions?.waiting).toBeUndefined();
+  });
+
+  it("once LCK's new season starts: its next match, its results and its table", async () => {
+    const card = await lolCardOn("2027-01-14T12:00:00Z");
+
+    expect(card.context).toBe("LCK Split 1 · Week 1");
+    expect(line(card.featured!)).toBe("HLE v BFX upcoming");
+    expect(card.matches.map(line)).toEqual(["T1 v GEN result", "DK v KT result"]);
+    expect(table(card)).toEqual([{ label: "Standings", rows: ["DK 1–0", "KT 0–1"] }]);
+  });
+});
+
+describe("the LoL card after MSI or First Stand", () => {
+  const base = { sportId: "lol", label: "League of Legends", emoji: "🎮" } as const;
+  const team = (code: string): Team => ({ id: code.toLowerCase(), name: code, shortName: code, code });
+  function finished(
+    region: LolRegion,
+    name: string,
+    [winner, loser]: [string, string],
+    date: string
+  ): LolSplit {
+    const final: BracketMatch = {
+      id: `${region}-final`,
+      homeTeamId: winner.toLowerCase(),
+      awayTeamId: loser.toLowerCase(),
+      homeScore: 3,
+      awayScore: 1,
+      winnerTeamId: winner.toLowerCase(),
+      date,
+      bestOf: 5,
+    };
+    return {
+      region,
+      name,
+      season: "2027",
+      ...(region === "msi" || region === "first-stand" ? { international: true } : {}),
+      teams: [team(winner), team(loser)],
+      standings: [],
+      matches: [],
+      playoffs: [{ id: "final", label: "Finals", matches: [final] }],
+      champion: { teamId: final.winnerTeamId!, final },
+    };
+  }
+
+  it.each([
+    ["first-stand", "First Stand 2027"],
+    ["msi", "MSI 2027"],
+  ] as const)("after %s's final the split winners are the latest champions, not the season's", (region, name) => {
+    const card = __testing.lolCard(base, {
+      splits: [
+        finished(region, name, ["GEN", "BLG"], "2027-03-22T12:00:00Z"),
+        finished("lck", "LCK Split 1", ["HLE", "T1"], "2027-03-01T08:00:00Z"),
+        finished("lec", "LEC Split 1", ["G2", "FNC"], "2027-03-08T16:00:00Z"),
+      ],
+    });
+
+    expect(card.context).toBe(`${name} · Finals`);
+    expect(card.tables.map((t) => ({ label: t.label, rows: t.rows.map((r) => `${r.code} ${r.value}`) }))).toEqual([
+      { label: "Latest champions", rows: [`GEN ${region === "msi" ? "MSI" : "First Stand"}`, "HLE LCK", "G2 LEC"] },
+    ]);
+  });
+});
+
+describe("swissRecords", () => {
+  const tie = (id: string, home: string | null, away: string | null, winner: string | null = null) => ({
+    id,
+    homeTeamId: home,
+    awayTeamId: away,
+    winnerTeamId: winner,
+    status: winner ? ("ft" as const) : ("scheduled" as const),
+  });
+
+  it("is empty until a match has been decided", () => {
+    const stage = {
+      winsToAdvance: 3,
+      lossesToExit: 3,
+      rounds: [[{ wins: 0, losses: 0, matches: [tie("1", "gen", "ig"), tie("2", "t1", "los")] }]],
+      exits: [],
+    };
+    expect(__testing.swissRecords(stage)).toEqual([]);
+  });
+
+  it("ranks every team by its record so far, best first", () => {
+    const stage = {
+      winsToAdvance: 3,
+      lossesToExit: 3,
+      rounds: [
+        [{ wins: 0, losses: 0, matches: [tie("1", "gen", "ig", "gen"), tie("2", "t1", "los", "t1")] }],
+        [
+          { wins: 1, losses: 0, matches: [tie("3", "gen", "t1", "t1")] },
+          { wins: 0, losses: 1, matches: [tie("4", "ig", "los")] },
+        ],
+      ],
+      exits: [],
+    };
+    expect(__testing.swissRecords(stage).map((r) => [r.teamId, `${r.wins}-${r.losses}`])).toEqual([
+      ["t1", "2-0"],
+      ["gen", "1-1"],
+      ["ig", "0-1"],
+      ["los", "0-1"],
+    ]);
+  });
+
+  it("does not count a series still being played, even with a leader", () => {
+    const live = { ...tie("3", "gen", "t1", "t1"), status: "live" as const };
+    const stage = {
+      winsToAdvance: 3,
+      lossesToExit: 3,
+      rounds: [
+        [{ wins: 0, losses: 0, matches: [tie("1", "gen", "ig", "gen"), tie("2", "t1", "los", "t1")] }],
+        [{ wins: 1, losses: 0, matches: [live] }],
+      ],
+      exits: [],
+    };
+    expect(__testing.swissRecords(stage).map((r) => [r.teamId, `${r.wins}-${r.losses}`])).toEqual([
+      ["gen", "1-0"],
+      ["t1", "1-0"],
+      ["ig", "0-1"],
+      ["los", "0-1"],
+    ]);
+  });
+});
+
+describe("racquetCard", () => {
+  const tournament = (id: string, status: RacquetTournament["status"]): RacquetTournament => ({
+    id,
+    name: id,
+    location: "Somewhere",
+    startDate: "2026-10-19",
+    endDate: "2026-10-25",
+    status,
+  });
+  const tour = (tournaments: RacquetTournament[]): RacquetData => ({
+    tour: "atp",
+    season: 2026,
+    rankings: [],
+    tournaments,
+  });
+  const base = { sportId: "tennis", label: "Tennis", emoji: "🎾" } as const;
+  const tours = [
+    { id: "atp", label: "ATP", data: tour([tournament("Paris Masters", "upcoming")]) },
+    { id: "wta", label: "WTA", data: tour([tournament("WTA Finals", "live")]) },
+  ];
+
+  it("leads with whichever tour has a tournament on when none is chosen", () => {
+    expect(__testing.racquetCard(base, tours, null, "Both tours").event?.name).toBe("WTA Finals");
+  });
+
+  it("leads with the chosen tour's own tournament, even with the other's on", () => {
+    expect(__testing.racquetCard(base, tours, "atp", "Both tours").event).toMatchObject({
+      name: "Paris Masters",
+      status: "upcoming",
+    });
   });
 });

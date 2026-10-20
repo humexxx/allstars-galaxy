@@ -202,6 +202,68 @@ export function todayInTimeZone(
 }
 
 /**
+ * The last millisecond of calendar day `day` (`YYYY-MM-DD`) in `timeZone`, as
+ * the instant it is. An unknown or missing zone falls back to UTC.
+ *
+ * "Until the 16th" means the 16th on the reader's clock. Ending it at UTC
+ * midnight instead cuts the last evening off for anyone west of Greenwich.
+ */
+export function endOfDayInTimeZone(day: string, timeZone?: string | null): Date {
+  const zone = isValidTimeZone(timeZone) ? timeZone : "UTC";
+  const [y, m, d] = day.split("-").map(Number);
+  // A millisecond before the next day starts. That midnight, read as if it
+  // were UTC, is one instant per offset in force around it (a day either side
+  // brackets any DST change near it), and the next day starts at the earliest
+  // of them that is already on its date. Working from 23:59:59.999 instead
+  // lands in the first pass of an hour that a fall-back at 24:00 repeats
+  // (Chile), and ends the day an hour early.
+  const midnight = Date.UTC(y, m - 1, d + 1);
+  const nextDay = new Date(midnight).toISOString().slice(0, 10);
+  const starts = [-DAY_MS, DAY_MS]
+    .map((shift) => midnight - zoneOffsetMs(midnight + shift, zone))
+    .filter(
+      (t) => calendarDayInTimeZone(new Date(t), zone).toISOString().slice(0, 10) === nextDay
+    );
+  const start =
+    starts.length > 0 ? Math.min(...starts) : midnight - zoneOffsetMs(midnight, zone);
+  return new Date(start - 1);
+}
+
+const DAY_MS = 86_400_000;
+
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** How far `timeZone`'s clock is ahead of UTC at `instant`, in ms. */
+function zoneOffsetMs(instant: number, timeZone: string): number {
+  let formatter = offsetFormatters.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    offsetFormatters.set(timeZone, formatter);
+  }
+  const parts = formatter.formatToParts(new Date(instant));
+  const get = (type: Intl.DateTimeFormatPartTypes): number =>
+    Number(parts.find((p) => p.type === type)?.value);
+  const wall = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour"),
+    get("minute"),
+    get("second")
+  );
+  return wall - Math.floor(instant / 1000) * 1000;
+}
+
+/**
  * The earliest calendar day anywhere on Earth at `instant` (the day in
  * UTC−12, `Etc/GMT+12` — the POSIX sign is inverted), as UTC midnight.
  *

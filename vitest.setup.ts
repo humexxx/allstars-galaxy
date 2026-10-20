@@ -14,6 +14,23 @@ afterEach(async () => {
   cleanup();
 });
 
+// jsdom has no `matchMedia`, and media-query hooks (reduced motion, phone
+// width) call it on render. A default that matches nothing reads as a wide
+// screen with motion allowed; a test that needs otherwise stubs its own.
+if (typeof window !== "undefined" && !window.matchMedia) {
+  window.matchMedia = (query: string): MediaQueryList =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+}
+
 // `server-only` is a Next.js marker package that throws at build time when
 // imported from the client bundle. In Vitest we are deliberately running
 // server modules in a Node environment, so we stub it out globally.
@@ -50,4 +67,17 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     unobserve() {}
     disconnect() {}
   } as unknown as typeof ResizeObserver;
+}
+
+// Nor an IntersectionObserver, which the sport bar watches its name row with
+// (SportShell). A no-op leaves the name in view, as on a page just opened.
+if (typeof globalThis.IntersectionObserver === "undefined") {
+  globalThis.IntersectionObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
+    }
+  } as unknown as typeof IntersectionObserver;
 }

@@ -51,9 +51,12 @@ export function AppSidebar({
     // The `top-14` / matching height override pin the sidebar below the sticky
     // AppHeader (see app-header.tsx). Keep this in sync with the header's
     // `h-14` if you change either.
+    // The hairline on its right runs beside the nav and fades out towards
+    // both ends, as on the shadcn docs: a rule beside the links, not a wall
+    // from the header down.
     <Sidebar
       collapsible="offExamples"
-      className="top-14 h-[calc(100svh-3.5rem)]"
+      className="top-14 h-[calc(100svh-3.5rem)] after:absolute after:top-18 after:right-0 after:bottom-6 after:w-px after:bg-sidebar-border after:mask-y-from-75%"
       {...props}
     >
       <SidebarContent className="gap-0 px-2 pt-18">

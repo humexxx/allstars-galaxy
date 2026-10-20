@@ -1,0 +1,424 @@
+{
+  "data": [
+    {
+      "id": 21716134,
+      "date": "2026-06-03",
+      "datetime": "2026-06-04T00:30:00.000Z",
+      "season": 2025,
+      "status": "Final",
+      "status_state": "final",
+      "postseason": true,
+      "postponed": false,
+      "home_team_score": 95,
+      "visitor_team_score": 105,
+      "home_team": {
+        "id": 27,
+        "conference": "West",
+        "city": "San Antonio",
+        "name": "Spurs",
+        "full_name": "San Antonio Spurs",
+        "abbreviation": "SAS"
+      },
+      "visitor_team": {
+        "id": 20,
+        "conference": "East",
+        "city": "New York",
+        "name": "Knicks",
+        "full_name": "New York Knicks",
+        "abbreviation": "NYK"
+      }
+    },
+    {
+      "id": 21716135,
+      "date": "2026-06-05",
+      "datetime": "2026-06-06T00:30:00.000Z",
+      "season": 2025,
+      "status": "Final",
+      "status_state": "final",
+      "postseason": true,
+      "postponed": false,
+      "home_team_score": 104,
+      "visitor_team_score": 105,
+      "home_team": {
+        "id": 27,
+        "conference": "West",
+        "city": "San Antonio",
+        "name": "Spurs",
+        "full_name": "San Antonio Spurs",
+        "abbreviation": "SAS"
+      },
+      "visitor_team": {
+        "id": 20,
+        "conference": "East",
+        "city": "New York",
+        "name": "Knicks",
+        "full_name": "New York Knicks",
+        "abbreviation": "NYK"
+      }
+    },
+    {
+      "id": 21716136,
+      "date": "2026-06-08",
+      "datetime": "2026-06-09T00:30:00.000Z",
+      "season": 2025,
+      "status": "Final",
+      "status_state": "final",
+      "postseason": true,
+      "postponed": false,
+      "home_team_score": 111,
+      "visitor_team_score": 115,
+      "home_team": {
+        "id": 20,
+        "conference": "East",
+        "city": "New York",
+        "name": "Knicks",
+        "full_name": "New York Knicks",
+        "abbreviation": "NYK"
+      },
+      "visitor_team": {
+        "id": 27,
+        "conference": "West",
+        "city": "San Antonio",
+        "name": "Spurs",
+        "full_name": "San Antonio Spurs",
+        "abbreviation": "SAS"
+      }
+    },
+    {
+      "id": 21716137,
+      "date": "2026-06-10",
+      "datetime": "2026-06-11T00:30:00.000Z",
+      "season": 2025,
+      "status": "Final",
+      "status_state": "final",
+      "postseason": true,
+      "postponed": false,
+      "home_team_score": 107,
+      "visitor_team_score": 106,
+      "home_team": {
+        "id": 20,
+        "conference": "East",
+        "city": "New York",
+        "name": "Knicks",
+        "full_name": "New York Knicks",
+        "abbreviation": "NYK"
+      },
+      "visitor_team": {
+        "id": 27,
+        "conference": "West",
+        "city": "San Antonio",
+        "name": "Spurs",
+        "full_name": "San Antonio Spurs",
+        "abbreviation": "SAS"
+      }
+    },
+    {
+      "id": 21716138,
+      "date": "2026-06-13",
+      "datetime": "2026-06-14T00:30:00.000Z",
+      "season": 2025,
+      "status": "Final",
+      "status_state": "final",
+      "postseason": true,
+      "postponed": false,
+      "home_team_score": 90,
+      "visitor_team_score": 94,
+      "home_team": {
+        "id": 27,
+        "conference": "West",
+        "city": "San Antonio",
+        "name": "Spurs",
+        "full_name": "San Antonio Spurs",
+        "abbreviation": "SAS"
+      },
+      "visitor_team": {
+        "id": 20,
+        "conference": "East",
+        "city": "New York",
+        "name": "Knicks",
+        "full_name": "New York Knicks",
+        "abbreviation": "NYK"
+      }
+    },
+    {
+      "id": 21717855,
+      "date": "2026-10-20",
+      "datetime": "2026-10-20T19:00:00.000Z",
+      "season": 2026,
+      "status": "2026-10-20T19:00:00Z",
+      "status_state": "scheduled",
+      "postseason": false,
+      "postponed": false,
+      "home_team_score": 0,
+      "visitor_team_score": 0,
+      "home_team": {
+        "id": 9,
+        "conference": "East",
+        "city": "Detroit",
+        "name": "Pistons",
+        "full_name": "Detroit Pistons",
+        "abbreviation": "DET"
+      },
+      "visitor_team": {
+        "id": 2,
+        "conference": "East",
+        "city": "Boston",
+        "name": "Celtics",
+        "full_name": "Boston Celtics",
+        "abbreviation": "BOS"
+      }
+    },
+    {
+      "id": 21717856,
+      "date": "2026-10-20",
+      "datetime": "2026-10-20T23:00:00.000Z",
+      "season": 2026,
+      "status": "2026-10-20T23:00:00Z",
+      "status_state": "scheduled",
+      "postseason": false,
+      "postponed": false,
+      "home_team_score": 0,
+      "visitor_team_score": 0,
+      "home_team": {
+        "id": 20,
+        "conference": "East",
+        "city": "New York",
+        "name": "Knicks",
+        "full_name": "New York Knicks",
+        "abbreviation": "NYK"
+      },
+      "visitor_team": {
+        "id": 23,
+        "conference": "East",
+        "city": "Philadelphia",
+        "name": "76ers",
+        "full_name": "Philadelphia 76ers",
+        "abbreviation": "PHI"
+      }
+    },
+    {
+      "id": 21717857,
+      "date": "2026-10-20",
+      "datetime": "2026-10-21T01:30:00.000Z",
+      "season": 2026,
+      "status": "2026-10-21T01:30:00Z",
+      "status_state": "scheduled",
+      "postseason": false,
+      "postponed": false,
+      "home_team_score": 0,
+      "visitor_team_score": 0,
+      "home_team": {
+        "id": 27,
+        "conference": "West",
+        "city": "San Antonio",
+        "name": "Spurs",
+        "full_name": "San Antonio Spurs",
+        "abbreviation": "SAS"
+      },
+      "visitor_team": {
+        "id": 21,
+        "conference": "West",
+        "city": "Oklahoma City",
+        "name": "Thunder",
+        "full_name": "Oklahoma City Thunder",
+        "abbreviation": "OKC"
+      }
+    },
+    {
+      "id": 21717858,
+      "date": "2026-10-21",
+      "datetime": "2026-10-21T23:30:00.000Z",
+      "season": 2026,
+      "status": "2026-10-21T23:30:00Z",
+      "status_state": "scheduled",
+      "postseason": false,
+      "postponed": false,
+      "home_team_score": 0,
+      "visitor_team_score": 0,
+      "home_team": {
+        "id": 16,
+        "conference": "East",
+        "city": "Miami",
+        "name": "Heat",
+        "full_name": "Miami Heat",
+        "abbreviation": "MIA"
+      },
+      "visitor_team": {
+        "id": 18,
+        "conference": "West",
+        "city": "Minnesota",
+        "name": "Timberwolves",
+        "full_name": "Minnesota Timberwolves",
+        "abbreviation": "MIN"
+      }
+    },
+    {
+      "id": 21717859,
+      "date": "2026-10-21",
+      "datetime": "2026-10-22T02:00:00.000Z",
+      "season": 2026,
+      "status": "2026-10-22T02:00:00Z",
+      "status_state": "scheduled",
+      "postseason": false,
+      "postponed": false,
+      "home_team_score": 0,
+      "visitor_team_score": 0,
+      "home_team": {
+        "id": 14,
+        "conference": "West",
+        "city": "Los Angeles",
+        "name": "Lakers",
+        "full_name": "Los Angeles Lakers",
+        "abbreviation": "LAL"
+      },
+      "visitor_team": {
+        "id": 10,
+        "conference": "West",
+        "city": "Golden State",
+        "name": "Warriors",
+        "full_name": "Golden State Warriors",
+        "abbreviation": "GSW"
+      }
+    },
+    {
+      "id": 21717922,
+      "date": "2026-10-21",
+      "datetime": "2026-10-21T23:00:00.000Z",
+      "season": 2026,
+      "status": "2026-10-21T23:00:00Z",
+      "status_state": "scheduled",
+      "postseason": false,
+      "postponed": false,
+      "home_team_score": 0,
+      "visitor_team_score": 0,
+      "home_team": {
+        "id": 22,
+        "conference": "East",
+        "city": "Orlando",
+        "name": "Magic",
+        "full_name": "Orlando Magic",
+        "abbreviation": "ORL"
+      },
+      "visitor_team": {
+        "id": 1,
+        "conference": "East",
+        "city": "Atlanta",
+        "name": "Hawks",
+        "full_name": "Atlanta Hawks",
+        "abbreviation": "ATL"
+      }
+    },
+    {
+      "id": 21717923,
+      "date": "2026-10-21",
+      "datetime": "2026-10-21T23:00:00.000Z",
+      "season": 2026,
+      "status": "2026-10-21T23:00:00Z",
+      "status_state": "scheduled",
+      "postseason": false,
+      "postponed": false,
+      "home_team_score": 0,
+      "visitor_team_score": 0,
+      "home_team": {
+        "id": 30,
+        "conference": "East",
+        "city": "Washington",
+        "name": "Wizards",
+        "full_name": "Washington Wizards",
+        "abbreviation": "WAS"
+      },
+      "visitor_team": {
+        "id": 17,
+        "conference": "East",
+        "city": "Milwaukee",
+        "name": "Bucks",
+        "full_name": "Milwaukee Bucks",
+        "abbreviation": "MIL"
+      }
+    },
+    {
+      "id": 21717924,
+      "date": "2026-10-21",
+      "datetime": "2026-10-21T23:30:00.000Z",
+      "season": 2026,
+      "status": "2026-10-21T23:30:00Z",
+      "status_state": "scheduled",
+      "postseason": false,
+      "postponed": false,
+      "home_team_score": 0,
+      "visitor_team_score": 0,
+      "home_team": {
+        "id": 3,
+        "conference": "East",
+        "city": "Brooklyn",
+        "name": "Nets",
+        "full_name": "Brooklyn Nets",
+        "abbreviation": "BKN"
+      },
+      "visitor_team": {
+        "id": 4,
+        "conference": "East",
+        "city": "Charlotte",
+        "name": "Hornets",
+        "full_name": "Charlotte Hornets",
+        "abbreviation": "CHA"
+      }
+    },
+    {
+      "id": 21717926,
+      "date": "2026-10-21",
+      "datetime": "2026-10-21T23:30:00.000Z",
+      "season": 2026,
+      "status": "2026-10-21T23:30:00Z",
+      "status_state": "scheduled",
+      "postseason": false,
+      "postponed": false,
+      "home_team_score": 0,
+      "visitor_team_score": 0,
+      "home_team": {
+        "id": 28,
+        "conference": "East",
+        "city": "Toronto",
+        "name": "Raptors",
+        "full_name": "Toronto Raptors",
+        "abbreviation": "TOR"
+      },
+      "visitor_team": {
+        "id": 5,
+        "conference": "East",
+        "city": "Chicago",
+        "name": "Bulls",
+        "full_name": "Chicago Bulls",
+        "abbreviation": "CHI"
+      }
+    },
+    {
+      "id": 21717927,
+      "date": "2026-10-21",
+      "datetime": "2026-10-22T00:00:00.000Z",
+      "season": 2026,
+      "status": "2026-10-22T00:00:00Z",
+      "status_state": "scheduled",
+      "postseason": false,
+      "postponed": false,
+      "home_team_score": 0,
+      "visitor_team_score": 0,
+      "home_team": {
+        "id": 15,
+        "conference": "West",
+        "city": "Memphis",
+        "name": "Grizzlies",
+        "full_name": "Memphis Grizzlies",
+        "abbreviation": "MEM"
+      },
+      "visitor_team": {
+        "id": 29,
+        "conference": "West",
+        "city": "Utah",
+        "name": "Jazz",
+        "full_name": "Utah Jazz",
+        "abbreviation": "UTA"
+      }
+    }
+  ]
+}

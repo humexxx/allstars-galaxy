@@ -19,6 +19,7 @@ import {
   revokeTripShare,
   updateTrip,
   updateTripItem,
+  updateTripShareExpiry,
   moveTripItem,
   setTripItemStops,
   setTripMembers,
@@ -35,8 +36,10 @@ import {
   updateTripItemSchema,
   moveTripItemSchema,
   updateTripSchema,
+  updateTripShareExpirySchema,
   type CreateTripInput,
   type CreateTripShareInput,
+  type UpdateTripShareExpiryInput,
   type TripItemInput,
   type TripPhotoInput,
   type UpdateTripInput,
@@ -297,7 +300,10 @@ export async function createTripShareAction(
     const idParsed = idSchema.safeParse(tripId);
     const parsed = createTripShareSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
-      return { success: false, error: "Invalid input" };
+      return {
+        success: false,
+        error: parsed.success ? "Invalid input" : parsed.error.issues[0].message,
+      };
     }
     const row = await createTripShare(ctx.effectiveUserId, idParsed.data, parsed.data);
     await logImpersonatedMutation({
@@ -310,7 +316,38 @@ export async function createTripShareAction(
         // entry about creating one.
         memberId: parsed.data.memberId ?? null,
         showPrices: row.showPrices,
+        expiresAt: row.expiresAt ?? null,
       },
+    });
+    revalidateTrip(idParsed.data, { dashboard: false });
+    return { success: true, data: row };
+  });
+}
+
+/** Moves when a link stops working; an expired link comes back with it. */
+export async function updateTripShareExpiryAction(
+  tripId: string,
+  input: UpdateTripShareExpiryInput
+): Promise<ActionResult<TripShare>> {
+  return safe("travel", async () => {
+    const ctx = await requireEffectiveContext();
+    const idParsed = idSchema.safeParse(tripId);
+    const parsed = updateTripShareExpirySchema.safeParse(input);
+    if (!idParsed.success || !parsed.success) {
+      return {
+        success: false,
+        error: parsed.success ? "Invalid input" : parsed.error.issues[0].message,
+      };
+    }
+    const row = await updateTripShareExpiry(ctx.effectiveUserId, idParsed.data, parsed.data);
+    if (!row) {
+      return { success: false, error: "That link was revoked or no longer exists" };
+    }
+    await logImpersonatedMutation({
+      action: "tripShare.updateExpiry",
+      entityTable: "trip_shares",
+      entityId: row.id,
+      metadata: { expiresAt: row.expiresAt },
     });
     revalidateTrip(idParsed.data, { dashboard: false });
     return { success: true, data: row };

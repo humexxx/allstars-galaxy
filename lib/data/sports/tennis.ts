@@ -1,4 +1,9 @@
-import type { PlayerRanking, RacquetTournament, TennisData } from "@/types/sports";
+import type {
+  PlayerRanking,
+  RacquetCalendarEntry,
+  RacquetTournament,
+  TennisData,
+} from "@/types/sports";
 
 const ATP_RANKINGS: PlayerRanking[] = [
   { position: 1, name: "Jannik Sinner", shortName: "J. Sinner", countryCode: "ITA", flagEmoji: "🇮🇹", points: 11830, movement: 0 },
@@ -27,25 +32,36 @@ const WTA_RANKINGS: PlayerRanking[] = [
 ];
 
 const ATP_TOURNAMENTS: RacquetTournament[] = [
-  { id: "atp-ao", name: "Australian Open", surface: "Hard", location: "Melbourne", startDate: "2026-01-19", endDate: "2026-02-01", status: "completed", champion: "J. Sinner", runnerUp: "A. Zverev" },
+  { id: "atp-ao", name: "Australian Open", tier: "Grand Slam", surface: "Hard", location: "Melbourne", startDate: "2026-01-19", endDate: "2026-02-01", status: "completed", champion: "J. Sinner", runnerUp: "A. Zverev" },
   { id: "atp-iw", name: "Indian Wells", surface: "Hard", location: "Indian Wells", startDate: "2026-03-09", endDate: "2026-03-22", status: "completed", champion: "C. Alcaraz", runnerUp: "D. Medvedev" },
   { id: "atp-miami", name: "Miami Open", surface: "Hard", location: "Miami", startDate: "2026-03-23", endDate: "2026-04-05", status: "completed", champion: "J. Sinner", runnerUp: "T. Fritz" },
   { id: "atp-mc", name: "Monte-Carlo Masters", surface: "Clay", location: "Monaco", startDate: "2026-04-12", endDate: "2026-04-19", status: "completed", champion: "C. Alcaraz", runnerUp: "C. Ruud" },
   { id: "atp-rome", name: "Italian Open", surface: "Clay", location: "Rome", startDate: "2026-05-08", endDate: "2026-05-18", status: "completed", champion: "J. Sinner", runnerUp: "C. Alcaraz" },
-  { id: "atp-rg", name: "Roland Garros", surface: "Clay", location: "Paris", startDate: "2026-05-25", endDate: "2026-06-07", status: "live" },
-  { id: "atp-wim", name: "Wimbledon", surface: "Grass", location: "London", startDate: "2026-06-29", endDate: "2026-07-12", status: "upcoming" },
+  { id: "atp-rg", name: "Roland Garros", tier: "Grand Slam", surface: "Clay", location: "Paris", venue: "Stade Roland Garros, Paris", defendingChampion: "C. Alcaraz", startDate: "2026-05-25", endDate: "2026-06-07", status: "live" },
+  { id: "atp-wim", name: "Wimbledon", tier: "Grand Slam", surface: "Grass", location: "London", defendingChampion: "J. Sinner", startDate: "2026-06-29", endDate: "2026-07-12", status: "upcoming" },
 ];
 
 const WTA_TOURNAMENTS: RacquetTournament[] = [
-  { id: "wta-ao", name: "Australian Open", surface: "Hard", location: "Melbourne", startDate: "2026-01-19", endDate: "2026-02-01", status: "completed", champion: "A. Sabalenka", runnerUp: "Q. Zheng" },
+  { id: "wta-ao", name: "Australian Open", tier: "Grand Slam", surface: "Hard", location: "Melbourne", startDate: "2026-01-19", endDate: "2026-02-01", status: "completed", champion: "A. Sabalenka", runnerUp: "Q. Zheng" },
   { id: "wta-iw", name: "Indian Wells", surface: "Hard", location: "Indian Wells", startDate: "2026-03-09", endDate: "2026-03-22", status: "completed", champion: "I. Świątek", runnerUp: "C. Gauff" },
   { id: "wta-miami", name: "Miami Open", surface: "Hard", location: "Miami", startDate: "2026-03-23", endDate: "2026-04-05", status: "completed", champion: "A. Sabalenka", runnerUp: "J. Paolini" },
   { id: "wta-madrid", name: "Madrid Open", surface: "Clay", location: "Madrid", startDate: "2026-04-25", endDate: "2026-05-04", status: "completed", champion: "I. Świątek", runnerUp: "A. Sabalenka" },
   { id: "wta-rome", name: "Italian Open", surface: "Clay", location: "Rome", startDate: "2026-05-08", endDate: "2026-05-18", status: "completed", champion: "I. Świątek", runnerUp: "C. Gauff" },
-  { id: "wta-rg", name: "Roland Garros", surface: "Clay", location: "Paris", startDate: "2026-05-25", endDate: "2026-06-07", status: "live" },
-  { id: "wta-wim", name: "Wimbledon", surface: "Grass", location: "London", startDate: "2026-06-29", endDate: "2026-07-12", status: "upcoming" },
+  { id: "wta-rg", name: "Roland Garros", tier: "Grand Slam", surface: "Clay", location: "Paris", venue: "Stade Roland Garros, Paris", defendingChampion: "C. Gauff", startDate: "2026-05-25", endDate: "2026-06-07", status: "live" },
+  { id: "wta-wim", name: "Wimbledon", tier: "Grand Slam", surface: "Grass", location: "London", defendingChampion: "I. Świątek", startDate: "2026-06-29", endDate: "2026-07-12", status: "upcoming" },
 ];
 
+/** The season's lines, as the live feed lists them beside its tournaments. */
+function calendarOf(tournaments: RacquetTournament[]): RacquetCalendarEntry[] {
+  return tournaments.map(({ id, name, startDate, endDate, status, champion }) => ({
+    id,
+    name,
+    startDate,
+    endDate,
+    status,
+    champion,
+  }));
+}
 
 export const TENNIS_DATA: TennisData = {
   atp: {
@@ -53,11 +69,13 @@ export const TENNIS_DATA: TennisData = {
     season: 2026,
     rankings: ATP_RANKINGS,
     tournaments: ATP_TOURNAMENTS,
+    calendar: calendarOf(ATP_TOURNAMENTS),
   },
   wta: {
     tour: "wta",
     season: 2026,
     rankings: WTA_RANKINGS,
     tournaments: WTA_TOURNAMENTS,
+    calendar: calendarOf(WTA_TOURNAMENTS),
   },
 };

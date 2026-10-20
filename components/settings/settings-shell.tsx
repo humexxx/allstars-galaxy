@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Palette, Wallet, type LucideIcon } from "lucide-react";
+import { Palette, Sparkles, Wallet, type LucideIcon } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Text } from "@/components/ui/typography";
 import { AppearanceSettings } from "@/components/settings/preferences-form";
 import { FinanceSettings } from "@/components/settings/milestones-form";
+import { AiSettingsPane } from "@/components/settings/ai-settings";
+import type { AiSettings, AiUsageSummary } from "@/types/ai";
 import type { UserPreferences } from "@/types/preferences";
 import { cn } from "@/lib/utils";
 
@@ -49,15 +51,43 @@ const CATEGORIES: Category[] = [
   },
 ];
 
-export function SettingsShell({ preferences }: { preferences: UserPreferences }) {
+/** What the AI pane shows; only an admin's page loads it. */
+export type AiPaneData = {
+  settings: AiSettings;
+  usage: AiUsageSummary;
+  keyConfigured: boolean;
+  today: string;
+};
+
+export function SettingsShell({
+  preferences,
+  ai,
+}: {
+  preferences: UserPreferences;
+  /** Present for admins only, and the AI category with it. */
+  ai?: AiPaneData | null;
+}) {
   const [activeId, setActiveId] = useState(CATEGORIES[0].id);
+  const categories: Category[] = ai
+    ? [
+        ...CATEGORIES,
+        {
+          id: "ai",
+          label: "AI",
+          blurb: "The travel assistant's model, its spend and its API key. Admins only.",
+          icon: Sparkles,
+          tint: "bg-warning/10 text-warning",
+          render: () => <AiSettingsPane {...ai} />,
+        },
+      ]
+    : CATEGORIES;
 
   return (
     // Real tabs: the rail switches a panel in place, it does not navigate, so
     // `aria-current="page"` was the wrong thing to say. A vertical rail from
     // lg up (System Settings); a horizontal scroll rail below that. From `md`
-    // the app sidebar already takes 256px, and a second 208px rail beside it
-    // left the pane a 220px column with its descriptions six lines deep.
+    // the app sidebar already takes 192px, and a second 208px rail beside it
+    // left the pane a narrow column with its descriptions six lines deep.
     <Tabs
       value={activeId}
       onValueChange={setActiveId}
@@ -70,7 +100,7 @@ export function SettingsShell({ preferences }: { preferences: UserPreferences })
         aria-label="Settings categories"
         className="relative h-auto! w-full flex-row! justify-start gap-1.5 overflow-x-auto bg-transparent p-0 pb-1 lg:w-52 lg:shrink-0 lg:flex-col! lg:overflow-visible lg:pb-0"
       >
-        {CATEGORIES.map((c) => {
+        {categories.map((c) => {
           const Icon = c.icon;
           return (
             <TabsTrigger
@@ -92,7 +122,7 @@ export function SettingsShell({ preferences }: { preferences: UserPreferences })
         })}
       </TabsList>
 
-      {CATEGORIES.map((c) => (
+      {categories.map((c) => (
         <TabsContent key={c.id} value={c.id} className="w-full min-w-0 lg:flex-1">
           <Card>
             <CardHeader>

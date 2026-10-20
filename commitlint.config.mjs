@@ -9,6 +9,7 @@ const config = {
         "auth",
         "db",
         "finance",
+        "portfolio",
         "travel",
         "sports",
         "entertainment",

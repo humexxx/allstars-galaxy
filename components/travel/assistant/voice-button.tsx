@@ -96,7 +96,12 @@ export function VoiceButton({
         frame = requestAnimationFrame(tick);
       };
       tick();
+      // Once only: unmounting stops it, and so does the recognition ending
+      // right after, and a second close() rejects on a closed context.
+      let stopped = false;
       stopMeter.current = () => {
+        if (stopped) return;
+        stopped = true;
         cancelAnimationFrame(frame);
         stream.getTracks().forEach((t) => t.stop());
         void context.close();

@@ -8,9 +8,12 @@
  *
  * This script:
  *   - reads migrations/meta/_journal.json to know every migration generated
- *   - reads drizzle.__drizzle_migrations to see how many have been applied
- *   - drizzle uses ORDINAL ORDER (not file hashes) to decide what to apply, so a
- *     plain count is the correct signal
+ *   - reads drizzle.__drizzle_migrations for the newest migration applied
+ *   - counts as pending exactly what drizzle's migrator will run: every journal
+ *     entry whose `when` is later than that newest `created_at`. Not a count of
+ *     rows — with two branches migrating the same database, a branch's journal
+ *     can hold as many entries as the table has rows and still have one to
+ *     apply, and the count said "up to date" without running anything
  *   - delegates the actual SQL execution to drizzle-orm's migrator (same engine
  *     drizzle-kit uses under the hood)
  *   - prints a final summary you can trust
@@ -44,15 +47,18 @@ function loadJournal(): Journal {
   return JSON.parse(raw) as Journal;
 }
 
-async function countApplied(sql: postgres.Sql): Promise<number> {
+type Applied = { count: number; newest: number };
+
+async function readApplied(sql: postgres.Sql): Promise<Applied> {
   try {
-    const [row] = await sql<{ count: number }[]>`
-      SELECT COUNT(*)::int AS count FROM drizzle.__drizzle_migrations
+    const [row] = await sql<{ count: number; newest: string | null }[]>`
+      SELECT COUNT(*)::int AS count, MAX(created_at)::text AS newest
+      FROM drizzle.__drizzle_migrations
     `;
-    return row?.count ?? 0;
+    return { count: row?.count ?? 0, newest: Number(row?.newest ?? 0) };
   } catch {
     // Fresh DB — table doesn't exist yet.
-    return 0;
+    return { count: 0, newest: 0 };
   }
 }
 
@@ -63,8 +69,9 @@ async function main() {
     const journal = loadJournal();
     const sortedEntries = [...journal.entries].sort((a, b) => a.idx - b.idx);
 
-    const appliedBefore = await countApplied(sql);
-    const pending = sortedEntries.slice(appliedBefore);
+    const before = await readApplied(sql);
+    const appliedBefore = before.count;
+    const pending = sortedEntries.filter((entry) => entry.when > before.newest);
 
     if (pending.length === 0) {
       console.log(
@@ -84,7 +91,7 @@ async function main() {
     const db = drizzle(sql);
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
-    const appliedAfter = await countApplied(sql);
+    const appliedAfter = (await readApplied(sql)).count;
     const newlyApplied = appliedAfter - appliedBefore;
 
     if (newlyApplied === pending.length) {

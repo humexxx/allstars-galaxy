@@ -33,7 +33,7 @@ calibrated. Health scoring and scenario comparison are part of this module.
 - `period.ts` — accounting-period helpers (unchanged)
 - `chart-series.ts` — `buildPlanTimeline` / `buildChartSeries` (real past as period closes + projection), `alignTodayPoint`, `buildCompareRows` (compare chart, joined by calendar month), `calendarTicks` (axis ticks on calendar months), `forecastKpiPoints` (the "Next" KPI; a plan that has not started yet gets its first close, no today marker and no Confirm), `milestoneCrossings`, and the one debt-free definition (`debtFreeMonthsFromNow`, `describeDebtFree`, `formatDebtFree`, `summaryDebtFree`)
 - `scenario.ts` — `compareScenario` (scenario vs base at a shared period; payoff compared as dates)
-- `dashboard.ts` — `buildDashboardFigures` for the dashboard card: today and the next 12 closes as net worth's parts (savings, investments with the portfolio folded in, owed to you, debt)
+- `dashboard.ts` — `buildDashboardFigures` for the dashboard card: the last three closed periods (`DASHBOARD_PAST_MONTHS`), today and the next 12 closes as net worth's parts (savings, investments with the portfolio folded in, owed to you, debt); `pastCount` says where today sits
 - `debt-payments.ts` — `projectedDebtPayments` / `debtChipAmount`: the calendar's debt chips read the payments the projection made
 - `table-rows.ts` — `densify` (first 12 rows + real Decembers)
 - `amount-input.ts` — parses typed or pasted amounts ("$1,234.50") the way the server schema will, so the confirmation dialog shows per-field errors instead of a bare "Invalid input" toast
@@ -64,7 +64,9 @@ strategy comparisons, the plans workspace
 [`FinancialHealthDonut`](../../components/finance/financial-health-donut.tsx).
 The dashboard card is [`dashboard-finance-card.tsx`](../../components/finance/dashboard-finance-card.tsx)
 with its stacked chart in `dashboard-finance-mini-chart.tsx`; both read the
-series list in `dashboard-finance-series.ts`.
+series list in `dashboard-finance-series.ts`. Its past comes off the plan page's
+own timeline (`getRecentMonthlySnapshots` + `buildPlanTimeline`) and is drawn
+solid up to "Now"; the projection after it is dashed and fainter.
 
 `/portal/plans` renders the workspace for **any** number of plans (a lone plan
 still gets its projection curve). Rail rows drive the chart:
@@ -138,7 +140,7 @@ gated on the `showContextAvatar` preference — see [Settings](./settings.md).
 
 ## Notes
 - Conventional Commits scope: `finance`
-- **Money owed to you counts in net worth before it lands.** An income marked *Owed to you* is a receivable: every repayment still to come is added to `netWorth` (`receivables` on `ProjectionMonth` / `TodayState`), and when one lands it becomes cash while the receivable drops by the same amount, so net worth does not move. Snapshots store net worth WITHOUT receivables and `getRecentMonthlySnapshots` adds them back from the plan's current lines, so history and forecast always count them the same way, including snapshots taken before the flag existed.
+- **Money owed to you counts in net worth before it lands.** An income marked *Owed to you* is a receivable: every repayment still to come is added to `netWorth` (`receivables` on `ProjectionMonth` / `TodayState`), and when one lands it becomes cash while the receivable drops by the same amount, so net worth does not move. Snapshots store net worth WITHOUT receivables and `getRecentMonthlySnapshots` adds them back from the plan's current lines (and returns them as each point's `receivables`), so history and forecast always count them the same way, including snapshots taken before the flag existed.
 - **Logic audit (2026-09-11).** The confirmation dialog is mounted only while open, and `confirmedSavings` accepts a negative figure (deficits are carried; the DB check was dropped in migration 0051). The anchored calendar converts `periodRangeFor`'s UTC bounds to local days and opens on today's period; a "Move all" drop turns the line into a `monthly_day` rule. Period-0 snapshots include the portfolio and snapshots grow it at the weighted ROI. Confirming, creating and deleting plans revalidate `/portal`. (Superseded in places by the 2026-09-29 calculation audit below.)
 - Cron job `/api/cron/daily` may write snapshots into this module — keep in sync with [Portfolio](./portfolio.md).
 - All actions wrap their handler in `safe()` from `@/lib/actions/safe` so service errors translate to `{ success: false, error: "Action failed" }` for the client.

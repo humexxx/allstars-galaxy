@@ -1,5 +1,9 @@
 import type { Projection, ProjectionMonth, TodayState } from "@/types/finance";
+import type { ChartPoint } from "@/lib/finance/chart-series";
 import { roundCents } from "@/lib/utils/format";
+
+/** Closed periods the chart shows before today, drawn solid. */
+export const DASHBOARD_PAST_MONTHS = 3;
 
 const MONTH_FMT = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
 const MONTH_YEAR_FMT = new Intl.DateTimeFormat("en-US", {
@@ -33,8 +37,13 @@ export type DashboardPoint = DashboardParts & {
 
 /** What the dashboard's finance card shows. */
 export type DashboardFigures = DashboardParts & {
-  /** Mini-chart: today's position, then the next 12 period closes. */
+  /**
+   * Mini-chart: up to three closed periods, today's position, then the next
+   * 12 period closes.
+   */
   points: DashboardPoint[];
+  /** Points before today's; `points[pastCount]` is today. */
+  pastCount: number;
   /** Last chart point − today: the change the "12 mo" badge names. */
   delta: number;
   /** Periods the delta spans (12, fewer when the horizon ends sooner). */
@@ -62,6 +71,25 @@ function partsOf(s: State): DashboardParts {
   };
 }
 
+/**
+ * A closed period from the plan's timeline. A snapshot records no portfolio
+ * figure of its own, only the net worth it is part of, so investments are
+ * what net worth holds besides the other parts — for a projected row that is
+ * exactly investments + portfolio, as in `partsOf`.
+ */
+function partsOfPoint(p: ChartPoint): DashboardParts {
+  const savings = p.savings ?? 0;
+  const debt = p.totalDebt ?? 0;
+  const receivables = p.receivables ?? 0;
+  return {
+    savings,
+    investments: p.netWorth - savings - receivables + debt,
+    receivables,
+    debt,
+    netWorth: p.netWorth,
+  };
+}
+
 function inCents(p: DashboardParts): DashboardParts {
   return {
     savings: roundCents(p.savings),
@@ -77,15 +105,21 @@ function inCents(p: DashboardParts): DashboardParts {
  * day-aware today as the plan page. Its "now" tiles used to be the period's
  * projected close (a paycheque off) with the portfolio held flat; its badge
  * measured one period past the chart's last point.
+ *
+ * `past` is the plan's timeline before today's period (`buildPlanTimeline`),
+ * oldest first: recorded snapshots where there are any, as on the plan page.
+ * The last `DASHBOARD_PAST_MONTHS` of it lead the chart.
  */
 export function buildDashboardFigures(
   projection: Projection,
-  today: TodayState | null
+  today: TodayState | null,
+  past: readonly ChartPoint[] = []
 ): DashboardFigures {
   const months = projection.months;
   if (!today || months.length === 0) {
     return {
       points: [],
+      pastCount: 0,
       savings: 0,
       investments: 0,
       receivables: 0,
@@ -103,8 +137,15 @@ export function buildDashboardFigures(
   const firstAfter =
     today.status === "before-start" ? 0 : Math.min(today.periodIndex + 1, months.length);
   const ahead = months.slice(firstAfter, firstAfter + 12);
+  const behind =
+    today.status === "before-start" ? [] : past.slice(-DASHBOARD_PAST_MONTHS);
   const now = partsOf(today);
   const points: DashboardPoint[] = [
+    ...behind.map((p) => ({
+      month: MONTH_FMT.format(p.date),
+      label: MONTH_YEAR_FMT.format(p.date),
+      ...inCents(partsOfPoint(p)),
+    })),
     {
       month: today.status === "before-start" ? "Start" : "Now",
       label: today.status === "before-start" ? "At the start" : "Today",
@@ -120,6 +161,7 @@ export function buildDashboardFigures(
   return {
     ...now,
     points,
+    pastCount: behind.length,
     delta: end - today.netWorth,
     deltaPeriods: ahead.length,
     status: today.status,

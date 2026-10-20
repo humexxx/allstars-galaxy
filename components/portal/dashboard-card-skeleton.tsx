@@ -10,6 +10,11 @@ type DashboardCardSkeletonProps = {
   rail?: number;
   /** The travel card's body: its featured trip tiles. */
   trips?: boolean;
+  /**
+   * A card with no shaped placeholder of its own yet: this many plain boxes
+   * under the header.
+   */
+  tiles?: number;
   className?: string;
 };
 
@@ -25,6 +30,7 @@ type DashboardCardSkeletonProps = {
 export function DashboardCardSkeleton({
   rail,
   trips,
+  tiles,
   className,
 }: DashboardCardSkeletonProps) {
   return (
@@ -52,6 +58,7 @@ export function DashboardCardSkeleton({
       </CardHeader>
       {rail ? <RailBody figures={rail} /> : null}
       {trips ? <TripsBody /> : null}
+      {tiles ? <TilesBody tiles={tiles} /> : null}
     </Card>
   );
 }
@@ -115,6 +122,25 @@ function TripsBody() {
               </div>
             </div>
           </div>
+        ))}
+      </div>
+    </CardContent>
+  );
+}
+
+function TilesBody({ tiles }: { tiles: number }) {
+  return (
+    <CardContent>
+      <div
+        className={cn(
+          "grid gap-3",
+          tiles <= 2 && "grid-cols-1 sm:grid-cols-2",
+          tiles === 3 && "grid-cols-1 sm:grid-cols-3",
+          tiles >= 4 && "grid-cols-2 sm:grid-cols-5"
+        )}
+      >
+        {Array.from({ length: tiles }).map((_, i) => (
+          <Skeleton key={i} className="h-20 w-full rounded-md" />
         ))}
       </div>
     </CardContent>

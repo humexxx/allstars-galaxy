@@ -96,8 +96,14 @@ back to its fixture only when its feed has never answered.
 - `components/travel/trip-photo.tsx` — every trip/item photo and cover; a
   dead link shows a muted tile (covers fall back to the trip colour) instead of
   the browser's broken-image glyph
-- The overview's first tab is **List** (Upcoming and Past as headed sections);
-  in the calendar the whole day cell is the "plan a trip here" link.
+- `components/travel/trips-overview.tsx` — the trips page under the shell: its
+  `PageHeader` holds the List / Calendar switch and the page's one "New trip"
+  (the empty state's, when there are no trips). The first tab is **List**
+  (Upcoming and Past as headed sections). `TripsCalendar` draws each trip as
+  one bar per week it crosses (`layOutTrips`), square-cut where a week wraps
+  it, stacked in lanes where trips share a day; the month fills the height the
+  shell leaves (a week never under 64px, so a short window scrolls) and the
+  whole day cell is the "plan a trip here" link.
   `relativeDays` counts to the END of a trip under way and from the last day of
   a past one ("Ends in 3 days", "6 mo ago")
 - `app/portal/entertainment/travel-planner/{,new/,[id]/}loading.tsx` — one
@@ -168,8 +174,8 @@ from `new Date()` and hydration-failed every evening west of UTC.
 
 ## Tests
 - `lib/travel/*.test.ts` — Vitest, pure: `calendar` (week packing, lane caps,
-  which items really span days), `pricing`, `split`, `item-fields`, `format`,
-  `airports`, `video`, `share-expiry` (each choice's instant in the reader's zone)
+  which items really span days, trips' bars across week rows), `pricing`,
+  `split`, `item-fields`, `format`, `airports`, `video`, `share-expiry` (each choice's instant in the reader's zone)
 - `schemas/travel.test.ts` — Vitest; backwards date ranges, airport queries, a share expiry in the past or missing
 - `lib/services/travel-service.test.ts` — Vitest, mocks `@/db`; covers the CRUD,
   the query count for `getTripWithRelations`, the scoped-share guards, what
@@ -179,7 +185,8 @@ from `new Date()` and hydration-failed every evening west of UTC.
   the audit metadata a share records, and the expiry update (past dates,
   ownership, revoked links)
 - `components/travel/*.test.tsx` — Vitest + jsdom; the itinerary, the calendar
-  (both versions), the payment log, the traveller bar, the marquee, the share
+  (both versions), the trips overview (one bar per week, lanes, one New
+  trip), the payment log, the traveller bar, the marquee, the share
   bar's sign-in, the unit arithmetic, the public page (its client calendar's
   props, its figures) and the share panel's expiry (default, zone, change, extend)
 - `e2e/trip-lifecycle.spec.ts` — Playwright, real Supabase user

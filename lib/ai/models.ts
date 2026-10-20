@@ -20,6 +20,8 @@ export type AiModel = {
    * it but keep a declined request declined.
    */
   fallbacks: boolean;
+  /** The web search tool this model takes: the filtered variant needs a 4.6+ Opus or Sonnet. */
+  webSearch: "web_search_20260209" | "web_search_20250305";
 };
 
 export const AI_MODELS: readonly AiModel[] = [
@@ -31,6 +33,7 @@ export const AI_MODELS: readonly AiModel[] = [
     outputPerMTok: 20,
     cacheReadPerMTok: 0.2,
     fallbacks: true,
+    webSearch: "web_search_20260209",
   },
   {
     id: "claude-sonnet-5-5",
@@ -40,6 +43,7 @@ export const AI_MODELS: readonly AiModel[] = [
     outputPerMTok: 10,
     cacheReadPerMTok: 0.2,
     fallbacks: true,
+    webSearch: "web_search_20260209",
   },
   {
     id: "claude-haiku-5-5",
@@ -49,8 +53,12 @@ export const AI_MODELS: readonly AiModel[] = [
     outputPerMTok: 0.5,
     cacheReadPerMTok: 0.01,
     fallbacks: false,
+    webSearch: "web_search_20250305",
   },
 ];
+
+/** Web search is billed per search on top of the tokens its results add. */
+export const WEB_SEARCH_USD = 0.01;
 
 export const DEFAULT_AI_MODEL = AI_MODELS[0].id;
 
@@ -68,6 +76,7 @@ export type AiTokenUsage = {
   output_tokens: number;
   cache_creation_input_tokens?: number | null;
   cache_read_input_tokens?: number | null;
+  server_tool_use?: { web_search_requests?: number | null } | null;
 };
 
 /** A response's cost in dollars, from the usage it reports. */
@@ -79,6 +88,7 @@ export function aiCost(model: AiModel, usage: AiTokenUsage): number {
       written * model.inputPerMTok * 1.25 +
       read * model.cacheReadPerMTok +
       usage.output_tokens * model.outputPerMTok) /
-    1_000_000
+      1_000_000 +
+    (usage.server_tool_use?.web_search_requests ?? 0) * WEB_SEARCH_USD
   );
 }

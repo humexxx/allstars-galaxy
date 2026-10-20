@@ -52,7 +52,7 @@ vi.mock("@/lib/services/travel-service", async (importActual) => ({
   setItemMembers: vi.fn(async () => undefined),
 }));
 
-import { trips, tripItems, tripMembers, tripItemStops, tripPhotos } from "@/db/schema";
+import { trips, tripItems, tripMembers, tripItemStops, tripPhotos, tripShares } from "@/db/schema";
 import { readUndo, signUndo } from "@/lib/travel/assistant/undo-token";
 import { setItemMembers } from "@/lib/services/travel-service";
 
@@ -192,6 +192,112 @@ describe("applyTravelChanges", () => {
         changes: [{ op: "add_item", tripId: TRIP, item: { title: "SJO → MCO", category: "flight", price: "450.00", priceUnit: "per_night" } }],
       })
     ).rejects.toThrow(/a flight cannot be priced per_night/);
+  });
+});
+
+describe("travellers and photos", () => {
+  const NEW_MEMBER = "55555555-5555-4555-8555-555555555555";
+  const member = (over: Record<string, unknown> = {}) => ({
+    id: NEW_MEMBER, tripId: TRIP, name: "Ana", email: null, sharePercent: null, sortOrder: 2,
+    createdAt: new Date("2026-10-19T00:00:00Z"), ...over,
+  });
+
+  it("adds a traveller and splits a new day between two people named in the same proposal", async () => {
+    selects.push(
+      [], // colours
+      [tripRow()], // add_member: the trip
+      [{ last: 1 }], // its last member's place
+      [tripRow()], // add_item: the trip
+      [
+        { id: MEMBER, name: "Jason Hume" },
+        { id: NEW_MEMBER, name: "Ana" },
+      ] // the members, Ana included
+    );
+    inserts.push([member()], [itemRow({ title: "Islands of Adventure", priceUnit: "per_person" })]);
+
+    const applied = await applyTravelChanges(USER, {
+      summary: "Theme park day",
+      changes: [
+        { op: "add_member", tripId: TRIP, member: { name: "Ana" } },
+        {
+          op: "add_item",
+          tripId: TRIP,
+          item: {
+            title: "Islands of Adventure",
+            category: "activity",
+            scheduledOn: "2027-01-18",
+            price: "180.00",
+            priceUnit: "per_person",
+            attendeeNames: ["Jason", "Ana"],
+            payerNames: ["jason hume", "Ana"],
+          },
+        },
+      ],
+    });
+
+    expect(calls.insert[0]).toMatchObject({ table: tripMembers, values: { name: "Ana", sortOrder: 2 } });
+    // Named, then resolved to the ids the item's lists take — a first name
+    // is enough when it is the only one.
+    expect(setItemMembers).toHaveBeenCalledWith(expect.anything(), expect.anything(), TRIP, ITEM, [MEMBER, NEW_MEMBER]);
+    expect(applied.lines.map((l) => [l.subject, l.title])).toEqual([
+      ["member", "Ana"],
+      ["item", "Islands of Adventure"],
+    ]);
+    expect(applied.lines[1].after).toEqual({ from: "2027-01-18", to: "2027-01-19" });
+  });
+
+  it("says who is on the trip when a name matches nobody", async () => {
+    selects.push([], [tripRow()], [{ id: MEMBER, name: "Jason Hume" }]);
+    await expect(
+      applyTravelChanges(USER, {
+        summary: "x",
+        changes: [{ op: "add_item", tripId: TRIP, item: { title: "Dinner", category: "food", payerNames: ["Bruno"] } }],
+      })
+    ).rejects.toThrow('no single traveller called "Bruno" (on this trip: Jason Hume)');
+  });
+
+  it("removes a traveller, revoking links scoped to them, and can put it all back", async () => {
+    const share = { id: "66666666-6666-4666-8666-666666666666", revokedAt: null };
+    selects.push(
+      [],
+      [tripRow()],
+      [member()],
+      [{ id: "a", itemId: ITEM, memberId: NEW_MEMBER }], // attendees
+      [], // payers
+      [], // contributions
+      [share]
+    );
+    const applied = await applyTravelChanges(USER, {
+      summary: "Ana is out",
+      changes: [{ op: "remove_member", tripId: TRIP, memberId: NEW_MEMBER }],
+    });
+    expect(calls.update[0]).toMatchObject({ table: tripShares, set: { revokedAt: expect.any(Date) } });
+    expect(calls.delete).toContain(tripMembers);
+
+    calls.insert.length = 0;
+    calls.update.length = 0;
+    selects.push([tripRow()]);
+    await undoTravelChanges(USER, applied.undoToken!);
+    expect(calls.insert.map((c) => c.table)).toEqual([tripMembers, expect.anything()]);
+    expect(calls.update[0]).toMatchObject({ table: tripShares, set: { memberId: NEW_MEMBER, revokedAt: null } });
+  });
+
+  it("adds an attached picture to the gallery as an upload", async () => {
+    const url = "https://x.supabase.co/storage/v1/object/public/trip-photos/u/assistant/a.jpg";
+    selects.push([], [tripRow()], [{ last: null }]);
+    inserts.push([{ id: "p1", tripId: TRIP, itemId: null, url, caption: null }]);
+    const applied = await applyTravelChanges(USER, {
+      summary: "Photo",
+      changes: [
+        {
+          op: "add_photo",
+          tripId: TRIP,
+          photo: { url, storagePath: "11111111-1111-4111-8111-111111111111/assistant/a.jpg" },
+        },
+      ],
+    });
+    expect(calls.insert[0]).toMatchObject({ table: tripPhotos, values: { source: "upload", sortOrder: 0 } });
+    expect(applied.lines[0]).toMatchObject({ subject: "photo", imageUrl: url, detail: "In the gallery" });
   });
 });
 

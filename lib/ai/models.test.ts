@@ -14,6 +14,16 @@ describe("aiCost", () => {
     expect(cost).toBeCloseTo((1_000 * 4 + 2_000 * 5 + 10_000 * 0.2 + 500 * 20) / 1e6, 10);
   });
 
+  it("adds a cent for each web search", () => {
+    expect(
+      aiCost(aiModel("claude-haiku-5-5"), {
+        input_tokens: 0,
+        output_tokens: 0,
+        server_tool_use: { web_search_requests: 2 },
+      })
+    ).toBeCloseTo(0.02, 10);
+  });
+
   it("treats missing cache counts as none", () => {
     expect(aiCost(aiModel("claude-haiku-5-5"), { input_tokens: 1e6, output_tokens: 0 })).toBe(0.1);
   });

@@ -3,10 +3,13 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { TravelChangeSetInput } from "@/schemas/travel-assistant";
 import type { TripItemCategory } from "./travel";
 
+/** Days something occupies, YYYY-MM-DD; `to` equals `from` for one day. */
+export type TravelDaySpan = { from: string; to: string };
+
 /** One row of a proposal card, or of the receipt once it is applied. */
 export type TravelChangeLine = {
   action: "add" | "change" | "remove";
-  subject: "trip" | "item";
+  subject: "trip" | "item" | "member" | "photo";
   /** The trip the line belongs to; for a trip line, the trip itself. */
   tripTitle: string;
   title: string;
@@ -15,6 +18,13 @@ export type TravelChangeLine = {
   detail?: string;
   /** Where to open it once it exists. Absent for anything removed. */
   tripId?: string;
+  /** The trip's own days, which the card's timeline spans. */
+  tripSpan?: TravelDaySpan;
+  /** Its days before and after the change, for the card's timeline. */
+  before?: TravelDaySpan | null;
+  after?: TravelDaySpan | null;
+  /** A photo line's picture. */
+  imageUrl?: string;
 };
 
 /** What the assistant proposed, as the card shows it and as Apply sends it back. */

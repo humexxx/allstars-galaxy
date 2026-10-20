@@ -9,6 +9,12 @@ vi.mock("@/app/actions/travel-assistant", () => ({
   applyTravelChangesAction: vi.fn(),
   undoTravelChangesAction: vi.fn(),
 }));
+vi.mock("@/lib/travel/photo-upload", () => ({
+  uploadTripPhoto: vi.fn(async (file: File) => ({
+    url: `https://cdn.test/${file.name}`,
+    storagePath: `11111111-1111-4111-8111-111111111111/assistant/${file.name}`,
+  })),
+}));
 
 import {
   applyTravelChangesAction,
@@ -149,5 +155,57 @@ describe("TravelAssistant", () => {
     stream([{ type: "error", message: "The Claude API key was rejected." }]);
     await say("Hola");
     expect(await screen.findByText("The Claude API key was rejected.")).toBeInTheDocument();
+  });
+
+  it("sends attached pictures for Claude to see, with what it needs to save one", async () => {
+    const fetchMock = stream([{ type: "text", text: "Veo la reserva" }]);
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(["x"], "booking.png", { type: "image/png" })] } });
+    });
+    await say("Agregá esta reserva");
+
+    const [message] = bodyOf(fetchMock, 0).messages;
+    expect(message.content).toEqual([
+      { type: "image", source: { type: "url", url: "https://cdn.test/booking.png" } },
+      {
+        type: "text",
+        text: "[Attached images: 1. url=https://cdn.test/booking.png storagePath=11111111-1111-4111-8111-111111111111/assistant/booking.png]",
+      },
+      { type: "text", text: "Agregá esta reserva" },
+    ]);
+    expect(screen.getByAltText("Attached image")).toBeInTheDocument();
+  });
+});
+
+describe("TravelAssistant dictation", () => {
+  it("writes what is said after what was typed", async () => {
+    let instance: { onresult: (e: unknown) => void; onend: () => void } | null = null;
+    class FakeRecognition {
+      lang = "";
+      continuous = false;
+      interimResults = false;
+      onresult: ((e: unknown) => void) | null = null;
+      onend: (() => void) | null = null;
+      onerror = null;
+      start() {
+        instance = this as never;
+      }
+      stop() {
+        this.onend?.();
+      }
+    }
+    vi.stubGlobal("webkitSpeechRecognition", FakeRecognition);
+    // Typing re-renders the panel, which then finds the browser can listen.
+    const box = screen.getByLabelText("Message the travel assistant");
+    fireEvent.change(box, { target: { value: "En Orlando" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /Dictate/ }));
+    act(() => {
+      instance!.onresult({ resultIndex: 0, results: [Object.assign([{ transcript: "agregá un parque" }], { isFinal: true })] });
+    });
+    expect(box).toHaveValue("En Orlando agregá un parque");
+    fireEvent.click(screen.getByRole("button", { name: "Stop dictation" }));
+    expect(screen.getByRole("button", { name: /Dictate/ })).toBeInTheDocument();
   });
 });

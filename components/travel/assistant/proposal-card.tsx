@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Check, MapPin, Minus, Pencil, Plus, Undo2 } from "lucide-react";
+import { Check, MapPin, Minus, Pencil, Plus, Undo2, UserRound } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 import type { TravelChangeLine, TravelProposal } from "@/types/travel-assistant";
 
 import { CategoryIcon } from "../category";
+import { TripPhoto } from "../trip-photo";
+import { ChangeTimeline } from "./change-timeline";
 
 export type ProposalState = "open" | "applying" | "applied" | "cancelled" | "undoing" | "undone";
 
@@ -58,6 +60,8 @@ export function ProposalCard({
         <StateBadge state={state} />
       </div>
 
+      <ChangeTimeline lines={lines} />
+
       <ul className="flex flex-col gap-2">
         {lines.map((line, i) => (
           <li key={i} className="flex items-start gap-2">
@@ -77,7 +81,7 @@ export function ProposalCard({
                 )}
               </span>
               <Text variant="small" className="tabular-nums">
-                {line.subject === "item" ? `${line.tripTitle} · ${line.detail ?? ""}` : line.detail}
+                {line.subject === "trip" ? line.detail : [line.tripTitle, line.detail].filter(Boolean).join(" · ")}
               </Text>
             </div>
           </li>
@@ -129,11 +133,15 @@ function LineIcon({ line }: { line: TravelChangeLine }) {
   const Action = ACTION_ICON[line.action];
   return (
     <span className="relative shrink-0">
-      {line.category ? (
+      {line.imageUrl ? (
+        <span className="relative block size-7 overflow-hidden rounded-md bg-muted">
+          <TripPhoto src={line.imageUrl} alt="" sizes="28px" fallbackClassName="size-3" />
+        </span>
+      ) : line.category ? (
         <CategoryIcon category={line.category} />
       ) : (
         <span className="grid size-7 place-items-center rounded-md bg-muted text-muted-foreground">
-          <MapPin className="size-4" />
+          {line.subject === "member" ? <UserRound className="size-4" /> : <MapPin className="size-4" />}
         </span>
       )}
       <span

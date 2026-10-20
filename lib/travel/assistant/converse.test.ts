@@ -41,12 +41,15 @@ function fakeClient(turns: Turn[]) {
     params.push(p);
     const turn = turns.shift()!;
     let onText: ((t: string) => void) | undefined;
+    let onBlock: ((b: Block) => void) | undefined;
     return {
-      on: (event: string, cb: (t: string) => void) => {
-        if (event === "text") onText = cb;
+      on: (event: string, cb: (arg: never) => void) => {
+        if (event === "text") onText = cb as (t: string) => void;
+        if (event === "contentBlock") onBlock = cb as (b: Block) => void;
       },
       finalMessage: async () => {
         if (turn instanceof Error) throw turn;
+        turn.content.forEach((b) => onBlock?.(b));
         if (turn.text) onText?.(turn.text);
         return { content: turn.content, stop_reason: turn.stop_reason, usage: USAGE, model: p.model };
       },
@@ -182,6 +185,20 @@ describe("converse's model and spend", () => {
       },
     });
     expect(added).toHaveLength(1);
+  });
+});
+
+describe("converse and web search", () => {
+  it("says what it is searching for, and resumes a turn the search paused", async () => {
+    const search = { type: "server_tool_use", id: "srvtoolu_1", name: "web_search", input: { query: "Universal Orlando ticket price 2027" } } as unknown as Block;
+    const { added, events, stream } = await run([
+      { content: [search], stop_reason: "pause_turn" },
+      { content: [text("Entre $120 y $180 por persona")], stop_reason: "end_turn" },
+    ]);
+    expect(events[0]).toEqual({ type: "status", label: "Searching the web: Universal Orlando ticket price 2027" });
+    // The paused turn goes back as it was, and the model carries on from it.
+    expect(stream).toHaveBeenCalledTimes(2);
+    expect(added.map((m) => m.role)).toEqual(["assistant", "assistant"]);
   });
 });
 

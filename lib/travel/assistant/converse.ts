@@ -12,7 +12,7 @@ import {
 import { travelChangeSetSchema, type TravelChangeSetInput } from "@/schemas/travel-assistant";
 import type { TravelAssistantEvent, TravelAssistantMessage } from "@/types/travel-assistant";
 
-import { getTripInputSchema, TRAVEL_ASSISTANT_SYSTEM, TRAVEL_ASSISTANT_TOOLS } from "./prompt";
+import { getTripInputSchema, TRAVEL_ASSISTANT_SYSTEM, travelAssistantTools } from "./prompt";
 
 /** Model calls one message may make: reads, a proposal, a retry and an answer fit easily. */
 const MAX_CALLS = 8;
@@ -69,12 +69,18 @@ export async function converse({
         output_config: { effort: "medium" },
         cache_control: { type: "ephemeral" },
         system: TRAVEL_ASSISTANT_SYSTEM,
-        tools: TRAVEL_ASSISTANT_TOOLS,
+        tools: travelAssistantTools(model),
         messages: [...history, ...added],
       },
       { signal }
     );
     stream.on("text", (text) => send({ type: "text", text }));
+    stream.on("contentBlock", (block) => {
+      if (block.type === "server_tool_use" && block.name === "web_search") {
+        const query = (block.input as { query?: unknown }).query;
+        send({ type: "status", label: typeof query === "string" ? `Searching the web: ${query}` : "Searching the web" });
+      }
+    });
 
     let message: Anthropic.Beta.BetaMessage;
     try {
@@ -94,6 +100,10 @@ export async function converse({
 
     const content = echoable(message.content);
     added.push({ role: "assistant", content });
+
+    // A long web search hands the turn back unfinished; sending it back as
+    // it is lets the model carry on where it stopped.
+    if (message.stop_reason === "pause_turn") continue;
 
     // A decline can cut a tool call off mid-input: never run that turn's tools.
     if (message.stop_reason === "refusal") {

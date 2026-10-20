@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useParams } from "next/navigation";
-import { ArrowUp, RotateCcw, Sparkles } from "lucide-react";
+import { ArrowUp, Paperclip, RotateCcw, Sparkles, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { applyTravelChangesAction, undoTravelChangesAction } from "@/app/actions/travel-assistant";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Text } from "@/components/ui/typography";
 import { readEvents } from "@/lib/travel/assistant/stream";
+import { uploadTripPhoto, type UploadedPhoto } from "@/lib/travel/photo-upload";
 import { cn } from "@/lib/utils";
 import type {
   TravelAssistantEvent,
@@ -25,10 +27,14 @@ import type {
   TravelProposal,
 } from "@/types/travel-assistant";
 
+type TravelAssistantContent = Exclude<TravelAssistantMessage["content"], string>[number];
+
+import { TripPhoto } from "../trip-photo";
 import { ProposalCard, type ProposalState } from "./proposal-card";
+import { VoiceButton } from "./voice-button";
 
 type Entry =
-  | { kind: "user"; id: string; text: string }
+  | { kind: "user"; id: string; text: string; images: string[] }
   | { kind: "assistant"; id: string; text: string }
   | { kind: "error"; id: string; message: string }
   | {
@@ -73,6 +79,11 @@ export function TravelAssistant() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<UploadedPhoto[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  /** What was typed before dictation started; the transcript goes after it. */
+  const voiceBase = useRef("");
 
   const transcript = useRef<TravelAssistantMessage[]>([]);
   const notes = useRef<string[]>([]);
@@ -99,14 +110,45 @@ export function TravelAssistant() {
       return next;
     });
 
-  async function send(text: string): Promise<void> {
-    const message = text.trim();
-    if (!message || busy) return;
-    setDraft("");
-    setBusy(true);
-    setEntries((all) => [...all, { kind: "user", id: newId(), text: message }]);
+  async function attach(files: FileList | null): Promise<void> {
+    if (!files?.length) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const uploaded = await uploadTripPhoto(file, "assistant");
+        setAttachments((all) => [...all, uploaded]);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  }
 
-    const content = [...notes.current, message].map((t) => ({ type: "text" as const, text: t }));
+  async function send(text: string): Promise<void> {
+    const images = attachments;
+    const message = text.trim() || (images.length ? "(See the attached images.)" : "");
+    if (!message || busy || uploading) return;
+    setDraft("");
+    setAttachments([]);
+    setBusy(true);
+    setEntries((all) => [
+      ...all,
+      { kind: "user", id: newId(), text: message, images: images.map((i) => i.url) },
+    ]);
+
+    // Claude sees each picture, and the note gives it what it needs to save
+    // one as a cover or a photo if asked.
+    const imageNote = images.length
+      ? `[Attached images: ${images.map((i, n) => `${n + 1}. url=${i.url} storagePath=${i.storagePath}`).join("; ")}]`
+      : null;
+    const content: TravelAssistantContent[] = [
+      ...notes.current.map((t) => ({ type: "text" as const, text: t })),
+      ...images.map((i) => ({ type: "image" as const, source: { type: "url" as const, url: i.url } })),
+      ...(imageNote ? [{ type: "text" as const, text: imageNote }] : []),
+      { type: "text" as const, text: message },
+    ];
     notes.current = [];
     const history: TravelAssistantMessage[] = [...transcript.current, { role: "user", content }];
     transcript.current = history;
@@ -271,12 +313,20 @@ export function TravelAssistant() {
               switch (entry.kind) {
                 case "user":
                   return (
-                    <p
-                      key={entry.id}
-                      className="ml-8 self-end whitespace-pre-wrap rounded-xl bg-primary px-3 py-2 text-sm text-primary-foreground"
-                    >
-                      {entry.text}
-                    </p>
+                    <div key={entry.id} className="ml-8 flex flex-col items-end gap-1 self-end">
+                      {entry.images.length > 0 && (
+                        <div className="flex flex-wrap justify-end gap-1">
+                          {entry.images.map((url) => (
+                            <span key={url} className="relative block size-16 overflow-hidden rounded-lg bg-muted">
+                              <TripPhoto src={url} alt="Attached image" sizes="64px" />
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <p className="whitespace-pre-wrap rounded-xl bg-primary px-3 py-2 text-sm text-primary-foreground">
+                        {entry.text}
+                      </p>
+                    </div>
                   );
                 case "assistant":
                   return (
@@ -315,19 +365,74 @@ export function TravelAssistant() {
             )}
           </div>
 
-          <form onSubmit={onSubmit} className="flex items-end gap-2 border-t p-4">
-            <Textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder="Plan a trip, add a booking, change dates…"
-              aria-label="Message the travel assistant"
-              rows={2}
-              className="min-w-0 flex-1 resize-none"
-            />
-            <Button type="submit" size="icon" aria-label="Send" disabled={busy || !draft.trim()}>
-              <ArrowUp />
-            </Button>
+          <form onSubmit={onSubmit} className="flex flex-col gap-2 border-t p-4">
+            {(attachments.length > 0 || uploading) && (
+              <div className="flex flex-wrap gap-2">
+                {attachments.map((a) => (
+                  <span key={a.storagePath} className="relative block size-14 overflow-hidden rounded-lg bg-muted">
+                    <TripPhoto src={a.url} alt="Image to send" sizes="56px" />
+                    <button
+                      type="button"
+                      aria-label="Remove this image"
+                      onClick={() => setAttachments((all) => all.filter((x) => x !== a))}
+                      className="absolute top-0.5 right-0.5 grid size-5 place-items-center rounded-full bg-black/60 text-white"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                ))}
+                {uploading && (
+                  <span className="grid size-14 place-items-center rounded-lg bg-muted">
+                    <Spinner />
+                  </span>
+                )}
+              </div>
+            )}
+            <div className="flex items-end gap-1">
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => void attach(e.target.files)}
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label="Attach images"
+                onClick={() => fileInput.current?.click()}
+                disabled={busy || uploading}
+                className="rounded-full"
+              >
+                <Paperclip />
+              </Button>
+              <Textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder="Plan a trip, add a booking, change dates…"
+                aria-label="Message the travel assistant"
+                rows={2}
+                className="min-w-0 flex-1 resize-none"
+              />
+              <VoiceButton
+                disabled={busy}
+                onStart={() => {
+                  voiceBase.current = draft.trim() ? `${draft.trim()} ` : "";
+                }}
+                onTranscript={(words) => setDraft(voiceBase.current + words)}
+              />
+              <Button
+                type="submit"
+                size="icon"
+                aria-label="Send"
+                disabled={busy || uploading || (!draft.trim() && attachments.length === 0)}
+              >
+                <ArrowUp />
+              </Button>
+            </div>
           </form>
         </SheetContent>
       </Sheet>

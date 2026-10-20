@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, max } from "drizzle-orm";
 import type { z } from "zod";
 
 import { db } from "@/db";
@@ -17,18 +17,19 @@ import {
 } from "@/db/schema";
 import { readUndo, signUndo } from "@/lib/travel/assistant/undo-token";
 import { moneyRange } from "@/lib/travel/format";
-import { allowsPriceUnit, deriveTitle, itemFields } from "@/lib/travel/item-fields";
+import { allowsPriceUnit, deriveTitle, itemFields, spansDays } from "@/lib/travel/item-fields";
 import { nextTripColor } from "@/lib/travel/trip-colors";
 import { formatDayRange } from "@/lib/utils/date";
 import {
   createTripSchema,
   tripItemSchema,
+  tripPhotoSchema,
   updateTripItemSchema,
   updateTripSchema,
   type TripItemData,
 } from "@/schemas/travel";
 import type { TravelChangeSetData } from "@/schemas/travel-assistant";
-import type { AppliedTravelChanges, TravelChangeLine } from "@/types/travel-assistant";
+import type { AppliedTravelChanges, TravelChangeLine, TravelDaySpan } from "@/types/travel-assistant";
 import type { TripItemCategory } from "@/types/travel";
 
 import {
@@ -57,6 +58,10 @@ export class TravelChangeError extends Error {}
 
 type TripRow = typeof trips.$inferSelect;
 type ItemRow = typeof tripItems.$inferSelect;
+type MemberRow = typeof tripMembers.$inferSelect;
+type PhotoRow = typeof tripPhotos.$inferSelect;
+type ShareRow = typeof tripShares.$inferSelect;
+type ContributionRow = typeof tripContributions.$inferSelect;
 type MemberLinkRow = typeof tripItemPayers.$inferSelect;
 type AttendeeRow = typeof tripItemAttendees.$inferSelect;
 
@@ -87,7 +92,20 @@ type UndoOp =
   | { kind: "reinsert_trip"; snapshot: TripSnapshot }
   | { kind: "delete_item"; tripId: string; itemId: string }
   | { kind: "restore_item"; item: ItemRow; payers: MemberLinkRow[]; attendees: AttendeeRow[] }
-  | { kind: "reinsert_item"; snapshot: ItemSnapshot };
+  | { kind: "reinsert_item"; snapshot: ItemSnapshot }
+  | { kind: "delete_member"; tripId: string; memberId: string }
+  | { kind: "restore_member"; member: MemberRow }
+  | {
+      kind: "reinsert_member";
+      member: MemberRow;
+      attendees: AttendeeRow[];
+      payers: MemberLinkRow[];
+      contributions: ContributionRow[];
+      /** Links scoped to them, as they were before removing them revoked them. */
+      shares: Pick<ShareRow, "id" | "revokedAt">[];
+    }
+  | { kind: "delete_photo"; tripId: string; photoId: string }
+  | { kind: "reinsert_photo"; photo: PhotoRow };
 
 type RunResult = { lines: TravelChangeLine[]; undo: UndoOp[] };
 
@@ -135,7 +153,14 @@ export async function getAssistantTrip(userId: string, tripId: string): Promise<
     startDate: trip.startDate,
     endDate: trip.endDate,
     currency: trip.currency,
-    members: trip.members.map((m) => ({ id: m.id, name: m.name })),
+    coverPhotoUrl: trip.coverPhotoUrl,
+    members: trip.members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      email: m.email,
+      sharePercent: m.sharePercent,
+    })),
+    photos: trip.photos.map((p) => ({ id: p.id, url: p.url, caption: p.caption, itemId: p.itemId })),
     items: trip.items.map((i) => ({
       id: i.id,
       title: i.title,
@@ -228,6 +253,7 @@ async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Pro
           title: trip.title,
           detail: tripDetail(trip),
           tripId: trip.id,
+          after: tripSpan(trip),
         });
         break;
       }
@@ -248,6 +274,9 @@ async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Pro
           title: trip.title,
           detail: tripDiff(current, trip),
           tripId: trip.id,
+          before: tripSpan(current),
+          after: tripSpan(trip),
+          imageUrl: trip.coverPhotoUrl !== current.coverPhotoUrl ? (trip.coverPhotoUrl ?? undefined) : undefined,
         });
         break;
       }
@@ -262,6 +291,7 @@ async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Pro
           tripTitle: snapshot.trip.title,
           title: snapshot.trip.title,
           detail: `${tripDetail(snapshot.trip)} · ${count(snapshot.items.length, "item")}`,
+          before: tripSpan(snapshot.trip),
         });
         break;
       }
@@ -270,7 +300,8 @@ async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Pro
         const tripId = change.tripId ?? refs.get(change.tripRef ?? "");
         if (!tripId) throw new TravelChangeError(`${where}: no trip to add it to`);
         const trip = await ownedTrip(tx, userId, tripId, where);
-        const data = itemData(valid(tripItemSchema, change.item, where), where, true);
+        const item0 = await withNamedTravellers(tx, tripId, change.item, where);
+        const data = itemData(valid(tripItemSchema, item0, where), where, true);
         const [item] = await tx
           .insert(tripItems)
           .values({ tripId, ...itemRowValues(data), sortOrder: 0 })
@@ -281,10 +312,12 @@ async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Pro
           action: "add",
           subject: "item",
           tripTitle: trip.title,
+          tripSpan: tripSpan(trip),
           title: item.title,
           category: item.category,
           detail: itemDetail(item, trip.currency),
           tripId,
+          after: itemSpan(item),
         });
         break;
       }
@@ -299,7 +332,7 @@ async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Pro
             ...itemInput(current),
             payerIds: payers.map((p) => p.memberId),
             attendeeIds: attendees.map((a) => a.memberId),
-            ...change.changes,
+            ...(await withNamedTravellers(tx, trip.id, change.changes, where)),
             id: current.id,
           },
           where
@@ -318,10 +351,13 @@ async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Pro
           action: "change",
           subject: "item",
           tripTitle: trip.title,
+          tripSpan: tripSpan(trip),
           title: item.title,
           category: item.category,
           detail: itemDiff(current, item, trip.currency),
           tripId: trip.id,
+          before: itemSpan(current),
+          after: itemSpan(item),
         });
         break;
       }
@@ -337,9 +373,175 @@ async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Pro
           action: "remove",
           subject: "item",
           tripTitle: trip.title,
+          tripSpan: tripSpan(trip),
           title: snapshot.item.title,
           category: snapshot.item.category,
           detail: itemDetail(snapshot.item, trip.currency),
+          tripId: trip.id,
+          before: itemSpan(snapshot.item),
+        });
+        break;
+      }
+
+      case "add_member": {
+        const tripId = change.tripId ?? refs.get(change.tripRef ?? "");
+        if (!tripId) throw new TravelChangeError(`${where}: no trip to add them to`);
+        const trip = await ownedTrip(tx, userId, tripId, where);
+        await checkShares(tx, tripId, change.member.sharePercent ?? null, null, where);
+        const [{ last }] = await tx
+          .select({ last: max(tripMembers.sortOrder) })
+          .from(tripMembers)
+          .where(eq(tripMembers.tripId, tripId));
+        const [member] = await tx
+          .insert(tripMembers)
+          .values({
+            tripId,
+            name: change.member.name,
+            email: change.member.email ?? null,
+            sharePercent: shareValue(change.member.sharePercent),
+            sortOrder: (last ?? -1) + 1,
+          })
+          .returning();
+        undo.push({ kind: "delete_member", tripId, memberId: member.id });
+        lines.push({
+          action: "add",
+          subject: "member",
+          tripTitle: trip.title,
+          tripSpan: tripSpan(trip),
+          title: member.name,
+          detail: memberDetail(member) || "Joins the trip",
+          tripId,
+        });
+        break;
+      }
+
+      case "update_member": {
+        const trip = await ownedTrip(tx, userId, change.tripId, where);
+        const current = await tripMember(tx, trip.id, change.memberId, where);
+        const next = { ...current, ...change.changes };
+        if ("sharePercent" in change.changes) {
+          await checkShares(tx, trip.id, change.changes.sharePercent ?? null, current.id, where);
+        }
+        const [member] = await tx
+          .update(tripMembers)
+          .set({
+            name: next.name,
+            email: next.email ?? null,
+            sharePercent:
+              "sharePercent" in change.changes ? shareValue(change.changes.sharePercent) : current.sharePercent,
+          })
+          .where(and(eq(tripMembers.id, current.id), eq(tripMembers.tripId, trip.id)))
+          .returning();
+        undo.push({ kind: "restore_member", member: current });
+        lines.push({
+          action: "change",
+          subject: "member",
+          tripTitle: trip.title,
+          tripSpan: tripSpan(trip),
+          title: member.name,
+          detail:
+            current.name !== member.name
+              ? `Was "${current.name}"`
+              : memberDetail(member) || "Details",
+          tripId: trip.id,
+        });
+        break;
+      }
+
+      case "remove_member": {
+        const trip = await ownedTrip(tx, userId, change.tripId, where);
+        const member = await tripMember(tx, trip.id, change.memberId, where);
+        const [attendees, payers, contributions, shares] = await Promise.all([
+          tx.select().from(tripItemAttendees).where(eq(tripItemAttendees.memberId, member.id)),
+          tx.select().from(tripItemPayers).where(eq(tripItemPayers.memberId, member.id)),
+          tx.select().from(tripContributions).where(eq(tripContributions.memberId, member.id)),
+          tx
+            .select({ id: tripShares.id, revokedAt: tripShares.revokedAt })
+            .from(tripShares)
+            .where(eq(tripShares.memberId, member.id)),
+        ]);
+        // As setTripMembers does: the FK nulls a link's member, and a null
+        // scope is the WHOLE trip. A link made to show one person their bill
+        // must not start publishing everyone's.
+        await tx
+          .update(tripShares)
+          .set({ revokedAt: new Date() })
+          .where(and(eq(tripShares.memberId, member.id), isNull(tripShares.revokedAt)));
+        await tx.delete(tripMembers).where(and(eq(tripMembers.id, member.id), eq(tripMembers.tripId, trip.id)));
+        undo.push({ kind: "reinsert_member", member, attendees, payers, contributions, shares });
+        lines.push({
+          action: "remove",
+          subject: "member",
+          tripTitle: trip.title,
+          tripSpan: tripSpan(trip),
+          title: member.name,
+          detail: contributions.length
+            ? `Leaves the trip, with ${count(contributions.length, "payment")} they made`
+            : "Leaves the trip",
+          tripId: trip.id,
+        });
+        break;
+      }
+
+      case "add_photo": {
+        const tripId = change.tripId ?? refs.get(change.tripRef ?? "");
+        if (!tripId) throw new TravelChangeError(`${where}: no trip to add it to`);
+        const trip = await ownedTrip(tx, userId, tripId, where);
+        const item = change.photo.itemId ? await tripItem(tx, tripId, change.photo.itemId, where) : null;
+        const data = valid(
+          tripPhotoSchema,
+          { ...change.photo, source: change.photo.storagePath ? "upload" : "url" },
+          where
+        );
+        const [{ last }] = await tx
+          .select({ last: max(tripPhotos.sortOrder) })
+          .from(tripPhotos)
+          .where(eq(tripPhotos.tripId, tripId));
+        const [photo] = await tx
+          .insert(tripPhotos)
+          .values({
+            tripId,
+            itemId: item?.id ?? null,
+            url: data.url,
+            storagePath: data.storagePath ?? null,
+            source: data.source,
+            caption: data.caption ?? null,
+            sortOrder: (last ?? -1) + 1,
+          })
+          .returning();
+        undo.push({ kind: "delete_photo", tripId, photoId: photo.id });
+        lines.push({
+          action: "add",
+          subject: "photo",
+          tripTitle: trip.title,
+          tripSpan: tripSpan(trip),
+          title: photo.caption || (item ? `Photo of ${item.title}` : "Photo"),
+          detail: item ? `On ${item.title}` : "In the gallery",
+          imageUrl: photo.url,
+          tripId,
+        });
+        break;
+      }
+
+      case "remove_photo": {
+        const trip = await ownedTrip(tx, userId, change.tripId, where);
+        const [photo] = await tx
+          .select()
+          .from(tripPhotos)
+          .where(and(eq(tripPhotos.id, change.photoId), eq(tripPhotos.tripId, trip.id)));
+        if (!photo) throw new TravelChangeError(`${where}: photo not found on this trip`);
+        // The row only: the uploaded file stays, so Undo has something to
+        // point back at.
+        await tx.delete(tripPhotos).where(eq(tripPhotos.id, photo.id));
+        undo.push({ kind: "reinsert_photo", photo });
+        lines.push({
+          action: "remove",
+          subject: "photo",
+          tripTitle: trip.title,
+          tripSpan: tripSpan(trip),
+          title: photo.caption || "Photo",
+          detail: "From the trip",
+          imageUrl: photo.url,
           tripId: trip.id,
         });
         break;
@@ -447,6 +649,58 @@ async function runUndo(tx: Tx, userId: string, op: UndoOp): Promise<void> {
       await insertAll(tx, tripPhotos, s.photos);
       return;
     }
+
+    case "delete_member": {
+      const [trip] = await tx
+        .select({ id: trips.id })
+        .from(trips)
+        .where(and(eq(trips.id, op.tripId), eq(trips.userId, userId)));
+      if (!trip) return;
+      await tx.delete(tripMembers).where(and(eq(tripMembers.id, op.memberId), eq(tripMembers.tripId, trip.id)));
+      return;
+    }
+
+    case "restore_member": {
+      await ownedTrip(tx, userId, op.member.tripId, "Undo");
+      const [row] = await tx
+        .update(tripMembers)
+        .set({ name: op.member.name, email: op.member.email, sharePercent: op.member.sharePercent })
+        .where(and(eq(tripMembers.id, op.member.id), eq(tripMembers.tripId, op.member.tripId)))
+        .returning({ id: tripMembers.id });
+      if (!row) throw new TravelChangeError(`"${op.member.name}" is no longer on the trip`);
+      return;
+    }
+
+    case "reinsert_member": {
+      await ownedTrip(tx, userId, op.member.tripId, "Undo");
+      await tx.insert(tripMembers).values(revive(op.member));
+      await insertAll(tx, tripItemAttendees, op.attendees);
+      await insertAll(tx, tripItemPayers, op.payers);
+      await insertAll(tx, tripContributions, op.contributions);
+      for (const share of op.shares) {
+        await tx
+          .update(tripShares)
+          .set({ memberId: op.member.id, revokedAt: share.revokedAt ? new Date(share.revokedAt) : null })
+          .where(and(eq(tripShares.id, share.id), eq(tripShares.tripId, op.member.tripId)));
+      }
+      return;
+    }
+
+    case "delete_photo": {
+      const [trip] = await tx
+        .select({ id: trips.id })
+        .from(trips)
+        .where(and(eq(trips.id, op.tripId), eq(trips.userId, userId)));
+      if (!trip) return;
+      await tx.delete(tripPhotos).where(and(eq(tripPhotos.id, op.photoId), eq(tripPhotos.tripId, trip.id)));
+      return;
+    }
+
+    case "reinsert_photo": {
+      await ownedTrip(tx, userId, op.photo.tripId, "Undo");
+      await tx.insert(tripPhotos).values(revive(op.photo));
+      return;
+    }
   }
 }
 
@@ -481,6 +735,95 @@ async function memberLists(tx: Tx, tripId: string, itemId: string, data: TripIte
   } catch {
     throw new TravelChangeError(`${where}: a traveller id is not on this trip`);
   }
+}
+
+async function tripMember(tx: Tx, tripId: string, memberId: string, where: string): Promise<MemberRow> {
+  const [member] = await tx
+    .select()
+    .from(tripMembers)
+    .where(and(eq(tripMembers.id, memberId), eq(tripMembers.tripId, tripId)));
+  if (!member) throw new TravelChangeError(`${where}: traveller not found on this trip`);
+  return member;
+}
+
+/**
+ * Turns `attendeeNames` / `payerNames` into the ids the item schema takes.
+ *
+ * By name because the model reads names, and because a traveller added a
+ * line earlier in the same proposal has no id it could know. A first name is
+ * enough when only one member has it.
+ */
+async function withNamedTravellers<T extends { attendeeNames?: string[]; payerNames?: string[] }>(
+  tx: Tx,
+  tripId: string,
+  fields: T,
+  where: string
+): Promise<Omit<T, "attendeeNames" | "payerNames"> & { attendeeIds?: string[]; payerIds?: string[] }> {
+  const { attendeeNames, payerNames, ...rest } = fields;
+  if (!attendeeNames && !payerNames) return rest;
+  const members = await tx
+    .select({ id: tripMembers.id, name: tripMembers.name })
+    .from(tripMembers)
+    .where(eq(tripMembers.tripId, tripId));
+  const idFor = (name: string): string => {
+    const wanted = name.trim().toLowerCase();
+    const exact = members.filter((m) => m.name.trim().toLowerCase() === wanted);
+    const first = members.filter((m) => m.name.trim().toLowerCase().split(/\s+/)[0] === wanted);
+    const match = exact.length === 1 ? exact : first;
+    if (match.length !== 1) {
+      throw new TravelChangeError(
+        `${where}: no single traveller called "${name}" (on this trip: ${members.map((m) => m.name).join(", ") || "nobody yet"})`
+      );
+    }
+    return match[0].id;
+  };
+  return {
+    ...rest,
+    ...(attendeeNames ? { attendeeIds: attendeeNames.map(idFor) } : {}),
+    ...(payerNames ? { payerIds: payerNames.map(idFor) } : {}),
+  };
+}
+
+/** Fixed shares may total less than 100 (the rest splits equally), never more. */
+async function checkShares(
+  tx: Tx,
+  tripId: string,
+  share: number | null,
+  replacing: string | null,
+  where: string
+): Promise<void> {
+  if (share === null) return;
+  const members = await tx
+    .select({ id: tripMembers.id, sharePercent: tripMembers.sharePercent })
+    .from(tripMembers)
+    .where(eq(tripMembers.tripId, tripId));
+  const others = members
+    .filter((m) => m.id !== replacing && m.sharePercent !== null)
+    .reduce((sum, m) => sum + Number(m.sharePercent), 0);
+  if (others + share > 100.001) {
+    throw new TravelChangeError(`${where}: fixed shares would add up to ${others + share}%, more than 100%`);
+  }
+}
+
+function shareValue(share: number | null | undefined): string | null {
+  return share === null || share === undefined ? null : String(share);
+}
+
+function memberDetail(m: MemberRow): string {
+  return [m.email, m.sharePercent !== null ? `${Number(m.sharePercent)}% of the cost` : null]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function tripSpan(t: Pick<TripRow, "startDate" | "endDate">): TravelDaySpan {
+  return { from: t.startDate, to: t.endDate ?? t.startDate };
+}
+
+/** What the item occupies on a calendar: a return flight is its day out. */
+function itemSpan(i: Pick<ItemRow, "scheduledOn" | "endsOn" | "category">): TravelDaySpan | null {
+  if (!i.scheduledOn) return null;
+  const to = i.endsOn && spansDays(i.category) ? i.endsOn : i.scheduledOn;
+  return { from: i.scheduledOn, to };
 }
 
 async function ownedTrip(tx: Tx, userId: string, tripId: string, where: string): Promise<TripRow> {
@@ -629,6 +972,7 @@ function tripDiff(before: TripRow, after: TripRow): string {
   if (before.destination !== after.destination) parts.push(`Destination ${after.destination ?? "cleared"}`);
   if (before.currency !== after.currency) parts.push(`Currency ${before.currency} → ${after.currency}`);
   if (before.description !== after.description) parts.push("Description");
+  if (before.coverPhotoUrl !== after.coverPhotoUrl) parts.push(after.coverPhotoUrl ? "New cover photo" : "Cover photo removed");
   return parts.join(" · ") || "No visible change";
 }
 

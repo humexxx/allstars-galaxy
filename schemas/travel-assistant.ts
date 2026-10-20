@@ -37,6 +37,12 @@ const tripFields = z.object({
     .regex(/^[A-Z]{3}$/)
     .optional()
     .describe("ISO 4217 code the trip's prices are in. USD when the user does not say"),
+  coverPhotoUrl: z
+    .url()
+    .max(2000)
+    .nullable()
+    .optional()
+    .describe("The trip's cover picture: an image the user attached, or a link they gave"),
 });
 
 const itemFields = z.object({
@@ -88,7 +94,41 @@ const itemFields = z.object({
   payerIds: z
     .array(idSchema)
     .optional()
-    .describe("Ids of the trip members who pay for it. Omit for the trip's usual split"),
+    .describe("Ids of the trip members who pay for it, equally. Omit for the trip's usual split"),
+  attendeeNames: z
+    .array(z.string().trim().min(1))
+    .optional()
+    .describe("Or name them: members' names, including ones added earlier in this proposal"),
+  payerNames: z
+    .array(z.string().trim().min(1))
+    .optional()
+    .describe("Or name who pays, the same way"),
+});
+
+const memberFields = z.object({
+  name: z.string().trim().min(1).max(100),
+  email: z.email().max(200).nullable().optional(),
+  sharePercent: z
+    .number()
+    .min(0)
+    .max(100)
+    .nullable()
+    .optional()
+    .describe("A fixed share of the trip's cost, 0-100. Omit to split what is left equally"),
+});
+
+/** A path the browser's own upload produced: `<user id>/<folder>/<file>`. */
+const storagePath = z
+  .string()
+  .regex(/^[0-9a-f-]{36}\/[\w-]+\/[\w.-]+$/, "Not an uploaded file's path");
+
+const photoFields = z.object({
+  url: z.url().max(2000),
+  storagePath: storagePath
+    .optional()
+    .describe("Only for an image the user attached: the storagePath its note gives"),
+  caption: z.string().max(500).nullable().optional(),
+  itemId: idSchema.optional().describe("Put it on one item instead of the trip's gallery"),
 });
 
 const createTripChange = z.object({
@@ -130,6 +170,34 @@ const deleteItemChange = z.object({
   itemId: idSchema,
 });
 
+const tripTarget = {
+  tripId: idSchema.optional().describe("An existing trip"),
+  tripRef: z.string().optional().describe("Or the ref of a trip created earlier in this proposal"),
+};
+
+const addMemberChange = z.object({ op: z.literal("add_member"), ...tripTarget, member: memberFields });
+
+const updateMemberChange = z.object({
+  op: z.literal("update_member"),
+  tripId: idSchema,
+  memberId: idSchema,
+  changes: memberFields.partial(),
+});
+
+const removeMemberChange = z.object({
+  op: z.literal("remove_member"),
+  tripId: idSchema,
+  memberId: idSchema,
+});
+
+const addPhotoChange = z.object({ op: z.literal("add_photo"), ...tripTarget, photo: photoFields });
+
+const removePhotoChange = z.object({
+  op: z.literal("remove_photo"),
+  tripId: idSchema,
+  photoId: idSchema,
+});
+
 export const travelChangeSchema = z.discriminatedUnion("op", [
   createTripChange,
   updateTripChange,
@@ -137,6 +205,11 @@ export const travelChangeSchema = z.discriminatedUnion("op", [
   addItemChange,
   updateItemChange,
   deleteItemChange,
+  addMemberChange,
+  updateMemberChange,
+  removeMemberChange,
+  addPhotoChange,
+  removePhotoChange,
 ]);
 
 export const travelChangeSetSchema = z
@@ -158,10 +231,10 @@ export const travelChangeSetSchema = z
         }
         refs.add(change.ref);
       }
-      if (change.op === "add_item") {
+      if (change.op === "add_item" || change.op === "add_member" || change.op === "add_photo") {
         // Exactly one, and a ref only once it exists: changes run in order.
         if (Boolean(change.tripId) === Boolean(change.tripRef)) {
-          ctx.addIssue({ code: "custom", path: ["changes", index], message: "add_item needs either tripId or tripRef" });
+          ctx.addIssue({ code: "custom", path: ["changes", index], message: `${change.op} needs either tripId or tripRef` });
         } else if (change.tripRef && !refs.has(change.tripRef)) {
           ctx.addIssue({
             code: "custom",

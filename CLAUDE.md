@@ -219,6 +219,17 @@ will cancel a long-running `ALTER COLUMN ... USING (...)` mid-flight.
 The pre-flight check in `drizzle.config.ts` will refuse to run if `DIRECT_URL`
 is missing and `DATABASE_URL` points at the transaction pooler.
 
+**Two branches with migrations: apply the older one first.** The migrator runs
+only migrations whose journal `when` is later than the newest row in
+`drizzle.__drizzle_migrations` — it never compares names or hashes. Apply a
+branch's migration generated at 3 pm, and another branch's from 1 pm is
+skipped without a word when that branch migrates. Whichever goes second must
+be generated after the first was applied (renumber it if needed).
+
+**The database is shared with production**, which runs the code on `main`. A
+migration applied ahead of its release must keep that code working: add, never
+drop or rename, and give new `NOT NULL` columns a default.
+
 ### Security
 - Every server action opens with an auth gate — never trust the caller:
   - **User-scoped actions** → `requireEffectiveContext()` from

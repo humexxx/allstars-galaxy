@@ -346,6 +346,13 @@ RAPIDAPI_KEY            # Refreshes the stored F1 news archive on the daily
                         # cron. Unset = no refresh (not a cron failure); the
                         # articles already stored keep reading.
 
+# travel assistant
+ANTHROPIC_API_KEY       # Claude API key for the Travel Planner's AI chat.
+                        # Unset = no assistant button. Admins only, since
+                        # every message spends API credit. A Max plan's
+                        # monthly API credit covers it (claim it by linking a
+                        # Console organization from claude.ai Billing).
+
 # DORMANT — kept for reference, not used by any service today:
 API_SPORTS_KEY          # Free tier hard-locked to seasons 2022-2024, unusable
                         # for current data. ~$100/mo for the All Sports paid

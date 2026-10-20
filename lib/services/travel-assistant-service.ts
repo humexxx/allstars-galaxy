@@ -1,0 +1,651 @@
+import "server-only";
+
+import { and, eq, inArray } from "drizzle-orm";
+import type { z } from "zod";
+
+import { db } from "@/db";
+import {
+  tripContributions,
+  tripItemAttendees,
+  tripItemPayers,
+  tripItems,
+  tripItemStops,
+  tripMembers,
+  tripPhotos,
+  trips,
+  tripShares,
+} from "@/db/schema";
+import { readUndo, signUndo } from "@/lib/travel/assistant/undo-token";
+import { moneyRange } from "@/lib/travel/format";
+import { allowsPriceUnit, deriveTitle, itemFields } from "@/lib/travel/item-fields";
+import { nextTripColor } from "@/lib/travel/trip-colors";
+import { formatDayRange } from "@/lib/utils/date";
+import {
+  createTripSchema,
+  tripItemSchema,
+  updateTripItemSchema,
+  updateTripSchema,
+  type TripItemData,
+} from "@/schemas/travel";
+import type { TravelChangeSetData } from "@/schemas/travel-assistant";
+import type { AppliedTravelChanges, TravelChangeLine } from "@/types/travel-assistant";
+import type { TripItemCategory } from "@/types/travel";
+
+import {
+  getTripWithRelations,
+  itemRowValues,
+  listUserTrips,
+  setItemMembers,
+  tripRowValues,
+  type Tx,
+} from "./travel-service";
+
+/**
+ * The travel assistant's side of the database.
+ *
+ * Everything it writes goes through `runChanges`, once to preview a proposal
+ * (inside a transaction that is then rolled back) and once to apply it. The
+ * card the user approves is therefore what the database actually said, not a
+ * guess at it — a bad date or someone else's trip fails at preview time.
+ *
+ * Only the caller's own trips are reachable: every read and write is scoped to
+ * `userId`, exactly as the forms are.
+ */
+
+/** A refusal the model or the user should read — never a crash. */
+export class TravelChangeError extends Error {}
+
+type TripRow = typeof trips.$inferSelect;
+type ItemRow = typeof tripItems.$inferSelect;
+type MemberLinkRow = typeof tripItemPayers.$inferSelect;
+type AttendeeRow = typeof tripItemAttendees.$inferSelect;
+
+type ItemSnapshot = {
+  item: ItemRow;
+  stops: (typeof tripItemStops.$inferSelect)[];
+  attendees: AttendeeRow[];
+  payers: MemberLinkRow[];
+  photos: (typeof tripPhotos.$inferSelect)[];
+};
+
+type TripSnapshot = {
+  trip: TripRow;
+  members: (typeof tripMembers.$inferSelect)[];
+  items: ItemRow[];
+  stops: (typeof tripItemStops.$inferSelect)[];
+  attendees: AttendeeRow[];
+  payers: MemberLinkRow[];
+  photos: (typeof tripPhotos.$inferSelect)[];
+  shares: (typeof tripShares.$inferSelect)[];
+  contributions: (typeof tripContributions.$inferSelect)[];
+};
+
+/** The inverse of one applied change, run newest first by `undoTravelChanges`. */
+type UndoOp =
+  | { kind: "delete_trip"; tripId: string }
+  | { kind: "restore_trip"; trip: TripRow }
+  | { kind: "reinsert_trip"; snapshot: TripSnapshot }
+  | { kind: "delete_item"; tripId: string; itemId: string }
+  | { kind: "restore_item"; item: ItemRow; payers: MemberLinkRow[]; attendees: AttendeeRow[] }
+  | { kind: "reinsert_item"; snapshot: ItemSnapshot };
+
+type RunResult = { lines: TravelChangeLine[]; undo: UndoOp[] };
+
+const CATEGORY_LABEL: Record<TripItemCategory, string> = {
+  lodging: "Hotel",
+  flight: "Flight",
+  cruise: "Cruise",
+  transport: "Transport",
+  food: "Food",
+  activity: "Activity",
+  shopping: "Shopping",
+  other: "Other",
+};
+
+const UNIT_SUFFIX = { total: "", per_night: " / night", per_person: " / person" } as const;
+
+// ---------- reads for the model ----------
+
+export type AssistantTripSummary = Pick<
+  TripRow,
+  "id" | "title" | "destination" | "startDate" | "endDate" | "currency"
+>;
+
+export async function listAssistantTrips(userId: string): Promise<AssistantTripSummary[]> {
+  const rows = await listUserTrips(userId);
+  return rows.map(({ id, title, destination, startDate, endDate, currency }) => ({
+    id,
+    title,
+    destination,
+    startDate,
+    endDate,
+    currency,
+  }));
+}
+
+/** One trip as the model reads it: what it needs to edit, and no more. */
+export async function getAssistantTrip(userId: string, tripId: string): Promise<object | null> {
+  const trip = await getTripWithRelations(tripId, userId);
+  if (!trip) return null;
+  return {
+    id: trip.id,
+    title: trip.title,
+    destination: trip.destination,
+    description: trip.description,
+    startDate: trip.startDate,
+    endDate: trip.endDate,
+    currency: trip.currency,
+    members: trip.members.map((m) => ({ id: m.id, name: m.name })),
+    items: trip.items.map((i) => ({
+      id: i.id,
+      title: i.title,
+      category: i.category,
+      scheduledOn: i.scheduledOn,
+      endsOn: i.endsOn,
+      fromCode: i.fromCode,
+      toCode: i.toCode,
+      roundTrip: i.roundTrip,
+      price: i.price,
+      priceMax: i.priceMax,
+      priceUnit: i.priceUnit,
+      link: i.link,
+      notes: i.notes,
+      attendeeIds: i.attendeeIds,
+      payerIds: i.payerIds,
+      ports: i.stops.map((s) => ({ day: s.dayNumber, on: s.stopOn, place: s.place })),
+    })),
+  };
+}
+
+// ---------- preview / apply / undo ----------
+
+/** Thrown to roll a preview back while carrying its result out. */
+class PreviewRollback extends Error {
+  constructor(readonly result: RunResult) {
+    super("preview");
+  }
+}
+
+export async function previewTravelChanges(
+  userId: string,
+  set: TravelChangeSetData
+): Promise<TravelChangeLine[]> {
+  try {
+    await db.transaction(async (tx) => {
+      throw new PreviewRollback(await runChanges(tx, userId, set));
+    });
+  } catch (err) {
+    if (err instanceof PreviewRollback) {
+      // Ids minted inside a rolled-back transaction never existed.
+      return err.result.lines.map((line) => ({ ...line, tripId: undefined }));
+    }
+    throw err;
+  }
+  throw new Error("unreachable");
+}
+
+export async function applyTravelChanges(
+  userId: string,
+  set: TravelChangeSetData
+): Promise<AppliedTravelChanges> {
+  const { lines, undo } = await db.transaction((tx) => runChanges(tx, userId, set));
+  return { lines, undoToken: signUndo(userId, undo.reverse()) };
+}
+
+/** Puts back what one Apply did. All or nothing, like the Apply was. */
+export async function undoTravelChanges(userId: string, token: string): Promise<void> {
+  const ops = readUndo<UndoOp[]>(token, userId);
+  if (!ops) throw new TravelChangeError("This change can no longer be undone");
+  await db.transaction(async (tx) => {
+    for (const op of ops) await runUndo(tx, userId, op);
+  });
+}
+
+// ---------- the one write path ----------
+
+async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Promise<RunResult> {
+  const lines: TravelChangeLine[] = [];
+  const undo: UndoOp[] = [];
+  const refs = new Map<string, string>();
+  const usedColors = (await tx.select({ color: trips.color }).from(trips).where(eq(trips.userId, userId))).map(
+    (r) => r.color
+  );
+
+  for (const [index, change] of set.changes.entries()) {
+    const where = `Change ${index + 1} (${change.op})`;
+    switch (change.op) {
+      case "create_trip": {
+        const color = nextTripColor(usedColors);
+        usedColors.push(color);
+        const data = valid(createTripSchema, { ...change.trip, color }, where);
+        const [trip] = await tx.insert(trips).values({ userId, ...tripRowValues(data) }).returning();
+        refs.set(change.ref, trip.id);
+        undo.push({ kind: "delete_trip", tripId: trip.id });
+        lines.push({
+          action: "add",
+          subject: "trip",
+          tripTitle: trip.title,
+          title: trip.title,
+          detail: tripDetail(trip),
+          tripId: trip.id,
+        });
+        break;
+      }
+
+      case "update_trip": {
+        const current = await ownedTrip(tx, userId, change.tripId, where);
+        const data = valid(updateTripSchema, { ...tripInput(current), ...change.changes, id: current.id }, where);
+        const [trip] = await tx
+          .update(trips)
+          .set({ ...tripRowValues(data), updatedAt: new Date() })
+          .where(and(eq(trips.id, current.id), eq(trips.userId, userId)))
+          .returning();
+        undo.push({ kind: "restore_trip", trip: current });
+        lines.push({
+          action: "change",
+          subject: "trip",
+          tripTitle: trip.title,
+          title: trip.title,
+          detail: tripDiff(current, trip),
+          tripId: trip.id,
+        });
+        break;
+      }
+
+      case "delete_trip": {
+        const snapshot = await snapshotTrip(tx, userId, change.tripId, where);
+        await tx.delete(trips).where(and(eq(trips.id, change.tripId), eq(trips.userId, userId)));
+        undo.push({ kind: "reinsert_trip", snapshot });
+        lines.push({
+          action: "remove",
+          subject: "trip",
+          tripTitle: snapshot.trip.title,
+          title: snapshot.trip.title,
+          detail: `${tripDetail(snapshot.trip)} · ${count(snapshot.items.length, "item")}`,
+        });
+        break;
+      }
+
+      case "add_item": {
+        const tripId = change.tripId ?? refs.get(change.tripRef ?? "");
+        if (!tripId) throw new TravelChangeError(`${where}: no trip to add it to`);
+        const trip = await ownedTrip(tx, userId, tripId, where);
+        const data = itemData(valid(tripItemSchema, change.item, where), where, true);
+        const [item] = await tx
+          .insert(tripItems)
+          .values({ tripId, ...itemRowValues(data), sortOrder: 0 })
+          .returning();
+        await memberLists(tx, tripId, item.id, data, where);
+        undo.push({ kind: "delete_item", tripId, itemId: item.id });
+        lines.push({
+          action: "add",
+          subject: "item",
+          tripTitle: trip.title,
+          title: item.title,
+          category: item.category,
+          detail: itemDetail(item, trip.currency),
+          tripId,
+        });
+        break;
+      }
+
+      case "update_item": {
+        const trip = await ownedTrip(tx, userId, change.tripId, where);
+        const current = await tripItem(tx, trip.id, change.itemId, where);
+        const [payers, attendees] = await itemLinks(tx, current.id);
+        const merged = valid(
+          updateTripItemSchema,
+          {
+            ...itemInput(current),
+            payerIds: payers.map((p) => p.memberId),
+            attendeeIds: attendees.map((a) => a.memberId),
+            ...change.changes,
+            id: current.id,
+          },
+          where
+        );
+        const touchedUnit = "priceUnit" in change.changes || "category" in change.changes;
+        const data = itemData(merged, where, touchedUnit);
+        const [item] = await tx
+          .update(tripItems)
+          .set({ ...itemRowValues(data), updatedAt: new Date() })
+          .where(and(eq(tripItems.id, current.id), eq(tripItems.tripId, trip.id)))
+          .returning();
+        await setItemMembers(tripItemPayers, tx, trip.id, item.id, data.payerIds ?? []);
+        await setItemMembers(tripItemAttendees, tx, trip.id, item.id, data.attendeeIds ?? []);
+        undo.push({ kind: "restore_item", item: current, payers, attendees });
+        lines.push({
+          action: "change",
+          subject: "item",
+          tripTitle: trip.title,
+          title: item.title,
+          category: item.category,
+          detail: itemDiff(current, item, trip.currency),
+          tripId: trip.id,
+        });
+        break;
+      }
+
+      case "delete_item": {
+        const trip = await ownedTrip(tx, userId, change.tripId, where);
+        const snapshot = await snapshotItem(tx, trip.id, change.itemId, where);
+        await tx
+          .delete(tripItems)
+          .where(and(eq(tripItems.id, change.itemId), eq(tripItems.tripId, trip.id)));
+        undo.push({ kind: "reinsert_item", snapshot });
+        lines.push({
+          action: "remove",
+          subject: "item",
+          tripTitle: trip.title,
+          title: snapshot.item.title,
+          category: snapshot.item.category,
+          detail: itemDetail(snapshot.item, trip.currency),
+          tripId: trip.id,
+        });
+        break;
+      }
+    }
+  }
+  return { lines, undo };
+}
+
+async function runUndo(tx: Tx, userId: string, op: UndoOp): Promise<void> {
+  switch (op.kind) {
+    case "delete_trip":
+      await tx.delete(trips).where(and(eq(trips.id, op.tripId), eq(trips.userId, userId)));
+      return;
+
+    case "restore_trip": {
+      const before = revive(op.trip);
+      const [row] = await tx
+        .update(trips)
+        .set({
+          title: before.title,
+          destination: before.destination,
+          description: before.description,
+          startDate: before.startDate,
+          endDate: before.endDate,
+          coverPhotoUrl: before.coverPhotoUrl,
+          currency: before.currency,
+          color: before.color,
+          updatedAt: before.updatedAt,
+        })
+        .where(and(eq(trips.id, before.id), eq(trips.userId, userId)))
+        .returning({ id: trips.id });
+      if (!row) throw new TravelChangeError(`"${op.trip.title}" no longer exists`);
+      return;
+    }
+
+    case "reinsert_trip": {
+      const s = op.snapshot;
+      if (s.trip.userId !== userId) throw new TravelChangeError("This change can no longer be undone");
+      // Parents before children: members before anything that names one,
+      // items before their stops, links and photos.
+      await tx.insert(trips).values(revive(s.trip));
+      await insertAll(tx, tripMembers, s.members);
+      await insertAll(tx, tripItems, s.items);
+      await insertAll(tx, tripItemStops, s.stops);
+      await insertAll(tx, tripItemAttendees, s.attendees);
+      await insertAll(tx, tripItemPayers, s.payers);
+      await insertAll(tx, tripPhotos, s.photos);
+      await insertAll(tx, tripShares, s.shares);
+      await insertAll(tx, tripContributions, s.contributions);
+      return;
+    }
+
+    case "delete_item": {
+      // Gone with its trip already is as undone as it gets.
+      const [trip] = await tx
+        .select({ id: trips.id })
+        .from(trips)
+        .where(and(eq(trips.id, op.tripId), eq(trips.userId, userId)));
+      if (!trip) return;
+      await tx.delete(tripItems).where(and(eq(tripItems.id, op.itemId), eq(tripItems.tripId, trip.id)));
+      return;
+    }
+
+    case "restore_item": {
+      await ownedTrip(tx, userId, op.item.tripId, "Undo");
+      const before = revive(op.item);
+      const { id, tripId } = before;
+      const [row] = await tx
+        .update(tripItems)
+        .set({
+          title: before.title,
+          category: before.category,
+          link: before.link,
+          videoUrl: before.videoUrl,
+          fromCode: before.fromCode,
+          toCode: before.toCode,
+          roundTrip: before.roundTrip,
+          price: before.price,
+          priceMax: before.priceMax,
+          priceUnit: before.priceUnit,
+          scheduledOn: before.scheduledOn,
+          endsOn: before.endsOn,
+          notes: before.notes,
+          sortOrder: before.sortOrder,
+          updatedAt: before.updatedAt,
+        })
+        .where(and(eq(tripItems.id, id), eq(tripItems.tripId, tripId)))
+        .returning({ id: tripItems.id });
+      if (!row) throw new TravelChangeError(`"${op.item.title}" no longer exists`);
+      await tx.delete(tripItemPayers).where(eq(tripItemPayers.itemId, id));
+      await tx.delete(tripItemAttendees).where(eq(tripItemAttendees.itemId, id));
+      await insertAll(tx, tripItemPayers, op.payers);
+      await insertAll(tx, tripItemAttendees, op.attendees);
+      return;
+    }
+
+    case "reinsert_item": {
+      const s = op.snapshot;
+      await ownedTrip(tx, userId, s.item.tripId, "Undo");
+      await tx.insert(tripItems).values(revive(s.item));
+      await insertAll(tx, tripItemStops, s.stops);
+      await insertAll(tx, tripItemAttendees, s.attendees);
+      await insertAll(tx, tripItemPayers, s.payers);
+      await insertAll(tx, tripPhotos, s.photos);
+      return;
+    }
+  }
+}
+
+// ---------- helpers ----------
+
+/** Zod's verdict as a sentence the model can act on. */
+function valid<S extends z.ZodType>(schema: S, input: unknown, where: string): z.output<S> {
+  const parsed = schema.safeParse(input);
+  if (parsed.success) return parsed.data;
+  const issue = parsed.error.issues[0];
+  const field = issue.path.length ? `${issue.path.join(".")}: ` : "";
+  throw new TravelChangeError(`${where}: ${field}${issue.message}`);
+}
+
+/**
+ * The rules the item form applies by construction: a flight's title is its
+ * route, and a price is only per night where a night means something.
+ */
+function itemData<T extends TripItemData>(data: T, where: string, checkUnit: boolean): T {
+  const unit = data.priceUnit ?? "total";
+  if (checkUnit && !allowsPriceUnit(data.category, unit)) {
+    throw new TravelChangeError(`${where}: a ${data.category} cannot be priced ${unit}`);
+  }
+  if (itemFields(data.category).title) return data;
+  return { ...data, title: deriveTitle(data.category, data, data.title || CATEGORY_LABEL[data.category]) };
+}
+
+async function memberLists(tx: Tx, tripId: string, itemId: string, data: TripItemData, where: string): Promise<void> {
+  try {
+    if (data.payerIds?.length) await setItemMembers(tripItemPayers, tx, tripId, itemId, data.payerIds);
+    if (data.attendeeIds?.length) await setItemMembers(tripItemAttendees, tx, tripId, itemId, data.attendeeIds);
+  } catch {
+    throw new TravelChangeError(`${where}: a traveller id is not on this trip`);
+  }
+}
+
+async function ownedTrip(tx: Tx, userId: string, tripId: string, where: string): Promise<TripRow> {
+  const [trip] = await tx.select().from(trips).where(and(eq(trips.id, tripId), eq(trips.userId, userId)));
+  if (!trip) throw new TravelChangeError(`${where}: trip not found`);
+  return trip;
+}
+
+async function tripItem(tx: Tx, tripId: string, itemId: string, where: string): Promise<ItemRow> {
+  const [item] = await tx
+    .select()
+    .from(tripItems)
+    .where(and(eq(tripItems.id, itemId), eq(tripItems.tripId, tripId)));
+  if (!item) throw new TravelChangeError(`${where}: item not found on this trip`);
+  return item;
+}
+
+async function itemLinks(tx: Tx, itemId: string): Promise<[MemberLinkRow[], AttendeeRow[]]> {
+  return Promise.all([
+    tx.select().from(tripItemPayers).where(eq(tripItemPayers.itemId, itemId)),
+    tx.select().from(tripItemAttendees).where(eq(tripItemAttendees.itemId, itemId)),
+  ]);
+}
+
+async function snapshotItem(tx: Tx, tripId: string, itemId: string, where: string): Promise<ItemSnapshot> {
+  const item = await tripItem(tx, tripId, itemId, where);
+  const [payers, attendees] = await itemLinks(tx, item.id);
+  const [stops, photos] = await Promise.all([
+    tx.select().from(tripItemStops).where(eq(tripItemStops.itemId, item.id)),
+    tx.select().from(tripPhotos).where(eq(tripPhotos.itemId, item.id)),
+  ]);
+  return { item, stops, attendees, payers, photos };
+}
+
+async function snapshotTrip(tx: Tx, userId: string, tripId: string, where: string): Promise<TripSnapshot> {
+  const trip = await ownedTrip(tx, userId, tripId, where);
+  const [members, items, photos, shares, contributions] = await Promise.all([
+    tx.select().from(tripMembers).where(eq(tripMembers.tripId, trip.id)),
+    tx.select().from(tripItems).where(eq(tripItems.tripId, trip.id)),
+    tx.select().from(tripPhotos).where(eq(tripPhotos.tripId, trip.id)),
+    tx.select().from(tripShares).where(eq(tripShares.tripId, trip.id)),
+    tx.select().from(tripContributions).where(eq(tripContributions.tripId, trip.id)),
+  ]);
+  const itemIds = items.map((i) => i.id);
+  const [stops, attendees, payers] = itemIds.length
+    ? await Promise.all([
+        tx.select().from(tripItemStops).where(inArray(tripItemStops.itemId, itemIds)),
+        tx.select().from(tripItemAttendees).where(inArray(tripItemAttendees.itemId, itemIds)),
+        tx.select().from(tripItemPayers).where(inArray(tripItemPayers.itemId, itemIds)),
+      ])
+    : [[], [], []];
+  return { trip, members, items, stops, attendees, payers, photos, shares, contributions };
+}
+
+/** Rows come back from the signed receipt as JSON: timestamps are strings again. */
+const TIMESTAMPS = ["createdAt", "updatedAt", "expiresAt", "revokedAt"] as const;
+
+export function revive<T extends object>(row: T): T {
+  const out = { ...row } as Record<string, unknown>;
+  for (const key of TIMESTAMPS) {
+    if (typeof out[key] === "string") out[key] = new Date(out[key] as string);
+  }
+  return out as T;
+}
+
+async function insertAll(
+  tx: Tx,
+  table:
+    | typeof tripMembers
+    | typeof tripItems
+    | typeof tripItemStops
+    | typeof tripItemAttendees
+    | typeof tripItemPayers
+    | typeof tripPhotos
+    | typeof tripShares
+    | typeof tripContributions,
+  rows: object[]
+): Promise<void> {
+  if (rows.length === 0) return;
+  // The union of tables makes `values` uninferrable; every row came out of
+  // the same table it goes back into.
+  await tx.insert(table).values(rows.map(revive) as never);
+}
+
+function tripInput(t: TripRow): Record<string, unknown> {
+  return {
+    title: t.title,
+    destination: t.destination,
+    description: t.description,
+    startDate: t.startDate,
+    endDate: t.endDate,
+    coverPhotoUrl: t.coverPhotoUrl,
+    currency: t.currency,
+    color: t.color,
+  };
+}
+
+function itemInput(i: ItemRow): Record<string, unknown> {
+  return {
+    title: i.title,
+    category: i.category,
+    link: i.link,
+    videoUrl: i.videoUrl,
+    fromCode: i.fromCode,
+    toCode: i.toCode,
+    roundTrip: i.roundTrip,
+    price: i.price,
+    priceMax: i.priceMax,
+    priceUnit: i.priceUnit,
+    scheduledOn: i.scheduledOn,
+    endsOn: i.endsOn,
+    notes: i.notes,
+  };
+}
+
+function count(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
+function tripDetail(t: Pick<TripRow, "startDate" | "endDate" | "destination">): string {
+  const dates = formatDayRange(t.startDate, t.endDate);
+  return t.destination ? `${dates} · ${t.destination}` : dates;
+}
+
+function itemPrice(i: Pick<ItemRow, "price" | "priceMax" | "priceUnit">, currency: string): string | null {
+  if (i.price === null) return null;
+  const low = Number(i.price);
+  const high = i.priceMax === null ? low : Number(i.priceMax);
+  return `${moneyRange(low, high, currency)}${UNIT_SUFFIX[i.priceUnit]}`;
+}
+
+function itemDates(i: Pick<ItemRow, "scheduledOn" | "endsOn">): string {
+  return i.scheduledOn ? formatDayRange(i.scheduledOn, i.endsOn) : "No date";
+}
+
+function itemDetail(i: ItemRow, currency: string): string {
+  return [itemDates(i), itemPrice(i, currency)].filter(Boolean).join(" · ");
+}
+
+function tripDiff(before: TripRow, after: TripRow): string {
+  const parts: string[] = [];
+  if (before.title !== after.title) parts.push(`Renamed from "${before.title}"`);
+  if (before.startDate !== after.startDate || before.endDate !== after.endDate) {
+    parts.push(`${formatDayRange(before.startDate, before.endDate)} → ${formatDayRange(after.startDate, after.endDate)}`);
+  }
+  if (before.destination !== after.destination) parts.push(`Destination ${after.destination ?? "cleared"}`);
+  if (before.currency !== after.currency) parts.push(`Currency ${before.currency} → ${after.currency}`);
+  if (before.description !== after.description) parts.push("Description");
+  return parts.join(" · ") || "No visible change";
+}
+
+function itemDiff(before: ItemRow, after: ItemRow, currency: string): string {
+  const parts: string[] = [];
+  if (before.title !== after.title) parts.push(`Was "${before.title}"`);
+  if (before.category !== after.category) parts.push(`${CATEGORY_LABEL[before.category]} → ${CATEGORY_LABEL[after.category]}`);
+  if (before.scheduledOn !== after.scheduledOn || before.endsOn !== after.endsOn) {
+    parts.push(`${itemDates(before)} → ${itemDates(after)}`);
+  }
+  const was = itemPrice(before, currency);
+  const now = itemPrice(after, currency);
+  if (was !== now) parts.push(`${was ?? "No price"} → ${now ?? "no price"}`);
+  if (before.fromCode !== after.fromCode || before.toCode !== after.toCode || before.roundTrip !== after.roundTrip) {
+    parts.push("Route");
+  }
+  if (before.notes !== after.notes) parts.push("Notes");
+  if (before.link !== after.link) parts.push("Link");
+  return parts.join(" · ") || "Travellers";
+}

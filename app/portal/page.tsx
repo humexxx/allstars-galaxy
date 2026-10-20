@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { PortalPageContainer } from "@/components/portal/page-container";
-import { DashboardCardSkeleton } from "@/components/portal/dashboard-card-skeleton";
+import {
+  DashboardFinanceSkeleton,
+  DashboardSportsSkeleton,
+  DashboardTravelSkeleton,
+} from "@/components/portal/dashboard-card-skeleton";
 import { DashboardFinanceCard } from "@/components/finance/dashboard-finance-card";
 import { DashboardConfirmationHost } from "@/components/finance/dashboard-confirmation-host";
 import { DashboardSportCards } from "@/components/entertainment/sports/dashboard-sport-cards";
@@ -38,13 +42,13 @@ export default async function PortalPage() {
             sport cards side by side. At 1024px it leaves ~736px, less a
             Windows scrollbar, so the step sits between (`@xl`, 576px). */}
         <div className="grid auto-rows-min gap-4 @xl:grid-cols-2">
-          <Suspense fallback={<DashboardCardSkeleton rail={5} />}>
+          <Suspense fallback={<DashboardFinanceSkeleton />}>
             <DashboardFinanceCard userId={userId} />
           </Suspense>
-          <Suspense fallback={<DashboardCardSkeleton tiles={3} />}>
+          <Suspense fallback={<DashboardTravelSkeleton />}>
             <DashboardTravelCard userId={userId} />
           </Suspense>
-          <Suspense fallback={<DashboardCardSkeleton tiles={2} className="col-span-1" />}>
+          <Suspense fallback={<DashboardSportsSkeleton />}>
             <DashboardSportCards userId={userId} />
           </Suspense>
         </div>

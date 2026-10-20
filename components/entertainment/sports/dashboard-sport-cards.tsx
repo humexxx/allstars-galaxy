@@ -5,7 +5,7 @@ import { Star, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Text } from "@/components/ui/typography";
-import { DashboardCardSkeleton } from "@/components/portal/dashboard-card-skeleton";
+import { DashboardSportSkeleton } from "@/components/portal/dashboard-card-skeleton";
 import { listUserFavoriteSports } from "@/lib/services/sports-service";
 import type { SportId } from "@/types/sports";
 
@@ -59,7 +59,7 @@ export async function DashboardSportCards({ userId }: { userId: string }) {
           key={sportId}
           // Four rows tall like the card it stands in for, or the cards
           // after it would take its rows (`dashboard-card-rows.ts`).
-          fallback={<DashboardCardSkeleton tiles={2} className="col-span-1 @xl:row-span-4" />}
+          fallback={<DashboardSportSkeleton />}
         >
           {sportId === "f1" ? (
             <DashboardF1Card userId={userId} />

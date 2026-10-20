@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/tabs";
 import { runAction } from "@/lib/actions/run";
 import { cn } from "@/lib/utils";
+import { foldForSearch } from "@/lib/utils/text";
 import {
   formatCurrency,
   formatPercent,
@@ -139,9 +140,9 @@ type PortfolioData = {
   currentUserId: string;
 };
 
-// The owner-only panels pull recharts and a long table into the portfolio
-// chunk for every visitor, though only method owners ever see them. Split them
-// so an investor's bundle stops paying for the owner's dashboard.
+// The owner-only chart pulls recharts into the portfolio chunk for every
+// visitor, though only method owners ever see it. Split it so an investor's
+// bundle stops paying for the owner's dashboard.
 const MarginChart = dynamic(
   () =>
     import("@/components/portal/margin-chart").then((mod) => mod.MarginChart),
@@ -149,14 +150,6 @@ const MarginChart = dynamic(
     ssr: false,
     loading: () => <Skeleton className="h-80 w-full rounded-xl" />,
   }
-);
-
-const InvestorBreakdown = dynamic(
-  () =>
-    import("@/components/portal/investor-breakdown").then(
-      (mod) => mod.InvestorBreakdown
-    ),
-  { loading: () => <Skeleton className="h-64 w-full rounded-xl" /> }
 );
 
 const PerformanceChart = dynamic(
@@ -229,8 +222,10 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   );
 
   const visibleInvestors = useMemo(() => {
-    const q = foldName(investorQuery.trim());
-    return q ? investorSummary.filter((r) => foldName(r.name).includes(q)) : investorSummary;
+    const q = foldForSearch(investorQuery.trim());
+    return q
+      ? investorSummary.filter((r) => foldForSearch(r.name).includes(q))
+      : investorSummary;
   }, [investorSummary, investorQuery]);
 
   const ownerKpis = useMemo(() => {
@@ -594,49 +589,30 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             {/* Exactly one chart. Owners get allocations against what is owed —
                 the gap between the two lines is the margin. Everyone else gets
                 the ordinary performance chart. */}
+            {/* The per-person view is the chart's investor filter, and each
+                person's movements open from the Transactions tab. */}
             {ownsMethods ? (
-              ownerKpis !== null && (
-                <>
-                  {showCharts && (
-                    <Card>
-                      <CardContent>
-                        {data.marginStatus.unconfigured ? (
-                          // With nothing priced, Allocations is a flat zero
-                          // under the owed line — which reads as a total loss.
-                          <EmptyState
-                            icon={ChartLine}
-                            title="Nothing is priced yet"
-                            description="Set where each method's money goes (Methods tab, edit a method). The daily price run then values every contribution at its day's price."
-                          />
-                        ) : (
-                          <MarginChart
-                            input={data.marginHistoryInput}
-                            hideValues={hideValues}
-                            status={<PriceFreshness {...data.priceFreshness} />}
-                          />
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {data.investorBreakdown.length > 0 && (
-                    <div className="flex flex-col gap-3">
-                      <div className="flex flex-col gap-1">
-                        <Heading level="h5" as="h2" className="text-muted-foreground">
-                          By person
-                        </Heading>
-                        <Text variant="small">
-                          What each investor put in, what it bought, and what the
-                          promise costs you.
-                        </Text>
-                      </div>
-                      <InvestorBreakdown
-                        rows={data.investorBreakdown}
-                        hideValues={hideValues}
+              ownerKpis !== null &&
+              showCharts && (
+                <Card>
+                  <CardContent>
+                    {data.marginStatus.unconfigured ? (
+                      // With nothing priced, Allocations is a flat zero
+                      // under the owed line — which reads as a total loss.
+                      <EmptyState
+                        icon={ChartLine}
+                        title="Nothing is priced yet"
+                        description="Set where each method's money goes (Methods tab, edit a method). The daily price run then values every contribution at its day's price."
                       />
-                    </div>
-                  )}
-                </>
+                    ) : (
+                      <MarginChart
+                        input={data.marginHistoryInput}
+                        hideValues={hideValues}
+                        status={<PriceFreshness {...data.priceFreshness} />}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
               )
             ) : (
               stats && hasSettledMoney(stats) && showCharts && performanceChart
@@ -826,11 +802,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
       )}
     </>
   );
-}
-
-/** Lower-cased and without accents, so "maria" finds "María". */
-function foldName(value: string): string {
-  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 }
 
 /** Any approved money at all — otherwise the KPI grid is four zeros. */

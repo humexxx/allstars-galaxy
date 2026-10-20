@@ -365,7 +365,12 @@ need `BALLDONTLIE_API_KEY`; its table comes from ESPN, also key-less.
 4. Service in `/lib/services/[feature]-service.ts`
 5. Actions in `/app/actions/[feature].ts`
 6. UI in `/components/[feature]/`
-7. Page in `/app/portal/[feature]/page.tsx`
+7. Page in `/app/portal/[feature]/page.tsx`, with a `loading.tsx` beside it
+   shaped like the page. A `loading.tsx` also wraps every route below it, and a
+   reload paints it before theirs: a skeleton for one page shares a route group
+   with it (`app/portal/(dashboard)/`, `plans/(list)/`,
+   `travel-planner/(list)/`). There is no portal-wide fallback, so a route
+   without its own shows no skeleton at all.
 8. **Update the module doc** — bump *Last reviewed*, add a bullet for the new
    route / action / service / schema / type / table in
    [`docs/modules/<module>.md`](docs/modules/).

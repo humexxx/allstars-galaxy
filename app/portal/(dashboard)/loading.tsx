@@ -2,11 +2,16 @@ import { DashboardCardSkeleton } from "@/components/portal/dashboard-card-skelet
 import { PortalPageContainer } from "@/components/portal/page-container"
 
 /**
- * The portal root's fallback is the dashboard's: the same two-column grid of
- * cards, so the streamed cards land in the boxes the skeleton drew.
- * Sections with a different shape ship their own loading.tsx.
+ * The dashboard's fallback: the same two-column grid of cards, so the streamed
+ * cards land in the boxes the skeleton drew.
+ *
+ * It lives in the `(dashboard)` group, not at `app/portal/loading.tsx`. There
+ * it wrapped every section too, and a section's own skeleton arrives a beat
+ * after the first HTML chunk, so a reload of Plans or the Board flashed this
+ * dashboard grid first. With no portal-wide fallback, the first paint is the
+ * section's own `loading.tsx` — every section must ship one.
  */
-export default function PortalLoading() {
+export default function DashboardLoading() {
   return (
     <PortalPageContainer>
       <section className="flex flex-col gap-6" aria-busy="true">

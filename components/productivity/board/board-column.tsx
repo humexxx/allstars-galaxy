@@ -40,7 +40,7 @@ type BoardColumnProps = {
   onRenameColumn: (columnId: string, name: string) => Promise<void>;
   onDeleteColumn: (columnId: string) => Promise<void>;
   onDeleteTask: (taskId: string) => Promise<void>;
-  onUpdateTask: (taskId: string, data: CreateBoardTaskData) => Promise<void>;
+  onUpdateTask: (taskId: string, data: CreateBoardTaskData) => Promise<string | undefined>;
   onSetDoneColumn: (columnId: string) => Promise<void>;
   /** Present on an earlier day's board: puts an open task on today's. */
   onMoveToToday?: (taskId: string) => Promise<void>;

@@ -14,7 +14,7 @@ calendar, plus optional targets, milestones and a progress log.
 - `/portal/productivity/road-paths` — long-term goals + milestones (`road-paths/layout.tsx`, default container)
 
 ## Server actions — `/app/actions/`
-- `board.ts` — column/task CRUD, reordering; `setDoneColumnAction`, `carryOverTasksAction` (moves or leaves each offered task; today from the `tz` cookie), `moveTaskToTodayAction` (refuses a habit's task)
+- `board.ts` — column/task CRUD, reordering (a move or edit that takes a habit's task into Done returns its streak line as `message`); `setDoneColumnAction`, `carryOverTasksAction` (moves or leaves each offered task; today from the `tz` cookie), `moveTaskToTodayAction` (refuses a habit's task)
 - `road-path.ts` — road path (incl. `updateRoadPathAction`, every field) / milestone / progress CRUD; create and update take the reader's today for `scheduleSince`
 
 All return `ActionResult<X>` through `safe()`; raw ids are checked with
@@ -24,11 +24,11 @@ getter actions were deleted — pages read through the services.
 ## Services — `/lib/services/`
 - `board-service.ts` — every positional write is scoped to (column, day); `getBoardTasksForDay`, `setDoneColumn`, `getCarryOverCandidates`, `carryOverTasks`, `moveTaskToDay`; a move into / out of the Done column sets `completedAt` and writes / removes the habit's check-in. `updateBoardColumn` / `updateBoardTask` return `null` when nothing matched
 - `road-path-service.ts` — every write is scoped by owner or parent row;
-  `getRoadPathDetail(id, userId, today, timeZone)` feeds the server-rendered detail view, `computeRoadPathStats` adds the habit figures
+  `getRoadPathDetail(id, userId, today, timeZone)` feeds the server-rendered detail view, `computeRoadPathStats` adds the habit figures, `getCheckInMessage` builds the check-in line
 - `task-automation-service.ts` — `ensureHabitTasksForDay(userId, day, timeZone)`: today's habit tasks, called by the board page and the dashboard card
 - `productivity-dashboard-service.ts` — `getDashboardProductivity(userId, today, timeZone | null)`: generates today's habit tasks (zone known only), then reads the board, carry-over count and road paths
 - `lib/productivity/dashboard.ts` — `buildDashboardProductivity`: today's done / total, open tasks in board order, habits sorted due → done → next
-- `lib/productivity/habit.ts` — pure habit maths on `YYYY-MM-DD` days: `isDueOn`, `dayStatus`, `habitStats` (streaks, completion), `habitOf`, `scheduleLabel`, `isCalendarDay`
+- `lib/productivity/habit.ts` — pure habit maths on `YYYY-MM-DD` days: `isDueOn`, `dayStatus`, `habitStats` (streaks, completion), `habitOf`, `scheduleLabel`, `isCalendarDay`, `checkInMessage` ("Gym done — 4 in a row, your best yet.": the record is against the best run before this check-in, so a tie says so)
 
 ## Schemas — `/schemas/`
 - `board.ts` — incl. `carryOverSchema`; a task takes a `boardDate`, never a `roadPathId`

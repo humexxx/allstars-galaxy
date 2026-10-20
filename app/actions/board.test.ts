@@ -11,6 +11,11 @@ vi.mock("@/lib/services/impersonation", () => ({
 
 vi.mock("@/lib/utils/request-today", () => ({
   getRequestTodayIso: vi.fn().mockResolvedValue("2026-10-19"),
+  getRequestTimeZone: vi.fn().mockResolvedValue("America/Costa_Rica"),
+}));
+
+vi.mock("@/lib/services/road-path-service", () => ({
+  getCheckInMessage: vi.fn(),
 }));
 
 vi.mock("@/lib/services/board-service", () => ({
@@ -57,6 +62,7 @@ import {
   updateBoardTask,
 } from "@/lib/services/board-service";
 
+import { getCheckInMessage } from "@/lib/services/road-path-service";
 import {
   carryOverTasksAction,
   createBoardColumnAction,
@@ -531,5 +537,74 @@ describe("moveTaskToTodayAction", () => {
     const result = await moveTaskToTodayAction(TASK_ID);
 
     expect(result).toEqual({ success: false, error: "Task not found" });
+  });
+});
+
+describe("check-in line", () => {
+  const PATH_ID = "55555555-5555-4555-8555-555555555555";
+  const open = { id: TASK_ID, completedAt: null, column: { isDone: false } };
+  const checkedIn = {
+    id: TASK_ID,
+    roadPathId: PATH_ID,
+    boardDate: "2026-10-16",
+    completedAt: new Date(),
+  };
+
+  it("comes back when a habit's task is dragged into Done", async () => {
+    vi.mocked(getBoardTask).mockResolvedValueOnce(open as never);
+    vi.mocked(reorderTask).mockResolvedValueOnce(checkedIn as never);
+    vi.mocked(getCheckInMessage).mockResolvedValueOnce("Gym done — 3 in a row (best: 4).");
+
+    const result = await reorderBoardTaskAction({
+      taskId: TASK_ID,
+      destinationColumnId: COLUMN_ID_2,
+      order: 0,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({ success: true, message: "Gym done — 3 in a row (best: 4)." })
+    );
+    // The day it was on, judged against the reader's today.
+    expect(getCheckInMessage).toHaveBeenCalledWith(
+      PATH_ID,
+      USER_ID,
+      "2026-10-16",
+      TODAY,
+      "America/Costa_Rica"
+    );
+  });
+
+  it("comes back when the edit form moves it into Done", async () => {
+    vi.mocked(getBoardTask).mockResolvedValueOnce(open as never);
+    vi.mocked(updateBoardTask).mockResolvedValueOnce(checkedIn as never);
+    vi.mocked(getCheckInMessage).mockResolvedValueOnce("Gym done — a new streak starts today");
+
+    const result = await updateBoardTaskAction({ id: TASK_ID, columnId: COLUMN_ID_2 });
+
+    expect(result).toEqual(
+      expect.objectContaining({ message: "Gym done — a new streak starts today" })
+    );
+  });
+
+  it("stays quiet for a task that was already done, or is not a habit's", async () => {
+    vi.mocked(getBoardTask).mockResolvedValueOnce({ ...open, column: { isDone: true } } as never);
+    vi.mocked(reorderTask).mockResolvedValueOnce(checkedIn as never);
+    const reordered = await reorderBoardTaskAction({
+      taskId: TASK_ID,
+      destinationColumnId: COLUMN_ID_2,
+      order: 0,
+    });
+
+    vi.mocked(getBoardTask).mockResolvedValueOnce(open as never);
+    vi.mocked(reorderTask).mockResolvedValueOnce({ ...checkedIn, roadPathId: null } as never);
+    const plain = await reorderBoardTaskAction({
+      taskId: TASK_ID,
+      destinationColumnId: COLUMN_ID_2,
+      order: 0,
+    });
+
+    expect(reordered).not.toHaveProperty("message", expect.any(String));
+    expect(plain).not.toHaveProperty("message", expect.any(String));
+    expect(getCheckInMessage).not.toHaveBeenCalled();
   });
 });

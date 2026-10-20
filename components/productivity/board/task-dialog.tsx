@@ -51,7 +51,8 @@ type TaskDialogProps = {
   columns: BoardColumn[];
   /** The day's board a new task goes on. */
   day: string;
-  onSubmit: (data: CreateBoardTaskData) => Promise<void>;
+  /** May resolve to a line to show instead of the plain "Task updated". */
+  onSubmit: (data: CreateBoardTaskData) => Promise<string | void | undefined>;
   /** Present = editing that task; absent = creating a new one. */
   task?: BoardTask;
   defaultColumnId?: string;
@@ -112,8 +113,8 @@ export function TaskDialog({
 
   const submit = async (data: CreateBoardTaskData): Promise<void> => {
     try {
-      await onSubmit(data);
-      toast.success(isEdit ? "Task updated" : "Task created");
+      const message = await onSubmit(data);
+      toast.success(message || (isEdit ? "Task updated" : "Task created"));
       setOpen(false);
       if (!isEdit) reset(initial());
     } catch {

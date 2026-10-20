@@ -230,3 +230,23 @@ export function habitOf(path: HabitSource, timeZone?: string | null): Habit {
       : null,
   };
 }
+
+/** Streak lengths worth a word of their own. */
+const STREAK_MILESTONES = [5, 10, 25, 50, 100, 200, 365];
+
+/**
+ * What the board says the moment a habit's task reaches Done: the streak it
+ * makes, and whether that beats every run before this check-in — the thing
+ * worth coming back for on the next due day.
+ */
+export function checkInMessage(title: string, streak: number, previousBest: number): string {
+  if (streak <= 1) return `${title} done — a new streak starts today`;
+  const milestone = STREAK_MILESTONES.includes(streak) ? ` That’s ${streak}!` : "";
+  const record =
+    streak > previousBest
+      ? ", your best yet"
+      : streak === previousBest
+        ? ", matching your best"
+        : ` (best: ${previousBest})`;
+  return `${title} done — ${streak} in a row${record}.${milestone}`;
+}

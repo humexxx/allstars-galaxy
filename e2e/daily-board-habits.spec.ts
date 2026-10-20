@@ -55,6 +55,8 @@ test.describe("Daily board and habits", () => {
     await page.getByRole("option", { name: "Done" }).click();
     await edit.getByRole("button", { name: "Save changes" }).click();
     await expect(edit).not.toBeVisible();
+    // The check-in is cheered, not just saved.
+    await expect(page.getByText(`${title} done — a new streak starts today`)).toBeVisible();
 
     await page.getByRole("link", { name: "Habit" }).click();
     await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();

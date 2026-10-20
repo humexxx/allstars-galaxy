@@ -24,7 +24,8 @@ import {
   moveTaskToDay,
   type CarryOverResult,
 } from "@/lib/services/board-service";
-import { getRequestTodayIso } from "@/lib/utils/request-today";
+import { getCheckInMessage } from "@/lib/services/road-path-service";
+import { getRequestTimeZone, getRequestTodayIso } from "@/lib/utils/request-today";
 import { idSchema } from "@/schemas/common";
 import {
   createBoardColumnSchema,
@@ -49,6 +50,22 @@ const PRODUCTIVITY_PATH = "/portal/productivity";
 
 function revalidateProductivity(): void {
   revalidatePath(PRODUCTIVITY_PATH, "layout");
+}
+
+/**
+ * A habit's task that has just reached Done gets a line about its streak —
+ * the reason to come back on the next due day. Nothing for any other move.
+ */
+async function checkInLine(
+  before: BoardTaskWithColumn | null,
+  after: BoardTask | null,
+  userId: string
+): Promise<string | undefined> {
+  if (!before || !after?.roadPathId || after.completedAt === null) return undefined;
+  if (before.completedAt !== null || before.column.isDone) return undefined;
+  const [today, timeZone] = await Promise.all([getRequestTodayIso(), getRequestTimeZone()]);
+  const line = await getCheckInMessage(after.roadPathId, userId, after.boardDate, today, timeZone);
+  return line ?? undefined;
 }
 
 export async function createBoardColumnAction(
@@ -175,9 +192,8 @@ export async function updateBoardTaskAction(
     }
     const { id, ...updateData } = parsed.data;
 
-    const before = ctx.isImpersonating
-      ? await getBoardTask(id, ctx.effectiveUserId)
-      : undefined;
+    // Read either way: a move into Done is told apart from any other edit.
+    const before = await getBoardTask(id, ctx.effectiveUserId);
 
     const task = await updateBoardTask(id, ctx.effectiveUserId, updateData);
     if (!task) return { success: false, error: "Task not found" };
@@ -186,11 +202,12 @@ export async function updateBoardTaskAction(
       action: "boardTask.update",
       entityTable: "board_tasks",
       entityId: task.id,
-      before,
+      before: ctx.isImpersonating ? before : undefined,
       after: task,
     });
     revalidateProductivity();
-    return { success: true, data: task };
+    const message = await checkInLine(before, task, ctx.effectiveUserId);
+    return { success: true, data: task, message };
   });
 }
 
@@ -227,6 +244,7 @@ export async function reorderBoardTaskAction(
       return { success: false, error: "Invalid input" };
     }
     const validated = parsed.data;
+    const before = await getBoardTask(validated.taskId, ctx.effectiveUserId);
     const task = await reorderTask(
       validated.taskId,
       ctx.effectiveUserId,
@@ -240,7 +258,8 @@ export async function reorderBoardTaskAction(
       entityId: validated.taskId,
     });
     revalidateProductivity();
-    return { success: true, data: task };
+    const message = await checkInLine(before, task, ctx.effectiveUserId);
+    return { success: true, data: task, message };
   });
 }
 

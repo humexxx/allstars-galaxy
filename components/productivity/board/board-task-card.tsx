@@ -43,7 +43,7 @@ type BoardTaskCardProps = {
   /** The day's board the card is on. */
   day?: string;
   onDelete?: (taskId: string) => Promise<void>;
-  onUpdate?: (taskId: string, data: CreateBoardTaskData) => Promise<void>;
+  onUpdate?: (taskId: string, data: CreateBoardTaskData) => Promise<string | undefined>;
   /** On an earlier day's board: put this open task on today's. */
   onMoveToToday?: (taskId: string) => Promise<void>;
 };

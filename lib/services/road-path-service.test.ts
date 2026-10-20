@@ -64,6 +64,7 @@ import {
   deleteRoadPathProgress,
   getNextMilestoneOrder,
   getRoadPath,
+  getCheckInMessage,
   getRoadPathDetail,
   getUserRoadPaths,
   updateRoadPath,
@@ -746,6 +747,35 @@ describe("getRoadPathDetail", () => {
 
     await expect(
       getRoadPathDetail(ROAD_PATH_ID, USER_ID, "2026-10-19", "UTC")
+    ).resolves.toBeNull();
+  });
+});
+
+describe("getCheckInMessage", () => {
+  it("names the streak the check-in makes, against the best run before it", async () => {
+    // Mon/Wed/Fri from Oct 5. Oct 5, 7 done, Oct 9 missed; Oct 12, 14 done and now Oct 16.
+    roadPathsFindFirst.mockResolvedValueOnce(
+      buildPathWithDetails({
+        title: "Gym",
+        startDate: new Date("2026-10-05T00:00:00Z"),
+        scheduleDays: [1, 3, 5],
+        scheduleSince: "2026-10-05",
+        checkIns: ["2026-10-05", "2026-10-07", "2026-10-12", "2026-10-14", "2026-10-16"].map(
+          (day) => ({ day })
+        ) as RoadPathWithDetails["checkIns"],
+      })
+    );
+
+    await expect(
+      getCheckInMessage(ROAD_PATH_ID, USER_ID, "2026-10-16", "2026-10-16", "America/Costa_Rica")
+    ).resolves.toBe("Gym done — 3 in a row, your best yet.");
+  });
+
+  it("is null for a path that is not the user's", async () => {
+    roadPathsFindFirst.mockResolvedValueOnce(undefined);
+
+    await expect(
+      getCheckInMessage(ROAD_PATH_ID, USER_ID, "2026-10-16", "2026-10-16", "UTC")
     ).resolves.toBeNull();
   });
 });

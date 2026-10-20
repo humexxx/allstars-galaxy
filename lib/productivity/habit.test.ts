@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   addDays,
+  checkInMessage,
   dayStatus,
   frequencyLabel,
   habitStats,
@@ -204,5 +205,15 @@ describe("labels", () => {
     expect(frequencyLabel(MWF)).toBe("3× a week");
     expect(frequencyLabel([2])).toBe("Once a week");
     expect(frequencyLabel([0, 1, 2, 3, 4, 5, 6])).toBeNull();
+  });
+});
+
+describe("checkInMessage", () => {
+  it("cheers a first day, a run, a tie, a record and a milestone", () => {
+    expect(checkInMessage("Gym", 1, 4)).toBe("Gym done — a new streak starts today");
+    expect(checkInMessage("Gym", 3, 4)).toBe("Gym done — 3 in a row (best: 4).");
+    expect(checkInMessage("Gym", 4, 4)).toBe("Gym done — 4 in a row, matching your best.");
+    expect(checkInMessage("Gym", 5, 4)).toBe("Gym done — 5 in a row, your best yet. That’s 5!");
+    expect(checkInMessage("Gym", 10, 12)).toBe("Gym done — 10 in a row (best: 12). That’s 10!");
   });
 });

@@ -18,7 +18,13 @@ import type {
   RoadPathProgress,
   RoadPathStats,
 } from "@/types";
-import { habitOf, habitStats, hasSchedule, normalizeSchedule } from "@/lib/productivity/habit";
+import {
+  checkInMessage,
+  habitOf,
+  habitStats,
+  hasSchedule,
+  normalizeSchedule,
+} from "@/lib/productivity/habit";
 import type {
   CreateRoadPathData,
   UpdateRoadPathData,
@@ -348,6 +354,30 @@ export async function getRoadPathDetail(
   const roadPath = await getRoadPath(roadPathId, userId);
   if (!roadPath) return null;
   return { roadPath, stats: computeRoadPathStats(roadPath, today, timeZone) };
+}
+
+/**
+ * The line the board shows when a habit's task has just been checked in for
+ * `day`: the streak that makes, against the best run before it.
+ */
+export async function getCheckInMessage(
+  roadPathId: string,
+  userId: string,
+  day: string,
+  today: string,
+  timeZone: string
+): Promise<string | null> {
+  const path = await getRoadPath(roadPathId, userId);
+  if (!path) return null;
+  const habit = habitOf(path, timeZone);
+  const days = path.checkIns.map((c) => c.day);
+  const now = habitStats(habit, days, today);
+  const before = habitStats(
+    habit,
+    days.filter((d) => d !== day),
+    today
+  );
+  return checkInMessage(path.title, now.currentStreak, before.bestStreak);
 }
 
 export function computeRoadPathStats(

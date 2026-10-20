@@ -261,6 +261,9 @@ export function BoardView({
           if (!result.success) {
             rollback();
             toast.error(result.error || "Failed to move task");
+          } else if (result.message) {
+            // A habit just checked in: its streak.
+            toast.success(result.message);
           }
         } catch {
           rollback();
@@ -322,12 +325,13 @@ export function BoardView({
     }
   };
 
+  /** Resolves to the habit's check-in line when the edit finished one. */
   const handleUpdateTask = async (
     taskId: string,
     data: CreateBoardTaskData
-  ): Promise<void> => {
+  ): Promise<string | undefined> => {
     const current = taskIndex.byId.get(taskId);
-    if (!current) return;
+    if (!current) return undefined;
     const moving = current.columnId !== data.columnId;
     const restore = (): void =>
       setTasks((prev) => prev.map((t) => (t.id === taskId ? current : t)));
@@ -363,6 +367,7 @@ export function BoardView({
         toast.error(result.error || "Failed to update task");
         throw new Error(result.error || "Failed to update task");
       }
+      return result.message;
     } catch (error) {
       restore();
       throw error;

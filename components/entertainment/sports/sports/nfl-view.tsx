@@ -60,7 +60,6 @@ export function NflView({ data }: NflViewProps): React.ReactElement {
               <MatchesByDate
                 matches={data.games}
                 teams={teamsMap}
-                label="Games"
                 emptyTitle="No games this week."
               />
             }

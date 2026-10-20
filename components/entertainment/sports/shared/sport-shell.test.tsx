@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
+import type { ReactNode } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { SportShell } from "./sport-shell";
+import { SportBarEnd, SportShell } from "./sport-shell";
 
-function renderShell(defaultValue = "overview"): ReturnType<typeof render> {
+function renderShell(
+  defaultValue = "overview",
+  overview: ReactNode = "Matches"
+): ReturnType<typeof render> {
   return render(
     <Tabs defaultValue={defaultValue}>
       <SportShell
@@ -21,7 +25,7 @@ function renderShell(defaultValue = "overview"): ReturnType<typeof render> {
           </TabsList>
         }
       >
-        <TabsContent value="overview">Matches</TabsContent>
+        <TabsContent value="overview">{overview}</TabsContent>
         <TabsContent value="knockout">Bracket</TabsContent>
       </SportShell>
     </Tabs>
@@ -89,6 +93,27 @@ describe("SportShell", () => {
     expect(row).toHaveClass("min-w-0");
     expect(scroller.parentElement).toBe(row);
     expect(scroller).toHaveClass("min-w-0", "overflow-x-auto", "overflow-y-hidden");
+  });
+
+  it("puts a tab's own control at the end of the tabs row, and takes it away with the tab", () => {
+    renderShell(
+      "overview",
+      <>
+        <SportBarEnd>
+          <button type="button">Filter</button>
+        </SportBarEnd>
+        Matches
+      </>
+    );
+    const filter = screen.getByRole("button", { name: "Filter" });
+    expect(tabsRow()).toContainElement(filter);
+    expect(tabsRow().lastElementChild).toContainElement(filter);
+    expect(screen.getByRole("tabpanel")).not.toContainElement(filter);
+
+    pick("Knockout");
+
+    expect(screen.queryByRole("button", { name: "Filter" })).toBeNull();
+    expect(tabsRow().lastElementChild).toBeEmptyDOMElement();
   });
 
   it("reads top to bottom: the name and its controls, then the tabs", () => {

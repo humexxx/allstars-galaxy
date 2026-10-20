@@ -656,6 +656,7 @@ describe("getRecentMonthlySnapshots", () => {
     );
 
     expect(result.map((r) => r.netWorth)).toEqual([4100, 4100]);
+    expect(result.map((r) => r.receivables)).toEqual([4000, 0]);
   });
 
   it("buckets by accounting PERIOD (anchorDay) so straddling snapshots collapse per period", async () => {

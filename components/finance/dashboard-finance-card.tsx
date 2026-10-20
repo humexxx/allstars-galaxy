@@ -29,8 +29,12 @@ import {
   getPlanWithLines,
   listUserPlans,
 } from "@/lib/services/finance-plan-service";
-import { loadCalibratedView } from "@/lib/services/finance-snapshot-service";
-import { buildDashboardFigures } from "@/lib/finance/dashboard";
+import {
+  getRecentMonthlySnapshots,
+  loadCalibratedView,
+} from "@/lib/services/finance-snapshot-service";
+import { buildPlanTimeline } from "@/lib/finance/chart-series";
+import { buildDashboardFigures, DASHBOARD_PAST_MONTHS } from "@/lib/finance/dashboard";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { todayInTimeZone } from "@/lib/utils/date";
 
@@ -77,8 +81,32 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   // included), with "now" as the day-aware position in the reader's zone.
   const timeZone = await getRequestTimeZone();
   const now = todayInTimeZone(timeZone);
-  const view = await loadCalibratedView(full, userId, now, { timeZone });
-  const fig = buildDashboardFigures(view.projection, view.today);
+  const [view, history] = await Promise.all([
+    loadCalibratedView(full, userId, now, { timeZone }),
+    // One month more than the chart shows: a period's close is recorded by the
+    // snapshots taken in the period after it.
+    getRecentMonthlySnapshots(
+      full.id,
+      userId,
+      DASHBOARD_PAST_MONTHS + 1,
+      now,
+      full.confirmationDayOfMonth
+    ),
+  ]);
+  // The months before today come off the plan page's own timeline: recorded
+  // snapshots, or the plan's forecast while it has none.
+  const timeline = buildPlanTimeline(
+    history,
+    view.projection,
+    now,
+    full.confirmationDayOfMonth,
+    view.baseline.baselineSource === "plan" ? view.projection : null
+  );
+  const fig = buildDashboardFigures(
+    view.projection,
+    view.today,
+    timeline.points.slice(0, timeline.todayIndex)
+  );
   const points = fig.points;
   const delta = fig.delta;
   // The reader's calendar day, not the server's: this renders on the server
@@ -170,6 +198,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
           </dl>
           <DashboardFinanceMiniChart
             data={points}
+            pastCount={fig.pastCount}
             className="h-48 sm:h-56 @xl:col-start-1 @xl:row-span-2 @xl:row-start-1 @xl:h-auto @xl:min-h-72"
           />
           <dl

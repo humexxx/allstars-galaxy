@@ -1,7 +1,7 @@
 # Entertainment
 
 > **Status:** In progress (travel shipped + dashboard card; sports UI shipped, favourites end-to-end on DB; LoL, F1, football, World Cup, padel, tennis, NBA and NFL wired to free live providers)
-> **Last reviewed:** 2026-10-18
+> **Last reviewed:** 2026-10-19
 
 ## Overview
 Two sub-modules: Travel Planner (trips, items, photos, public sharing) and
@@ -16,6 +16,7 @@ back to its fixture only when its feed has never answered.
 - `/portal/entertainment/travel-planner` — list of trips (authenticated)
 - `/portal/entertainment/travel-planner/new` — create trip
 - `/portal/entertainment/travel-planner/[id]` — trip detail + editor
+- `/api/travel/assistant` — the travel assistant's chat, `POST`, streamed as NDJSON (`TravelAssistantEvent` per line); admins only, 120s max
 - `/trips/[token]` — **public** shared trip view (top-level, no auth); `loading.tsx` paints the shell before the trip resolves
 - `/portal/entertainment/sports` — sports hub with tabs per sport + manage-favourites sheet; `?sport=` picks the sport, `?league=` the football league, `?tab=news` opens F1 on its news (the article page's "All news")
 
@@ -30,6 +31,8 @@ back to its fixture only when its feed has never answered.
 - `airports.ts` — `searchAirportsAction` → `ActionResult<Airport[]>`; the query
   is checked with `airportQuerySchema` and a bad one returns no results
 - `sports.ts` — `setSportFavoriteAction` toggles a sport favourite for the current user (`ActionResult`)
+
+- `travel-assistant.ts` — `applyTravelChangesAction` (re-validates a proposal the user approved and applies it in one transaction → lines + signed undo receipt) and `undoTravelChangesAction`; admins only, both revalidate every Travel page and `/portal`
 
 ## Services — `/lib/services/`
 - `travel-service.ts` — trip / item / photo / member / share CRUD,
@@ -54,6 +57,8 @@ back to its fixture only when its feed has never answered.
 - `balldontlie-nba-service.ts` — `getNbaData()` reads one page of balldontlie games (`BALLDONTLIE_API_KEY`): today ±4 days in season, June 1 → +130 days out of season (`gameWindow`), trimmed to the last six finals and next six fixtures, plus ESPN's regular-season table for the season those results belong to (`standingsFrom`; teams keyed by abbreviation so the two join). Cached 5 min via `cachedFeed`, `NBA_DATA` only when cold. Every team's logo, games and table alike, comes off ESPN's CDN by ESPN's abbreviation (`logoFor`: `gs`, `no`, `ny`, `sa`, `utah`, `wsh` for the six balldontlie spells differently)
 - `espn-nfl-service.ts` — `getNflData()` reads ESPN's public NFL API (no key): this week's scoreboard, `standings?level=3` (conference seed + division), and in the postseason one scoreboard per round for the bracket (`roundFrom`). Cached 5 min via `cachedFeed`, `NFL_DATA` only when cold. `team.logo` (scoreboard) / `team.logos[0]` (standings) → `Team.logoUrl`
 
+- `travel-assistant-service.ts` — the assistant's reads (`listAssistantTrips`, `getAssistantTrip`) and its one write path, `runChanges`: `previewTravelChanges` runs it in a transaction it rolls back, `applyTravelChanges` commits it, `undoTravelChanges` replays the signed inverse (see *Notes*). `travel-service.ts` exports `tripRowValues` / `itemRowValues` / `setItemMembers` so the forms and the assistant save the same way
+
 ## Schemas — `/schemas/`
 - `travel.ts` — `createTripSchema`, `updateTripSchema`, `tripItemBaseSchema` →
   `tripItemSchema` / `updateTripItemSchema` (both carry the `endsAfterStart`
@@ -66,6 +71,8 @@ back to its fixture only when its feed has never answered.
   `TripPhotoInput`, `CreateTripShareInput`), and that is what the actions take
 - `sports.ts` — `sportIdSchema` (`z.enum(SPORT_IDS)`), `setSportFavoriteSchema` / `SetSportFavoriteData`
 
+- `travel-assistant.ts` — `travelChangeSetSchema` (`summary` + 1–60 `changes`: `create_trip` with a `ref`, `update_trip`, `delete_trip`, `add_item` by `tripId` or `tripRef`, `update_item`, `delete_item`; fields are patches) and `travelUndoTokenSchema`
+
 ## Types — `/types/`
 - `travel.ts` — `Trip`, `TripItem`, `TripPhoto`, `TripShare`,
   `TripContribution`, `TripMemberView`, `TripItemStop`, `TripItemWithStops`,
@@ -75,8 +82,11 @@ back to its fixture only when its feed has never answered.
   `SharedCalendarTrip` (a share link's month: dates, names and figures only)
 - `sports.ts` — `SPORT_IDS` (the one list `SportId` derives from), `F1StandingRow` / `F1DashboardStandings`, `F1DriverPortrait` (ESPN's pictures for the F1 feed; `F1Driver.imageUrl` / `flagUrl`, `F1Constructor.logoUrl`), `F1NewsArticle`, and the full domain shapes for matches, standings, brackets, F1/NBA/NFL/LoL specifics, plus `UserSportsPreference` and `DashboardSportHighlight`. `SportId` no longer includes `worldcup` (the World Cup is a football competition; `?sport=worldcup` links land on it); `FootballLeagueId` includes `world-cup`; `DashboardSportCard` / `DashboardMatch` / `DashboardTable` shape every sport's dashboard card; `FootballLeagueData.groups?: FootballGroupStandings[]` carries per-group cup tables; `Match.penalties` holds a shoot-out outside the score; `LolRegion` includes `worlds` / `msi` / `first-stand`; `LolSplit.swiss` is a `SwissStage` (`SwissPool` / `SwissMatch` / `SwissExit`)
 
+- `travel-assistant.ts` — `TravelChangeLine`, `TravelProposal`, `AppliedTravelChanges`, `TravelAssistantMessage`, `TravelAssistantEvent`
+
 ## Components
 - `components/travel/` — trip list/detail, item editors, photo gallery, share panel.
+- `components/travel/assistant/` — `TravelAssistant` (corner button + chat sheet, mounted by `app/portal/entertainment/travel-planner/layout.tsx` when `canUseTravelAssistant`) and `ProposalCard` (Apply / Cancel, then the receipt with Undo on the newest one)
   List/Calendar switches are `ToggleGroup` (they own no tab panels); dates are
   picked with `DateField`; the airport picker is `Popover` + `Command`; the
   trip form takes `onCancel` / `onSaved` so the edit dialog closes on both
@@ -148,6 +158,7 @@ from `new Date()` and hydration-failed every evening west of UTC.
   (both versions), the payment log, the traveller bar, the marquee, the share
   bar's sign-in, the unit arithmetic, and the public page (its client
   calendar's props, its figures)
+- Travel assistant — Vitest: `schemas/travel-assistant.test.ts` (refs, money), `lib/travel/assistant/{converse,undo-token,stream}.test.ts` (the tool loop against a fake client, signed receipts, NDJSON), `lib/services/travel-assistant-service.test.ts` (apply, merge, ownership, preview, undo), `app/actions/travel-assistant.test.ts`, `app/api/travel/assistant/route.test.ts`, `components/travel/assistant/travel-assistant.test.tsx` (stream, card, Apply note, Undo)
 - `e2e/trip-lifecycle.spec.ts` — Playwright, real Supabase user
 - `e2e/trip-share-links.spec.ts` — Playwright; opens both kinds of share link in
   a browser with no session, which is the only place the server/client boundary
@@ -163,6 +174,7 @@ from `new Date()` and hydration-failed every evening west of UTC.
 - `e2e/auth.setup.ts` + `e2e/fixtures.ts` — shared auth + DB cleanup fixtures
 
 ## Notes
+- **The travel assistant proposes; the user applies.** The model (`claude-opus-5-5`, effort medium, `fallbacks: "default"`) reads with `list_trips` / `get_trip` and writes only through `propose_changes`, which runs the real write path in a rolled-back transaction, so the card shows what the database actually said, and a bad date or someone else's trip fails before the user sees it. Apply re-validates and commits; what the user did with a card reaches the model as a note on their next message. Undo replays a signed inverse (a deleted trip comes back with all nine of its tables), keyed off `CRON_SECRET`, bound to the user, valid 24h; only the newest receipt offers it. The browser keeps the API transcript and sends it back unchanged (append-only), and the date and open trip arrive as mid-conversation system notes so the system prompt stays cached. Admins only (`lib/travel/assistant/access.ts`): every message spends the owner's API credit.
 - **Logic audit (2026-09-11).** Travel: `TripCalendar` takes `showPrices` and the public calendar tab honours the link's setting; removing a traveller revokes their scoped share links (the FK would have widened them to the whole trip); `defaultShares` scales fixed shares up when they total under 100 with nobody flexible; a per-person item whose named payers are a subset of its attendees charges the payers for the other seats; the dashboard estimate uses `tripCost` with the party size; a hidden end date is not saved; stops renumber on save and "Add day" continues from the highest day; the public payload omits the owner's user id and shows item notes only on priced links. Sports: F1 picks a live race first and derives `live` from the race time; NBA live games carry scores and "recent" means finals; an ESPN tennis event that has not started is `upcoming`; F1 news dedupes a batch by article id and orders with a tiebreaker; date-only strings are read as calendar days; the dashboard card counts followed sports.
 - **`setTripMembers` scopes every member update to the trip.** A member id
   borrowed from somebody else's trip used to be overwritten and re-parented.

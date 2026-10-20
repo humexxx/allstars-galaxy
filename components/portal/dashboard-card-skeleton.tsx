@@ -179,6 +179,41 @@ export function DashboardSportSkeleton() {
 }
 
 /**
+ * A card with no placeholder of its own yet: the shared header over a grid of
+ * `tiles` boxes. `rail` keeps the old call for the finance card working.
+ */
+export function DashboardCardSkeleton({
+  tiles = 3,
+  rail,
+  className,
+}: {
+  tiles?: number;
+  rail?: number;
+  className?: string;
+}) {
+  if (rail) return <DashboardFinanceSkeleton />;
+  return (
+    <Card className={cn("col-span-full", className)} aria-hidden="true">
+      <HeaderSkeleton />
+      <CardContent>
+        <div
+          className={cn(
+            "grid gap-3",
+            tiles <= 2 && "grid-cols-1 sm:grid-cols-2",
+            tiles === 3 && "grid-cols-1 sm:grid-cols-3",
+            tiles >= 4 && "grid-cols-2 sm:grid-cols-5"
+          )}
+        >
+          {Array.from({ length: tiles }).map((_, i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-md" />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
  * The sport cards before the favourites are known: two, the most a row holds.
  * Fewer real cards just leave the row shorter.
  */

@@ -55,7 +55,7 @@ vi.mock("@/db", () => ({
 }));
 
 import {
-  calculateRoadPathStats,
+  computeRoadPathStats,
   createRoadPath,
   createRoadPathMilestone,
   createRoadPathProgress,
@@ -64,8 +64,7 @@ import {
   deleteRoadPathProgress,
   getNextMilestoneOrder,
   getRoadPath,
-  getRoadPathMilestones,
-  getRoadPathProgress,
+  getRoadPathDetail,
   getUserRoadPaths,
   updateRoadPath,
   updateRoadPathMilestone,
@@ -150,6 +149,9 @@ function buildPath(overrides: Partial<RoadPath> = {}): RoadPath {
     targetDate: new Date("2026-12-31T00:00:00Z"),
     autoCreateTasks: false,
     taskFrequency: null,
+    scheduleDays: null,
+    scheduleSince: null,
+    lastTaskCreatedAt: null,
     completedAt: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
@@ -164,7 +166,7 @@ function buildPathWithDetails(
     ...buildPath(),
     milestones: [],
     progress: [],
-    tasks: [],
+    checkIns: [],
     ...overrides,
   } as unknown as RoadPathWithDetails;
 }
@@ -223,10 +225,8 @@ describe("getUserRoadPaths", () => {
     expect(roadPathsFindMany).toHaveBeenCalledTimes(1);
     const opts = roadPathsFindMany.mock.calls[0][0];
     // Sanity-check that relations were requested.
-    expect(opts.with).toBeTruthy();
-    expect(opts.with.milestones).toBeTruthy();
-    expect(opts.with.progress).toBeTruthy();
-    expect(opts.with.tasks).toBeTruthy();
+    // The cards need the check-ins for their streak and week.
+    expect(opts.with.checkIns).toBeTruthy();
   });
 
   it("returns [] when the user has no paths", async () => {
@@ -257,100 +257,124 @@ describe("getRoadPath", () => {
 // ---------- createRoadPath ----------
 
 describe("createRoadPath", () => {
+  const TODAY = "2026-10-19";
+
   it("inserts a new path and returns it", async () => {
     const created = buildPath();
     const chain = mockInsertReturning(created);
 
-    const result = await createRoadPath(USER_ID, {
-      title: "Run 100km",
-      description: "yearly goal",
-      targetValue: 100,
-      unit: "km",
-      startDate: new Date("2026-01-01T00:00:00Z"),
-      targetDate: new Date("2026-12-31T00:00:00Z"),
-      autoCreateTasks: false,
-      taskFrequency: null,
-    });
+    const result = await createRoadPath(
+      USER_ID,
+      {
+        title: "Run 100km",
+        description: "yearly goal",
+        targetValue: 100,
+        unit: "km",
+        startDate: new Date("2026-01-01T00:00:00Z"),
+        targetDate: new Date("2026-12-31T00:00:00Z"),
+        scheduleDays: [5, 1, 3],
+      },
+      TODAY
+    );
 
     expect(result).toEqual(created);
-    expect(insertMock).toHaveBeenCalledTimes(1);
     const values = chain.values.mock.calls[0][0];
     expect(values.userId).toBe(USER_ID);
     expect(values.title).toBe("Run 100km");
     // numeric column -> string
     expect(values.targetValue).toBe("100");
-    expect(values.autoCreateTasks).toBe(false);
+    expect(values.scheduleDays).toEqual([1, 3, 5]);
+    // Started in the past: judged from today, so January is not all misses.
+    expect(values.scheduleSince).toBe(TODAY);
   });
 
-  it("defaults autoCreateTasks to false when omitted", async () => {
-    const created = buildPath();
-    const chain = mockInsertReturning(created);
+  it("judges a future start from its own day", async () => {
+    const chain = mockInsertReturning(buildPath());
 
-    await createRoadPath(USER_ID, {
-      title: "Read more",
-      startDate: new Date("2026-01-01"),
-    } as unknown as Parameters<typeof createRoadPath>[1]);
+    await createRoadPath(
+      USER_ID,
+      { title: "Swim", startDate: new Date("2026-11-02T00:00:00Z"), scheduleDays: [2] },
+      TODAY
+    );
 
-    expect(chain.values.mock.calls[0][0].autoCreateTasks).toBe(false);
+    expect(chain.values.mock.calls[0][0].scheduleSince).toBe("2026-11-02");
   });
 
-  it("passes undefined targetValue through as undefined (not '0')", async () => {
-    const created = buildPath();
-    const chain = mockInsertReturning(created);
+  it("stores no schedule as null, not an empty list", async () => {
+    const chain = mockInsertReturning(buildPath());
 
-    await createRoadPath(USER_ID, {
-      title: "Habit",
-      startDate: new Date("2026-01-01"),
-    } as unknown as Parameters<typeof createRoadPath>[1]);
+    await createRoadPath(USER_ID, { title: "Habit", startDate: new Date("2026-01-01") }, TODAY);
 
-    expect(chain.values.mock.calls[0][0].targetValue).toBeUndefined();
+    const values = chain.values.mock.calls[0][0];
+    expect(values.scheduleDays).toBeNull();
+    expect(values.targetValue).toBeUndefined();
   });
 });
 
 // ---------- updateRoadPath ----------
 
 describe("updateRoadPath", () => {
-  it("stringifies numeric targetValue and currentValue", async () => {
-    const updated = buildPath({ currentValue: "42" });
+  const TODAY = "2026-10-19";
+
+  it("stringifies a numeric targetValue", async () => {
+    roadPathsFindFirst.mockResolvedValueOnce(buildPath());
+    const updated = buildPath({ targetValue: "200" });
     const chain = mockUpdateReturning(updated);
 
-    const result = await updateRoadPath(ROAD_PATH_ID, USER_ID, {
-      title: "Renamed",
-      targetValue: 200,
-      currentValue: 42,
-    } as unknown as Parameters<typeof updateRoadPath>[2]);
+    const result = await updateRoadPath(ROAD_PATH_ID, USER_ID, { targetValue: 200 }, TODAY);
 
     expect(result).toEqual(updated);
-    expect(updateMock).toHaveBeenCalledTimes(1);
     const setPayload = chain.set.mock.calls[0][0];
-    expect(setPayload.title).toBe("Renamed");
     expect(setPayload.targetValue).toBe("200");
-    expect(setPayload.currentValue).toBe("42");
     expect(setPayload.updatedAt).toBeInstanceOf(Date);
   });
 
   it("explicit null targetValue is preserved as null", async () => {
-    const updated = buildPath({ targetValue: null });
-    const chain = mockUpdateReturning(updated);
+    roadPathsFindFirst.mockResolvedValueOnce(buildPath());
+    const chain = mockUpdateReturning(buildPath({ targetValue: null }));
 
-    await updateRoadPath(ROAD_PATH_ID, USER_ID, {
-      targetValue: null,
-    } as unknown as Parameters<typeof updateRoadPath>[2]);
+    await updateRoadPath(ROAD_PATH_ID, USER_ID, { targetValue: null }, TODAY);
 
     expect(chain.set.mock.calls[0][0].targetValue).toBeNull();
   });
 
-  it("does not write currentValue / autoCreateTasks if not provided", async () => {
-    const updated = buildPath();
-    const chain = mockUpdateReturning(updated);
+  it("returns null without writing when the path is not the user's", async () => {
+    roadPathsFindFirst.mockResolvedValueOnce(undefined);
 
-    await updateRoadPath(ROAD_PATH_ID, USER_ID, {
-      title: "Just a rename",
-    } as unknown as Parameters<typeof updateRoadPath>[2]);
+    expect(await updateRoadPath(ROAD_PATH_ID, USER_ID, { title: "x" }, TODAY)).toBeNull();
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it("starts a changed schedule today", async () => {
+    roadPathsFindFirst.mockResolvedValueOnce(buildPath({ scheduleDays: [1, 3, 5] }));
+    const chain = mockUpdateReturning(buildPath());
+
+    await updateRoadPath(ROAD_PATH_ID, USER_ID, { scheduleDays: [1, 2, 3, 4, 5] }, TODAY);
 
     const payload = chain.set.mock.calls[0][0];
-    expect(payload.currentValue).toBeUndefined();
-    expect(payload.autoCreateTasks).toBeUndefined();
+    expect(payload.scheduleDays).toEqual([1, 2, 3, 4, 5]);
+    expect(payload.scheduleSince).toBe(TODAY);
+  });
+
+  it("leaves the schedule and its start alone when the days did not change", async () => {
+    roadPathsFindFirst.mockResolvedValueOnce(buildPath({ scheduleDays: [1, 3, 5] }));
+    const chain = mockUpdateReturning(buildPath());
+
+    await updateRoadPath(ROAD_PATH_ID, USER_ID, { scheduleDays: [5, 3, 1] }, TODAY);
+
+    const payload = chain.set.mock.calls[0][0];
+    expect(payload).not.toHaveProperty("scheduleDays");
+    expect(payload).not.toHaveProperty("scheduleSince");
+  });
+
+  it("carries a new title onto the path's open tasks from today on", async () => {
+    roadPathsFindFirst.mockResolvedValueOnce(buildPath({ title: "Exercise" }));
+    const chain = mockUpdateReturning(buildPath({ title: "Gym" }));
+
+    await updateRoadPath(ROAD_PATH_ID, USER_ID, { title: "Gym" }, TODAY);
+
+    expect(updateMock).toHaveBeenCalledTimes(2);
+    expect(chain.set.mock.calls[1][0]).toEqual(expect.objectContaining({ title: "Gym" }));
   });
 });
 
@@ -362,31 +386,6 @@ describe("deleteRoadPath", () => {
     await deleteRoadPath(ROAD_PATH_ID, USER_ID);
     expect(deleteMock).toHaveBeenCalledTimes(1);
     expect(chain.where).toHaveBeenCalledTimes(1);
-  });
-});
-
-// ---------- getRoadPathMilestones ----------
-
-describe("getRoadPathMilestones", () => {
-  it("returns milestones ordered by `order` ascending", async () => {
-    mockOwnershipSelect([buildPath()]);
-    const milestones = [
-      buildMilestone({ id: "m1", order: 0 }),
-      buildMilestone({ id: "m2", order: 1 }),
-    ];
-    roadPathMilestonesFindMany.mockResolvedValueOnce(milestones);
-
-    const result = await getRoadPathMilestones(ROAD_PATH_ID, USER_ID);
-    expect(result).toEqual(milestones);
-  });
-
-  it("throws when the parent path is not owned by the user", async () => {
-    mockOwnershipSelect([buildPath()]); // owned by USER_ID
-
-    await expect(
-      getRoadPathMilestones(ROAD_PATH_ID, OTHER_USER_ID)
-    ).rejects.toThrow("Road path not found");
-    expect(roadPathMilestonesFindMany).not.toHaveBeenCalled();
   });
 });
 
@@ -551,57 +550,6 @@ describe("getNextMilestoneOrder", () => {
 
 // ---------- getRoadPathProgress ----------
 
-describe("getRoadPathProgress", () => {
-  it("returns all progress entries when no date range provided", async () => {
-    mockOwnershipSelect([buildPath()]);
-    const rows = [
-      buildProgress({ id: "p1" }),
-      buildProgress({ id: "p2", date: new Date("2026-03-01") }),
-    ];
-    roadPathProgressFindMany.mockResolvedValueOnce(rows);
-
-    const result = await getRoadPathProgress(ROAD_PATH_ID, USER_ID);
-    expect(result).toEqual(rows);
-    expect(roadPathProgressFindMany).toHaveBeenCalledTimes(1);
-    // Without range we still pass a `where` (the eq(roadPathId) condition) —
-    // assert it is truthy without inspecting the Drizzle predicate internals.
-    const opts = roadPathProgressFindMany.mock.calls[0][0];
-    expect(opts.where).toBeTruthy();
-  });
-
-  it("includes both startDate and endDate conditions when provided", async () => {
-    mockOwnershipSelect([buildPath()]);
-    roadPathProgressFindMany.mockResolvedValueOnce([]);
-
-    await getRoadPathProgress(
-      ROAD_PATH_ID,
-      USER_ID,
-      new Date("2026-01-01"),
-      new Date("2026-12-31")
-    );
-
-    const opts = roadPathProgressFindMany.mock.calls[0][0];
-    expect(opts.where).toBeTruthy();
-  });
-
-  it("accepts startDate only", async () => {
-    mockOwnershipSelect([buildPath()]);
-    roadPathProgressFindMany.mockResolvedValueOnce([]);
-
-    await getRoadPathProgress(ROAD_PATH_ID, USER_ID, new Date("2026-06-01"));
-    expect(roadPathProgressFindMany).toHaveBeenCalledTimes(1);
-  });
-
-  it("throws when the parent path is missing", async () => {
-    mockOwnershipSelect([]);
-
-    await expect(
-      getRoadPathProgress(ROAD_PATH_ID, USER_ID)
-    ).rejects.toThrow("Road path not found");
-    expect(roadPathProgressFindMany).not.toHaveBeenCalled();
-  });
-});
-
 // ---------- createRoadPathProgress ----------
 
 describe("createRoadPathProgress", () => {
@@ -725,122 +673,79 @@ describe("deleteRoadPathProgress", () => {
   });
 });
 
-// ---------- calculateRoadPathStats ----------
+// ---------- computeRoadPathStats ----------
 
-describe("calculateRoadPathStats", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
-  });
+describe("computeRoadPathStats", () => {
+  const TODAY = "2026-10-19";
+  const ZONE = "America/Costa_Rica";
 
-  it("computes totalProgress as currentValue / targetValue * 100", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(
-      buildPathWithDetails({
-        targetValue: "100",
-        currentValue: "25",
-        milestones: [],
-      })
+  it("computes totalProgress as currentValue / targetValue * 100", () => {
+    const stats = computeRoadPathStats(
+      buildPathWithDetails({ targetValue: "100", currentValue: "25" }),
+      TODAY,
+      ZONE
     );
-
-    const stats = await calculateRoadPathStats(ROAD_PATH_ID, USER_ID);
     expect(stats.totalProgress).toBeCloseTo(25, 5);
   });
 
-  it("returns 0% (not NaN) when targetValue is 0", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(
-      buildPathWithDetails({
-        targetValue: "0",
-        currentValue: "10",
-      })
-    );
-
-    const stats = await calculateRoadPathStats(ROAD_PATH_ID, USER_ID);
-    expect(stats.totalProgress).toBe(0);
-    expect(Number.isNaN(stats.totalProgress)).toBe(false);
+  it("returns 0% (not NaN) when targetValue is 0 or null", () => {
+    for (const targetValue of ["0", null]) {
+      const stats = computeRoadPathStats(
+        buildPathWithDetails({ targetValue, currentValue: "10" }),
+        TODAY,
+        ZONE
+      );
+      expect(stats.totalProgress).toBe(0);
+    }
   });
 
-  it("returns 0% when targetValue is null", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(
-      buildPathWithDetails({
-        targetValue: null,
-        currentValue: "10",
-      })
-    );
-
-    const stats = await calculateRoadPathStats(ROAD_PATH_ID, USER_ID);
-    expect(stats.totalProgress).toBe(0);
-  });
-
-  it("counts completed and total milestones", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(
+  it("counts completed and total milestones", () => {
+    const stats = computeRoadPathStats(
       buildPathWithDetails({
         milestones: [
           buildMilestone({ id: "a", completedAt: new Date() }),
           buildMilestone({ id: "b", completedAt: null }),
           buildMilestone({ id: "c", completedAt: new Date() }),
         ],
-      })
+      }),
+      TODAY,
+      ZONE
     );
-
-    const stats = await calculateRoadPathStats(ROAD_PATH_ID, USER_ID);
     expect(stats.completedMilestones).toBe(2);
     expect(stats.totalMilestones).toBe(3);
   });
 
-  it("returns daysRemaining = null when targetDate is null", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(
-      buildPathWithDetails({ targetDate: null })
-    );
-
-    const stats = await calculateRoadPathStats(ROAD_PATH_ID, USER_ID);
-    expect(stats.daysRemaining).toBeNull();
+  it("has no habit figures for a path with no schedule and no check-ins", () => {
+    expect(computeRoadPathStats(buildPathWithDetails(), TODAY, ZONE).habit).toBeNull();
   });
 
-  it("computes daysRemaining as ceil((targetDate - now) / day)", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(
+  it("measures the habit from its check-ins", () => {
+    const stats = computeRoadPathStats(
       buildPathWithDetails({
-        targetDate: new Date("2026-06-25T12:00:00Z"), // exactly 10 days away
-      })
+        startDate: new Date("2026-10-12T00:00:00Z"),
+        scheduleDays: [1, 3, 5],
+        scheduleSince: "2026-10-12",
+        checkIns: [
+          { day: "2026-10-12" },
+          { day: "2026-10-14" },
+          { day: "2026-10-16" },
+        ] as RoadPathWithDetails["checkIns"],
+      }),
+      TODAY,
+      ZONE
     );
-
-    const stats = await calculateRoadPathStats(ROAD_PATH_ID, USER_ID);
-    expect(stats.daysRemaining).toBe(10);
-  });
-
-  it("computes progressRate = currentValue / daysElapsed (>= 1 day)", async () => {
-    // startDate 5 days before clock; currentValue 50 → 10/day.
-    roadPathsFindFirst.mockResolvedValueOnce(
-      buildPathWithDetails({
-        startDate: new Date("2026-06-10T12:00:00Z"),
-        currentValue: "50",
-        targetValue: "100",
-      })
+    expect(stats.habit).toEqual(
+      expect.objectContaining({ currentStreak: 3, doneDue: 3, due: 3, completionRate: 1 })
     );
-
-    const stats = await calculateRoadPathStats(ROAD_PATH_ID, USER_ID);
-    expect(stats.progressRate).toBeCloseTo(10, 5);
   });
+});
 
-  it("clamps daysElapsed to a minimum of 1 to avoid divide-by-zero", async () => {
-    // startDate = now → daysElapsed would be 0 without the Math.max(1, …) clamp.
-    roadPathsFindFirst.mockResolvedValueOnce(
-      buildPathWithDetails({
-        startDate: new Date("2026-06-15T12:00:00Z"),
-        currentValue: "5",
-        targetValue: "100",
-      })
-    );
-
-    const stats = await calculateRoadPathStats(ROAD_PATH_ID, USER_ID);
-    expect(stats.progressRate).toBe(5);
-    expect(Number.isFinite(stats.progressRate)).toBe(true);
-  });
-
-  it("throws when the path is missing", async () => {
+describe("getRoadPathDetail", () => {
+  it("returns null when the path is missing", async () => {
     roadPathsFindFirst.mockResolvedValueOnce(undefined);
 
     await expect(
-      calculateRoadPathStats(ROAD_PATH_ID, USER_ID)
-    ).rejects.toThrow("Road path not found");
+      getRoadPathDetail(ROAD_PATH_ID, USER_ID, "2026-10-19", "UTC")
+    ).resolves.toBeNull();
   });
 });

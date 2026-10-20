@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Heading, Mono, Text } from "@/components/ui/typography";
-import { GripVertical, MoreHorizontal, Calendar } from "lucide-react";
+import { GripVertical, MoreHorizontal, Calendar, Repeat } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,10 +38,14 @@ type BoardTaskCardProps = {
   timeZone?: string;
   /** Today in that zone (`YYYY-MM-DD`), from the server so both renders agree. */
   today?: string;
-  /** The task sits in a finished column: a past due date is not a warning. */
+  /** The task sits in the Done column: a past due date is not a warning. */
   isDone?: boolean;
+  /** The day's board the card is on. */
+  day?: string;
   onDelete?: (taskId: string) => Promise<void>;
   onUpdate?: (taskId: string, data: CreateBoardTaskData) => Promise<void>;
+  /** On an earlier day's board: put this open task on today's. */
+  onMoveToToday?: (taskId: string) => Promise<void>;
 };
 
 const PRIORITY_STYLES: Record<TaskPriority, { bar: string; label: string; tone: string }> = {
@@ -63,8 +68,10 @@ export function BoardTaskCard({
   timeZone,
   today,
   isDone = false,
+  day,
   onDelete,
   onUpdate,
+  onMoveToToday,
 }: BoardTaskCardProps): React.ReactElement {
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -87,6 +94,8 @@ export function BoardTaskCard({
   };
 
   const priorityStyle = task.priority ? PRIORITY_STYLES[task.priority] : null;
+  // A habit's task counts for its own day, so it never moves to another.
+  const canMoveToToday = onMoveToToday !== undefined && task.roadPathId === null;
   const isOptimistic = task.id.startsWith("temp-");
 
   const due = task.dueDate
@@ -140,7 +149,14 @@ export function BoardTaskCard({
 
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex items-start justify-between gap-2">
-          <Heading level="h6" as="h3" className="min-w-0 break-words">
+          <Heading
+            level="h6"
+            as="h3"
+            className={cn(
+              "min-w-0 break-words",
+              isDone && "text-muted-foreground line-through decoration-muted-foreground/60"
+            )}
+          >
             {task.title}
           </Heading>
           {onDelete ? (
@@ -161,6 +177,11 @@ export function BoardTaskCard({
                     Edit task
                   </DropdownMenuItem>
                 ) : null}
+                {canMoveToToday ? (
+                  <DropdownMenuItem onSelect={() => void onMoveToToday(task.id)}>
+                    Move to today
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem variant="destructive" onSelect={() => setConfirmingDelete(true)}>
                   Delete task
                 </DropdownMenuItem>
@@ -175,8 +196,17 @@ export function BoardTaskCard({
           </Text>
         ) : null}
 
-        {priorityStyle || due ? (
+        {priorityStyle || due || task.roadPathId ? (
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
+            {task.roadPathId ? (
+              <Link
+                href={`/portal/productivity/road-paths?path=${task.roadPathId}`}
+                className="inline-flex items-center gap-1 rounded-sm font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <Repeat className="size-3" aria-hidden="true" />
+                Habit
+              </Link>
+            ) : null}
             {priorityStyle ? (
               <span className={cn("inline-flex items-center gap-1 font-medium", priorityStyle.tone)}>
                 <span className={cn("size-1.5 rounded-full", priorityStyle.bar)} aria-hidden="true" />
@@ -197,6 +227,7 @@ export function BoardTaskCard({
       {onUpdate ? (
         <TaskDialog
           columns={columns}
+          day={day ?? task.boardDate}
           task={task}
           open={editing}
           onOpenChange={setEditing}

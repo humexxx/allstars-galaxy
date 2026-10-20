@@ -9,9 +9,14 @@ vi.mock("@/lib/services/impersonation", () => ({
   logImpersonatedMutation: vi.fn(),
 }));
 
+vi.mock("@/lib/utils/request-today", () => ({
+  getRequestTodayIso: vi.fn().mockResolvedValue("2026-10-19"),
+}));
+
 vi.mock("@/lib/services/road-path-service", () => ({
   getRoadPath: vi.fn(),
   createRoadPath: vi.fn(),
+  updateRoadPath: vi.fn(),
   deleteRoadPath: vi.fn(),
   createRoadPathMilestone: vi.fn(),
   updateRoadPathMilestone: vi.fn(),
@@ -21,10 +26,6 @@ vi.mock("@/lib/services/road-path-service", () => ({
   deleteRoadPathProgress: vi.fn(),
 }));
 
-vi.mock("@/lib/services/task-automation-service", () => ({
-  createAutomatedTasksForRoadPath: vi.fn(),
-}));
-
 import { revalidatePath } from "next/cache";
 import {
   logImpersonatedMutation,
@@ -32,6 +33,7 @@ import {
 } from "@/lib/services/impersonation";
 import {
   createRoadPath,
+  updateRoadPath,
   deleteRoadPath,
   createRoadPathMilestone,
   updateRoadPathMilestone,
@@ -40,10 +42,10 @@ import {
   createRoadPathProgress,
   deleteRoadPathProgress,
 } from "@/lib/services/road-path-service";
-import { createAutomatedTasksForRoadPath } from "@/lib/services/task-automation-service";
 
 import {
   createRoadPathAction,
+  updateRoadPathAction,
   deleteRoadPathAction,
   createRoadPathMilestoneAction,
   updateRoadPathMilestoneAction,
@@ -74,27 +76,29 @@ afterEach(() => {
 });
 
 describe("createRoadPathAction", () => {
-  it("creates the road path, logs, and revalidates on the happy path", async () => {
-    const path = {
-      id: ROAD_PATH_ID,
-      title: "Learn Spanish",
-      autoCreateTasks: false,
-      taskFrequency: null,
-    } as unknown as Awaited<ReturnType<typeof createRoadPath>>;
+  it("creates the road path for the reader's today, logs, and revalidates", async () => {
+    const path = { id: ROAD_PATH_ID, title: "Exercise" } as unknown as Awaited<
+      ReturnType<typeof createRoadPath>
+    >;
     vi.mocked(createRoadPath).mockResolvedValueOnce(path);
 
     const result = await createRoadPathAction({
-      title: "Learn Spanish",
-      startDate: "2026-06-01",
-    } as unknown as Parameters<typeof createRoadPathAction>[0]);
+      title: "Exercise",
+      startDate: "2026-10-19",
+      scheduleDays: [5, 1, 3, 1],
+    });
 
     expect(result).toEqual({ success: true, data: path });
-    expect(createRoadPath).toHaveBeenCalledOnce();
     expect(createRoadPath).toHaveBeenCalledWith(
       USER_ID,
-      expect.objectContaining({ title: "Learn Spanish", autoCreateTasks: false })
+      expect.objectContaining({
+        title: "Exercise",
+        startDate: new Date("2026-10-19"),
+        // Sorted, once each.
+        scheduleDays: [1, 3, 5],
+      }),
+      "2026-10-19"
     );
-    expect(createAutomatedTasksForRoadPath).not.toHaveBeenCalled();
     expect(logImpersonatedMutation).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "roadPath.create",
@@ -105,61 +109,28 @@ describe("createRoadPathAction", () => {
     expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
   });
 
-  it("triggers createAutomatedTasksForRoadPath when createFirstTask + autoCreateTasks are set", async () => {
-    const path = {
-      id: ROAD_PATH_ID,
-      title: "Daily Run",
-      autoCreateTasks: true,
-      taskFrequency: "daily",
-    } as unknown as Awaited<ReturnType<typeof createRoadPath>>;
-    vi.mocked(createRoadPath).mockResolvedValueOnce(path);
-
+  it("rejects a weekday outside 0–6", async () => {
     const result = await createRoadPathAction({
-      title: "Daily Run",
-      startDate: "2026-06-01",
-      autoCreateTasks: true,
-      taskFrequency: "daily",
-      createFirstTask: true,
-    } as unknown as Parameters<typeof createRoadPathAction>[0]);
+      title: "Exercise",
+      startDate: "2026-10-19",
+      scheduleDays: [7],
+    });
 
-    expect(result).toEqual({ success: true, data: path });
-    expect(createAutomatedTasksForRoadPath).toHaveBeenCalledOnce();
-    expect(createAutomatedTasksForRoadPath).toHaveBeenCalledWith(
-      USER_ID,
-      ROAD_PATH_ID
-    );
+    expect(result.success).toBe(false);
+    expect(createRoadPath).not.toHaveBeenCalled();
   });
 
-  it("still creates the path when its first task fails, and says so", async () => {
-    const path = {
-      id: ROAD_PATH_ID,
-      title: "Daily Run",
-      autoCreateTasks: true,
-      taskFrequency: "daily",
-    } as unknown as Awaited<ReturnType<typeof createRoadPath>>;
-    vi.mocked(createRoadPath).mockResolvedValueOnce(path);
-    vi.mocked(createAutomatedTasksForRoadPath).mockRejectedValueOnce(
-      new Error("boom")
-    );
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
+  it("says why a target before the start is refused", async () => {
     const result = await createRoadPathAction({
-      title: "Daily Run",
-      startDate: "2026-06-01",
-      autoCreateTasks: true,
-      taskFrequency: "daily",
-      createFirstTask: true,
-    } as unknown as Parameters<typeof createRoadPathAction>[0]);
+      title: "Exercise",
+      startDate: "2026-10-19",
+      targetDate: "2026-10-01",
+    });
 
     expect(result).toEqual({
-      success: true,
-      data: path,
-      message: "Road path created, but its first task could not be added",
+      success: false,
+      error: "The target date can't be before the start date",
     });
-    expect(createAutomatedTasksForRoadPath).toHaveBeenCalledOnce();
-    expect(logImpersonatedMutation).toHaveBeenCalledOnce();
-    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
-    errorSpy.mockRestore();
   });
 
   it("returns an error envelope when title is missing", async () => {
@@ -167,10 +138,65 @@ describe("createRoadPathAction", () => {
       startDate: "2026-06-01",
     } as unknown as Parameters<typeof createRoadPathAction>[0]);
 
-    expect(result).toEqual({ success: false, error: "Invalid input" });
+    expect(result.success).toBe(false);
     expect(createRoadPath).not.toHaveBeenCalled();
     expect(logImpersonatedMutation).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateRoadPathAction", () => {
+  it("saves every field it is given, for the reader's today", async () => {
+    const path = { id: ROAD_PATH_ID, title: "Gym" } as unknown as Awaited<
+      ReturnType<typeof updateRoadPath>
+    >;
+    vi.mocked(updateRoadPath).mockResolvedValueOnce(path);
+
+    const result = await updateRoadPathAction({
+      id: ROAD_PATH_ID,
+      title: "Gym",
+      description: "Legs",
+      startDate: "2026-10-01",
+      targetDate: null,
+      targetValue: null,
+      unit: "",
+      scheduleDays: [2, 4],
+      completedAt: null,
+    });
+
+    expect(result).toEqual({ success: true, data: path });
+    expect(updateRoadPath).toHaveBeenCalledWith(
+      ROAD_PATH_ID,
+      USER_ID,
+      expect.objectContaining({
+        title: "Gym",
+        description: "Legs",
+        startDate: new Date("2026-10-01"),
+        scheduleDays: [2, 4],
+        completedAt: null,
+      }),
+      "2026-10-19"
+    );
+    expect(logImpersonatedMutation).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "roadPath.update", after: path })
+    );
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
+  });
+
+  it("returns not found when the path is not the user's", async () => {
+    vi.mocked(updateRoadPath).mockResolvedValueOnce(null);
+
+    const result = await updateRoadPathAction({ id: ROAD_PATH_ID, title: "Gym" });
+
+    expect(result).toEqual({ success: false, error: "Road path not found" });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("rejects an id that is not a uuid", async () => {
+    const result = await updateRoadPathAction({ id: "nope", title: "Gym" });
+
+    expect(result.success).toBe(false);
+    expect(updateRoadPath).not.toHaveBeenCalled();
   });
 });
 

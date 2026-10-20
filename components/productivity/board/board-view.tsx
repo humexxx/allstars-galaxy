@@ -21,6 +21,8 @@ import {
 } from "@dnd-kit/sortable";
 import { BoardColumn } from "./board-column";
 import { BoardTaskCard } from "./board-task-card";
+import { BoardDayNav } from "./board-day-nav";
+import { CarryOverDialog } from "./carry-over-dialog";
 import { CreateColumnDialog } from "./create-column-dialog";
 import { TaskDialog } from "./task-dialog";
 import { Columns3, Maximize2, Minimize2 } from "lucide-react";
@@ -36,22 +38,29 @@ import {
   createBoardTaskAction,
   deleteBoardColumnAction,
   deleteBoardTaskAction,
+  moveTaskToTodayAction,
   reorderBoardTaskAction,
+  setDoneColumnAction,
   updateBoardColumnAction,
   updateBoardTaskAction,
 } from "@/app/actions/board";
-import type { BoardColumn as BoardColumnType, BoardTask } from "@/types";
+import type { BoardColumn as BoardColumnType, BoardTask, CarryOverTask } from "@/types";
 import type { CreateBoardColumnData, CreateBoardTaskData } from "@/schemas/board";
 import { runAction } from "@/lib/actions/run";
 import { toast } from "sonner";
 
 type BoardViewProps = {
   initialColumns: BoardColumnType[];
+  /** The tasks on `day`'s board. */
   initialTasks: BoardTask[];
+  /** Open tasks from earlier days, offered to today. Empty on any other day. */
+  carryOver: CarryOverTask[];
+  /** The day this board is, `YYYY-MM-DD`. */
+  day: string;
   /** The reader's IANA zone (`tz` cookie): due dates are days in it. */
   timeZone?: string;
   /** Today in that zone, `YYYY-MM-DD` — from the server so both renders agree. */
-  today?: string;
+  today: string;
 };
 
 function buildOptimisticTask(data: CreateBoardTaskData, tempId: string, order: number): BoardTask {
@@ -59,13 +68,15 @@ function buildOptimisticTask(data: CreateBoardTaskData, tempId: string, order: n
     id: tempId,
     userId: "",
     columnId: data.columnId,
-    roadPathId: data.roadPathId ?? null,
+    roadPathId: null,
     title: data.title,
     description: data.description ?? null,
     priority: data.priority ?? null,
     order,
+    boardDate: data.boardDate,
     dueDate: data.dueDate ?? null,
     completedAt: null,
+    carryOverDeclinedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -77,6 +88,7 @@ function buildOptimisticColumn(data: CreateBoardColumnData, tempId: string): Boa
     userId: "",
     name: data.name,
     order: data.order,
+    isDone: false,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -85,6 +97,8 @@ function buildOptimisticColumn(data: CreateBoardColumnData, tempId: string): Boa
 export function BoardView({
   initialColumns,
   initialTasks,
+  carryOver,
+  day,
   timeZone,
   today,
 }: BoardViewProps): React.ReactElement {
@@ -241,7 +255,6 @@ export function BoardView({
         try {
           const result = await reorderBoardTaskAction({
             taskId,
-            sourceColumnId,
             destinationColumnId,
             order: newOrder,
           });
@@ -315,6 +328,7 @@ export function BoardView({
   ): Promise<void> => {
     const current = taskIndex.byId.get(taskId);
     if (!current) return;
+    const moving = current.columnId !== data.columnId;
     const restore = (): void =>
       setTasks((prev) => prev.map((t) => (t.id === taskId ? current : t)));
     setTasks((prev) =>
@@ -323,6 +337,9 @@ export function BoardView({
           ? {
               ...t,
               columnId: data.columnId,
+              // A new column is a move to the end of it; the service does the
+              // same and closes the gap left behind.
+              order: moving ? (taskIndex.byColumnId[data.columnId] ?? []).length : t.order,
               title: data.title,
               description: data.description ?? null,
               priority: data.priority ?? null,
@@ -334,24 +351,14 @@ export function BoardView({
 
     try {
       setPendingMutations((n) => n + 1);
-      // A column change is a move, not a field edit: `updateBoardTask` would
-      // write the new columnId with the old `order`, leaving a hole in the
-      // source column and a duplicate order in the destination. Reorder to
-      // the end of the destination first, then save the other fields.
-      if (current.columnId !== data.columnId) {
-        const destinationCount = (taskIndex.byColumnId[data.columnId] ?? []).length;
-        const moved = await reorderBoardTaskAction({
-          taskId,
-          sourceColumnId: current.columnId,
-          destinationColumnId: data.columnId,
-          order: destinationCount,
-        });
-        if (!moved.success) {
-          toast.error(moved.error || "Failed to move task");
-          throw new Error(moved.error || "Failed to move task");
-        }
-      }
-      const result = await updateBoardTaskAction({ id: taskId, ...data });
+      const result = await updateBoardTaskAction({
+        id: taskId,
+        columnId: data.columnId,
+        title: data.title,
+        description: data.description,
+        priority: data.priority,
+        dueDate: data.dueDate,
+      });
       if (!result.success) {
         toast.error(result.error || "Failed to update task");
         throw new Error(result.error || "Failed to update task");
@@ -362,6 +369,31 @@ export function BoardView({
     } finally {
       setPendingMutations((n) => n - 1);
     }
+  };
+
+  const handleSetDoneColumn = async (columnId: string): Promise<void> => {
+    const previous = columns;
+    setColumns((prev) => prev.map((c) => ({ ...c, isDone: c.id === columnId })));
+    setPendingMutations((n) => n + 1);
+    const { ok } = await runAction(setDoneColumnAction(columnId), {
+      failure: "Failed to change the Done column",
+    });
+    if (!ok) setColumns(previous);
+    setPendingMutations((n) => n - 1);
+  };
+
+  const handleMoveToToday = async (taskId: string): Promise<void> => {
+    const moved = taskIndex.byId.get(taskId);
+    if (!moved) return;
+    // It leaves this day's board; today's picks it up.
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    setPendingMutations((n) => n + 1);
+    const { ok } = await runAction(moveTaskToTodayAction(taskId), {
+      success: "Moved to today",
+      failure: "Failed to move the task",
+    });
+    if (!ok) setTasks((prev) => [...prev, moved]);
+    setPendingMutations((n) => n - 1);
   };
 
   const handleRenameColumn = async (columnId: string, name: string): Promise<void> => {
@@ -403,6 +435,10 @@ export function BoardView({
   const handleDeleteColumn = async (columnId: string): Promise<void> => {
     const removedColumn = columns.find((c) => c.id === columnId);
     if (!removedColumn) return;
+    if (removedColumn.isDone) {
+      toast.error("Choose another Done column before deleting this one");
+      return;
+    }
     const removedTasks = taskIndex.byColumnId[columnId] ?? [];
     setColumns((prev) => prev.filter((c) => c.id !== columnId));
     // board_tasks.column_id cascades, so the tasks are gone too. Leaving them
@@ -441,6 +477,7 @@ export function BoardView({
 
   const nextColumnOrder = columns.length > 0 ? Math.max(...columns.map((c) => c.order)) + 1 : 0;
   const isDraggingTask = activeTask !== null;
+  const isPast = day < today;
 
   return (
     <div
@@ -483,13 +520,19 @@ export function BoardView({
             </Tooltip>
             {columns.length > 0 ? (
               <>
-                <TaskDialog columns={columns} onSubmit={handleCreateTask} />
+                <TaskDialog columns={columns} day={day} onSubmit={handleCreateTask} />
                 <CreateColumnDialog onCreate={handleCreateColumn} nextOrder={nextColumnOrder} />
               </>
             ) : null}
           </>
         }
       />
+
+      <div className={cn(isExpanded && "px-4 sm:px-8 lg:px-12")}>
+        <BoardDayNav day={day} today={today} />
+      </div>
+
+      {day === today ? <CarryOverDialog tasks={carryOver} /> : null}
 
       {columns.length === 0 ? (
         <EmptyState
@@ -546,7 +589,10 @@ export function BoardView({
                   onDeleteColumn={handleDeleteColumn}
                   onDeleteTask={handleDeleteTask}
                   onUpdateTask={handleUpdateTask}
+                  onSetDoneColumn={handleSetDoneColumn}
+                  onMoveToToday={isPast ? handleMoveToToday : undefined}
                   isDimmed={isDraggingTask && activeTask?.columnId !== column.id}
+                  day={day}
                   timeZone={timeZone}
                   today={today}
                 />
@@ -556,7 +602,13 @@ export function BoardView({
 
           <DragOverlay>
             {activeTask ? (
-              <BoardTaskCard task={activeTask} isOverlay timeZone={timeZone} today={today} />
+              <BoardTaskCard
+                task={activeTask}
+                isOverlay
+                isDone={columns.find((c) => c.id === activeTask.columnId)?.isDone}
+                timeZone={timeZone}
+                today={today}
+              />
             ) : null}
           </DragOverlay>
         </DndContext>

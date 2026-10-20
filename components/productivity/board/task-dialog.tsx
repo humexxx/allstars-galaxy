@@ -49,6 +49,8 @@ function fromDay(day: string): Date | null {
 
 type TaskDialogProps = {
   columns: BoardColumn[];
+  /** The day's board a new task goes on. */
+  day: string;
   onSubmit: (data: CreateBoardTaskData) => Promise<void>;
   /** Present = editing that task; absent = creating a new one. */
   task?: BoardTask;
@@ -68,6 +70,7 @@ type TaskDialogProps = {
  */
 export function TaskDialog({
   columns,
+  day,
   onSubmit,
   task,
   defaultColumnId,
@@ -82,6 +85,7 @@ export function TaskDialog({
 
   const initial = (): CreateBoardTaskData => ({
     columnId: task?.columnId ?? defaultColumnId ?? columns[0]?.id ?? "",
+    boardDate: task?.boardDate ?? day,
     title: task?.title ?? "",
     description: task?.description ?? "",
     priority: task?.priority ?? null,

@@ -1,16 +1,24 @@
 import "server-only";
 
 import { db } from "@/db";
-import { roadPaths, roadPathMilestones, roadPathProgress, boardTasks } from "@/db/schema";
-import { eq, and, asc, desc, gte, lte } from "drizzle-orm";
+import {
+  roadPaths,
+  roadPathMilestones,
+  roadPathProgress,
+  roadPathCheckIns,
+  boardTasks,
+} from "@/db/schema";
+import { eq, and, asc, desc, gte, isNull } from "drizzle-orm";
 import type {
   RoadPath,
   RoadPathDetail,
+  RoadPathWithCheckIns,
   RoadPathWithDetails,
   RoadPathMilestone,
   RoadPathProgress,
   RoadPathStats,
 } from "@/types";
+import { habitOf, habitStats, hasSchedule, normalizeSchedule } from "@/lib/productivity/habit";
 import type {
   CreateRoadPathData,
   UpdateRoadPathData,
@@ -31,27 +39,14 @@ async function ensureRoadPathOwnership(roadPathId: string, userId: string): Prom
   });
 }
 
-export async function getUserRoadPaths(userId: string): Promise<RoadPathWithDetails[]> {
-  const paths = await db.query.roadPaths.findMany({
+export async function getUserRoadPaths(userId: string): Promise<RoadPathWithCheckIns[]> {
+  return db.query.roadPaths.findMany({
     where: eq(roadPaths.userId, userId),
     orderBy: [desc(roadPaths.createdAt)],
     with: {
-      milestones: {
-        orderBy: [asc(roadPathMilestones.order)],
-      },
-      progress: {
-        orderBy: [desc(roadPathProgress.date), desc(roadPathProgress.createdAt)],
-      },
-      tasks: {
-        orderBy: [desc(boardTasks.createdAt)],
-        with: {
-          column: true,
-        },
-      },
+      checkIns: { orderBy: [asc(roadPathCheckIns.day)] },
     },
   });
-
-  return paths;
 }
 
 export async function getRoadPath(roadPathId: string, userId: string): Promise<RoadPathWithDetails | null> {
@@ -64,22 +59,29 @@ export async function getRoadPath(roadPathId: string, userId: string): Promise<R
       progress: {
         orderBy: [desc(roadPathProgress.date), desc(roadPathProgress.createdAt)],
       },
-      tasks: {
-        orderBy: [desc(boardTasks.createdAt)],
-        with: {
-          column: true,
-        },
-      },
+      checkIns: { orderBy: [asc(roadPathCheckIns.day)] },
     },
   });
 
-  return path || null;
+  return path ?? null;
 }
 
+function dayOf(instant: Date): string {
+  return instant.toISOString().slice(0, 10);
+}
+
+/**
+ * `today` is the reader's day. The schedule judges from the later of the
+ * start day and today: a path started in the past cannot be checked in for
+ * those days, so they would only ever read as missed.
+ */
 export async function createRoadPath(
   userId: string,
-  data: CreateRoadPathData
+  data: CreateRoadPathData,
+  today: string
 ): Promise<RoadPath> {
+  const scheduleDays = normalizeSchedule(data.scheduleDays);
+  const startDay = dayOf(data.startDate);
   const [path] = await db
     .insert(roadPaths)
     .values({
@@ -90,20 +92,31 @@ export async function createRoadPath(
       unit: data.unit,
       startDate: data.startDate,
       targetDate: data.targetDate,
-      autoCreateTasks: data.autoCreateTasks ?? false,
-      taskFrequency: data.taskFrequency,
+      scheduleDays: scheduleDays.length > 0 ? scheduleDays : null,
+      scheduleSince: startDay > today ? startDay : today,
     })
     .returning();
 
   return path;
 }
 
+/**
+ * A changed schedule takes effect today, so the days before it are not
+ * re-judged by days they were never due on. A new title follows onto the
+ * path's open tasks from today on that still carry the old one.
+ */
 export async function updateRoadPath(
   roadPathId: string,
   userId: string,
-  data: Omit<UpdateRoadPathData, "id">
+  data: Omit<UpdateRoadPathData, "id">,
+  today: string
 ): Promise<RoadPath | null> {
-  const { targetValue, currentValue, autoCreateTasks, ...rest } = data;
+  const current = await db.query.roadPaths.findFirst({
+    where: and(eq(roadPaths.id, roadPathId), eq(roadPaths.userId, userId)),
+  });
+  if (!current) return null;
+
+  const { targetValue, scheduleDays, ...rest } = data;
 
   const updateData: Partial<typeof roadPaths.$inferInsert> = {
     ...rest,
@@ -113,36 +126,42 @@ export async function updateRoadPath(
   if (targetValue !== undefined) {
     updateData.targetValue = targetValue?.toString() ?? null;
   }
-  if (currentValue !== undefined) {
-    updateData.currentValue = currentValue.toString();
-  }
-  if (autoCreateTasks !== undefined) {
-    updateData.autoCreateTasks = autoCreateTasks;
+  if (scheduleDays !== undefined) {
+    const next = normalizeSchedule(scheduleDays);
+    if (next.join() !== normalizeSchedule(current.scheduleDays).join()) {
+      updateData.scheduleDays = next.length > 0 ? next : null;
+      updateData.scheduleSince = today;
+    }
   }
 
-  const [path] = await db
-    .update(roadPaths)
-    .set(updateData)
-    .where(and(eq(roadPaths.id, roadPathId), eq(roadPaths.userId, userId)))
-    .returning();
+  return db.transaction(async (tx) => {
+    const [path] = await tx
+      .update(roadPaths)
+      .set(updateData)
+      .where(and(eq(roadPaths.id, roadPathId), eq(roadPaths.userId, userId)))
+      .returning();
 
-  // No row: the id was not this user's road path.
-  return path ?? null;
+    if (path && data.title !== undefined && data.title !== current.title) {
+      await tx
+        .update(boardTasks)
+        .set({ title: data.title, updatedAt: new Date() })
+        .where(
+          and(
+            eq(boardTasks.userId, userId),
+            eq(boardTasks.roadPathId, roadPathId),
+            eq(boardTasks.title, current.title),
+            gte(boardTasks.boardDate, today),
+            isNull(boardTasks.completedAt)
+          )
+        );
+    }
+
+    return path ?? null;
+  });
 }
 
 export async function deleteRoadPath(roadPathId: string, userId: string): Promise<void> {
   await db.delete(roadPaths).where(and(eq(roadPaths.id, roadPathId), eq(roadPaths.userId, userId)));
-}
-
-export async function getRoadPathMilestones(roadPathId: string, userId: string): Promise<RoadPathMilestone[]> {
-  await ensureRoadPathOwnership(roadPathId, userId);
-
-  const milestones = await db.query.roadPathMilestones.findMany({
-    where: eq(roadPathMilestones.roadPathId, roadPathId),
-    orderBy: [asc(roadPathMilestones.order)],
-  });
-
-  return milestones;
 }
 
 export async function createRoadPathMilestone(
@@ -242,31 +261,6 @@ export async function getNextMilestoneOrder(roadPathId: string, userId: string):
   return milestones.length > 0 ? milestones[0].order + 1 : 0;
 }
 
-export async function getRoadPathProgress(
-  roadPathId: string,
-  userId: string,
-  startDate?: Date,
-  endDate?: Date
-): Promise<RoadPathProgress[]> {
-  await ensureRoadPathOwnership(roadPathId, userId);
-
-  const conditions = [eq(roadPathProgress.roadPathId, roadPathId)];
-
-  if (startDate) {
-    conditions.push(gte(roadPathProgress.date, startDate));
-  }
-  if (endDate) {
-    conditions.push(lte(roadPathProgress.date, endDate));
-  }
-
-  const progress = await db.query.roadPathProgress.findMany({
-    where: and(...conditions),
-    orderBy: [asc(roadPathProgress.date)],
-  });
-
-  return progress;
-}
-
 export async function createRoadPathProgress(
   userId: string,
   data: CreateRoadPathProgressData
@@ -340,31 +334,27 @@ export async function deleteRoadPathProgress(progressId: string, userId: string)
     .where(and(eq(roadPaths.id, progress.roadPathId), eq(roadPaths.userId, userId)));
 }
 
-export async function calculateRoadPathStats(roadPathId: string, userId: string): Promise<RoadPathStats> {
-  const path = await getRoadPath(roadPathId, userId);
-
-  if (!path) {
-    throw new Error("Road path not found");
-  }
-
-  return computeRoadPathStats(path, new Date());
-}
-
 /**
  * One road path with its stats, from a single read — the percentage and the
  * figure under it have to come from the same row or they disagree on screen
- * the moment progress is logged.
+ * the moment progress is logged. `today` and `timeZone` are the reader's.
  */
 export async function getRoadPathDetail(
   roadPathId: string,
-  userId: string
+  userId: string,
+  today: string,
+  timeZone: string
 ): Promise<RoadPathDetail | null> {
   const roadPath = await getRoadPath(roadPathId, userId);
   if (!roadPath) return null;
-  return { roadPath, stats: computeRoadPathStats(roadPath, new Date()) };
+  return { roadPath, stats: computeRoadPathStats(roadPath, today, timeZone) };
 }
 
-function computeRoadPathStats(path: RoadPathWithDetails, now: Date): RoadPathStats {
+export function computeRoadPathStats(
+  path: RoadPathWithDetails,
+  today: string,
+  timeZone: string
+): RoadPathStats {
   const targetValue = parseFloat(path.targetValue || "0");
   const currentValue = parseFloat(path.currentValue || "0");
 
@@ -373,25 +363,15 @@ function computeRoadPathStats(path: RoadPathWithDetails, now: Date): RoadPathSta
   const totalProgress =
     targetValue > 0 ? Math.max(0, Math.min(100, (currentValue / targetValue) * 100)) : 0;
 
-  const completedMilestones = path.milestones.filter((m) => m.completedAt !== null).length;
-  const totalMilestones = path.milestones.length;
-
-  const DAY_MS = 1000 * 60 * 60 * 24;
-  let daysRemaining: number | null = null;
-  if (path.targetDate) {
-    const target = new Date(path.targetDate);
-    daysRemaining = Math.max(0, Math.ceil((target.getTime() - now.getTime()) / DAY_MS));
-  }
-
-  const startDate = path.startDate ? new Date(path.startDate) : now;
-  const daysElapsed = Math.max(1, Math.ceil((now.getTime() - startDate.getTime()) / DAY_MS));
-  const progressRate = currentValue / daysElapsed;
+  const habit = habitOf(path, timeZone);
 
   return {
     totalProgress,
-    completedMilestones,
-    totalMilestones,
-    daysRemaining,
-    progressRate,
+    completedMilestones: path.milestones.filter((m) => m.completedAt !== null).length,
+    totalMilestones: path.milestones.length,
+    habit:
+      hasSchedule(habit) || path.checkIns.length > 0
+        ? habitStats(habit, path.checkIns.map((c) => c.day), today)
+        : null,
   };
 }

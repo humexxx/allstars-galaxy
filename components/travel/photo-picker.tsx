@@ -36,7 +36,7 @@ type PhotoPickerProps = {
   disabled?: boolean;
   /**
    * Render mode:
-   *   - "compact": just an inline strip (used in the gallery's "add" slot)
+   *   - "compact": just an inline strip (used in the banner photos dialog's "add" slot)
    *   - "full":    tabbed UI with URL + upload (used in the cover-photo block
    *               of the trip form)
    */

@@ -264,8 +264,8 @@ export async function loadTripWithRelations(
     stopsByItem.set(stop.itemId, list);
   }
 
-  // A photo belongs to one place or the other: the gallery is the trip's own
-  // photos, and an item's photos travel with the item.
+  // A photo belongs to one place or the other: the trip's own photos take
+  // turns on its banner, and an item's photos travel with the item.
   const payersByItem = groupByItem(payers);
   const attendeesByItem = groupByItem(attendees);
 

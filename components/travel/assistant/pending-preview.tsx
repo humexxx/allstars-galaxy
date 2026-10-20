@@ -96,7 +96,16 @@ export function pendingDelay(index: number): { animationDelay: string } {
 
 const LABEL: Record<TravelMark, string> = { add: "New", change: "Changes", remove: "Removing" };
 
-export function PendingBadge({ mark, className }: { mark: TravelMark; className?: string }) {
+export function PendingBadge({
+  mark,
+  label,
+  className,
+}: {
+  mark: TravelMark;
+  /** In place of New / Changes / Removing, where the badge alone would not say what. */
+  label?: string;
+  className?: string;
+}) {
   return (
     <Badge
       data-pending={mark}
@@ -110,7 +119,7 @@ export function PendingBadge({ mark, className }: { mark: TravelMark; className?
           mark === "remove" ? "bg-destructive" : "bg-primary"
         )}
       />
-      {LABEL[mark]}
+      {label ?? LABEL[mark]}
     </Badge>
   );
 }

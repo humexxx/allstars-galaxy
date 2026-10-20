@@ -14,6 +14,23 @@ afterEach(async () => {
   cleanup();
 });
 
+// jsdom has no `matchMedia`, and media-query hooks (reduced motion, phone
+// width) call it on render. A default that matches nothing reads as a wide
+// screen with motion allowed; a test that needs otherwise stubs its own.
+if (typeof window !== "undefined" && !window.matchMedia) {
+  window.matchMedia = (query: string): MediaQueryList =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+}
+
 // `server-only` is a Next.js marker package that throws at build time when
 // imported from the client bundle. In Vitest we are deliberately running
 // server modules in a Node environment, so we stub it out globally.

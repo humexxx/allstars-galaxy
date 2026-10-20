@@ -1177,7 +1177,7 @@ export const tripItems = pgTable(
   ]
 ).enableRLS();
 
-// trip_photos: gallery shots. Both uploaded files (Supabase Storage public URLs)
+// trip_photos: banner and activity photos. Both uploaded files (Supabase Storage public URLs)
 // and external URLs land here — the `source` enum just records provenance for
 // future cleanup (e.g. when a trip is deleted we may want to also delete the
 // storage objects, but only for `source = upload`).
@@ -1188,9 +1188,10 @@ export const tripPhotos = pgTable(
     tripId: uuid("trip_id")
       .notNull()
       .references(() => trips.id, { onDelete: "cascade" }),
-    // When set, the photo belongs to that activity rather than the trip's own
-    // gallery. Nullable rather than a second table: a photo is a photo, and two
-    // tables would mean two uploaders and two delete paths.
+    // When set, the photo belongs to that activity; when null, it is one of
+    // the photos taking turns on the trip's banner. Nullable rather than a
+    // second table: a photo is a photo, and two tables would mean two
+    // uploaders and two delete paths.
     itemId: uuid("item_id").references((): AnyPgColumn => tripItems.id, {
       onDelete: "cascade",
     }),

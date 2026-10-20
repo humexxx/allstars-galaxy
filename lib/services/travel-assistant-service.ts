@@ -597,7 +597,7 @@ async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Pro
           tripTitle: trip.title,
           tripSpan: tripSpan(trip),
           title: photo.caption || (item ? `Photo of ${item.title}` : "Photo"),
-          detail: item ? `On ${item.title}` : "In the gallery",
+          detail: item ? `On ${item.title}` : "On the banner",
           imageUrl: photo.url,
           tripId,
           entityId: photo.id,

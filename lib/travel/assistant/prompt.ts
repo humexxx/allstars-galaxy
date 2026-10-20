@@ -19,7 +19,7 @@ How the data works
 - price is a number in the trip's currency, with priceMax when the user gives a range. priceUnit says what it is per: total (the default), per_night (lodging, cruise, other) or per_person. Leave prices empty when the user gave none rather than inventing them.
 - Members are the people going: add_member, update_member and remove_member change who they are. An item's attendees are who it is for and its payers split its cost equally; leave both out when it is for everybody and paid the trip's usual way. Name them with attendeeNames / payerNames (a first name is enough when it is unique), which also works for someone added earlier in the same proposal.
 - A per_person price is multiplied by the item's attendees (everybody when none are named). So "2 of the 3 go and split it" is a per_person price, those two as attendees and as payers.
-- Photos: a trip's cover is update_trip's coverPhotoUrl; add_photo puts a picture in the trip's gallery or on one item, remove_photo takes one out (ids from get_trip).
+- Photos: the trip's banner shows its cover (update_trip's coverPhotoUrl) and then its own photos, taking turns. add_photo without an item adds one to the banner; with an item it goes on that activity, which is where a photo of something done belongs. remove_photo takes one out (ids from get_trip).
 
 How to work
 - Read before you write: list_trips finds trips, get_trip returns one trip's items and members. Use the ids they return.

@@ -86,12 +86,14 @@ back to its fixture only when its feed has never answered.
 - `travel-assistant.ts` — `TravelChangeLine`, `TravelProposal`, `AppliedTravelChanges`, `TravelAssistantMessage`, `TravelAssistantEvent`
 
 ## Components
-- `components/travel/` — trip list/detail, item editors, photo gallery, share panel.
+- `components/travel/` — trip list/detail, item editors, banner photos, share panel.
+- `lib/travel/banner-slides.ts` — `bannerSlides` (the cover, then the trip's own photos) and `BannerSlide`; a plain module because the shared page, a server component, calls it and cannot call a client module's function
+- `components/travel/banner-photos.tsx` — the banner carousel shared by the trip page and the public view: `useBannerCarousel` (a turn every 5s, restarted by a hand-picked dot; still under reduced motion; only the marked slides while a proposal marks some), `BannerSlides` (crossfading layers) and `BannerDots`; `BannerPhotos` puts the two together. `banner-photos-dialog.tsx` — `BannerPhotosDialog`, adding and removing the trip's own photos from the banner's Photos button (the cover is still set from Edit)
 - `components/travel/assistant/` — `TravelAssistant` (corner button + chat: a floating, non-modal window on wide screens, a full-screen sheet on phones; mounted by `app/portal/entertainment/travel-planner/layout.tsx` when `canUseTravelAssistant`; attaches images through `lib/travel/photo-upload.ts`, the upload `PhotoPicker` uses too), `ProposalCard` (Apply / Cancel, then the receipt with Undo on the newest one), `ChangeTimeline` (the card's strip of the trip's days: dashed where things were, solid where they go), `pending-preview.tsx` (the open proposal as context: `useTripPreview`, `PendingMarks` / `usePendingMark` (`PendingMarks` also scrolls the first `data-pending` badge into view when a proposal lands), `PendingBadge`, `pendingRowClass`, `reviveTrip`), `PendingReviewBar` (Apply / Discard / back to the chat, floating over any page while a proposal waits and the chat is closed), `NewTripPreview` and `VoiceButton` (Web Speech dictation into the message box, ES / EN, with a live level meter; absent where the browser has no speech recognition)
   List/Calendar switches are `ToggleGroup` (they own no tab panels); dates are
   picked with `DateField`; the airport picker is `Popover` + `Command`; the
   trip form takes `onCancel` / `onSaved` so the edit dialog closes on both
-- `TripDetail` draws a trip the open proposal touches as the proposal would leave it (`TripPreview.trip`) and locks its content until the user decides; `TripItinerary`, `TravellerBar`, `TripPayments` and `TripGallery` light up new and changed rows (blue, sliding in one after another), show what changed (old price struck, "moved from"), and keep removed ones on screen, crossed out in red and out of every total
+- `TripDetail` draws a trip the open proposal touches as the proposal would leave it (`TripPreview.trip`) and locks its content until the user decides; `TripItinerary`, `TravellerBar`, `TripPayments` and the banner (a photo added or removed becomes the slide on show, badged "New photo" / "Removing photo") light up new and changed rows (blue, sliding in one after another), show what changed (old price struck, "moved from"), and keep removed ones on screen, crossed out in red and out of every total
 - `components/travel/trip-photo.tsx` — every trip/item photo and cover; a
   dead link shows a muted tile (covers fall back to the trip colour) instead of
   the browser's broken-image glyph
@@ -132,7 +134,7 @@ back to its fixture only when its feed has never answered.
 ## DB tables — `db/schema.ts`
 - `trips` — user-owned trips (date-based, no timezone)
 - `trip_items` — activities, bookings, transport, food (optional scheduled dates)
-- `trip_photos` — gallery (uploaded or external URLs)
+- `trip_photos` — uploaded or external URLs; with `item_id` on an activity, without it one of the photos taking turns on the trip's banner
 - `trip_shares` — share tokens for read-only public access; `member_id` scopes
   a link to one traveller, `show_prices` / `show_members` gate what it exposes
 - `trip_members` — who is going, with an optional fixed `share_percent`
@@ -161,6 +163,7 @@ from `new Date()` and hydration-failed every evening west of UTC.
   bar's sign-in, the unit arithmetic, and the public page (its client
   calendar's props, its figures)
 - Travel assistant — Vitest: `schemas/travel-assistant.test.ts` (refs, money), `lib/travel/assistant/{converse,undo-token,stream}.test.ts` (the tool loop against a fake client, web search status and paused turns, signed receipts, NDJSON), `lib/services/travel-assistant-service.test.ts` (apply, merge, ownership, travellers by name, removing one and undoing it, photos, preview, undo), `app/actions/travel-assistant.test.ts`, `app/api/travel/assistant/route.test.ts`, `components/travel/assistant/{travel-assistant,change-timeline}.test.tsx` (stream, card, Apply note, Undo, attachments, dictation, the timeline, following the assistant to a trip, the floating window staying open on desktop and making way on a phone, the review bar), `components/travel/assistant/pending-preview.test.tsx` (new, changed and removed rows on the itinerary, totals without the removed, scrolling to the first change)
+- Banner — Vitest: `components/travel/banner-photos.test.tsx` (a turn every five seconds and back to the first, a hand-picked photo's full five, only the marked photos while a proposal waits, no dots for one photo, `bannerSlides`' order)
 - `e2e/trip-lifecycle.spec.ts` — Playwright, real Supabase user
 - `e2e/trip-share-links.spec.ts` — Playwright; opens both kinds of share link in
   a browser with no session, which is the only place the server/client boundary
@@ -245,8 +248,22 @@ from `new Date()` and hydration-failed every evening west of UTC.
   becomes a `Date`, somebody west of Greenwich gets yesterday.
 - **Photos attach to an item** (`trip_photos.item_id`, which had existed
   unused since the table did). A photo picked before the item exists waits in
-  the form and is attached once the insert returns an id. The gallery holds
-  only the trip's own photos; the rest travel with their item.
+  the form and is attached once the insert returns an id. The trip's own
+  photos (no item) take turns on the banner; the rest travel with their item.
+- **No gallery: the banner is the trip's only picture.** A photo of something
+  done belongs on that activity, so the Gallery card went (planner and shared
+  page alike) and the trip's own photos became banner slides after the cover,
+  crossfading every five seconds with dots along the bottom edge, inside the
+  padding so they never meet the dates. No migration: they were already the
+  rows without an `item_id`.
+- **The payments column is sticky** (`lg:sticky lg:top-6 lg:self-start`) on
+  the planner and the shared page, so the money stays beside the days as they
+  scroll. `self-start` matters: a grid stretches its items to the row, and a
+  column as tall as the itinerary has nothing to stick against.
+- **The banner's buttons are dark glass with white text** (the traveller
+  pill's `bg-black/60 ring-white/20`), not `secondary`: that variant is a pale
+  grey with blue text, which over a photograph read as a light patch. Delete
+  turns red on hover rather than carrying a red icon a dark surface swallows.
 - **The shared page's view switcher sits on the banner**, opposite the total,
   dark and ringed for the same reason the pill is: the photograph underneath
   is unknown. `PublicTripViews` owns the page layout rather than a slot inside
@@ -340,9 +357,10 @@ from `new Date()` and hydration-failed every evening west of UTC.
   [`e2e/trip-share-links.spec.ts`](../../e2e/trip-share-links.spec.ts) opens
   both kinds of link in a browser with no session.
 - **Both grid columns carry `min-w-0`.** An `fr` track still takes an automatic
-  minimum from its content, so the gallery's photo rail widened its own column
-  and crushed the itinerary to one word per line. The rail scrolls; the column
-  has to be allowed to be narrower than it.
+  minimum from its content, so the old gallery's photo rail (gone since) widened
+  its own column and crushed the itinerary to one word per line. Any row that
+  scrolls sideways does the same; the column has to be allowed to be narrower
+  than it.
 - **The banner is `min-h-72` below `sm`.** At 21/9 a 390px phone gives 167px,
   and the traveller pill, the buttons and the title all landed on top of each
   other. Its three overlays are now one `justify-between` column.
@@ -374,8 +392,8 @@ from `new Date()` and hydration-failed every evening west of UTC.
   the delete button used to hold space at the right of every row, which is what
   pushed each amount off the card's edge.
 - **Icon buttons are `size-9 sm:size-7`** — 36px on touch, 28px on a pointer.
-  Several were 20–24px, and the gallery's delete was both the smallest and the
-  only destructive one visible without hovering.
+  Several were 20–24px, and the old gallery's photo delete was both the
+  smallest and the only destructive one visible without hovering.
 - **`space-y-*` stays.** The shadcn skill prefers `gap-*`, but
   [`docs/SPACING.md`](../SPACING.md) mandates `space-y-4`/`space-y-6` for
   stacked blocks, and a blanket swap would silently do nothing wherever the
@@ -572,8 +590,8 @@ from `new Date()` and hydration-failed every evening west of UTC.
 - `/app/trips/[token]` is **public** — verify no PII leaks through the shared route. The share token model in `trip_shares` is the only authz check.
 - **Travel formatting helpers live in [`lib/travel/format.ts`](../../lib/travel/format.ts)** (`parseTripDate`, `formatDateRange`, `tripDays`, `tripDurationLabel`, `formatTripMoney`) — a server-safe module with no `"use client"`. They were previously duplicated per component and exported from the client `trip-detail.tsx`; importing that from the server-rendered `public-trip-view.tsx` turned them into client references and **500'd every public share link**. Never re-export shared helpers from a client module.
 - `getPublicTripByToken` is wrapped in `React.cache()` (like `getTripWithRelations`) so `generateMetadata` + page body share one DB hit. The share panel treats **expired** links as inactive (same as revoked — the public resolver rejects both).
-- Itinerary/gallery/calendar hover-revealed controls are always visible below `sm` (no hover on touch) and reveal on keyboard focus.
-- All trip cover photos and gallery thumbnails render through `next/image` (remote hosts whitelisted in [`next.config.ts`](../../next.config.ts)). The blob-URL preview inside `photo-picker.tsx` stays as a CSS background because the optimizer can't process blob URLs.
+- Itinerary/banner-photos/calendar hover-revealed controls are always visible below `sm` (no hover on touch) and reveal on keyboard focus.
+- All trip banner photos and thumbnails render through `next/image` (remote hosts whitelisted in [`next.config.ts`](../../next.config.ts)). The blob-URL preview inside `photo-picker.tsx` stays as a CSS background because the optimizer can't process blob URLs.
 - `getTripWithRelations` is wrapped in `React.cache()` so `generateMetadata` and the page body share one DB hit per request.
 - `app/portal/entertainment/loading.tsx`, `app/portal/entertainment/travel-planner/[id]/not-found.tsx`, and `app/portal/entertainment/error.tsx` give the module its skeleton / 404 / error boundaries.
 - **Sports data — sources (as of 2026-10-18):**

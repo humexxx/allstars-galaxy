@@ -62,7 +62,8 @@ pnpm db:seed        # Seed database
   and mocks `@/db` at the import boundary — no real Supabase needed. See
   [`vitest.config.ts`](vitest.config.ts) and [`vitest.setup.ts`](vitest.setup.ts)
   (the setup stubs the `server-only` marker so server modules can be imported
-  from the test runner).
+  from the test runner, and gives jsdom a `matchMedia` that matches nothing —
+  a wide screen with motion allowed; a test that needs a phone stubs its own).
 - **Playwright** (`e2e/*.spec.ts`) drives the real app at `http://localhost:3010`.
   Requires a dedicated Supabase test user — copy [`.env.test.example`](.env.test.example)
   to `.env.test` and fill `TEST_USER_EMAIL` / `TEST_USER_PASSWORD`. The auth

@@ -285,7 +285,7 @@ describe("travellers and photos", () => {
     expect(calls.update[0]).toMatchObject({ table: tripShares, set: { memberId: NEW_MEMBER, revokedAt: null } });
   });
 
-  it("adds an attached picture to the gallery as an upload", async () => {
+  it("adds an attached picture to the banner as an upload", async () => {
     const url = "https://x.supabase.co/storage/v1/object/public/trip-photos/u/assistant/a.jpg";
     selects.push([], [tripRow()], [{ last: null }]);
     inserts.push([{ id: "p1", tripId: TRIP, itemId: null, url, caption: null }]);
@@ -300,7 +300,7 @@ describe("travellers and photos", () => {
       ],
     });
     expect(calls.insert[0]).toMatchObject({ table: tripPhotos, values: { source: "upload", sortOrder: 0 } });
-    expect(applied.lines[0]).toMatchObject({ subject: "photo", imageUrl: url, detail: "In the gallery" });
+    expect(applied.lines[0]).toMatchObject({ subject: "photo", imageUrl: url, detail: "On the banner" });
   });
 });
 

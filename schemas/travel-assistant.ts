@@ -128,7 +128,7 @@ const photoFields = z.object({
     .optional()
     .describe("Only for an image the user attached: the storagePath its note gives"),
   caption: z.string().max(500).nullable().optional(),
-  itemId: idSchema.optional().describe("Put it on one item instead of the trip's gallery"),
+  itemId: idSchema.optional().describe("Put it on one item instead of the trip's banner"),
 });
 
 const createTripChange = z.object({

@@ -1,9 +1,12 @@
+import { DashboardSportCardSkeleton } from "@/components/entertainment/sports/dashboard-sport-card-skeleton"
 import { DashboardCardSkeleton } from "@/components/portal/dashboard-card-skeleton"
+import { DASHBOARD_GRID, DASHBOARD_SECTION } from "@/components/portal/dashboard-layout"
 import { PortalPageContainer } from "@/components/portal/page-container"
 
 /**
- * The dashboard's fallback: the same two-column grid of cards, so the streamed
- * cards land in the boxes the skeleton drew.
+ * The dashboard's fallback: exactly what `page.tsx` draws while its cards
+ * stream — the same section, grid and card skeletons — so the page replaces it
+ * without a single box moving.
  *
  * It lives in the `(dashboard)` group, not at `app/portal/loading.tsx`. There
  * it wrapped every section too, and a section's own skeleton arrives a beat
@@ -14,15 +17,15 @@ import { PortalPageContainer } from "@/components/portal/page-container"
 export default function DashboardLoading() {
   return (
     <PortalPageContainer>
-      <section className="flex flex-col gap-6" aria-busy="true">
+      <section className={DASHBOARD_SECTION} aria-busy="true">
         <span className="sr-only" role="status">
           Loading…
         </span>
-        <div className="grid auto-rows-min gap-4 md:grid-cols-2">
+        <div className={DASHBOARD_GRID}>
           <DashboardCardSkeleton rail={5} />
-          <DashboardCardSkeleton tiles={3} />
-          <DashboardCardSkeleton tiles={3} />
-          <DashboardCardSkeleton tiles={2} className="col-span-1" />
+          <DashboardCardSkeleton trips />
+          <DashboardSportCardSkeleton />
+          <DashboardSportCardSkeleton />
         </div>
       </section>
     </PortalPageContainer>

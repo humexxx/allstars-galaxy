@@ -5,12 +5,12 @@ import { Star, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Text } from "@/components/ui/typography";
-import { DashboardCardSkeleton } from "@/components/portal/dashboard-card-skeleton";
 import { listUserFavoriteSports } from "@/lib/services/sports-service";
 import type { SportId } from "@/types/sports";
 
 import { DashboardF1Card } from "./dashboard-f1-card";
 import { DashboardSportCard } from "./dashboard-sport-card";
+import { DashboardSportCardSkeleton } from "./dashboard-sport-card-skeleton";
 
 const SPORTS_PATH = "/portal/entertainment/sports";
 
@@ -57,9 +57,9 @@ export async function DashboardSportCards({ userId }: { userId: string }) {
       {favorites.map(({ sportId, competition }) => (
         <Suspense
           key={sportId}
-          // Four rows tall like the card it stands in for, or the cards
-          // after it would take its rows (`dashboard-card-rows.ts`).
-          fallback={<DashboardCardSkeleton tiles={2} className="col-span-1 @xl:row-span-4" />}
+          // Four rows like the card it stands in for, or the cards after it
+          // would take its rows (`dashboard-card-rows.ts`).
+          fallback={<DashboardSportCardSkeleton />}
         >
           {sportId === "f1" ? (
             <DashboardF1Card userId={userId} />

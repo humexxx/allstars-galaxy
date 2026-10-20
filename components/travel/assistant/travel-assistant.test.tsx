@@ -68,12 +68,29 @@ async function say(text: string): Promise<void> {
   });
 }
 
+/** The screen the assistant thinks it is on; a phone below 768px. */
+const screenSize = { phone: false, listeners: new Set<() => void>() };
+function onPhone(): void {
+  screenSize.phone = true;
+  act(() => screenSize.listeners.forEach((l) => l()));
+}
+
 beforeEach(() => {
+  vi.stubGlobal("matchMedia", () => ({
+    get matches() {
+      return screenSize.phone;
+    },
+    addEventListener: (_: string, l: () => void) => screenSize.listeners.add(l),
+    removeEventListener: (_: string, l: () => void) => screenSize.listeners.delete(l),
+  }));
+  Element.prototype.scrollIntoView = vi.fn();
   render(<TravelAssistant />);
   fireEvent.click(screen.getByRole("button", { name: "Open the travel assistant" }));
 });
 
 afterEach(() => {
+  screenSize.phone = false;
+  screenSize.listeners.clear();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -94,8 +111,8 @@ describe("TravelAssistant", () => {
       context: { tripId: TRIP },
     });
     expect(await screen.findByText("Te propongo esto:")).toBeInTheDocument();
-    // On the card in the chat, and on the bar that decides it from the page.
-    expect(screen.getAllByText("Universal on the 18th")).toHaveLength(2);
+    // On the card in the chat; the bar on the page waits for the chat to close.
+    expect(screen.getAllByText("Universal on the 18th")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
   });
 
@@ -235,12 +252,19 @@ describe("TravelAssistant on the page", () => {
     ],
   };
 
-  it("opens the trip the proposal changes and steps the chat aside for it", async () => {
+  it("opens the trip the proposal changes, and floats beside it on a wide screen", async () => {
     stream([{ type: "proposal", proposal: ON_PAGE }, { type: "text", text: "Mirá la página" }]);
     await say("Cambiá el otro viaje");
 
     expect(router.push).toHaveBeenCalledWith(`/portal/entertainment/travel-planner/${OTHER}`);
-    // The decision moves to the page: a bar with the summary and the buttons.
+    // The chat stays open, and the page behind it can be used.
+    const chat = screen.getByRole("dialog", { name: /Travel assistant/ });
+    expect(chat).toHaveAttribute("data-slot", "travel-assistant-window");
+    expect(document.body).not.toHaveStyle({ pointerEvents: "none" });
+    expect(screen.queryByRole("region", { name: "Changes to review" })).toBeNull();
+
+    // Closed, the decision moves to a bar on the page.
+    fireEvent.click(within(chat).getByRole("button", { name: "Close" }));
     const bar = screen.getByRole("region", { name: "Changes to review" });
     expect(bar).toHaveTextContent("Universal on the 18th");
     expect(bar).toHaveTextContent("1 change waiting for you");
@@ -248,7 +272,18 @@ describe("TravelAssistant on the page", () => {
     expect(screen.getByRole("button", { name: "Open the travel assistant" })).toHaveClass("hidden");
   });
 
+  it("makes way for the page on a phone", async () => {
+    onPhone();
+    stream([{ type: "proposal", proposal: ON_PAGE }, { type: "text", text: "Mirá la página" }]);
+    await say("Cambiá el otro viaje");
+
+    expect(router.push).toHaveBeenCalledWith(`/portal/entertainment/travel-planner/${OTHER}`);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByRole("region", { name: "Changes to review" })).toHaveTextContent("Universal on the 18th");
+  });
+
   it("applies from the bar, and offers to undo", async () => {
+    onPhone();
     stream([{ type: "proposal", proposal: ON_PAGE }]);
     vi.mocked(applyTravelChangesAction).mockResolvedValue({
       success: true,

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -41,8 +41,18 @@ export function useTripPreview(tripId: string): TripPreview | null {
 
 const MarksContext = createContext<TripPreview | null>(null);
 
-/** Makes one trip's marks available to every row the trip page draws. */
+/**
+ * Makes one trip's marks available to every row the trip page draws, and
+ * brings the first of them into view when a proposal lands on the page — a
+ * change at the bottom of a long itinerary is otherwise easy to miss.
+ */
 export function PendingMarks({ preview, children }: { preview: TripPreview | null; children: ReactNode }) {
+  const proposalId = useContext(ProposalContext)?.id;
+  const tripId = preview?.tripId;
+  useEffect(() => {
+    if (!proposalId || !tripId) return;
+    document.querySelector("[data-pending]")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [proposalId, tripId]);
   return <MarksContext.Provider value={preview}>{children}</MarksContext.Provider>;
 }
 
@@ -89,6 +99,7 @@ const LABEL: Record<TravelMark, string> = { add: "New", change: "Changes", remov
 export function PendingBadge({ mark, className }: { mark: TravelMark; className?: string }) {
   return (
     <Badge
+      data-pending={mark}
       variant={mark === "remove" ? "destructive" : "info"}
       className={cn("gap-1 text-2xs", className)}
     >

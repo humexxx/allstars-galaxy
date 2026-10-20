@@ -6,7 +6,7 @@ import type { TripItemWithStops, TripWithRelations } from "@/types/travel";
 import type { TripPreview } from "@/types/travel-assistant";
 
 import { TripItinerary } from "../trip-itinerary";
-import { PendingMarks } from "./pending-preview";
+import { PendingMarks, PendingProposalProvider, type PendingProposal } from "./pending-preview";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/app/actions/travel", () => ({
@@ -67,6 +67,22 @@ describe("a previewed proposal on the itinerary", () => {
     // The 18th's subtotal counts the park, not the tour that is going.
     const subtotal = screen.getByText("Monday, Jan 18").closest("section")!.querySelector("h3 + span");
     expect(subtotal).toHaveTextContent("$120");
+  });
+
+  it("brings the first pending row into view when a proposal lands", () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const proposal = { id: "p1", previews: [preview] } as unknown as PendingProposal;
+    render(
+      <PendingProposalProvider value={proposal}>
+        <PendingMarks preview={preview}>
+          <TripItinerary trip={trip([PARK, DINNER])} />
+        </PendingMarks>
+      </PendingProposalProvider>
+    );
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(document.querySelector("[data-pending]"));
+    expect(scroll).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
   });
 
   it("draws the trip as it is when nothing is waiting", () => {

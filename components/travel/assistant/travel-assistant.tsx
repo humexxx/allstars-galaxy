@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { ArrowUp, Paperclip, RotateCcw, Sparkles, X } from "lucide-react";
+import { Dialog as DialogPrimitive } from "radix-ui";
 import { toast } from "sonner";
 
 import { applyTravelChangesAction, undoTravelChangesAction } from "@/app/actions/travel-assistant";
@@ -24,6 +25,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Text } from "@/components/ui/typography";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { readEvents } from "@/lib/travel/assistant/stream";
 import { uploadTripPhoto, type UploadedPhoto } from "@/lib/travel/photo-upload";
 import { cn } from "@/lib/utils";
@@ -82,18 +84,20 @@ const TRAVEL = "/portal/entertainment/travel-planner";
  * message — the model would otherwise go on assuming its changes were saved.
  *
  * It wraps the Travel pages so they can draw the open proposal on themselves:
- * when one arrives, the assistant opens the trip it touches, steps the chat
- * aside, and the page shows the trip as it would be, with a bar to apply or
- * discard it.
+ * when one arrives, the assistant opens the trip it touches and the page shows
+ * the trip as it would be. On a wide screen the chat floats in a corner, so
+ * the page stays in view beside it; a phone has room for one of the two, so
+ * the chat makes way and a bar on the page applies or discards.
  */
 export function TravelAssistant({ children }: { children?: ReactNode }) {
   const params = useParams<{ id?: string }>();
   const tripId = typeof params.id === "string" && params.id !== "new" ? params.id : null;
   const router = useRouter();
   const pathname = usePathname();
+  const phone = useIsMobile();
 
   const [open, setOpen] = useState(false);
-  /** The chat said something after it stepped aside for a proposal. */
+  /** The chat said something after it made way for a proposal. */
   const [unread, setUnread] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [draft, setDraft] = useState("");
@@ -104,6 +108,7 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
   const fileInput = useRef<HTMLInputElement>(null);
   /** What was typed before dictation started; the transcript goes after it. */
   const voiceBase = useRef("");
+  const input = useRef<HTMLTextAreaElement>(null);
 
   const transcript = useRef<TravelAssistantMessage[]>([]);
   const notes = useRef<string[]>([]);
@@ -230,15 +235,17 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
     if (proposed) showOnPage(proposed);
   }
 
-  /** Opens the page the proposal changes and steps the chat aside for it. */
+  /** Opens the page the proposal changes; on a phone, the chat makes way for it. */
   function showOnPage(proposal: TravelProposal): void {
     const fresh = proposal.previews.find((p) => p.isNew);
     const first = proposal.previews[0];
     const target = fresh ? `${TRAVEL}/preview` : first ? `${TRAVEL}/${first.tripId}` : null;
     if (!target) return;
     if (target !== pathname) router.push(target);
-    setOpen(false);
-    setUnread(true);
+    if (phone) {
+      setOpen(false);
+      setUnread(true);
+    }
   }
 
   async function apply(entry: ProposalEntry): Promise<void> {
@@ -338,7 +345,8 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
   return (
     <PendingProposalProvider value={pending}>
       {children}
-      {waiting && <PendingReviewBar proposal={pending!} onOpenChat={openChat} unread={unread} />}
+      {/* With the chat open, its card decides; the bar is for when it is not. */}
+      {waiting && !open && <PendingReviewBar proposal={pending!} onOpenChat={openChat} unread={unread} />}
       <Button
         size="icon-lg"
         aria-label="Open the travel assistant"
@@ -348,14 +356,20 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
           // Clear of the dev-tools wrench, which only exists in development.
           process.env.NODE_ENV === "development" ? "bottom-16" : "bottom-4",
           // The review bar carries its own way back to the chat.
-          waiting && "hidden"
+          (open || waiting) && "hidden"
         )}
       >
         <Sparkles />
       </Button>
 
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="flex flex-col gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md">
+      <Sheet open={open} onOpenChange={setOpen} modal={phone}>
+        <ChatWindow
+          floating={!phone}
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            input.current?.focus();
+          }}
+        >
           <SheetHeader className="border-b pr-12">
             <div className="flex items-center justify-between gap-2">
               <SheetTitle className="flex items-center gap-2">
@@ -490,6 +504,7 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
                 <Paperclip />
               </Button>
               <Textarea
+                ref={input}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={onKeyDown}
@@ -515,8 +530,53 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
               </Button>
             </div>
           </form>
-        </SheetContent>
+        </ChatWindow>
       </Sheet>
     </PendingProposalProvider>
+  );
+}
+
+/**
+ * Where the chat sits. A phone gives it the whole screen. Anything wider gets
+ * a window floating in the corner: no dimming, and the page behind it stays
+ * in view and in reach. That matters once a proposal is drawn on that page.
+ * Clicking the page leaves the window open; Escape or the close button shuts it.
+ */
+function ChatWindow({
+  floating,
+  onOpenAutoFocus,
+  children,
+}: {
+  floating: boolean;
+  onOpenAutoFocus: (event: Event) => void;
+  children: ReactNode;
+}) {
+  if (!floating) {
+    return (
+      <SheetContent side="right" className="flex flex-col gap-0 data-[side=right]:w-full">
+        {children}
+      </SheetContent>
+    );
+  }
+  // Not portalled: the content's own presence plays the exit animation, which
+  // a wrapper inside the portal would cut short. The wrapper only places the
+  // window and lets clicks through to the page around it.
+  return (
+    <div className="pointer-events-none fixed inset-y-4 right-4 z-50 flex flex-col justify-end">
+      <DialogPrimitive.Content
+        data-slot="travel-assistant-window"
+        onOpenAutoFocus={onOpenAutoFocus}
+        onInteractOutside={(e) => e.preventDefault()}
+        className="pointer-events-auto relative flex h-160 max-h-full w-sm origin-bottom-right flex-col overflow-hidden rounded-2xl border bg-popover text-sm shadow-2xl duration-200 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-open:slide-in-from-bottom-4 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-closed:slide-out-to-bottom-4"
+      >
+        {children}
+        <DialogPrimitive.Close asChild>
+          <Button variant="ghost" size="icon-sm" className="absolute top-4 right-4">
+            <X />
+            <span className="sr-only">Close</span>
+          </Button>
+        </DialogPrimitive.Close>
+      </DialogPrimitive.Content>
+    </div>
   );
 }

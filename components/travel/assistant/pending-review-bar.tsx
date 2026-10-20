@@ -12,9 +12,10 @@ import type { PendingProposal } from "./pending-preview";
 /**
  * Where a proposal is decided, on the page that shows it.
  *
- * It floats over whatever page is open while the proposal waits, so the
- * changes can be looked at full screen — the chat closes to make room — and
- * applied or discarded without going back to it.
+ * It floats over whatever page is open while the proposal waits and the chat
+ * is closed — on a phone the chat closes on its own to make room — so the
+ * changes can be looked at full screen and applied or discarded without going
+ * back to it.
  */
 export function PendingReviewBar({
   proposal,
@@ -61,6 +62,7 @@ export function PendingReviewBar({
           variant="ghost"
           onClick={proposal.discard}
           disabled={proposal.applying}
+          aria-label="Discard"
           className="shrink-0"
         >
           <X />

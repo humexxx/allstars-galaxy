@@ -124,19 +124,21 @@ describe("openingDayIndex", () => {
 });
 
 describe("MatchesByDate", () => {
-  it("opens on the freshest results and keeps the days before behind Earlier", () => {
+  it("opens on the freshest results and keeps the days before behind a clock", () => {
     const { container } = renderList(season);
     expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18", "2026-10-21"]);
     expect(earlierButton()).toHaveAccessibleName("Earlier results, 2 days");
-    expect(earlierButton()).toHaveTextContent(/^Earlier$/);
+    // An icon: the name is for a screen reader, the tooltip for the eye.
+    expect(earlierButton()).toHaveTextContent("");
+    expect(earlierButton()!.querySelector("svg")).not.toBeNull();
     expect(screen.getByText(/^Today · /)).toBeInTheDocument();
   });
 
-  it("puts Earlier on the first day's heading line, not on a row of its own", () => {
+  it("puts the clock on the first day's heading line, not on a row of its own", () => {
     const { container } = renderList(season);
     const heading = container.querySelector('[data-day="2026-10-17"]')!.firstElementChild!;
     expect(heading).toContainElement(earlierButton());
-    expect(heading).toHaveTextContent(/^Saturday, October 17, 2026Earlier$/);
+    expect(heading).toHaveTextContent(/^Saturday, October 17, 2026$/);
   });
 
   it("opens on a day heading: no label row above the first day", () => {
@@ -245,7 +247,7 @@ describe("MatchesByDate", () => {
     expect(earlierButton()).toHaveAccessibleName("Earlier results, 1 day");
   });
 
-  it("shows every day, and no Earlier, before the first result", () => {
+  it("shows every day, and no clock, before the first result", () => {
     const { container } = renderList(season.slice(3));
     expect(shownDays(container)).toEqual(["2026-10-18", "2026-10-21"]);
     expect(earlierButton()).toBeNull();

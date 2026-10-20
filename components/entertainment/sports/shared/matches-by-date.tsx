@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CalendarX, ChevronUp, ListFilter } from "lucide-react";
+import { CalendarX, History, ListFilter } from "lucide-react";
 
 import { useReaderTimeZone } from "@/components/reader-time-zone";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Eyebrow } from "@/components/ui/typography";
 import { matchDays, type MatchDay } from "@/lib/sports/match-days";
 import { cn } from "@/lib/utils";
@@ -47,7 +48,7 @@ export function openingDayIndex(days: MatchDay[], today: string): number {
  * narrows it to one team's fixtures and results.
  *
  * The page is the only scroller. The list opens on its freshest results
- * rather than scrolling to them, with the days before behind "Earlier" on the
+ * rather than scrolling to them, with the days before behind a clock on the
  * first day's heading: a scroll on load never ran on a phone, where the list
  * had no box of its own to scroll.
  *
@@ -92,9 +93,9 @@ export function MatchesByDate({
   const shown = days.slice(earlier);
 
   // The older days go in above the first heading. Bring the newest of them
-  // into view and give it focus, so the list reads on upward from where
-  // "Earlier" was instead of jumping to the season's first day, and a
-  // keyboard is not left on <body> when the button goes.
+  // into view and give it focus, so the list reads on upward from where the
+  // clock was instead of jumping to the season's first day, and a keyboard is
+  // not left on <body> when the button goes.
   useLayoutEffect(() => {
     const day = revealed.current;
     revealed.current = null;
@@ -125,6 +126,8 @@ export function MatchesByDate({
     setTeam(value);
     setShowEarlier(false);
   };
+
+  const earlierLabel = `Earlier results, ${earlier} ${earlier === 1 ? "day" : "days"}`;
 
   const heading = (day: string): string => {
     const name = format.longDay(day);
@@ -162,18 +165,23 @@ export function MatchesByDate({
               >
                 {heading(day)}
                 {i === 0 && earlier > 0 && (
-                  // A 24px target in a 22px line: the negative margins keep
-                  // the line, and the table's label beside it, as they are.
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    className="-my-1.5 -mr-2 font-medium tracking-normal normal-case text-muted-foreground"
-                    aria-label={`Earlier results, ${earlier} ${earlier === 1 ? "day" : "days"}`}
-                    onClick={revealEarlier}
-                  >
-                    <ChevronUp data-icon="inline-start" />
-                    Earlier
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      {/* A 24px target in a 22px line: the negative margins
+                          keep the line, and the table's label beside it, as
+                          they are. */}
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="-my-1.5 -mr-1 text-muted-foreground"
+                        aria-label={earlierLabel}
+                        onClick={revealEarlier}
+                      >
+                        <History className="size-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{earlierLabel}</TooltipContent>
+                  </Tooltip>
                 )}
               </Eyebrow>
               <div className="grid gap-2 @xl:grid-cols-2">

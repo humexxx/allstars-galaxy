@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
 
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
 import { NBA_DATA } from "@/lib/data/sports/nba";

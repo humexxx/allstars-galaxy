@@ -18,9 +18,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { SPORTS } from "@/lib/data/sports/registry";
 import type { SportPayload } from "@/lib/sports/payload";
-import type { SportId, SportMeta } from "@/types/sports";
+import type { SavedTeamFilter, SportId, SportMeta } from "@/types/sports";
 
 import { ManageFavoritesSheet } from "./manage-favorites-sheet";
+import { SavedTeamFilterProvider } from "./shared/team-filter-context";
 import { SportsTodayProvider } from "./shared/time-zone-context";
 import { SportSkeleton, SportsNavigationContext } from "./sports-navigation";
 import { F1View } from "./sports/f1-view";
@@ -41,6 +42,8 @@ type SportsHubProps = {
   initialTab?: string;
   /** The reader's today, decided on the server (`getRequestTodayIso`). */
   today: string;
+  /** The match list on screen and the teams last picked in it; null for a sport without one. */
+  teamFilter?: SavedTeamFilter | null;
 };
 
 export function SportsHub({
@@ -49,6 +52,7 @@ export function SportsHub({
   payload,
   initialTab,
   today,
+  teamFilter = null,
 }: SportsHubProps): React.ReactElement {
   const favSet = useMemo(() => new Set(favoriteSportIds), [favoriteSportIds]);
   const router = useRouter();
@@ -114,10 +118,12 @@ export function SportsHub({
             <SportSkeleton />
           ) : (
             <SportsTodayProvider today={today}>
-              <div className="flex flex-col gap-6">
-                {payload.sample && <SampleDataNotice />}
-                <SportContent payload={payload} initialTab={initialTab} />
-              </div>
+              <SavedTeamFilterProvider filter={teamFilter}>
+                <div className="flex flex-col gap-6">
+                  {payload.sample && <SampleDataNotice />}
+                  <SportContent payload={payload} initialTab={initialTab} />
+                </div>
+              </SavedTeamFilterProvider>
             </SportsTodayProvider>
           )}
         </div>

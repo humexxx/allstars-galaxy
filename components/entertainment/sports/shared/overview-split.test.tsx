@@ -2,6 +2,8 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
+
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
 import type { Match, Team } from "@/types/sports";
 

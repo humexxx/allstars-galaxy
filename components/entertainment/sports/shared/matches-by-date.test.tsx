@@ -2,13 +2,19 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/app/actions/sports", () => ({
+  setSportTeamFilterAction: vi.fn(async () => ({ success: true })),
+}));
+
+import { setSportTeamFilterAction } from "@/app/actions/sports";
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { matchDays } from "@/lib/sports/match-days";
-import type { Match, MatchStatus, Team } from "@/types/sports";
+import type { Match, MatchStatus, SavedTeamFilter, Team } from "@/types/sports";
 
 import { MatchesByDate, openingDayIndex } from "./matches-by-date";
 import { SportShell } from "./sport-shell";
+import { SavedTeamFilterProvider } from "./team-filter-context";
 import { SportsTodayProvider } from "./time-zone-context";
 
 const TODAY = "2026-10-18";
@@ -17,14 +23,16 @@ const ZONE = "America/Costa_Rica";
 const teams = new Map<string, Team>([
   ["rma", { id: "rma", name: "Real Madrid", shortName: "Real Madrid", code: "RMA" }],
   ["bar", { id: "bar", name: "Barcelona", shortName: "Barcelona", code: "BAR" }],
+  ["atm", { id: "atm", name: "Atlético de Madrid", shortName: "Atlético", code: "ATM" }],
+  ["sev", { id: "sev", name: "Sevilla FC", shortName: "Sevilla", code: "SEV" }],
 ]);
 
-const match = (id: string, kickoff: string, status: MatchStatus): Match => {
+const match = (id: string, kickoff: string, status: MatchStatus, home = "rma", away = "bar"): Match => {
   const played = status === "ft" || status === "aet" || status === "pen";
   return {
     id,
-    homeTeamId: "rma",
-    awayTeamId: "bar",
+    homeTeamId: home,
+    awayTeamId: away,
     homeScore: played ? 2 : null,
     awayScore: played ? 1 : null,
     kickoff,
@@ -41,27 +49,41 @@ const season = [
   match("oct-21", "2026-10-21T20:00:00Z", "scheduled"),
 ];
 
-/** The list on an Overview tab of a sport shell, whose bar holds its filter. */
-function renderList(matches: Match[]): ReturnType<typeof render> {
+// Four teams over three days: the Clásico, then Atlético–Sevilla, then Barça–Sevilla.
+const league = [
+  match("clasico", "2026-10-17T20:00:00Z", "ft"),
+  match("derbi", "2026-10-18T20:00:00Z", "scheduled", "atm", "sev"),
+  match("visit", "2026-10-21T20:00:00Z", "scheduled", "bar", "sev"),
+];
+
+const LA_LIGA = { sportId: "football", competition: "la-liga" } as const;
+
+/**
+ * The list on an Overview tab of a sport shell, whose bar holds its filter.
+ * `saved` is what the page read for this list; without it nothing is saved.
+ */
+function renderList(matches: Match[], saved: SavedTeamFilter | null = null): ReturnType<typeof render> {
   return render(
     <ReaderTimeZoneProvider timeZone={ZONE}>
       <SportsTodayProvider today={TODAY}>
-        <Tabs defaultValue="overview">
-          <SportShell
-            title="La Liga"
-            tabs={
-              <TabsList variant="line">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="knockout">Knockout</TabsTrigger>
-              </TabsList>
-            }
-          >
-            <TabsContent value="overview">
-              <MatchesByDate matches={matches} teams={teams} />
-            </TabsContent>
-            <TabsContent value="knockout">Bracket</TabsContent>
-          </SportShell>
-        </Tabs>
+        <SavedTeamFilterProvider filter={saved}>
+          <Tabs defaultValue="overview">
+            <SportShell
+              title="La Liga"
+              tabs={
+                <TabsList variant="line">
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
+                  <TabsTrigger value="knockout">Knockout</TabsTrigger>
+                </TabsList>
+              }
+            >
+              <TabsContent value="overview">
+                <MatchesByDate matches={matches} teams={teams} />
+              </TabsContent>
+              <TabsContent value="knockout">Bracket</TabsContent>
+            </SportShell>
+          </Tabs>
+        </SavedTeamFilterProvider>
       </SportsTodayProvider>
     </ReaderTimeZoneProvider>
   );
@@ -73,25 +95,39 @@ const shownDays = (container: HTMLElement): (string | null)[] =>
 const earlierButton = (): HTMLElement | null =>
   screen.queryByRole("button", { name: /Earlier results/ });
 
-const teamFilter = (): HTMLElement | null => screen.queryByRole("combobox", { name: "Filter by team" });
+const teamFilter = (): HTMLElement | null => screen.queryByRole("button", { name: /^Filter by team/ });
 
 /** The sticky row the tablist sits in (through its sideways scroller). */
 const sportBar = (): HTMLElement => screen.getByRole("tablist").closest<HTMLElement>(".sticky")!;
 
-// jsdom has neither; the tests that need them lend them.
-const { scrollIntoView, hasPointerCapture } = Element.prototype;
+// jsdom has no scrollIntoView; cmdk scrolls its highlighted option with it.
+const { scrollIntoView } = Element.prototype;
 
-/** Radix's Select asks for pointer capture and scrolls its options into view. */
-function pickTeam(name: RegExp): void {
-  Element.prototype.hasPointerCapture = vi.fn(() => false);
-  fireEvent.keyDown(teamFilter()!, { key: "Enter" });
+const openFilter = (): void => {
+  fireEvent.click(teamFilter()!);
+};
+const tick = (name: RegExp): void => {
   fireEvent.click(screen.getByRole("option", { name }));
+};
+const closeFilter = (): void => {
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+};
+
+/** Open the menu, tick one team, close it. */
+function pickTeam(name: RegExp): void {
+  openFilter();
+  tick(name);
+  closeFilter();
 }
+
+/** The scrolls the list asked for, not cmdk's own (`block: "nearest"`). */
+const listScrolls = (scrolled: ReturnType<typeof vi.fn>): unknown[] =>
+  scrolled.mock.contexts.filter((_, i) => (scrolled.mock.calls[i][0] as ScrollIntoViewOptions)?.block === "start");
 
 afterEach(() => {
   Element.prototype.scrollIntoView = scrollIntoView;
-  Element.prototype.hasPointerCapture = hasPointerCapture;
   vi.restoreAllMocks();
+  vi.mocked(setSportTeamFilterAction).mockClear();
 });
 
 describe("openingDayIndex", () => {
@@ -186,7 +222,7 @@ describe("MatchesByDate", () => {
 
     expect(screen.getByRole("tabpanel")).toHaveTextContent("Bracket");
     expect(teamFilter()).toBeNull();
-    expect(within(sportBar()).queryByRole("combobox")).toBeNull();
+    expect(within(sportBar()).queryByRole("button")).toBeNull();
   });
 
   it("opens another team's fixtures on its freshest results again, its crest in the bar", () => {
@@ -199,7 +235,7 @@ describe("MatchesByDate", () => {
 
     expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18", "2026-10-21"]);
     expect(earlierButton()).toHaveAccessibleName("Earlier results, 2 days");
-    expect(teamFilter()).toHaveTextContent("Barcelona");
+    expect(teamFilter()).toHaveAccessibleName("Filter by team: Barcelona");
   });
 
   it("brings a team picked deep in the list back to its first day, under the bar", () => {
@@ -216,10 +252,7 @@ describe("MatchesByDate", () => {
 
     pickTeam(/Barcelona/);
 
-    const first = container.querySelector("[data-day]");
-    expect(scrolled).toHaveBeenCalledTimes(1);
-    expect(scrolled.mock.contexts[0]).toBe(first);
-    expect(scrolled).toHaveBeenCalledWith({ block: "start" });
+    expect(listScrolls(scrolled)).toEqual([container.querySelector("[data-day]")]);
   });
 
   it("leaves the page alone when the picked team's list already starts in view", () => {
@@ -239,7 +272,7 @@ describe("MatchesByDate", () => {
 
     pickTeam(/Barcelona/);
 
-    expect(scrolled).not.toHaveBeenCalled();
+    expect(listScrolls(scrolled)).toEqual([]);
   });
 
   it("says one day in the singular", () => {
@@ -265,6 +298,88 @@ describe("MatchesByDate", () => {
     renderList([]);
     expect(screen.getByText("No matches available yet")).toBeInTheDocument();
     expect(earlierButton()).toBeNull();
+  });
+
+  it("narrows to several teams at once, ticked in one menu", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const { container } = renderList(league);
+
+    openFilter();
+    tick(/Real Madrid/);
+    expect(shownDays(container)).toEqual(["2026-10-17"]);
+    tick(/Sevilla/);
+
+    expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18", "2026-10-21"]);
+    expect(screen.getByRole("option", { name: /Real Madrid/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("option", { name: /Sevilla/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("option", { name: /Barcelona/ })).toHaveAttribute("aria-checked", "false");
+    expect(teamFilter()).toHaveAccessibleName("Filter by team: 2 teams");
+
+    // Unticking one keeps the other; All teams lets both go.
+    tick(/Sevilla/);
+    expect(shownDays(container)).toEqual(["2026-10-17"]);
+    tick(/All teams/);
+    expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18", "2026-10-21"]);
+    expect(teamFilter()).toHaveAccessibleName("Filter by team: All teams");
+  });
+
+  it("finds a team by name through the search", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    renderList(league);
+    openFilter();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Search teams" }), { target: { value: "atl" } });
+
+    expect(screen.getByRole("option", { name: /Atlético/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Barcelona/ })).toBeNull();
+  });
+
+  it("opens on the teams last picked in this list", () => {
+    const { container } = renderList(league, { list: LA_LIGA, teamIds: ["atm"] });
+    expect(shownDays(container)).toEqual(["2026-10-18"]);
+    expect(teamFilter()).toHaveAccessibleName("Filter by team: Atlético");
+  });
+
+  it("lets go of a remembered team that is no longer in the list", () => {
+    const { container } = renderList(league, { list: LA_LIGA, teamIds: ["gone", "sev"] });
+    expect(shownDays(container)).toEqual(["2026-10-18", "2026-10-21"]);
+    expect(teamFilter()).toHaveAccessibleName("Filter by team: Sevilla");
+  });
+
+  it("saves the pick once, when the menu closes having changed", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    renderList(league, { list: LA_LIGA, teamIds: [] });
+
+    openFilter();
+    tick(/Sevilla/);
+    tick(/Barcelona/);
+    expect(setSportTeamFilterAction).not.toHaveBeenCalled();
+    closeFilter();
+
+    expect(setSportTeamFilterAction).toHaveBeenCalledOnce();
+    expect(setSportTeamFilterAction).toHaveBeenCalledWith({ ...LA_LIGA, teamIds: ["sev", "bar"] });
+  });
+
+  it("saves nothing when the menu closes as it opened", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    renderList(league, { list: LA_LIGA, teamIds: ["sev"] });
+
+    openFilter();
+    tick(/Barcelona/);
+    tick(/Barcelona/);
+    closeFilter();
+
+    expect(setSportTeamFilterAction).not.toHaveBeenCalled();
+  });
+
+  it("saves nothing for a list the page did not name", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    renderList(league);
+
+    pickTeam(/Sevilla/);
+
+    expect(teamFilter()).toHaveAccessibleName("Filter by team: Sevilla");
+    expect(setSportTeamFilterAction).not.toHaveBeenCalled();
   });
 
   it("has nowhere to put a filter outside a sport shell, and renders without one", () => {

@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
 
 import { getFootballLeague } from "@/lib/data/sports/football";
 import type { FootballLeagueId } from "@/types/sports";
@@ -51,7 +53,7 @@ describe("FootballView", () => {
 
   it("keeps the team filter in the sport bar, and only while Overview is open", () => {
     renderLeague("uefa-champions-league");
-    const filter = (): HTMLElement | null => screen.queryByRole("combobox", { name: "Filter by team" });
+    const filter = (): HTMLElement | null => screen.queryByRole("button", { name: /^Filter by team/ });
     expect(openTab()).toBe("Knockout");
     expect(filter()).toBeNull();
 

@@ -3,8 +3,9 @@ import type { Metadata } from "next";
 import { SportsHub } from "@/components/entertainment/sports/sports-hub";
 import { DEFAULT_SPORT } from "@/lib/data/sports/registry";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
-import { listUserFavoriteSportIds } from "@/lib/services/sports-service";
-import { loadSport } from "@/lib/sports/load";
+import { getSportTeamFilter, listUserFavoriteSportIds } from "@/lib/services/sports-service";
+import { footballLeagueFrom, loadSport } from "@/lib/sports/load";
+import { teamFilterList } from "@/lib/sports/team-filter";
 import { getRequestTodayIso } from "@/lib/utils/request-today";
 import { isSportId } from "@/lib/sports/payload";
 
@@ -33,7 +34,13 @@ export default async function SportsPage({
   // into football, and links to it still land on it.
   const worldCupLink = sport === "worldcup";
   const active = worldCupLink ? "football" : isSportId(sport) ? sport : (favorites[0] ?? DEFAULT_SPORT);
-  const payload = await loadSport(active, { league: worldCupLink ? "world-cup" : league });
+  const leagueParam = worldCupLink ? "world-cup" : league;
+  // The teams last picked in this list, read beside the sport rather than after it.
+  const list = teamFilterList(active, footballLeagueFrom(leagueParam));
+  const [payload, teamIds] = await Promise.all([
+    loadSport(active, { league: leagueParam }),
+    list ? getSportTeamFilter(ctx.effectiveUserId, list) : Promise.resolve([]),
+  ]);
 
   // No PageHeader: the sport bar names the page, and the favourites button
   // sits at the end of the sport strip (SportsHub).
@@ -44,6 +51,7 @@ export default async function SportsPage({
       payload={payload}
       initialTab={tab}
       today={today}
+      teamFilter={list ? { list, teamIds } : null}
     />
   );
 }

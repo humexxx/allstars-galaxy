@@ -9,9 +9,11 @@ import {
   ChevronRight,
   Image as ImageIcon,
   MapPin,
+  Plane,
   Plus,
 } from "lucide-react";
 
+import { PageHeader } from "@/components/portal/page-header";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,7 +26,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Eyebrow, Heading, Mono } from "@/components/ui/typography";
-import { addMonths, daysBetween, monthWeeks } from "@/lib/travel/calendar";
+import {
+  addMonths,
+  daysBetween,
+  laneCount,
+  layOutTrips,
+  monthWeeks,
+  type PackedRun,
+} from "@/lib/travel/calendar";
 import { cn } from "@/lib/utils";
 import { formatDay, formatDayRange, formatMonthLong } from "@/lib/utils/date";
 import type { Trip } from "@/types/travel";
@@ -93,18 +102,69 @@ function partition(trips: Trip[], today: string): { upcoming: Trip[]; past: Trip
   return { upcoming, past };
 }
 
+const TITLE = "Travel Planner";
+
+/**
+ * The page's one "New trip": in the header beside the List / Calendar switch,
+ * or in the empty state when there is nothing to switch between. The calendar
+ * used to carry a second one under the month.
+ */
+function NewTripButton({ className }: { className?: string }) {
+  return (
+    <Button asChild className={className}>
+      <Link href={NEW_TRIP_PATH}>
+        <Plus />
+        New trip
+      </Link>
+    </Button>
+  );
+}
+
+/**
+ * The whole trips page under the shell: its header, then the list or the
+ * month. The switch sits in the header row, next to the title, rather than on
+ * a row of its own above the content.
+ */
 export function TripsOverview({ trips, today }: TripsOverviewProps) {
   const { upcoming, past } = useMemo(() => partition(trips, today), [trips, today]);
 
+  if (trips.length === 0) {
+    return (
+      <>
+        <PageHeader title={TITLE} />
+        <EmptyState
+          variant="card"
+          icon={Plane}
+          title="No trips yet"
+          description="Create your first trip to start planning destinations, dates and bookings."
+          action={<NewTripButton />}
+        />
+      </>
+    );
+  }
+
   return (
-    <Tabs defaultValue="list" className="flex flex-col gap-6">
-      {/* "List", not "Upcoming": the panel holds the past trips too, and a
-          tab called Upcoming with a Past section inside it contradicted
-          itself. Same words as the trip page's own List / Calendar switch. */}
-      <TabsList>
-        <TabsTrigger value="list">List</TabsTrigger>
-        <TabsTrigger value="calendar">Calendar</TabsTrigger>
-      </TabsList>
+    // `flex-1` down to the calendar, which fills what the shell leaves of the
+    // window. The list just sits at the top of the same box.
+    <Tabs defaultValue="list" className="flex flex-1 flex-col gap-6">
+      <PageHeader
+        title={TITLE}
+        actions={
+          <>
+            {/* "List", not "Upcoming": the panel holds the past trips too, and
+                a tab called Upcoming with a Past section inside it
+                contradicted itself. Same words as the trip page's own List /
+                Calendar switch. */}
+            <TabsList>
+              <TabsTrigger value="list">List</TabsTrigger>
+              <TabsTrigger value="calendar">Calendar</TabsTrigger>
+            </TabsList>
+            {/* Pushed to the far end on a phone, where the actions get a row
+                of their own under the title. */}
+            <NewTripButton className="ml-auto" />
+          </>
+        }
+      />
 
       <TabsContent value="list" className="flex flex-col gap-6">
         <section className="flex flex-col gap-3">
@@ -127,7 +187,7 @@ export function TripsOverview({ trips, today }: TripsOverviewProps) {
         )}
       </TabsContent>
 
-      <TabsContent value="calendar">
+      <TabsContent value="calendar" className="flex flex-col">
         <TripsCalendar trips={trips} today={today} />
       </TabsContent>
     </Tabs>
@@ -237,36 +297,55 @@ function TripCard({
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /**
- * Every trip on one month. Days are YYYY-MM-DD strings throughout, compared as
- * strings — the same approach as the trip page's calendar, and it keeps the
- * memos keyed on values that are equal from one render to the next (the Date
- * objects this used to build were new every render, so nothing was memoised).
+ * Where the first bar sits, clear of the day number, and how tall each lane
+ * is. A week is tall enough for its deepest stack and never shorter than
+ * MIN_WEEK; past that the month stretches to fill the window, so a short one
+ * scrolls instead of squeezing six weeks into slivers.
  */
-function TripsCalendar({ trips, today }: { trips: Trip[]; today: string }) {
+const LANE_TOP = 26;
+const BAR_HEIGHT = 20;
+const LANE_GAP = 2;
+const MIN_WEEK = 64;
+
+/**
+ * Every trip on one month, each one a single bar from its first day to its
+ * last — the length of the bar is the trip. A trip that wraps a week carries
+ * on in the next row with square, borderless ends where it was cut, and trips
+ * that share a day stack in lanes (`layOutTrips`).
+ *
+ * Days are YYYY-MM-DD strings throughout, compared as strings, so the memos
+ * stay keyed on values that are equal from one render to the next.
+ */
+export function TripsCalendar({ trips, today }: { trips: Trip[]; today: string }) {
   const todayMonth = today.slice(0, 7);
   const [month, setMonth] = useState(todayMonth);
+  /** The trip under the pointer, lit in every row it crosses. */
+  const [lit, setLit] = useState<string | null>(null);
 
-  const days = useMemo(() => monthWeeks(month).flat(), [month]);
-
-  /** The trips on each visible day, earliest start first. */
-  const tripsByDay = useMemo(() => {
-    const first = days[0];
-    const last = days[days.length - 1];
-    const visible = trips
-      .filter((t) => (t.endDate ?? t.startDate) >= first && t.startDate <= last)
-      .sort((a, b) => a.startDate.localeCompare(b.startDate));
-    const map = new Map<string, Trip[]>();
-    for (const day of days) {
-      const matches = visible.filter(
-        (t) => t.startDate <= day && (t.endDate ?? t.startDate) >= day
-      );
-      if (matches.length) map.set(day, matches);
-    }
-    return map;
-  }, [trips, days]);
+  const weeks = useMemo(() => {
+    const sorted = [...trips].sort(
+      (a, b) =>
+        a.startDate.localeCompare(b.startDate) ||
+        (b.endDate ?? b.startDate).localeCompare(a.endDate ?? a.startDate)
+    );
+    // A trip that crosses three weeks is three bars and one link: the first
+    // bar on screen is the one in the tab order and the accessibility tree.
+    const seen = new Set<string>();
+    return monthWeeks(month).map((week) => {
+      const bars = layOutTrips(week, sorted).map((bar) => {
+        const first = !seen.has(bar.value.id);
+        seen.add(bar.value.id);
+        return { ...bar, first };
+      });
+      return { week, bars, lanes: laneCount(bars) };
+    });
+  }, [trips, month]);
 
   return (
-    <Card size="sm">
+    // `min-h-min` on both clipped boxes: `overflow-hidden` drops a flex
+    // item's automatic minimum to zero, so on a short window the month was
+    // cut off at the bottom instead of the page scrolling to it.
+    <Card size="sm" className="min-h-min flex-1">
       <CardHeader>
         <CardTitle as="h2">{formatMonthLong(`${month}-01`)}</CardTitle>
         <CardAction className="flex items-center gap-1">
@@ -297,122 +376,154 @@ function TripsCalendar({ trips, today }: { trips: Trip[]; today: string }) {
         </CardAction>
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-7 gap-px overflow-hidden rounded-md border bg-border text-xs">
-          {WEEKDAYS.map((d) => (
+      <CardContent className="flex flex-1 flex-col">
+        <div className="flex min-h-min flex-1 flex-col gap-px overflow-hidden rounded-md border bg-border">
+          <div className="grid grid-cols-7 gap-px">
+            {WEEKDAYS.map((d) => (
+              <div
+                key={d}
+                className="bg-muted/40 px-1 py-1.5 text-center text-2xs font-medium uppercase tracking-wider text-muted-foreground"
+              >
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {weeks.map(({ week, bars, lanes }) => (
             <div
-              key={d}
-              className="bg-muted/40 px-2 py-1.5 text-center text-2xs font-medium uppercase tracking-wider text-muted-foreground"
+              key={week[0]}
+              data-slot="calendar-week"
+              className="relative grid flex-1 grid-cols-7 gap-px"
+              // A computed layout, not a spacing choice — see the constants.
+              style={{
+                minHeight: Math.max(MIN_WEEK, LANE_TOP + lanes * (BAR_HEIGHT + LANE_GAP) + 4),
+              }}
             >
-              {d}
+              {week.map((day) => (
+                <DayCell key={day} day={day} month={month} today={today} />
+              ))}
+
+              {/* The bars ride over the days on a matching seven-column
+                  track — same columns, same gap — which is the only way one
+                  can cross a cell boundary and read as one thing. */}
+              <div
+                className="pointer-events-none absolute inset-x-0 grid grid-cols-7 gap-x-px"
+                style={{ top: LANE_TOP, rowGap: LANE_GAP }}
+              >
+                {bars.map((bar) => (
+                  <TripBar
+                    key={`${bar.value.id}-${bar.start}`}
+                    trip={bar.value}
+                    bar={bar}
+                    lit={lit === bar.value.id}
+                    onLight={setLit}
+                  />
+                ))}
+              </div>
             </div>
           ))}
-          {days.map((day, index) => {
-            const inMonth = day.slice(0, 7) === month;
-            const isToday = day === today;
-            const dayTrips = tripsByDay.get(day) ?? [];
-            return (
-              <div
-                key={day}
-                aria-current={isToday ? "date" : undefined}
-                className={cn(
-                  "group relative min-h-22 bg-card p-1.5",
-                  // The page's own ground, not a muted wash: in the dark
-                  // theme `bg-muted/20` came out LIGHTER than the card, so the
-                  // days outside the month were the ones that stood out.
-                  !inMonth && "bg-background text-muted-foreground"
-                )}
-              >
-                {/* The whole day is the target, as the hint below says. It
-                    used to be a 12px "+" in the corner — invisible until
-                    hover on a desktop, crowding every cell on a phone, and on
-                    a day with a trip it opened the trip instead. The bars sit
-                    above it and keep their own links. */}
-                {inMonth && (
-                  <Link
-                    href={newTripWithDate(day)}
-                    aria-label={`New trip on ${formatDay(day)}`}
-                    className="absolute inset-0 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                  />
-                )}
-                <div className="pointer-events-none relative flex items-center justify-between">
-                  <span
-                    className={cn(
-                      "inline-flex size-5 items-center justify-center rounded-full text-2xs tabular-nums",
-                      isToday && "bg-primary font-semibold text-primary-foreground"
-                    )}
-                  >
-                    {Number(day.slice(-2))}
-                  </span>
-                  {inMonth && (
-                    <Plus
-                      aria-hidden
-                      className="hidden size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 sm:block"
-                    />
-                  )}
-                </div>
-
-                <div className="pointer-events-none relative mt-1 flex flex-col gap-0.5">
-                  {dayTrips.slice(0, 3).map((trip) => {
-                    // Labelled where a run begins and again at the start of
-                    // each week row, so a trip that carries over from last
-                    // week still says what it is. Other days are a plain
-                    // marker of the same colour.
-                    const isStart = trip.startDate === day;
-                    const labelled = isStart || index % 7 === 0;
-                    const range = formatDayRange(trip.startDate, trip.endDate);
-                    const bar = (
-                      <Link
-                        href={tripPath(trip.id)}
-                        // A wash of the trip's colour with a ring of it, and
-                        // the label in the text colour: white on the solid
-                        // slot was 3.2:1 on orange and 2.2:1 on yellow.
-                        className="pointer-events-auto block truncate rounded px-1.5 py-0.5 text-2xs font-medium text-foreground"
-                        style={{
-                          backgroundColor: `color-mix(in oklch, ${trip.color} 22%, var(--card))`,
-                          boxShadow: `inset 0 0 0 1px color-mix(in oklch, ${trip.color} 60%, transparent)`,
-                        }}
-                        // A continuation day repeats the start day's link, so
-                        // it stays out of the tab order and out of the
-                        // accessibility tree instead of being read once per
-                        // day of the trip.
-                        {...(isStart
-                          ? { "aria-label": `${trip.title}, ${range}` }
-                          : { tabIndex: -1, "aria-hidden": true })}
-                      >
-                        {labelled ? trip.title : "\u00a0"}
-                      </Link>
-                    );
-                    return (
-                      <Tooltip key={trip.id}>
-                        <TooltipTrigger asChild>{bar}</TooltipTrigger>
-                        <TooltipContent side="top">
-                          <span className="block font-medium">{trip.title}</span>
-                          <span className="block tabular-nums opacity-80">{range}</span>
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  })}
-                  {dayTrips.length > 3 && (
-                    <span className="block px-1.5 text-2xs text-muted-foreground">
-                      +{dayTrips.length - 3} more
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          <span>Click a day to plan a new trip · click a bar to open the trip</span>
-          <Button asChild size="sm" variant="outline" className="ml-auto">
-            <Link href={NEW_TRIP_PATH}>
-              <Plus /> New trip
-            </Link>
-          </Button>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function DayCell({ day, month, today }: { day: string; month: string; today: string }) {
+  const inMonth = day.slice(0, 7) === month;
+  const isToday = day === today;
+  return (
+    <div
+      aria-current={isToday ? "date" : undefined}
+      className={cn(
+        "group relative bg-card p-1",
+        // The page's own ground, not a muted wash: in the dark theme
+        // `bg-muted/20` came out LIGHTER than the card, so the days outside
+        // the month were the ones that stood out.
+        !inMonth && "bg-background text-muted-foreground"
+      )}
+    >
+      {/* The whole day is the "plan a trip here" target. The bars sit above
+          it and keep their own links. */}
+      {inMonth && (
+        <Link
+          href={newTripWithDate(day)}
+          aria-label={`New trip on ${formatDay(day)}`}
+          className="absolute inset-0 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        />
+      )}
+      <div className="pointer-events-none relative flex items-center justify-between">
+        <span
+          className={cn(
+            "inline-flex size-5 items-center justify-center rounded-full text-2xs tabular-nums",
+            isToday && "bg-primary font-semibold text-primary-foreground"
+          )}
+        >
+          {Number(day.slice(-2))}
+        </span>
+        {inMonth && (
+          <Plus
+            aria-hidden
+            className="hidden size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 sm:block"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TripBar({
+  trip,
+  bar,
+  lit,
+  onLight,
+}: {
+  trip: Trip;
+  bar: Omit<PackedRun<Trip>, "value"> & { first: boolean };
+  lit: boolean;
+  onLight: (id: string | null) => void;
+}) {
+  const range = formatDayRange(trip.startDate, trip.endDate);
+  const light = () => onLight(trip.id);
+  const dim = () => onLight(null);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          href={tripPath(trip.id)}
+          data-slot="trip-bar"
+          onMouseEnter={light}
+          onMouseLeave={dim}
+          onFocus={light}
+          onBlur={dim}
+          style={{
+            gridColumn: `${bar.start + 1} / span ${bar.span}`,
+            gridRow: bar.lane + 1,
+            height: BAR_HEIGHT,
+            // A wash of the trip's colour with a rim of it, and the label in
+            // the text colour: white on the solid slot was 3.2:1 on orange
+            // and 2.2:1 on yellow.
+            backgroundColor: `color-mix(in oklch, ${trip.color} ${lit ? 40 : 22}%, var(--card))`,
+            borderColor: `color-mix(in oklch, ${trip.color} 60%, transparent)`,
+          }}
+          className={cn(
+            "pointer-events-auto flex min-w-0 items-center border px-1.5 text-2xs font-medium text-foreground outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+            // A rounded, inset end is where the trip begins or ends; a square
+            // one running into the edge with no rim is where the week cut it.
+            bar.opensRun ? "ml-1 rounded-l-sm" : "rounded-l-none border-l-0",
+            bar.closesRun ? "mr-1 rounded-r-sm" : "rounded-r-none border-r-0"
+          )}
+          {...(bar.first
+            ? { "aria-label": `${trip.title}, ${range}` }
+            : { tabIndex: -1, "aria-hidden": true })}
+        >
+          <span className="truncate">{trip.title}</span>
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        <span className="block font-medium">{trip.title}</span>
+        {trip.destination && <span className="block opacity-80">{trip.destination}</span>}
+        <span className="block tabular-nums opacity-80">{range}</span>
+      </TooltipContent>
+    </Tooltip>
   );
 }

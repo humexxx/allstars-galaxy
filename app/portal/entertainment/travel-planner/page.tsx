@@ -1,10 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Plus, Plane } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/portal/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
 import { TripsOverview } from "@/components/travel/trips-overview";
 
 import { requireEffectiveContext } from "@/lib/services/impersonation";
@@ -26,37 +21,9 @@ export default async function TravelPlannerPage() {
   const today = await getRequestTodayIso();
 
   return (
-    <section className="flex flex-col gap-6">
-      <PageHeader
-        title="Travel Planner"
-        actions={
-          <Button asChild>
-            <Link href="/portal/entertainment/travel-planner/new">
-              <Plus />
-              New trip
-            </Link>
-          </Button>
-        }
-      />
-
-      {trips.length === 0 ? (
-        <EmptyState
-          variant="card"
-          icon={Plane}
-          title="No trips yet"
-          description="Create your first trip to start planning destinations, dates and bookings."
-          action={
-            <Button asChild>
-              <Link href="/portal/entertainment/travel-planner/new">
-                <Plus />
-                Create trip
-              </Link>
-            </Button>
-          }
-        />
-      ) : (
-        <TripsOverview trips={trips} today={today} />
-      )}
+    // `flex-1` so the calendar can fill the height the shell leaves it.
+    <section className="flex flex-1 flex-col gap-6">
+      <TripsOverview trips={trips} today={today} />
     </section>
   );
 }

@@ -30,7 +30,10 @@ export async function updateAiSettings(
   return getAiSettings();
 }
 
-/** One Claude call's spend, priced at the model's list rates. */
+/**
+ * One Claude call's spend, under the model the API says answered it. A model
+ * not on our list (a safety fallback's) is priced at the default's rates.
+ */
 export async function recordAiUsage(entry: {
   userId: string;
   feature: string;
@@ -41,7 +44,7 @@ export async function recordAiUsage(entry: {
   await db.insert(aiUsage).values({
     userId: entry.userId,
     feature: entry.feature,
-    model: model.id,
+    model: entry.model,
     inputTokens: entry.usage.input_tokens,
     outputTokens: entry.usage.output_tokens,
     cacheCreationInputTokens: entry.usage.cache_creation_input_tokens ?? 0,

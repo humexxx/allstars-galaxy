@@ -76,8 +76,8 @@ export async function POST(request: Request): Promise<Response> {
           added,
           send,
           // The spend is the admin's, even while they plan someone else's trip.
-          record: (usage) =>
-            recordAiUsage({ userId: ctx.realUser.id, feature: "travel-assistant", model: model.id, usage }),
+          record: (usage, answeredBy) =>
+            recordAiUsage({ userId: ctx.realUser.id, feature: "travel-assistant", model: answeredBy, usage }),
           signal: request.signal,
         });
       } catch (err) {

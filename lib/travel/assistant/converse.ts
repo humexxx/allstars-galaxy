@@ -47,8 +47,11 @@ export async function converse({
   history: TravelAssistantMessage[];
   added: TravelAssistantMessage[];
   send: (event: TravelAssistantEvent) => void;
-  /** Books each call's tokens against the month's credit. */
-  record: (usage: AiTokenUsage) => Promise<void>;
+  /**
+   * Books each call's tokens against the month's credit, under the model
+   * that answered: after a safety fallback that is not the one asked for.
+   */
+  record: (usage: AiTokenUsage, answeredBy: string) => Promise<void>;
   signal?: AbortSignal;
 }): Promise<void> {
   let parseRetries = 0;
@@ -85,7 +88,7 @@ export async function converse({
     }
 
     // Billed whatever happens next, so counted before anything can return.
-    await record(message.usage).catch((err: unknown) =>
+    await record(message.usage, message.model).catch((err: unknown) =>
       console.error("[travel-assistant] usage not recorded:", err)
     );
 

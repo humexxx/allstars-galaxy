@@ -70,6 +70,16 @@ describe("recordAiUsage", () => {
       costUsd: "0.012000",
     });
   });
+  it("keeps the name of a fallback model it has no price for", async () => {
+    await recordAiUsage({
+      userId: "admin-1",
+      feature: "travel-assistant",
+      model: "claude-opus-4-8",
+      usage: { input_tokens: 0, output_tokens: 1000 },
+    });
+    // Priced at the default's rates ($20 out per million).
+    expect(calls.insert[0]).toMatchObject({ model: "claude-opus-4-8", costUsd: "0.020000" });
+  });
 });
 
 describe("getAiUsageSummary", () => {

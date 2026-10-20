@@ -94,7 +94,7 @@ describe("POST /api/travel/assistant", () => {
     as("admin");
     vi.mocked(converse).mockImplementation(async ({ model, record }) => {
       expect(model.id).toBe("claude-sonnet-5-5");
-      await record({ input_tokens: 10, output_tokens: 5 });
+      await record({ input_tokens: 10, output_tokens: 5 }, "claude-sonnet-5-5");
     });
     await (await post(HELLO)).text();
     expect(recordAiUsage).toHaveBeenCalledWith({

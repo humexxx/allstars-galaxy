@@ -36,7 +36,7 @@ const toolUse = (name: string, input: unknown, id = "toolu_1") =>
 function fakeClient(turns: Turn[]) {
   const sent: TravelAssistantMessage[][] = [];
   const params: Record<string, unknown>[] = [];
-  const stream = vi.fn((p: { messages: TravelAssistantMessage[] }) => {
+  const stream = vi.fn((p: { messages: TravelAssistantMessage[]; model: string }) => {
     sent.push(structuredClone(p.messages));
     params.push(p);
     const turn = turns.shift()!;
@@ -48,7 +48,7 @@ function fakeClient(turns: Turn[]) {
       finalMessage: async () => {
         if (turn instanceof Error) throw turn;
         if (turn.text) onText?.(turn.text);
-        return { content: turn.content, stop_reason: turn.stop_reason, usage: USAGE };
+        return { content: turn.content, stop_reason: turn.stop_reason, usage: USAGE, model: p.model };
       },
     };
   });
@@ -158,7 +158,7 @@ describe("converse's model and spend", () => {
     expect(params.map((p) => p.model)).toEqual(["claude-sonnet-5-5", "claude-sonnet-5-5"]);
     expect(params[0]).toMatchObject({ fallbacks: "default", betas: ["server-side-fallback-2026-07-01"] });
     expect(record).toHaveBeenCalledTimes(2);
-    expect(record).toHaveBeenCalledWith(USAGE);
+    expect(record).toHaveBeenCalledWith(USAGE, "claude-sonnet-5-5");
   });
 
   it("sends Haiku no fallback, which it would only ignore", async () => {

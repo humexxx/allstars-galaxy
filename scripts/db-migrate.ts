@@ -8,12 +8,10 @@
  *
  * This script:
  *   - reads migrations/meta/_journal.json to know every migration generated
- *   - reads drizzle.__drizzle_migrations for the newest migration applied
- *   - counts as pending exactly what drizzle's migrator will run: every journal
- *     entry whose `when` is later than that newest `created_at`. Not a count of
- *     rows — with two branches migrating the same database, a branch's journal
- *     can hold as many entries as the table has rows and still have one to
- *     apply, and the count said "up to date" without running anything
+ *   - reads drizzle.__drizzle_migrations to see which have been applied
+ *   - works out what drizzle will apply by its own rule — timestamps, not a
+ *     count (see `planMigrations`) — and refuses to run when an entry would be
+ *     silently skipped
  *   - delegates the actual SQL execution to drizzle-orm's migrator (same engine
  *     drizzle-kit uses under the hood)
  *   - prints a final summary you can trust
@@ -25,7 +23,8 @@ import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 
-type JournalEntry = { idx: number; tag: string; when: number };
+import { planMigrations, type JournalEntry } from "./migration-plan";
+
 type Journal = { entries: JournalEntry[] };
 
 const url = process.env.DIRECT_URL;
@@ -47,35 +46,53 @@ function loadJournal(): Journal {
   return JSON.parse(raw) as Journal;
 }
 
-type Applied = { count: number; newest: number };
-
-async function readApplied(sql: postgres.Sql): Promise<Applied> {
+async function appliedAt(sql: postgres.Sql): Promise<number[]> {
   try {
-    const [row] = await sql<{ count: number; newest: string | null }[]>`
-      SELECT COUNT(*)::int AS count, MAX(created_at)::text AS newest
-      FROM drizzle.__drizzle_migrations
+    const rows = await sql<{ created_at: string }[]>`
+      SELECT created_at::text AS created_at FROM drizzle.__drizzle_migrations
     `;
-    return { count: row?.count ?? 0, newest: Number(row?.newest ?? 0) };
+    return rows.map((r) => Number(r.created_at));
   } catch {
     // Fresh DB — table doesn't exist yet.
-    return { count: 0, newest: 0 };
+    return [];
   }
 }
+
+const day = (ms: number): string => new Date(ms).toISOString().slice(0, 16).replace("T", " ");
 
 async function main() {
   const sql = postgres(url!, { max: 1, idle_timeout: 5 });
 
   try {
     const journal = loadJournal();
-    const sortedEntries = [...journal.entries].sort((a, b) => a.idx - b.idx);
+    const { applied, pending, skipped, foreign, lastAppliedAt } = planMigrations(
+      journal.entries,
+      await appliedAt(sql)
+    );
 
-    const before = await readApplied(sql);
-    const appliedBefore = before.count;
-    const pending = sortedEntries.filter((entry) => entry.when > before.newest);
+    if (foreign.length > 0) {
+      console.log(
+        `\n! ${foreign.length} applied migration${foreign.length === 1 ? " is" : "s are"} not in this checkout's journal (another branch's):`
+      );
+      for (const at of foreign) console.log(`  • created_at ${at} (${day(at)} UTC)`);
+    }
+
+    if (skipped.length > 0) {
+      console.error(
+        `\n✗ ${skipped.length} migration${skipped.length === 1 ? " is" : "s are"} missing from the database but older than its newest (${day(lastAppliedAt!)} UTC).`
+      );
+      console.error("  drizzle applies only entries newer than that, so these would never run:");
+      for (const entry of skipped) console.error(`  • ${entry.tag}  (when ${entry.when})`);
+      console.error(
+        "\n  Nothing was applied. Move each entry's `when` in migrations/meta/_journal.json past the\n" +
+          "  database's newest (and after any migration it depends on), then run this again.\n"
+      );
+      process.exit(1);
+    }
 
     if (pending.length === 0) {
       console.log(
-        `✓ Database is up to date (${appliedBefore} migration${appliedBefore === 1 ? "" : "s"} applied, 0 pending)`
+        `✓ Database is up to date (${applied.length} of ${journal.entries.length} migration${journal.entries.length === 1 ? "" : "s"} applied, 0 pending)`
       );
       return;
     }
@@ -91,21 +108,16 @@ async function main() {
     const db = drizzle(sql);
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
-    const appliedAfter = (await readApplied(sql)).count;
-    const newlyApplied = appliedAfter - appliedBefore;
+    const recorded = new Set(await appliedAt(sql));
+    const landed = pending.filter((entry) => recorded.has(entry.when));
+    const missing = pending.filter((entry) => !recorded.has(entry.when));
+    for (const entry of landed) console.log(`  ✓ ${entry.tag}`);
+    for (const entry of missing) console.log(`  ✗ ${entry.tag}  (did not land)`);
 
-    if (newlyApplied === pending.length) {
-      for (const entry of pending) console.log(`  ✓ ${entry.tag}`);
-      console.log(`\n✓ Applied ${newlyApplied} migration${newlyApplied === 1 ? "" : "s"}`);
-    } else if (newlyApplied > 0) {
-      const applied = pending.slice(0, newlyApplied);
-      const failed = pending.slice(newlyApplied);
-      for (const entry of applied) console.log(`  ✓ ${entry.tag}`);
-      for (const entry of failed) console.log(`  ✗ ${entry.tag}  (did not land)`);
-      console.log(`\n✗ ${newlyApplied} applied, ${failed.length} failed`);
-      process.exit(1);
+    if (missing.length === 0) {
+      console.log(`\n✓ Applied ${landed.length} migration${landed.length === 1 ? "" : "s"}`);
     } else {
-      console.log("\n✗ No migrations were applied — check the error output above.");
+      console.log(`\n✗ ${landed.length} applied, ${missing.length} did not land — check the error output above.`);
       process.exit(1);
     }
   } finally {

@@ -222,12 +222,14 @@ will cancel a long-running `ALTER COLUMN ... USING (...)` mid-flight.
 The pre-flight check in `drizzle.config.ts` will refuse to run if `DIRECT_URL`
 is missing and `DATABASE_URL` points at the transaction pooler.
 
-**Two branches with migrations: apply the older one first.** The migrator runs
-only migrations whose journal `when` is later than the newest row in
-`drizzle.__drizzle_migrations` — it never compares names or hashes. Apply a
-branch's migration generated at 3 pm, and another branch's from 1 pm is
-skipped without a word when that branch migrates. Whichever goes second must
-be generated after the first was applied (renumber it if needed).
+drizzle applies a migration only when its journal `when` is newer than the
+newest `created_at` in `drizzle.__drizzle_migrations` — never by count, name
+or hash. The one database is migrated from several branches, so
+`pnpm db:migrate` ([`scripts/db-migrate.ts`](scripts/db-migrate.ts)) plans by
+that rule (`scripts/migration-plan.ts`): it lists another branch's applied
+migrations, and refuses to run when an entry of yours is older than the
+database's newest, because drizzle would skip it forever. Move that entry's
+`when` past the newest and run it again.
 
 **The database is shared with production**, which runs the code on `main`. A
 migration applied ahead of its release must keep that code working: add, never

@@ -1344,6 +1344,35 @@ export const userSportsPreferences = pgTable(
   ]
 ).enableRLS();
 
+/**
+ * The teams a reader narrowed a match list to, one row per competition, so
+ * the sports page reopens on them. Not tied to favourites: any sport's list
+ * can be filtered. `competition` is the football league id, or the sport id
+ * itself for a sport with one list (NBA, NFL). No row, or an empty list, is
+ * every team; the service deletes the row rather than keep an empty one.
+ */
+export const userSportsTeamFilters = pgTable(
+  "user_sports_team_filters",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sportId: text("sport_id").notNull(),
+    competition: text("competition").notNull(),
+    teamIds: text("team_ids").array().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("user_sports_team_filters_user_list_uniq").on(
+      t.userId,
+      t.sportId,
+      t.competition
+    ),
+  ]
+).enableRLS();
+
 // Portal-wide user preferences — one row per user, created lazily on first
 // write. Absence of a row means "all defaults" (the service layer owns the
 // default values so no backfill migration is needed when adding a column).

@@ -48,8 +48,10 @@ import {
   listUserFavoriteSportIds,
   listUserFavoriteSports,
   listUserSportsFavorites,
+  getSportTeamFilter,
   setSportCompetition,
   setSportFavorite,
+  setSportTeamFilter,
 } from "./sports-service";
 
 const dbMock = vi.mocked(db, true);
@@ -213,6 +215,82 @@ describe("setSportCompetition", () => {
     mockUpdate([]);
 
     await expect(setSportCompetition(USER_ID, "padel", "women")).resolves.toBeNull();
+  });
+});
+
+// ---------- team filters ----------
+
+describe("getSportTeamFilter", () => {
+  function mockFilterRow(rows: unknown[]) {
+    const chain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue(rows),
+    };
+    dbMock.select.mockReturnValue(chain as never);
+    return chain;
+  }
+
+  it("hands back the teams last picked in that list", async () => {
+    const chain = mockFilterRow([{ teamIds: ["arsenal", "chelsea"] }]);
+
+    await expect(
+      getSportTeamFilter(USER_ID, { sportId: "football", competition: "premier-league" })
+    ).resolves.toEqual(["arsenal", "chelsea"]);
+    expect(chain.where).toHaveBeenCalledOnce();
+    expect(chain.limit).toHaveBeenCalledWith(1);
+  });
+
+  it("is every team, [], when nothing is remembered", async () => {
+    mockFilterRow([]);
+
+    await expect(getSportTeamFilter(USER_ID, { sportId: "nba", competition: "nba" })).resolves.toEqual([]);
+  });
+});
+
+describe("setSportTeamFilter", () => {
+  function mockUpsert(rows: unknown[]) {
+    const chain = {
+      values: vi.fn().mockReturnThis(),
+      onConflictDoUpdate: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue(rows),
+    };
+    dbMock.insert.mockReturnValue(chain as never);
+    return chain;
+  }
+
+  it("upserts the caller's row for that list, each team once, in the order picked", async () => {
+    const row = { id: "f", teamIds: ["chelsea", "arsenal"] };
+    const chain = mockUpsert([row]);
+
+    await expect(
+      setSportTeamFilter(USER_ID, { sportId: "football", competition: "premier-league" }, [
+        "chelsea",
+        "arsenal",
+        "chelsea",
+      ])
+    ).resolves.toEqual(row);
+
+    expect(chain.values).toHaveBeenCalledWith({
+      userId: USER_ID,
+      sportId: "football",
+      competition: "premier-league",
+      teamIds: ["chelsea", "arsenal"],
+    });
+    const [conflict] = chain.onConflictDoUpdate.mock.calls[0];
+    expect(conflict.target).toHaveLength(3);
+    expect(conflict.set.teamIds).toEqual(["chelsea", "arsenal"]);
+    expect(conflict.set.updatedAt).toBeInstanceOf(Date);
+    expect(dbMock.delete).not.toHaveBeenCalled();
+  });
+
+  it("deletes the row for every team rather than keep an empty one", async () => {
+    const chain = mockDelete();
+
+    await expect(setSportTeamFilter(USER_ID, { sportId: "nfl", competition: "nfl" }, [])).resolves.toBeNull();
+
+    expect(chain.where).toHaveBeenCalledOnce();
+    expect(dbMock.insert).not.toHaveBeenCalled();
   });
 });
 

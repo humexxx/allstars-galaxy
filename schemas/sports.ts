@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { SPORT_COMPETITIONS, SPORT_IDS } from "@/types/sports";
+import { FOOTBALL_COMPETITION_IDS, SPORT_COMPETITIONS, SPORT_IDS } from "@/types/sports";
 
 // Rejects unknown sport keys before they reach the service / DB.
 export const sportIdSchema = z.enum(SPORT_IDS);
@@ -31,3 +31,27 @@ export const setSportCompetitionSchema = z
   );
 
 export type SetSportCompetitionData = z.infer<typeof setSportCompetitionSchema>;
+
+const teamIdsSchema = z.array(z.string().trim().min(1).max(64)).max(64);
+
+// The teams a match list is narrowed to, for one list: a football league, or
+// the NBA's or NFL's own (`TeamFilterList`). An empty list is every team.
+export const setSportTeamFilterSchema = z.discriminatedUnion("sportId", [
+  z.object({
+    sportId: z.literal("football"),
+    competition: z.enum(FOOTBALL_COMPETITION_IDS),
+    teamIds: teamIdsSchema,
+  }),
+  z.object({
+    sportId: z.literal("nba"),
+    competition: z.literal("nba"),
+    teamIds: teamIdsSchema,
+  }),
+  z.object({
+    sportId: z.literal("nfl"),
+    competition: z.literal("nfl"),
+    teamIds: teamIdsSchema,
+  }),
+]);
+
+export type SetSportTeamFilterData = z.infer<typeof setSportTeamFilterSchema>;

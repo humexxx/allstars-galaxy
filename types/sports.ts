@@ -2,7 +2,7 @@
 // designed to be filled by a real API later (e.g. football-data.org, ergast,
 // nba-api, etc.) without changing the UI layer.
 
-import type { F1NewsImage, userSportsPreferences } from "@/db/schema";
+import type { F1NewsImage, userSportsPreferences, userSportsTeamFilters } from "@/db/schema";
 
 /** The single list of sport keys — `sportIdSchema` validates against it. */
 export const SPORT_IDS = [
@@ -18,6 +18,8 @@ export const SPORT_IDS = [
 export type SportId = (typeof SPORT_IDS)[number];
 
 export type UserSportsPreference = typeof userSportsPreferences.$inferSelect;
+
+export type UserSportsTeamFilter = typeof userSportsTeamFilters.$inferSelect;
 
 /** One side of a match on a dashboard card. */
 export type DashboardSide = {
@@ -244,6 +246,18 @@ export const FOOTBALL_COMPETITION_IDS = [
 ] as const;
 
 export type FootballLeagueId = (typeof FOOTBALL_COMPETITION_IDS)[number];
+
+/**
+ * A match list the team filter remembers: one football league, or a sport
+ * with a single list, keyed by its own id.
+ */
+export type TeamFilterList =
+  | { sportId: "football"; competition: FootballLeagueId }
+  | { sportId: "nba"; competition: "nba" }
+  | { sportId: "nfl"; competition: "nfl" };
+
+/** The list on screen and the teams last picked in it ([] is every team). */
+export type SavedTeamFilter = { list: TeamFilterList; teamIds: string[] };
 
 export type FootballLeague = {
   id: FootballLeagueId;

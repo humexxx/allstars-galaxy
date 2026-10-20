@@ -1,10 +1,10 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, type SQL } from "drizzle-orm";
 
 import { db } from "@/db";
-import { userSportsPreferences } from "@/db/schema";
+import { userSportsPreferences, userSportsTeamFilters } from "@/db/schema";
 import { F1_DATA } from "@/lib/data/sports/f1";
 import { getFootballLeague } from "@/lib/data/sports/football";
 import { LOL_DATA } from "@/lib/data/sports/lol";
@@ -53,7 +53,9 @@ import type {
   SportId,
   SwissStage,
   Team,
+  TeamFilterList,
   UserSportsPreference,
+  UserSportsTeamFilter,
 } from "@/types/sports";
 import {
   FOOTBALL_COMPETITION_IDS,
@@ -135,6 +137,58 @@ export async function setSportCompetition(
         eq(userSportsPreferences.sportId, sportId)
       )
     )
+    .returning();
+  return row ?? null;
+}
+
+// ---------- Team filters ----------
+
+const sameList = (userId: string, list: TeamFilterList): SQL | undefined =>
+  and(
+    eq(userSportsTeamFilters.userId, userId),
+    eq(userSportsTeamFilters.sportId, list.sportId),
+    eq(userSportsTeamFilters.competition, list.competition)
+  );
+
+/** The teams the caller last narrowed this match list to; [] for every team. */
+export async function getSportTeamFilter(
+  userId: string,
+  list: TeamFilterList
+): Promise<string[]> {
+  const [row] = await db
+    .select({ teamIds: userSportsTeamFilters.teamIds })
+    .from(userSportsTeamFilters)
+    .where(sameList(userId, list))
+    .limit(1);
+  return row?.teamIds ?? [];
+}
+
+/**
+ * Remembers the teams the caller narrowed a match list to, once each, in the
+ * order picked. Every team (an empty list) deletes the row instead: no row
+ * already means that. Null when there was nothing to keep.
+ */
+export async function setSportTeamFilter(
+  userId: string,
+  list: TeamFilterList,
+  teamIds: readonly string[]
+): Promise<UserSportsTeamFilter | null> {
+  const unique = [...new Set(teamIds)];
+  if (unique.length === 0) {
+    await db.delete(userSportsTeamFilters).where(sameList(userId, list));
+    return null;
+  }
+  const [row] = await db
+    .insert(userSportsTeamFilters)
+    .values({ userId, sportId: list.sportId, competition: list.competition, teamIds: unique })
+    .onConflictDoUpdate({
+      target: [
+        userSportsTeamFilters.userId,
+        userSportsTeamFilters.sportId,
+        userSportsTeamFilters.competition,
+      ],
+      set: { teamIds: unique, updatedAt: new Date() },
+    })
     .returning();
   return row ?? null;
 }

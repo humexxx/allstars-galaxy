@@ -121,3 +121,61 @@ test.describe("Daily board and habits", () => {
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
   });
 });
+
+/**
+ * A device's first visit carries no `tz` cookie, so the server's first render
+ * reads UTC. The board must not generate on that render: it wrote UTC's day's
+ * habit task and stamped the path, so the reader's own day never got one.
+ * The browser is put in a zone a calendar day away from UTC at this hour.
+ */
+const AWAY = new Date().getUTCHours() < 10 ? "Pacific/Pago_Pago" : "Pacific/Kiritimati";
+
+test.describe("Daily board on a first visit", () => {
+  test.use({ timezoneId: AWAY });
+
+  test.beforeEach(async ({ cleanBoard, cleanRoadPaths }) => {
+    await cleanRoadPaths();
+    await cleanBoard();
+  });
+
+  test.afterAll(async ({ cleanBoard, cleanRoadPaths }) => {
+    await cleanRoadPaths();
+    await cleanBoard();
+  });
+
+  test("puts the habit on the reader's today, not on UTC's", async ({ page, baseURL }) => {
+    const now = new Date();
+    const readerDay = new Intl.DateTimeFormat("en-CA", { timeZone: AWAY }).format(now);
+    const utcDay = now.toISOString().slice(0, 10);
+    test.skip(readerDay === utcDay, "the reader's day and UTC's agree at this minute");
+    const title = `E2E First visit ${Date.now()}`;
+
+    await page.context().addCookies([{ name: "tz", value: AWAY, url: baseURL! }]);
+    await page.goto("/portal/productivity/road-paths");
+    await page.getByRole("button", { name: "Create road path" }).first().click();
+    const create = page.getByRole("dialog", { name: "Create road path" });
+    await create.getByLabel("Title").fill(title);
+    for (const day of ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]) {
+      await create.getByRole("button", { name: day, exact: true }).click();
+    }
+    await create.getByRole("button", { name: "Create road path" }).click();
+    await expect(create).not.toBeVisible();
+
+    // A new device: signed in, no zone yet.
+    await page.context().clearCookies({ name: "tz" });
+    await page.goto("/portal/productivity/board");
+
+    const readerLabel = new Intl.DateTimeFormat("en-US", {
+      timeZone: AWAY,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    }).format(now);
+    await expect(page.getByText(`Today · ${readerLabel}`)).toBeVisible();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+
+    await page.goto(`/portal/productivity/board?day=${utcDay}`);
+    await expect(page.getByRole("button", { name: "Add task" }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: title })).not.toBeVisible();
+  });
+});

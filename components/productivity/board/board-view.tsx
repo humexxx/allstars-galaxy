@@ -532,7 +532,12 @@ export function BoardView({
         <BoardDayNav day={day} today={today} />
       </div>
 
-      {day === today ? <CarryOverDialog tasks={carryOver} /> : null}
+      {day === today ? (
+        // Keyed on what is offered: the list can arrive after the first
+        // render (the refresh that brings the reader's zone), and a dialog
+        // mounted with nothing to ask would stay closed.
+        <CarryOverDialog key={carryOver.map((t) => t.id).join()} tasks={carryOver} />
+      ) : null}
 
       {columns.length === 0 ? (
         <EmptyState

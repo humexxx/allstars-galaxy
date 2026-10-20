@@ -1,7 +1,7 @@
 import { BoardView } from "@/components/productivity/board/board-view";
 import type { Metadata } from "next";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
-import { getRequestTimeZone, getRequestTodayIso } from "@/lib/utils/request-today";
+import { getRequestTodayIso, readRequestTimeZone } from "@/lib/utils/request-today";
 import { isCalendarDay } from "@/lib/productivity/habit";
 import {
   getBoardColumns,
@@ -20,6 +20,12 @@ export const metadata: Metadata = {
  * One day's board, `?day=YYYY-MM-DD`, today in the reader's zone by default.
  * Opening today's puts the day's habit tasks on it first and asks about
  * what earlier days left unfinished.
+ *
+ * Neither happens until the zone is known. On a device's first request there
+ * is no `tz` cookie yet and "today" falls back to UTC — tomorrow, on a Costa
+ * Rica evening. Generating then wrote tomorrow's habit tasks and stamped the
+ * paths as generated, so the corrected render skipped today's. The header
+ * writes the cookie and refreshes, and that render does both.
  */
 export default async function BoardPage({
   searchParams,
@@ -30,20 +36,21 @@ export default async function BoardPage({
   const userId = ctx.effectiveUserId;
   const { day: requested } = await searchParams;
 
-  const [existingColumns, timeZone, today] = await Promise.all([
+  const [existingColumns, knownZone, today] = await Promise.all([
     getBoardColumns(userId),
-    getRequestTimeZone(),
+    readRequestTimeZone(),
     getRequestTodayIso(),
   ]);
+  const timeZone = knownZone ?? "UTC";
   const columns =
     existingColumns.length > 0 ? existingColumns : await initializeDefaultColumns(userId);
   const day = isCalendarDay(requested) ? requested : today;
-  const isToday = day === today;
+  const settlesToday = day === today && knownZone !== null;
 
-  if (isToday) await ensureHabitTasksForDay(userId, today, timeZone);
+  if (settlesToday) await ensureHabitTasksForDay(userId, today, timeZone);
   const [tasks, carryOver] = await Promise.all([
     getBoardTasksForDay(userId, day),
-    isToday ? getCarryOverCandidates(userId, today) : Promise.resolve([]),
+    settlesToday ? getCarryOverCandidates(userId, today) : Promise.resolve([]),
   ]);
 
   return (

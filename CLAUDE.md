@@ -266,7 +266,7 @@ enforced by `commitlint` via a `husky` `commit-msg` hook. Format:
 
 - **type** (required): `feat`, `fix`, `perf`, `refactor`, `docs`, `style`,
   `test`, `build`, `ci`, `chore`, `revert`
-- **scope** (optional, but constrained): `auth`, `db`, `finance`, `travel`,
+- **scope** (optional, but constrained): `auth`, `db`, `finance`, `portfolio`, `travel`,
   `entertainment`, `landing`, `portal`, `ui`, `deps`, `release`, `ci`, `docs`,
   `config`, `types`, `schemas` — extend the list in [`commitlint.config.mjs`](commitlint.config.mjs) if needed.
 - **subject**: imperative, lower-case start, no trailing period, ≤100 chars total header.

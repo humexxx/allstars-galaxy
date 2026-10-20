@@ -1,4 +1,5 @@
 import type { portfolios, investmentMethods } from "@/db/schema";
+import type { PriceSchedule } from "@/lib/finance/price-freshness";
 
 import type { TransactionStatus, TransactionType } from "./transaction";
 
@@ -109,4 +110,12 @@ export type TransactionTableRow = {
   /** Empty for a method the viewer does not run: where a client's money is
    *  deployed is the owner's private half of the deal. */
   allocations: TransactionAllocationView[];
+};
+
+/** How old the prices behind an owner's book are, and when the price run is due. */
+export type PriceFreshnessData = {
+  /** One per asset the owner's methods hold; `fetchedAt` is ISO, null if never quoted. */
+  quotes: { symbol: string; source: string; fetchedAt: string | null }[];
+  /** The price cron, from vercel.json; null when it is not a plain daily/hourly line. */
+  schedule: PriceSchedule | null;
 };

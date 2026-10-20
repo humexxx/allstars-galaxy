@@ -1361,3 +1361,47 @@ export const userPreferences = pgTable("user_preferences", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }).enableRLS();
+
+// App-wide AI configuration, edited by admins in Settings. At most one row,
+// created on the first save; no row means "all defaults", which the service
+// layer owns (same as user_preferences).
+export const aiSettings = pgTable(
+  "ai_settings",
+  {
+    id: integer("id").primaryKey().default(1),
+    // The Claude model the travel assistant answers with. Validated against
+    // the list in lib/ai/models.ts, not a pg enum: Anthropic ships models
+    // faster than this table should need migrating.
+    model: text("model"),
+    // When the API key in ANTHROPIC_API_KEY stops working. The Admin API
+    // could read it, but it is unavailable to an individual Console account,
+    // so an admin types it in when they create the key.
+    apiKeyExpiresOn: date("api_key_expires_on"),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [check("ai_settings_single_row_chk", sql`${t.id} = 1`)]
+).enableRLS();
+
+// One row per Claude API call the app makes. Settings adds these up into a
+// month's spend against the plan's API credit — an estimate from the token
+// counts each response reports, because the account's real balance is only
+// readable through the Admin API.
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Whose message it was; kept when the account goes, the spend happened.
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    feature: text("feature").notNull(),
+    model: text("model").notNull(),
+    inputTokens: integer("input_tokens").notNull(),
+    outputTokens: integer("output_tokens").notNull(),
+    cacheCreationInputTokens: integer("cache_creation_input_tokens").notNull().default(0),
+    cacheReadInputTokens: integer("cache_read_input_tokens").notNull().default(0),
+    costUsd: numeric("cost_usd", { precision: 12, scale: 6 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("ai_usage_created_at_idx").on(t.createdAt)]
+).enableRLS();

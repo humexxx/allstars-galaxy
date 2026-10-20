@@ -536,7 +536,11 @@ export function BoardView({
         // Keyed on what is offered: the list can arrive after the first
         // render (the refresh that brings the reader's zone), and a dialog
         // mounted with nothing to ask would stay closed.
-        <CarryOverDialog key={carryOver.map((t) => t.id).join()} tasks={carryOver} />
+        <CarryOverDialog
+          key={carryOver.map((t) => t.id).join()}
+          tasks={carryOver}
+          todayTitles={initialTasks.map((t) => t.title)}
+        />
       ) : null}
 
       {columns.length === 0 ? (

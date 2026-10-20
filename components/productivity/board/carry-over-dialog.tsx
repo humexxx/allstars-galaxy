@@ -21,17 +21,29 @@ import type { CarryOverTask } from "@/types";
 
 type CarryOverDialogProps = {
   tasks: CarryOverTask[];
+  /** Titles already on today's board — a habit's task, typically. */
+  todayTitles?: string[];
 };
+
+const sameTitle = (title: string): string => title.trim().toLocaleLowerCase();
 
 /**
  * The first look at today's board asks about what earlier days left open.
- * Every task starts ticked; what is unticked stays on its own day, in the
- * history, and is not asked about again. Closing without answering asks again
- * next time.
+ * Every task starts ticked, except one already on today's board by name: an
+ * old "Exercise" task moved in beside the habit's own made two. What is
+ * unticked stays on its own day, in the history, and is not asked about
+ * again. Closing without answering asks again next time.
  */
-export function CarryOverDialog({ tasks }: CarryOverDialogProps): React.ReactElement | null {
+export function CarryOverDialog({
+  tasks,
+  todayTitles = [],
+}: CarryOverDialogProps): React.ReactElement | null {
+  const onToday = new Set(todayTitles.map(sameTitle));
+  const isOnToday = (task: CarryOverTask): boolean => onToday.has(sameTitle(task.title));
   const [open, setOpen] = useState(tasks.length > 0);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(tasks.map((t) => t.id)));
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(tasks.filter((t) => !isOnToday(t)).map((t) => t.id))
+  );
   const [pending, setPending] = useState<"move" | "leave" | null>(null);
 
   if (tasks.length === 0) return null;
@@ -93,6 +105,7 @@ export function CarryOverDialog({ tasks }: CarryOverDialogProps): React.ReactEle
                     </Text>
                     <Text as="span" variant="small">
                       {task.columnName} · <Mono>{formatShortDay(task.boardDate)}</Mono>
+                      {isOnToday(task) ? " · already on today’s board" : null}
                     </Text>
                   </span>
                 </label>

@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { aiModel } from "@/lib/ai/models";
+import { getAiSettings, recordAiUsage } from "@/lib/services/ai-service";
 import { getEffectiveContext } from "@/lib/services/impersonation";
 import { listAssistantTrips } from "@/lib/services/travel-assistant-service";
 import { canUseTravelAssistant } from "@/lib/travel/assistant/access";
@@ -44,6 +46,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
   const userId = ctx.effectiveUserId;
+  const model = aiModel((await getAiSettings()).model);
   const history = parsed.data.messages as TravelAssistantMessage[];
   const added: TravelAssistantMessage[] = [];
   if (parsed.data.context) {
@@ -67,10 +70,14 @@ export async function POST(request: Request): Promise<Response> {
         await converse({
           // Reads ANTHROPIC_API_KEY now, per request, never at import.
           client: new Anthropic(),
+          model,
           userId,
           history,
           added,
           send,
+          // The spend is the admin's, even while they plan someone else's trip.
+          record: (usage) =>
+            recordAiUsage({ userId: ctx.realUser.id, feature: "travel-assistant", model: model.id, usage }),
           signal: request.signal,
         });
       } catch (err) {

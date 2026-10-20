@@ -6,8 +6,11 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { DevToolsProvider } from "@/components/dev-tools/dev-tools-context";
 import { DevToolsDrawer } from "@/components/dev-tools/dev-tools-drawer";
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
+import { AiKeyExpiryNotice } from "@/components/portal/ai-key-expiry-notice";
+import { keyExpiryWarning, type KeyExpiryWarning } from "@/lib/ai/key-expiry";
+import { getAiSettings } from "@/lib/services/ai-service";
 import { getEffectiveContext } from "@/lib/services/impersonation";
-import { getRequestTimeZone } from "@/lib/utils/request-today";
+import { getRequestTimeZone, getRequestTodayIso } from "@/lib/utils/request-today";
 
 /**
  * Topology matches the shadcn docs site: sticky full-width header on top,
@@ -31,6 +34,9 @@ export default async function PortalLayout({
   if (!ctx) {
     redirect("/login");
   }
+
+  // Admins only, and only once the key's date has been entered in Settings.
+  const keyExpiry = ctx.realRole === "admin" ? await aiKeyExpiry() : null;
 
   return (
     <ReaderTimeZoneProvider timeZone={timeZone}>
@@ -73,8 +79,16 @@ export default async function PortalLayout({
             </div>
           </div>
           <DevToolsDrawer />
+          {keyExpiry && <AiKeyExpiryNotice {...keyExpiry} />}
         </DevToolsProvider>
       </SidebarProvider>
     </ReaderTimeZoneProvider>
   );
+}
+
+/** The reminder an admin is due, if any. */
+async function aiKeyExpiry(): Promise<{ warning: KeyExpiryWarning; expiresOn: string } | null> {
+  const [{ apiKeyExpiresOn }, today] = await Promise.all([getAiSettings(), getRequestTodayIso()]);
+  const warning = keyExpiryWarning(apiKeyExpiresOn, today);
+  return warning && apiKeyExpiresOn ? { warning, expiresOn: apiKeyExpiresOn } : null;
 }

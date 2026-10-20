@@ -6,7 +6,12 @@ vi.mock("@/lib/services/travel-assistant-service", () => ({
 }));
 vi.mock("@/lib/utils/request-today", () => ({ getRequestTodayIso: vi.fn(async () => "2026-10-19") }));
 vi.mock("@/lib/travel/assistant/converse", () => ({ converse: vi.fn() }));
+vi.mock("@/lib/services/ai-service", () => ({
+  getAiSettings: vi.fn(async () => ({ model: "claude-sonnet-5-5", apiKeyExpiresOn: null })),
+  recordAiUsage: vi.fn(async () => undefined),
+}));
 
+import { recordAiUsage } from "@/lib/services/ai-service";
 import { getEffectiveContext } from "@/lib/services/impersonation";
 import { converse } from "@/lib/travel/assistant/converse";
 import type { TravelAssistantEvent } from "@/types/travel-assistant";
@@ -20,7 +25,11 @@ const as = (realRole: string | null): void => {
   vi.mocked(getEffectiveContext).mockResolvedValue(
     realRole === null
       ? null
-      : ({ effectiveUserId: "user-1", realRole } as Awaited<ReturnType<typeof getEffectiveContext>>)
+      : ({
+          effectiveUserId: "user-1",
+          realUser: { id: "admin-1" },
+          realRole,
+        } as Awaited<ReturnType<typeof getEffectiveContext>>)
   );
 };
 
@@ -79,6 +88,21 @@ describe("POST /api/travel/assistant", () => {
         ],
       },
     ]);
+  });
+
+  it("answers with the model chosen in Settings and books the spend to the admin", async () => {
+    as("admin");
+    vi.mocked(converse).mockImplementation(async ({ model, record }) => {
+      expect(model.id).toBe("claude-sonnet-5-5");
+      await record({ input_tokens: 10, output_tokens: 5 });
+    });
+    await (await post(HELLO)).text();
+    expect(recordAiUsage).toHaveBeenCalledWith({
+      userId: "admin-1",
+      feature: "travel-assistant",
+      model: "claude-sonnet-5-5",
+      usage: { input_tokens: 10, output_tokens: 5 },
+    });
   });
 
   it("drops a note that never got its reply, so the next message stays valid", async () => {

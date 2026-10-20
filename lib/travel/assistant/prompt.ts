@@ -4,8 +4,6 @@ import { z } from "zod";
 import { idSchema } from "@/schemas/common";
 import { travelChangeSetSchema } from "@/schemas/travel-assistant";
 
-export const TRAVEL_ASSISTANT_MODEL = "claude-opus-5-5";
-
 /**
  * Fixed text, so the prompt cache holds across every turn: today's date and
  * the open page arrive as system notes in the conversation instead.

@@ -17,6 +17,7 @@ import {
   getAssistantTrip,
   previewTravelChanges,
 } from "@/lib/services/travel-assistant-service";
+import { aiModel } from "@/lib/ai/models";
 import type { TravelAssistantEvent, TravelAssistantMessage } from "@/types/travel-assistant";
 
 import { converse, echoable } from "./converse";
@@ -34,8 +35,10 @@ const toolUse = (name: string, input: unknown, id = "toolu_1") =>
 /** A client whose every stream plays the next scripted turn. */
 function fakeClient(turns: Turn[]) {
   const sent: TravelAssistantMessage[][] = [];
-  const stream = vi.fn((params: { messages: TravelAssistantMessage[] }) => {
-    sent.push(structuredClone(params.messages));
+  const params: Record<string, unknown>[] = [];
+  const stream = vi.fn((p: { messages: TravelAssistantMessage[] }) => {
+    sent.push(structuredClone(p.messages));
+    params.push(p);
     const turn = turns.shift()!;
     let onText: ((t: string) => void) | undefined;
     return {
@@ -45,25 +48,30 @@ function fakeClient(turns: Turn[]) {
       finalMessage: async () => {
         if (turn instanceof Error) throw turn;
         if (turn.text) onText?.(turn.text);
-        return { content: turn.content, stop_reason: turn.stop_reason };
+        return { content: turn.content, stop_reason: turn.stop_reason, usage: USAGE };
       },
     };
   });
-  return { client: { beta: { messages: { stream } } } as unknown as Pick<Anthropic, "beta">, stream, sent };
+  return { client: { beta: { messages: { stream } } } as unknown as Pick<Anthropic, "beta">, stream, sent, params };
 }
 
-async function run(turns: Turn[]) {
-  const { client, stream, sent } = fakeClient(turns);
+const USAGE = { input_tokens: 1200, output_tokens: 300, cache_creation_input_tokens: 0, cache_read_input_tokens: 5000 };
+
+async function run(turns: Turn[], modelId = "claude-opus-5-5") {
+  const { client, stream, sent, params } = fakeClient(turns);
   const added: TravelAssistantMessage[] = [];
   const events: TravelAssistantEvent[] = [];
+  const record = vi.fn(async () => undefined);
   await converse({
     client,
+    model: aiModel(modelId),
     userId: USER,
     history: [{ role: "user", content: "Plan Orlando" }],
     added,
     send: (e) => events.push(e),
+    record,
   });
-  return { added, events, stream, sent };
+  return { added, events, stream, sent, params, record };
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -134,6 +142,45 @@ describe("converse", () => {
       { content: [text("Hola")], stop_reason: "end_turn" },
     ]);
     expect(stream).toHaveBeenCalledTimes(2);
+    expect(added).toHaveLength(1);
+  });
+});
+
+describe("converse's model and spend", () => {
+  it("asks the model chosen in Settings and books every call's tokens", async () => {
+    const { params, record } = await run(
+      [
+        { content: [toolUse("get_trip", { tripId: TRIP })], stop_reason: "tool_use" },
+        { content: [text("Listo")], stop_reason: "end_turn" },
+      ],
+      "claude-sonnet-5-5"
+    );
+    expect(params.map((p) => p.model)).toEqual(["claude-sonnet-5-5", "claude-sonnet-5-5"]);
+    expect(params[0]).toMatchObject({ fallbacks: "default", betas: ["server-side-fallback-2026-07-01"] });
+    expect(record).toHaveBeenCalledTimes(2);
+    expect(record).toHaveBeenCalledWith(USAGE);
+  });
+
+  it("sends Haiku no fallback, which it would only ignore", async () => {
+    const { params } = await run([{ content: [text("Hola")], stop_reason: "end_turn" }], "claude-haiku-5-5");
+    expect(params[0]).not.toHaveProperty("fallbacks");
+    expect(params[0]).not.toHaveProperty("betas");
+  });
+
+  it("keeps answering when the spend cannot be written", async () => {
+    const { client } = fakeClient([{ content: [text("Hola")], stop_reason: "end_turn" }]);
+    const added: TravelAssistantMessage[] = [];
+    await converse({
+      client,
+      model: aiModel("claude-opus-5-5"),
+      userId: USER,
+      history: [{ role: "user", content: "Hola" }],
+      added,
+      send: () => undefined,
+      record: async () => {
+        throw new Error("db down");
+      },
+    });
     expect(added).toHaveLength(1);
   });
 });

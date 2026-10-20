@@ -2,6 +2,7 @@ import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
 
+import type { AiModel, AiTokenUsage } from "@/lib/ai/models";
 import {
   getAssistantTrip,
   listAssistantTrips,
@@ -11,12 +12,7 @@ import {
 import { travelChangeSetSchema, type TravelChangeSetInput } from "@/schemas/travel-assistant";
 import type { TravelAssistantEvent, TravelAssistantMessage } from "@/types/travel-assistant";
 
-import {
-  getTripInputSchema,
-  TRAVEL_ASSISTANT_MODEL,
-  TRAVEL_ASSISTANT_SYSTEM,
-  TRAVEL_ASSISTANT_TOOLS,
-} from "./prompt";
+import { getTripInputSchema, TRAVEL_ASSISTANT_SYSTEM, TRAVEL_ASSISTANT_TOOLS } from "./prompt";
 
 /** Model calls one message may make: reads, a proposal, a retry and an answer fit easily. */
 const MAX_CALLS = 8;
@@ -36,17 +32,23 @@ type ToolResult = Anthropic.Beta.BetaToolResultBlockParam;
  */
 export async function converse({
   client,
+  model,
   userId,
   history,
   added,
   send,
+  record,
   signal,
 }: {
   client: Pick<Anthropic, "beta">;
+  /** The model the admins picked in Settings. */
+  model: AiModel;
   userId: string;
   history: TravelAssistantMessage[];
   added: TravelAssistantMessage[];
   send: (event: TravelAssistantEvent) => void;
+  /** Books each call's tokens against the month's credit. */
+  record: (usage: AiTokenUsage) => Promise<void>;
   signal?: AbortSignal;
 }): Promise<void> {
   let parseRetries = 0;
@@ -54,12 +56,13 @@ export async function converse({
   for (let call = 0; call < MAX_CALLS; call++) {
     const stream = client.beta.messages.stream(
       {
-        model: TRAVEL_ASSISTANT_MODEL,
+        model: model.id,
         max_tokens: 16000,
         // A safety decline is retried on the model Anthropic picks for it,
         // inside the same call, instead of ending the conversation.
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
+        ...(model.fallbacks
+          ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }
+          : {}),
         output_config: { effort: "medium" },
         cache_control: { type: "ephemeral" },
         system: TRAVEL_ASSISTANT_SYSTEM,
@@ -80,6 +83,11 @@ export async function converse({
       if (err instanceof Anthropic.APIError || signal?.aborted || parseRetries++ >= 2) throw err;
       continue;
     }
+
+    // Billed whatever happens next, so counted before anything can return.
+    await record(message.usage).catch((err: unknown) =>
+      console.error("[travel-assistant] usage not recorded:", err)
+    );
 
     const content = echoable(message.content);
     added.push({ role: "assistant", content });

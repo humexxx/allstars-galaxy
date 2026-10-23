@@ -17,13 +17,14 @@ import {
 } from "@/components/ui/command";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Eyebrow } from "@/components/ui/typography";
 import { runAction } from "@/lib/actions/run";
 import { matchDays, type MatchDay } from "@/lib/sports/match-days";
 import { cn } from "@/lib/utils";
 import type { Match, MatchStatus, Team } from "@/types/sports";
 
+import { EASE, fadeIn, holdScrollStill, holdStill, SLIDE_MS } from "./reveal";
+import { RevealPill } from "./reveal-pill";
 import { ScoreCard } from "./score-card";
 import { scrollParent } from "./scroll";
 import { SportBarEnd } from "./sport-shell";
@@ -36,10 +37,7 @@ const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "p
 /** Days one tap of the clock brings in: a matchday, a week of the NFL, three NBA nights. */
 const EARLIER_STEP = 3;
 
-/** The days already shown slide down, then the new ones fade in above them. */
-const SLIDE_MS = 220;
-const FADE_MS = 200;
-const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
+
 
 /**
  * Where the list opens: the latest day up to today with a result in it, so
@@ -218,26 +216,13 @@ export function MatchesByDate({
               >
                 {heading(day)}
                 {i === 0 && earlier > 0 && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      {/* A 24px pill in a 22px line: the negative margins keep
-                          the line, and the table's label beside it, as they
-                          are. It names itself in the heading's quieter voice
-                          rather than the heading's capitals. */}
-                      <Button
-                        variant="outline"
-                        size="xs"
-                        className="-my-1.5 rounded-full font-medium tracking-normal normal-case"
-                        aria-label={`Earlier: ${earlierLabel}`}
-                        data-earlier
-                        onClick={revealEarlier}
-                      >
-                        <History data-icon="inline-start" />
-                        Earlier
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{earlierLabel}</TooltipContent>
-                  </Tooltip>
+                  <RevealPill
+                    icon={History}
+                    label="Earlier"
+                    detail={earlierLabel}
+                    data-earlier
+                    onClick={revealEarlier}
+                  />
                 )}
               </Eyebrow>
               <div className="grid gap-2 @xl:grid-cols-2 @5xl:grid-cols-3">
@@ -254,30 +239,14 @@ export function MatchesByDate({
 }
 
 /**
- * Keeps the page where it is while days go in above the ones on screen.
- * Left alone, the browser's scroll anchoring scrolls down by the height
- * added, to keep the cards that were in view in place, and the new days land
- * above the screen. Anchoring comes back once the slide is over.
- */
-function holdScrollStill(list: HTMLElement): void {
-  const scroller = scrollParent(list);
-  const held = scroller ? [scroller] : [document.documentElement, document.body];
-  for (const el of held) el.style.overflowAnchor = "none";
-  window.setTimeout(() => {
-    for (const el of held) el.style.overflowAnchor = "";
-  }, SLIDE_MS + FADE_MS);
-}
-
-/**
  * The days that were on screen slide from where they were to where they are
  * now (down, by the height of the days added), and the added days fade in
  * after them. Nothing moves for a reader who asked for less motion, or where
  * there is no Web Animations API (a test).
  */
 function slideIn(list: HTMLElement, tops: Map<string, number>, added: string[]): void {
-  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  if (holdStill(list)) return;
   for (const el of list.querySelectorAll<HTMLElement>("[data-day]")) {
-    if (typeof el.animate !== "function") return;
     const day = el.dataset.day ?? "";
     const was = tops.get(day);
     if (was !== undefined) {
@@ -289,13 +258,7 @@ function slideIn(list: HTMLElement, tops: Map<string, number>, added: string[]):
         });
       }
     } else if (added.includes(day)) {
-      el.animate(
-        [
-          { opacity: 0, transform: "translateY(-0.5rem)" },
-          { opacity: 1, transform: "none" },
-        ],
-        { duration: FADE_MS, delay: SLIDE_MS / 2, easing: EASE, fill: "backwards" }
-      );
+      fadeIn(el, SLIDE_MS / 2);
     }
   }
 }

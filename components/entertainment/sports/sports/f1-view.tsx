@@ -13,7 +13,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import type { F1Constructor, F1Data, F1Driver, F1NewsArticle } from "@/types/sports";
+import type {
+  F1Constructor,
+  F1Data,
+  F1Driver,
+  F1NewsArticle,
+  F1WeekendResults,
+} from "@/types/sports";
 
 import { F1Races } from "../f1-races";
 import { NewsList } from "../shared/news-list";
@@ -28,6 +34,8 @@ type F1ViewProps = {
   news?: F1NewsArticle[];
   /** `?tab=news` — the article page's "All news" link lands on the wire. */
   initialTab?: string;
+  /** The sessions run so far of the race on now or next. */
+  weekend?: F1WeekendResults;
 };
 
 type F1Tab = "overview" | "news";
@@ -56,7 +64,7 @@ function openingView(
   return { tab: initialTab === "news" && hasNews ? "news" : "overview", championship: "drivers" };
 }
 
-export function F1View({ data, news = [], initialTab }: F1ViewProps) {
+export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps) {
   const opening = openingView(initialTab, news.length > 0);
   const [championship, setChampionship] = useState<Championship>(opening.championship);
 
@@ -77,7 +85,7 @@ export function F1View({ data, news = [], initialTab }: F1ViewProps) {
             table: the races on the left, the championship beside them. */}
         <TabsContent value="overview">
           <OverviewSplit
-            matches={<F1Races data={data} />}
+            matches={<F1Races data={data} weekend={weekend} />}
             table={
               <TableCard className="@container">
                 {/* A segmented control, not two more tabs: both championships

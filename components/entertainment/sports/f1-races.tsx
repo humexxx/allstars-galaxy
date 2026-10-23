@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, ChevronDown, Flag } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronRight, Flag } from "lucide-react";
 import { useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -11,12 +11,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { isRaceWeekend, racesTabGroups, weekendPhrase } from "@/lib/sports/f1-weekend";
 import { cn } from "@/lib/utils";
-import type { F1Data, F1Race } from "@/types/sports";
+import type { F1Data, F1Race, F1SessionResult, F1WeekendResults } from "@/types/sports";
 
 import { F1CircuitOutline } from "./f1-circuit-outline";
 import { racePlace, raceWhen, SprintBadge } from "./f1-race-labels";
 import { ResultsLine, SessionList } from "./f1-race-parts";
-import { F1RaceSheet, useRaceClassifications } from "./f1-race-sheet";
+import { F1RaceSheet, useRaceClassifications, useWeekendResults } from "./f1-race-sheet";
 import { useMatchTime } from "./shared/time-zone-context";
 import { StatusPill } from "./shared/status-pill";
 import { useNow } from "./use-now";
@@ -24,8 +24,9 @@ import { useNow } from "./use-now";
 /** `opener` gets the focus back when the sheet closes. */
 type OpenRace = (race: F1Race, opener: HTMLElement) => void;
 
+// A tile is a button, but it does not grey on hover: its border firms up.
 const TILE =
-  "flex w-full flex-col gap-3 rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50";
+  "flex w-full flex-col gap-3 rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring/50";
 
 /**
  * F1's races, the left of its Overview: the race on now or next, large; the
@@ -37,12 +38,21 @@ const TILE =
  * lists, which is what puts the first card level with the standings card
  * beside it (`OverviewSplit`).
  */
-export function F1Races({ data }: { data: F1Data }): JSX.Element {
+export function F1Races({
+  data,
+  weekend,
+}: {
+  data: F1Data;
+  /** The sessions run so far of the race on now or next, read with the page. */
+  weekend?: F1WeekendResults;
+}): JSX.Element {
   const { featured, comingUp, justFinished } = useMemo(
     () => racesTabGroups(data.races),
     [data.races]
   );
   const classifications = useRaceClassifications(data.season);
+  const weekends = useWeekendResults(data.season, weekend);
+  const featuredResults = featured ? weekends.get(featured.round) : undefined;
   // Kept after the sheet closes, so its content does not vanish mid-slide.
   const [raceId, setRaceId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -54,6 +64,7 @@ export function F1Races({ data }: { data: F1Data }): JSX.Element {
     setRaceId(next.id);
     setSheetOpen(true);
     if (next.status === "completed") void classifications.load(next.round);
+    void weekends.load(next);
   };
 
   return (
@@ -61,7 +72,11 @@ export function F1Races({ data }: { data: F1Data }): JSX.Element {
       <section className="flex flex-col gap-2">
         <RaceHeading>{featured?.status === "live" ? "On now" : "Next race"}</RaceHeading>
         {featured ? (
-          <FeaturedRace race={featured} onOpen={open} />
+          <FeaturedRace
+            race={featured}
+            onOpen={open}
+            results={featuredResults?.status === "ready" ? featuredResults.sessions : []}
+          />
         ) : (
           <EmptyState
             icon={Flag}
@@ -99,6 +114,10 @@ export function F1Races({ data }: { data: F1Data }): JSX.Element {
         classification={race ? classifications.get(race.round) : undefined}
         onRetry={() => {
           if (race) void classifications.load(race.round);
+        }}
+        weekend={race ? weekends.get(race.round) : undefined}
+        onRetryWeekend={() => {
+          if (race) void weekends.load(race);
         }}
       />
     </div>
@@ -145,12 +164,21 @@ function WhatsNext({ race }: { race: F1Race }): JSX.Element {
   );
 }
 
-function FeaturedRace({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX.Element {
+function FeaturedRace({
+  race,
+  onOpen,
+  results,
+}: {
+  race: F1Race;
+  onOpen: OpenRace;
+  results: F1SessionResult[];
+}): JSX.Element {
   const format = useMatchTime();
   const now = useNow();
   return (
-    // The whole card opens the race: the title's button is stretched over it.
-    <Card className="relative transition-colors hover:bg-muted/40 has-focus-visible:ring-2 has-focus-visible:ring-ring/50">
+    // The card is not one big button that greys on hover: "View details"
+    // opens the race, and the card itself stays still.
+    <Card>
       <CardContent className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-5 @2xl:gap-x-8">
         <div className="flex min-w-0 flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -162,13 +190,7 @@ function FeaturedRace({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX
             <span aria-hidden className="text-3xl leading-none">
               {race.flagEmoji}
             </span>
-            <button
-              type="button"
-              onClick={(event) => onOpen(race, event.currentTarget)}
-              className="text-left outline-none after:absolute after:inset-0"
-            >
-              {race.name}
-            </button>
+            {race.name}
           </Heading>
           <Text variant="muted">{racePlace(race)}</Text>
           <Mono className="text-sm">{raceWhen(race, format)}</Mono>
@@ -186,7 +208,19 @@ function FeaturedRace({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX
         </div>
 
         <div className="col-span-2 @2xl:col-span-1 @2xl:col-start-1">
-          <SessionList race={race} format={format} now={now} />
+          <SessionList race={race} format={format} now={now} results={results} />
+        </div>
+
+        <div className="col-span-2 @2xl:col-span-1 @2xl:col-start-1">
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label={`View details: ${race.name}`}
+            onClick={(event) => onOpen(race, event.currentTarget)}
+          >
+            View details
+            <ChevronRight data-icon="inline-end" />
+          </Button>
         </div>
       </CardContent>
     </Card>

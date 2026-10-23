@@ -240,7 +240,14 @@ function SportContent({
     case "football":
       return <FootballView league={payload.league} options={payload.options} />;
     case "f1":
-      return <F1View data={payload.data} news={payload.news} initialTab={initialTab} />;
+      return (
+        <F1View
+          data={payload.data}
+          news={payload.news}
+          initialTab={initialTab}
+          weekend={payload.weekend}
+        />
+      );
     case "nba":
       return <NbaView data={payload.data} />;
     case "tennis":

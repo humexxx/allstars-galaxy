@@ -2,13 +2,16 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/app/actions/f1", () => ({ getF1RaceClassificationAction: vi.fn() }));
+vi.mock("@/app/actions/f1", () => ({
+  getF1RaceClassificationAction: vi.fn(),
+  getF1WeekendResultsAction: vi.fn(),
+}));
 
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
 import type { F1Race } from "@/types/sports";
 
 import { AUSTIN, DRIVERS, SINGAPORE } from "./__fixtures__/f1";
-import { F1RaceSheet, type ClassificationState } from "./f1-race-sheet";
+import { F1RaceSheet, type ClassificationState, type WeekendState } from "./f1-race-sheet";
 
 function stubViewport(phone: boolean): void {
   vi.stubGlobal(
@@ -20,7 +23,9 @@ function stubViewport(phone: boolean): void {
 function renderSheet(
   race: F1Race,
   classification?: ClassificationState,
-  onRetry: () => void = vi.fn()
+  onRetry: () => void = vi.fn(),
+  weekend?: WeekendState,
+  onRetryWeekend: () => void = vi.fn()
 ): void {
   render(
     <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
@@ -32,6 +37,8 @@ function renderSheet(
         drivers={DRIVERS}
         classification={classification}
         onRetry={onRetry}
+        weekend={weekend}
+        onRetryWeekend={onRetryWeekend}
       />
     </ReaderTimeZoneProvider>
   );
@@ -138,5 +145,60 @@ describe("F1RaceSheet", () => {
     stubViewport(true);
     renderSheet(AUSTIN);
     expect(sheet()).toHaveAttribute("data-side", "bottom");
+  });
+
+  describe("Results", () => {
+    const fp1 = {
+      kind: "fp1" as const,
+      rows: [
+        { position: "1", code: "LEC", name: "C. Leclerc", team: "Ferrari", teamColor: "#E8002D", time: "1:36.052" },
+        { position: "2", code: "VER", name: "M. Verstappen", team: "Red Bull Racing", time: "1:36.120", gap: "+0.068" },
+      ],
+    };
+    const quali = {
+      kind: "qualifying" as const,
+      rows: [{ position: "1", code: "NOR", name: "L. Norris", team: "McLaren", time: "1:32.501", segment: "Q3" as const }],
+    };
+
+    it("shows the latest session's order, with a pick of the others", () => {
+      renderSheet(AUSTIN, undefined, vi.fn(), { status: "ready", sessions: [fp1, quali] });
+      const results = section("Results");
+      expect(within(results).getByRole("radio", { name: "Qualifying" })).toHaveAttribute("aria-checked", "true");
+      expect(within(results).getByRole("table", { name: "Qualifying" })).toHaveTextContent("L. Norris");
+      expect(within(results).getByRole("table", { name: "Qualifying" })).toHaveTextContent("Q31:32.501");
+
+      fireEvent.click(within(results).getByRole("radio", { name: "Practice 1" }));
+
+      const table = within(results).getByRole("table", { name: "Practice 1" });
+      expect(within(table).getAllByRole("row").map((r) => r.textContent)).toEqual([
+        "PosDriverTimeGap",
+        "1C. LeclercFerrari1:36.052",
+        "2M. VerstappenRed Bull Racing1:36.120+0.068",
+      ]);
+    });
+
+    it("leaves a finished race to the classification below, with its points", () => {
+      const race = { kind: "race" as const, rows: [{ position: "1", code: "VER", name: "M. Verstappen", team: "Red Bull Racing", time: "1:32:11.902" }] };
+      renderSheet(SINGAPORE, { status: "loading" }, vi.fn(), { status: "ready", sessions: [quali, race] });
+      expect(within(section("Results")).queryByRole("radio")).toBeNull();
+      expect(within(section("Results")).getByRole("table", { name: "Qualifying" })).toBeInTheDocument();
+    });
+
+    it("holds its place while the sessions load", () => {
+      renderSheet(SINGAPORE, undefined, vi.fn(), { status: "loading" });
+      expect(within(section("Results")).getByRole("status", { name: "Loading the sessions" })).toBeInTheDocument();
+    });
+
+    it("says plainly when the sessions could not be read, with a retry", () => {
+      const retry = vi.fn();
+      renderSheet(SINGAPORE, undefined, vi.fn(), { status: "error", message: "Couldn't load the sessions" }, retry);
+      fireEvent.click(within(section("Results")).getByRole("button", { name: "Retry" }));
+      expect(retry).toHaveBeenCalled();
+    });
+
+    it("has no Results without any session in", () => {
+      renderSheet(AUSTIN, undefined, vi.fn(), { status: "ready", sessions: [] });
+      expect(within(sheet()).queryByRole("heading", { name: "Results" })).toBeNull();
+    });
   });
 });

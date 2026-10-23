@@ -9,7 +9,10 @@ import type { F1Data } from "@/types/sports";
 import { F1View } from "./f1-view";
 
 // The races' sheet loads a classification through a server action.
-vi.mock("@/app/actions/f1", () => ({ getF1RaceClassificationAction: vi.fn() }));
+vi.mock("@/app/actions/f1", () => ({
+  getF1RaceClassificationAction: vi.fn(),
+  getF1WeekendResultsAction: vi.fn(),
+}));
 // The shared split lives beside the match lists, whose team filter saves through one.
 vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
 
@@ -113,7 +116,7 @@ describe("F1View", () => {
     const outline = (scope: Element | null) =>
       scope?.querySelector(`svg[viewBox="${F1_CIRCUIT_VIEWBOX}"]`);
     // Monaco is next, so it is the featured card; Spain is a tile under Coming up.
-    const featured = screen.getByRole("button", { name: "Monaco GP" }).closest('[data-slot="card"]');
+    const featured = screen.getByRole("heading", { name: "Monaco GP" }).closest('[data-slot="card"]');
     expect(outline(featured)?.querySelector("path")).toHaveAttribute(
       "d",
       F1_CIRCUIT_OUTLINES.monaco

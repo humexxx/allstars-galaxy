@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Mono, Text } from "@/components/ui/typography";
 import { raceSessions, SESSION_LABEL, weekendNow } from "@/lib/sports/f1-weekend";
 import { cn } from "@/lib/utils";
-import type { F1Driver, F1Race } from "@/types/sports";
+import type { F1Driver, F1Race, F1SessionKind, F1SessionResult, F1SessionResultRow } from "@/types/sports";
 
 import type { MatchTimeFormat } from "./shared/match-time";
 import { Portrait } from "./shared/portrait";
@@ -14,19 +14,33 @@ import { StatusPill } from "./shared/status-pill";
 // No hooks, and `format` is a function: as a client module, a server
 // component passing it in would fail at render.
 
+/** What a session's first place is called: the fastest lap, the pole, the win. */
+const LEADER: Record<F1SessionKind, string> = {
+  fp1: "Fastest",
+  fp2: "Fastest",
+  fp3: "Fastest",
+  "sprint-qualifying": "Sprint pole",
+  sprint: "Winner",
+  qualifying: "Pole",
+  race: "Winner",
+};
+
 /**
  * The weekend's timetable in the reader's zone. With `now` (only after mount)
  * the sessions already run fade, the one on track is marked live and the next
- * one stands out.
+ * one stands out. A session with its `results` in shows who led it, and the
+ * time, in place of when it ran.
  */
 export function SessionList({
   race,
   format,
   now,
+  results = [],
 }: {
   race: F1Race;
   format: MatchTimeFormat;
   now: number | null;
+  results?: F1SessionResult[];
 }): JSX.Element {
   const state = now === null ? {} : weekendNow(race, now);
   return (
@@ -55,11 +69,44 @@ export function SessionList({
               {live && <StatusPill status="live" />}
               {next && <Badge variant="info">Next</Badge>}
             </span>
-            <Mono className="shrink-0 text-xs">{format.dayTime(session.startsAt)}</Mono>
+            {leaderOf(session.kind, results) ? (
+              <SessionLeader kind={session.kind} row={leaderOf(session.kind, results)!} />
+            ) : (
+              <Mono className="shrink-0 text-xs">{format.dayTime(session.startsAt)}</Mono>
+            )}
           </li>
         );
       })}
     </ol>
+  );
+}
+
+function leaderOf(kind: F1SessionKind, results: F1SessionResult[]): F1SessionResultRow | undefined {
+  return results.find((r) => r.kind === kind)?.rows.find((row) => row.position === "1");
+}
+
+/** "● C. Leclerc 1:35.291", the dot in the team's colour. */
+function SessionLeader({ kind, row }: { kind: F1SessionKind; row: F1SessionResultRow }): JSX.Element {
+  return (
+    <span className="flex min-w-0 shrink items-center gap-2 text-foreground">
+      <span className="sr-only">{LEADER[kind]}:</span>
+      <TeamDot color={row.teamColor} />
+      <Text as="span" weight="medium" className="truncate">
+        {row.name}
+      </Text>
+      {row.time && <Mono className="shrink-0 text-xs text-muted-foreground">{row.time}</Mono>}
+    </span>
+  );
+}
+
+/** A team's colour as a dot; a neutral one where OpenF1 sends none. */
+export function TeamDot({ color }: { color?: string }): JSX.Element {
+  return (
+    <span
+      aria-hidden
+      className="size-2 shrink-0 rounded-full bg-muted-foreground/40"
+      style={color ? { backgroundColor: color } : undefined}
+    />
   );
 }
 

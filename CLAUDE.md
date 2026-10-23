@@ -376,8 +376,8 @@ API_SPORTS_KEY          # Free tier hard-locked to seasons 2022-2024, unusable
                         # plan if we ever upgrade. https://dashboard.api-sports.io
 ```
 
-F1 (Jolpica, plus ESPN for the dashboard card), LoL (Lolesports), tennis and
-the NFL (ESPN) are key-less — nothing to configure in `.env`. The NBA's games
+F1 (Jolpica, plus ESPN for the dashboard card and OpenF1 for each session's
+results), LoL (Lolesports), tennis and the NFL (ESPN) are key-less — nothing to configure in `.env`. The NBA's games
 need `BALLDONTLIE_API_KEY`; its table comes from ESPN, also key-less.
 
 ## Common Workflows

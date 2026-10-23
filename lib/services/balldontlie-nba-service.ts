@@ -33,8 +33,25 @@ const REVALIDATE_SECONDS = 300;
  * on its own.
  */
 const PAGE_SIZE = 100;
-/** In season: a few nights either side of today, well under one page. */
-const IN_SEASON_DAYS = 4;
+/**
+ * A busy fortnight can outrun one page; a second is read only when the first
+ * says there is one, so a refresh is still one request on most days.
+ */
+const MAX_PAGES = 2;
+/** In season: a few nights back and a week ahead, about one page. */
+const IN_SEASON_DAYS_BEHIND = 3;
+const IN_SEASON_DAYS_AHEAD = 7;
+/**
+ * What the view lists: the nights of results up to the latest one and the
+ * week of fixtures from the next one, and never fewer than six of either.
+ * By nights, because six games was one busy night and the list showed today
+ * and nothing after it; at least six, because a finals series plays every
+ * other night and three nights of it was its last game alone.
+ */
+const RESULT_DAYS = 3;
+const FIXTURE_DAYS = 7;
+const MIN_LISTED = 6;
+const DAY_MS = 86_400_000;
 /** Out of season: far enough ahead to reach October's opener. */
 const OFF_SEASON_AHEAD_DAYS = 130;
 
@@ -103,7 +120,10 @@ function gameWindow(today: Date): { start: string; end: string } {
   const offSeason =
     (month === 5 && day >= 15) || month === 6 || month === 7 || month === 8 || (month === 9 && day < 28);
   if (!offSeason) {
-    return { start: iso(shift(today, -IN_SEASON_DAYS)), end: iso(shift(today, IN_SEASON_DAYS)) };
+    return {
+      start: iso(shift(today, -IN_SEASON_DAYS_BEHIND)),
+      end: iso(shift(today, IN_SEASON_DAYS_AHEAD)),
+    };
   }
   return {
     start: `${today.getFullYear()}-06-01`,
@@ -192,10 +212,18 @@ function matchFrom(game: BdlGame): Match {
 }
 
 async function gamesIn(start: string, end: string): Promise<BdlGame[]> {
-  const res = await fetchBdl<{ data: BdlGame[] }>(
-    `/games?per_page=${PAGE_SIZE}&start_date=${start}&end_date=${end}`
-  );
-  return res.data ?? [];
+  const games: BdlGame[] = [];
+  let cursor: number | undefined;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const res = await fetchBdl<{ data: BdlGame[]; meta?: { next_cursor?: number } }>(
+      `/games?per_page=${PAGE_SIZE}&start_date=${start}&end_date=${end}` +
+        (cursor ? `&cursor=${cursor}` : "")
+    );
+    games.push(...(res.data ?? []));
+    cursor = res.meta?.next_cursor;
+    if (!cursor) break;
+  }
+  return games;
 }
 
 /**
@@ -213,7 +241,15 @@ function recentAndNext(games: Match[]): Match[] {
   // recent slot with fixtures that had not tipped off yet.
   const played = sorted.filter((g) => g.status === "ft");
   const ahead = sorted.filter((g) => g.status !== "ft" && g.status !== "cancelled");
-  const kept = new Set([...played.slice(-6), ...ahead.slice(0, 6)]);
+  const at = (g: Match): number => Date.parse(g.kickoff);
+  const latest = played.at(-1);
+  const next = ahead[0];
+  const recent = latest ? played.filter((g) => at(latest) - at(g) < RESULT_DAYS * DAY_MS).length : 0;
+  const soon = next ? ahead.filter((g) => at(g) - at(next) < FIXTURE_DAYS * DAY_MS).length : 0;
+  const kept = new Set([
+    ...played.slice(-Math.max(MIN_LISTED, recent)),
+    ...ahead.slice(0, Math.max(MIN_LISTED, soon)),
+  ]);
   return sorted.filter((g) => kept.has(g));
 }
 

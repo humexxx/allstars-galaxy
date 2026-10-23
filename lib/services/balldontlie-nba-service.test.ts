@@ -102,14 +102,36 @@ describe("recentAndNext", () => {
     ]);
   });
 
-  it("trims a long season down to six either side of today", () => {
-    const games = Array.from({ length: 20 }, (_, i) =>
+  it("keeps at least six results and a week of fixtures out of a long season", () => {
+    // A game a night through January: the 1st to the 10th played. Three
+    // nights would be three results, so the floor of six holds.
+    const games = Array.from({ length: 30 }, (_, i) =>
       match(`2026-01-${String(i + 1).padStart(2, "0")}T00:30:00Z`, i < 10 ? "ft" : "scheduled")
     );
-    const out = recentAndNext(games);
+    const out = recentAndNext(games).map((g) => g.kickoff.slice(0, 10));
 
-    expect(out).toHaveLength(12);
-    expect(out[0].kickoff).toBe("2026-01-05T00:30:00Z");
+    expect(out[0]).toBe("2026-01-05");
+    expect(out.at(-1)).toBe("2026-01-17");
+    expect(out).toHaveLength(13);
+  });
+
+  it("lists every game of a busy week ahead, not one night's worth", () => {
+    // Twelve games a night: six by count was today alone.
+    const night = (day: string): Match[] =>
+      Array.from({ length: 12 }, (_, i) => ({ ...match(`2026-10-${day}T23:00:00Z`), id: `${day}-${i}` }));
+    const games = ["23", "24", "25", "26", "27", "28", "29", "30", "31"].flatMap(night);
+
+    const days = new Set(recentAndNext(games).map((g) => g.kickoff.slice(0, 10)));
+
+    expect([...days]).toEqual([
+      "2026-10-23",
+      "2026-10-24",
+      "2026-10-25",
+      "2026-10-26",
+      "2026-10-27",
+      "2026-10-28",
+      "2026-10-29",
+    ]);
   });
 
   it("interleaves ESPN's preseason and balldontlie's games by kickoff", () => {
@@ -199,12 +221,12 @@ describe("statusFrom", () => {
 });
 
 describe("gameWindow", () => {
-  it("asks for a few nights either side of today in season", () => {
+  it("asks for a few nights back and a week ahead in season", () => {
     // One page is the OLDEST hundred games in the range. ±130 days in
     // December would have stopped at the season's first fortnight.
     expect(gameWindow(new Date(2026, 11, 15, 12))).toEqual({
-      start: "2026-12-11",
-      end: "2026-12-19",
+      start: "2026-12-12",
+      end: "2026-12-22",
     });
   });
 
@@ -218,13 +240,13 @@ describe("gameWindow", () => {
   it("keeps the finals in view until the new season has a week of games", () => {
     expect(gameWindow(new Date(2026, 9, 18, 12)).start).toBe("2026-06-01");
     expect(gameWindow(new Date(2026, 9, 28, 12))).toEqual({
-      start: "2026-10-24",
-      end: "2026-11-01",
+      start: "2026-10-25",
+      end: "2026-11-04",
     });
   });
 
   it("stays narrow while the finals are still being played", () => {
-    expect(gameWindow(new Date(2026, 5, 10, 12)).start).toBe("2026-06-06");
+    expect(gameWindow(new Date(2026, 5, 10, 12)).start).toBe("2026-06-07");
   });
 });
 
@@ -728,15 +750,16 @@ describe("getNbaData through the year", () => {
     expect(calls()).toHaveLength(2);
     expect(calls()).toEqual(expect.arrayContaining([STANDINGS(2027), HEADER("20261001-20261019")]));
     expect(data.season).toBe("2026–27");
-    // The last six preseason results, then the first six fixtures; June's
+    // The preseason's last nights of results, then the opening week; June's
     // finals belong to 2025–26 and are not listed.
     expect(fixtures(data)).toEqual([
-      "CHA@MEM", "WAS@NOP", "MIN@CHI", "POR@GSW", "UTA@PHX", "DEN@LAL",
-      "BOS@DET", "PHI@NYK", "OKC@SAS", "ATL@ORL", "MIL@WAS", "MIN@MIA",
+      "MIL@IND", "ATL@DAL", "SAC@SAS", "CHA@MEM", "WAS@NOP", "MIN@CHI", "POR@GSW", "UTA@PHX", "DEN@LAL",
+      "BOS@DET", "PHI@NYK", "OKC@SAS", "ATL@ORL", "MIL@WAS", "MIN@MIA", "CHA@BKN", "CHI@TOR", "UTA@MEM",
+      "GSW@LAL",
     ]);
     expect(data.games.map((g) => g.stageLabel ?? "")).toEqual([
-      ...Array(6).fill("Preseason"),
-      ...Array(6).fill(""),
+      ...Array(9).fill("Preseason"),
+      ...Array(10).fill(""),
     ]);
     expect(data.champion).toEqual({
       season: "2025–26",
@@ -758,7 +781,10 @@ describe("getNbaData through the year", () => {
     const data = await getNbaData();
 
     expect(data).not.toBe(NBA_DATA);
-    expect(fixtures(data)).toEqual(["BOS@DET", "PHI@NYK", "OKC@SAS", "ATL@ORL", "MIL@WAS", "MIN@MIA"]);
+    expect(fixtures(data)).toEqual([
+      "BOS@DET", "PHI@NYK", "OKC@SAS", "ATL@ORL", "MIL@WAS", "MIN@MIA", "CHA@BKN", "CHI@TOR", "UTA@MEM",
+      "GSW@LAL",
+    ]);
     expect(data.champion?.teamId).toBe("NYK");
     expect(data.tipOff).toBe("2026-10-20T19:00:00.000Z");
   });
@@ -775,7 +801,7 @@ describe("getNbaData through the year", () => {
     expect(calls()).toEqual([STANDINGS(2027)]);
     expect(data.season).toBe("2026–27");
     expect(data.games.slice(0, 3).map((g) => g.status)).toEqual(["ft", "ft", "ft"]);
-    expect(data.games).toHaveLength(9);
+    expect(data.games).toHaveLength(10);
     expect(data.games.some((g) => g.stageLabel)).toBe(false);
     expect(data.champion).toBeUndefined();
     expect(data.tipOff).toBeUndefined();

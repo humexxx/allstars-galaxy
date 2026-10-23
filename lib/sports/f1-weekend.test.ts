@@ -123,11 +123,11 @@ describe("leadRace", () => {
 });
 
 describe("racesTabGroups", () => {
-  it("features the next race, then the three after it and the three just run", () => {
+  it("features the next race, then every race after it and every one run, latest first", () => {
     const groups = racesTabGroups(F1_DATA.races);
     expect(groups.featured?.round).toBe(7);
     expect(groups.comingUp.map((r) => r.round)).toEqual([8, 9, 10]);
-    expect(groups.justFinished.map((r) => r.round)).toEqual([6, 5, 4]);
+    expect(groups.justFinished.map((r) => r.round)).toEqual([6, 5, 4, 3, 2, 1]);
   });
 
   it("has no featured race once the season is over", () => {
@@ -135,7 +135,7 @@ describe("racesTabGroups", () => {
     const groups = racesTabGroups(over);
     expect(groups.featured).toBeUndefined();
     expect(groups.comingUp).toEqual([]);
-    expect(groups.justFinished.map((r) => r.round)).toEqual([10, 9, 8]);
+    expect(groups.justFinished.map((r) => r.round)).toEqual([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
   });
 });
 

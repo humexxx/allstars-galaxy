@@ -1,22 +1,22 @@
 "use client";
 
-import { CalendarDays, ChevronDown, ChevronRight, Flag } from "lucide-react";
-import { useMemo, useRef, useState, type JSX, type ReactNode } from "react";
+import { CalendarClock, ChevronRight, Flag, History } from "lucide-react";
+import { useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
-import { isRaceWeekend, racesTabGroups, weekendPhrase } from "@/lib/sports/f1-weekend";
-import { cn } from "@/lib/utils";
+import { isRaceWeekend, RACES_SHOWN, racesTabGroups, weekendPhrase } from "@/lib/sports/f1-weekend";
 import type { F1Data, F1Race, F1SessionResult, F1WeekendResults } from "@/types/sports";
 
 import { F1CircuitOutline } from "./f1-circuit-outline";
 import { racePlace, raceWhen, SprintBadge } from "./f1-race-labels";
 import { ResultsLine, SessionList } from "./f1-race-parts";
 import { F1RaceSheet, useRaceClassifications, useWeekendResults } from "./f1-race-sheet";
+import { fadeIn, holdScrollStill } from "./shared/reveal";
+import { RevealPill } from "./shared/reveal-pill";
 import { useMatchTime } from "./shared/time-zone-context";
 import { StatusPill } from "./shared/status-pill";
 import { useNow } from "./use-now";
@@ -30,8 +30,10 @@ const TILE =
 
 /**
  * F1's races, the left of its Overview: the race on now or next, large; the
- * three after it; the three just run; and the whole calendar on request.
- * Every race opens its sheet.
+ * three after it; the three just run. As the match lists bring in earlier
+ * days, "Later" and "Earlier" on those headings bring in three more races a
+ * tap, below the ones shown, until the season runs out either way. Every
+ * race opens its sheet.
  *
  * Its own container, so the tiles follow the column's width rather than the
  * page's. Each part opens on a heading set like a day heading in the match
@@ -59,6 +61,40 @@ export function F1Races({
   const race = raceId ? (data.races.find((r) => r.id === raceId) ?? null) : null;
   const opener = useRef<HTMLElement | null>(null);
 
+  // How many more than RACES_SHOWN each list shows, and the races a tap added.
+  const [moreLater, setMoreLater] = useState(0);
+  const [moreEarlier, setMoreEarlier] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  const added = useRef<{ ids: string[]; pill: Reveal } | null>(null);
+  const coming = comingUp.slice(0, RACES_SHOWN + moreLater);
+  const finished = justFinished.slice(0, RACES_SHOWN + moreEarlier);
+  const nextLater = comingUp.slice(coming.length, coming.length + RACES_SHOWN);
+  const nextEarlier = justFinished.slice(finished.length, finished.length + RACES_SHOWN);
+
+  // The new races are in, under the ones shown. They fade in; the focus
+  // stays on the pill for the next three, or goes to the first of them once
+  // the season has no more that way.
+  useLayoutEffect(() => {
+    const done = added.current;
+    const root = listRef.current;
+    added.current = null;
+    if (!done || !root) return;
+    const tiles = done.ids
+      .map((id) => root.querySelector<HTMLElement>(`[data-race="${id}"]`))
+      .filter((t): t is HTMLElement => t !== null);
+    const pill = root.querySelector<HTMLElement>(`[data-reveal="${done.pill}"]`);
+    (pill ?? tiles[0])?.focus({ preventScroll: true });
+    tiles.forEach((tile, i) => fadeIn(tile, i * 40));
+  }, [moreLater, moreEarlier]);
+
+  const reveal = (which: Reveal): void => {
+    if (!listRef.current) return;
+    holdScrollStill(listRef.current);
+    added.current = { ids: (which === "later" ? nextLater : nextEarlier).map((r) => r.id), pill: which };
+    if (which === "later") setMoreLater(moreLater + RACES_SHOWN);
+    else setMoreEarlier(moreEarlier + RACES_SHOWN);
+  };
+
   const open: OpenRace = (next, from) => {
     opener.current = from;
     setRaceId(next.id);
@@ -68,7 +104,7 @@ export function F1Races({
   };
 
   return (
-    <div className="@container flex min-w-0 flex-col gap-6">
+    <div ref={listRef} className="@container flex min-w-0 flex-col gap-6">
       <section className="flex flex-col gap-2">
         <RaceHeading>{featured?.status === "live" ? "On now" : "Next race"}</RaceHeading>
         {featured ? (
@@ -82,28 +118,52 @@ export function F1Races({
           <EmptyState
             icon={Flag}
             title={`The ${data.season} season is over`}
-            description="Every round is in the calendar below."
+            description="Every round is under Just finished below."
           />
         )}
       </section>
 
-      {comingUp.length > 0 && (
-        <RaceSection title="Coming up">
-          {comingUp.map((r) => (
+      {coming.length > 0 && (
+        <RaceSection
+          title="Coming up"
+          action={
+            nextLater.length > 0 && (
+              <RevealPill
+                icon={CalendarClock}
+                label="Later"
+                detail={showRounds(nextLater)}
+                data-reveal="later"
+                onClick={() => reveal("later")}
+              />
+            )
+          }
+        >
+          {coming.map((r) => (
             <RaceTile key={r.id} race={r} onOpen={open} />
           ))}
         </RaceSection>
       )}
 
-      {justFinished.length > 0 && (
-        <RaceSection title="Just finished">
-          {justFinished.map((r) => (
+      {finished.length > 0 && (
+        <RaceSection
+          title="Just finished"
+          action={
+            nextEarlier.length > 0 && (
+              <RevealPill
+                icon={History}
+                label="Earlier"
+                detail={showRounds(nextEarlier)}
+                data-reveal="earlier"
+                onClick={() => reveal("earlier")}
+              />
+            )
+          }
+        >
+          {finished.map((r) => (
             <RaceTile key={r.id} race={r} onOpen={open} />
           ))}
         </RaceSection>
       )}
-
-      <FullCalendar races={data.races} featuredId={featured?.id} onOpen={open} />
 
       <F1RaceSheet
         race={race}
@@ -134,10 +194,32 @@ function RaceHeading({ children }: { children: ReactNode }): JSX.Element {
   );
 }
 
-function RaceSection({ title, children }: { title: string; children: ReactNode }): JSX.Element {
+type Reveal = "later" | "earlier";
+
+/** What a tap brings in: "Show rounds 13 – 15", or "Show round 13". */
+function showRounds(races: F1Race[]): string {
+  const rounds = races.map((r) => r.round).sort((a, b) => a - b);
+  return rounds.length > 1
+    ? `Show rounds ${rounds[0]} – ${rounds[rounds.length - 1]}`
+    : `Show round ${rounds[0]}`;
+}
+
+function RaceSection({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  /** At the end of the heading's line: the pill that brings in more. */
+  action?: ReactNode;
+  children: ReactNode;
+}): JSX.Element {
   return (
     <section className="flex flex-col gap-2">
-      <RaceHeading>{title}</RaceHeading>
+      <div className="flex items-center justify-between gap-2">
+        <RaceHeading>{title}</RaceHeading>
+        {action}
+      </div>
       <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">{children}</div>
     </section>
   );
@@ -214,7 +296,8 @@ function FeaturedRace({
           <SessionList race={race} format={format} now={now} results={results} drivers={drivers} />
         </div>
 
-        <div className="col-span-2 @2xl:col-span-1 @2xl:col-start-1">
+        {/* At the card's foot, on its right. */}
+        <div className="col-span-2 flex justify-end">
           <Button
             variant="outline"
             size="sm"
@@ -233,7 +316,12 @@ function FeaturedRace({
 function RaceTile({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX.Element {
   const format = useMatchTime();
   return (
-    <button type="button" onClick={(event) => onOpen(race, event.currentTarget)} className={TILE}>
+    <button
+      type="button"
+      data-race={race.id}
+      onClick={(event) => onOpen(race, event.currentTarget)}
+      className={TILE}
+    >
       <span className="flex w-full items-start justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2">
           <span aria-hidden className="text-xl leading-none">
@@ -264,73 +352,4 @@ function RaceTile({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX.Ele
       )}
     </button>
   );
-}
-
-/** Every round on one line each, folded away until asked for. */
-function FullCalendar({
-  races,
-  featuredId,
-  onOpen,
-}: {
-  races: F1Race[];
-  featuredId?: string;
-  onOpen: OpenRace;
-}): JSX.Element {
-  const format = useMatchTime();
-  const [open, setOpen] = useState(false);
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} className="flex flex-col gap-3">
-      <CollapsibleTrigger asChild>
-        <Button variant="outline" className="self-start">
-          <CalendarDays />
-          {open ? "Hide calendar" : "Full calendar"}
-          <ChevronDown className={cn("transition-transform", open && "rotate-180")} />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <Card className="gap-0 py-0">
-          <ol aria-label="Season calendar" className="divide-y">
-            {races.map((race) => (
-              <li key={race.id}>
-                <button
-                  type="button"
-                  onClick={(event) => onOpen(race, event.currentTarget)}
-                  className={cn(
-                    "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors outline-none hover:bg-muted/40 focus-visible:bg-muted/40",
-                    race.status === "completed" && "text-muted-foreground"
-                  )}
-                >
-                  <Mono className="w-6 shrink-0 text-xs text-muted-foreground">{race.round}</Mono>
-                  <span aria-hidden className="text-base leading-none">
-                    {race.flagEmoji}
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                    <Text
-                      as="span"
-                      weight={race.id === featuredId ? "semibold" : "medium"}
-                      className={cn("truncate", race.status === "completed" && "text-muted-foreground")}
-                    >
-                      {race.name}
-                    </Text>
-                    <Mono className="text-2xs text-muted-foreground">{raceWhen(race, format)}</Mono>
-                  </span>
-                  <CalendarRowEnd race={race} isNext={race.id === featuredId} />
-                </button>
-              </li>
-            ))}
-          </ol>
-        </Card>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function CalendarRowEnd({ race, isNext }: { race: F1Race; isNext: boolean }): JSX.Element | null {
-  if (race.status === "live") return <StatusPill status="live" />;
-  if (isNext) return <Badge variant="info">Next</Badge>;
-  const winner = race.winner?.code ?? race.podium?.[0];
-  if (race.status === "completed" && winner) {
-    return <Mono className="shrink-0 text-xs font-semibold text-foreground">{winner}</Mono>;
-  }
-  return race.sprint ? <SprintBadge /> : null;
 }

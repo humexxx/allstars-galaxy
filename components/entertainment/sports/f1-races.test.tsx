@@ -204,9 +204,13 @@ describe("F1Races", () => {
     expect(within(sheet()).getByRole("heading", { name: "United States Grand Prix" })).toBeInTheDocument();
   });
 
-  it("shows who led each session run so far in the card's timetable", () => {
+  it("shows who led each session run so far in the card's timetable, by face", () => {
     vi.setSystemTime(new Date("2026-10-24T03:00:00Z"));
-    renderRaces(F1_SEASON, {
+    // Leclerc has a face in the standings; Norris has none, so his disc is his code.
+    const drivers = F1_SEASON.drivers.map((d) =>
+      d.code === "LEC" ? { ...d, imageUrl: "https://a.espncdn.com/i/headshots/rpm/players/full/5498.png" } : d
+    );
+    renderRaces({ ...F1_SEASON, drivers }, {
       season: 2026,
       round: 18,
       sessions: [
@@ -222,7 +226,9 @@ describe("F1Races", () => {
     });
     const rows = within(featuredCard()).getAllByRole("listitem");
     expect(rows[0]).toHaveTextContent(/^Practice 1Fastest:C. Leclerc1:36.052$/);
-    expect(rows[1]).toHaveTextContent(/^Sprint QualifyingSprint pole:L. Norris1:33.200$/);
+    expect(rows[0].querySelector("img")).not.toBeNull();
+    expect(rows[1]).toHaveTextContent(/^Sprint QualifyingSprint pole:NORL. Norris1:33.200$/);
+    expect(rows[1].querySelector("img")).toBeNull();
     // Still to run: its time, not a result.
     expect(rows[2]).toHaveTextContent("Sprint");
     expect(rows[2]).not.toHaveTextContent("Winner");

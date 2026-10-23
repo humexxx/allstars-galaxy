@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import type { F1Driver, F1Race, F1SessionKind, F1SessionResult, F1SessionResultRow } from "@/types/sports";
 
 import type { MatchTimeFormat } from "./shared/match-time";
-import { Portrait } from "./shared/portrait";
+import { Portrait, type PortraitSubject } from "./shared/portrait";
 import { StatusPill } from "./shared/status-pill";
 
 // No hooks, and `format` is a function: as a client module, a server
@@ -36,11 +36,14 @@ export function SessionList({
   format,
   now,
   results = [],
+  drivers = [],
 }: {
   race: F1Race;
   format: MatchTimeFormat;
   now: number | null;
   results?: F1SessionResult[];
+  /** The standings' drivers, whose faces and names the leaders take. */
+  drivers?: F1Driver[];
 }): JSX.Element {
   const state = now === null ? {} : weekendNow(race, now);
   return (
@@ -70,7 +73,11 @@ export function SessionList({
               {next && <Badge variant="info">Next</Badge>}
             </span>
             {leaderOf(session.kind, results) ? (
-              <SessionLeader kind={session.kind} row={leaderOf(session.kind, results)!} />
+              <SessionLeader
+                kind={session.kind}
+                row={leaderOf(session.kind, results)!}
+                drivers={drivers}
+              />
             ) : (
               <Mono className="shrink-0 text-xs">{format.dayTime(session.startsAt)}</Mono>
             )}
@@ -85,28 +92,40 @@ function leaderOf(kind: F1SessionKind, results: F1SessionResult[]): F1SessionRes
   return results.find((r) => r.kind === kind)?.rows.find((row) => row.position === "1");
 }
 
-/** "● C. Leclerc 1:35.291", the dot in the team's colour. */
-function SessionLeader({ kind, row }: { kind: F1SessionKind; row: F1SessionResultRow }): JSX.Element {
+/** The face and name a session's row is drawn with: the standings' driver, matched by code. */
+export function sessionDriver(
+  row: F1SessionResultRow,
+  drivers: F1Driver[]
+): { name: string; subject: PortraitSubject } {
+  const known = drivers.find((d) => d.code === row.code);
+  const name = known?.shortName ?? row.name;
+  return {
+    name,
+    // Without a face, the team's colour and the driver's code, as a disc.
+    subject: { name, imageUrl: known?.imageUrl, flagUrl: known?.flagUrl, color: row.teamColor, code: row.code },
+  };
+}
+
+/** "(face) C. Leclerc 1:35.291". */
+function SessionLeader({
+  kind,
+  row,
+  drivers,
+}: {
+  kind: F1SessionKind;
+  row: F1SessionResultRow;
+  drivers: F1Driver[];
+}): JSX.Element {
+  const { name, subject } = sessionDriver(row, drivers);
   return (
     <span className="flex min-w-0 shrink items-center gap-2 text-foreground">
       <span className="sr-only">{LEADER[kind]}:</span>
-      <TeamDot color={row.teamColor} />
+      <Portrait size="sm" subject={subject} />
       <Text as="span" weight="medium" className="truncate">
-        {row.name}
+        {name}
       </Text>
       {row.time && <Mono className="shrink-0 text-xs text-muted-foreground">{row.time}</Mono>}
     </span>
-  );
-}
-
-/** A team's colour as a dot; a neutral one where OpenF1 sends none. */
-export function TeamDot({ color }: { color?: string }): JSX.Element {
-  return (
-    <span
-      aria-hidden
-      className="size-2 shrink-0 rounded-full bg-muted-foreground/40"
-      style={color ? { backgroundColor: color } : undefined}
-    />
   );
 }
 

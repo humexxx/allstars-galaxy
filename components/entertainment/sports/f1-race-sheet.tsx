@@ -30,7 +30,8 @@ import type {
 
 import { F1CircuitOutline } from "./f1-circuit-outline";
 import { racePlace, raceWhen, SprintBadge } from "./f1-race-labels";
-import { Podium, SessionList, TeamDot } from "./f1-race-parts";
+import { Podium, sessionDriver, SessionList } from "./f1-race-parts";
+import { Portrait } from "./shared/portrait";
 import { useMatchTime } from "./shared/time-zone-context";
 import { StatusPill } from "./shared/status-pill";
 import { SportsTh } from "./shared/table-primitives";
@@ -249,7 +250,7 @@ function RaceDetails({
         )}
         {sessions.length > 0 && (
           <Section title="Results">
-            <SessionResults sessions={sessions} />
+            <SessionResults sessions={sessions} drivers={drivers} />
           </Section>
         )}
 
@@ -260,6 +261,7 @@ function RaceDetails({
               format={format}
               now={now}
               results={weekend?.status === "ready" ? weekend.sessions : []}
+              drivers={drivers}
             />
           </Section>
         )}
@@ -334,7 +336,13 @@ const SESSION_NAME: Record<F1SessionKind, string> = {
  * One session's order at a time, the latest first: position, driver and
  * team, the best lap (a race's winner: the race time) and the gap.
  */
-function SessionResults({ sessions }: { sessions: F1SessionResult[] }): JSX.Element {
+function SessionResults({
+  sessions,
+  drivers,
+}: {
+  sessions: F1SessionResult[];
+  drivers: F1Driver[];
+}): JSX.Element {
   const [picked, setPicked] = useState<F1SessionKind>(sessions[sessions.length - 1].kind);
   const shown = sessions.find((s) => s.kind === picked) ?? sessions[sessions.length - 1];
   return (
@@ -366,37 +374,40 @@ function SessionResults({ sessions }: { sessions: F1SessionResult[] }): JSX.Elem
             </TableRow>
           </TableHeader>
           <TableBody>
-            {shown.rows.map((row, i) => (
-              <TableRow key={`${row.code}-${i}`}>
-                <TableCell className="pl-3">
-                  <Mono className="text-xs text-muted-foreground">{row.position}</Mono>
-                </TableCell>
-                <TableCell className="w-full max-w-0">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <TeamDot color={row.teamColor} />
-                    <div className="flex min-w-0 flex-col leading-tight">
-                      <Text as="span" weight="medium" className="truncate">
-                        {row.name}
-                      </Text>
-                      <Text variant="small" as="span" className="truncate">
-                        {row.team}
-                      </Text>
+            {shown.rows.map((row, i) => {
+              const { name, subject } = sessionDriver(row, drivers);
+              return (
+                <TableRow key={`${row.code}-${i}`}>
+                  <TableCell className="pl-3">
+                    <Mono className="text-xs text-muted-foreground">{row.position}</Mono>
+                  </TableCell>
+                  <TableCell className="w-full max-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Portrait size="table" subject={subject} />
+                      <div className="flex min-w-0 flex-col leading-tight">
+                        <Text as="span" weight="medium" className="truncate">
+                          {name}
+                        </Text>
+                        <Text variant="small" as="span" className="truncate">
+                          {row.team}
+                        </Text>
+                      </div>
                     </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  <span className="inline-flex items-center gap-1">
-                    {row.segment && (
-                      <Mono className="text-2xs text-muted-foreground">{row.segment}</Mono>
-                    )}
-                    <Mono className="text-xs">{row.time ?? ""}</Mono>
-                  </span>
-                </TableCell>
-                <TableCell className="pr-3 text-right">
-                  <Mono className="text-xs text-muted-foreground">{row.gap ?? ""}</Mono>
-                </TableCell>
-              </TableRow>
-            ))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <span className="inline-flex items-center gap-1">
+                      {row.segment && (
+                        <Mono className="text-2xs text-muted-foreground">{row.segment}</Mono>
+                      )}
+                      <Mono className="text-xs">{row.time ?? ""}</Mono>
+                    </span>
+                  </TableCell>
+                  <TableCell className="pr-3 text-right">
+                    <Mono className="text-xs text-muted-foreground">{row.gap ?? ""}</Mono>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

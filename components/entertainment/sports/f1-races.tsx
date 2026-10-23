@@ -76,6 +76,7 @@ export function F1Races({
             race={featured}
             onOpen={open}
             results={featuredResults?.status === "ready" ? featuredResults.sessions : []}
+            drivers={data.drivers}
           />
         ) : (
           <EmptyState
@@ -168,10 +169,12 @@ function FeaturedRace({
   race,
   onOpen,
   results,
+  drivers,
 }: {
   race: F1Race;
   onOpen: OpenRace;
   results: F1SessionResult[];
+  drivers: F1Data["drivers"];
 }): JSX.Element {
   const format = useMatchTime();
   const now = useNow();
@@ -208,7 +211,7 @@ function FeaturedRace({
         </div>
 
         <div className="col-span-2 @2xl:col-span-1 @2xl:col-start-1">
-          <SessionList race={race} format={format} now={now} results={results} />
+          <SessionList race={race} format={format} now={now} results={results} drivers={drivers} />
         </div>
 
         <div className="col-span-2 @2xl:col-span-1 @2xl:col-start-1">

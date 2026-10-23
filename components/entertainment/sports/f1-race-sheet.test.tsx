@@ -170,11 +170,34 @@ describe("F1RaceSheet", () => {
       fireEvent.click(within(results).getByRole("radio", { name: "Practice 1" }));
 
       const table = within(results).getByRole("table", { name: "Practice 1" });
+      // No faces in the fixture: each driver is the disc with their code.
       expect(within(table).getAllByRole("row").map((r) => r.textContent)).toEqual([
         "PosDriverTimeGap",
-        "1C. LeclercFerrari1:36.052",
-        "2M. VerstappenRed Bull Racing1:36.120+0.068",
+        "1LECC. LeclercFerrari1:36.052",
+        "2VERM. VerstappenRed Bull Racing1:36.120+0.068",
       ]);
+    });
+
+    it("draws each driver by their face from the standings, by the name there too", () => {
+      const faces = DRIVERS.map((d) =>
+        d.code === "LEC" ? { ...d, shortName: "C. Leclerc", imageUrl: "https://a.espncdn.com/i/headshots/rpm/players/full/5498.png" } : d
+      );
+      render(
+        <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
+          <F1RaceSheet
+            race={AUSTIN}
+            open
+            onOpenChange={vi.fn()}
+            season={2026}
+            drivers={faces}
+            onRetry={vi.fn()}
+            weekend={{ status: "ready", sessions: [fp1] }}
+          />
+        </ReaderTimeZoneProvider>
+      );
+      const [, leclerc, verstappen] = within(section("Results")).getAllByRole("row");
+      expect(leclerc.querySelector("img")).not.toBeNull();
+      expect(verstappen.querySelector("img")).toBeNull();
     });
 
     it("leaves a finished race to the classification below, with its points", () => {

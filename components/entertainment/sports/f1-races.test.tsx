@@ -47,7 +47,9 @@ describe("F1Races", () => {
       '[data-slot="card"]'
     ) as HTMLElement;
 
-    expect(featured).toHaveTextContent("Next race · Round 18");
+    // "Next race" is the heading above the card, which names the round.
+    expect(featured.closest("section")?.querySelector("h3")).toHaveTextContent("Next race");
+    expect(featured).toHaveTextContent(/^Round 18/);
     expect(featured.querySelector('[data-slot="badge"]')).toHaveTextContent("Sprint");
     expect(featured).toHaveTextContent("Circuit of the Americas · Austin, USA");
     // 20:00Z is 2 PM in Costa Rica.

@@ -17,6 +17,7 @@ import type { F1Constructor, F1Data, F1Driver, F1NewsArticle } from "@/types/spo
 
 import { F1Races } from "../f1-races";
 import { NewsList } from "../shared/news-list";
+import { OverviewSplit } from "../shared/overview-split";
 import { Portrait } from "../shared/portrait";
 import { SportShell } from "../shared/sport-shell";
 import { SportsTh, TableCard } from "../shared/table-primitives";
@@ -29,27 +30,30 @@ type F1ViewProps = {
   initialTab?: string;
 };
 
-const TABS = ["standings", "races", "news"] as const;
-type F1Tab = (typeof TABS)[number];
+type F1Tab = "overview" | "news";
 type Championship = "drivers" | "constructors";
 
-// Narrow on a phone, so Podiums is on screen without a sideways scroll.
 const NUM = "px-1 text-right sm:px-2";
+// The table sits beside the races at about 300px and fills a phone at 343:
+// by the card's own width, Wins shows from 20rem and Podiums from 24rem, and
+// whichever column is last takes the row's end padding.
+const WINS = "hidden @xs:table-cell @max-sm:pr-3";
+const PODIUMS = "hidden @sm:table-cell pr-3 sm:pr-4";
+const POINTS = "@max-xs:pr-3";
 
 /**
- * Where `?tab=` opens the view. Drivers and Constructors were tabs of their
- * own before they shared Standings, and a link to either still lands on its
- * table.
+ * Where `?tab=` opens the view. Standings and Races were tabs until they
+ * shared Overview, and Drivers and Constructors tabs before that; a link to
+ * any of them lands on Overview, on that table where it names one.
  */
 function openingView(
   initialTab: string | undefined,
   hasNews: boolean
 ): { tab: F1Tab; championship: Championship } {
   if (initialTab === "drivers" || initialTab === "constructors") {
-    return { tab: "standings", championship: initialTab };
+    return { tab: "overview", championship: initialTab };
   }
-  const tab = TABS.find((t) => t === initialTab) ?? "standings";
-  return { tab: tab === "news" && !hasNews ? "standings" : tab, championship: "drivers" };
+  return { tab: initialTab === "news" && hasNews ? "news" : "overview", championship: "drivers" };
 }
 
 export function F1View({ data, news = [], initialTab }: F1ViewProps) {
@@ -64,38 +68,41 @@ export function F1View({ data, news = [], initialTab }: F1ViewProps) {
         subtitle={`${data.season} Season`}
         tabs={
           <TabsList variant="line">
-            <TabsTrigger value="standings">Standings</TabsTrigger>
-            <TabsTrigger value="races">Races</TabsTrigger>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
             {news.length > 0 && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }
       >
-        <TabsContent value="standings">
-          <TableCard>
-            {/* A segmented control, not two more tabs: both championships
-                are the one table with its rows swapped. */}
-            <div className="border-b px-4 py-3">
-              <ToggleGroup
-                type="single"
-                size="sm"
-                value={championship}
-                onValueChange={(v) => v && setChampionship(v as Championship)}
-                aria-label="Championship"
-              >
-                <ToggleGroupItem value="drivers">Drivers</ToggleGroupItem>
-                <ToggleGroupItem value="constructors">Constructors</ToggleGroupItem>
-              </ToggleGroup>
-            </div>
-            {championship === "drivers" ? (
-              <DriversTable drivers={data.drivers} />
-            ) : (
-              <ConstructorsTable constructors={data.constructors} />
-            )}
-          </TableCard>
-        </TabsContent>
-
-        <TabsContent value="races">
-          <F1Races data={data} />
+        {/* The races and the standings on one tab, as football's matches and
+            table: the races on the left, the championship beside them. */}
+        <TabsContent value="overview">
+          <OverviewSplit
+            matches={<F1Races data={data} />}
+            table={
+              <TableCard className="@container">
+                {/* A segmented control, not two more tabs: both championships
+                    are the one table with its rows swapped. */}
+                <div className="border-b px-4 py-3">
+                  <ToggleGroup
+                    type="single"
+                    size="sm"
+                    value={championship}
+                    onValueChange={(v) => v && setChampionship(v as Championship)}
+                    aria-label="Championship"
+                  >
+                    <ToggleGroupItem value="drivers">Drivers</ToggleGroupItem>
+                    <ToggleGroupItem value="constructors">Constructors</ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+                {championship === "drivers" ? (
+                  <DriversTable drivers={data.drivers} />
+                ) : (
+                  <ConstructorsTable constructors={data.constructors} />
+                )}
+              </TableCard>
+            }
+            tableLabel="Standings"
+          />
         </TabsContent>
 
         {news.length > 0 && (
@@ -118,9 +125,9 @@ function DriversTable({ drivers }: { drivers: F1Driver[] }) {
         <TableRow className="bg-muted/40 hover:bg-muted/40">
           <SportsTh className="w-8 pl-3">#</SportsTh>
           <SportsTh>Driver</SportsTh>
-          <SportsTh className={NUM}>Points</SportsTh>
-          <SportsTh className={NUM}>Wins</SportsTh>
-          <SportsTh className={cn(NUM, "pr-3 sm:pr-4")}>Podiums</SportsTh>
+          <SportsTh className={cn(NUM, POINTS)}>Points</SportsTh>
+          <SportsTh className={cn(NUM, WINS)}>Wins</SportsTh>
+          <SportsTh className={cn(NUM, PODIUMS)}>Podiums</SportsTh>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -146,13 +153,13 @@ function DriversTable({ drivers }: { drivers: F1Driver[] }) {
                 </div>
               </div>
             </TableCell>
-            <TableCell className={NUM}>
+            <TableCell className={cn(NUM, POINTS)}>
               <Mono className="text-sm font-semibold">{d.points}</Mono>
             </TableCell>
-            <TableCell className={NUM}>
+            <TableCell className={cn(NUM, WINS)}>
               <Mono className="text-sm">{d.wins}</Mono>
             </TableCell>
-            <TableCell className={cn(NUM, "pr-3 sm:pr-4")}>
+            <TableCell className={cn(NUM, PODIUMS)}>
               <Mono className="text-sm">{d.podiums}</Mono>
             </TableCell>
           </TableRow>
@@ -169,9 +176,9 @@ function ConstructorsTable({ constructors }: { constructors: F1Constructor[] }) 
         <TableRow className="bg-muted/40 hover:bg-muted/40">
           <SportsTh className="w-8 pl-3">#</SportsTh>
           <SportsTh>Team</SportsTh>
-          <SportsTh className={NUM}>Points</SportsTh>
-          <SportsTh className={NUM}>Wins</SportsTh>
-          <SportsTh className={cn(NUM, "pr-3 sm:pr-4")}>Podiums</SportsTh>
+          <SportsTh className={cn(NUM, POINTS)}>Points</SportsTh>
+          <SportsTh className={cn(NUM, WINS)}>Wins</SportsTh>
+          <SportsTh className={cn(NUM, PODIUMS)}>Podiums</SportsTh>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -194,13 +201,13 @@ function ConstructorsTable({ constructors }: { constructors: F1Constructor[] }) 
                 <Text as="span" weight="medium">{c.shortName}</Text>
               </div>
             </TableCell>
-            <TableCell className={NUM}>
+            <TableCell className={cn(NUM, POINTS)}>
               <Mono className="text-sm font-semibold">{c.points}</Mono>
             </TableCell>
-            <TableCell className={NUM}>
+            <TableCell className={cn(NUM, WINS)}>
               <Mono className="text-sm">{c.wins}</Mono>
             </TableCell>
-            <TableCell className={cn(NUM, "pr-3 sm:pr-4")}>
+            <TableCell className={cn(NUM, PODIUMS)}>
               <Mono className="text-sm">{c.podiums}</Mono>
             </TableCell>
           </TableRow>

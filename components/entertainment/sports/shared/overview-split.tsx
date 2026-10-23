@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { scrollParent, scrollportHeight } from "./scroll";
 
 type OverviewSplitProps = {
-  /** The day-by-day list (`MatchesByDate`). */
+  /** The day-by-day list (`MatchesByDate`), or F1's races. */
   matches: ReactNode;
   /** The table beside it. Without one the matches fill the row. */
   table?: ReactNode;
@@ -17,8 +17,9 @@ type OverviewSplitProps = {
 };
 
 /**
- * An Overview tab's two columns (football, the NBA, the NFL): every match on
- * the left and the table beside them from `@4xl`, stacked below that.
+ * An Overview tab's two columns (football, the NBA, the NFL, F1): every match
+ * (F1's races) on the left and the table beside them from `@4xl`, stacked
+ * below that.
  *
  * The table opens on a label set like a day heading, so its card starts level
  * with the first match card and the two columns read as one layout.

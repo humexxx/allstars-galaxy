@@ -28,9 +28,14 @@ const TILE =
   "flex w-full flex-col gap-3 rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50";
 
 /**
- * The Races tab: the race on now or next, large; the three after it; the
- * three just run; and the whole calendar on request. Every race opens its
- * sheet.
+ * F1's races, the left of its Overview: the race on now or next, large; the
+ * three after it; the three just run; and the whole calendar on request.
+ * Every race opens its sheet.
+ *
+ * Its own container, so the tiles follow the column's width rather than the
+ * page's. Each part opens on a heading set like a day heading in the match
+ * lists, which is what puts the first card level with the standings card
+ * beside it (`OverviewSplit`).
  */
 export function F1Races({ data }: { data: F1Data }): JSX.Element {
   const { featured, comingUp, justFinished } = useMemo(
@@ -52,16 +57,19 @@ export function F1Races({ data }: { data: F1Data }): JSX.Element {
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      {featured ? (
-        <FeaturedRace race={featured} onOpen={open} />
-      ) : (
-        <EmptyState
-          icon={Flag}
-          title={`The ${data.season} season is over`}
-          description="Every round is in the calendar below."
-        />
-      )}
+    <div className="@container flex min-w-0 flex-col gap-6">
+      <section className="flex flex-col gap-2">
+        <RaceHeading>{featured?.status === "live" ? "On now" : "Next race"}</RaceHeading>
+        {featured ? (
+          <FeaturedRace race={featured} onOpen={open} />
+        ) : (
+          <EmptyState
+            icon={Flag}
+            title={`The ${data.season} season is over`}
+            description="Every round is in the calendar below."
+          />
+        )}
+      </section>
 
       {comingUp.length > 0 && (
         <RaceSection title="Coming up">
@@ -97,12 +105,19 @@ export function F1Races({ data }: { data: F1Data }): JSX.Element {
   );
 }
 
+/** The size, padding and gap of a day heading in `MatchesByDate`. */
+function RaceHeading({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <Eyebrow size="sm" asChild>
+      <h3 className="py-1">{children}</h3>
+    </Eyebrow>
+  );
+}
+
 function RaceSection({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="flex flex-col gap-3">
-      <Eyebrow asChild>
-        <h3>{title}</h3>
-      </Eyebrow>
+    <section className="flex flex-col gap-2">
+      <RaceHeading>{title}</RaceHeading>
       <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">{children}</div>
     </section>
   );
@@ -139,9 +154,8 @@ function FeaturedRace({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX
       <CardContent className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-5 @2xl:gap-x-8">
         <div className="flex min-w-0 flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Eyebrow>
-              {race.status === "live" ? "On now" : "Next race"} · Round {race.round}
-            </Eyebrow>
+            {/* "Next race" or "On now" is the heading above the card. */}
+            <Eyebrow>Round {race.round}</Eyebrow>
             {race.sprint && <SprintBadge />}
           </div>
           <Heading level="h3" className="flex items-center gap-3">

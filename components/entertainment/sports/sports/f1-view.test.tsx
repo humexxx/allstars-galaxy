@@ -8,8 +8,10 @@ import type { F1Data } from "@/types/sports";
 
 import { F1View } from "./f1-view";
 
-// The Races tab's sheet loads a classification through a server action.
+// The races' sheet loads a classification through a server action.
 vi.mock("@/app/actions/f1", () => ({ getF1RaceClassificationAction: vi.fn() }));
+// The shared split lives beside the match lists, whose team filter saves through one.
+vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
 
 beforeEach(() => {
   // The race sheet picks its side from the viewport; jsdom has no matchMedia.
@@ -24,12 +26,42 @@ const openTab = () => screen.getByRole("tab", { selected: true }).textContent;
 const championship = (name: "Drivers" | "Constructors") => screen.getByRole("radio", { name });
 
 describe("F1View", () => {
-  it("has one Standings tab where Drivers and Constructors were", () => {
+  it("opens on one Overview tab: the races beside the standings, as football's matches and table", () => {
     render(<F1View data={F1_DATA} />);
-    expect(tabs()).toEqual(["Standings", "Races"]);
-    expect(openTab()).toBe("Standings");
+    expect(tabs()).toEqual(["Overview"]);
+    expect(openTab()).toBe("Overview");
     expect(championship("Drivers")).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("columnheader", { name: "Driver" })).toBeInTheDocument();
+
+    const standings = screen.getByText("Standings").closest("section")!;
+    const races = screen.getByRole("heading", { name: "Next race" }).closest("section")!.parentElement!;
+    expect(standings.parentElement).toBe(races.parentElement);
+    expect(standings.parentElement).toHaveClass("@4xl:grid-cols-[2fr_1fr]");
+  });
+
+  it("puts the next race's card level with the standings card: both open on a day heading's line", () => {
+    render(<F1View data={F1_DATA} />);
+    const heading = screen.getByRole("heading", { name: "Next race" });
+    const label = screen.getByText("Standings");
+    for (const cls of ["text-2xs", "py-1"]) {
+      expect(heading).toHaveClass(cls);
+      expect(label).toHaveClass(cls);
+    }
+    expect(heading.parentElement).toHaveClass("gap-2");
+    expect(label.parentElement).toHaveClass("gap-2");
+    // The heading says "Next race"; the card under it no longer repeats it.
+    const card = heading.nextElementSibling!;
+    expect(card).toHaveTextContent(/^Round \d+/);
+    expect(card).not.toHaveTextContent("Next race");
+  });
+
+  it("drops Wins, then Podiums, as the standings card narrows, by its own width", () => {
+    render(<F1View data={F1_DATA} />);
+    const card = screen.getByRole("table").closest('[data-slot="card"]');
+    expect(card).toHaveClass("@container");
+    expect(screen.getByRole("columnheader", { name: "Wins" })).toHaveClass("hidden", "@xs:table-cell");
+    expect(screen.getByRole("columnheader", { name: "Podiums" })).toHaveClass("hidden", "@sm:table-cell");
+    expect(screen.getByRole("columnheader", { name: "Points" })).not.toHaveClass("hidden");
   });
 
   it("swaps the table between the championships, columns and badges included", () => {
@@ -55,16 +87,22 @@ describe("F1View", () => {
   it.each([
     ["drivers", "Drivers", "Driver"],
     ["constructors", "Constructors", "Team"],
-  ] as const)("opens an old ?tab=%s link on Standings, on that table", (tab, mode, column) => {
+  ] as const)("opens an old ?tab=%s link on Overview, on that table", (tab, mode, column) => {
     render(<F1View data={F1_DATA} initialTab={tab} />);
-    expect(openTab()).toBe("Standings");
+    expect(openTab()).toBe("Overview");
     expect(championship(mode)).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("columnheader", { name: column })).toBeInTheDocument();
   });
 
-  it("falls back to Standings for ?tab=news when there is no news", () => {
+  it.each(["standings", "races"])("opens an old ?tab=%s link on Overview", (tab) => {
+    render(<F1View data={F1_DATA} initialTab={tab} />);
+    expect(openTab()).toBe("Overview");
+    expect(championship("Drivers")).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("falls back to Overview for ?tab=news when there is no news", () => {
     render(<F1View data={F1_DATA} initialTab="news" />);
-    expect(openTab()).toBe("Standings");
+    expect(openTab()).toBe("Overview");
   });
 
   it("draws each race's circuit, and leaves a race with no outline as it was", () => {

@@ -7,7 +7,7 @@ import * as dotenv from "dotenv";
 dotenv.config({ path: ".env" });
 dotenv.config({ path: ".env.test", override: true });
 
-const PORT = Number(process.env.E2E_PORT ?? 3010);
+const PORT = Number(process.env.E2E_PORT ?? 3000);
 const BASE_URL = process.env.E2E_BASE_URL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({
@@ -40,7 +40,7 @@ export default defineConfig({
       dependencies: ["setup"],
     },
   ],
-  // Reuse the developer's running `pnpm dev` on :3010. Next 16 refuses to
+  // Reuse the developer's running `pnpm dev` on :3000. Next 16 refuses to
   // start a second dev server in the same project directory, so spinning one
   // up here would fight that lock.
   webServer: process.env.CI

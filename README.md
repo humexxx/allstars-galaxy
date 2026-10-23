@@ -26,7 +26,7 @@ cd allstars-galaxy
 cp .env.example .env   # fill in Supabase URL, keys, and DATABASE_URL / DIRECT_URL
 pnpm install           # also wires the husky commit-msg hook
 pnpm db:migrate        # apply migrations against your DB
-pnpm dev               # http://localhost:3010
+pnpm dev               # http://localhost:3000
 ```
 
 Requires **Node 22+** and **pnpm 11+**.
@@ -34,7 +34,7 @@ Requires **Node 22+** and **pnpm 11+**.
 ## Scripts
 
 ```bash
-pnpm dev          # dev server (http://localhost:3010)
+pnpm dev          # dev server (http://localhost:3000)
 pnpm build        # production build
 pnpm start        # production server
 pnpm lint         # ESLint

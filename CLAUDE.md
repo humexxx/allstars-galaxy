@@ -42,7 +42,7 @@ exact change-to-doc map.
 ## Commands
 
 ```bash
-pnpm dev            # Start dev server (http://localhost:3010)
+pnpm dev            # Start dev server (http://localhost:3000)
 pnpm build          # Production build
 pnpm lint           # ESLint
 pnpm test           # Vitest — unit + integration (mocked DB)
@@ -64,7 +64,7 @@ pnpm db:seed        # Seed database
   (the setup stubs the `server-only` marker so server modules can be imported
   from the test runner, and gives jsdom a `matchMedia` that matches nothing —
   a wide screen with motion allowed; a test that needs a phone stubs its own).
-- **Playwright** (`e2e/*.spec.ts`) drives the real app at `http://localhost:3010`.
+- **Playwright** (`e2e/*.spec.ts`) drives the real app at `http://localhost:3000`.
   Requires a dedicated Supabase test user — copy [`.env.test.example`](.env.test.example)
   to `.env.test` and fill `TEST_USER_EMAIL` / `TEST_USER_PASSWORD`. The auth
   fixture logs in once and persists `storageState` to `playwright/.auth/user.json`

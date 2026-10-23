@@ -27,7 +27,12 @@ const REVALIDATE_SECONDS = 300;
 // Wide enough to stay populated for competitions between rounds (e.g. UCL
 // knockout, or a domestic league in its off-week). Matches are capped below.
 const MATCH_WINDOW_DAYS = 60;
-const MAX_MATCHES = 40;
+// The list opens on the freshest results and runs on through the fixtures;
+// the days before sit behind its clock, a few a tap. Forty shared between
+// both sides was two matchdays of results, so the clock ran out at once.
+// Now the results have room for the whole window back, and the fixtures a
+// month or so ahead.
+const MATCH_CAPS = { upcoming: 30, results: 80 } as const;
 
 type CompetitionConfig = {
   internalId: FootballLeagueId;
@@ -779,7 +784,7 @@ async function fetchWorldCupFromApi(): Promise<FootballLeagueData> {
     mapMatches(matchesRes.matches, teamsMap),
     (m) => m.kickoff,
     (m) => m.status,
-    MAX_MATCHES,
+    MATCH_CAPS,
   );
   const seasonYear = matchesRes.matches[0]?.utcDate.slice(0, 4) ?? "2026";
 
@@ -853,7 +858,7 @@ async function fetchLeague(
     mapMatches(matchesRes.matches, teamsMap),
     (m) => m.kickoff,
     (m) => m.status,
-    MAX_MATCHES
+    MATCH_CAPS
   );
 
   return {

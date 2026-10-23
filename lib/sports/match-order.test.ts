@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { orderMatchesForDisplay } from "./match-order";
+import { orderMatchesForDisplay, type MatchCaps } from "./match-order";
 
 type M = { id: string; date: string; status: string };
 
 const match = (id: string, date: string, status: string): M => ({ id, date, status });
-const order = (matches: M[], max?: number): string[] =>
+const order = (matches: M[], max?: number | MatchCaps): string[] =>
   orderMatchesForDisplay(
     matches,
     (m) => m.date,
@@ -33,5 +33,15 @@ describe("orderMatchesForDisplay", () => {
   it("gives one side's unused room to the other", () => {
     expect(order([...results.slice(0, 1), ...fixtures], 4)).toEqual(["f5", "f6", "f7", "r1"]);
     expect(order([...results, ...fixtures.slice(0, 1)], 4)).toEqual(["f5", "r4", "r3", "r2"]);
+  });
+
+  it("keeps each side to its own room when given two caps, live always in", () => {
+    expect(order([...results, ...fixtures, live], { upcoming: 2, results: 3 })).toEqual([
+      "live", "f5", "f6", "r4", "r3", "r2",
+    ]);
+    // Unused room is not lent to the other side.
+    expect(order([...results.slice(0, 1), ...fixtures], { upcoming: 2, results: 3 })).toEqual([
+      "f5", "f6", "r1",
+    ]);
   });
 });

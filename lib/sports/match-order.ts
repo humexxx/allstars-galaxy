@@ -8,11 +8,14 @@
  * this order, a cap keeps what users care about: anything live, then the
  * next fixtures and the freshest results, half the room each.
  */
+/** Room of its own for each side, rather than one cap they share. */
+export type MatchCaps = { upcoming: number; results: number };
+
 export function orderMatchesForDisplay<T>(
   matches: T[],
   getDate: (m: T) => string,
   getStatus: (m: T) => string,
-  max?: number
+  max?: number | MatchCaps
 ): T[] {
   const rank = (m: T): number => {
     const s = getStatus(m);
@@ -32,6 +35,13 @@ export function orderMatchesForDisplay<T>(
   });
 
   if (max === undefined) return sorted;
+  if (typeof max === "object") {
+    return [
+      ...sorted.filter((m) => rank(m) === 0),
+      ...sorted.filter((m) => rank(m) === 1).slice(0, max.upcoming),
+      ...sorted.filter((m) => rank(m) === 2).slice(0, max.results),
+    ];
+  }
   // A cap shares its room between fixtures and results. Filling it in rank
   // order let a 60-day window of fixtures take every slot, so a league's list
   // had no results at all and the afternoon's finished games vanished.

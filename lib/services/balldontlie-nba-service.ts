@@ -34,21 +34,23 @@ const REVALIDATE_SECONDS = 300;
  */
 const PAGE_SIZE = 100;
 /**
- * A busy fortnight can outrun one page; a second is read only when the first
- * says there is one, so a refresh is still one request on most days.
+ * Three weeks of a season is two pages or so; the next is read only when the
+ * one before says there is one, and three pages a refresh every five minutes
+ * stays inside the five a minute.
  */
-const MAX_PAGES = 2;
-/** In season: a few nights back and a week ahead, about one page. */
-const IN_SEASON_DAYS_BEHIND = 3;
+const MAX_PAGES = 3;
+/** In season: two weeks back, for the list's earlier days, and a week ahead. */
+const IN_SEASON_DAYS_BEHIND = 14;
 const IN_SEASON_DAYS_AHEAD = 7;
 /**
- * What the view lists: the nights of results up to the latest one and the
- * week of fixtures from the next one, and never fewer than six of either.
- * By nights, because six games was one busy night and the list showed today
- * and nothing after it; at least six, because a finals series plays every
- * other night and three nights of it was its last game alone.
+ * What the view lists: two weeks of results up to the latest one (the list
+ * opens on the latest night and the clock brings in the rest a few nights a
+ * tap) and the week of fixtures from the next one, never fewer than six of
+ * either. By nights, because six games was one busy night and the list showed
+ * today and nothing after it; at least six, because a finals series plays
+ * every other night and a few nights of it was its last game or two.
  */
-const RESULT_DAYS = 3;
+const RESULT_DAYS = 14;
 const FIXTURE_DAYS = 7;
 const MIN_LISTED = 6;
 const DAY_MS = 86_400_000;

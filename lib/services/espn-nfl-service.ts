@@ -88,10 +88,10 @@ const WEEKS_IN_SEASON: Partial<Record<number, number>> = {
 
 /**
  * The weeks shown around the current one. The list opens on the latest
- * results, with the weeks before behind its clock, so two back is enough to
- * read the last fortnight; three ahead is what is worth planning around.
+ * results, with the weeks before behind its clock, a week a tap, so four back
+ * is the last month; three ahead is what is worth planning around.
  */
-const WEEKS_BEFORE = 2;
+const WEEKS_BEFORE = 4;
 const WEEKS_AFTER = 3;
 
 /** The weeks around `week`, within the season type's own (none outside one). */

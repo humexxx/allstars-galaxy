@@ -221,13 +221,13 @@ describe("roundFrom", () => {
 describe("weeksAround", () => {
   const { weeksAround } = __testing;
 
-  it("is two weeks back and three ahead of the current one", () => {
-    expect(weeksAround(7, 2)).toEqual([5, 6, 8, 9, 10]);
+  it("is four weeks back and three ahead of the current one", () => {
+    expect(weeksAround(7, 2)).toEqual([3, 4, 5, 6, 8, 9, 10]);
   });
 
   it("stays inside the season: week 1 has nothing behind it, week 18 nothing ahead", () => {
     expect(weeksAround(1, 2)).toEqual([2, 3, 4]);
-    expect(weeksAround(17, 2)).toEqual([15, 16, 18]);
+    expect(weeksAround(17, 2)).toEqual([13, 14, 15, 16, 18]);
     expect(weeksAround(3, 1)).toEqual([1, 2, 4]);
   });
 

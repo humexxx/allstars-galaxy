@@ -60,6 +60,7 @@ type EspnEvent = {
 
 type EspnScoreboard = {
   season?: { year?: number; type?: number };
+  week?: { number?: number };
   events?: EspnEvent[];
 };
 
@@ -78,6 +79,31 @@ type EspnStandings = { children?: EspnStandingsGroup[] };
 
 /** ESPN's season types. Only the postseason and the months after it carry a bracket. */
 const SEASON_TYPE = { preseason: 1, regular: 2, postseason: 3, offseason: 4 } as const;
+
+/** How many weeks each season type has, for the weeks around the current one. */
+const WEEKS_IN_SEASON: Partial<Record<number, number>> = {
+  [SEASON_TYPE.preseason]: 4,
+  [SEASON_TYPE.regular]: 18,
+};
+
+/**
+ * The weeks shown around the current one. The list opens on the latest
+ * results, with the weeks before behind its clock, so two back is enough to
+ * read the last fortnight; three ahead is what is worth planning around.
+ */
+const WEEKS_BEFORE = 2;
+const WEEKS_AFTER = 3;
+
+/** The weeks around `week`, within the season type's own (none outside one). */
+function weeksAround(week: number | undefined, seasonType: number): number[] {
+  const last = WEEKS_IN_SEASON[seasonType];
+  if (!week || !last) return [];
+  const weeks: number[] = [];
+  for (let w = Math.max(1, week - WEEKS_BEFORE); w <= Math.min(last, week + WEEKS_AFTER); w++) {
+    if (w !== week) weeks.push(w);
+  }
+  return weeks;
+}
 
 /**
  * The postseason by ESPN week; week 4 is the Pro Bowl. ESPN takes no date
@@ -303,10 +329,28 @@ async function fetchPlayoffs(year: number): Promise<BracketRound[]> {
 }
 
 /**
- * This week's games, both conference tables and, once there is one, the
- * playoff bracket — from ESPN's public API, the endpoints espn.com reads, no
- * key. The NFL had been a hand-written season because no free provider was
- * thought to carry current data.
+ * The weeks around this one, a call each (ESPN takes no date range for the
+ * NFL). A week that fails is left out rather than taking the feed down: this
+ * week's games and the tables are what the view cannot do without.
+ */
+async function fetchNearbyWeeks(
+  season: number,
+  seasonType: number,
+  week: number | undefined
+): Promise<EspnScoreboard[]> {
+  const settled = await Promise.allSettled(
+    weeksAround(week, seasonType).map((w) =>
+      fetchEspn<EspnScoreboard>(`${SITE_URL}/scoreboard?dates=${season}&seasontype=${seasonType}&week=${w}`)
+    )
+  );
+  return settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+}
+
+/**
+ * This week's games and the weeks around it, both conference tables and,
+ * once there is one, the playoff bracket — from ESPN's public API, the
+ * endpoints espn.com reads, no key. The NFL had been a hand-written season
+ * because no free provider was thought to carry current data.
  */
 async function fetchNflFromApi(): Promise<NflData> {
   const [board, table] = await Promise.all([
@@ -315,18 +359,19 @@ async function fetchNflFromApi(): Promise<NflData> {
   ]);
   const season = board.season?.year ?? new Date().getFullYear();
   const seasonType = board.season?.type ?? SEASON_TYPE.regular;
+  const nearby = await fetchNearbyWeeks(season, seasonType, board.week?.number);
 
   const byId = new Map<string, Team>();
-  const games: Match[] = [];
-  for (const event of board.events ?? []) {
+  const games = new Map<string, Match>();
+  for (const event of [board, ...nearby].flatMap((b) => b.events ?? [])) {
     const mapped = matchFrom(event);
-    if (!mapped) continue;
-    games.push(mapped.match);
+    if (!mapped || games.has(mapped.match.id)) continue;
+    games.set(mapped.match.id, mapped.match);
     for (const team of mapped.teams) byId.set(team.id, team);
   }
   const { standings, teams } = standingsFrom(table);
   for (const team of teams) if (!byId.has(team.id)) byId.set(team.id, team);
-  if (games.length === 0 && standings.length === 0) {
+  if (games.size === 0 && standings.length === 0) {
     throw new Error("espn nfl returned neither games nor standings");
   }
 
@@ -337,7 +382,7 @@ async function fetchNflFromApi(): Promise<NflData> {
     season,
     teams: [...byId.values()],
     games: orderMatchesForDisplay(
-      games,
+      [...games.values()],
       (m) => m.kickoff,
       (m) => m.status
     ),
@@ -355,4 +400,4 @@ export const getNflData = cachedFeed(
 );
 
 /** Pure mappers, exported for their tests — nothing here touches the network. */
-export const __testing = { matchFrom, standingsFrom, roundFrom, statusFrom, teamFrom };
+export const __testing = { matchFrom, standingsFrom, roundFrom, statusFrom, teamFrom, weeksAround };

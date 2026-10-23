@@ -93,7 +93,7 @@ const shownDays = (container: HTMLElement): (string | null)[] =>
   [...container.querySelectorAll("[data-day]")].map((el) => el.getAttribute("data-day"));
 
 const earlierButton = (): HTMLElement | null =>
-  screen.queryByRole("button", { name: /^Show \d+ earlier day/ });
+  screen.queryByRole("button", { name: /^Earlier: Show / });
 
 const teamFilter = (): HTMLElement | null => screen.queryByRole("button", { name: /^Filter by team/ });
 
@@ -160,21 +160,21 @@ describe("openingDayIndex", () => {
 });
 
 describe("MatchesByDate", () => {
-  it("opens on the freshest results and keeps the days before behind a clock", () => {
+  it("opens on the freshest results and keeps the days before behind Earlier", () => {
     const { container } = renderList(season);
     expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18", "2026-10-21"]);
-    expect(earlierButton()).toHaveAccessibleName("Show 2 earlier days");
-    // An icon: the name is for a screen reader, the tooltip for the eye.
-    expect(earlierButton()).toHaveTextContent("");
+    // It says what a tap brings in, by the dates.
+    expect(earlierButton()).toHaveAccessibleName("Earlier: Show Oct 10 – Oct 14");
+    expect(earlierButton()).toHaveTextContent(/^Earlier$/);
     expect(earlierButton()!.querySelector("svg")).not.toBeNull();
     expect(screen.getByText(/^Today · /)).toBeInTheDocument();
   });
 
-  it("puts the clock on the first day's heading line, not on a row of its own", () => {
+  it("puts Earlier on the first day's heading line, not on a row of its own", () => {
     const { container } = renderList(season);
     const heading = container.querySelector('[data-day="2026-10-17"]')!.firstElementChild!;
     expect(heading).toContainElement(earlierButton());
-    expect(heading).toHaveTextContent(/^Saturday, October 17, 2026$/);
+    expect(heading).toHaveTextContent(/^Saturday, October 17, 2026Earlier$/);
   });
 
   it("opens on a day heading: no label row above the first day", () => {
@@ -214,15 +214,16 @@ describe("MatchesByDate", () => {
     const { container } = renderList([...long, match("oct-18", "2026-10-18T20:00:00Z", "scheduled")]);
     expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18"]);
 
+    expect(earlierButton()).toHaveAccessibleName("Earlier: Show Oct 11 – Oct 15");
     fireEvent.click(earlierButton()!);
     expect(shownDays(container).slice(0, 4)).toEqual(["2026-10-11", "2026-10-13", "2026-10-15", "2026-10-17"]);
-    expect(earlierButton()).toHaveAccessibleName("Show 3 earlier days");
+    expect(earlierButton()).toHaveAccessibleName("Earlier: Show Oct 5 – Oct 9");
     expect(container.querySelector("[data-day]")).toContainElement(earlierButton());
     expect(document.activeElement).toBe(earlierButton());
 
     fireEvent.click(earlierButton()!);
     expect(shownDays(container)[0]).toBe("2026-10-05");
-    expect(earlierButton()).toHaveAccessibleName("Show 1 earlier day");
+    expect(earlierButton()).toHaveAccessibleName("Earlier: Show Oct 3");
 
     fireEvent.click(earlierButton()!);
     expect(shownDays(container)).toHaveLength(9);
@@ -272,7 +273,7 @@ describe("MatchesByDate", () => {
     pickTeam(/Barcelona/);
 
     expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18", "2026-10-21"]);
-    expect(earlierButton()).toHaveAccessibleName("Show 2 earlier days");
+    expect(earlierButton()).toHaveAccessibleName("Earlier: Show Oct 10 – Oct 14");
     expect(teamFilter()).toHaveAccessibleName("Filter by team: Barcelona");
   });
 
@@ -313,9 +314,9 @@ describe("MatchesByDate", () => {
     expect(listScrolls(scrolled)).toEqual([]);
   });
 
-  it("says one day in the singular", () => {
+  it("names a single earlier day by its date alone", () => {
     renderList(season.slice(1));
-    expect(earlierButton()).toHaveAccessibleName("Show 1 earlier day");
+    expect(earlierButton()).toHaveAccessibleName("Earlier: Show Oct 14");
   });
 
   it("shows every day, and no clock, before the first result", () => {

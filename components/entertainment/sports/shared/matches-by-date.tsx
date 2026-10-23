@@ -170,7 +170,15 @@ export function MatchesByDate({
     });
   };
 
-  const earlierLabel = `Show ${step} earlier ${step === 1 ? "day" : "days"}`;
+  // What a tap brings in, by its dates: "Show Oct 10 – Oct 14", or one day.
+  const batch = days.slice(earlier - step, earlier);
+  const earlierDates =
+    batch.length > 1
+      ? `${format.shortDay(batch[0].day)} – ${format.shortDay(batch[batch.length - 1].day)}`
+      : batch[0]
+        ? format.shortDay(batch[0].day)
+        : "";
+  const earlierLabel = `Show ${earlierDates}`;
 
   const heading = (day: string): string => {
     const name = format.longDay(day);
@@ -212,18 +220,20 @@ export function MatchesByDate({
                 {i === 0 && earlier > 0 && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      {/* A 24px target in a 22px line: the negative margins
-                          keep the line, and the table's label beside it, as
-                          they are. */}
+                      {/* A 24px pill in a 22px line: the negative margins keep
+                          the line, and the table's label beside it, as they
+                          are. It names itself in the heading's quieter voice
+                          rather than the heading's capitals. */}
                       <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        className="-my-1.5 -mr-1 text-muted-foreground"
-                        aria-label={earlierLabel}
+                        variant="outline"
+                        size="xs"
+                        className="-my-1.5 rounded-full font-medium tracking-normal normal-case"
+                        aria-label={`Earlier: ${earlierLabel}`}
                         data-earlier
                         onClick={revealEarlier}
                       >
-                        <History className="size-3.5" />
+                        <History data-icon="inline-start" />
+                        Earlier
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>{earlierLabel}</TooltipContent>

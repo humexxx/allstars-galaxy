@@ -2,6 +2,7 @@ import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import type {
   F1Data,
   F1NewsArticle,
+  F1WeekendResults,
   FootballLeagueData,
   FootballLeagueId,
   LolData,
@@ -26,7 +27,13 @@ export type SportPayload = (
       /** What the picker offers, by name; the other leagues are not loaded. */
       options: ReadonlyArray<{ id: FootballLeagueId; name: string }>;
     }
-  | { sport: "f1"; data: F1Data; news: F1NewsArticle[] }
+  | {
+      sport: "f1";
+      data: F1Data;
+      news: F1NewsArticle[];
+      /** The sessions run so far of the race on now or next. */
+      weekend?: F1WeekendResults;
+    }
   | { sport: "lol"; data: LolData }
   | { sport: "padel"; data: PadelData }
   | { sport: "tennis"; data: TennisData }

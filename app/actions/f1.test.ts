@@ -8,11 +8,16 @@ vi.mock("@/lib/services/jolpica-f1-service", () => ({
   getF1RaceClassification: vi.fn(),
 }));
 
+vi.mock("@/lib/services/openf1-service", () => ({
+  getF1WeekendResults: vi.fn(),
+}));
+
 import { requireAuth } from "@/lib/services/auth-server";
 import { getF1RaceClassification } from "@/lib/services/jolpica-f1-service";
+import { getF1WeekendResults } from "@/lib/services/openf1-service";
 import type { F1RaceClassification } from "@/types/sports";
 
-import { getF1RaceClassificationAction } from "./f1";
+import { getF1RaceClassificationAction, getF1WeekendResultsAction } from "./f1";
 
 const CLASSIFICATION: F1RaceClassification = {
   season: 2026,
@@ -76,5 +81,34 @@ describe("getF1RaceClassificationAction", () => {
 
     expect(result).toEqual({ success: false, error: "Action failed" });
     expect(getF1RaceClassification).not.toHaveBeenCalled();
+  });
+});
+
+describe("getF1WeekendResultsAction", () => {
+  const AUSTIN = { season: 2026, round: 18, from: "2026-10-23T17:30:00.000Z", to: "2026-10-25T20:00:00.000Z" };
+
+  it("reads the weekend's sessions for a signed-in reader", async () => {
+    const weekend = { season: 2026, round: 18, sessions: [] };
+    vi.mocked(getF1WeekendResults).mockResolvedValueOnce(weekend);
+
+    await expect(getF1WeekendResultsAction(AUSTIN)).resolves.toEqual({ success: true, data: weekend });
+    expect(getF1WeekendResults).toHaveBeenCalledWith(2026, 18, AUSTIN.from, AUSTIN.to);
+  });
+
+  it("refuses what is not one weekend before asking OpenF1", async () => {
+    const result = await getF1WeekendResultsAction({ ...AUSTIN, to: "2026-11-23T20:00:00.000Z" });
+    expect(result).toEqual({ success: false, error: "Invalid race weekend" });
+    expect(await getF1WeekendResultsAction({ ...AUSTIN, from: "tomorrow" })).toEqual({
+      success: false,
+      error: "Invalid race weekend",
+    });
+    expect(getF1WeekendResults).not.toHaveBeenCalled();
+  });
+
+  it("asks nothing of a reader who is not signed in", async () => {
+    vi.mocked(requireAuth).mockRejectedValueOnce(new Error("Unauthorized"));
+    const result = await getF1WeekendResultsAction(AUSTIN);
+    expect(result.success).toBe(false);
+    expect(getF1WeekendResults).not.toHaveBeenCalled();
   });
 });

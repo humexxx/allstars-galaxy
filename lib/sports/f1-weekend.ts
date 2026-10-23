@@ -127,6 +127,19 @@ export type RacesTabGroups = {
 };
 
 /** The Races tab's split of the calendar. Races arrive in round order. */
+/**
+ * When a race's weekend runs, first session to race start, for asking OpenF1
+ * for its sessions; null when it has no times. Results exist only once a
+ * session is over, so a weekend that has not started has none to ask for.
+ */
+export function weekendWindow(race: F1Race, now?: number): { from: string; to: string } | null {
+  const sessions = raceSessions(race);
+  if (sessions.length === 0) return null;
+  const from = sessions[0].startsAt;
+  if (now !== undefined && Date.parse(from) > now) return null;
+  return { from, to: sessions[sessions.length - 1].startsAt };
+}
+
 export function racesTabGroups(races: F1Race[]): RacesTabGroups {
   const featured = races.find((r) => r.status === "live") ?? races.find((r) => r.status === "upcoming");
   const comingUp = races

@@ -8,3 +8,18 @@ export const f1RaceRefSchema = z.object({
 });
 
 export type F1RaceRefData = z.infer<typeof f1RaceRefSchema>;
+
+// One race weekend, as the session-results action takes it: the race and the
+// window its sessions run in, which is how OpenF1 is asked for them. A
+// weekend is three days; a week of slack covers a reschedule.
+export const f1WeekendRefSchema = f1RaceRefSchema
+  .extend({
+    from: z.iso.datetime({ offset: true }),
+    to: z.iso.datetime({ offset: true }),
+  })
+  .refine(({ from, to }) => {
+    const span = Date.parse(to) - Date.parse(from);
+    return span >= 0 && span <= 7 * 86_400_000;
+  }, { message: "Not one weekend", path: ["to"] });
+
+export type F1WeekendRefData = z.infer<typeof f1WeekendRefSchema>;

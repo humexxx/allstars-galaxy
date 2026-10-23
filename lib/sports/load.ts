@@ -16,10 +16,12 @@ import {
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
 import { getF1Data } from "@/lib/services/jolpica-f1-service";
+import { getF1WeekendResults } from "@/lib/services/openf1-service";
 import { getF1News } from "@/lib/services/rapidapi-f1-news-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
+import { racesTabGroups, weekendWindow } from "@/lib/sports/f1-weekend";
 import { type SportPayload } from "@/lib/sports/payload";
 import type { FootballLeagueId, SportId } from "@/types/sports";
 
@@ -67,7 +69,15 @@ export async function loadSport(
       // Two providers: Jolpica for the championship, the stored RapidAPI feed
       // for the news. The news read is the database, never the provider.
       const [data, news] = await Promise.all([getF1Data(), getF1News()]);
-      return { sport, data, news, sample: data === F1_DATA };
+      // The race on now or next shows each session's result as it comes in,
+      // from OpenF1 (practice too, which Jolpica does not carry).
+      const { featured } = racesTabGroups(data.races);
+      const window = featured ? weekendWindow(featured, Date.now()) : null;
+      const weekend =
+        featured && window
+          ? await getF1WeekendResults(data.season, featured.round, window.from, window.to)
+          : undefined;
+      return { sport, data, news, weekend, sample: data === F1_DATA };
     }
     case "lol": {
       const data = await getLolData();

@@ -421,6 +421,38 @@ export type F1RaceClassification = {
   rows: F1ClassificationRow[];
 };
 
+/** One car in a session's order: practice, qualifying, a sprint or the race. */
+export type F1SessionResultRow = {
+  /** "1" to "22", or "DNF" / "DNS" / "DSQ" for a car that did not finish it. */
+  position: string;
+  /** "LEC" */
+  code: string;
+  /** "C. Leclerc" */
+  name: string;
+  team: string;
+  /** The team's colour as "#RRGGBB". */
+  teamColor?: string;
+  /** The best lap ("1:35.291"); for a race or sprint, the winner's total time. */
+  time?: string;
+  /** "+0.042", "+2 laps"; none for the leader. */
+  gap?: string;
+  laps?: number;
+  /** In qualifying, the part the time was set in. */
+  segment?: "Q1" | "Q2" | "Q3";
+};
+
+export type F1SessionResult = {
+  kind: F1SessionKind;
+  rows: F1SessionResultRow[];
+};
+
+/** What each session of one weekend finished in, in time order, the finished ones only. */
+export type F1WeekendResults = {
+  season: number;
+  round: number;
+  sessions: F1SessionResult[];
+};
+
 /**
  * The race on the dashboard's F1 card, with what the weekend is doing now.
  * The sessions are decided per request, never inside the cached feed: the

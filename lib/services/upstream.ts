@@ -46,3 +46,25 @@ export function cachedFeed<Args extends unknown[], T>(
     }
   };
 }
+
+/**
+ * Hands out at most `limit` starts in any `windowMs`, queueing the rest.
+ *
+ * Jolpica allows bursts of about four requests a second and a cold read makes
+ * nine, which used to go out at once: the calls past the fourth could come
+ * back 429, and a podium went missing. OpenF1 allows about three.
+ */
+export function rateLimiter(limit: number, windowMs: number): () => Promise<void> {
+  const starts: number[] = [];
+  return async function slot(): Promise<void> {
+    for (;;) {
+      const now = Date.now();
+      while (starts.length > 0 && now - starts[0] >= windowMs) starts.shift();
+      if (starts.length < limit) {
+        starts.push(now);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, windowMs - (now - starts[0])));
+    }
+  };
+}

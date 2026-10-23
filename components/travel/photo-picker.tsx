@@ -18,22 +18,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Text } from "@/components/ui/typography";
-import { createClient } from "@/lib/supabase";
-
-/**
- * Bucket assumed to exist with these Supabase policies:
- *   - Public read (so /trips/[token] previews and OG crawlers can fetch images)
- *   - Insert restricted to authenticated users into a path under their own uid
- *
- * SQL to create the bucket + policies if missing:
- *   insert into storage.buckets (id, name, public) values ('trip-photos','trip-photos', true);
- *   create policy "trip-photos read"   on storage.objects for select using (bucket_id = 'trip-photos');
- *   create policy "trip-photos write"  on storage.objects for insert with check (bucket_id = 'trip-photos' and (storage.foldername(name))[1] = auth.uid()::text);
- *   create policy "trip-photos update" on storage.objects for update using (bucket_id = 'trip-photos' and owner = auth.uid());
- *   create policy "trip-photos delete" on storage.objects for delete using (bucket_id = 'trip-photos' and owner = auth.uid());
- */
-const BUCKET = "trip-photos";
-const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+import { uploadTripPhoto } from "@/lib/travel/photo-upload";
 
 export type PhotoPickResult = {
   url: string;
@@ -51,7 +36,7 @@ type PhotoPickerProps = {
   disabled?: boolean;
   /**
    * Render mode:
-   *   - "compact": just an inline strip (used in the gallery's "add" slot)
+   *   - "compact": just an inline strip (used in the banner photos dialog's "add" slot)
    *   - "full":    tabbed UI with URL + upload (used in the cover-photo block
    *               of the trip form)
    */
@@ -92,41 +77,14 @@ export function PhotoPicker({
   };
 
   const handleFile = async (file: File) => {
-    if (file.size > MAX_FILE_BYTES) {
-      toast.error("File too large (max 10 MB)");
-      return;
-    }
-    if (!file.type.startsWith("image/")) {
-      toast.error("Only image files are supported");
-      return;
-    }
     setBusy(true);
     try {
-      const supabase = createClient();
-      const { data: userRes } = await supabase.auth.getUser();
-      if (!userRes.user) {
-        toast.error("Sign in expired, please refresh");
-        return;
-      }
-      const ext = file.name.split(".").pop() || "jpg";
-      const key = `${userRes.user.id}/${folder}/${crypto.randomUUID()}.${ext.toLowerCase()}`;
-      const { error: uploadErr } = await supabase.storage
-        .from(BUCKET)
-        .upload(key, file, { cacheControl: "31536000", upsert: false });
-      if (uploadErr) {
-        // Supabase says "Bucket not found", which reads like a broken app
-        // rather than one-time setup nobody has done. Name the fix.
-        const missingBucket = /bucket not found/i.test(uploadErr.message);
-        toast.error(
-          missingBucket
-            ? `Storage isn't set up yet — create a public bucket named "${BUCKET}" in Supabase. Until then, add photos with the URL tab.`
-            : uploadErr.message,
-          missingBucket ? { duration: 10_000 } : undefined
-        );
-        return;
-      }
-      const { data } = supabase.storage.from(BUCKET).getPublicUrl(key);
-      await onPick({ url: data.publicUrl, storagePath: key, source: "upload" });
+      const uploaded = await uploadTripPhoto(file, folder);
+      await onPick({ ...uploaded, source: "upload" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      // The missing-bucket sentence has a fix to read; give it time.
+      toast.error(message, /bucket/i.test(message) ? { duration: 10_000 } : undefined);
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";

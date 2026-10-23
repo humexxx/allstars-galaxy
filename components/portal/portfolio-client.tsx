@@ -54,6 +54,7 @@ import { EmptyPortfolio } from "@/components/portfolio/empty-portfolio";
 import { ManualSnapshotDialog } from "@/components/portfolio/manual-snapshot-dialog";
 import { TransactionsTable } from "@/components/portfolio/transactions-table";
 import { InvestorSummaryTable } from "@/components/portfolio/investor-summary-table";
+import { PriceFreshness } from "@/components/portfolio/price-freshness";
 import type { CashFlowPoint } from "@/components/portfolio/performance-series";
 import {
   AlertDialog,
@@ -84,6 +85,7 @@ import type {
   PortfolioStats,
   PortfolioTransaction,
   MethodInvestors,
+  PriceFreshnessData,
   TransactionTableRow,
 } from "@/types/portfolio";
 
@@ -125,6 +127,8 @@ type PortfolioData = {
   /** How much of the book is priced: nothing (`unconfigured`), or all but
    *  `unpriced` contributions. */
   marginStatus: { unconfigured: boolean; unpriced: number };
+  /** How old the prices behind the margin are; empty quotes for non-owners. */
+  priceFreshness: PriceFreshnessData;
   currentUserId: string;
 };
 
@@ -593,6 +597,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                           <MarginChart
                             input={data.marginHistoryInput}
                             hideValues={hideValues}
+                            status={<PriceFreshness {...data.priceFreshness} />}
                           />
                         )}
                       </CardContent>

@@ -49,7 +49,10 @@ function fromDay(day: string): Date | null {
 
 type TaskDialogProps = {
   columns: BoardColumn[];
-  onSubmit: (data: CreateBoardTaskData) => Promise<void>;
+  /** The day's board a new task goes on. */
+  day: string;
+  /** May resolve to a line to show instead of the plain "Task updated". */
+  onSubmit: (data: CreateBoardTaskData) => Promise<string | void | undefined>;
   /** Present = editing that task; absent = creating a new one. */
   task?: BoardTask;
   defaultColumnId?: string;
@@ -68,6 +71,7 @@ type TaskDialogProps = {
  */
 export function TaskDialog({
   columns,
+  day,
   onSubmit,
   task,
   defaultColumnId,
@@ -82,6 +86,7 @@ export function TaskDialog({
 
   const initial = (): CreateBoardTaskData => ({
     columnId: task?.columnId ?? defaultColumnId ?? columns[0]?.id ?? "",
+    boardDate: task?.boardDate ?? day,
     title: task?.title ?? "",
     description: task?.description ?? "",
     priority: task?.priority ?? null,
@@ -108,8 +113,8 @@ export function TaskDialog({
 
   const submit = async (data: CreateBoardTaskData): Promise<void> => {
     try {
-      await onSubmit(data);
-      toast.success(isEdit ? "Task updated" : "Task created");
+      const message = await onSubmit(data);
+      toast.success(message || (isEdit ? "Task updated" : "Task created"));
       setOpen(false);
       if (!isEdit) reset(initial());
     } catch {

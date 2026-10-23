@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Progress } from "@/components/ui/progress";
 import { Heading, Mono, Text } from "@/components/ui/typography";
-import { cn } from "@/lib/utils";
 import { formatShortDay } from "@/lib/utils/date";
 import type {
   PublicTripItem,
@@ -33,6 +32,8 @@ import { UnitArithmetic } from "@/components/travel/unit-arithmetic";
 import { PublicTripViews } from "@/components/travel/public-trip-views";
 import { ItemItinerary } from "@/components/travel/item-itinerary";
 import { ActivityVideo } from "@/components/travel/activity-video";
+import { BannerPhotos } from "@/components/travel/banner-photos";
+import { bannerSlides } from "@/lib/travel/banner-slides";
 
 const NO_DATE_KEY = "__no_date__";
 
@@ -132,18 +133,7 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
           className="relative min-h-72 w-full bg-muted sm:aspect-21/9 sm:min-h-0"
           style={trip.coverPhotoUrl ? undefined : { backgroundColor: trip.color }}
         >
-          {trip.coverPhotoUrl && (
-            <Image
-              src={trip.coverPhotoUrl}
-              alt={`${trip.title} cover photo`}
-              fill
-              priority
-              sizes="(max-width: 1024px) 100vw, 1024px"
-              className="object-cover"
-              // Covers may be external URLs — see `tripPhotoSourceEnum`.
-              unoptimized
-            />
-          )}
+          <BannerPhotos slides={bannerSlides({ ...trip, photos })} />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
           <div className="absolute inset-0 flex flex-col justify-between gap-4 p-4 text-white sm:p-6">
             <div className="flex items-start justify-between gap-2">
@@ -368,38 +358,6 @@ export function PublicTripViewRenderer({ view }: { view: PublicTripView }) {
                     "Covered against the low estimate."
                   )}
                 </Text>
-              </CardContent>
-            </Card>
-          )}
-
-          {photos.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle as="h2">Gallery</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {/* One scrolling row, like the planner's: a grid grew a line
-                    for every three photos and pushed the page down. */}
-                <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1">
-                  {photos.map((photo, i) => (
-                    <div
-                      key={photo.id}
-                      className={cn(
-                        "relative aspect-square w-28 shrink-0 snap-start",
-                        "overflow-hidden rounded-md border bg-muted"
-                      )}
-                    >
-                      <Image
-                        src={photo.url}
-                        alt={photo.caption ?? `${trip.title} photo ${i + 1}`}
-                        fill
-                        sizes="112px"
-                        className="object-cover"
-                        unoptimized
-                      />
-                    </div>
-                  ))}
-                </div>
               </CardContent>
             </Card>
           )}

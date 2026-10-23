@@ -15,47 +15,50 @@ function toInstant(value: string | Date): Date {
 
 const instantSchema = z.union([z.string(), z.date()]).transform(toInstant);
 
-export const roadPathFrequencySchema = z.enum(["daily", "every_other_day", "weekly", "biweekly", "monthly"]);
+/** Weekdays a habit is due, 0 = Sunday … 6 = Saturday. Empty: no schedule. */
+export const scheduleDaysSchema = z
+  .array(z.number().int().min(0).max(6))
+  .max(7)
+  .transform((days) => [...new Set(days)].sort((a, b) => a - b));
 
-export const createRoadPathSchema = z.object({
+const roadPathFields = {
   title: z.string().trim().min(1, "Title is required").max(200, "Title too long"),
   description: z.string().max(2000, "Description too long").nullable().optional(),
   targetValue: z.number().positive("Must be more than 0").nullable().optional(),
   unit: z.string().max(50, "Unit too long").nullable().optional(),
   startDate: instantSchema,
   targetDate: instantSchema.nullable().optional(),
-  autoCreateTasks: z.boolean().optional(),
-  taskFrequency: roadPathFrequencySchema.nullable().optional(),
-  createFirstTask: z.boolean().optional(),
-}).refine(
-  (data) => {
-    if (data.autoCreateTasks && !data.taskFrequency) {
-      return false;
-    }
-    return true;
-  },
-  {
-    message: "Task frequency is required when auto-create tasks is enabled",
-    path: ["taskFrequency"],
-  }
-);
+  scheduleDays: scheduleDaysSchema.optional(),
+};
+
+function targetAfterStart(data: { startDate?: Date; targetDate?: Date | null }): boolean {
+  return !data.startDate || !data.targetDate || data.targetDate >= data.startDate;
+}
+
+const targetAfterStartIssue = {
+  message: "The target date can't be before the start date",
+  path: ["targetDate"],
+};
+
+export const createRoadPathSchema = z
+  .object(roadPathFields)
+  .refine(targetAfterStart, targetAfterStartIssue);
 
 export type CreateRoadPathInput = z.input<typeof createRoadPathSchema>;
 export type CreateRoadPathData = z.output<typeof createRoadPathSchema>;
 
-export const updateRoadPathSchema = z.object({
-  id: idSchema,
-  title: z.string().trim().min(1, "Title is required").max(200, "Title too long").optional(),
-  description: z.string().max(2000, "Description too long").nullable().optional(),
-  targetValue: z.number().positive("Must be more than 0").nullable().optional(),
-  currentValue: z.number().min(0).optional(),
-  unit: z.string().max(50, "Unit too long").nullable().optional(),
-  targetDate: instantSchema.nullable().optional(),
-  autoCreateTasks: z.boolean().optional(),
-  taskFrequency: roadPathFrequencySchema.nullable().optional(),
-  completedAt: instantSchema.nullable().optional(),
-});
+/** Every field of a road path, any subset at a time. */
+export const updateRoadPathSchema = z
+  .object({
+    id: idSchema,
+    ...roadPathFields,
+    title: roadPathFields.title.optional(),
+    startDate: instantSchema.optional(),
+    completedAt: instantSchema.nullable().optional(),
+  })
+  .refine(targetAfterStart, targetAfterStartIssue);
 
+export type UpdateRoadPathInput = z.input<typeof updateRoadPathSchema>;
 export type UpdateRoadPathData = z.output<typeof updateRoadPathSchema>;
 
 export const createRoadPathMilestoneSchema = z.object({

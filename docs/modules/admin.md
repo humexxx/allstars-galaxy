@@ -1,7 +1,7 @@
 # Admin
 
 > **Status:** Active
-> **Last reviewed:** 2026-10-18
+> **Last reviewed:** 2026-10-19
 
 ## Overview
 Admin-only operations: user management, transaction approval queue, and
@@ -47,7 +47,7 @@ impersonation (with audit trail).
 - Impersonation must always write to `impersonation_logs` — never bypass.
 - Impersonation ends on *Stop impersonating*, when the 30-minute cookie expires, or on sign-out (`signOutAction` clears the cookie — see [Auth](./auth.md)).
 - Admin actions return `ActionResult` like every other action: a thrown message is hidden by Next.js in production, so "You cannot demote yourself" never reached the admin. The UI calls them through `runAction`, and both confirm dialogs stay open with a pending label until the action settles.
-- `app/portal/admin/loading.tsx` and `admin/transactions/loading.tsx` draw their page (search / filter row + table card, via `components/admin/admin-table-skeleton.tsx`); `app/portal/admin/error.tsx` is the module error boundary.
+- `app/portal/admin/users/loading.tsx` and `admin/transactions/loading.tsx` draw their page (search / filter row + table card, via `components/admin/admin-table-skeleton.tsx`); `app/portal/admin/error.tsx` is the module error boundary.
 - The role-change dialog's copy is driven by `ROLE_META[nextRole]`, so promoting to provider no longer reads "Demote to user?".
 - **The users table sets any of the three roles** (`USER_ROLES` from `types/user.ts` drives the menu). It used to toggle admin↔user only, which made `provider` unreachable and demoted a provider to admin by accident.
 - **The approvals queue filters by a user picker** (`UserSelector` with

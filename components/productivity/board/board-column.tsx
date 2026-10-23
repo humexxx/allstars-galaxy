@@ -6,7 +6,7 @@ import { BoardTaskCard } from "./board-task-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/typography";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { CircleCheck, MoreHorizontal, Plus } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,7 +29,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { BoardColumn as BoardColumnType, BoardTask } from "@/types";
 import type { CreateBoardTaskData } from "@/schemas/board";
 import { TaskDialog } from "./task-dialog";
-import { isDoneColumnName } from "./due-date";
 import { cn } from "@/lib/utils";
 
 type BoardColumnProps = {
@@ -41,8 +40,13 @@ type BoardColumnProps = {
   onRenameColumn: (columnId: string, name: string) => Promise<void>;
   onDeleteColumn: (columnId: string) => Promise<void>;
   onDeleteTask: (taskId: string) => Promise<void>;
-  onUpdateTask: (taskId: string, data: CreateBoardTaskData) => Promise<void>;
+  onUpdateTask: (taskId: string, data: CreateBoardTaskData) => Promise<string | undefined>;
+  onSetDoneColumn: (columnId: string) => Promise<void>;
+  /** Present on an earlier day's board: puts an open task on today's. */
+  onMoveToToday?: (taskId: string) => Promise<void>;
   isDimmed?: boolean;
+  /** The day's board this column is on. */
+  day: string;
   /** The reader's zone and today in it, for the cards' due dates. */
   timeZone?: string;
   today?: string;
@@ -57,7 +61,10 @@ export function BoardColumn({
   onDeleteColumn,
   onDeleteTask,
   onUpdateTask,
+  onSetDoneColumn,
+  onMoveToToday,
   isDimmed = false,
+  day,
   timeZone,
   today,
 }: BoardColumnProps): React.ReactElement {
@@ -68,6 +75,8 @@ export function BoardColumn({
   const [draftName, setDraftName] = useState(column.name);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const isOnlyColumn = columns.length <= 1;
+  // Deleting it would leave nothing on the board able to be finished.
+  const deleteBlocked = isOnlyColumn || column.isDone;
 
   const startRename = (): void => {
     setDraftName(column.name);
@@ -126,6 +135,17 @@ export function BoardColumn({
               </Tooltip>
             </Heading>
           )}
+          {column.isDone ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex shrink-0 text-success" tabIndex={0}>
+                  <CircleCheck className="size-4" aria-hidden="true" />
+                  <span className="sr-only">Done column</span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>Tasks here are finished</TooltipContent>
+            </Tooltip>
+          ) : null}
           <Badge variant="secondary" className="tabular-nums">
             {tasks.length}
           </Badge>
@@ -133,6 +153,7 @@ export function BoardColumn({
         <div className="flex items-center gap-0.5">
           <TaskDialog
             columns={columns}
+            day={day}
             defaultColumnId={column.id}
             onSubmit={onCreateTask}
           >
@@ -158,15 +179,24 @@ export function BoardColumn({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={startRename}>Rename column</DropdownMenuItem>
+              {!column.isDone ? (
+                <DropdownMenuItem onSelect={() => void onSetDoneColumn(column.id)}>
+                  Use as Done column
+                </DropdownMenuItem>
+              ) : null}
               {/* The last column cannot go: the page re-creates the default
                   three for a board with none, so deleting it brought back
                   Todo / Working / Done the moment the page revalidated. */}
               <DropdownMenuItem
                 variant="destructive"
-                disabled={isOnlyColumn}
+                disabled={deleteBlocked}
                 onSelect={() => setConfirmingDelete(true)}
               >
-                {isOnlyColumn ? "Can’t delete the only column" : "Delete column"}
+                {isOnlyColumn
+                  ? "Can’t delete the only column"
+                  : column.isDone
+                    ? "Can’t delete the Done column"
+                    : "Delete column"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -186,11 +216,13 @@ export function BoardColumn({
               key={task.id}
               task={task}
               columns={columns}
+              day={day}
               timeZone={timeZone}
               today={today}
-              isDone={isDoneColumnName(column.name)}
+              isDone={column.isDone}
               onDelete={onDeleteTask}
               onUpdate={onUpdateTask}
+              onMoveToToday={column.isDone ? undefined : onMoveToToday}
             />
           ))}
         </SortableContext>
@@ -213,9 +245,8 @@ export function BoardColumn({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{column.name}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              {tasks.length > 0
-                ? `Its ${tasks.length} ${tasks.length === 1 ? "task goes" : "tasks go"} with it. This cannot be undone.`
-                : "The column is empty, so nothing else goes with it."}
+              Its tasks on every day go with it, not only the ones shown here. This cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

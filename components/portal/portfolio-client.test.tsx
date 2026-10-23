@@ -15,6 +15,7 @@ vi.mock("@/app/actions/allocations", () => ({
   setAllocationsAction: vi.fn(),
   updateMethodAction: vi.fn(),
 }));
+vi.mock("@/app/actions/price-refresh", () => ({ refreshPricesAction: vi.fn() }));
 
 import PortfolioClientPage from "./portfolio-client";
 
@@ -68,6 +69,7 @@ const base: Data = {
   },
   investorBreakdown: [],
   marginStatus: { unconfigured: true, unpriced: 0 },
+  priceFreshness: { quotes: [], schedule: null },
   currentUserId: "me",
 };
 

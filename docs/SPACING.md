@@ -57,14 +57,21 @@ scrolling pane, which is what keeps the sidebar and header in place, and
 is the single source of truth for page-level padding and width:
 
 ```
-mx-auto flex w-full flex-1 flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8 lg:px-12
+mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8 lg:px-12
 ```
 
 - **Horizontal:** `px-4 sm:px-8 lg:px-12` (16 → 32 → 48px gutters).
 - **Vertical:** `py-6 sm:py-8` (24 → 32px top/bottom).
 - **Section rhythm:** `gap-6` (24px) between direct children.
-- **Width:** set by the `width` prop — `"default"` = `max-w-5xl` (reading width),
-  `"wide"` = `max-w-7xl` (data surfaces), `"full"` = `max-w-none`.
+- **Width:** `max-w-7xl` (1280px) on **every** portal route — the width
+  `/portal/plans` was laid out in — so the column never jumps between modules.
+  The component takes no width prop. A block that needs a shorter measure (a
+  form, a paragraph) caps itself inside the container; the page never does.
+
+| Route | Width |
+| --- | --- |
+| Every `/portal/**` page, plus its `loading.tsx` / `error.tsx` | `max-w-7xl` |
+| `/trips/[token]` (public share, outside the portal) | `max-w-5xl`, to match its own top bar |
 
 The string is **mobile-first**: the unprefixed step is the phone value and `sm:`
 pins the desktop one. If you ever retune it, step the base down from desktop —
@@ -73,18 +80,19 @@ don't leave a single unprefixed value that phones inherit (see the
 
 ### Where to render it
 
-**Each route renders its own container and declares its width.** It used to sit
-in `app/portal/layout.tsx` and sniff `usePathname()` to widen `/portal/plans`,
+**Each route renders its own container.** It used to sit in
+`app/portal/layout.tsx` and sniff `usePathname()` to widen `/portal/plans`,
 which buried a list of special-cased routes inside the shared shell and forced
 the whole container to be a client component. Now:
 
-- Several routes under one segment share a width → put it in that segment's
-  `layout.tsx` (see `app/portal/{entertainment,productivity,admin}/layout.tsx`,
-  and `app/portal/plans/layout.tsx` for `width="wide"`).
+- Several routes under one segment → put it in that segment's `layout.tsx`
+  (see `app/portal/{entertainment,admin,plans}/layout.tsx`).
 - A one-off route → wrap the page's own return.
 
 Exactly one container per route: nesting two would double the padding.
-Never fork the padding string — change the width, not the gutters.
+Never fork the padding string or give one route its own width — a grid that
+looks sparse at 7xl gets another column at a container breakpoint (`@5xl:`),
+not a narrower page.
 
 ## App-shell offsets (header + sidebar)
 

@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active (page redesigned to mirror plan-editor layout)
-> **Last reviewed:** 2026-10-18
+> **Last reviewed:** 2026-10-19
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -17,6 +17,7 @@ metadata. Interest math is shared with [Finance](./finance.md).
 - `portfolio-snapshots.ts` — create manual snapshots of portfolio value (`ActionResult<{ snapshotsCreated }>`)
 - `admin-transactions.ts` — admin-only approve/reject of transactions (see [Admin](./admin.md))
 - `allocations.ts` — `setAllocationsAction`, `repriceContributionsAction`, `createPriceAssetAction`, `setManualPriceAction`, `updateMethodAction`; gated on **owning the method**, not merely on being an admin. `setManualPriceAction` prices only `manual` assets, and only for a real (non-impersonating) admin or a caller who owns every method allocating the asset
+- `price-refresh.ts` — `refreshPricesAction`: the chart's **Refresh** button; refreshes the prices behind the caller's own methods (`ActionResult<PriceRefreshOutcome>`: `current` with `newerAt`, or `refreshed` with `fetched` / `missed`)
 
 Every action returns `ActionResult<X>` (see `app/actions/AGENTS.md`).
 
@@ -26,7 +27,7 @@ Every action returns `ActionResult<X>` (see `app/actions/AGENTS.md`).
 - `snapshot-service.ts` — snapshot persistence/queries
 - `interest-service.ts` — ROI math (shared with [Finance](./finance.md)); `applyMonthlyInterest(forMonth, beforeDate?)` claims the month and compounds in one transaction. The compounding is a single `UPDATE` with the arithmetic in Postgres (`round(current_value * (1 + roi / 100), 2)`): a read-then-write overwrote a withdrawal approved in between with a value computed from the old balance, and `numeric` rounds exactly where `toFixed` on a float could miss a cent
 - `chart-service.ts` — chart data shaping (shared utility)
-- `price-service.ts` — quote storage + provider dispatch (`refreshPrices`, `getLatestPrices`, `listPriceAssets`, `getPriceAsset`, `createPriceAsset`, `insertManualQuote`)
+- `price-service.ts` — quote storage + provider dispatch (`refreshPrices({ assetIds? })`, `getLatestPrices`, `listPriceAssets`, `getPriceAsset`, `createPriceAsset`, `insertManualQuote`); `getHeldQuotes` (the owner's held assets + newest quote time), `refreshHeldPrices` (on-demand refresh, see Notes), `priceCronSchedule` (the price cron, read from `vercel.json`)
 - `price-providers/` — one module per source: `massive.ts`, `coingecko.ts`, shared `types.ts`
 - `margin-service.ts` — margin maths over derived positions (never stored); its shapes live in `types/margin.ts`
 - `investment-method-service.ts` — `listAllInvestmentMethods`, `isMethodOwner`, `ownsAnyMethod`, `isAssetOnlyInOwnMethods`, `updateInvestmentMethod` (owner-scoped WHERE, one transaction returning `{ before, after }`) — the queries `allocations.ts` and the portfolio page used to run against `db` directly
@@ -39,7 +40,7 @@ Every action returns `ActionResult<X>` (see `app/actions/AGENTS.md`).
 - `allocations.ts` — `SetAllocationsData`, `SetManualPriceData`, `UpdateMethodData`, `CreatePriceAssetInput` (`z.input`, the symbol is upper-cased) / `CreatePriceAssetData`
 
 ## Types — `/types/`
-- `portfolio.ts` — incl. `AssetOption`, `TransactionAllocationView`, `TransactionTableRow`
+- `portfolio.ts` — incl. `AssetOption`, `TransactionAllocationView`, `TransactionTableRow`, `PriceFreshnessData`
 - `transaction.ts` — `Transaction` (`$inferSelect`), `TransactionStatus` / `TransactionType` (defined once)
 - `chart.ts` — `ChartDataPoint`, `TimeRange`
 - `margin.ts` — `MarginOverview`, `InvestorBreakdown`, `MarginHistoryInput`, `MethodAllocationSummary`, `ManagedOverview`
@@ -50,6 +51,7 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
 - `components/portal/portfolio-client.tsx` — page shell: `PageHeader size="compact"` (Default badge, three actions), 4-card KPI grid (Total value with eye toggle, All-time profit, Cost basis, Active positions), Overview / Transactions / Methods / Managed tabs. Registers `Show charts`, `Hide values`, and admin `Manual snapshot` / `Clear manual snapshots` into the global dev drawer via `useRegisterDevTool` from `components/dev-tools/`.
 - `components/portfolio/investment-methods-view.tsx` — `/portal/investment-methods` view: plan-style header, 4-card KPI grid (Methods, Authors, Avg monthly ROI, Best monthly ROI), inline Risk-profile breakdown bar, grouped-by-author method cards with risk-tinted badges. Registers a `Show disabled methods` toggle in the dev drawer that hot-reveals methods normally filtered out.
 - `components/portfolio/` — supporting pieces: transactions table, performance chart (lazy-loaded), add-transaction dialog, manual-snapshot dialog, asset/allocation views.
+- `components/portfolio/price-freshness.tsx` — "Prices updated 2 h ago · next in 21 h" + Refresh, in the margin chart's bottom-right corner (`MarginChart status`); exact times per asset in a tooltip that a tap also opens. Its maths is `lib/finance/price-freshness.ts` (pure: cron parsing, next/last run, staleness, overdue, cooldown).
 - `components/portfolio/figures.ts` — `formatUnits` (2 decimals from one unit up, 4 significant digits below) and `formatRoi` (2–4 decimals, the stored precision).
 - `components/portfolio/performance-series.ts` — `performanceSeries` (the chart's value series, ending at the live total) and `rangeGain` (a range's gain net of deposits and withdrawals). Pure, no `"use client"`, so the server page can call it.
 - `app/api/portfolio/export/csv.ts` — `cell` / `signed`, the CSV quoting helpers (a route file may only export handlers). *Removed in the redesign:* `portfolio-header.tsx`, `stats-cards.tsx` (their concerns moved into `portfolio-client.tsx` and the dev drawer).
@@ -63,7 +65,7 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
 - `price_quotes` — append-only price history, one row per fetch; `(asset_id, fetched_at desc)` index serves the `DISTINCT ON` latest-price read
 - `method_allocations` — the policy: what share of incoming money goes to which asset
 - `transaction_allocations` — what each contribution actually bought, at that day's price (immutable)
-- `app_state` — global key-value (cron state, etc.) — also touched by other modules
+- `app_state` — global key-value (cron state, etc.) — also touched by other modules; `last_manual_price_refresh` is the Refresh cooldown
 
 ## Notes
 - **Logic audit (2026-09-11).** Monthly interest is idempotent per calendar month: the cron consults `last_interest_run` on every day (the 1st included), a failure writes `last_interest_error` instead, and the admin's manual "apply interest" goes through the same month claim (see 2026-10-16). Approve/reject only move a `pending` row (re-approval used to reset accrued value). `PortfolioStats.totalWithdrawn` and `getPortfolioAssets` add approved withdrawals back into profit. `getDerivedHoldings` keeps `closed` buys' units; `backfillTransactionAllocations` and `setMethodAllocations` require a policy that totals 100%. The performance chart no longer fabricates a $0 origin. Daily snapshots skip a portfolio already snapshotted today; `COUNT(*)` is cast to int. The investor summary joins on `investorId`; the admin filter ignores a non-UUID user id; the CSV signs withdrawals.
@@ -297,11 +299,26 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
   1024 the sidebar leaves far less than the viewport suggests. The KPI grids
   do the same (`@md:grid-cols-2 @4xl:grid-cols-4`); four cards at 1024 clipped
   every figure.
-- Conventional Commits scope: `portfolio` *(not in commitlint allowlist — add it to [`commitlint.config.mjs`](../../commitlint.config.mjs) if you start committing here often, or use `finance` if the change is on shared math)*
+- **Price freshness (2026-10-19).** Owners only — an investor's value is a fixed
+  return, prices never touch it. The label reports the **oldest** quote behind
+  the book (the page is only as fresh as that) and the next run from the cron
+  line in `vercel.json`; it turns warning-coloured once a run an hour or more
+  past failed to replace a quote that could be newer (Hobby crons start
+  anywhere inside their hour). **Refresh** goes through `refreshPrices`, scoped
+  to the stale held assets. A Massive quote fetched earlier the same UTC day is
+  already the newest close it has (the refresh path asks for yesterday's bar),
+  so the button only spends requests when the run missed or before it ran —
+  otherwise it answers "already the latest" with when newer ones can exist,
+  without a provider call. A refresh that does call claims a **global**
+  5-minute cooldown in `app_state.last_manual_price_refresh` (conditional
+  upsert, like the interest month): the Massive key's 5 req/min are shared by
+  every owner and the cron. It does not reprice contributions; that stays the
+  cron's job (and the dev drawer's).
+- Conventional Commits scope: `portfolio` (in [`commitlint.config.mjs`](../../commitlint.config.mjs) since 2026-10-19); use `finance` if the change is on shared math
 - Daily cron at `/api/cron/daily` writes snapshots and applies monthly compound interest on the 1st.
 - `createDailySnapshots` must use `inArray(...)` for the "latest snapshot per portfolio" lookup — a raw ``sql`... = ANY(${ids})` `` makes Drizzle emit `ANY(($1, $2))` (a row tuple), which Postgres rejects once there's more than one portfolio. That bug silently broke every daily portfolio snapshot from 2026-05-26 until the `inArray` fix.
 - Transactions are created via `createTransactionAction` (server action). The previous `/api/transactions` route handler is gone; cron and webhook routes are the only remaining API routes.
 - `PerformanceChart` and the projection charts in [Finance](./finance.md) are lazy-loaded with `next/dynamic({ ssr: false })` to keep recharts out of the initial portal bundle.
-- `app/portal/portfolio/loading.tsx` and `app/portal/admin/loading.tsx` stream skeletons for the heavy data fetches; `app/portal/portfolio/error.tsx` is the module error boundary.
+- `app/portal/portfolio/loading.tsx` and `app/portal/admin/users/loading.tsx` stream skeletons for the heavy data fetches; `app/portal/portfolio/error.tsx` is the module error boundary.
 - The KPI grid renders `StatCard` from `components/ui/stat-card.tsx` (shared house primitive: `Eyebrow` label + `Mono` value + tone-colored sublabel).
 - The **Dev Tools drawer** (`components/dev-tools/`, mounted in `app/portal/layout.tsx`) is a portal-wide foundation: any page can call `useRegisterDevTool({ id, kind: "toggle" | "action" | "custom", ... })` and the helper shows up in the right-side `Sheet`. The floating wrench trigger only renders in `process.env.NODE_ENV === "development"` — registrations made by pages mounted in production are silently ignored. Context is split (`useDevToolsCommands` for stable register/unregister, `useDevToolsState` for the changing helpers/open) so consumer effects don't re-fire on every registration.

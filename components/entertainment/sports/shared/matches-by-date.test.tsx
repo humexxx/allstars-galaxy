@@ -93,7 +93,7 @@ const shownDays = (container: HTMLElement): (string | null)[] =>
   [...container.querySelectorAll("[data-day]")].map((el) => el.getAttribute("data-day"));
 
 const earlierButton = (): HTMLElement | null =>
-  screen.queryByRole("button", { name: /Earlier results/ });
+  screen.queryByRole("button", { name: /^Show \d+ earlier day/ });
 
 const teamFilter = (): HTMLElement | null => screen.queryByRole("button", { name: /^Filter by team/ });
 
@@ -163,7 +163,7 @@ describe("MatchesByDate", () => {
   it("opens on the freshest results and keeps the days before behind a clock", () => {
     const { container } = renderList(season);
     expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18", "2026-10-21"]);
-    expect(earlierButton()).toHaveAccessibleName("Earlier results, 2 days");
+    expect(earlierButton()).toHaveAccessibleName("Show 2 earlier days");
     // An icon: the name is for a screen reader, the tooltip for the eye.
     expect(earlierButton()).toHaveTextContent("");
     expect(earlierButton()!.querySelector("svg")).not.toBeNull();
@@ -184,9 +184,10 @@ describe("MatchesByDate", () => {
     expect(screen.queryByText("Matches")).toBeNull();
   });
 
-  it("reveals the earlier days and moves focus to the newest of them", () => {
+  it("brings in the last earlier days without scrolling, then focuses the top of the list", () => {
     const scrolled = vi.fn();
     Element.prototype.scrollIntoView = scrolled;
+    const scrollBy = vi.spyOn(window, "scrollBy").mockImplementation(() => {});
     const { container } = renderList(season);
 
     fireEvent.click(earlierButton()!);
@@ -198,10 +199,47 @@ describe("MatchesByDate", () => {
       "2026-10-18",
       "2026-10-21",
     ]);
+    // Nothing older: the clock goes, and the keyboard lands where it was.
     expect(earlierButton()).toBeNull();
-    const newest = container.querySelector('[data-day="2026-10-14"]');
-    expect(document.activeElement).toBe(newest);
-    expect(scrolled).toHaveBeenCalledWith({ block: "start" });
+    expect(document.activeElement).toBe(container.querySelector('[data-day="2026-10-10"]'));
+    expect(scrolled).not.toHaveBeenCalled();
+    expect(scrollBy).not.toHaveBeenCalled();
+  });
+
+  it("brings in three days a tap, keeping the clock on top, focused, for the next three", () => {
+    // Eight results, a few days apart, then today's fixture.
+    const long = [3, 5, 7, 9, 11, 13, 15, 17].map((d) =>
+      match(`d${d}`, `2026-10-${String(d).padStart(2, "0")}T20:00:00Z`, "ft")
+    );
+    const { container } = renderList([...long, match("oct-18", "2026-10-18T20:00:00Z", "scheduled")]);
+    expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18"]);
+
+    fireEvent.click(earlierButton()!);
+    expect(shownDays(container).slice(0, 4)).toEqual(["2026-10-11", "2026-10-13", "2026-10-15", "2026-10-17"]);
+    expect(earlierButton()).toHaveAccessibleName("Show 3 earlier days");
+    expect(container.querySelector("[data-day]")).toContainElement(earlierButton());
+    expect(document.activeElement).toBe(earlierButton());
+
+    fireEvent.click(earlierButton()!);
+    expect(shownDays(container)[0]).toBe("2026-10-05");
+    expect(earlierButton()).toHaveAccessibleName("Show 1 earlier day");
+
+    fireEvent.click(earlierButton()!);
+    expect(shownDays(container)).toHaveLength(9);
+    expect(earlierButton()).toBeNull();
+  });
+
+  it("holds the page still while the days go in: scroll anchoring off, then back", () => {
+    vi.useFakeTimers();
+    try {
+      renderList(season);
+      fireEvent.click(earlierButton()!);
+      expect(document.body.style.overflowAnchor).toBe("none");
+      vi.advanceTimersByTime(1000);
+      expect(document.body.style.overflowAnchor).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("puts the team filter at the end of the sport bar, out of the list", () => {
@@ -234,7 +272,7 @@ describe("MatchesByDate", () => {
     pickTeam(/Barcelona/);
 
     expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18", "2026-10-21"]);
-    expect(earlierButton()).toHaveAccessibleName("Earlier results, 2 days");
+    expect(earlierButton()).toHaveAccessibleName("Show 2 earlier days");
     expect(teamFilter()).toHaveAccessibleName("Filter by team: Barcelona");
   });
 
@@ -277,7 +315,7 @@ describe("MatchesByDate", () => {
 
   it("says one day in the singular", () => {
     renderList(season.slice(1));
-    expect(earlierButton()).toHaveAccessibleName("Earlier results, 1 day");
+    expect(earlierButton()).toHaveAccessibleName("Show 1 earlier day");
   });
 
   it("shows every day, and no clock, before the first result", () => {

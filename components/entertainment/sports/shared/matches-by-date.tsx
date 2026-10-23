@@ -33,6 +33,14 @@ import { useMatchTime, useSportsToday } from "./time-zone-context";
 
 const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "pen"]);
 
+/** Days one tap of the clock brings in: a matchday, a week of the NFL, three NBA nights. */
+const EARLIER_STEP = 3;
+
+/** The days already shown slide down, then the new ones fade in above them. */
+const SLIDE_MS = 220;
+const FADE_MS = 200;
+const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
+
 /**
  * Where the list opens: the latest day up to today with a result in it, so
  * the freshest results lead and what is next follows. A season with no
@@ -55,7 +63,10 @@ export function openingDayIndex(days: MatchDay[], today: string): number {
  * The page is the only scroller. The list opens on its freshest results
  * rather than scrolling to them, with the days before behind a clock on the
  * first day's heading: a scroll on load never ran on a phone, where the list
- * had no box of its own to scroll.
+ * had no box of its own to scroll. Each tap brings in a few more days above
+ * without moving the page: the days on screen slide down to make room, the
+ * new ones fade in where the reader is looking, and the clock stays on top
+ * for the next few.
  *
  * It opens on a day heading, not a label of its own, so that a column beside
  * it which opens on a line like one (`OverviewSplit`'s table) starts its card
@@ -77,10 +88,11 @@ export function MatchesByDate({
   const today = useSportsToday();
   const saved = useSavedTeamFilter();
   const [picks, setPicks] = useState<readonly string[]>(() => saved?.teamIds ?? []);
-  const [showEarlier, setShowEarlier] = useState(false);
+  // How many days before the opening one are shown.
+  const [extra, setExtra] = useState(0);
   const [, startSaving] = useTransition();
   const listRef = useRef<HTMLDivElement>(null);
-  const revealed = useRef<string | null>(null);
+  const reveal = useRef<{ tops: Map<string, number>; added: string[] } | null>(null);
   const narrowed = useRef(false);
 
   const options = useMemo(() => {
@@ -103,21 +115,22 @@ export function MatchesByDate({
     [matches, picked, timeZone]
   );
 
-  const earlier = showEarlier ? 0 : openingDayIndex(days, today);
+  const earlier = Math.max(0, openingDayIndex(days, today) - extra);
   const shown = days.slice(earlier);
+  const step = Math.min(EARLIER_STEP, earlier);
 
-  // The older days go in above the first heading. Bring the newest of them
-  // into view and give it focus, so the list reads on upward from where the
-  // clock was instead of jumping to the season's first day, and a keyboard is
-  // not left on <body> when the button goes.
+  // The new days are in, above the ones that were shown, and the page has
+  // not scrolled. The focus goes to the clock on the new first heading, for
+  // the next few days, or to that heading's day once there are none.
   useLayoutEffect(() => {
-    const day = revealed.current;
-    revealed.current = null;
-    const target = day ? listRef.current?.querySelector<HTMLElement>(`[data-day="${day}"]`) : null;
-    if (!target) return;
-    target.focus({ preventScroll: true });
-    if (typeof target.scrollIntoView === "function") target.scrollIntoView({ block: "start" });
-  }, [showEarlier]);
+    const done = reveal.current;
+    const list = listRef.current;
+    reveal.current = null;
+    if (!done || !list) return;
+    const clock = list.querySelector<HTMLElement>("[data-earlier]");
+    (clock ?? list.querySelector<HTMLElement>("[data-day]"))?.focus({ preventScroll: true });
+    slideIn(list, done.tops, done.added);
+  }, [extra]);
 
   // The filter sits in the stuck bar, so a team can be picked deep in the
   // list, which left the new, shorter list starting above the screen. Put
@@ -130,15 +143,22 @@ export function MatchesByDate({
   }, [picks]);
 
   const revealEarlier = (): void => {
-    revealed.current = days[earlier - 1]?.day ?? null;
-    setShowEarlier(true);
+    const list = listRef.current;
+    if (!list || step === 0) return;
+    const tops = new Map<string, number>();
+    for (const el of list.querySelectorAll<HTMLElement>("[data-day]")) {
+      tops.set(el.dataset.day ?? "", el.getBoundingClientRect().top);
+    }
+    holdScrollStill(list);
+    reveal.current = { tops, added: days.slice(earlier - step, earlier).map((d) => d.day) };
+    setExtra(extra + step);
   };
 
   // Other teams open on their own freshest results, as the list did.
   const pickTeams = (next: readonly string[]): void => {
     narrowed.current = true;
     setPicks(next);
-    setShowEarlier(false);
+    setExtra(0);
   };
 
   const saveTeams = (teamIds: readonly string[]): void => {
@@ -150,7 +170,7 @@ export function MatchesByDate({
     });
   };
 
-  const earlierLabel = `Earlier results, ${earlier} ${earlier === 1 ? "day" : "days"}`;
+  const earlierLabel = `Show ${step} earlier ${step === 1 ? "day" : "days"}`;
 
   const heading = (day: string): string => {
     const name = format.longDay(day);
@@ -200,6 +220,7 @@ export function MatchesByDate({
                         size="icon-xs"
                         className="-my-1.5 -mr-1 text-muted-foreground"
                         aria-label={earlierLabel}
+                        data-earlier
                         onClick={revealEarlier}
                       >
                         <History className="size-3.5" />
@@ -220,6 +241,53 @@ export function MatchesByDate({
       )}
     </section>
   );
+}
+
+/**
+ * Keeps the page where it is while days go in above the ones on screen.
+ * Left alone, the browser's scroll anchoring scrolls down by the height
+ * added, to keep the cards that were in view in place, and the new days land
+ * above the screen. Anchoring comes back once the slide is over.
+ */
+function holdScrollStill(list: HTMLElement): void {
+  const scroller = scrollParent(list);
+  const held = scroller ? [scroller] : [document.documentElement, document.body];
+  for (const el of held) el.style.overflowAnchor = "none";
+  window.setTimeout(() => {
+    for (const el of held) el.style.overflowAnchor = "";
+  }, SLIDE_MS + FADE_MS);
+}
+
+/**
+ * The days that were on screen slide from where they were to where they are
+ * now (down, by the height of the days added), and the added days fade in
+ * after them. Nothing moves for a reader who asked for less motion, or where
+ * there is no Web Animations API (a test).
+ */
+function slideIn(list: HTMLElement, tops: Map<string, number>, added: string[]): void {
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  for (const el of list.querySelectorAll<HTMLElement>("[data-day]")) {
+    if (typeof el.animate !== "function") return;
+    const day = el.dataset.day ?? "";
+    const was = tops.get(day);
+    if (was !== undefined) {
+      const by = was - el.getBoundingClientRect().top;
+      if (by !== 0) {
+        el.animate([{ transform: `translateY(${by}px)` }, { transform: "none" }], {
+          duration: SLIDE_MS,
+          easing: EASE,
+        });
+      }
+    } else if (added.includes(day)) {
+      el.animate(
+        [
+          { opacity: 0, transform: "translateY(-0.5rem)" },
+          { opacity: 1, transform: "none" },
+        ],
+        { duration: FADE_MS, delay: SLIDE_MS / 2, easing: EASE, fill: "backwards" }
+      );
+    }
+  }
 }
 
 /** Whether `day`'s top is up under the sport bar, which its scroll margin clears. */

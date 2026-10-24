@@ -120,8 +120,15 @@ describe("loadSport", () => {
 
     const payload = await loadSport("football", { league: "serie-a" });
 
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-    for (const [url] of fetchSpy.mock.calls) expect(url).toContain("/competitions/SA/");
+    // Two football-data requests, both for the league asked for; the news is
+    // ESPN's and costs football-data nothing.
+    const urls = fetchSpy.mock.calls.map(([url]) => url);
+    const footballData = urls.filter((url) => !url.includes("site.api.espn.com"));
+    expect(footballData).toHaveLength(2);
+    for (const url of footballData) expect(url).toContain("/competitions/SA/");
+    expect(urls.filter((url) => url.includes("site.api.espn.com"))).toEqual([
+      "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/news?limit=24",
+    ]);
     expect(payload).toMatchObject({ sport: "football", sample: false });
     if (payload.sport !== "football") throw new Error("not football");
     expect(payload.league.league.id).toBe("serie-a");

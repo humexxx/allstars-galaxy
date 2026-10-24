@@ -13,11 +13,14 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { teamInterest } from "@/lib/sports/news";
 import { cn } from "@/lib/utils";
-import type { NflConference, NflData, Team } from "@/types/sports";
+import type { NewsStory, NflConference, NflData, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { MatchesByDate } from "../shared/matches-by-date";
+import { NewsTab } from "../shared/news-list";
+import { useSavedTeamFilter } from "../shared/team-filter-context";
 import { OverviewSplit } from "../shared/overview-split";
 import { SportShell } from "../shared/sport-shell";
 import { ShowMoreRows, useShownRows } from "../shared/show-more";
@@ -26,18 +29,24 @@ import { TeamBadge } from "../shared/team-badge";
 
 type NflViewProps = {
   data: NflData;
+  /** ESPN's NFL news; no News tab without any. */
+  news?: NewsStory[];
+  /** `?tab=news` opens on the news. */
+  initialTab?: string;
 };
 
-export function NflView({ data }: NflViewProps): React.ReactElement {
+export function NflView({ data, news = [], initialTab }: NflViewProps): React.ReactElement {
   const teamsMap = useMemo(
     () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
     [data.teams],
   );
+  const saved = useSavedTeamFilter();
 
   const hasPlayoffs = data.playoffs.length > 0;
+  const opening = initialTab === "news" && news.length > 0 ? "news" : hasPlayoffs ? "playoffs" : "overview";
 
   return (
-    <Tabs defaultValue={hasPlayoffs ? "playoffs" : "overview"} className="gap-6">
+    <Tabs defaultValue={opening} className="gap-6">
       <SportShell
         emoji="🏈"
         title="American Football · NFL"
@@ -51,6 +60,7 @@ export function NflView({ data }: NflViewProps): React.ReactElement {
               {!hasPlayoffs && <Lock aria-hidden />}
               Playoffs
             </TabsTrigger>
+            {news.length > 0 && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }
       >
@@ -76,6 +86,20 @@ export function NflView({ data }: NflViewProps): React.ReactElement {
                 <KnockoutBracket rounds={data.playoffs} teams={teamsMap} />
               </CardContent>
             </Card>
+          </TabsContent>
+        )}
+
+        {/* Led by the teams picked in the week's games, else each conference's top two. */}
+        {news.length > 0 && (
+          <TabsContent value="news">
+            <NewsTab
+              stories={news}
+              interest={teamInterest(
+                teamsMap,
+                saved?.teamIds ?? [],
+                data.standings.filter((s) => s.position <= 2).map((s) => s.teamId)
+              )}
+            />
           </TabsContent>
         )}
       </SportShell>

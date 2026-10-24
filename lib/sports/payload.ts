@@ -7,6 +7,7 @@ import type {
   FootballLeagueId,
   LolData,
   NbaData,
+  NewsStory,
   NflData,
   PadelData,
   SportId,
@@ -26,6 +27,8 @@ export type SportPayload = (
       league: FootballLeagueData;
       /** What the picker offers, by name; the other leagues are not loaded. */
       options: ReadonlyArray<{ id: FootballLeagueId; name: string }>;
+      /** The league's news, ESPN's. */
+      news?: NewsStory[];
     }
   | {
       sport: "f1";
@@ -36,9 +39,9 @@ export type SportPayload = (
     }
   | { sport: "lol"; data: LolData }
   | { sport: "padel"; data: PadelData }
-  | { sport: "tennis"; data: TennisData }
-  | { sport: "nba"; data: NbaData }
-  | { sport: "nfl"; data: NflData }
+  | { sport: "tennis"; data: TennisData; news?: Record<keyof TennisData, NewsStory[]> }
+  | { sport: "nba"; data: NbaData; news?: NewsStory[] }
+  | { sport: "nfl"; data: NflData; news?: NewsStory[] }
 ) & {
   /**
    * The live feed has never answered, so the view is showing its fixture.

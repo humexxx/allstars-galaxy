@@ -14,6 +14,7 @@ import {
   getWorldCupData,
 } from "@/lib/services/football-data-service";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
+import { getEspnNews } from "@/lib/services/espn-news-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
 import { getF1Data } from "@/lib/services/jolpica-f1-service";
 import { getF1WeekendResults } from "@/lib/services/openf1-service";
@@ -53,15 +54,18 @@ export async function loadSport(
       const id = footballLeagueFrom(params.league);
       // The World Cup is one of football's competitions, with a feed of its
       // own: one call covers its groups, fixtures and bracket.
+      // Each league's news beside it, from ESPN (key-less, cached a quarter
+      // of an hour): no football-data request is spent on it.
       if (id === "world-cup") {
-        const league = await getWorldCupData();
-        return { sport, league, options: FOOTBALL_COMPETITIONS, sample: league === WORLD_CUP_DATA };
+        const [league, news] = await Promise.all([getWorldCupData(), getEspnNews(id)]);
+        return { sport, league, options: FOOTBALL_COMPETITIONS, news, sample: league === WORLD_CUP_DATA };
       }
-      const league = await getFootballLeagueData(id);
+      const [league, news] = await Promise.all([getFootballLeagueData(id), getEspnNews(id)]);
       return {
         sport,
         league,
         options: FOOTBALL_COMPETITIONS,
+        news,
         sample: league === getFootballLeague(id),
       };
     }
@@ -88,16 +92,17 @@ export async function loadSport(
       return { sport, data, sample: data === PADEL_DATA };
     }
     case "tennis": {
-      const data = await getTennisData();
-      return { sport, data, sample: data === TENNIS_DATA };
+      // Both tours' news: the view switches between them without a request.
+      const [data, atp, wta] = await Promise.all([getTennisData(), getEspnNews("atp"), getEspnNews("wta")]);
+      return { sport, data, news: { atp, wta }, sample: data === TENNIS_DATA };
     }
     case "nba": {
-      const data = await getNbaData();
-      return { sport, data, sample: data === NBA_DATA };
+      const [data, news] = await Promise.all([getNbaData(), getEspnNews("nba")]);
+      return { sport, data, news, sample: data === NBA_DATA };
     }
     case "nfl": {
-      const data = await getNflData();
-      return { sport, data, sample: data === NFL_DATA };
+      const [data, news] = await Promise.all([getNflData(), getEspnNews("nfl")]);
+      return { sport, data, news, sample: data === NFL_DATA };
     }
   }
 }

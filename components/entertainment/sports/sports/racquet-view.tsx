@@ -21,8 +21,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mono, Text } from "@/components/ui/typography";
 import { currentTournament, drawIsOut, featuredTournament } from "@/lib/sports/racquet";
 import { cn } from "@/lib/utils";
-import type { RacquetData, RacquetTour, RacquetTournament } from "@/types/sports";
+import type { NewsStory, RacquetData, RacquetTour, RacquetTournament } from "@/types/sports";
 
+import { NewsTab } from "../shared/news-list";
 import { OverviewSplit } from "../shared/overview-split";
 import { Portrait } from "../shared/portrait";
 import { SportShell } from "../shared/sport-shell";
@@ -39,7 +40,13 @@ import {
 import { RacquetTournamentSheet } from "./racquet-tournament-sheet";
 import { findTournament, RacquetDrawTab, RacquetOverview, seasonOf } from "./racquet-tournaments";
 
-type TourTab = { value: string; label: string; data: RacquetData };
+type TourTab = {
+  value: string;
+  label: string;
+  data: RacquetData;
+  /** The tour's news (tennis's, from ESPN); padel has none. */
+  news?: NewsStory[];
+};
 
 type RacquetViewProps = {
   /** Which provider's draws the sheet asks for, and how a tie is drawn. */
@@ -48,6 +55,8 @@ type RacquetViewProps = {
   title: string;
   subtitle: string;
   tours: TourTab[];
+  /** `?tab=news` opens on the news. */
+  initialTab?: string;
 };
 
 /** A draw the feed shipped with the page: the featured and the current tournament's. */
@@ -64,12 +73,13 @@ function shippedDraw(t: RacquetTournament, data: RacquetData): DrawState {
   };
 }
 
-export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetViewProps) {
+export function RacquetView({ sport, emoji, title, subtitle, tours, initialTab }: RacquetViewProps) {
   const today = useSportsToday();
   const defaultTour = tours[0]?.value ?? "main";
   const [tourValue, setTourValue] = useState<string>(defaultTour);
   const activeTour = tours.find((t) => t.value === tourValue) ?? tours[0];
   const data = activeTour.data;
+  const hasNews = tours.some((t) => (t.news?.length ?? 0) > 0);
   const variant: DrawVariant = sport === "padel" ? "pair" : "player";
 
   // Every tournament being played, and the one picked of them, per tour. The
@@ -119,7 +129,7 @@ export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetVie
   };
 
   return (
-    <Tabs defaultValue="overview" className="gap-6">
+    <Tabs defaultValue={initialTab === "news" && hasNews ? "news" : "overview"} className="gap-6">
       <SportShell
         emoji={emoji}
         title={title}
@@ -144,6 +154,8 @@ export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetVie
           <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="draw">Draw</TabsTrigger>
+            {/* For either tour, so switching tours never strands the tab. */}
+            {hasNews && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }
       >
@@ -181,6 +193,19 @@ export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetVie
             onPick={pick}
           />
         </TabsContent>
+
+        {/* The tour's news, led by its top five players and the tournament featured. */}
+        {hasNews && (
+          <TabsContent value="news">
+            <NewsTab
+              stories={activeTour.news ?? []}
+              interest={{
+                names: data.rankings.slice(0, 5).map((p) => p.shortName.split(" ").slice(-1)[0] ?? ""),
+                places: featured ? [featured.name, featured.location] : [],
+              }}
+            />
+          </TabsContent>
+        )}
       </SportShell>
       <RacquetTournamentSheet
         tournament={openedTournament}

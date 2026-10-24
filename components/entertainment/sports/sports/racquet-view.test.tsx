@@ -500,6 +500,32 @@ describe("RacquetView, tennis", () => {
     ]);
   });
 
+  it("has a News tab with the tour on screen's news", () => {
+    const story = (id: string, headline: string) => ({
+      id,
+      headline,
+      description: null,
+      href: `https://www.espn.com/tennis/story/_/id/${id}`,
+      external: true,
+      image: { url: `https://a.espncdn.com/photo/${id}.jpg` },
+      at: "2026-10-23T12:00:00Z",
+      kind: "story" as const,
+      about: [],
+    });
+    render(
+      <SportsTodayProvider today="2026-10-19">
+        <TennisView
+          data={tennis}
+          news={{ atp: [story("a", "Sinner into the Vienna quarter-finals")], wta: [story("w", "Rybakina avoids upset at Ningbo")] }}
+          initialTab="news"
+        />
+      </SportsTodayProvider>
+    );
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("News");
+    expect(screen.getByRole("heading", { name: "Sinner into the Vienna quarter-finals" })).toBeInTheDocument();
+    expect(screen.queryByText("Rybakina avoids upset at Ningbo")).toBeNull();
+  });
+
   it("shows no picker with one tournament being played", () => {
     render(
       <SportsTodayProvider today="2026-10-19">

@@ -816,6 +816,26 @@ export type F1DriverPortrait = {
 
 // ---------- F1 news (RapidAPI, stored daily) ----------
 
+/**
+ * One story on a sport's News tab, whatever wire it came from: F1's stored
+ * one (opened on our own page) or ESPN's (opened at the source).
+ */
+export type NewsStory = {
+  id: string;
+  headline: string;
+  description: string | null;
+  href: string;
+  /** Opened at the source, in a new tab, rather than on our own page. */
+  external: boolean;
+  image: { url: string; alt?: string } | null;
+  /** ISO: when it was published, or — for a wire that says nothing — first seen. */
+  at: string;
+  /** A video or a game recap leads nothing; an article can. */
+  kind: "story" | "recap" | "video";
+  /** The teams and players it is filed under. */
+  about: string[];
+};
+
 export type F1NewsArticle = {
   id: string;
   headline: string;

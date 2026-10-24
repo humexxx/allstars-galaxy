@@ -2,63 +2,110 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Newspaper } from "lucide-react";
+import { ExternalLink, Newspaper, Play } from "lucide-react";
+import { useMemo, type ReactNode } from "react";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
-import type { F1NewsImage } from "@/db/schema";
-import type { F1NewsArticle } from "@/types/sports";
+import { leadStory, type NewsInterest } from "@/lib/sports/news";
+import { cn } from "@/lib/utils";
+import type { NewsStory } from "@/types/sports";
 
 import { useMatchTime } from "./time-zone-context";
 
 /**
- * A wire of articles, newest first.
- *
- * The thumbnail is the widest image the provider sent — its list runs from
- * small crops to full-bleed and the first one is not reliably the best.
+ * A story's way in: our own page for F1's stored wire — shareable, with the
+ * rest of the wire under it and the source one tap away — or the source
+ * itself, in a new tab, for ESPN's.
  */
-function thumbnail(images: F1NewsImage[]): F1NewsImage | null {
-  if (images.length === 0) return null;
-  return images.reduce((best, i) => ((i.width ?? 0) > (best.width ?? 0) ? i : best));
+function StoryLink({
+  story,
+  className,
+  children,
+}: {
+  story: NewsStory;
+  className: string;
+  children: ReactNode;
+}) {
+  if (story.external) {
+    return (
+      <a href={story.href} target="_blank" rel="noopener noreferrer" className={className}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <Link href={story.href} className={className}>
+      {children}
+    </Link>
+  );
 }
 
-/**
- * The wire with one story leading it (`leadStory`), big — its picture, its
- * headline, more of its standfirst — so the page is not a pile of cards all
- * the same size. The rest follow as before.
- */
-export function NewsList({ lead, items }: { lead?: F1NewsArticle | null; items: F1NewsArticle[] }) {
+/** A picture, unoptimized: provider images come off whatever CDN the wire uses that week. */
+function StoryImage({ story, sizes, className }: { story: NewsStory; sizes: string; className: string }) {
+  if (!story.image) return null;
+  return (
+    <div className={cn("relative overflow-hidden bg-muted", className)}>
+      <Image
+        src={story.image.url}
+        alt={story.image.alt ?? story.headline}
+        fill
+        sizes={sizes}
+        className="object-cover"
+        unoptimized
+      />
+      {story.kind === "video" && (
+        <span className="absolute bottom-1 left-1 inline-flex items-center gap-0.5 rounded-sm bg-black/70 px-1 text-2xs font-medium text-white">
+          <Play aria-hidden className="size-2.5 fill-current" />
+          Video
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** When, and — for a story opened at the source — that it leaves the page. */
+function StoryFoot({ story }: { story: NewsStory }) {
   const format = useMatchTime();
+  return (
+    <span className="mt-auto flex items-center gap-1 text-muted-foreground">
+      <Mono className="text-2xs">{format.day(story.at)}</Mono>
+      {story.external && (
+        <>
+          <ExternalLink aria-hidden className="size-3" />
+          <span className="sr-only">(opens ESPN in a new tab)</span>
+        </>
+      )}
+    </span>
+  );
+}
+
+const CARD = "group flex rounded-lg border bg-card transition-colors hover:border-foreground/25";
+
+/**
+ * A sport's wire with one story leading it (`leadStory`), big — its picture,
+ * its headline, more of its standfirst — so the tab is not a pile of cards
+ * all the same size. The rest follow as cards.
+ */
+export function NewsList({ lead, items }: { lead?: NewsStory | null; items: NewsStory[] }) {
   if (!lead && items.length === 0) {
     return (
-      <EmptyState
-        icon={Newspaper}
-        title="No news yet"
-        description="Stories land here once the daily refresh has run."
-      />
+      <EmptyState icon={Newspaper} title="No news yet" description="Stories land here as the wire brings them." />
     );
   }
 
-  const leadImage = lead ? thumbnail(lead.images) : null;
   return (
     <div className="@container flex flex-col gap-3">
       {lead && (
-        <Link
-          href={`/news/f1/${lead.id}`}
-          className="group grid overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/25 @2xl:grid-cols-5"
+        <StoryLink
+          story={lead}
+          className={cn(CARD, "grid overflow-hidden rounded-xl @2xl:grid-cols-5")}
         >
-          {leadImage?.url && (
-            <div className="relative aspect-video bg-muted @2xl:col-span-3">
-              <Image
-                src={leadImage.url}
-                alt={leadImage.alt ?? lead.headline}
-                fill
-                sizes="(min-width: 1024px) 40rem, 100vw"
-                className="object-cover"
-                unoptimized
-              />
-            </div>
-          )}
+          <StoryImage
+            story={lead}
+            sizes="(min-width: 1024px) 40rem, 100vw"
+            className="aspect-video @2xl:col-span-3"
+          />
           <div className="flex min-w-0 flex-col gap-2 p-4 @2xl:col-span-2 @2xl:p-6">
             <Eyebrow size="sm" as="span">
               Top story
@@ -71,54 +118,34 @@ export function NewsList({ lead, items }: { lead?: F1NewsArticle | null; items: 
                 {lead.description}
               </Text>
             )}
-            <Mono className="mt-auto text-2xs text-muted-foreground">{format.day(lead.firstSeenAt)}</Mono>
+            <StoryFoot story={lead} />
           </div>
-        </Link>
+        </StoryLink>
       )}
       <div className="grid gap-3 @xl:grid-cols-2">
-        {items.map((item) => {
-          const image = thumbnail(item.images);
-          return (
-            // Our own page, not the source: it is shareable, it carries the
-            // rest of the wire underneath, and the way out to the original is
-            // on it.
-            <Link
-              key={item.id}
-              href={`/news/f1/${item.id}`}
-              className="group flex gap-3 rounded-lg border bg-card p-3 transition-colors hover:border-foreground/25"
-            >
-              {image?.url && (
-                <div className="relative size-20 shrink-0 overflow-hidden rounded-md bg-muted">
-                  <Image
-                    src={image.url}
-                    alt={image.alt ?? item.headline}
-                    fill
-                    sizes="80px"
-                    className="object-cover"
-                    // Provider images come from whatever CDN ESPN is using that
-                    // week; `unoptimized` avoids a remotePatterns allowlist that
-                    // would silently break the day it changes.
-                    unoptimized
-                  />
-                </div>
-              )}
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <Text as="span" weight="medium" className="leading-snug">
-                  {item.headline}
+        {items.map((story) => (
+          <StoryLink key={story.id} story={story} className={cn(CARD, "gap-3 p-3")}>
+            <StoryImage story={story} sizes="80px" className="size-20 shrink-0 rounded-md" />
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <Text as="span" weight="medium" className="leading-snug">
+                {story.headline}
+              </Text>
+              {story.description && (
+                <Text variant="small" className="line-clamp-2">
+                  {story.description}
                 </Text>
-                {item.description && (
-                  <Text variant="small" className="line-clamp-2">
-                    {item.description}
-                  </Text>
-                )}
-                <Mono className="mt-auto text-2xs text-muted-foreground">
-                  {format.day(item.firstSeenAt)}
-                </Mono>
-              </div>
-            </Link>
-          );
-        })}
+              )}
+              <StoryFoot story={story} />
+            </div>
+          </StoryLink>
+        ))}
       </div>
     </div>
   );
+}
+
+/** A sport's News tab: its wire, led by the story most worth its reader's time. */
+export function NewsTab({ stories, interest }: { stories: NewsStory[]; interest: NewsInterest }) {
+  const wire = useMemo(() => leadStory(stories, interest), [stories, interest]);
+  return <NewsList lead={wire.lead} items={wire.rest} />;
 }

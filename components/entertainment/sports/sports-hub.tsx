@@ -258,7 +258,9 @@ function SportContent({
 }): React.ReactElement {
   switch (payload.sport) {
     case "football":
-      return <FootballView league={payload.league} options={payload.options} />;
+      return (
+        <FootballView league={payload.league} options={payload.options} news={payload.news} initialTab={initialTab} />
+      );
     case "f1":
       return (
         <F1View
@@ -269,13 +271,13 @@ function SportContent({
         />
       );
     case "nba":
-      return <NbaView data={payload.data} />;
+      return <NbaView data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "tennis":
-      return <TennisView data={payload.data} />;
+      return <TennisView data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "padel":
       return <PadelView data={payload.data} />;
     case "nfl":
-      return <NflView data={payload.data} />;
+      return <NflView data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "lol":
       return <LolView data={payload.data} />;
   }

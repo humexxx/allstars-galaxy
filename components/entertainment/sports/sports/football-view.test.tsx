@@ -70,4 +70,30 @@ describe("FootballView", () => {
     renderLeague("la-liga");
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("La Liga");
   });
+
+  it("has a News tab for a league with news, opening on it for ?tab=news", () => {
+    render(
+      <FootballView
+        league={getFootballLeague("la-liga")}
+        options={OPTIONS}
+        news={[
+          {
+            id: "espn-1",
+            headline: "El Clásico is served",
+            description: null,
+            href: "https://www.espn.com/soccer/story/_/id/1",
+            external: true,
+            image: null,
+            at: "2026-10-24T10:00:00Z",
+            kind: "story",
+            about: ["Barcelona", "Real Madrid"],
+          },
+        ]}
+        initialTab="news"
+      />
+    );
+    expect(tabs()).toEqual(["Overview", "News"]);
+    expect(openTab()).toBe("News");
+    expect(screen.getByRole("heading", { name: "El Clásico is served" })).toBeInTheDocument();
+  });
 });

@@ -12,7 +12,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Mono, Text } from "@/components/ui/typography";
-import { leadStory } from "@/lib/sports/f1-news";
+import { f1Interest, fromF1Wire, leadStory } from "@/lib/sports/news";
 import { cn } from "@/lib/utils";
 import type {
   F1Constructor,
@@ -69,7 +69,7 @@ function openingView(
 export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps) {
   const opening = openingView(initialTab, news.length > 0);
   const [championship, setChampionship] = useState<Championship>(opening.championship);
-  const wire = useMemo(() => leadStory(news, data), [news, data]);
+  const wire = useMemo(() => leadStory(fromF1Wire(news), f1Interest(data)), [news, data]);
 
   return (
     <Tabs defaultValue={opening.tab} className="gap-6">

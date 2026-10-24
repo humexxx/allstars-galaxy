@@ -14,11 +14,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Text } from "@/components/ui/typography";
+import { teamInterest } from "@/lib/sports/news";
 import { cn } from "@/lib/utils";
-import type { NbaConference, NbaData, Team } from "@/types/sports";
+import type { NbaConference, NbaData, NewsStory, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { MatchesByDate } from "../shared/matches-by-date";
+import { NewsTab } from "../shared/news-list";
+import { useSavedTeamFilter } from "../shared/team-filter-context";
 import { OverviewSplit } from "../shared/overview-split";
 import { SportShell } from "../shared/sport-shell";
 import { ShowMoreRows, useShownRows } from "../shared/show-more";
@@ -28,9 +31,13 @@ import { useMatchTime } from "../shared/time-zone-context";
 
 type NbaViewProps = {
   data: NbaData;
+  /** ESPN's NBA news; no News tab without any. */
+  news?: NewsStory[];
+  /** `?tab=news` opens on the news. */
+  initialTab?: string;
 };
 
-export function NbaView({ data }: NbaViewProps) {
+export function NbaView({ data, news = [], initialTab }: NbaViewProps) {
   const teamsMap = useMemo(
     () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
     [data.teams],
@@ -40,9 +47,11 @@ export function NbaView({ data }: NbaViewProps) {
   const hasStandings = data.standings.length > 0;
   const playoffs = data.playoffs ?? [];
   const hasPlayoffs = playoffs.length > 0;
+  const saved = useSavedTeamFilter();
+  const opening = initialTab === "news" && news.length > 0 ? "news" : hasPlayoffs ? "postseason" : "overview";
 
   return (
-    <Tabs defaultValue={hasPlayoffs ? "postseason" : "overview"} className="gap-6">
+    <Tabs defaultValue={opening} className="gap-6">
       <SportShell
         emoji="🏀"
         title="NBA"
@@ -56,6 +65,7 @@ export function NbaView({ data }: NbaViewProps) {
               {!hasPlayoffs && <Lock aria-hidden />}
               Postseason
             </TabsTrigger>
+            {news.length > 0 && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }
       >
@@ -83,6 +93,20 @@ export function NbaView({ data }: NbaViewProps) {
                 <KnockoutBracket rounds={playoffs} teams={teamsMap} />
               </CardContent>
             </Card>
+          </TabsContent>
+        )}
+
+        {/* Led by the teams picked in the games, else each conference's top two. */}
+        {news.length > 0 && (
+          <TabsContent value="news">
+            <NewsTab
+              stories={news}
+              interest={teamInterest(
+                teamsMap,
+                saved?.teamIds ?? [],
+                data.standings.filter((s) => s.position <= 2).map((s) => s.teamId)
+              )}
+            />
           </TabsContent>
         )}
       </SportShell>

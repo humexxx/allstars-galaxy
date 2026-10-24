@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
 
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
 import { NBA_DATA } from "@/lib/data/sports/nba";
-import type { NbaData } from "@/types/sports";
+import type { NbaData, NewsStory } from "@/types/sports";
 
 import { NbaView } from "./nba-view";
 
@@ -85,5 +85,43 @@ describe("NbaView", () => {
       expect(screen.queryByText(/champions/)).toBeNull();
       expect(screen.queryByText(/Tips off/)).toBeNull();
     });
+  });
+});
+
+describe("NbaView, the news", () => {
+  const story = (id: string, headline: string, over: Partial<NewsStory> = {}): NewsStory => ({
+    id,
+    headline,
+    description: null,
+    href: `https://www.espn.com/nba/story/_/id/${id}`,
+    external: true,
+    image: { url: `https://a.espncdn.com/photo/${id}.jpg` },
+    at: "2026-10-24T04:00:00Z",
+    kind: "story",
+    about: [],
+    ...over,
+  });
+  const news = [
+    story("1", "Game Highlights", { kind: "video" }),
+    story("2", "Giannis stays hot in a loss"),
+  ];
+
+  it("has a News tab only with news, and opens on it for ?tab=news", () => {
+    const { unmount } = render(<NbaView data={{ ...NBA_DATA, playoffs: [] }} />);
+    expect(screen.queryByRole("tab", { name: "News" })).toBeNull();
+    unmount();
+
+    render(<NbaView data={{ ...NBA_DATA, playoffs: [] }} news={news} initialTab="news" />);
+    expect(openTab()).toBe("News");
+  });
+
+  it("leads with a story, never a clip, and opens ESPN in a new tab", () => {
+    render(<NbaView data={{ ...NBA_DATA, playoffs: [] }} news={news} />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "News" }), { button: 0 });
+    const lead = screen.getByText("Top story").closest("a")!;
+    expect(within(lead).getByRole("heading", { name: "Giannis stays hot in a loss" })).toBeInTheDocument();
+    expect(lead).toHaveAttribute("target", "_blank");
+    expect(lead).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.getByText("Video")).toBeInTheDocument();
   });
 });

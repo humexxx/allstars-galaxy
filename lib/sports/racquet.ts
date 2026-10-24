@@ -17,7 +17,7 @@ export function featuredTournament<T extends Dated>(list: T[]): T | undefined {
   return list.find((t) => t.status === "live") ?? list.find((t) => t.status === "upcoming");
 }
 
-/** The one whose draw the Current tab opens on: being played, else just finished. */
+/** The one whose draw Overview opens on: being played, else just finished. */
 export function currentTournament<T extends Dated>(list: T[]): T | undefined {
   return list.find((t) => t.status === "live") ?? justFinished(list, 1)[0];
 }

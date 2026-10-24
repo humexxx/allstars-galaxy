@@ -460,8 +460,8 @@ function CalendarRow({
 }
 
 /**
- * The Current tab: the tournament being played, else the one just finished,
- * with its draw inline.
+ * The left of Overview: the tournament being played, else the one just
+ * finished, with its draw inline.
  */
 export function RacquetCurrent({
   tournament: t,
@@ -488,39 +488,50 @@ export function RacquetCurrent({
 
   const place = placeOf(t);
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 @2xl:flex-row @2xl:items-end @2xl:justify-between">
-        <div className="flex min-w-0 flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Eyebrow>{t.status === "live" ? "On now" : "Just finished"}</Eyebrow>
-            {t.tier && <Badge variant="outline">{t.tier}</Badge>}
-            <StatusPill status={t.status} />
+    // As F1's next race: a line set like a day heading, then one card, so it
+    // starts level with the rankings card beside it (`OverviewSplit`). Its
+    // own container, so the card follows the column's width.
+    <section className="@container flex min-w-0 flex-col gap-2">
+      <Eyebrow size="sm" asChild>
+        <h3 className="py-1">{t.status === "live" ? "On now" : "Just finished"}</h3>
+      </Eyebrow>
+      <Card>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 @xl:flex-row @xl:items-start @xl:justify-between">
+            <div className="flex min-w-0 flex-col gap-1">
+              <div className="flex flex-wrap items-center gap-2">
+                {t.tier && <Badge variant="outline">{t.tier}</Badge>}
+                <StatusPill status={t.status} />
+              </div>
+              <Heading level="h4" as="h4">
+                {t.name}
+              </Heading>
+              <Text variant="muted">
+                {[formatDayRange(t.startDate, t.endDate), place].filter(Boolean).join(" · ")}
+              </Text>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-end @xl:self-auto"
+              aria-label={`View details: ${t.name}`}
+              onClick={() => onOpen(t.id)}
+            >
+              View details
+              <ChevronRight data-icon="inline-end" />
+            </Button>
           </div>
-          <Heading level="h4" as="h3">
-            {t.name}
-          </Heading>
-          <Text variant="muted">
-            {[formatDayRange(t.startDate, t.endDate), place].filter(Boolean).join(" · ")}
-          </Text>
-        </div>
-        <Button variant="outline" size="sm" className="self-start @2xl:self-auto" onClick={() => onOpen(t.id)}>
-          Details
-          <ChevronRight />
-        </Button>
-      </div>
-      {t.status === "completed" && t.champion && (
-        <div className="flex items-start gap-2 rounded-lg bg-warning/10 px-3 py-2 text-sm dark:bg-warning/20">
-          <Trophy className="mt-0.5 size-4 shrink-0 text-warning" aria-label={championLabel(variant)} />
-          <span className="min-w-0">
-            <ChampionLine champion={t.champion} runnerUp={t.runnerUp} />
-          </span>
-        </div>
-      )}
-      <Card size="sm">
-        <CardContent>
+          {t.status === "completed" && t.champion && (
+            <div className="flex items-start gap-2 rounded-lg bg-warning/10 px-3 py-2 text-sm dark:bg-warning/20">
+              <Trophy className="mt-0.5 size-4 shrink-0 text-warning" aria-label={championLabel(variant)} />
+              <span className="min-w-0">
+                <ChampionLine champion={t.champion} runnerUp={t.runnerUp} />
+              </span>
+            </div>
+          )}
           <DrawBody tournament={t} state={draw} variant={variant} onRetry={onRetry} />
         </CardContent>
       </Card>
-    </div>
+    </section>
   );
 }

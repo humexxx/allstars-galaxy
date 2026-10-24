@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, ListOrdered, Minus } from "lucide-react";
+import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 
-import { EmptyState } from "@/components/ui/empty-state";
 import {
   Select,
   SelectContent,
@@ -24,8 +23,10 @@ import { currentTournament, drawIsOut } from "@/lib/sports/racquet";
 import { cn } from "@/lib/utils";
 import type { RacquetData, RacquetTour, RacquetTournament } from "@/types/sports";
 
+import { OverviewSplit } from "../shared/overview-split";
 import { Portrait } from "../shared/portrait";
 import { SportShell } from "../shared/sport-shell";
+import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportsTh, TableCard } from "../shared/table-primitives";
 import { useSportsToday } from "../shared/time-zone-context";
 import {
@@ -109,7 +110,7 @@ export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetVie
   };
 
   return (
-    <Tabs defaultValue="current" className="gap-6">
+    <Tabs defaultValue="overview" className="gap-6">
       <SportShell
         emoji={emoji}
         title={title}
@@ -132,26 +133,31 @@ export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetVie
         }
         tabs={
           <TabsList variant="line">
-            <TabsTrigger value="current">Current</TabsTrigger>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="tournaments">Tournaments</TabsTrigger>
-            <TabsTrigger value="rankings">Rankings</TabsTrigger>
           </TabsList>
         }
       >
-        <TabsContent value="current">
-          <RacquetCurrent
-            tournament={current}
-            draw={currentDraw}
-            variant={variant}
-            onOpen={openTournament}
-            onRetry={() => current && load(data.tour, current.id)}
+        {/* The tournament on now (else just finished) and the tour's rankings
+            on one tab, as football's matches and table. A tour with no
+            rankings published leaves the tournament the whole row. */}
+        <TabsContent value="overview">
+          <OverviewSplit
+            matches={
+              <RacquetCurrent
+                tournament={current}
+                draw={currentDraw}
+                variant={variant}
+                onOpen={openTournament}
+                onRetry={() => current && load(data.tour, current.id)}
+              />
+            }
+            table={data.rankings.length > 0 && <RankingsTable key={tourValue} data={data} />}
+            tableLabel="Rankings"
           />
         </TabsContent>
         <TabsContent value="tournaments">
           <RacquetTournaments data={data} variant={variant} onOpen={openTournament} />
-        </TabsContent>
-        <TabsContent value="rankings">
-          <RankingsTable data={data} />
         </TabsContent>
       </SportShell>
       <RacquetTournamentSheet
@@ -178,10 +184,7 @@ function RankingsTable({ data }: { data: RacquetData }) {
   // Without a single photo the table keeps its flags, in a slot only as wide
   // as a flag.
   const showsFaces = data.rankings.some((p) => p.photoUrl);
-
-  if (data.rankings.length === 0) {
-    return <EmptyState icon={ListOrdered} title="No rankings published for this tour yet." />;
-  }
+  const rows = useShownRows(data.rankings);
 
   return (
     <TableCard>
@@ -205,7 +208,7 @@ function RankingsTable({ data }: { data: RacquetData }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.rankings.map((p, idx) => (
+            {rows.shown.map((p, idx) => (
               <TableRow key={`${p.position}-${p.name}-${idx}`}>
                 <TableCell className="pl-3 text-sm tabular-nums text-muted-foreground">
                   {p.position}
@@ -236,6 +239,7 @@ function RankingsTable({ data }: { data: RacquetData }) {
             ))}
           </TableBody>
         </Table>
+        <ShowMoreRows rows={rows} className="border-t py-1" />
     </TableCard>
   );
 }

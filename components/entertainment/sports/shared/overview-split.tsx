@@ -17,9 +17,9 @@ type OverviewSplitProps = {
 };
 
 /**
- * An Overview tab's two columns (football, the NBA, the NFL, F1): every match
- * (F1's races) on the left and the table beside them from `@4xl`, stacked
- * below that.
+ * An Overview tab's two columns (football, the NBA, the NFL, F1, padel and
+ * tennis): every match (F1's races, the tournament on now) on the left and the
+ * table beside them from `@4xl`, stacked below that.
  *
  * The table opens on a label set like a day heading, so its card starts level
  * with the first match card and the two columns read as one layout.

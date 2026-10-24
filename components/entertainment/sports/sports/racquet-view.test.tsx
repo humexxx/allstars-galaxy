@@ -10,6 +10,7 @@ import { getRacquetDrawAction } from "@/app/actions/racquet";
 import type {
   BracketRound,
   PadelData,
+  PlayerRanking,
   RacquetData,
   RacquetDraw,
   RacquetTournament,
@@ -155,18 +156,55 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
+const ranking = (position: number): PlayerRanking => ({
+  position,
+  name: `Player ${position}`,
+  shortName: `P. ${position}`,
+  countryCode: "ES",
+  flagEmoji: "🇪🇸",
+  points: 20000 - position * 100,
+  movement: 0,
+});
+
 describe("RacquetView, the tabs", () => {
-  it("offers Current, Tournaments and Rankings, and opens on Current", () => {
+  it("offers Overview and Tournaments, and opens on Overview", () => {
     renderPadel();
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
-      "Current",
-      "Tournaments",
-      "Rankings",
-    ]);
-    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("Current");
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Tournaments"]);
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("Overview");
   });
 
-  it("shows the tournament just finished on Current, with its champions and its draw", () => {
+  it("puts the tour's rankings beside the tournament, ten rows and a button for the rest", () => {
+    const ranked: PadelData = {
+      ...PADEL,
+      men: { ...MEN, rankings: Array.from({ length: 12 }, (_, i) => ranking(i + 1)) },
+    };
+    render(
+      <SportsTodayProvider today="2026-10-18">
+        <PadelView data={ranked} />
+      </SportsTodayProvider>
+    );
+    const rows = (): number => within(screen.getByRole("table")).getAllByRole("row").length - 1;
+    expect(screen.getByText("Rankings")).toBeInTheDocument();
+    expect(rows()).toBe(10);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more" }));
+    expect(rows()).toBe(12);
+    fireEvent.click(screen.getByRole("button", { name: "Show fewer" }));
+    expect(rows()).toBe(10);
+  });
+
+  it("leaves the tournament the whole row when the tour publishes no rankings", () => {
+    renderPadel();
+    expect(screen.queryByText("Rankings")).toBeNull();
+  });
+
+  it("opens the tournament on Overview from View details", () => {
+    renderPadel();
+    fireEvent.click(screen.getByRole("button", { name: "View details: Milano P1 2026" }));
+    expect(within(sheet()).getByRole("heading", { name: "Milano P1 2026" })).toBeInTheDocument();
+  });
+
+  it("shows the tournament just finished on Overview, with its champions and its draw", () => {
     renderPadel();
     expect(screen.getByRole("heading", { name: "Milano P1 2026" })).toBeInTheDocument();
     expect(screen.getByText("Just finished")).toBeInTheDocument();
@@ -378,7 +416,7 @@ describe("RacquetView, tennis", () => {
         <TennisView data={tennis} />
       </SportsTodayProvider>
     );
-    // Current opens on the tournament being played, not on last week's final,
+    // Overview opens on the tournament being played, not on last week's final,
     // and asks for its draw when the feed did not ship one.
     expect(screen.getByRole("heading", { name: "Erste Bank Open" })).toBeInTheDocument();
     expect(await screen.findByText("The draw has not been published")).toBeInTheDocument();

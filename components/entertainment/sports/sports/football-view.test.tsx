@@ -34,15 +34,18 @@ describe("FootballView", () => {
     expect(screen.getAllByRole("columnheader")).toHaveLength(5);
   });
 
-  it("lists every team, not the top eight", () => {
+  it("lists ten teams, and the rest on a tap", () => {
     renderLeague("uefa-champions-league");
     expect(tabs()).toEqual(["Overview", "Knockout"]);
     expect(openTab()).toBe("Knockout");
 
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Overview" }), { button: 0 });
 
-    expect(getFootballLeague("uefa-champions-league").standings.length).toBeGreaterThan(8);
-    expect(tableRows()).toBe(getFootballLeague("uefa-champions-league").standings.length);
+    const teams = getFootballLeague("uefa-champions-league").standings.length;
+    expect(teams).toBeGreaterThan(10);
+    expect(tableRows()).toBe(10);
+    fireEvent.click(screen.getByRole("button", { name: `Show ${teams - 10} more` }));
+    expect(tableRows()).toBe(teams);
   });
 
   it("lets the matches fill the row while there is no table", () => {

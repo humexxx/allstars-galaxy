@@ -37,6 +37,7 @@ import { KnockoutBracket } from "../shared/knockout-bracket";
 import { Last5Form } from "../shared/last-5-form";
 import { SportShell } from "../shared/sport-shell";
 import { SwissBracket } from "../shared/swiss-bracket";
+import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportsTh, TableCard } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
 import { useMatchTime } from "../shared/time-zone-context";
@@ -333,6 +334,7 @@ function LolStandings({
   split: LolSplit;
   teamsMap: Map<string, Team>;
 }) {
+  const rows = useShownRows(split.standings);
   return (
     <TableCard>
         <Table>
@@ -356,7 +358,7 @@ function LolStandings({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {split.standings.map((row) => {
+            {rows.shown.map((row) => {
               const team = teamsMap.get(row.teamId);
               return (
                 <TableRow key={row.teamId}>
@@ -385,6 +387,7 @@ function LolStandings({
             })}
           </TableBody>
         </Table>
+        <ShowMoreRows rows={rows} className="border-t py-1" />
     </TableCard>
   );
 }

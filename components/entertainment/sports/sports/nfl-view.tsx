@@ -20,6 +20,7 @@ import { KnockoutBracket } from "../shared/knockout-bracket";
 import { MatchesByDate } from "../shared/matches-by-date";
 import { OverviewSplit } from "../shared/overview-split";
 import { SportShell } from "../shared/sport-shell";
+import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportsTh, TableCellNum } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
 
@@ -93,6 +94,7 @@ function NflStandings({
   const rows = data.standings
     .filter((s) => s.conference === conf)
     .sort((a, b) => a.position - b.position);
+  const shownRows = useShownRows(rows, conf);
 
   return (
     <Card size="sm">
@@ -129,7 +131,7 @@ function NflStandings({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => {
+            {shownRows.shown.map((row) => {
               const team = teamsMap.get(row.teamId);
               const isLeader = row.position === 1;
               return (
@@ -153,6 +155,7 @@ function NflStandings({
             })}
           </TableBody>
         </Table>
+        <ShowMoreRows rows={shownRows} />
       </CardContent>
     </Card>
   );

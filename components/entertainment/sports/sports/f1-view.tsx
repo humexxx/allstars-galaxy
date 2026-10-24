@@ -26,6 +26,7 @@ import { NewsList } from "../shared/news-list";
 import { OverviewSplit } from "../shared/overview-split";
 import { Portrait } from "../shared/portrait";
 import { SportShell } from "../shared/sport-shell";
+import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportsTh, TableCard } from "../shared/table-primitives";
 
 type F1ViewProps = {
@@ -127,100 +128,108 @@ function DriversTable({ drivers }: { drivers: F1Driver[] }) {
   // Faces come from ESPN. Without them the table keeps its flags, in a slot
   // only as wide as a flag.
   const showsFaces = drivers.some((d) => d.imageUrl);
+  const rows = useShownRows(drivers);
   return (
-    <Table>
-      <TableHeader>
-        <TableRow className="bg-muted/40 hover:bg-muted/40">
-          <SportsTh className="w-8 pl-3">#</SportsTh>
-          <SportsTh>Driver</SportsTh>
-          <SportsTh className={cn(NUM, POINTS)}>Points</SportsTh>
-          <SportsTh className={cn(NUM, WINS)}>Wins</SportsTh>
-          <SportsTh className={cn(NUM, PODIUMS)}>Podiums</SportsTh>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {drivers.map((d) => (
-          <TableRow key={d.code}>
-            <TableCell className="pl-3 text-sm tabular-nums text-muted-foreground">
-              {d.position}
-            </TableCell>
-            <TableCell>
-              <div className={cn("flex items-center", showsFaces ? "gap-2 sm:gap-3" : "gap-3")}>
-                {showsFaces ? (
-                  <Portrait
-                    size="table"
-                    subject={{ name: d.shortName, imageUrl: d.imageUrl, flagUrl: d.flagUrl }}
-                    fallback={<span className="text-base leading-none">{d.flagEmoji}</span>}
-                  />
-                ) : (
-                  <span className="text-base leading-none">{d.flagEmoji}</span>
-                )}
-                <div className="leading-tight">
-                  <Text as="div" weight="medium">{d.shortName}</Text>
-                  <Text variant="small" as="div">{d.team}</Text>
-                </div>
-              </div>
-            </TableCell>
-            <TableCell className={cn(NUM, POINTS)}>
-              <Mono className="text-sm font-semibold">{d.points}</Mono>
-            </TableCell>
-            <TableCell className={cn(NUM, WINS)}>
-              <Mono className="text-sm">{d.wins}</Mono>
-            </TableCell>
-            <TableCell className={cn(NUM, PODIUMS)}>
-              <Mono className="text-sm">{d.podiums}</Mono>
-            </TableCell>
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
+            <SportsTh className="w-8 pl-3">#</SportsTh>
+            <SportsTh>Driver</SportsTh>
+            <SportsTh className={cn(NUM, POINTS)}>Points</SportsTh>
+            <SportsTh className={cn(NUM, WINS)}>Wins</SportsTh>
+            <SportsTh className={cn(NUM, PODIUMS)}>Podiums</SportsTh>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {rows.shown.map((d) => (
+            <TableRow key={d.code}>
+              <TableCell className="pl-3 text-sm tabular-nums text-muted-foreground">
+                {d.position}
+              </TableCell>
+              <TableCell>
+                <div className={cn("flex items-center", showsFaces ? "gap-2 sm:gap-3" : "gap-3")}>
+                  {showsFaces ? (
+                    <Portrait
+                      size="table"
+                      subject={{ name: d.shortName, imageUrl: d.imageUrl, flagUrl: d.flagUrl }}
+                      fallback={<span className="text-base leading-none">{d.flagEmoji}</span>}
+                    />
+                  ) : (
+                    <span className="text-base leading-none">{d.flagEmoji}</span>
+                  )}
+                  <div className="leading-tight">
+                    <Text as="div" weight="medium">{d.shortName}</Text>
+                    <Text variant="small" as="div">{d.team}</Text>
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell className={cn(NUM, POINTS)}>
+                <Mono className="text-sm font-semibold">{d.points}</Mono>
+              </TableCell>
+              <TableCell className={cn(NUM, WINS)}>
+                <Mono className="text-sm">{d.wins}</Mono>
+              </TableCell>
+              <TableCell className={cn(NUM, PODIUMS)}>
+                <Mono className="text-sm">{d.podiums}</Mono>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <ShowMoreRows rows={rows} className="border-t py-1" />
+    </>
   );
 }
 
 function ConstructorsTable({ constructors }: { constructors: F1Constructor[] }) {
+  const rows = useShownRows(constructors);
   return (
-    <Table>
-      <TableHeader>
-        <TableRow className="bg-muted/40 hover:bg-muted/40">
-          <SportsTh className="w-8 pl-3">#</SportsTh>
-          <SportsTh>Team</SportsTh>
-          <SportsTh className={cn(NUM, POINTS)}>Points</SportsTh>
-          <SportsTh className={cn(NUM, WINS)}>Wins</SportsTh>
-          <SportsTh className={cn(NUM, PODIUMS)}>Podiums</SportsTh>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {constructors.map((c) => (
-          <TableRow key={c.name}>
-            <TableCell className="pl-3 text-sm tabular-nums text-muted-foreground">
-              {c.position}
-            </TableCell>
-            <TableCell>
-              <div className="flex items-center gap-2 sm:gap-3">
-                {/* The logo, or the livery for a team with none
-                    published yet — the dashboard's badge. */}
-                <Portrait
-                  size="table"
-                  subject={{ name: c.shortName, logoUrl: c.logoUrl, color: c.primaryColor }}
-                />
-                {/* The short name, as the drivers table labels the
-                    team: with the logo beside it, "Cadillac F1
-                    Team" pushed Podiums off a phone's screen. */}
-                <Text as="span" weight="medium">{c.shortName}</Text>
-              </div>
-            </TableCell>
-            <TableCell className={cn(NUM, POINTS)}>
-              <Mono className="text-sm font-semibold">{c.points}</Mono>
-            </TableCell>
-            <TableCell className={cn(NUM, WINS)}>
-              <Mono className="text-sm">{c.wins}</Mono>
-            </TableCell>
-            <TableCell className={cn(NUM, PODIUMS)}>
-              <Mono className="text-sm">{c.podiums}</Mono>
-            </TableCell>
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
+            <SportsTh className="w-8 pl-3">#</SportsTh>
+            <SportsTh>Team</SportsTh>
+            <SportsTh className={cn(NUM, POINTS)}>Points</SportsTh>
+            <SportsTh className={cn(NUM, WINS)}>Wins</SportsTh>
+            <SportsTh className={cn(NUM, PODIUMS)}>Podiums</SportsTh>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {rows.shown.map((c) => (
+            <TableRow key={c.name}>
+              <TableCell className="pl-3 text-sm tabular-nums text-muted-foreground">
+                {c.position}
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2 sm:gap-3">
+                  {/* The logo, or the livery for a team with none
+                      published yet — the dashboard's badge. */}
+                  <Portrait
+                    size="table"
+                    subject={{ name: c.shortName, logoUrl: c.logoUrl, color: c.primaryColor }}
+                  />
+                  {/* The short name, as the drivers table labels the
+                      team: with the logo beside it, "Cadillac F1
+                      Team" pushed Podiums off a phone's screen. */}
+                  <Text as="span" weight="medium">{c.shortName}</Text>
+                </div>
+              </TableCell>
+              <TableCell className={cn(NUM, POINTS)}>
+                <Mono className="text-sm font-semibold">{c.points}</Mono>
+              </TableCell>
+              <TableCell className={cn(NUM, WINS)}>
+                <Mono className="text-sm">{c.wins}</Mono>
+              </TableCell>
+              <TableCell className={cn(NUM, PODIUMS)}>
+                <Mono className="text-sm">{c.podiums}</Mono>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <ShowMoreRows rows={rows} className="border-t py-1" />
+    </>
   );
 }

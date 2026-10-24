@@ -272,6 +272,8 @@ function pairOf(players: PadelApiMatchPlayer[] | null | undefined, seed?: string
     name: sorted.map((p) => shortNameFor(p.name)).join(" / "),
     shortName: sorted.map((p) => surnameOf(p.name)).join(" / "),
     code: seed?.trim() ?? "",
+    // As the rankings' faces: spelled from the name, no request spent.
+    photos: sorted.map((p) => photoFor(p.name) ?? null),
   };
 }
 

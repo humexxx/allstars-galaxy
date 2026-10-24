@@ -222,6 +222,11 @@ describe("pairOf", () => {
       name: "A. Coello / A. Tapia",
       shortName: "Coello / Tapia",
       code: "1",
+      // In the order the surnames read, spelled as the rankings' faces are.
+      photos: [
+        "https://media.padelapi.org/player-api/arturo-coello.webp",
+        "https://media.padelapi.org/player-api/agustin-tapia.webp",
+      ],
     });
   });
 

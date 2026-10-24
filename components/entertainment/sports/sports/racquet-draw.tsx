@@ -93,13 +93,15 @@ export function RacquetBracket({
 }) {
   // Only ranked players come with a photo, so most draws are a mix. Once any
   // player in this draw has one, every row reserves a disc's width and the
-  // names line up.
+  // names line up. A padel pair has two.
   const withFaces = useMemo(
     () =>
-      variant === "player" &&
       rounds.some((round) =>
         round.matches.some((m) =>
-          [m.homeTeamId, m.awayTeamId].some((id) => id && players.get(id)?.logoUrl)
+          [m.homeTeamId, m.awayTeamId].some((id) => {
+            const entry = id ? players.get(id) : undefined;
+            return variant === "pair" ? entry?.photos?.some(Boolean) : entry?.logoUrl;
+          })
         )
       ),
     [rounds, players, variant]
@@ -109,7 +111,8 @@ export function RacquetBracket({
     <KnockoutBracket
       rounds={rounds}
       teams={players}
-      minColumnWidth="11rem"
+      // Two faces take the room the surnames had at 11rem.
+      minColumnWidth={variant === "pair" && withFaces ? "13rem" : "11rem"}
       renderMatch={(match, teams) => (
         <DrawMatchCard match={match} teams={teams} withFaces={withFaces} variant={variant} />
       )}

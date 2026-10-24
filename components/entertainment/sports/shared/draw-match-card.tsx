@@ -113,7 +113,7 @@ export function DrawMatchCard({
             nobody,
           };
           return variant === "pair" ? (
-            <PairRow key={side} {...props} />
+            <PairRow key={side} {...props} withFaces={withFaces} />
           ) : (
             <PlayerRow key={side} {...props} withFaces={withFaces} />
           );
@@ -229,11 +229,20 @@ function PlayerRow({
 }
 
 /** A padel pair: both surnames stacked, so neither is cut off in a narrow column. */
-function PairRow({ player, scores, opponentScores, isWinner, decided, nobody }: RowProps) {
+function PairRow({
+  player,
+  scores,
+  opponentScores,
+  isWinner,
+  decided,
+  nobody,
+  withFaces,
+}: RowProps & { withFaces: boolean }) {
   if (!player) {
     return (
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span className="w-4 shrink-0" />
+        {withFaces && <span className="w-8.5 shrink-0" />}
         <span className="min-w-0 flex-1 truncate">{nobody}</span>
       </div>
     );
@@ -247,6 +256,7 @@ function PairRow({ player, scores, opponentScores, isWinner, decided, nobody }: 
       )}
     >
       <Seed player={player} />
+      {withFaces && <PairFaces pair={player} />}
       <span className={cn("flex min-w-0 flex-1 flex-col", isWinner && "font-semibold")}>
         {player.shortName.split(" / ").map((name, i) => (
           <span key={i} className="truncate leading-tight">
@@ -256,6 +266,32 @@ function PairRow({ player, scores, opponentScores, isWinner, decided, nobody }: 
       </span>
       <SetScores scores={scores} opponentScores={opponentScores} />
     </div>
+  );
+}
+
+/**
+ * A pair's two players side by side, the second a little over the first, in
+ * the order their names read down the row. A photo that does not load (a
+ * wildcard or a qualifier the provider has none of) is the player's initial.
+ */
+function PairFaces({ pair }: { pair: Team }) {
+  const surnames = pair.shortName.split(" / ");
+  return (
+    <span aria-hidden className="flex shrink-0 items-center">
+      {surnames.map((surname, i) => (
+        <Portrait
+          key={i}
+          size="xs"
+          subject={{ name: surname, imageUrl: pair.photos?.[i] ?? undefined }}
+          fallback={
+            <span className="grid size-full place-items-center rounded-full bg-muted text-2xs font-medium text-muted-foreground">
+              {surname.charAt(0)}
+            </span>
+          }
+          className={cn(i > 0 && "-ml-1.5 rounded-full ring-2 ring-card")}
+        />
+      ))}
+    </span>
   );
 }
 

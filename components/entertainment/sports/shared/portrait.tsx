@@ -24,6 +24,8 @@ export type PortraitSubject = {
 };
 
 const SIZES = {
+  // A padel pair's two faces, side by side in a bracket box.
+  xs: { disc: "size-5", flag: "size-2", px: "20px" },
   sm: { disc: "size-6", flag: "size-2.5", px: "24px" },
   md: { disc: "size-7", flag: "size-3", px: "28px" },
   // A standings table on a 375px phone has no width to spare: the full disc

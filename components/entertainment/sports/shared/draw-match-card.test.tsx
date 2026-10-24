@@ -141,6 +141,32 @@ describe("DrawMatchCard, a padel pair", () => {
     expect(screen.getByText("Thu, Oct 15 · Walkover")).toBeInTheDocument();
   });
 
+  it("puts both players' faces by the pair, and an initial for one that will not load", () => {
+    const withPhotos = new Map(
+      [...pairs].map(([id, pair]) => [
+        id,
+        {
+          ...pair,
+          photos: pair.shortName.split(" / ").map((s) => `https://media.padelapi.org/player-api/${s.toLowerCase()}.webp`),
+        },
+      ])
+    );
+    const { container } = render(
+      <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
+        <DrawMatchCard match={milanoFinal} teams={withPhotos} variant="pair" withFaces />
+      </ReaderTimeZoneProvider>
+    );
+    const images = [...container.querySelectorAll("img")];
+    expect(images.map((img) => img.getAttribute("src"))).toEqual([
+      "https://media.padelapi.org/player-api/coello.webp",
+      "https://media.padelapi.org/player-api/tapia.webp",
+      "https://media.padelapi.org/player-api/augsburger.webp",
+      "https://media.padelapi.org/player-api/lebron.webp",
+    ]);
+    fireEvent.error(images[3]);
+    expect(screen.getByText("L")).toBeInTheDocument();
+  });
+
   it("names a bye where the missing pair would be, and only there", () => {
     inCostaRica({
       ...milanoFinal,

@@ -130,6 +130,8 @@ export type Team = {
   logoUrl?: string;
   /** Tailwind-friendly hex used for branded backgrounds. */
   primaryColor?: string;
+  /** A padel pair's two photos, in the order `shortName` names its players. */
+  photos?: Array<string | null>;
 };
 
 export type MatchStatus =

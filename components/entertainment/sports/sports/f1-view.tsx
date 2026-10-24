@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   Table,
@@ -12,6 +12,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Mono, Text } from "@/components/ui/typography";
+import { leadStory } from "@/lib/sports/f1-news";
 import { cn } from "@/lib/utils";
 import type {
   F1Constructor,
@@ -68,6 +69,7 @@ function openingView(
 export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps) {
   const opening = openingView(initialTab, news.length > 0);
   const [championship, setChampionship] = useState<Championship>(opening.championship);
+  const wire = useMemo(() => leadStory(news, data), [news, data]);
 
   return (
     <Tabs defaultValue={opening.tab} className="gap-6">
@@ -116,7 +118,7 @@ export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps) {
 
         {news.length > 0 && (
           <TabsContent value="news">
-            <NewsList items={news} />
+            <NewsList lead={wire.lead} items={wire.rest} />
           </TabsContent>
         )}
       </SportShell>

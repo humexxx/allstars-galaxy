@@ -193,23 +193,24 @@ function DriversTable({
 }
 
 /**
- * The driver's face with the team's logo half showing behind it, in place of
- * the team's name on a line of its own: one line a row, so the table is
- * shorter. The face is ringed in the card's colour to sit apart from it.
+ * The driver's face with the team's logo showing from behind it on the right,
+ * in place of the team's name on a line of its own: one line a row, so the
+ * table is shorter. The face is ringed in the card's colour to sit apart from
+ * it, and stacked above it although it comes first.
  */
 function DriverAndTeam({ driver, team }: { driver: F1Driver; team?: F1Constructor }) {
   return (
     <span className="flex shrink-0 items-center">
       <Portrait
         size="table"
-        subject={{ name: driver.team, logoUrl: team?.logoUrl, color: team?.primaryColor }}
-        className="-mr-3 sm:-mr-3.5"
+        subject={{ name: driver.shortName, imageUrl: driver.imageUrl, flagUrl: driver.flagUrl }}
+        fallback={<span className="text-base leading-none">{driver.flagEmoji}</span>}
+        className="z-10 rounded-full ring-2 ring-card"
       />
       <Portrait
         size="table"
-        subject={{ name: driver.shortName, imageUrl: driver.imageUrl, flagUrl: driver.flagUrl }}
-        fallback={<span className="text-base leading-none">{driver.flagEmoji}</span>}
-        className="rounded-full ring-2 ring-card"
+        subject={{ name: driver.team, logoUrl: team?.logoUrl, color: team?.primaryColor }}
+        className="-ml-2.5 sm:-ml-3"
       />
     </span>
   );

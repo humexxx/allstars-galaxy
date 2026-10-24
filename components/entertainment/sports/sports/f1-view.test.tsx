@@ -100,10 +100,12 @@ describe("F1View", () => {
     render(<F1View data={data} />);
 
     const row = screen.getByText("A.K. Antonelli").closest("tr")!;
-    // The logo first, behind; the face after it, on top.
-    const [logo, driver] = [...row.querySelectorAll("img")].map((img) => img.getAttribute("src") ?? "");
-    expect(logo).toContain("mercedes.png");
+    // The face first, on top; the logo after it, behind on its right.
+    const [driver, logo] = [...row.querySelectorAll("img")]
+      .map((img) => img.getAttribute("src") ?? "")
+      .filter((src) => !src.includes("countries"));
     expect(driver).toBe(face("ANT"));
+    expect(logo).toContain("mercedes.png");
     // The team is said, not shown.
     expect(within(row).getByText(", Mercedes")).toHaveClass("sr-only");
     expect(within(row).queryByText("Mercedes")).toBeNull();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -34,9 +34,6 @@ type KnockoutBracketProps = {
   minColumnWidth?: string;
 };
 
-/** Rounds on screen at once: a Grand Slam's seven page through, the rest fit. */
-const VISIBLE_ROUNDS = 4;
-
 /** Index of the CURRENT round: first with an undecided tie; a fully decided
  *  bracket lands on the final instead of opening on the oldest round. */
 function currentRoundIndex(rounds: BracketRound[]): number {
@@ -44,8 +41,21 @@ function currentRoundIndex(rounds: BracketRound[]): number {
   return idx === -1 ? rounds.length - 1 : idx;
 }
 
-function initialWindowStart(rounds: BracketRound[]): number {
-  return Math.min(currentRoundIndex(rounds), Math.max(0, rounds.length - VISIBLE_ROUNDS));
+/** A round's ties by the half of the draw they are in: the top half, then the bottom. */
+function halves<T>(list: T[]): [T[], T[]] {
+  const mid = Math.ceil(list.length / 2);
+  return [list.slice(0, mid), list.slice(mid)];
+}
+
+const reducedMotion = (): boolean =>
+  typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+/** Each column's left edge, in the scrolled content's own coordinates. */
+function columnLefts(viewport: HTMLElement): number[] {
+  const origin = viewport.getBoundingClientRect().left - viewport.scrollLeft;
+  return [...viewport.querySelectorAll<HTMLElement>("[data-column]")].map(
+    (column) => column.getBoundingClientRect().left - origin
+  );
 }
 
 /**
@@ -106,10 +116,15 @@ function treeOrder(rounds: BracketRound[]): { rounds: BracketRound[]; paired: bo
 }
 
 /**
- * A knockout as a tree, drawn like the Swiss stage: a column per round, a box
- * per tie, and branches joining each pair of ties to the one they feed. The
- * third-place match stands in a column of its own after the final, with no
- * branch into it — it is fed by the semi-finals' losers, not their winners.
+ * A knockout as a tree, drawn as a printed bracket is: the top half of the
+ * draw on the left running in, the bottom half mirrored on the right, and
+ * the final between them — the third-place match under it, with no branch
+ * into it, as it is fed by the semi-finals' losers. A box per tie, branches
+ * joining each pair of ties to the one they feed.
+ *
+ * Wider than its card, it scrolls sideways (swipe, or the buttons over it: a
+ * column a tap, or straight to either end, the other half of the draw). It
+ * opens on the round being played, its top half centred.
  */
 export function KnockoutBracket({
   rounds,
@@ -120,51 +135,100 @@ export function KnockoutBracket({
 }: KnockoutBracketProps) {
   const tree = useMemo(() => treeOrder(rounds.filter((r) => r.id !== "third-place")), [rounds]);
   const thirdPlace = rounds.find((r) => r.id === "third-place");
+  const viewport = useRef<HTMLDivElement>(null);
+  const [ends, setEnds] = useState({ overflow: false, atStart: true, atEnd: true });
 
-  const [windowStart, setWindowStart] = useState(() => initialWindowStart(tree.rounds));
-  // Re-focus when the rounds themselves change (league switch, revalidation):
-  // a stale start could point past the new bracket's last round. React's
-  // render-time derived-state reset, not an effect.
-  const [prevRounds, setPrevRounds] = useState(rounds);
-  if (prevRounds !== rounds) {
-    setPrevRounds(rounds);
-    setWindowStart(initialWindowStart(tree.rounds));
-  }
-
-  const maxStart = Math.max(0, tree.rounds.length - VISIBLE_ROUNDS);
-  const start = Math.min(windowStart, maxStart);
-  const visible = useMemo(() => tree.rounds.slice(start, start + VISIBLE_ROUNDS), [tree, start]);
-
-  const { columns, edges } = useMemo(() => {
+  const { columns, edges, opening } = useMemo(() => {
     const current = currentRoundIndex(tree.rounds);
-    const box = (match: BracketMatch) => (
-      <TieBox match={match} teams={teams} renderMatch={renderMatch} />
-    );
-    const columns: BracketColumn[] = visible.map((round, i) => ({
-      key: `${round.id}-${start + i}`,
+    const last = tree.rounds.length - 1;
+    const item = (match: BracketMatch, caption?: string) => ({
+      key: match.id,
+      caption,
+      node: <TieBox match={match} teams={teams} renderMatch={renderMatch} />,
+    });
+    const column = (round: BracketRound, i: number, side: string, matches: BracketMatch[]) => ({
+      key: `${round.id}-${side}`,
       label: round.label,
-      current: start + i === current,
-      items: round.matches.map((m) => ({ key: m.id, node: box(m) })),
-    }));
-    const showsFinal = start + visible.length === tree.rounds.length;
-    if (thirdPlace && showsFinal && thirdPlace.matches.length > 0) {
-      columns.push({
-        key: "third-place",
-        label: thirdPlace.label,
-        items: thirdPlace.matches.map((m) => ({ key: m.id, node: box(m) })),
-      });
-    }
-    const edges: BracketEdge[] = visible.flatMap((round, i) => {
-      const next = visible[i + 1];
-      if (!next || !tree.paired[start + i]) return [];
-      return next.matches.flatMap((target, k) =>
+      current: i === current,
+      items: matches.map((m) => item(m)),
+    });
+    const before = tree.rounds.slice(0, last);
+    const final = tree.rounds[last];
+    const columns: BracketColumn[] = [
+      ...before.map((round, i) => column(round, i, "top", halves(round.matches)[0])),
+      {
+        key: `${final?.id ?? "final"}-centre`,
+        label: final?.label ?? "",
+        current: last === current,
+        items: [
+          ...(final?.matches ?? []).map((m) => item(m)),
+          ...(thirdPlace?.matches ?? []).map((m) => item(m, thirdPlace?.label)),
+        ],
+      },
+      ...before.map((round, i) => column(round, i, "bottom", halves(round.matches)[1])).reverse(),
+    ];
+    const edges: BracketEdge[] = before.flatMap((round, i) => {
+      if (!tree.paired[i]) return [];
+      return tree.rounds[i + 1].matches.flatMap((target, k) =>
         [round.matches[k * 2], round.matches[k * 2 + 1]]
           .filter((feeder): feeder is BracketMatch => Boolean(feeder))
           .map((feeder) => ({ from: feeder.id, to: target.id }))
       );
     });
-    return { columns, edges };
-  }, [tree, visible, start, thirdPlace, teams, renderMatch]);
+    // The top half's column of the round being played; the final's own once
+    // only the final is left.
+    return { columns, edges, opening: Math.min(current, last) };
+  }, [tree, thirdPlace, teams, renderMatch]);
+
+  const readEnds = useCallback(() => {
+    const el = viewport.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const next = { overflow: max > 1, atStart: el.scrollLeft <= 1, atEnd: el.scrollLeft >= max - 1 };
+    setEnds((prev) =>
+      prev.overflow === next.overflow && prev.atStart === next.atStart && prev.atEnd === next.atEnd
+        ? prev
+        : next
+    );
+  }, []);
+
+  // On the round being played, before the first paint; again for new rounds
+  // (another league, a revalidation), never on the reader's own scrolling.
+  useLayoutEffect(() => {
+    const el = viewport.current;
+    const target = el?.querySelector<HTMLElement>(`[data-column="${opening}"]`);
+    if (el && target) {
+      const left = columnLefts(el)[opening] ?? 0;
+      el.scrollLeft = Math.max(0, left - (el.clientWidth - target.offsetWidth) / 2);
+    }
+    readEnds();
+  }, [rounds, opening, readEnds]);
+
+  useLayoutEffect(() => {
+    const el = viewport.current;
+    if (!el) return;
+    const observer = new ResizeObserver(readEnds);
+    observer.observe(el);
+    el.addEventListener("scroll", readEnds, { passive: true });
+    return () => {
+      observer.disconnect();
+      el.removeEventListener("scroll", readEnds);
+    };
+  }, [readEnds]);
+
+  const scrollTo = (left: number): void => {
+    viewport.current?.scrollTo({ left, behavior: reducedMotion() ? "auto" : "smooth" });
+  };
+  /** To the next column's left edge that way, or the end. */
+  const step = (direction: 1 | -1): void => {
+    const el = viewport.current;
+    if (!el) return;
+    const at = el.scrollLeft;
+    const lefts = columnLefts(el);
+    const next =
+      direction > 0 ? lefts.find((x) => x > at + 1) : [...lefts].reverse().find((x) => x < at - 1);
+    scrollTo(next ?? (direction > 0 ? el.scrollWidth : 0));
+  };
 
   if (rounds.length === 0 || !isBracketDrawn(rounds)) {
     return (
@@ -179,56 +243,56 @@ export function KnockoutBracket({
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {/* A round a tap, or straight to either end: the first round, or the
-          rounds that end in the final. */}
-      {maxStart > 0 && (
+      {ends.overflow && (
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center">
             <Button
               size="icon"
               variant="ghost"
-              disabled={start === 0}
-              onClick={() => setWindowStart(0)}
-              aria-label="First round"
+              disabled={ends.atStart}
+              onClick={() => scrollTo(0)}
+              aria-label="Left end of the bracket"
             >
               <ChevronsLeft />
             </Button>
             <Button
               size="icon"
               variant="ghost"
-              disabled={start === 0}
-              onClick={() => setWindowStart(Math.max(0, start - 1))}
-              aria-label="Earlier rounds"
+              disabled={ends.atStart}
+              onClick={() => step(-1)}
+              aria-label="Scroll left"
             >
               <ChevronLeft />
             </Button>
           </div>
-          <Mono className="text-center text-xs text-muted-foreground">
-            {visible[0]?.label} – {visible[visible.length - 1]?.label}
-          </Mono>
           <div className="flex items-center">
             <Button
               size="icon"
               variant="ghost"
-              disabled={start >= maxStart}
-              onClick={() => setWindowStart(Math.min(maxStart, start + 1))}
-              aria-label="Later rounds"
+              disabled={ends.atEnd}
+              onClick={() => step(1)}
+              aria-label="Scroll right"
             >
               <ChevronRight />
             </Button>
             <Button
               size="icon"
               variant="ghost"
-              disabled={start >= maxStart}
-              onClick={() => setWindowStart(maxStart)}
-              aria-label="To the final"
+              disabled={ends.atEnd}
+              onClick={() => scrollTo(viewport.current?.scrollWidth ?? 0)}
+              aria-label="Right end of the bracket"
             >
               <ChevronsRight />
             </Button>
           </div>
         </div>
       )}
-      <BracketCanvas columns={columns} edges={edges} minColumnWidth={minColumnWidth} />
+      <BracketCanvas
+        columns={columns}
+        edges={edges}
+        minColumnWidth={minColumnWidth}
+        viewportRef={viewport}
+      />
     </div>
   );
 }

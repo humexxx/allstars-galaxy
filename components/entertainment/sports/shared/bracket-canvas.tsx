@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Eyebrow, Mono } from "@/components/ui/typography";
@@ -28,19 +28,23 @@ export type BracketColumn = {
 /** A branch from one box to another, by their item keys. */
 export type BracketEdge = { from: string; to: string };
 
-/** A horizontal run, a rounded turn, the vertical drop, and in again. */
+/**
+ * A horizontal run, a rounded turn, the vertical drop, and in again — either
+ * way across: a two-sided bracket's right half runs right to left.
+ */
 export function elbow(x1: number, y1: number, x2: number, y2: number): string {
   const mid = (x1 + x2) / 2;
   const dy = y2 - y1;
-  const r = Math.min(8, Math.abs(dy) / 2, (x2 - x1) / 4);
+  const dx = x2 < x1 ? -1 : 1;
+  const r = Math.min(8, Math.abs(dy) / 2, Math.abs(x2 - x1) / 4);
   if (r < 1) return `M${x1},${y1} L${x2},${y2}`;
   const s = Math.sign(dy);
   return [
     `M${x1},${y1}`,
-    `H${mid - r}`,
+    `H${mid - dx * r}`,
     `Q${mid},${y1} ${mid},${y1 + s * r}`,
     `V${y2 - s * r}`,
-    `Q${mid},${y2} ${mid + r},${y2}`,
+    `Q${mid},${y2} ${mid + dx * r},${y2}`,
     `H${x2}`,
   ].join(" ");
 }
@@ -60,12 +64,15 @@ export function BracketCanvas({
   edges,
   minColumnWidth = "8rem",
   className,
+  viewportRef,
 }: {
   columns: BracketColumn[];
   edges: BracketEdge[];
   /** A column never narrows past this; a tennis draw's set scores need more. */
   minColumnWidth?: string;
   className?: string;
+  /** The part that scrolls sideways, for controls that move it. Its columns carry `data-column`. */
+  viewportRef?: Ref<HTMLDivElement>;
 }) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const boxes = useRef(new Map<string, HTMLElement>());
@@ -81,11 +88,13 @@ export function BracketCanvas({
         const from = boxes.current.get(edge.from)?.getBoundingClientRect();
         const to = boxes.current.get(edge.to)?.getBoundingClientRect();
         if (!from || !to) continue;
+        // From the side of the box that faces the one it feeds.
+        const rightward = from.left <= to.left;
         next.push(
           elbow(
-            from.right - origin.left,
+            (rightward ? from.right : from.left) - origin.left,
             from.top + from.height / 2 - origin.top,
-            to.left - origin.left,
+            (rightward ? to.left : to.right) - origin.left,
             to.top + to.height / 2 - origin.top
           )
         );
@@ -105,7 +114,7 @@ export function BracketCanvas({
   };
 
   return (
-    <div className={cn("-mx-1 overflow-x-auto px-1 pb-1", className)}>
+    <div ref={viewportRef} className={cn("-mx-1 overflow-x-auto px-1 pb-1", className)}>
       <div
         ref={canvasRef}
         className="relative grid w-max min-w-full gap-x-5"
@@ -119,8 +128,8 @@ export function BracketCanvas({
             <path key={i} d={d} fill="none" stroke="currentColor" strokeWidth={1.5} />
           ))}
         </svg>
-        {columns.map((column) => (
-          <div key={column.key} className="flex flex-col gap-2">
+        {columns.map((column, i) => (
+          <div key={column.key} data-column={i} className="flex flex-col gap-2">
             <Eyebrow as="div" size="sm" className={cn(column.current && "text-foreground")}>
               {column.label}
             </Eyebrow>

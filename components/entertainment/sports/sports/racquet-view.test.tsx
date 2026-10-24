@@ -211,7 +211,8 @@ describe("RacquetView, the tabs", () => {
     expect(screen.getByText("d. L. Augsburger / J. Lebron", { exact: false })).toBeInTheDocument();
     // The bracket itself: its rounds, and each pair as two names.
     expect(screen.getByText("Final")).toBeInTheDocument();
-    expect(screen.getByText("Semi-finals")).toBeInTheDocument();
+    // One semi-final on each side of the final.
+    expect(screen.getAllByText("Semi-finals")).toHaveLength(2);
     expect(screen.getAllByText("Coello").length).toBeGreaterThan(0);
     expect(getRacquetDrawAction).not.toHaveBeenCalled();
   });

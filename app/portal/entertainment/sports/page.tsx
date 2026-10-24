@@ -52,6 +52,7 @@ export default async function SportsPage({
       initialTab={tab}
       today={today}
       teamFilter={list ? { list, teamIds } : null}
+      viewerId={ctx.effectiveUserId}
     />
   );
 }

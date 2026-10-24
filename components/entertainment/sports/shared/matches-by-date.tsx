@@ -30,6 +30,7 @@ import { scrollParent } from "./scroll";
 import { SportBarEnd } from "./sport-shell";
 import { TeamBadge } from "./team-badge";
 import { useSavedTeamFilter } from "./team-filter-context";
+import { rememberTeams } from "../seen-sports";
 import { useMatchTime, useSportsToday } from "./time-zone-context";
 
 const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "pen"]);
@@ -162,9 +163,11 @@ export function MatchesByDate({
   const saveTeams = (teamIds: readonly string[]): void => {
     if (!saved) return;
     startSaving(async () => {
-      await runAction(setSportTeamFilterAction({ ...saved.list, teamIds: [...teamIds] }), {
-        failure: "Couldn't save your teams",
-      });
+      const result = await runAction(
+        setSportTeamFilterAction({ ...saved.list, teamIds: [...teamIds] }),
+        { failure: "Couldn't save your teams" }
+      );
+      if (result.ok) rememberTeams(saved.list, teamIds);
     });
   };
 

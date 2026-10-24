@@ -10,7 +10,7 @@ import {
   type MouseEvent,
 } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Info, Star } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -21,6 +21,7 @@ import type { SportPayload } from "@/lib/sports/payload";
 import type { SavedTeamFilter, SportId, SportMeta } from "@/types/sports";
 
 import { ManageFavoritesSheet } from "./manage-favorites-sheet";
+import { recallSport, rememberSport, seenKey } from "./seen-sports";
 import { SavedTeamFilterProvider } from "./shared/team-filter-context";
 import { SportsTodayProvider } from "./shared/time-zone-context";
 import { SportSkeleton, SportsNavigationContext } from "./sports-navigation";
@@ -44,6 +45,8 @@ type SportsHubProps = {
   today: string;
   /** The match list on screen and the teams last picked in it; null for a sport without one. */
   teamFilter?: SavedTeamFilter | null;
+  /** Whose hub this is (the effective user): the sports seen are kept per account. */
+  viewerId: string;
 };
 
 export function SportsHub({
@@ -53,25 +56,37 @@ export function SportsHub({
   initialTab,
   today,
   teamFilter = null,
+  viewerId,
 }: SportsHubProps): React.ReactElement {
   const favSet = useMemo(() => new Set(favoriteSportIds), [favoriteSportIds]);
   const router = useRouter();
   const [loading, startLoading] = useTransition();
   const [target, setTarget] = useState<SportId | null>(null);
+  const [targetKey, setTargetKey] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const fromContent = useRef(false);
 
+  // Each sport is remembered as it arrives, by the address that asked for it.
+  const currentKey = seenKey(activeSport, useSearchParams().get("league"));
+  useEffect(() => {
+    rememberSport(viewerId, currentKey, { payload, teamFilter, today });
+  }, [viewerId, currentKey, payload, teamFilter, today]);
+
   // Every move inside the hub — another sport, another league — runs in this
-  // one transition: until the next sport's data is on screen, the content is
-  // a skeleton of it rather than the old sport with a spinner by its control.
+  // one transition. Until the next sport's data is here, the content is the
+  // copy last seen of it (within half an hour), so going back to a sport is
+  // instant and the fresh copy takes its place when it lands; a sport not
+  // seen yet is a skeleton of it rather than the old one with a spinner.
   const navigate = useCallback(
     (href: string) => {
-      const sport = new URLSearchParams(href.split("?")[1] ?? "").get("sport");
+      const params = new URLSearchParams(href.split("?")[1] ?? "");
+      const sport = (params.get("sport") as SportId | null) ?? activeSport;
       fromContent.current = Boolean(contentRef.current?.contains(document.activeElement));
-      setTarget(sport as SportId | null);
+      setTarget(sport);
+      setTargetKey(seenKey(sport, params.get("league")));
       startLoading(() => router.push(href, { scroll: false }));
     },
-    [router]
+    [router, activeSport]
   );
 
   // A control inside the view (the league picker) unmounts under the
@@ -83,6 +98,9 @@ export function SportsHub({
   }, [loading]);
 
   const loadingLabel = SPORTS.find((s) => s.id === (target ?? activeSport))?.label;
+  const copy = loading && targetKey ? recallSport(viewerId, targetKey) : undefined;
+  const shown = copy ?? (loading ? null : { payload, teamFilter, today });
+  const shownKey = copy && targetKey ? targetKey : currentKey;
 
   // Render favourites first so the user lands on their most-watched sports.
   const orderedSports = useMemo(
@@ -114,17 +132,19 @@ export function SportsHub({
           {loading ? `Loading ${loadingLabel ?? "sport"}…` : ""}
         </p>
         <div ref={contentRef} tabIndex={-1} aria-busy={loading} className="outline-none">
-          {loading ? (
-            <SportSkeleton />
-          ) : (
-            <SportsTodayProvider today={today}>
-              <SavedTeamFilterProvider filter={teamFilter}>
+          {shown ? (
+            // Keyed by address: a copy and the fresh one of the same sport are
+            // one view, and keep its tab and picks; another sport starts anew.
+            <SportsTodayProvider key={shownKey} today={shown.today}>
+              <SavedTeamFilterProvider filter={shown.teamFilter}>
                 <div className="flex flex-col gap-6">
-                  {payload.sample && <SampleDataNotice />}
-                  <SportContent payload={payload} initialTab={initialTab} />
+                  {shown.payload.sample && <SampleDataNotice />}
+                  <SportContent payload={shown.payload} initialTab={copy ? undefined : initialTab} />
                 </div>
               </SavedTeamFilterProvider>
             </SportsTodayProvider>
+          ) : (
+            <SportSkeleton sport={target ?? activeSport} />
           )}
         </div>
       </div>

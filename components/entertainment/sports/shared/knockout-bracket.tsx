@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Trophy } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -179,29 +179,53 @@ export function KnockoutBracket({
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
+      {/* A round a tap, or straight to either end: the first round, or the
+          rounds that end in the final. */}
       {maxStart > 0 && (
         <div className="flex items-center justify-between gap-2">
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={start === 0}
-            onClick={() => setWindowStart(Math.max(0, start - 1))}
-            aria-label="Earlier rounds"
-          >
-            <ChevronLeft />
-          </Button>
-          <Mono className="text-xs text-muted-foreground">
+          <div className="flex items-center">
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={start === 0}
+              onClick={() => setWindowStart(0)}
+              aria-label="First round"
+            >
+              <ChevronsLeft />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={start === 0}
+              onClick={() => setWindowStart(Math.max(0, start - 1))}
+              aria-label="Earlier rounds"
+            >
+              <ChevronLeft />
+            </Button>
+          </div>
+          <Mono className="text-center text-xs text-muted-foreground">
             {visible[0]?.label} – {visible[visible.length - 1]?.label}
           </Mono>
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={start >= maxStart}
-            onClick={() => setWindowStart(Math.min(maxStart, start + 1))}
-            aria-label="Later rounds"
-          >
-            <ChevronRight />
-          </Button>
+          <div className="flex items-center">
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={start >= maxStart}
+              onClick={() => setWindowStart(Math.min(maxStart, start + 1))}
+              aria-label="Later rounds"
+            >
+              <ChevronRight />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={start >= maxStart}
+              onClick={() => setWindowStart(maxStart)}
+              aria-label="To the final"
+            >
+              <ChevronsRight />
+            </Button>
+          </div>
         </div>
       )}
       <BracketCanvas columns={columns} edges={edges} minColumnWidth={minColumnWidth} />

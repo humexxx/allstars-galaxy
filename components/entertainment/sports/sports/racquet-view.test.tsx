@@ -455,6 +455,51 @@ describe("RacquetView, tennis", () => {
     expect(screen.getByRole("heading", { name: "Swiss Indoors Basel" })).toBeInTheDocument();
   });
 
+  it("shows the draw's three best seeds on the featured card, from its own players", () => {
+    const player = (id: string, name: string, seed: number): Team => ({ id, name: "🇮🇹", shortName: name, code: String(seed) });
+    const vienna: RacquetTournament = {
+      ...atp.tournaments[1],
+      bracket: [
+        {
+          id: "semi-final",
+          label: "Semi-finals",
+          matches: [
+            { id: "s1", homeTeamId: "sin", awayTeamId: "fri" },
+            { id: "s2", homeTeamId: "zve", awayTeamId: "alc" },
+          ],
+        },
+        { id: "final", label: "Final", matches: [{ id: "f", homeTeamId: null, awayTeamId: null }] },
+      ],
+    };
+    const seeded: TennisData = {
+      ...tennis,
+      atp: {
+        ...atp,
+        tournaments: [atp.tournaments[0], vienna],
+        drawPlayers: [
+          player("sin", "J. Sinner", 1),
+          player("zve", "A. Zverev", 2),
+          player("alc", "C. Alcaraz", 3),
+          player("fri", "T. Fritz", 4),
+          // Seeded first in another draw the page carries, not in this one.
+          player("dra", "J. Draper", 1),
+        ],
+      },
+    };
+    render(
+      <SportsTodayProvider today="2026-10-19">
+        <TennisView data={seeded} />
+      </SportsTodayProvider>
+    );
+    const card = screen.getByRole("heading", { name: "Erste Bank Open" }).closest<HTMLElement>("[data-slot='card']")!;
+    const seeds = within(card).getByText("Top seeds").parentElement!;
+    expect(within(seeds).getAllByRole("listitem").map((li) => li.getAttribute("title"))).toEqual([
+      "Seed 1: J. Sinner",
+      "Seed 2: A. Zverev",
+      "Seed 3: C. Alcaraz",
+    ]);
+  });
+
   it("shows no picker with one tournament being played", () => {
     render(
       <SportsTodayProvider today="2026-10-19">

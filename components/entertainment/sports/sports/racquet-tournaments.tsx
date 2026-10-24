@@ -24,8 +24,10 @@ import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { roundInPlay } from "@/lib/sports/bracket";
 import { cn } from "@/lib/utils";
 import { formatDayRange } from "@/lib/utils/date";
-import type { RacquetCalendarEntry, RacquetData, RacquetTournament } from "@/types/sports";
+import type { RacquetCalendarEntry, RacquetData, RacquetDraw, RacquetTournament, Team } from "@/types/sports";
 
+import { PairFaces } from "../shared/draw-match-card";
+import { Portrait } from "../shared/portrait";
 import { fadeIn, holdScrollStill } from "../shared/reveal";
 import { RevealPill } from "../shared/reveal-pill";
 import { StatusPill } from "../shared/status-pill";
@@ -258,6 +260,59 @@ function OnNowHeading({
   );
 }
 
+/**
+ * The draw's three best seeds, among the players in its own rounds: the
+ * tour's list of players spans every draw the page carries.
+ */
+function topSeeds(draw: RacquetDraw): Team[] {
+  const inDraw = new Set(draw.rounds.flatMap((r) => r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId])));
+  return draw.players
+    .filter((p) => inDraw.has(p.id) && /^\d+$/.test(p.code.trim()))
+    .sort((a, b) => Number(a.code) - Number(b.code))
+    .slice(0, 3);
+}
+
+/**
+ * Who leads the draw — a week of tennis splits the best players between
+ * three or four events, and the seeds say which one has them. A face each
+ * (a pair's two), the surname under it, the seed in its tooltip.
+ */
+function TopSeeds({ seeds, variant }: { seeds: Team[]; variant: DrawVariant }) {
+  return (
+    <div className="flex shrink-0 flex-col items-end gap-1.5">
+      <Eyebrow size="sm" as="div">
+        Top seeds
+      </Eyebrow>
+      <ol className="flex items-start gap-2">
+        {seeds.map((p) => {
+          // A pair's "Coello / Tapia" closes up; a player goes by the surname.
+          const label = variant === "pair" ? p.shortName.replace(" / ", "/") : p.shortName.split(" ").slice(-1)[0];
+          return (
+            <li
+              key={p.id}
+              title={`Seed ${p.code}: ${variant === "pair" ? p.name : p.shortName}`}
+              className="flex w-14 flex-col items-center gap-1"
+            >
+              {variant === "pair" ? (
+                <PairFaces pair={p} size="md" />
+              ) : (
+                <Portrait
+                  subject={{ name: p.shortName, imageUrl: p.logoUrl, flagEmoji: p.name }}
+                  fallback={<span className="text-base leading-none">{p.name}</span>}
+                />
+              )}
+              <span className="w-full truncate text-center text-2xs text-muted-foreground">
+                <span className="sr-only">Seed {p.code}: </span>
+                {label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
 /** "Starts today", "Starts tomorrow", "Starts in 5 days" — by the reader's calendar day. */
 function startsIn(startDate: string, today: string): string {
   const days = Math.round((Date.parse(startDate) - Date.parse(today)) / 86_400_000);
@@ -284,16 +339,21 @@ function FeaturedTournament({
   today: string;
   onOpen: (id: string) => void;
 }) {
-  const round = t.status === "live" && draw?.status === "ready" ? roundInPlay(draw.draw.rounds) : undefined;
+  const ready = draw?.status === "ready" ? draw.draw : undefined;
+  const round = t.status === "live" && ready ? roundInPlay(ready.rounds) : undefined;
+  const seeds = ready ? topSeeds(ready) : [];
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 @2xl:flex-row @2xl:items-start @2xl:gap-6">
         {t.imageUrl && <TournamentPoster key={t.imageUrl} src={t.imageUrl} className="@2xl:w-2/5" />}
         <div className="flex min-w-0 flex-1 flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {t.tier && <Badge variant="outline">{t.tier}</Badge>}
-            {t.surface && !t.tier && <Badge variant="outline">{t.surface}</Badge>}
-            <StatusPill status={t.status} />
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {t.tier && <Badge variant="outline">{t.tier}</Badge>}
+              {t.surface && !t.tier && <Badge variant="outline">{t.surface}</Badge>}
+              <StatusPill status={t.status} />
+            </div>
+            {seeds.length > 0 && <TopSeeds seeds={seeds} variant={variant} />}
           </div>
           <Heading level="h3" as="h4">
             {t.name}

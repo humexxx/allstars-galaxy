@@ -274,14 +274,14 @@ function PairRow({
  * the order their names read down the row. A photo that does not load (a
  * wildcard or a qualifier the provider has none of) is the player's initial.
  */
-function PairFaces({ pair }: { pair: Team }) {
+export function PairFaces({ pair, size = "xs" }: { pair: Team; size?: "xs" | "md" }) {
   const surnames = pair.shortName.split(" / ");
   return (
     <span aria-hidden className="flex shrink-0 items-center">
       {surnames.map((surname, i) => (
         <Portrait
           key={i}
-          size="xs"
+          size={size}
           subject={{ name: surname, imageUrl: pair.photos?.[i] ?? undefined }}
           fallback={
             <span className="grid size-full place-items-center rounded-full bg-muted text-2xs font-medium text-muted-foreground">

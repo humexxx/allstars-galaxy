@@ -492,7 +492,9 @@ describe("RacquetView, tennis", () => {
       </SportsTodayProvider>
     );
     const card = screen.getByRole("heading", { name: "Erste Bank Open" }).closest<HTMLElement>("[data-slot='card']")!;
-    const seeds = within(card).getByText("Top seeds").parentElement!;
+    // No label on screen: the faces say it. The list is named for a screen reader.
+    expect(within(card).queryByText("Top seeds")).toBeNull();
+    const seeds = within(card).getByRole("list", { name: "Top seeds" });
     expect(within(seeds).getAllByRole("listitem").map((li) => li.getAttribute("title"))).toEqual([
       "Seed 1: J. Sinner",
       "Seed 2: A. Zverev",

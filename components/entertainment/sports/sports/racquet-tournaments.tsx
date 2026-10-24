@@ -91,7 +91,19 @@ function prizeOf(prize: RacquetTournament["prize"]): string | null {
  * which is not on the optimizer's allowlist — the call `Portrait` makes for
  * faces. A poster that fails to load is left out rather than drawn broken.
  */
-export function TournamentPoster({ src, className }: { src: string; className?: string }) {
+export function TournamentPoster({
+  src,
+  className,
+  onFail,
+  children,
+}: {
+  src: string;
+  className?: string;
+  /** Told when the poster does not load, so what was laid over it can go elsewhere. */
+  onFail?: () => void;
+  /** Laid over the poster. */
+  children?: ReactNode;
+}) {
   const [failed, setFailed] = useState(false);
   if (failed) return null;
   return (
@@ -105,8 +117,12 @@ export function TournamentPoster({ src, className }: { src: string; className?: 
         sizes="(min-width: 768px) 24rem, 100vw"
         className="object-cover"
         unoptimized
-        onError={() => setFailed(true)}
+        onError={() => {
+          setFailed(true);
+          onFail?.();
+        }}
       />
+      {children}
     </span>
   );
 }
@@ -274,42 +290,45 @@ function topSeeds(draw: RacquetDraw): Team[] {
 
 /**
  * Who leads the draw — a week of tennis splits the best players between
- * three or four events, and the seeds say which one has them. A face each
- * (a pair's two), the surname under it, the seed in its tooltip.
+ * three or four events, and the seeds say which one has them. Just the
+ * faces, big (a pair's two), each surname small under it for a player with
+ * no photo, the seed in its tooltip and for a screen reader. `onImage` sets
+ * it over a poster.
  */
-function TopSeeds({ seeds, variant }: { seeds: Team[]; variant: DrawVariant }) {
+function TopSeeds({ seeds, variant, onImage = false }: { seeds: Team[]; variant: DrawVariant; onImage?: boolean }) {
   return (
-    <div className="flex shrink-0 flex-col items-end gap-1.5">
-      <Eyebrow size="sm" as="div">
-        Top seeds
-      </Eyebrow>
-      <ol className="flex items-start gap-2">
-        {seeds.map((p) => {
-          // A pair's "Coello / Tapia" closes up; a player goes by the surname.
-          const label = variant === "pair" ? p.shortName.replace(" / ", "/") : p.shortName.split(" ").slice(-1)[0];
-          return (
-            <li
-              key={p.id}
-              title={`Seed ${p.code}: ${variant === "pair" ? p.name : p.shortName}`}
-              className="flex w-14 flex-col items-center gap-1"
-            >
-              {variant === "pair" ? (
-                <PairFaces pair={p} size="md" />
-              ) : (
-                <Portrait
-                  subject={{ name: p.shortName, imageUrl: p.logoUrl, flagEmoji: p.name }}
-                  fallback={<span className="text-base leading-none">{p.name}</span>}
-                />
+    <ol aria-label="Top seeds" className="flex shrink-0 items-start gap-2">
+      {seeds.map((p) => {
+        // A pair's "Coello / Tapia" closes up; a player goes by the surname.
+        const label = variant === "pair" ? p.shortName.replace(" / ", "/") : p.shortName.split(" ").slice(-1)[0];
+        return (
+          <li
+            key={p.id}
+            title={`Seed ${p.code}: ${variant === "pair" ? p.name : p.shortName}`}
+            className={cn("flex flex-col items-center gap-1", variant === "pair" ? "w-18" : "w-14")}
+          >
+            {variant === "pair" ? (
+              <PairFaces pair={p} size="lg" />
+            ) : (
+              <Portrait
+                size="lg"
+                subject={{ name: p.shortName, imageUrl: p.logoUrl, flagEmoji: p.name }}
+                fallback={<span className="text-2xl leading-none">{p.name}</span>}
+              />
+            )}
+            <span
+              className={cn(
+                "w-full truncate text-center text-2xs",
+                onImage ? "font-medium text-white" : "text-muted-foreground"
               )}
-              <span className="w-full truncate text-center text-2xs text-muted-foreground">
-                <span className="sr-only">Seed {p.code}: </span>
-                {label}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
+            >
+              <span className="sr-only">Seed {p.code}: </span>
+              {label}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -342,10 +361,27 @@ function FeaturedTournament({
   const ready = draw?.status === "ready" ? draw.draw : undefined;
   const round = t.status === "live" && ready ? roundInPlay(ready.rounds) : undefined;
   const seeds = ready ? topSeeds(ready) : [];
+  // On the poster where there is one (padel's), along its foot; else in the
+  // card's top right corner.
+  const [posterGone, setPosterGone] = useState(false);
+  const seedsOnPoster = Boolean(t.imageUrl) && !posterGone && seeds.length > 0;
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 @2xl:flex-row @2xl:items-start @2xl:gap-6">
-        {t.imageUrl && <TournamentPoster key={t.imageUrl} src={t.imageUrl} className="@2xl:w-2/5" />}
+        {t.imageUrl && (
+          <TournamentPoster
+            key={t.imageUrl}
+            src={t.imageUrl}
+            className="@2xl:w-2/5"
+            onFail={() => setPosterGone(true)}
+          >
+            {seedsOnPoster && (
+              <span className="absolute inset-x-0 bottom-0 flex justify-end bg-linear-to-t from-black/80 to-transparent px-2 pt-6 pb-1.5">
+                <TopSeeds seeds={seeds} variant={variant} onImage />
+              </span>
+            )}
+          </TournamentPoster>
+        )}
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -353,7 +389,7 @@ function FeaturedTournament({
               {t.surface && !t.tier && <Badge variant="outline">{t.surface}</Badge>}
               <StatusPill status={t.status} />
             </div>
-            {seeds.length > 0 && <TopSeeds seeds={seeds} variant={variant} />}
+            {seeds.length > 0 && !seedsOnPoster && <TopSeeds seeds={seeds} variant={variant} />}
           </div>
           <Heading level="h3" as="h4">
             {t.name}

@@ -274,7 +274,7 @@ function PairRow({
  * the order their names read down the row. A photo that does not load (a
  * wildcard or a qualifier the provider has none of) is the player's initial.
  */
-export function PairFaces({ pair, size = "xs" }: { pair: Team; size?: "xs" | "md" }) {
+export function PairFaces({ pair, size = "xs" }: { pair: Team; size?: "xs" | "md" | "lg" }) {
   const surnames = pair.shortName.split(" / ");
   return (
     <span aria-hidden className="flex shrink-0 items-center">
@@ -288,7 +288,7 @@ export function PairFaces({ pair, size = "xs" }: { pair: Team; size?: "xs" | "md
               {surname.charAt(0)}
             </span>
           }
-          className={cn(i > 0 && "-ml-1.5 rounded-full ring-2 ring-card")}
+          className={cn(i > 0 && "rounded-full ring-2 ring-card", i > 0 && (size === "lg" ? "-ml-3" : "-ml-1.5"))}
         />
       ))}
     </span>

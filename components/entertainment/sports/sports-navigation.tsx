@@ -4,6 +4,8 @@ import { createContext, useContext } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import type { SportId } from "@/types/sports";
 
 /**
  * Moves the hub to another sport or league inside the hub's own transition,
@@ -33,13 +35,26 @@ export function SportStripSkeleton(): React.ReactElement {
   );
 }
 
+/** What the left of a sport's Overview holds, for its skeleton. */
+type Shape = "matches" | "races" | "tournament";
+
+const SHAPES: Partial<Record<SportId, Shape>> = {
+  f1: "races",
+  padel: "tournament",
+  tennis: "tournament",
+};
+
 /**
- * One sport's page while it loads, laid out as `SportShell` is: the name and
- * the tabs in one bar from `@4xl`, the name above a tabs row narrower, then
- * the overview's two columns — matches on the left, the table beside them.
- * The route's `loading.tsx` uses it too, under the strip.
+ * One sport's page while it loads, laid out as `SportShell` is — the name
+ * row, the tabs over their rule — then the Overview's two columns: the left
+ * as the sport fills it (days of match cards; F1's next race and the races
+ * after it; the tournament on now with its draw), each part under a line set
+ * like a day heading, and beside it the table's label and card: its ten rows
+ * and the "Show more" line under them, as every table in the hub. The
+ * route's `loading.tsx` uses it too, under the strip, with no sport to go by.
  */
-export function SportSkeleton(): React.ReactElement {
+export function SportSkeleton({ sport }: { sport?: SportId } = {}): React.ReactElement {
+  const shape = (sport && SHAPES[sport]) ?? "matches";
   return (
     <div className="@container flex flex-col" aria-hidden="true">
       <div className="flex items-center gap-3 pb-4">
@@ -54,25 +69,133 @@ export function SportSkeleton(): React.ReactElement {
         <Skeleton className="h-6 w-20" />
       </div>
       <div className="grid items-start gap-6 pt-6 @4xl:grid-cols-[2fr_1fr]">
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-8 w-full" />
-          <div className="grid gap-2 @xl:grid-cols-2">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 w-full rounded-lg" />
-            ))}
-          </div>
+        <div className="flex min-w-0 flex-col gap-6">
+          {shape === "races" ? (
+            <RacesSkeleton />
+          ) : shape === "tournament" ? (
+            <TournamentSkeleton />
+          ) : (
+            <MatchesSkeleton />
+          )}
         </div>
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-4 w-16" />
-          <Card size="sm">
-            <CardContent className="flex flex-col gap-2">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="h-7 w-full" />
-              ))}
-            </CardContent>
-          </Card>
+        <div className="flex flex-col gap-2">
+          <HeadingLine className="w-20" />
+          <TableSkeleton withToggle={shape === "races"} />
         </div>
       </div>
     </div>
+  );
+}
+
+/** A day heading's line: 22px, as `Eyebrow size="sm"` with `py-1`. */
+function HeadingLine({ className }: { className?: string }): React.ReactElement {
+  return (
+    <div className="flex h-5.5 items-center">
+      <Skeleton className={cn("h-3 w-40", className)} />
+    </div>
+  );
+}
+
+function MatchesSkeleton(): React.ReactElement {
+  return (
+    <section className="flex flex-col gap-2">
+      <HeadingLine className="w-48" />
+      <div className="grid gap-2 @xl:grid-cols-2">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-16 w-full rounded-lg" />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** F1: the next race's card, then the races after it as tiles. */
+function RacesSkeleton(): React.ReactElement {
+  return (
+    <>
+      <section className="flex flex-col gap-2">
+        <HeadingLine className="w-24" />
+        <Card>
+          <CardContent className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-8 gap-y-5">
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-8 w-64 max-w-full" />
+              <Skeleton className="h-4 w-56 max-w-full" />
+              <Skeleton className="h-4 w-40" />
+            </div>
+            <Skeleton className="size-20 @2xl:size-40" />
+            <div className="col-span-2 flex flex-col gap-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-6 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+      <section className="flex flex-col gap-2">
+        <HeadingLine className="w-24" />
+        <div className="grid gap-3 @xl:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-lg" />
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+/** Padel and tennis: the tournament on now in one card, its draw in columns. */
+function TournamentSkeleton(): React.ReactElement {
+  return (
+    <section className="flex flex-col gap-2">
+      <HeadingLine className="w-20" />
+      <Card>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-5 w-24 rounded-full" />
+            <Skeleton className="h-6 w-72 max-w-full" />
+            <Skeleton className="h-4 w-56 max-w-full" />
+          </div>
+          <div className="grid grid-cols-2 gap-4 @xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, column) => (
+              <div
+                key={column}
+                className={cn("flex flex-col justify-around gap-3", column > 1 && "hidden @xl:flex")}
+              >
+                {Array.from({ length: 4 >> Math.min(column, 2) }).map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                ))}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+/** A table card: its header band, ten rows and the "Show more" line. */
+function TableSkeleton({ withToggle }: { withToggle: boolean }): React.ReactElement {
+  return (
+    <Card className="gap-0 py-0">
+      {withToggle && (
+        <div className="flex h-14 items-center border-b px-3">
+          <Skeleton className="h-8 w-44" />
+        </div>
+      )}
+      <div className="flex h-10 items-center border-b bg-muted/40 px-3">
+        <Skeleton className="h-3 w-full" />
+      </div>
+      {Array.from({ length: 10 }).map((_, i) => (
+        <div key={i} className="flex h-10 items-center gap-3 border-b px-3">
+          <Skeleton className="size-6 shrink-0 rounded-full" />
+          <Skeleton className="h-3.5 flex-1" />
+          <Skeleton className="h-3.5 w-8" />
+        </div>
+      ))}
+      <div className="flex h-10 items-center justify-center">
+        <Skeleton className="h-3.5 w-24" />
+      </div>
+    </Card>
   );
 }

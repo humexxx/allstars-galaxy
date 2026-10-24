@@ -144,4 +144,34 @@ describe("DashboardSportCard", () => {
       "/portal/entertainment/sports?sport=football&league=la-liga"
     );
   });
+
+  it("carries the latest news under the table, opened at ESPN in a new tab", async () => {
+    await renderCard({
+      ...card([]),
+      sportId: "nba",
+      label: "NBA",
+      news: [
+        {
+          id: "espn-1",
+          headline: "Giannis stays hot in a loss",
+          description: null,
+          href: "https://www.espn.com/nba/story/_/id/1",
+          external: true,
+          image: { url: "https://a.espncdn.com/photo/1.jpg" },
+          at: "2026-10-24T04:36:05Z",
+          kind: "story",
+          about: [],
+        },
+      ],
+    });
+    const rail = screen.getByText("Latest news").parentElement!;
+    const story = within(rail).getByRole("link", { name: /Giannis stays hot in a loss/ });
+    expect(story).toHaveAttribute("href", "https://www.espn.com/nba/story/_/id/1");
+    expect(story).toHaveAttribute("target", "_blank");
+  });
+
+  it("has no news rail for a sport without a wire", async () => {
+    await renderCard(card([]));
+    expect(screen.queryByText("Latest news")).toBeNull();
+  });
 });

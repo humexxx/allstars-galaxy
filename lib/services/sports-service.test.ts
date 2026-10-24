@@ -369,6 +369,43 @@ describe("getDashboardSportCard", () => {
     expect(card.tables[0].rows[0]).toMatchObject({ position: 1, value: expect.stringMatching(/ pts$/) });
   });
 
+  it("gives the NBA and the NFL their latest ESPN news, and no clips", async () => {
+    const article = (id: number, type: string, headline: string) => ({
+      id,
+      type,
+      headline,
+      published: `2026-10-24T0${id}:00:00Z`,
+      images: [{ type: "header", url: `https://a.espncdn.com/photo/${id}.jpg`, width: 600 }],
+      links: { web: { href: `https://www.espn.com/nba/story/_/id/${id}` } },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.includes("site.api.espn.com") && url.includes("/news")
+          ? new Response(
+              JSON.stringify({
+                articles: [
+                  article(1, "HeadlineNews", "Giannis stays hot"),
+                  article(2, "Media", "Game Highlights"),
+                  article(3, "Recap", "Lakers past Clippers"),
+                ],
+              }),
+              { status: 200 }
+            )
+          : Promise.reject(new Error("fetch is disabled in unit tests"))
+      )
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (const sport of ["nba", "nfl"] as const) {
+        const card = (await getDashboardSportCard(sport))!;
+        expect(card.news?.map((n) => n.headline)).toEqual(["Lakers past Clippers", "Giannis stays hot"]);
+      }
+    } finally {
+      vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("fetch is disabled in unit tests"))));
+    }
+  });
+
   it("gives the NBA both conferences, each a W–L table", async () => {
     const card = (await getDashboardSportCard("nba"))!;
 

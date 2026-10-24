@@ -14,6 +14,7 @@ import { PADEL_DATA } from "@/lib/data/sports/padel";
 import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
+import { getEspnNews } from "@/lib/services/espn-news-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
 import {
   FOOTBALL_COMPETITIONS,
@@ -43,6 +44,7 @@ import type {
   LolData,
   LolMatch,
   LolRegion,
+  NewsStory,
   LolSplit,
   Match,
   NbaConference,
@@ -256,10 +258,14 @@ export async function getDashboardSportCard(
         },
       };
     }
-    case "nba":
-      return nbaCard(base, (await getNbaData()) ?? NBA_DATA);
-    case "nfl":
-      return nflCard(base, (await getNflData()) ?? NFL_DATA);
+    case "nba": {
+      const [data, news] = await Promise.all([getNbaData(), getEspnNews("nba")]);
+      return { ...nbaCard(base, data ?? NBA_DATA), news: cardNews(news) };
+    }
+    case "nfl": {
+      const [data, news] = await Promise.all([getNflData(), getEspnNews("nfl")]);
+      return { ...nflCard(base, data ?? NFL_DATA), news: cardNews(news) };
+    }
     case "lol":
       return lolCard(base, (await getLolData()) ?? LOL_DATA, oneOf(LOL_REGIONS, competition));
     case "tennis": {
@@ -289,6 +295,17 @@ export async function getDashboardSportCard(
     default:
       return null;
   }
+}
+
+/** How many stories a card's rail carries. */
+const CARD_NEWS = 6;
+
+/**
+ * A card's latest news: its stories and recaps, newest first — a clip's page
+ * is a video player, not something to read off a dashboard.
+ */
+function cardNews(stories: NewsStory[]): NewsStory[] {
+  return stories.filter((s) => s.kind !== "video").slice(0, CARD_NEWS);
 }
 
 /** `value` when it is one of `choices`, else null. */

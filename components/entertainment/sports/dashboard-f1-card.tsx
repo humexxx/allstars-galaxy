@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
@@ -10,7 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Eyebrow, Mono } from "@/components/ui/typography";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { getF1DashboardStandings } from "@/lib/services/espn-f1-standings-service";
 import { getF1News } from "@/lib/services/rapidapi-f1-news-service";
@@ -26,17 +24,12 @@ import {
   SPORT_CARD_SECTION,
 } from "@/components/entertainment/sports/shared/dashboard-card-rows";
 import { matchTimeFormat } from "@/components/entertainment/sports/shared/match-time";
-import type { F1NewsImage } from "@/db/schema";
+import { NewsRail } from "@/components/entertainment/sports/shared/news-rail";
+import { fromF1Wire } from "@/lib/sports/news";
 
 const F1_PATH = "/portal/entertainment/sports?sport=f1";
 /** A slider, so more than fits is fine — but not so many nobody reaches the end. */
 const SHOWN = 8;
-
-/** The widest image the provider sent — its list runs small crops to full bleed. */
-function thumbnail(images: F1NewsImage[]): F1NewsImage | null {
-  if (images.length === 0) return null;
-  return images.reduce((best, i) => ((i.width ?? 0) > (best.width ?? 0) ? i : best));
-}
 
 /**
  * Formula 1 on the dashboard: the next race and the wire, in one card.
@@ -102,47 +95,7 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
       </div>
 
       <div className={SPORT_CARD_SECTION}>
-        {news.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <Eyebrow size="sm">Latest news</Eyebrow>
-            {/* Scroll-snap rather than a carousel library: the card is narrow,
-                a swipe is the gesture people already use here, and it adds no
-                dependency. The rail is the same one the travel gallery uses. */}
-            <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1">
-              {news.map((item) => {
-                const image = thumbnail(item.images);
-                return (
-                  <Link
-                    key={item.id}
-                    href={`/news/f1/${item.id}`}
-                    className="group flex w-44 shrink-0 snap-start flex-col gap-2 rounded-lg border bg-card p-2 transition-colors hover:bg-muted/40"
-                  >
-                    {image?.url && (
-                      <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
-                        <Image
-                          src={image.url}
-                          alt={image.alt ?? item.headline}
-                          fill
-                          sizes="176px"
-                          className="object-cover"
-                          // The provider's CDN is whatever ESPN is using that
-                          // week; an allowlist would break the day it changes.
-                          unoptimized
-                        />
-                      </div>
-                    )}
-                    <span className="line-clamp-3 text-xs font-medium leading-snug">
-                      {item.headline}
-                    </span>
-                    <Mono className="mt-auto text-2xs text-muted-foreground">
-                      {format.shortDay(item.firstSeenAt)}
-                    </Mono>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <NewsRail stories={fromF1Wire(news)} format={format} />
       </div>
     </Card>
   );

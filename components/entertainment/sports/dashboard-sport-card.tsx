@@ -26,6 +26,7 @@ import { DashboardSportTables } from "./dashboard-sport-tables";
 import { SPORT_CARD_HEADER, SPORT_CARD_ROWS, SPORT_CARD_SECTION } from "./shared/dashboard-card-rows";
 import { FeatureBox } from "./shared/feature-box";
 import { matchTimeFormat, type MatchTimeFormat } from "./shared/match-time";
+import { NewsRail } from "./shared/news-rail";
 import { StatusPill } from "./shared/status-pill";
 import { TeamBadge } from "./shared/team-badge";
 
@@ -121,6 +122,10 @@ export async function DashboardSportCard({
             )}
           </div>
         )}
+
+        {/* Under the table, in its row: a fourth row would put this card's
+            out of line with the one beside it. */}
+        {card.news && <NewsRail stories={card.news} format={format} />}
       </div>
     </Card>
   );

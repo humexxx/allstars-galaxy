@@ -89,6 +89,8 @@ export type DashboardSportCard = {
   note?: { title: string; text?: string; when?: { label: string; startsAt: string } };
   /** The championship picker, on a sport that has a choice (`SPORT_COMPETITIONS`). */
   competitions?: DashboardCompetitions;
+  /** The latest stories, for a sport with a wire (the NBA's, the NFL's — ESPN). */
+  news?: NewsStory[];
 };
 
 /**

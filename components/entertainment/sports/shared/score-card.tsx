@@ -139,7 +139,8 @@ function Channels({ names }: { names: string[] }) {
       className="flex w-0 min-w-full items-center justify-end gap-0.5 text-2xs text-muted-foreground"
     >
       <Tv aria-hidden className="size-2.5 shrink-0" />
-      <span aria-hidden className="truncate">
+      {/* In the team names' colour: the one line of the column worth spotting. */}
+      <span aria-hidden className="truncate text-foreground">
         {SHORT_CHANNEL[names[0]] ?? names[0]}
       </span>
       <span className="sr-only">On {all}</span>

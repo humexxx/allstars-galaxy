@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { F1_DATA } from "@/lib/data/sports/f1";
@@ -85,6 +85,32 @@ describe("F1View", () => {
 
     fireEvent.click(championship("Drivers"));
     expect(screen.getByText("A.K. Antonelli")).toBeInTheDocument();
+  });
+
+  it("puts each driver's team logo behind the face, not its name on a line of its own", () => {
+    const face = (code: string): string =>
+      `https://a.espncdn.com/combiner/i?img=/i/headshots/rpm/players/full/${code}.png&w=96&h=96&scale=crop`;
+    const data: F1Data = {
+      ...F1_DATA,
+      drivers: F1_DATA.drivers.map((d) => ({ ...d, imageUrl: face(d.code) })),
+      constructors: F1_DATA.constructors.map((c) =>
+        c.shortName === "Mercedes" ? { ...c, logoUrl: "/f1/teams/mercedes.png" } : c
+      ),
+    };
+    render(<F1View data={data} />);
+
+    const row = screen.getByText("A.K. Antonelli").closest("tr")!;
+    // The logo first, behind; the face after it, on top.
+    const [logo, driver] = [...row.querySelectorAll("img")].map((img) => img.getAttribute("src") ?? "");
+    expect(logo).toContain("mercedes.png");
+    expect(driver).toBe(face("ANT"));
+    // The team is said, not shown.
+    expect(within(row).getByText(", Mercedes")).toHaveClass("sr-only");
+    expect(within(row).queryByText("Mercedes")).toBeNull();
+
+    // A team with no logo published draws its livery behind the face.
+    const leclerc = screen.getByText("C. Leclerc").closest("tr")!;
+    expect(within(leclerc).getByText("FER")).toBeInTheDocument();
   });
 
   it.each([

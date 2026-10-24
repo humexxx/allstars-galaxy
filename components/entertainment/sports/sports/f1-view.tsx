@@ -104,7 +104,7 @@ export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps) {
                   </ToggleGroup>
                 </div>
                 {championship === "drivers" ? (
-                  <DriversTable drivers={data.drivers} />
+                  <DriversTable drivers={data.drivers} constructors={data.constructors} />
                 ) : (
                   <ConstructorsTable constructors={data.constructors} />
                 )}
@@ -124,10 +124,18 @@ export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps) {
   );
 }
 
-function DriversTable({ drivers }: { drivers: F1Driver[] }) {
+function DriversTable({
+  drivers,
+  constructors,
+}: {
+  drivers: F1Driver[];
+  constructors: F1Constructor[];
+}) {
   // Faces come from ESPN. Without them the table keeps its flags, in a slot
-  // only as wide as a flag.
+  // only as wide as a flag, and the team's name under the driver's.
   const showsFaces = drivers.some((d) => d.imageUrl);
+  // A driver's team is the constructor's short name ("Red Bull", "RB").
+  const teams = new Map(constructors.flatMap((c) => [[c.name, c], [c.shortName, c]] as const));
   const rows = useShownRows(drivers);
   return (
     <>
@@ -148,21 +156,23 @@ function DriversTable({ drivers }: { drivers: F1Driver[] }) {
                 {d.position}
               </TableCell>
               <TableCell>
-                <div className={cn("flex items-center", showsFaces ? "gap-2 sm:gap-3" : "gap-3")}>
-                  {showsFaces ? (
-                    <Portrait
-                      size="table"
-                      subject={{ name: d.shortName, imageUrl: d.imageUrl, flagUrl: d.flagUrl }}
-                      fallback={<span className="text-base leading-none">{d.flagEmoji}</span>}
-                    />
-                  ) : (
-                    <span className="text-base leading-none">{d.flagEmoji}</span>
-                  )}
-                  <div className="leading-tight">
-                    <Text as="div" weight="medium">{d.shortName}</Text>
-                    <Text variant="small" as="div">{d.team}</Text>
+                {showsFaces ? (
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <DriverAndTeam driver={d} team={teams.get(d.team)} />
+                    <Text as="span" weight="medium">
+                      {d.shortName}
+                      <span className="sr-only">, {d.team}</span>
+                    </Text>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <span className="text-base leading-none">{d.flagEmoji}</span>
+                    <div className="leading-tight">
+                      <Text as="div" weight="medium">{d.shortName}</Text>
+                      <Text variant="small" as="div">{d.team}</Text>
+                    </div>
+                  </div>
+                )}
               </TableCell>
               <TableCell className={cn(NUM, POINTS)}>
                 <Mono className="text-sm font-semibold">{d.points}</Mono>
@@ -179,6 +189,29 @@ function DriversTable({ drivers }: { drivers: F1Driver[] }) {
       </Table>
       <ShowMoreRows rows={rows} className="border-t py-1" />
     </>
+  );
+}
+
+/**
+ * The driver's face with the team's logo half showing behind it, in place of
+ * the team's name on a line of its own: one line a row, so the table is
+ * shorter. The face is ringed in the card's colour to sit apart from it.
+ */
+function DriverAndTeam({ driver, team }: { driver: F1Driver; team?: F1Constructor }) {
+  return (
+    <span className="flex shrink-0 items-center">
+      <Portrait
+        size="table"
+        subject={{ name: driver.team, logoUrl: team?.logoUrl, color: team?.primaryColor }}
+        className="-mr-3 sm:-mr-3.5"
+      />
+      <Portrait
+        size="table"
+        subject={{ name: driver.shortName, imageUrl: driver.imageUrl, flagUrl: driver.flagUrl }}
+        fallback={<span className="text-base leading-none">{driver.flagEmoji}</span>}
+        className="rounded-full ring-2 ring-card"
+      />
+    </span>
   );
 }
 

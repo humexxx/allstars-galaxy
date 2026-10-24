@@ -204,12 +204,16 @@ export type BracketRoundId =
   | "quarter-final"
   | "semi-final"
   | "third-place"
-  | "final";
+  | "final"
+  // A double elimination's columns, numbered in the order they are played.
+  | `round-${number}`;
 
 export type BracketMatch = {
   id: string;
   homeTeamId: string | null;
   awayTeamId: string | null;
+  /** A double elimination's half: the lower bracket is where a team plays on after its first loss. */
+  side?: "upper" | "lower";
   /** When the tie is two-legged, leg scores live here (a tennis draw's sets). */
   legs?: Array<{
     homeScore: number | null;
@@ -231,6 +235,9 @@ export type BracketMatch = {
   /** A series' format: an esports best-of, or an NBA playoff series' seven. */
   bestOf?: 1 | 3 | 5 | 7;
 };
+
+/** A winner's way from one match (`from`) to the next (`to`), by match id. */
+export type BracketLink = { from: string; to: string };
 
 export type BracketRound = {
   id: BracketRoundId;
@@ -744,9 +751,19 @@ export type LolSplit = {
   teams: Team[];
   standings: LolStanding[];
   matches: LolMatch[];
+  /** An international event's play-ins, before its Swiss stage or knockouts. */
+  playIns?: BracketRound[];
+  /** The play-ins' branches, when they are a double elimination (see `playoffLinks`). */
+  playInLinks?: BracketLink[];
   /** Worlds' Swiss stage, between the play-ins and the knockouts. */
   swiss?: SwissStage;
   playoffs?: BracketRound[];
+  /**
+   * Who went where, for a bracket that is not a plain knockout (MSI's double
+   * elimination): each winner's next match. Without it the branches are read
+   * off the rounds, each halving into the next.
+   */
+  playoffLinks?: BracketLink[];
   /** Once the final is decided. */
   champion?: LolChampion;
 };

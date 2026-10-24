@@ -144,3 +144,45 @@ describe("LolView without a match list", () => {
     expect(screen.getByText("No matches to show")).toBeInTheDocument();
   });
 });
+
+describe("LolView, an international event's stages", () => {
+  const playIns: LolSplit["playIns"] = [
+    { id: "round-1", label: "Round 1", matches: [{ id: "p1", homeTeamId: "kt", awayTeamId: "hle", homeScore: 3, awayScore: 1, winnerTeamId: "kt", side: "upper" }] },
+    { id: "round-2", label: "Final", matches: [{ id: "p2", homeTeamId: "kt", awayTeamId: "t1", homeScore: 3, awayScore: 0, winnerTeamId: "kt", side: "upper" }] },
+  ];
+  const tbd = { homeTeamId: null, awayTeamId: null };
+  const undrawn: LolSplit["playoffs"] = [
+    { id: "semi-final", label: "Semifinals", matches: [{ id: "s1", ...tbd }, { id: "s2", ...tbd }] },
+    { id: "final", label: "Finals", matches: [{ id: "f", ...tbd }] },
+  ];
+  const swiss: LolSplit["swiss"] = { winsToAdvance: 3, lossesToExit: 3, rounds: [], exits: [] };
+  const during: LolSplit = { ...worlds, champion: undefined, matches: [], playIns, swiss, playoffs: undrawn };
+  const tabs = (): string[] => screen.getAllByRole("tab").map((t) => t.textContent ?? "");
+
+  it("is a tab a stage, in the order played, on the Swiss stage while the playoffs are undrawn", () => {
+    renderView({ splits: [during, lck] });
+    expect(tabs()).toEqual(["Play-ins", "Swiss stage", "Playoffs"]);
+    expect(openTab()).toBe("Swiss stage");
+    expect(screen.getByRole("tab", { name: "Playoffs" })).toBeDisabled();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Play-ins" }), { button: 0 });
+    expect(screen.getAllByText("Final").length).toBeGreaterThan(0);
+  });
+
+  it("opens on the playoffs once they are drawn", () => {
+    renderView({ splits: [{ ...during, playoffs: worlds.playoffs }, lck] });
+    expect(openTab()).toBe("Playoffs");
+    expect(screen.getByRole("tab", { name: "Playoffs" })).not.toBeDisabled();
+  });
+
+  it("gives an event with no Swiss stage, as MSI, its play-ins and its playoffs", () => {
+    const msi: LolSplit = { ...worlds, region: "msi", name: "MSI 2026", playIns, swiss: undefined };
+    renderView({ splits: [msi, lck] });
+    expect(tabs()).toEqual(["Play-ins", "Playoffs"]);
+    expect(openTab()).toBe("Playoffs");
+  });
+
+  it("leaves a league its matches and its table", () => {
+    renderView({ splits: [lck, during] });
+    expect(tabs()).toEqual(["Matches", "Standings"]);
+  });
+});

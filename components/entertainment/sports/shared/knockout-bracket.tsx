@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Mono } from "@/components/ui/typography";
 import { isBracketDrawn } from "@/lib/sports/bracket";
 import { cn } from "@/lib/utils";
-import type { BracketMatch, BracketRound, Team } from "@/types/sports";
+import type { BracketLink, BracketMatch, BracketRound, Team } from "@/types/sports";
 
 import {
   BracketCanvas,
@@ -32,6 +32,12 @@ type KnockoutBracketProps = {
   renderMatch?: (match: BracketMatch, teams: Map<string, Team>) => ReactNode;
   /** Passed to the canvas: a column never narrows past this. */
   minColumnWidth?: string;
+  /**
+   * A bracket that is not a plain knockout (a double elimination) brings its
+   * own branches, each winner to its next match. It is drawn one-sided, its
+   * rounds in the order played, the lower bracket's ties under the upper's.
+   */
+  links?: BracketLink[];
 };
 
 /** Index of the CURRENT round: first with an undecided tie; a fully decided
@@ -132,8 +138,13 @@ export function KnockoutBracket({
   className,
   renderMatch,
   minColumnWidth,
+  links,
 }: KnockoutBracketProps) {
-  const tree = useMemo(() => treeOrder(rounds.filter((r) => r.id !== "third-place")), [rounds]);
+  const tree = useMemo(() => {
+    const main = rounds.filter((r) => r.id !== "third-place");
+    // Given branches mean the rounds do not halve: nothing to sort by them.
+    return links ? { rounds: main, paired: main.map(() => false) } : treeOrder(main);
+  }, [rounds, links]);
   const thirdPlace = rounds.find((r) => r.id === "third-place");
   const viewport = useRef<HTMLDivElement>(null);
   const [ends, setEnds] = useState({ overflow: false, atStart: true, atEnd: true });
@@ -154,31 +165,54 @@ export function KnockoutBracket({
     });
     const before = tree.rounds.slice(0, last);
     const final = tree.rounds[last];
-    const columns: BracketColumn[] = [
-      ...before.map((round, i) => column(round, i, "top", halves(round.matches)[0])),
-      {
-        key: `${final?.id ?? "final"}-centre`,
-        label: final?.label ?? "",
-        current: last === current,
-        items: [
-          ...(final?.matches ?? []).map((m) => item(m)),
-          ...(thirdPlace?.matches ?? []).map((m) => item(m, thirdPlace?.label)),
-        ],
-      },
-      ...before.map((round, i) => column(round, i, "bottom", halves(round.matches)[1])).reverse(),
-    ];
-    const edges: BracketEdge[] = before.flatMap((round, i) => {
-      if (!tree.paired[i]) return [];
-      return tree.rounds[i + 1].matches.flatMap((target, k) =>
-        [round.matches[k * 2], round.matches[k * 2 + 1]]
-          .filter((feeder): feeder is BracketMatch => Boolean(feeder))
-          .map((feeder) => ({ from: feeder.id, to: target.id }))
-      );
-    });
-    // The top half's column of the round being played; the final's own once
-    // only the final is left.
+    const finalColumn: BracketColumn = {
+      key: `${final?.id ?? "final"}-centre`,
+      label: final?.label ?? "",
+      current: last === current,
+      items: [
+        ...(final?.matches ?? []).map((m) => item(m)),
+        ...(thirdPlace?.matches ?? []).map((m) => item(m, thirdPlace?.label)),
+      ],
+    };
+    // Two halves only for a knockout: every round before the final splits
+    // evenly, and from the second on each feeds the next (the NFL's wild-card
+    // round of six does not halve into four, but the rest does). A double
+    // elimination (MSI's, a league's) has no halves.
+    const twoSided =
+      !links &&
+      last > 0 &&
+      final?.matches.length === 1 &&
+      before.every((r, i) => r.matches.length % 2 === 0 && (i === 0 || tree.paired[i]));
+    const columns: BracketColumn[] = twoSided
+      ? [
+          ...before.map((round, i) => column(round, i, "top", halves(round.matches)[0])),
+          finalColumn,
+          ...before.map((round, i) => column(round, i, "bottom", halves(round.matches)[1])).reverse(),
+        ]
+      : [
+          ...before.map((round, i) => ({
+            ...column(round, i, "all", round.matches),
+            // The lower bracket's first tie in each round says so.
+            items: round.matches.map((m, k) =>
+              item(m, m.side === "lower" && round.matches[k - 1]?.side !== "lower" ? "Lower bracket" : undefined)
+            ),
+          })),
+          finalColumn,
+        ];
+    const edges: BracketEdge[] =
+      links ??
+      before.flatMap((round, i) => {
+        if (!tree.paired[i]) return [];
+        return tree.rounds[i + 1].matches.flatMap((target, k) =>
+          [round.matches[k * 2], round.matches[k * 2 + 1]]
+            .filter((feeder): feeder is BracketMatch => Boolean(feeder))
+            .map((feeder) => ({ from: feeder.id, to: target.id }))
+        );
+      });
+    // The round being played (its top half's column, two-sided); the final's
+    // own once only the final is left.
     return { columns, edges, opening: Math.min(current, last) };
-  }, [tree, thirdPlace, teams, renderMatch]);
+  }, [tree, thirdPlace, teams, renderMatch, links]);
 
   const readEnds = useCallback(() => {
     const el = viewport.current;

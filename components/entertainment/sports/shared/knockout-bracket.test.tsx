@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
-import type { BracketMatch, BracketRound, Team } from "@/types/sports";
+import type { BracketLink, BracketMatch, BracketRound, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "./knockout-bracket";
 
@@ -28,10 +28,10 @@ const rounds: BracketRound[] = SIZES.map((size, r) => ({
   ),
 }));
 
-function renderBracket(list: BracketRound[] = rounds): HTMLElement {
+function renderBracket(list: BracketRound[] = rounds, links?: BracketLink[]): HTMLElement {
   const { container } = render(
     <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
-      <KnockoutBracket rounds={list} teams={teams} />
+      <KnockoutBracket rounds={list} teams={teams} links={links} />
     </ReaderTimeZoneProvider>
   );
   return container;
@@ -96,6 +96,50 @@ describe("KnockoutBracket", () => {
     const all = columns(renderBracket(withThird));
     expect(all).toHaveLength(11);
     expect(all[5].textContent).toContain("Third place");
+  });
+
+  it("draws a double elimination one-sided, its own branches, the lower bracket captioned", () => {
+    const m = (id: string, home: string, away: string, side: "upper" | "lower"): BracketMatch => ({
+      id,
+      homeTeamId: home,
+      awayTeamId: away,
+      winnerTeamId: home,
+      side,
+    });
+    // Four rounds of even sizes that do not halve: no halves to split.
+    const doubleElimination: BracketRound[] = [
+      { id: "round-1", label: "Round 1", matches: [m("a", "t0", "t1", "upper"), m("b", "t2", "t3", "upper")] },
+      { id: "round-2", label: "Round 2", matches: [m("c", "t0", "t2", "upper"), m("d", "t1", "t3", "lower")] },
+      { id: "round-3", label: "Round 3", matches: [m("e", "t2", "t1", "lower")] },
+      { id: "round-4", label: "Final", matches: [m("f", "t0", "t2", "upper")] },
+    ];
+    const container = renderBracket(doubleElimination, [
+      { from: "a", to: "c" },
+      { from: "b", to: "c" },
+      { from: "d", to: "e" },
+      { from: "c", to: "f" },
+      { from: "e", to: "f" },
+    ]);
+    const all = columns(container);
+    expect(all.map(heading)).toEqual(["Round 1", "Round 2", "Round 3", "Final"]);
+    expect(all[1].textContent).toContain("Lower bracket");
+    expect(all[0].textContent).not.toContain("Lower bracket");
+  });
+
+  it("splits no even-sized rounds that do not halve past the first, given no branches", () => {
+    const tie = (id: string, home: string | null, away: string | null): BracketMatch => ({
+      id,
+      homeTeamId: home,
+      awayTeamId: away,
+    });
+    // A league's double elimination by its schedule's blocks: 4, 2, 2, 1.
+    const even: BracketRound[] = [
+      { id: "round-1", label: "Round 1", matches: [tie("a", "t0", "t1"), tie("b", "t2", "t3"), tie("c", "t4", "t5"), tie("d", "t6", "t7")] },
+      { id: "round-2", label: "Upper final", matches: [tie("e", "t0", "t2"), tie("g", "t4", "t6")] },
+      { id: "round-3", label: "Lower final", matches: [tie("h", "t1", "t3"), tie("i", "t5", "t7")] },
+      { id: "final", label: "Final", matches: [tie("f", null, null)] },
+    ];
+    expect(columns(renderBracket(even)).map(heading)).toEqual(["Round 1", "Upper final", "Lower final", "Final"]);
   });
 
   it("has no buttons while the whole bracket fits", () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactElement } from "react";
-import { CalendarX, Trophy } from "lucide-react";
+import { CalendarX, Lock, Trophy } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -64,14 +64,22 @@ export function LolView({ data }: LolViewProps) {
   const playoffsDrawn = playoffs !== null && isBracketDrawn(playoffs);
   // Worlds' main stage until its knockouts are drawn, so it is where to land.
   const swiss = split.swiss ?? null;
+  const playIns = split.playIns && split.playIns.length > 0 ? split.playIns : null;
   const hasMatches = split.matches.length > 0;
+  // An international event is its stages, a tab each in the order they are
+  // played — play-ins, Swiss stage, playoffs — and lands on the latest one
+  // under way: the playoffs once drawn (locked till then), else the Swiss
+  // stage, else the play-ins. A league keeps its matches and its table.
+  const stages = Boolean(split.international) && (playIns !== null || swiss !== null || playoffs !== null);
   const opening = playoffsDrawn
     ? "playoffs"
     : swiss
       ? "swiss"
-      : !hasMatches && split.standings.length > 0
-        ? "standings"
-        : "matches";
+      : stages && playIns
+        ? "play-ins"
+        : !hasMatches && split.standings.length > 0
+          ? "standings"
+          : "matches";
 
   return (
     // Keyed by region: switching to a region without playoffs while on the
@@ -103,13 +111,19 @@ export function LolView({ data }: LolViewProps) {
         }
         tabs={
           <TabsList variant="line">
-            <TabsTrigger value="matches">Matches</TabsTrigger>
+            {!stages && <TabsTrigger value="matches">Matches</TabsTrigger>}
+            {stages && playIns && <TabsTrigger value="play-ins">Play-ins</TabsTrigger>}
             {/* Worlds' Swiss stage publishes no table until it is played. */}
             {split.standings.length > 0 && (
               <TabsTrigger value="standings">Standings</TabsTrigger>
             )}
             {swiss && <TabsTrigger value="swiss">Swiss stage</TabsTrigger>}
-            {playoffs && <TabsTrigger value="playoffs">Playoffs</TabsTrigger>}
+            {playoffs && (
+              <TabsTrigger value="playoffs" disabled={stages && !playoffsDrawn}>
+                {stages && !playoffsDrawn && <Lock aria-hidden />}
+                Playoffs
+              </TabsTrigger>
+            )}
           </TabsList>
         }
       >
@@ -121,6 +135,16 @@ export function LolView({ data }: LolViewProps) {
               teams={teamsMap}
               upcoming={data.upcoming ?? []}
             />
+          )}
+
+          {stages && playIns && (
+            <TabsContent value="play-ins">
+              <Card size="sm">
+                <CardContent>
+                  <KnockoutBracket rounds={playIns} teams={teamsMap} links={split.playInLinks} />
+                </CardContent>
+              </Card>
+            </TabsContent>
           )}
 
           <TabsContent value="matches">
@@ -159,7 +183,7 @@ export function LolView({ data }: LolViewProps) {
             <TabsContent value="playoffs">
               <Card size="sm">
                 <CardContent>
-                  <KnockoutBracket rounds={playoffs} teams={teamsMap} />
+                  <KnockoutBracket rounds={playoffs} teams={teamsMap} links={split.playoffLinks} />
                 </CardContent>
               </Card>
             </TabsContent>

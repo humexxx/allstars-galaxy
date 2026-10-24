@@ -18,7 +18,7 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { raceSessions, weekendWindow } from "@/lib/sports/f1-weekend";
+import { raceSessions, SESSION_LABEL, weekendNow, weekendWindow } from "@/lib/sports/f1-weekend";
 import type {
   F1ClassificationRow,
   F1Driver,
@@ -32,6 +32,7 @@ import { F1CircuitOutline } from "./f1-circuit-outline";
 import { racePlace, raceWhen, SprintBadge } from "./f1-race-labels";
 import { Podium, sessionDriver, SessionList } from "./f1-race-parts";
 import { Portrait } from "./shared/portrait";
+import { ShowMoreRows, useShownRows } from "./shared/show-more";
 import { useMatchTime } from "./shared/time-zone-context";
 import { StatusPill } from "./shared/status-pill";
 import { SportsTh } from "./shared/table-primitives";
@@ -143,6 +144,11 @@ type F1RaceSheetProps = {
   /** Its sessions' results, practice to race. */
   weekend?: WeekendState;
   onRetryWeekend?: () => void;
+  /**
+   * The race on now or next: beside its circuit goes the session on track or
+   * the next one, by name and time, rather than the race's own start.
+   */
+  current?: boolean;
 };
 
 /**
@@ -163,6 +169,7 @@ export function F1RaceSheet({
   onRetry,
   weekend,
   onRetryWeekend,
+  current = false,
 }: F1RaceSheetProps): JSX.Element {
   const isMobile = useIsMobile();
   return (
@@ -186,6 +193,7 @@ export function F1RaceSheet({
             onRetry={onRetry}
             weekend={weekend}
             onRetryWeekend={onRetryWeekend}
+            current={current}
           />
         )}
       </SheetContent>
@@ -201,11 +209,15 @@ function RaceDetails({
   onRetry,
   weekend,
   onRetryWeekend,
+  current,
 }: Omit<F1RaceSheetProps, "race" | "open" | "onOpenChange" | "returnFocus"> & {
   race: F1Race;
 }): JSX.Element {
   const format = useMatchTime();
   const now = useNow();
+  // The weekend under way, or about to be: what is on track, else what is next.
+  const state = current && now !== null ? weekendNow(race, now) : {};
+  const session = state.live ?? state.next;
   const hasSessions = raceSessions(race).length > 0;
   const hasMarks = race.pole || race.fastestLap || race.sprintWinner;
   // The race of a finished weekend is the classification below, with points.
@@ -236,10 +248,19 @@ function RaceDetails({
           <F1CircuitOutline circuitId={race.circuitId} className="size-24 text-foreground" />
           <div className="flex min-w-0 flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <StatusPill status={race.status} />
+              {session ? (
+                <StatusPill
+                  status={state.live ? "live" : "upcoming"}
+                  label={`${state.live ? "On track" : "Next"} · ${SESSION_LABEL[session.kind]}`}
+                />
+              ) : (
+                <StatusPill status={race.status} />
+              )}
               {race.sprint && <SprintBadge />}
             </div>
-            <Mono className="text-sm">{raceWhen(race, format)}</Mono>
+            <Mono className="text-sm">
+              {session ? format.dayTime(session.startsAt) : raceWhen(race, format)}
+            </Mono>
           </div>
         </div>
 
@@ -345,6 +366,7 @@ function SessionResults({
 }): JSX.Element {
   const [picked, setPicked] = useState<F1SessionKind>(sessions[sessions.length - 1].kind);
   const shown = sessions.find((s) => s.kind === picked) ?? sessions[sessions.length - 1];
+  const rows = useShownRows(shown.rows, shown.kind);
   return (
     <div className="flex flex-col gap-3">
       {sessions.length > 1 && (
@@ -374,7 +396,7 @@ function SessionResults({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {shown.rows.map((row, i) => {
+            {rows.shown.map((row, i) => {
               const { name, subject } = sessionDriver(row, drivers);
               return (
                 <TableRow key={`${row.code}-${i}`}>
@@ -410,6 +432,7 @@ function SessionResults({
             })}
           </TableBody>
         </Table>
+        <ShowMoreRows rows={rows} className="border-t py-1" />
       </div>
     </div>
   );
@@ -490,6 +513,11 @@ function Classification({
     );
   }
 
+  return <ClassificationTable rows={state.rows} />;
+}
+
+function ClassificationTable({ rows: all }: { rows: F1ClassificationRow[] }): JSX.Element {
+  const rows = useShownRows(all);
   return (
     <div className="overflow-hidden rounded-lg border">
       <Table>
@@ -502,7 +530,7 @@ function Classification({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {state.rows.map((row, i) => (
+          {rows.shown.map((row, i) => (
             <TableRow key={`${row.code}-${i}`}>
               <TableCell className="pl-3">
                 <Mono className="text-xs text-muted-foreground">{row.position}</Mono>
@@ -534,6 +562,7 @@ function Classification({
           ))}
         </TableBody>
       </Table>
+      <ShowMoreRows rows={rows} className="border-t py-1" />
     </div>
   );
 }

@@ -59,6 +59,37 @@ afterEach(() => {
 });
 
 describe("F1RaceSheet", () => {
+  // Beside the circuit: the pill and the time under it.
+  const besideCircuit = (pill: string): HTMLElement =>
+    within(sheet()).getByText(pill).closest("div")!.parentElement!;
+
+  function renderCurrent(race: F1Race): void {
+    render(
+      <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
+        <F1RaceSheet race={race} open onOpenChange={vi.fn()} season={2026} drivers={DRIVERS} onRetry={vi.fn()} current />
+      </ReaderTimeZoneProvider>
+    );
+  }
+
+  it("names the next session of the race on now or next, and its time, not the race's", () => {
+    renderCurrent(AUSTIN);
+    // 17:30Z is 11:30 AM in Costa Rica.
+    expect(besideCircuit("Next · Practice 1")).toHaveTextContent("Fri, Oct 23, 11:30 AM");
+    expect(besideCircuit("Next · Practice 1")).not.toHaveTextContent("Oct 25");
+  });
+
+  it("names the session on track while one is", () => {
+    vi.setSystemTime(new Date("2026-10-24T17:20:00Z"));
+    renderCurrent(AUSTIN);
+    expect(besideCircuit("On track · Sprint")).toHaveTextContent("Sat, Oct 24, 11:00 AM");
+  });
+
+  it("dates any other race by its Grand Prix", () => {
+    renderSheet(AUSTIN);
+    expect(within(sheet()).queryByText(/^Next ·/)).toBeNull();
+    expect(besideCircuit("Upcoming")).toHaveTextContent("Sun, Oct 25, 2:00 PM");
+  });
+
   it("heads a race with its round, name and place, and its weekend in the reader's zone", () => {
     renderSheet(AUSTIN);
     expect(within(sheet()).getByText("Round 18 · 2026")).toBeInTheDocument();

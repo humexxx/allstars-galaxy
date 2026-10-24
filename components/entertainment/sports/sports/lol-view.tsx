@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
-import { CalendarX, Lock, RotateCw, Trophy } from "lucide-react";
+import { CalendarX, Lock, RotateCw } from "lucide-react";
 
 import { getLolSplitAction } from "@/app/actions/lol";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
+import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { isBracketDrawn } from "@/lib/sports/bracket";
 import type {
@@ -40,6 +40,7 @@ import type {
   Team,
 } from "@/types/sports";
 
+import { ChampionCard } from "../shared/champion-card";
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { Last5Form } from "../shared/last-5-form";
 import { SportShell } from "../shared/sport-shell";
@@ -358,38 +359,15 @@ function LolSeasonEnd({
   upcoming: LolUpcoming[];
 }): ReactElement {
   const format = useMatchTime();
-  const { teamId, final } = champion;
-  const atHome = final.homeTeamId === teamId;
-  const winner = teams.get(teamId);
-  const runnerUpId = atHome ? final.awayTeamId : final.homeTeamId;
-  const runnerUp = runnerUpId ? teams.get(runnerUpId) : undefined;
-  const won = atHome ? final.homeScore : final.awayScore;
-  const lost = atHome ? final.awayScore : final.homeScore;
-  const result =
-    runnerUp && won != null && lost != null
-      ? `Beat ${runnerUp.shortName} ${won}–${lost} in the final`
-      : "Won the final";
-
   return (
-    <Card size="sm">
-      <CardContent className="flex flex-col gap-4 @2xl:flex-row @2xl:items-center @2xl:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          {winner && <TeamBadge team={winner} size="lg" />}
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <Eyebrow size="sm" as="div" className="flex items-center gap-1.5">
-              <Trophy aria-hidden className="size-3.5 text-warning" />
-              {split.name} champions
-            </Eyebrow>
-            <Heading level="h5" as="p" className="truncate">
-              {winner?.name ?? teamId}
-            </Heading>
-            <Text variant="small" as="div">
-              {final.date ? `${result} · ${format.shortDay(final.date)}` : result}
-            </Text>
-          </div>
-        </div>
-        {/* Only once Lolesports lists them: before that there is no date to give. */}
-        {upcoming.length > 0 && (
+    <ChampionCard
+      competition={split.name}
+      championId={champion.teamId}
+      final={champion.final}
+      teams={teams}
+      aside={
+        // Only once Lolesports lists them: before that there is no date to give.
+        upcoming.length > 0 && (
           <div className="flex flex-col gap-1.5 border-t pt-3 @2xl:min-w-64 @2xl:border-t-0 @2xl:border-l @2xl:pt-0 @2xl:pl-4">
             <Eyebrow size="sm" as="div">
               Next up
@@ -398,16 +376,14 @@ function LolSeasonEnd({
               {upcoming.map((u) => (
                 <li key={u.region} className="flex items-center justify-between gap-3 text-xs">
                   <span className="truncate font-medium">{u.name}</span>
-                  <Mono className="shrink-0 text-2xs text-muted-foreground">
-                    {format.day(u.startDate)}
-                  </Mono>
+                  <Mono className="shrink-0 text-2xs text-muted-foreground">{format.day(u.startDate)}</Mono>
                 </li>
               ))}
             </ul>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        )
+      }
+    />
   );
 }
 

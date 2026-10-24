@@ -81,3 +81,10 @@ if (typeof globalThis.IntersectionObserver === "undefined") {
     }
   } as unknown as typeof IntersectionObserver;
 }
+
+// jsdom draws nothing on a canvas and logs "Not implemented" for every
+// `getContext`. No context reads as a browser that cannot draw, which the
+// confetti already steps aside for.
+if (typeof HTMLCanvasElement !== "undefined") {
+  HTMLCanvasElement.prototype.getContext = (() => null) as HTMLCanvasElement["getContext"];
+}

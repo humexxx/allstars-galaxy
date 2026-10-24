@@ -4,13 +4,6 @@ import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -19,9 +12,10 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mono, Text } from "@/components/ui/typography";
-import { currentTournament, drawIsOut, featuredTournament } from "@/lib/sports/racquet";
+import { tournamentPath } from "@/lib/sports/paths";
+import { currentTournament, drawIsOut, featuredTournament, seasonOf } from "@/lib/sports/racquet";
 import { cn } from "@/lib/utils";
-import type { NewsStory, RacquetData, RacquetTour, RacquetTournament } from "@/types/sports";
+import type { NewsStory, RacquetData, RacquetTournament } from "@/types/sports";
 
 import { NewsTab } from "../shared/news-list";
 import { OverviewSplit } from "../shared/overview-split";
@@ -30,31 +24,19 @@ import { SportShell } from "../shared/sport-shell";
 import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportsTh, TableCard } from "../shared/table-primitives";
 import { useSportsToday } from "../shared/time-zone-context";
-import {
-  drawKey,
-  useRacquetDraws,
-  type DrawState,
-  type DrawVariant,
-  type RacquetSport,
-} from "./racquet-draw";
-import { RacquetTournamentSheet } from "./racquet-tournament-sheet";
-import { findTournament, RacquetDrawTab, RacquetOverview, seasonOf } from "./racquet-tournaments";
-
-type TourTab = {
-  value: string;
-  label: string;
-  data: RacquetData;
-  /** The tour's news (tennis's, from ESPN); padel has none. */
-  news?: NewsStory[];
-};
+import { useRacquetDraws, type DrawState, type DrawVariant, type RacquetSport } from "./racquet-draw";
+import { RacquetOverview } from "./racquet-tournaments";
 
 type RacquetViewProps = {
-  /** Which provider's draws the sheet asks for, and how a tie is drawn. */
+  /** Which provider's draws the view asks for, and how a tie is drawn. */
   sport: RacquetSport;
   emoji: string;
   title: string;
   subtitle: string;
-  tours: TourTab[];
+  /** The men's tour: the hub follows no women's tour. */
+  data: RacquetData;
+  /** The tour's news (tennis's, from ESPN); padel has none. */
+  news?: NewsStory[];
   /** `?tab=news` opens on the news. */
   initialTab?: string;
 };
@@ -73,60 +55,40 @@ function shippedDraw(t: RacquetTournament, data: RacquetData): DrawState {
   };
 }
 
-export function RacquetView({ sport, emoji, title, subtitle, tours, initialTab }: RacquetViewProps) {
+/**
+ * Padel and tennis: Overview (the tournament on now or next beside the
+ * rankings, the season under it) and, with news, News. Every tournament
+ * opens on its own page, its whole draw there.
+ */
+export function RacquetView({ sport, emoji, title, subtitle, data, news, initialTab }: RacquetViewProps) {
   const today = useSportsToday();
-  const defaultTour = tours[0]?.value ?? "main";
-  const [tourValue, setTourValue] = useState<string>(defaultTour);
-  const activeTour = tours.find((t) => t.value === tourValue) ?? tours[0];
-  const data = activeTour.data;
-  const hasNews = tours.some((t) => (t.news?.length ?? 0) > 0);
+  const hasNews = (news?.length ?? 0) > 0;
   const variant: DrawVariant = sport === "padel" ? "pair" : "player";
 
-  // Every tournament being played, and the one picked of them, per tour. The
-  // Overview features it, else the first, else the next to start; the Draw
-  // tab draws it, else the first, else the one just finished.
+  // Every tournament being played, and the one picked of them. The Overview
+  // features it, else the first, else the next to start.
   const onNow = data.tournaments.filter((t) => t.status === "live");
-  const [picked, setPicked] = useState<Partial<Record<RacquetTour, string>>>({});
-  const pickedLive = onNow.find((t) => t.id === picked[data.tour]);
+  const [picked, setPicked] = useState<string | null>(null);
+  const pickedLive = onNow.find((t) => t.id === picked);
   const current = pickedLive ?? currentTournament(data.tournaments);
   const featured =
     pickedLive ?? featuredTournament(data.tournaments) ?? featuredTournament(seasonOf(data));
-  const pick = (id: string): void => setPicked((p) => ({ ...p, [data.tour]: id }));
   const { draws, load } = useRacquetDraws(sport);
-  // Which tournament the sheet shows outlives whether it is open, so the
-  // sheet keeps its content while it slides away.
-  const [opened, setOpened] = useState<{ tour: RacquetTour; id: string } | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const openedData = tours.find((t) => t.data.tour === opened?.tour)?.data;
-  const openedTournament = opened && openedData ? findTournament(openedData, opened.id) : undefined;
-
-  const drawFor = (t: RacquetTournament, tourData: RacquetData): DrawState => {
-    if (t.bracket?.length) return shippedDraw(t, tourData);
-    if (!drawIsOut(t.status, t.startDate, today)) return { status: "pending" };
-    return draws[drawKey(tourData.tour, t.id)] ?? { status: "loading" };
-  };
 
   // The feed ships the current draw when it can; when it could not (the
-  // provider failed that refresh), Current asks for it like the sheet does,
-  // instead of standing on an empty draw.
-  const currentKey = current ? drawKey(data.tour, current.id) : null;
+  // provider failed that refresh), the view asks for it, for the round under
+  // way and the seeds, instead of standing on an empty draw.
   const currentNeedsLoad =
     current !== undefined && !current.bracket?.length && drawIsOut(current.status, current.startDate, today);
-  const currentKnown = currentKey ? draws[currentKey] : undefined;
+  const currentKnown = current ? draws[current.id] : undefined;
   useEffect(() => {
-    if (current && currentNeedsLoad && !currentKnown) load(data.tour, current.id);
-  }, [current, currentNeedsLoad, currentKnown, data.tour, load]);
-  const currentDraw: DrawState = current ? drawFor(current, data) : { status: "pending" };
-
-  const openTournament = (id: string): void => {
-    const t = findTournament(data, id);
-    if (!t) return;
-    setOpened({ tour: data.tour, id });
-    setSheetOpen(true);
-    const known = draws[drawKey(data.tour, id)];
-    const needsLoad = !t.bracket?.length && drawIsOut(t.status, t.startDate, today);
-    if (needsLoad && (!known || known.status === "error")) load(data.tour, id);
-  };
+    if (current && currentNeedsLoad && !currentKnown) load(current.id);
+  }, [current, currentNeedsLoad, currentKnown, load]);
+  const currentDraw: DrawState | undefined = !current
+    ? undefined
+    : current.bracket?.length
+      ? shippedDraw(current, data)
+      : (currentKnown ?? (currentNeedsLoad ? { status: "loading" } : { status: "pending" }));
 
   return (
     <Tabs defaultValue={initialTab === "news" && hasNews ? "news" : "overview"} className="gap-6">
@@ -134,27 +96,9 @@ export function RacquetView({ sport, emoji, title, subtitle, tours, initialTab }
         emoji={emoji}
         title={title}
         subtitle={subtitle}
-        controls={
-          tours.length > 1 ? (
-            <Select value={tourValue} onValueChange={setTourValue}>
-              <SelectTrigger className="w-56" aria-label="Tour">
-                <SelectValue placeholder="Tour" />
-              </SelectTrigger>
-              <SelectContent>
-                {tours.map((tour) => (
-                  <SelectItem key={tour.value} value={tour.value}>
-                    {tour.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null
-        }
         tabs={
           <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="draw">Draw</TabsTrigger>
-            {/* For either tour, so switching tours never strands the tab. */}
             {hasNews && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }
@@ -166,31 +110,18 @@ export function RacquetView({ sport, emoji, title, subtitle, tours, initialTab }
           <OverviewSplit
             matches={
               <RacquetOverview
-                key={tourValue}
                 data={data}
                 featured={featured}
                 draw={featured && featured.id === current?.id ? currentDraw : undefined}
                 variant={variant}
                 today={today}
                 onNow={onNow}
-                onPick={pick}
-                onOpen={openTournament}
+                onPick={setPicked}
+                hrefFor={(id) => tournamentPath(sport, id)}
               />
             }
-            table={data.rankings.length > 0 && <RankingsTable key={tourValue} data={data} />}
+            table={data.rankings.length > 0 && <RankingsTable data={data} />}
             tableLabel="Rankings"
-          />
-        </TabsContent>
-        {/* The bracket, the whole width of the page, and the whole screen on "Expand". */}
-        <TabsContent value="draw">
-          <RacquetDrawTab
-            tournament={current}
-            draw={currentDraw}
-            variant={variant}
-            onOpen={openTournament}
-            onRetry={() => current && load(data.tour, current.id)}
-            onNow={onNow}
-            onPick={pick}
           />
         </TabsContent>
 
@@ -198,7 +129,7 @@ export function RacquetView({ sport, emoji, title, subtitle, tours, initialTab }
         {hasNews && (
           <TabsContent value="news">
             <NewsTab
-              stories={activeTour.news ?? []}
+              stories={news ?? []}
               interest={{
                 names: data.rankings.slice(0, 5).map((p) => p.shortName.split(" ").slice(-1)[0] ?? ""),
                 places: featured ? [featured.name, featured.location] : [],
@@ -207,18 +138,6 @@ export function RacquetView({ sport, emoji, title, subtitle, tours, initialTab }
           </TabsContent>
         )}
       </SportShell>
-      <RacquetTournamentSheet
-        tournament={openedTournament}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        draw={
-          openedTournament && openedData
-            ? drawFor(openedTournament, openedData)
-            : { status: "pending" }
-        }
-        variant={variant}
-        onRetry={() => opened && load(opened.tour, opened.id)}
-      />
     </Tabs>
   );
 }

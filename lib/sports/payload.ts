@@ -39,7 +39,7 @@ export type SportPayload = (
     }
   | { sport: "lol"; data: LolData }
   | { sport: "padel"; data: PadelData }
-  | { sport: "tennis"; data: TennisData; news?: Record<keyof TennisData, NewsStory[]> }
+  | { sport: "tennis"; data: TennisData; news?: NewsStory[] }
   | { sport: "nba"; data: NbaData; news?: NewsStory[] }
   | { sport: "nfl"; data: NflData; news?: NewsStory[] }
 ) & {

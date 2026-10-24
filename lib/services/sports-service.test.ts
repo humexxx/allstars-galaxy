@@ -191,13 +191,13 @@ describe("setSportFavorite", () => {
 
 describe("setSportCompetition", () => {
   it("updates only the caller's favourite row for that sport and hands it back", async () => {
-    const row = { id: "a", userId: USER_ID, sportId: "tennis", competition: "wta", createdAt: new Date() };
+    const row = { id: "a", userId: USER_ID, sportId: "lol", competition: "lck", createdAt: new Date() };
     const chain = mockUpdate([row]);
 
-    await expect(setSportCompetition(USER_ID, "tennis", "wta")).resolves.toEqual(row);
+    await expect(setSportCompetition(USER_ID, "lol", "lck")).resolves.toEqual(row);
 
     expect(dbMock.update).toHaveBeenCalledOnce();
-    expect(chain.set).toHaveBeenCalledWith({ competition: "wta" });
+    expect(chain.set).toHaveBeenCalledWith({ competition: "lck" });
     expect(chain.where).toHaveBeenCalledOnce();
     // Never an insert: a card, and so a choice, exists only for a favourite.
     expect(dbMock.insert).not.toHaveBeenCalled();
@@ -214,7 +214,7 @@ describe("setSportCompetition", () => {
   it("is null when the sport is not one of the caller's favourites", async () => {
     mockUpdate([]);
 
-    await expect(setSportCompetition(USER_ID, "padel", "women")).resolves.toBeNull();
+    await expect(setSportCompetition(USER_ID, "lol", "lck")).resolves.toBeNull();
   });
 });
 
@@ -470,11 +470,12 @@ describe("getDashboardSportCard", () => {
     });
   });
 
-  it("gives tennis its tournament and both tours' rankings, with flags for the players", async () => {
+  it("gives tennis its tournament and the ATP's rankings, with flags for the players", async () => {
     const card = (await getDashboardSportCard("tennis"))!;
 
     expect(card.featured).toBeUndefined();
-    expect(card.tables.map((t) => t.label)).toEqual(["ATP", "WTA"]);
+    expect(card.context).toBe("ATP");
+    expect(card.tables.map((t) => t.label)).toEqual(["Rankings"]);
     expect(card.tables[0].rows[0]).toMatchObject({ position: 1, flagEmoji: expect.any(String) });
     expect(card.tables[0].rows[0].code).toBeUndefined();
   });
@@ -517,38 +518,16 @@ describe("getDashboardSportCard", () => {
     expect(card.competitions?.value).toBe("uefa-champions-league");
   });
 
-  it("narrows tennis to the tour it is set to, and names it under the title", async () => {
-    const both = (await getDashboardSportCard("tennis"))!;
-    const wta = (await getDashboardSportCard("tennis", "wta"))!;
+  it("offers no tour to pick for tennis or padel, whatever is stored: men only", async () => {
+    // A favourite set to the WTA or the women's draw before they were dropped.
+    const tennis = (await getDashboardSportCard("tennis", "wta"))!;
+    const padel = (await getDashboardSportCard("padel", "women"))!;
 
-    expect(both.context).toBe("Both tours");
-    expect(both.competitions).toEqual({
-      value: null,
-      automatic: "Both tours",
-      options: [
-        { id: "atp", label: "ATP" },
-        { id: "wta", label: "WTA" },
-      ],
-    });
-    expect(wta.context).toBe("WTA");
-    expect(wta.competitions?.value).toBe("wta");
-    expect(wta.tables.map((t) => t.label)).toEqual(["WTA"]);
-    expect(wta.tables[0].rows[0].name).toBe("I. Świątek");
-  });
-
-  it("narrows padel to the category it is set to", async () => {
-    const card = (await getDashboardSportCard("padel", "women"))!;
-
-    expect(card.context).toBe("Women");
-    expect(card.tables.map((t) => t.label)).toEqual(["Women"]);
-    expect(card.competitions).toMatchObject({ value: "women", automatic: "Men and women" });
-  });
-
-  it("ignores a stored value that is not the sport's: tennis with padel's category", async () => {
-    const card = (await getDashboardSportCard("tennis", "women"))!;
-
-    expect(card.tables.map((t) => t.label)).toEqual(["ATP", "WTA"]);
-    expect(card.competitions?.value).toBeNull();
+    expect(tennis.competitions).toBeUndefined();
+    expect(tennis.tables[0].rows[0].name).not.toBe("I. Świątek");
+    expect(padel.competitions).toBeUndefined();
+    expect(padel.context).toBe("Premier Padel");
+    expect(padel.tables.map((t) => t.label)).toEqual(["Rankings"]);
   });
 
   it("offers no choice for the NBA, whatever is stored", async () => {
@@ -824,19 +803,11 @@ describe("racquetCard", () => {
     tournaments,
   });
   const base = { sportId: "tennis", label: "Tennis", emoji: "🎾" } as const;
-  const tours = [
-    { id: "atp", label: "ATP", data: tour([tournament("Paris Masters", "upcoming")]) },
-    { id: "wta", label: "WTA", data: tour([tournament("WTA Finals", "live")]) },
-  ];
 
-  it("leads with whichever tour has a tournament on when none is chosen", () => {
-    expect(__testing.racquetCard(base, tours, null, "Both tours").event?.name).toBe("WTA Finals");
-  });
-
-  it("leads with the chosen tour's own tournament, even with the other's on", () => {
-    expect(__testing.racquetCard(base, tours, "atp", "Both tours").event).toMatchObject({
-      name: "Paris Masters",
-      status: "upcoming",
-    });
+  it("leads with the tournament on, else the next to start", () => {
+    const week = tour([tournament("Paris Masters", "upcoming"), tournament("Vienna", "live")]);
+    expect(__testing.racquetCard(base, week, "ATP").event).toMatchObject({ name: "Vienna", status: "live" });
+    const off = tour([tournament("Paris Masters", "upcoming")]);
+    expect(__testing.racquetCard(base, off, "ATP").event).toMatchObject({ name: "Paris Masters", status: "upcoming" });
   });
 });

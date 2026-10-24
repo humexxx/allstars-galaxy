@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { F1_DATA } from "@/lib/data/sports/f1";
 import { F1_CIRCUIT_OUTLINES, F1_CIRCUIT_VIEWBOX } from "@/lib/data/sports/f1-circuits";
@@ -8,21 +8,8 @@ import type { F1Data } from "@/types/sports";
 
 import { F1View } from "./f1-view";
 
-// The races' sheet loads a classification through a server action.
-vi.mock("@/app/actions/f1", () => ({
-  getF1RaceClassificationAction: vi.fn(),
-  getF1WeekendResultsAction: vi.fn(),
-}));
 // The shared split lives beside the match lists, whose team filter saves through one.
 vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
-
-beforeEach(() => {
-  // The race sheet picks its side from the viewport; jsdom has no matchMedia.
-  vi.stubGlobal(
-    "matchMedia",
-    vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
-  );
-});
 
 const tabs = () => screen.getAllByRole("tab").map((t) => t.textContent);
 const openTab = () => screen.getByRole("tab", { selected: true }).textContent;
@@ -149,7 +136,7 @@ describe("F1View", () => {
       "d",
       F1_CIRCUIT_OUTLINES.monaco
     );
-    const tile = screen.getByRole("button", { name: /Spanish GP/ });
+    const tile = screen.getByRole("link", { name: /Spanish GP/ });
     expect(outline(tile)).toBeNull();
     // The circuit is still named in words.
     expect(tile).toHaveTextContent("Circuit de Barcelona");

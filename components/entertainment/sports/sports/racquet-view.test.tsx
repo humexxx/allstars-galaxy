@@ -12,7 +12,6 @@ import type {
   PadelData,
   PlayerRanking,
   RacquetData,
-  RacquetDraw,
   RacquetTournament,
   Team,
   TennisData,
@@ -109,24 +108,7 @@ const MEN: RacquetData = {
   drawPlayers: PAIRS,
 };
 
-const PADEL: PadelData = {
-  men: MEN,
-  women: { ...MEN, tour: "wpt-women", tournaments: [], calendar: [], drawPlayers: [] },
-};
-
-const DUBAI_DRAW: RacquetDraw = {
-  tournamentId: "padelapi-746",
-  rounds: finalRounds("dubai"),
-  players: PAIRS,
-  champion: "A. Coello / A. Tapia",
-};
-
-function stubViewport(phone: boolean): void {
-  vi.stubGlobal(
-    "matchMedia",
-    vi.fn(() => ({ matches: phone, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
-  );
-}
+const PADEL: PadelData = { men: MEN };
 
 function renderPadel(): void {
   render(
@@ -136,15 +118,7 @@ function renderPadel(): void {
   );
 }
 
-const openTab = (name: string): void => {
-  // Radix tabs switch on mousedown, not click.
-  fireEvent.mouseDown(screen.getByRole("tab", { name }));
-};
-
-const sheet = (): HTMLElement => screen.getByRole("dialog");
-
 beforeEach(() => {
-  stubViewport(false);
   vi.mocked(getRacquetDrawAction).mockResolvedValue({
     success: false,
     error: "The draw could not be loaded",
@@ -176,10 +150,11 @@ const earlier = (): void => {
 };
 
 describe("RacquetView, the tabs", () => {
-  it("offers Overview and Draw, and opens on Overview", () => {
+  it("offers Overview alone, with no tour to pick and no Draw tab: each draw is on its tournament's page", () => {
     renderPadel();
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Draw"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview"]);
     expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("Overview");
+    expect(screen.queryByRole("combobox")).toBeNull();
   });
 
   it("puts the tour's rankings beside the tournaments, ten rows and a button for the rest", () => {
@@ -220,15 +195,18 @@ describe("RacquetView, Overview", () => {
     expect(card.querySelector("img")?.getAttribute("src")).toBe(
       "https://media.padelapi.org/tournament-api/kuwait-p1-2026.webp"
     );
-    // Not one big button that greys on hover: "View details" opens it.
+    // Not one big link that greys on hover: "View details" opens its page.
     expect(card.className).not.toMatch(/hover:bg/);
-    fireEvent.click(within(card).getByRole("button", { name: "View details: Kuwait P1 2026" }));
-    expect(within(sheet()).getByRole("heading", { name: "Kuwait P1 2026" })).toBeInTheDocument();
+    expect(within(card).getByRole("link", { name: "View details: Kuwait P1 2026" })).toHaveAttribute(
+      "href",
+      "/portal/entertainment/sports/padel/padelapi-748"
+    );
   });
 
-  it("lists every tournament still to come under Coming up", () => {
+  it("lists every tournament still to come under Coming up, each a link to its page", () => {
     renderPadel();
     expect(tiles("Coming up")).toEqual(["padelapi-749", "padelapi-750", "padelapi-751"]);
+    expect(tile("padelapi-749")).toHaveAttribute("href", "/portal/entertainment/sports/padel/padelapi-749");
   });
 
   it("brings in the tournaments played three a tap, latest first, the calendar's own included", () => {
@@ -245,145 +223,6 @@ describe("RacquetView, Overview", () => {
     // Nothing older: the pill goes, and the keyboard lands on what it brought in.
     expect(screen.queryByRole("button", { name: /^Earlier:/ })).toBeNull();
     expect(document.activeElement).toBe(tile("padelapi-701"));
-  });
-});
-
-describe("RacquetView, the Draw tab", () => {
-  it("draws the tournament just finished, with its champions, the whole width", () => {
-    renderPadel();
-    openTab("Draw");
-    expect(screen.getByRole("heading", { name: "Milano P1 2026" })).toBeInTheDocument();
-    expect(screen.getByText("Just finished")).toBeInTheDocument();
-    expect(screen.getByText("d. L. Augsburger / J. Lebron", { exact: false })).toBeInTheDocument();
-    // The bracket itself, a semi-final each side of the final, each pair as two names.
-    expect(screen.getByText("Final")).toBeInTheDocument();
-    expect(screen.getAllByText("Semi-finals")).toHaveLength(2);
-    expect(screen.getAllByText("Coello").length).toBeGreaterThan(0);
-    expect(getRacquetDrawAction).not.toHaveBeenCalled();
-  });
-
-  it("puts the bracket on the whole screen on Expand", () => {
-    renderPadel();
-    openTab("Draw");
-    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
-    const full = screen.getByRole("dialog");
-    expect(within(full).getByRole("heading", { name: "Milano P1 2026" })).toBeInTheDocument();
-    expect(within(full).getByText("Final")).toBeInTheDocument();
-  });
-
-  it("opens the tournament's sheet from View details", () => {
-    renderPadel();
-    openTab("Draw");
-    fireEvent.click(screen.getByRole("button", { name: "View details: Milano P1 2026" }));
-    expect(within(sheet()).getByRole("heading", { name: "Milano P1 2026" })).toBeInTheDocument();
-  });
-});
-
-describe("RacquetView, the tournament sheet", () => {
-  it("opens a draw that came with the page without asking for it", () => {
-    renderPadel();
-    earlier();
-    fireEvent.click(tile("padelapi-747"));
-    const details = sheet();
-    expect(within(details).getByRole("heading", { name: "Milano P1 2026" })).toBeInTheDocument();
-    expect(within(details).getByText("€479,068")).toBeInTheDocument();
-    expect(within(details).getByText("Final")).toBeInTheDocument();
-    expect(getRacquetDrawAction).not.toHaveBeenCalled();
-  });
-
-  it("slides in from the right on a desktop", () => {
-    renderPadel();
-    fireEvent.click(screen.getByRole("button", { name: "View details: Kuwait P1 2026" }));
-    expect(sheet()).toHaveAttribute("data-side", "right");
-  });
-
-  it("comes up from the bottom on a phone", () => {
-    stubViewport(true);
-    renderPadel();
-    fireEvent.click(screen.getByRole("button", { name: "View details: Kuwait P1 2026" }));
-    expect(sheet()).toHaveAttribute("data-side", "bottom");
-  });
-
-  it("loads any other draw when it is opened, once", async () => {
-    let answer: (value: Awaited<ReturnType<typeof getRacquetDrawAction>>) => void = () => {};
-    vi.mocked(getRacquetDrawAction).mockReturnValue(new Promise((resolve) => (answer = resolve)));
-    renderPadel();
-    earlier();
-    fireEvent.click(tile("padelapi-746"));
-
-    expect(within(sheet()).getByRole("status", { name: "Loading the draw" })).toBeInTheDocument();
-    expect(getRacquetDrawAction).toHaveBeenCalledWith({
-      sport: "padel",
-      tour: "wpt-men",
-      tournamentId: "padelapi-746",
-    });
-
-    answer({ success: true, data: DUBAI_DRAW });
-    expect(await within(sheet()).findByText("Final")).toBeInTheDocument();
-
-    fireEvent.keyDown(sheet(), { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    fireEvent.click(tile("padelapi-746"));
-    expect(within(sheet()).getByText("Final")).toBeInTheDocument();
-    expect(getRacquetDrawAction).toHaveBeenCalledTimes(1);
-  });
-
-  it("offers another try when the draw does not load", async () => {
-    vi.mocked(getRacquetDrawAction)
-      .mockResolvedValueOnce({ success: false, error: "The draw could not be loaded" })
-      .mockResolvedValueOnce({ success: true, data: DUBAI_DRAW });
-    renderPadel();
-    earlier();
-    fireEvent.click(tile("padelapi-746"));
-
-    expect(await within(sheet()).findByText("The draw could not be loaded")).toBeInTheDocument();
-    fireEvent.click(within(sheet()).getByRole("button", { name: "Try again" }));
-    expect(await within(sheet()).findByText("Final")).toBeInTheDocument();
-    expect(getRacquetDrawAction).toHaveBeenCalledTimes(2);
-  });
-
-  it("shows only the champions when the provider withholds an old draw's results", async () => {
-    vi.mocked(getRacquetDrawAction).mockResolvedValue({
-      success: true,
-      data: { tournamentId: "padelapi-701", rounds: [], players: [], resultsHidden: true },
-    });
-    renderPadel();
-    earlier();
-    earlier();
-    fireEvent.click(tile("padelapi-701"));
-
-    expect(await within(sheet()).findByText(/only kept for about six months/)).toBeInTheDocument();
-    expect(within(sheet()).getAllByText("A. Coello / A. Tapia").length).toBeGreaterThan(0);
-  });
-
-  it("asks for no draw weeks before one can exist", () => {
-    renderPadel();
-    fireEvent.click(tile("padelapi-749"));
-    expect(within(sheet()).getByText("The draw is not out yet")).toBeInTheDocument();
-    expect(getRacquetDrawAction).not.toHaveBeenCalled();
-  });
-
-  it("never asks for a fixture tournament's draw", () => {
-    const fixture: PadelData = {
-      ...PADEL,
-      men: {
-        ...MEN,
-        tournaments: [
-          { id: "wpt-m-doha", name: "Qatar Major", location: "Doha", startDate: "2026-02-23", endDate: "2026-03-01", status: "completed", champion: "Coello / Tapia" },
-        ],
-        calendar: [],
-      },
-    };
-    render(
-      <SportsTodayProvider today="2026-10-18">
-        <PadelView data={fixture} />
-      </SportsTodayProvider>
-    );
-    // A season over shows its last tournaments from the start.
-    expect(screen.getByText("The season is over")).toBeInTheDocument();
-    fireEvent.click(tile("wpt-m-doha"));
-    expect(within(sheet()).getByText("This draw is not available")).toBeInTheDocument();
-    expect(getRacquetDrawAction).not.toHaveBeenCalled();
   });
 });
 
@@ -417,7 +256,7 @@ describe("RacquetView, tennis", () => {
     calendar: [],
     drawPlayers: [],
   };
-  const tennis: TennisData = { atp, wta: { ...atp, tour: "wta", tournaments: [] } };
+  const tennis: TennisData = { atp };
 
   it("picks between the tournaments being played, and loads the one picked", async () => {
     vi.mocked(getRacquetDrawAction).mockResolvedValue({
@@ -446,13 +285,11 @@ describe("RacquetView, tennis", () => {
 
     expect(screen.getByRole("heading", { name: "Swiss Indoors Basel" })).toBeInTheDocument();
     await waitFor(() =>
-      expect(getRacquetDrawAction).toHaveBeenCalledWith(
-        expect.objectContaining({ tournamentId: "espn-328-2026-mens-singles" })
-      )
+      expect(getRacquetDrawAction).toHaveBeenCalledWith({
+        sport: "tennis",
+        tournamentId: "espn-328-2026-mens-singles",
+      })
     );
-    // The Draw tab draws the one picked too.
-    openTab("Draw");
-    expect(screen.getByRole("heading", { name: "Swiss Indoors Basel" })).toBeInTheDocument();
   });
 
   it("shows the draw's three best seeds on the featured card, from its own players", () => {
@@ -502,7 +339,7 @@ describe("RacquetView, tennis", () => {
     ]);
   });
 
-  it("has a News tab with the tour on screen's news", () => {
+  it("has a News tab with the ATP's news", () => {
     const story = (id: string, headline: string) => ({
       id,
       headline,
@@ -518,14 +355,14 @@ describe("RacquetView, tennis", () => {
       <SportsTodayProvider today="2026-10-19">
         <TennisView
           data={tennis}
-          news={{ atp: [story("a", "Sinner into the Vienna quarter-finals")], wta: [story("w", "Rybakina avoids upset at Ningbo")] }}
+          news={[story("a", "Sinner into the Vienna quarter-finals")]}
           initialTab="news"
         />
       </SportsTodayProvider>
     );
     expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("News");
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "News"]);
     expect(screen.getByRole("heading", { name: "Sinner into the Vienna quarter-finals" })).toBeInTheDocument();
-    expect(screen.queryByText("Rybakina avoids upset at Ningbo")).toBeNull();
   });
 
   it("shows no picker with one tournament being played", () => {
@@ -537,7 +374,7 @@ describe("RacquetView, tennis", () => {
     expect(screen.queryByRole("group", { name: "Tournaments on now" })).toBeNull();
   });
 
-  it("features the event being played, with last year's champion, and draws it on Draw", async () => {
+  it("features the event being played, with last year's champion, and asks for its draw once", async () => {
     vi.mocked(getRacquetDrawAction).mockResolvedValue({
       success: true,
       data: { tournamentId: "espn-vienna", rounds: [], players: [] },
@@ -554,9 +391,8 @@ describe("RacquetView, tennis", () => {
     earlier();
     expect(within(tile("espn-315-2026-mens-singles")).getByText("Shanghai, China PR")).toBeInTheDocument();
 
-    // Its draw, asked for when the feed did not ship one.
-    openTab("Draw");
-    expect(await screen.findByText("The draw has not been published")).toBeInTheDocument();
-    expect(getRacquetDrawAction).toHaveBeenCalledTimes(1);
+    // Its draw, asked for when the feed did not ship one: for the round under way.
+    await waitFor(() => expect(getRacquetDrawAction).toHaveBeenCalledTimes(1));
+    expect(getRacquetDrawAction).toHaveBeenCalledWith({ sport: "tennis", tournamentId: "espn-422-2026-mens-singles" });
   });
 });

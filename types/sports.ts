@@ -534,7 +534,8 @@ export type NbaData = {
 
 // ---------- Tennis / Padel rankings ----------
 
-export type RacquetTour = "atp" | "wta" | "wpt-men" | "wpt-women";
+/** The men's tours only: the hub follows no women's tour. */
+export type RacquetTour = "atp" | "wpt-men";
 
 export type PlayerRanking = {
   position: number;
@@ -623,12 +624,10 @@ export type RacquetData = {
 
 export type TennisData = {
   atp: RacquetData;
-  wta: RacquetData;
 };
 
 export type PadelData = {
   men: RacquetData;
-  women: RacquetData;
 };
 
 // ---------- NFL ----------
@@ -849,12 +848,6 @@ export type F1NewsArticle = {
 
 // ---------- Dashboard competitions ----------
 
-/** The tours a tennis card can narrow to: `TennisData`'s keys. */
-export const TENNIS_TOURS = ["atp", "wta"] as const satisfies readonly (keyof TennisData)[];
-
-/** The categories a padel card can narrow to: `PadelData`'s keys. */
-export const PADEL_CATEGORIES = ["men", "women"] as const satisfies readonly (keyof PadelData)[];
-
 /**
  * What each sport's dashboard card can be set to
  * (`user_sports_preferences.competition`, null for the card's own pick). A
@@ -863,6 +856,4 @@ export const PADEL_CATEGORIES = ["men", "women"] as const satisfies readonly (ke
 export const SPORT_COMPETITIONS: Partial<Record<SportId, readonly string[]>> = {
   football: FOOTBALL_COMPETITION_IDS,
   lol: LOL_REGIONS,
-  tennis: TENNIS_TOURS,
-  padel: PADEL_CATEGORIES,
 };

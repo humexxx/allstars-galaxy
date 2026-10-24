@@ -2,77 +2,73 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/app/actions/f1", () => ({
-  getF1RaceClassificationAction: vi.fn(),
-  getF1WeekendResultsAction: vi.fn(),
-}));
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
-import type { F1Race } from "@/types/sports";
+import type { F1ClassificationRow, F1Driver, F1Race, F1SessionResult } from "@/types/sports";
 
 import { AUSTIN, DRIVERS, SINGAPORE } from "./__fixtures__/f1";
-import { F1RaceSheet, type ClassificationState, type WeekendState } from "./f1-race-sheet";
+import { F1RacePage } from "./f1-race-page";
 
-function stubViewport(phone: boolean): void {
-  vi.stubGlobal(
-    "matchMedia",
-    vi.fn(() => ({ matches: phone, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
-  );
-}
-
-function renderSheet(
+function renderPage(
   race: F1Race,
-  classification?: ClassificationState,
-  onRetry: () => void = vi.fn(),
-  weekend?: WeekendState,
-  onRetryWeekend: () => void = vi.fn()
+  {
+    sessions = [],
+    classification,
+    drivers = DRIVERS,
+    current = false,
+  }: {
+    sessions?: F1SessionResult[];
+    classification?: F1ClassificationRow[] | null;
+    drivers?: F1Driver[];
+    current?: boolean;
+  } = {}
 ): void {
   render(
     <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
-      <F1RaceSheet
+      <F1RacePage
         race={race}
-        open
-        onOpenChange={vi.fn()}
         season={2026}
-        drivers={DRIVERS}
+        drivers={drivers}
         classification={classification}
-        onRetry={onRetry}
-        weekend={weekend}
-        onRetryWeekend={onRetryWeekend}
+        sessions={sessions}
+        current={current}
       />
     </ReaderTimeZoneProvider>
   );
 }
 
-const sheet = (): HTMLElement => screen.getByRole("dialog");
 const section = (title: string): HTMLElement =>
-  within(sheet()).getByRole("heading", { name: title }).closest("section")!;
+  screen.getByRole("heading", { name: title }).closest("section")!;
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-19T12:00:00Z"));
-  stubViewport(false);
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  refresh.mockClear();
 });
 
-describe("F1RaceSheet", () => {
+describe("F1RacePage", () => {
   // Beside the circuit: the pill and the time under it.
-  const besideCircuit = (pill: string): HTMLElement =>
-    within(sheet()).getByText(pill).closest("div")!.parentElement!;
+  const besideCircuit = (pill: string): HTMLElement => screen.getByText(pill).closest("div")!.parentElement!;
 
-  function renderCurrent(race: F1Race): void {
-    render(
-      <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
-        <F1RaceSheet race={race} open onOpenChange={vi.fn()} season={2026} drivers={DRIVERS} onRetry={vi.fn()} current />
-      </ReaderTimeZoneProvider>
+  it("leads with the way back to F1 and the hub", () => {
+    renderPage(AUSTIN);
+    const trail = screen.getByRole("navigation", { name: "breadcrumb" });
+    expect(within(trail).getByRole("link", { name: "Sports" })).toHaveAttribute("href", "/portal/entertainment/sports");
+    expect(within(trail).getByRole("link", { name: "Formula 1" })).toHaveAttribute(
+      "href",
+      "/portal/entertainment/sports?sport=f1"
     );
-  }
+    expect(within(trail).getByText("United States Grand Prix")).toHaveAttribute("aria-current", "page");
+  });
 
   it("names the next session of the race on now or next, and its time, not the race's", () => {
-    renderCurrent(AUSTIN);
+    renderPage(AUSTIN, { current: true });
     // 17:30Z is 11:30 AM in Costa Rica.
     expect(besideCircuit("Next · Practice 1")).toHaveTextContent("Fri, Oct 23, 11:30 AM");
     expect(besideCircuit("Next · Practice 1")).not.toHaveTextContent("Oct 25");
@@ -80,21 +76,21 @@ describe("F1RaceSheet", () => {
 
   it("names the session on track while one is", () => {
     vi.setSystemTime(new Date("2026-10-24T17:20:00Z"));
-    renderCurrent(AUSTIN);
+    renderPage(AUSTIN, { current: true });
     expect(besideCircuit("On track · Sprint")).toHaveTextContent("Sat, Oct 24, 11:00 AM");
   });
 
   it("dates any other race by its Grand Prix", () => {
-    renderSheet(AUSTIN);
-    expect(within(sheet()).queryByText(/^Next ·/)).toBeNull();
+    renderPage(AUSTIN);
+    expect(screen.queryByText(/^Next ·/)).toBeNull();
     expect(besideCircuit("Upcoming")).toHaveTextContent("Sun, Oct 25, 2:00 PM");
   });
 
   it("heads a race with its round, name and place, and its weekend in the reader's zone", () => {
-    renderSheet(AUSTIN);
-    expect(within(sheet()).getByText("Round 18 · 2026")).toBeInTheDocument();
-    expect(within(sheet()).getByRole("heading", { name: "United States Grand Prix" })).toBeInTheDocument();
-    expect(sheet()).toHaveAccessibleDescription("Circuit of the Americas · Austin, USA");
+    renderPage(AUSTIN);
+    expect(screen.getByText("Round 18 · 2026")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "United States Grand Prix" })).toBeInTheDocument();
+    expect(screen.getByText("Circuit of the Americas · Austin, USA")).toBeInTheDocument();
 
     const weekend = within(section("Weekend")).getAllByRole("listitem");
     expect(weekend).toHaveLength(5);
@@ -102,12 +98,12 @@ describe("F1RaceSheet", () => {
     expect(weekend[3]).toHaveTextContent("Qualifying");
     expect(weekend[3]).toHaveTextContent("Sat, Oct 24, 3:00 PM");
     // Nothing run yet, so no podium and no classification.
-    expect(within(sheet()).queryByRole("heading", { name: "Podium" })).toBeNull();
-    expect(within(sheet()).queryByRole("heading", { name: "Classification" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Podium" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Classification" })).toBeNull();
   });
 
   it("puts the podium with each driver's gap to the winner", () => {
-    renderSheet(SINGAPORE, { status: "loading" });
+    renderPage(SINGAPORE, { classification: null });
     const steps = within(section("Podium")).getAllByRole("listitem");
     expect(steps.map((s) => s.textContent)).toEqual([
       expect.stringMatching(/^1.*M\. Verstappen.*Red Bull.*1:32:11\.902$/),
@@ -117,11 +113,9 @@ describe("F1RaceSheet", () => {
   });
 
   it("marks pole, the fastest lap and the sprint", () => {
-    renderSheet(SINGAPORE, { status: "loading" });
+    renderPage(SINGAPORE, { classification: null });
     const marks = Object.fromEntries(
-      within(sheet())
-        .getAllByRole("term")
-        .map((dt) => [dt.textContent, dt.nextElementSibling?.textContent])
+      screen.getAllByRole("term").map((dt) => [dt.textContent, dt.nextElementSibling?.textContent])
     );
     expect(marks).toEqual({
       Pole: "RUS1:30.641",
@@ -130,29 +124,20 @@ describe("F1RaceSheet", () => {
     });
   });
 
-  it("holds the classification's place while it loads", () => {
-    renderSheet(SINGAPORE, { status: "loading" });
-    expect(
-      within(section("Classification")).getByRole("status", { name: "Loading the classification" })
-    ).toBeInTheDocument();
-  });
-
-  it("says why the classification is missing, plainly, and offers a retry", () => {
-    const onRetry = vi.fn();
-    renderSheet(SINGAPORE, { status: "error", message: "The classification isn't available yet" }, onRetry);
+  it("says plainly when the classification is not in yet, and asks again on Retry", () => {
+    renderPage(SINGAPORE, { classification: null });
 
     const alert = within(section("Classification")).getByRole("alert");
     expect(alert).toHaveTextContent("The classification isn't available yet");
     // Usually the results are simply not in yet: not an error colour.
     expect(alert.className).not.toMatch(/destructive/);
     fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
-    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it("lists the whole field once it is in, the fastest lap marked", () => {
-    renderSheet(SINGAPORE, {
-      status: "ready",
-      rows: [
+    renderPage(SINGAPORE, {
+      classification: [
         { position: "1", code: "VER", name: "M. Verstappen", team: "Red Bull", result: "1:32:11.902", points: 25 },
         { position: "2", code: "LEC", name: "C. Leclerc", team: "Ferrari", result: "+5.402", points: 19, fastestLap: true },
         { position: "DNF", code: "STR", name: "L. Stroll", team: "Aston Martin", result: "Retired", points: 0 },
@@ -165,17 +150,6 @@ describe("F1RaceSheet", () => {
       ["DNF", "L. StrollAston Martin", "Retired", "0"],
     ]);
     expect(within(rows[2]).getByLabelText("Fastest lap")).toBeInTheDocument();
-  });
-
-  it("slides in from the right on a desktop", () => {
-    renderSheet(AUSTIN);
-    expect(sheet()).toHaveAttribute("data-side", "right");
-  });
-
-  it("rises from the bottom on a phone", () => {
-    stubViewport(true);
-    renderSheet(AUSTIN);
-    expect(sheet()).toHaveAttribute("data-side", "bottom");
   });
 
   describe("Results", () => {
@@ -192,7 +166,7 @@ describe("F1RaceSheet", () => {
     };
 
     it("shows the latest session's order, with a pick of the others", () => {
-      renderSheet(AUSTIN, undefined, vi.fn(), { status: "ready", sessions: [fp1, quali] });
+      renderPage(AUSTIN, { sessions: [fp1, quali] });
       const results = section("Results");
       expect(within(results).getByRole("radio", { name: "Qualifying" })).toHaveAttribute("aria-checked", "true");
       expect(within(results).getByRole("table", { name: "Qualifying" })).toHaveTextContent("L. Norris");
@@ -213,19 +187,7 @@ describe("F1RaceSheet", () => {
       const faces = DRIVERS.map((d) =>
         d.code === "LEC" ? { ...d, shortName: "C. Leclerc", imageUrl: "https://a.espncdn.com/i/headshots/rpm/players/full/5498.png" } : d
       );
-      render(
-        <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
-          <F1RaceSheet
-            race={AUSTIN}
-            open
-            onOpenChange={vi.fn()}
-            season={2026}
-            drivers={faces}
-            onRetry={vi.fn()}
-            weekend={{ status: "ready", sessions: [fp1] }}
-          />
-        </ReaderTimeZoneProvider>
-      );
+      renderPage(AUSTIN, { sessions: [fp1], drivers: faces });
       const [, leclerc, verstappen] = within(section("Results")).getAllByRole("row");
       expect(leclerc.querySelector("img")).not.toBeNull();
       expect(verstappen.querySelector("img")).toBeNull();
@@ -233,26 +195,14 @@ describe("F1RaceSheet", () => {
 
     it("leaves a finished race to the classification below, with its points", () => {
       const race = { kind: "race" as const, rows: [{ position: "1", code: "VER", name: "M. Verstappen", team: "Red Bull Racing", time: "1:32:11.902" }] };
-      renderSheet(SINGAPORE, { status: "loading" }, vi.fn(), { status: "ready", sessions: [quali, race] });
+      renderPage(SINGAPORE, { sessions: [quali, race], classification: null });
       expect(within(section("Results")).queryByRole("radio")).toBeNull();
       expect(within(section("Results")).getByRole("table", { name: "Qualifying" })).toBeInTheDocument();
     });
 
-    it("holds its place while the sessions load", () => {
-      renderSheet(SINGAPORE, undefined, vi.fn(), { status: "loading" });
-      expect(within(section("Results")).getByRole("status", { name: "Loading the sessions" })).toBeInTheDocument();
-    });
-
-    it("says plainly when the sessions could not be read, with a retry", () => {
-      const retry = vi.fn();
-      renderSheet(SINGAPORE, undefined, vi.fn(), { status: "error", message: "Couldn't load the sessions" }, retry);
-      fireEvent.click(within(section("Results")).getByRole("button", { name: "Retry" }));
-      expect(retry).toHaveBeenCalled();
-    });
-
     it("has no Results without any session in", () => {
-      renderSheet(AUSTIN, undefined, vi.fn(), { status: "ready", sessions: [] });
-      expect(within(sheet()).queryByRole("heading", { name: "Results" })).toBeNull();
+      renderPage(AUSTIN);
+      expect(screen.queryByRole("heading", { name: "Results" })).toBeNull();
     });
   });
 });

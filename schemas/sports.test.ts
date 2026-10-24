@@ -16,16 +16,22 @@ describe("setSportCompetitionSchema", () => {
     ["lol", "msi"],
     ["lol", "first-stand"],
     ["lol", "lck"],
-    ["tennis", "atp"],
-    ["tennis", "wta"],
-    ["padel", "men"],
-    ["padel", "women"],
   ])("accepts %s's %s", (sportId, competition) => {
     expect(valid(sportId, competition)).toBe(true);
   });
 
-  it.each(["football", "lol", "tennis", "padel"])("accepts null for %s: the card's own pick", (sportId) => {
+  it.each(["football", "lol"])("accepts null for %s: the card's own pick", (sportId) => {
     expect(valid(sportId, null)).toBe(true);
+  });
+
+  it.each([
+    ["tennis", "atp"],
+    ["tennis", "wta"],
+    ["padel", "men"],
+    ["padel", "women"],
+    ["tennis", null],
+  ])("refuses %s %s: men only, so no tour to pick", (sportId, competition) => {
+    expect(valid(sportId, competition)).toBe(false);
   });
 
   it.each([

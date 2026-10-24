@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ChevronRight, Flag, History } from "lucide-react";
 import { Children, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 
@@ -9,22 +10,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { isRaceWeekend, RACES_SHOWN, racesTabGroups, weekendPhrase } from "@/lib/sports/f1-weekend";
+import { f1RacePath } from "@/lib/sports/paths";
 import type { F1Data, F1Race, F1SessionResult, F1WeekendResults } from "@/types/sports";
 
 import { F1CircuitOutline } from "./f1-circuit-outline";
 import { racePlace, raceWhen, SprintBadge } from "./f1-race-labels";
 import { ResultsLine, SessionList } from "./f1-race-parts";
-import { F1RaceSheet, useRaceClassifications, useWeekendResults } from "./f1-race-sheet";
 import { fadeIn, holdScrollStill } from "./shared/reveal";
 import { RevealPill } from "./shared/reveal-pill";
 import { useMatchTime } from "./shared/time-zone-context";
 import { StatusPill } from "./shared/status-pill";
 import { useNow } from "./use-now";
 
-/** `opener` gets the focus back when the sheet closes. */
-type OpenRace = (race: F1Race, opener: HTMLElement) => void;
-
-// A tile is a button, but it does not grey on hover: its border firms up.
+// A tile is a link, but it does not grey on hover: its border firms up.
 const TILE =
   "flex w-full flex-col gap-3 rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring/50";
 
@@ -33,7 +31,7 @@ const TILE =
  * every race still to come, then the ones run — none until asked for: as the
  * match lists bring in earlier days, "Earlier" on the "Earlier races" line
  * brings in three a tap, latest first, right where it was tapped, until the
- * season runs out. Every race opens its sheet.
+ * season runs out. Every race opens its own page.
  *
  * Its own container, so the tiles follow the column's width rather than the
  * page's. Each part opens on a heading set like a day heading in the match
@@ -52,14 +50,7 @@ export function F1Races({
     () => racesTabGroups(data.races),
     [data.races]
   );
-  const classifications = useRaceClassifications(data.season);
-  const weekends = useWeekendResults(data.season, weekend);
-  const featuredResults = featured ? weekends.get(featured.round) : undefined;
-  // Kept after the sheet closes, so its content does not vanish mid-slide.
-  const [raceId, setRaceId] = useState<string | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const race = raceId ? (data.races.find((r) => r.id === raceId) ?? null) : null;
-  const opener = useRef<HTMLElement | null>(null);
+  const featuredResults = featured && weekend?.round === featured.round ? weekend.sessions : [];
 
   // The races run that are shown. None while there is a race to come; once
   // the season is over they are all there is, so it opens on the last few.
@@ -92,25 +83,12 @@ export function F1Races({
     setShownEarlier(shownEarlier + RACES_SHOWN);
   };
 
-  const open: OpenRace = (next, from) => {
-    opener.current = from;
-    setRaceId(next.id);
-    setSheetOpen(true);
-    if (next.status === "completed") void classifications.load(next.round);
-    void weekends.load(next);
-  };
-
   return (
     <div ref={listRef} className="@container flex min-w-0 flex-col gap-6">
       <section className="flex flex-col gap-2">
         <RaceHeading>{featured?.status === "live" ? "On now" : "Next race"}</RaceHeading>
         {featured ? (
-          <FeaturedRace
-            race={featured}
-            onOpen={open}
-            results={featuredResults?.status === "ready" ? featuredResults.sessions : []}
-            drivers={data.drivers}
-          />
+<FeaturedRace race={featured} results={featuredResults} drivers={data.drivers} />
         ) : (
           <EmptyState
             icon={Flag}
@@ -123,7 +101,7 @@ export function F1Races({
       {comingUp.length > 0 && (
         <RaceSection title="Coming up">
           {comingUp.map((r) => (
-            <RaceTile key={r.id} race={r} onOpen={open} />
+            <RaceTile key={r.id} race={r} />
           ))}
         </RaceSection>
       )}
@@ -146,28 +124,11 @@ export function F1Races({
           }
         >
           {earlier.map((r) => (
-            <RaceTile key={r.id} race={r} onOpen={open} />
+            <RaceTile key={r.id} race={r} />
           ))}
         </RaceSection>
       )}
 
-      <F1RaceSheet
-        race={race}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        returnFocus={opener}
-        season={data.season}
-        drivers={data.drivers}
-        classification={race ? classifications.get(race.round) : undefined}
-        onRetry={() => {
-          if (race) void classifications.load(race.round);
-        }}
-        weekend={race ? weekends.get(race.round) : undefined}
-        onRetryWeekend={() => {
-          if (race) void weekends.load(race);
-        }}
-        current={race !== null && race.id === featured?.id}
-      />
     </div>
   );
 }
@@ -236,20 +197,18 @@ function WhatsNext({ race }: { race: F1Race }): JSX.Element {
 
 function FeaturedRace({
   race,
-  onOpen,
   results,
   drivers,
 }: {
   race: F1Race;
-  onOpen: OpenRace;
   results: F1SessionResult[];
   drivers: F1Data["drivers"];
 }): JSX.Element {
   const format = useMatchTime();
   const now = useNow();
   return (
-    // The card is not one big button that greys on hover: "View details"
-    // opens the race, and the card itself stays still.
+    // The card is not one big link that greys on hover: "View details"
+    // opens the race's page, and the card itself stays still.
     <Card>
       <CardContent className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-5 @2xl:gap-x-8">
         <div className="flex min-w-0 flex-col gap-2">
@@ -285,14 +244,11 @@ function FeaturedRace({
 
         {/* At the card's foot, on its right. */}
         <div className="col-span-2 flex justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label={`View details: ${race.name}`}
-            onClick={(event) => onOpen(race, event.currentTarget)}
-          >
-            View details
-            <ChevronRight data-icon="inline-end" />
+          <Button variant="outline" size="sm" asChild>
+            <Link href={f1RacePath(race.round)} aria-label={`View details: ${race.name}`}>
+              View details
+              <ChevronRight data-icon="inline-end" />
+            </Link>
           </Button>
         </div>
       </CardContent>
@@ -300,15 +256,10 @@ function FeaturedRace({
   );
 }
 
-function RaceTile({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX.Element {
+function RaceTile({ race }: { race: F1Race }): JSX.Element {
   const format = useMatchTime();
   return (
-    <button
-      type="button"
-      data-race={race.id}
-      onClick={(event) => onOpen(race, event.currentTarget)}
-      className={TILE}
-    >
+    <Link href={f1RacePath(race.round)} data-race={race.id} className={TILE}>
       <span className="flex w-full items-start justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2">
           <span aria-hidden className="text-xl leading-none">
@@ -337,6 +288,6 @@ function RaceTile({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX.Ele
           <ResultsLine race={race} />
         </span>
       )}
-    </button>
+    </Link>
   );
 }

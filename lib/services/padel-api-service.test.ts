@@ -382,11 +382,11 @@ describe("drawFrom", () => {
 });
 
 describe("drawsFrom", () => {
-  it("splits one list into both categories' draws", () => {
-    const draws = drawsFrom(747, MATCHES);
-    expect(draws.men.rounds[3].matches[0].id).toBe("13991");
-    expect(draws.women.tournamentId).toBe("padelapi-747");
-    expect(draws.women.rounds[0].matches).toHaveLength(8);
+  it("keeps the men's draw out of a list that holds the women's too", () => {
+    const draw = drawsFrom(747, MATCHES);
+    expect(draw.tournamentId).toBe("padelapi-747");
+    expect(draw.rounds[3].matches[0].id).toBe("13991");
+    expect(draw.champion).toBe("A. Coello / A. Tapia");
   });
 });
 
@@ -438,14 +438,14 @@ describe("the feed and the draws on demand", () => {
     expect(data.men.calendar!.map((t) => t.id)).toEqual(["padelapi-701", "padelapi-747", "padelapi-748"]);
   });
 
-  it("reads one category's draw for the sheet", async () => {
-    const draw = await getPadelDraw("wpt-women", "padelapi-747");
-    expect(draw!.champion).toBe("A. Sanchez / A. Ustero");
+  it("reads the men's draw on demand", async () => {
+    const draw = await getPadelDraw("padelapi-747");
+    expect(draw!.champion).toBe("A. Coello / A. Tapia");
     expect(draw!.rounds).toHaveLength(4);
   });
 
   it("names the champions of a draw whose results the free plan hides", async () => {
-    expect(await getPadelDraw("wpt-men", "padelapi-701")).toMatchObject({
+    expect(await getPadelDraw("padelapi-701")).toMatchObject({
       rounds: [],
       resultsHidden: true,
       champion: "A. Coello / A. Tapia",
@@ -453,7 +453,7 @@ describe("the feed and the draws on demand", () => {
   });
 
   it("has no draw yet for a tournament more than a few days off, and asks nobody", async () => {
-    expect(await getPadelDraw("wpt-men", "padelapi-748")).toEqual({
+    expect(await getPadelDraw("padelapi-748")).toEqual({
       tournamentId: "padelapi-748",
       rounds: [],
       players: [],
@@ -476,7 +476,7 @@ describe("the feed and the draws on demand", () => {
   });
 
   it("asks for no tournament this season's calendar does not list", async () => {
-    expect(await getPadelDraw("wpt-men", "padelapi-999")).toBeNull();
+    expect(await getPadelDraw("padelapi-999")).toBeNull();
     expect(drawCalls().some((url) => url.includes("/999/"))).toBe(false);
   });
 });

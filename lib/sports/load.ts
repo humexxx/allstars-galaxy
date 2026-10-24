@@ -92,9 +92,8 @@ export async function loadSport(
       return { sport, data, sample: data === PADEL_DATA };
     }
     case "tennis": {
-      // Both tours' news: the view switches between them without a request.
-      const [data, atp, wta] = await Promise.all([getTennisData(), getEspnNews("atp"), getEspnNews("wta")]);
-      return { sport, data, news: { atp, wta }, sample: data === TENNIS_DATA };
+      const [data, news] = await Promise.all([getTennisData(), getEspnNews("atp")]);
+      return { sport, data, news, sample: data === TENNIS_DATA };
     }
     case "nba": {
       const [data, news] = await Promise.all([getNbaData(), getEspnNews("nba")]);

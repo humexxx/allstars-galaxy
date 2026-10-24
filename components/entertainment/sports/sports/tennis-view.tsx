@@ -6,8 +6,8 @@ import { RacquetView } from "./racquet-view";
 
 type TennisViewProps = {
   data: TennisData;
-  /** Each tour's news, ESPN's. */
-  news?: Record<keyof TennisData, NewsStory[]>;
+  /** The ATP's news, ESPN's. */
+  news?: NewsStory[];
   /** `?tab=news` opens on the news. */
   initialTab?: string;
 };
@@ -18,11 +18,9 @@ export function TennisView({ data, news, initialTab }: TennisViewProps) {
       sport="tennis"
       emoji="🎾"
       title="Tennis"
-      subtitle={`Season ${data.atp.season}`}
-      tours={[
-        { value: "atp", label: "ATP", data: data.atp, news: news?.atp },
-        { value: "wta", label: "WTA", data: data.wta, news: news?.wta },
-      ]}
+      subtitle={`ATP · Season ${data.atp.season}`}
+      data={data.atp}
+      news={news}
       initialTab={initialTab}
     />
   );

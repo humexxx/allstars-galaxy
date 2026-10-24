@@ -8,7 +8,7 @@ import { racquetDrawSchema, type RacquetDrawData } from "@/schemas/racquet";
 import type { RacquetDraw } from "@/types/sports";
 
 /**
- * One padel or tennis tournament's draw, for the details sheet.
+ * One padel or tennis tournament's draw, for a view the feed shipped none to.
  *
  * The feed ships only the featured and the current draw; every other one is
  * read here when somebody opens it, through a cache per tournament (a day
@@ -22,11 +22,8 @@ export async function getRacquetDrawAction(
     await requireAuth();
     const parsed = racquetDrawSchema.safeParse(input);
     if (!parsed.success) return { success: false, error: "Tournament not found" };
-    const { sport, tour, tournamentId } = parsed.data;
-    const draw =
-      sport === "padel"
-        ? await getPadelDraw(tour, tournamentId)
-        : await getTennisDraw(tour, tournamentId);
+    const { sport, tournamentId } = parsed.data;
+    const draw = sport === "padel" ? await getPadelDraw(tournamentId) : await getTennisDraw(tournamentId);
     if (!draw) return { success: false, error: "The draw could not be loaded" };
     return { success: true, data: draw };
   });

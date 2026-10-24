@@ -12,7 +12,6 @@ import { racquetDrawSchema, type RacquetDrawData } from "@/schemas/racquet";
 import type {
   BracketRound,
   RacquetDraw,
-  RacquetTour,
   RacquetTournament,
   Team,
 } from "@/types/sports";
@@ -36,29 +35,25 @@ export type DrawState =
   | { status: "unavailable" }
   | { status: "ready"; draw: RacquetDraw };
 
-export function drawKey(tour: RacquetTour, tournamentId: string): string {
-  return `${tour}:${tournamentId}`;
-}
-
 /**
- * The draws opened so far, by tour and tournament, and the call that loads one.
+ * The draws asked for so far, by tournament, and the call that loads one: the
+ * current tournament's, when the feed could not ship it.
  *
- * Kept for the life of the view, so a sheet opened twice asks once — the
- * server caches too, but each miss there spends a provider's daily budget.
+ * Kept for the life of the view, so it is asked for once — the server caches
+ * too, but each miss there spends a provider's daily budget.
  */
 export function useRacquetDraws(sport: RacquetSport): {
   draws: Record<string, DrawState>;
-  load: (tour: RacquetTour, tournamentId: string) => void;
+  load: (tournamentId: string) => void;
 } {
   const [draws, setDraws] = useState<Record<string, DrawState>>({});
 
   const load = useCallback(
-    (tour: RacquetTour, tournamentId: string): void => {
-      const key = drawKey(tour, tournamentId);
-      const set = (state: DrawState): void => setDraws((prev) => ({ ...prev, [key]: state }));
+    (tournamentId: string): void => {
+      const set = (state: DrawState): void => setDraws((prev) => ({ ...prev, [tournamentId]: state }));
       // The schema the action applies, checked here first: the fixture's ids
       // ("wpt-m-rome") would only come back refused.
-      const request = racquetDrawSchema.safeParse({ sport, tour, tournamentId });
+      const request = racquetDrawSchema.safeParse({ sport, tournamentId });
       if (!request.success) {
         set({ status: "unavailable" });
         return;

@@ -1,16 +1,7 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/app/actions/f1", () => ({
-  getF1RaceClassificationAction: vi.fn(),
-  getF1WeekendResultsAction: vi.fn(async () => ({
-    success: true,
-    data: { season: 2026, round: 0, sessions: [] },
-  })),
-}));
-
-import { getF1RaceClassificationAction, getF1WeekendResultsAction } from "@/app/actions/f1";
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
 import type { F1Data, F1WeekendResults } from "@/types/sports";
 
@@ -33,11 +24,10 @@ const section = (title: string): HTMLElement =>
 // The races, not the pill on the section's heading.
 const tiles = (title: string): HTMLElement[] =>
   within(section(title))
-    .getAllByRole("button")
+    .queryAllByRole("link")
     .filter((b) => b.hasAttribute("data-race"));
 const rounds = (title: string): string[] =>
   tiles(title).map((t) => t.textContent?.match(/Round (\d+)/)?.[1] ?? "");
-const sheet = (): HTMLElement => screen.getByRole("dialog");
 // The races run come in from the pill on their heading, three a tap.
 const showEarlier = (): void => {
   fireEvent.click(within(section("Earlier races")).getByRole("button", { name: /^Earlier:/ }));
@@ -47,10 +37,6 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   // Monday before Austin, 06:00 in Costa Rica.
   vi.setSystemTime(new Date("2026-10-19T12:00:00Z"));
-  vi.stubGlobal(
-    "matchMedia",
-    vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
-  );
 });
 
 afterEach(() => {
@@ -163,93 +149,25 @@ describe("F1Races", () => {
     expect(document.activeElement).toBe(pill);
   });
 
-  it("opens a finished race's sheet from its tile and loads its classification", async () => {
-    vi.mocked(getF1RaceClassificationAction).mockResolvedValue({
-      success: true,
-      data: {
-        season: 2026,
-        round: 17,
-        rows: [
-          { position: "1", code: "VER", name: "M. Verstappen", team: "Red Bull", result: "1:32:11.902", points: 25 },
-        ],
-      },
-    });
+  it("opens every race on its own page, by its round", () => {
     renderRaces();
     showEarlier();
-    fireEvent.click(tiles("Earlier races")[0]);
-
-    expect(within(sheet()).getByRole("heading", { name: "Singapore Grand Prix" })).toBeInTheDocument();
-    expect(getF1RaceClassificationAction).toHaveBeenCalledWith({ season: 2026, round: 17 });
-    expect(within(sheet()).getByRole("status", { name: "Loading the classification" })).toBeInTheDocument();
-    const table = await within(sheet()).findByRole("table");
-    expect(within(table).getByText("M. Verstappen")).toBeInTheDocument();
-    expect(within(table).getByText("1:32:11.902")).toBeInTheDocument();
+    expect(tiles("Earlier races")[0]).toHaveAttribute("href", "/portal/entertainment/sports/f1/17");
+    expect(within(section("Coming up")).getByRole("link", { name: /Qatar Grand Prix/ })).toHaveAttribute(
+      "href",
+      "/portal/entertainment/sports/f1/22"
+    );
   });
 
-  it("asks once per race for the visit, and again only after a failure", async () => {
-    vi.mocked(getF1RaceClassificationAction)
-      .mockResolvedValueOnce({ success: false, error: "The classification isn't available yet" })
-      .mockResolvedValueOnce({
-        success: true,
-        data: {
-          season: 2026,
-          round: 17,
-          rows: [
-            { position: "1", code: "VER", name: "M. Verstappen", team: "Red Bull", result: "1:32:11.902", points: 25 },
-          ],
-        },
-      });
-    renderRaces();
-    showEarlier();
-    fireEvent.click(tiles("Earlier races")[0]);
-
-    const alert = await within(sheet()).findByRole("alert");
-    expect(alert).toHaveTextContent("The classification isn't available yet");
-    fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
-    expect(await within(sheet()).findByRole("table")).toBeInTheDocument();
-    expect(getF1RaceClassificationAction).toHaveBeenCalledTimes(2);
-
-    // Closed and opened again: the rows are kept, nothing is asked.
-    fireEvent.keyDown(sheet(), { key: "Escape" });
-    fireEvent.click(tiles("Earlier races")[0]);
-    expect(within(sheet()).getByRole("table")).toBeInTheDocument();
-    expect(getF1RaceClassificationAction).toHaveBeenCalledTimes(2);
-  });
-
-  it("opens an upcoming race without asking for results", () => {
-    renderRaces();
-    fireEvent.click(within(section("Coming up")).getByRole("button", { name: /Qatar Grand Prix/ }));
-
-    expect(within(sheet()).getByRole("heading", { name: "Qatar Grand Prix" })).toBeInTheDocument();
-    expect(within(sheet()).queryByText("Classification")).toBeNull();
-    expect(getF1RaceClassificationAction).not.toHaveBeenCalled();
-  });
-
-  it("hands the focus back to the race that opened the sheet", async () => {
-    renderRaces();
-    const tile = tiles("Coming up")[0];
-    tile.focus();
-    fireEvent.click(tile);
-    expect(within(sheet()).getByRole("heading", { name: "Mexico City Grand Prix" })).toBeInTheDocument();
-    await waitFor(() => expect(sheet()).toContainElement(document.activeElement as HTMLElement));
-
-    fireEvent.keyDown(sheet(), { key: "Escape" });
-
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await waitFor(() => expect(document.activeElement).toBe(tile));
-  });
-
-  it("opens the featured race from View details; the card itself is not a button and does not grey", () => {
+  it("opens the featured race's page from View details; the card itself is not a link and does not grey", () => {
     renderRaces();
     expect(featuredCard().className).not.toMatch(/hover:bg/);
-    expect(screen.queryByRole("button", { name: "United States Grand Prix" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "United States Grand Prix" })).toBeNull();
 
-    const details = screen.getByRole("button", { name: "View details: United States Grand Prix" });
+    const details = screen.getByRole("link", { name: "View details: United States Grand Prix" });
     // At the card's foot, on its right.
     expect(details.parentElement).toHaveClass("col-span-2", "justify-end");
-    fireEvent.click(details);
-
-    expect(within(sheet()).getByRole("heading", { name: "United States Grand Prix" })).toBeInTheDocument();
+    expect(details).toHaveAttribute("href", "/portal/entertainment/sports/f1/18");
   });
 
   it("shows who led each session run so far in the card's timetable, by face", () => {
@@ -280,21 +198,6 @@ describe("F1Races", () => {
     // Still to run: its time, not a result.
     expect(rows[2]).toHaveTextContent("Sprint");
     expect(rows[2]).not.toHaveTextContent("Winner");
-  });
-
-  it("asks for a race's sessions when its sheet opens, once its weekend has started", () => {
-    renderRaces();
-    showEarlier();
-    fireEvent.click(tiles("Earlier races")[0]);
-    expect(getF1WeekendResultsAction).toHaveBeenCalledWith(
-      expect.objectContaining({ season: 2026, round: expect.any(Number) })
-    );
-  });
-
-  it("does not ask for the sessions of a weekend still to start", () => {
-    renderRaces();
-    fireEvent.click(screen.getByRole("button", { name: "View details: United States Grand Prix" }));
-    expect(getF1WeekendResultsAction).not.toHaveBeenCalled();
   });
 
   it("says the season is over when nothing is left to run", () => {

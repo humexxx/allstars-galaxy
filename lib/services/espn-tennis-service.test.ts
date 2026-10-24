@@ -776,14 +776,14 @@ describe("getTennisDraw", () => {
   });
 
   it("hands back the draw the feed already carries, without another call", async () => {
-    const draw = await getTennisDraw("atp", "espn-315-2026-mens-singles");
+    const draw = await getTennisDraw("espn-315-2026-mens-singles");
     expect(draw).toMatchObject({ champion: "A. Davidovich Fokina", runnerUp: "R. Jodar" });
     expect(draw!.rounds.map((r) => r.id)).toEqual(["final"]);
     expect(dayCalls()).toEqual([]);
   });
 
   it("reads an event only the calendar lists off its final day", async () => {
-    const draw = await getTennisDraw("atp", "espn-188-2026-mens-singles");
+    const draw = await getTennisDraw("espn-188-2026-mens-singles");
     expect(dayCalls()).toEqual([
       "https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard?dates=20260712",
     ]);
@@ -794,9 +794,9 @@ describe("getTennisDraw", () => {
     });
   });
 
-  it("refuses another tour's draw, or one on no calendar, before asking ESPN for it", async () => {
-    expect(await getTennisDraw("wta", "espn-188-2026-mens-singles")).toBeNull();
-    expect(await getTennisDraw("atp", "espn-999-2026-mens-singles")).toBeNull();
+  it("refuses a women's draw, or one on no calendar, before asking ESPN for it", async () => {
+    expect(await getTennisDraw("espn-188-2026-womens-singles")).toBeNull();
+    expect(await getTennisDraw("espn-999-2026-mens-singles")).toBeNull();
     expect(dayCalls()).toEqual([]);
   });
 });

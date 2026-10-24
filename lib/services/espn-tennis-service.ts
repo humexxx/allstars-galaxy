@@ -28,9 +28,10 @@ const RANKING_LIMIT = 20;
 /** Two weeks either side: what just finished, what is on, what is next. */
 const CALENDAR_DAYS = 14;
 
-type EspnTour = "atp" | "wta";
+/** The men's tour only: the hub follows no women's tour. */
+type EspnTour = "atp";
 
-const SLUGS: Record<EspnTour, string> = { atp: "mens-singles", wta: "womens-singles" };
+const SLUGS: Record<EspnTour, string> = { atp: "mens-singles" };
 
 type EspnAthlete = {
   id?: string;
@@ -570,30 +571,25 @@ const getTennisCalendar = cachedFeed<[EspnTour, number], CalendarSeed[]>(
 );
 
 /**
- * Both tours from ESPN's public API — the same endpoints espn.com reads, no key.
+ * The ATP from ESPN's public API — the same endpoints espn.com reads, no key.
  *
  * It replaced TheSportsDB, whose free key "3" was switched off: every call
  * answered 403, so the calendar fell back to the fixture and October showed
  * Roland Garros as live. ESPN also publishes the rankings, which were a
- * fixture all along. Four calls: one scoreboard over a date range and one
- * rankings table per tour. The season's calendar is joined in by
+ * fixture all along. Two calls: one scoreboard over a date range and the
+ * rankings table. The season's calendar is joined in by
  * `getTennisData`, from a cache of its own.
  */
 async function fetchTennisFromApi(): Promise<TennisData> {
   const now = new Date();
   const range = calendarRange(now);
-  const [atpBoard, atpRankings, wtaBoard, wtaRankings] = await Promise.all([
+  const [board, rankings] = await Promise.all([
     fetchEspn<EspnScoreboard>(`/atp/scoreboard?dates=${range}`),
     fetchEspn<EspnRankings>(`/atp/rankings`),
-    fetchEspn<EspnScoreboard>(`/wta/scoreboard?dates=${range}`),
-    fetchEspn<EspnRankings>(`/wta/rankings`),
   ]);
-  const atp = tourFrom("atp", atpBoard, atpRankings, now.getTime());
-  const wta = tourFrom("wta", wtaBoard, wtaRankings, now.getTime());
-  if (atp.rankings.length === 0 && wta.rankings.length === 0) {
-    throw new Error("espn tennis returned no rankings");
-  }
-  return { atp, wta };
+  const atp = tourFrom("atp", board, rankings, now.getTime());
+  if (atp.rankings.length === 0) throw new Error("espn tennis returned no rankings");
+  return { atp };
 }
 
 const getTennisFeed = cachedFeed(
@@ -605,28 +601,20 @@ const getTennisFeed = cachedFeed(
 );
 
 /**
- * Both tours, each with its season's calendar.
+ * The ATP, with its season's calendar.
  *
  * The calendars are read out here, never inside the feed's cached function:
  * Next skips the read of an `unstable_cache` nested in another, so the
- * day-long calendar cache would never have served — two more calls on every
- * five-minute refresh, four in January — and a calendar that failed once
+ * day-long calendar cache would never have served — one more call on every
+ * five-minute refresh, two in January — and a calendar that failed once
  * would have been stored with the feed, empty, for five minutes.
  */
 export async function getTennisData(): Promise<TennisData> {
   const now = new Date();
   const year = now.getUTCFullYear();
-  const [feed, atpSeeds, wtaSeeds] = await Promise.all([
-    getTennisFeed(),
-    getTennisCalendar("atp", year),
-    getTennisCalendar("wta", year),
-  ]);
+  const [feed, seeds] = await Promise.all([getTennisFeed(), getTennisCalendar("atp", year)]);
   if (feed === TENNIS_DATA) return feed;
-  const today = now.toISOString().slice(0, 10);
-  return {
-    atp: withCalendar(feed.atp, atpSeeds, today),
-    wta: withCalendar(feed.wta, wtaSeeds, today),
-  };
+  return { atp: withCalendar(feed.atp, seeds, now.toISOString().slice(0, 10)) };
 }
 
 /**
@@ -680,13 +668,10 @@ const getFinishedDraw = cachedFeed<[EspnTour, string, string], RacquetDraw | nul
  * browser — and the feed's own draw is reused when it shipped one. Null when
  * the event is unknown or ESPN did not answer.
  */
-export async function getTennisDraw(
-  tour: EspnTour,
-  tournamentId: string
-): Promise<RacquetDraw | null> {
-  const parsed = /^espn-(\d+-\d{4})-(mens|womens)-singles$/.exec(tournamentId);
-  if (!parsed || `${parsed[2]}-singles` !== SLUGS[tour]) return null;
-  const section = (await getTennisData())[tour];
+export async function getTennisDraw(tournamentId: string): Promise<RacquetDraw | null> {
+  const parsed = /^espn-(\d+-\d{4})-mens-singles$/.exec(tournamentId);
+  if (!parsed) return null;
+  const section = (await getTennisData()).atp;
   const scored = section.tournaments.find((t) => t.id === tournamentId);
   if (scored?.bracket?.length) {
     const used = new Set(
@@ -708,7 +693,7 @@ export async function getTennisDraw(
   if (!drawIsOut(known.status, known.startDate, today)) return empty;
   const day = clampDay(today, known.startDate, known.endDate);
   const load = known.status === "completed" ? getFinishedDraw : getLiveDraw;
-  const draw = await load(tour, parsed[1], day);
+  const draw = await load("atp", parsed[1], day);
   // An event days away may not be on the scoreboard yet: nothing drawn, not a failure.
   return draw ?? (known.status === "upcoming" ? empty : null);
 }

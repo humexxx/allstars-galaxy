@@ -1,4 +1,4 @@
-import type { RacquetTournament } from "@/types/sports";
+import type { RacquetCalendarEntry, RacquetData, RacquetTournament } from "@/types/sports";
 
 /**
  * Which tournament each part of a racquet view is about.
@@ -82,4 +82,28 @@ export function addDays(day: string, days: number): string {
   const date = new Date(`${day}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+/** A calendar line in the shape the cards and the page read: no place, no draw. */
+function fromCalendar(entry: RacquetCalendarEntry): RacquetTournament {
+  return { ...entry, location: "" };
+}
+
+/**
+ * The feed's tournaments with the rest of the season's calendar behind them,
+ * in date order. Tennis's feed covers only a fortnight either side of today;
+ * read off it alone, "coming up" would stop two weeks out.
+ */
+export function seasonOf(data: RacquetData): RacquetTournament[] {
+  const listed = new Set(data.tournaments.map((t) => t.id));
+  const rest = (data.calendar ?? []).filter((e) => !listed.has(e.id)).map(fromCalendar);
+  return [...data.tournaments, ...rest].sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
+
+/** A tournament of the tour by id, from the feed or, failing that, the calendar. */
+export function findTournament(data: RacquetData, id: string): RacquetTournament | undefined {
+  const listed = data.tournaments.find((t) => t.id === id);
+  if (listed) return listed;
+  const entry = data.calendar?.find((e) => e.id === id);
+  return entry ? fromCalendar(entry) : undefined;
 }

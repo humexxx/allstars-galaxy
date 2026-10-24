@@ -62,8 +62,6 @@ import type {
 import {
   FOOTBALL_COMPETITION_IDS,
   LOL_REGIONS,
-  PADEL_CATEGORIES,
-  TENNIS_TOURS,
 } from "@/types/sports";
 
 // ---------- Favourite CRUD ----------
@@ -268,30 +266,10 @@ export async function getDashboardSportCard(
     }
     case "lol":
       return lolCard(base, (await getLolData()) ?? LOL_DATA, oneOf(LOL_REGIONS, competition));
-    case "tennis": {
-      const data = (await getTennisData()) ?? TENNIS_DATA;
-      return racquetCard(
-        base,
-        [
-          { id: "atp", label: "ATP", data: data.atp },
-          { id: "wta", label: "WTA", data: data.wta },
-        ],
-        oneOf(TENNIS_TOURS, competition),
-        "Both tours"
-      );
-    }
-    case "padel": {
-      const data = (await getPadelData()) ?? PADEL_DATA;
-      return racquetCard(
-        base,
-        [
-          { id: "men", label: "Men", data: data.men },
-          { id: "women", label: "Women", data: data.women },
-        ],
-        oneOf(PADEL_CATEGORIES, competition),
-        "Men and women"
-      );
-    }
+    case "tennis":
+      return racquetCard(base, ((await getTennisData()) ?? TENNIS_DATA).atp, "ATP");
+    case "padel":
+      return racquetCard(base, ((await getPadelData()) ?? PADEL_DATA).men, "Premier Padel");
     default:
       return null;
   }
@@ -582,15 +560,9 @@ function swissRecords(stage: SwissStage): { teamId: string; wins: number; losses
  * one the card is set to. The line under the title names that choice: the
  * lead box already says whether the tournament is on now or next.
  */
-function racquetCard(
-  base: CardBase,
-  tours: { id: string; label: string; data: RacquetData }[],
-  chosen: string | null,
-  automatic: string
-): DashboardSportCard {
-  const pick = tours.find((t) => t.id === chosen);
-  const shown = pick ? [pick] : tours;
-  const tournaments = shown.flatMap((t) => t.data.tournaments);
+/** The men's tour only, so no championship to pick: the hub follows no women's tour. */
+function racquetCard(base: CardBase, data: RacquetData, context: string): DashboardSportCard {
+  const tournaments = data.tournaments;
   const event =
     tournaments.find((t) => t.status === "live") ??
     tournaments
@@ -598,7 +570,7 @@ function racquetCard(
       .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
   return {
     ...base,
-    context: pick?.label ?? automatic,
+    context,
     event: event
       ? {
           name: event.name,
@@ -609,11 +581,11 @@ function racquetCard(
         }
       : undefined,
     matches: [],
-    tables: shown
-      .map((t) => ({
-        id: t.id,
-        label: t.label,
-        rows: t.data.rankings.slice(0, CARD_ROWS).map(
+    tables: [
+      {
+        id: data.tour,
+        label: "Rankings",
+        rows: data.rankings.slice(0, CARD_ROWS).map(
           (p): DashboardTableRow => ({
             position: p.position,
             name: p.shortName,
@@ -622,13 +594,8 @@ function racquetCard(
             value: p.points.toLocaleString("en-US"),
           })
         ),
-      }))
-      .filter((t) => t.rows.length > 0),
-    competitions: {
-      value: pick?.id ?? null,
-      automatic,
-      options: tours.map((t) => ({ id: t.id, label: t.label })),
-    },
+      },
+    ].filter((t) => t.rows.length > 0),
   };
 }
 

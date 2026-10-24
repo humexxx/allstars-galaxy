@@ -21,7 +21,6 @@ vi.mock("@/app/actions/sports", () => ({
 }));
 vi.mock("@/app/actions/racquet", () => ({ getRacquetDrawAction: vi.fn() }));
 vi.mock("@/app/actions/lol", () => ({ getLolSplitAction: vi.fn() }));
-vi.mock("@/app/actions/f1", () => ({ getF1RaceClassificationAction: vi.fn() }));
 
 const NBA: SportPayload = { sport: "nba", data: { ...NBA_DATA, playoffs: [] } };
 const F1: SportPayload = { sport: "f1", data: F1_DATA, news: [] };

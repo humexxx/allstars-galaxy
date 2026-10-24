@@ -159,8 +159,8 @@ describe("setSportCompetitionAction", () => {
   const ROW = {
     id: "22222222-2222-2222-2222-222222222222",
     userId: USER_ID,
-    sportId: "tennis",
-    competition: "wta",
+    sportId: "lol",
+    competition: "lck",
     createdAt: new Date(),
   };
 
@@ -169,15 +169,15 @@ describe("setSportCompetitionAction", () => {
   });
 
   it("stores the championship on the caller's favourite and refreshes the dashboard", async () => {
-    const result = await setSportCompetitionAction({ sportId: "tennis", competition: "wta" });
+    const result = await setSportCompetitionAction({ sportId: "lol", competition: "lck" });
 
     expect(result).toEqual({ success: true });
-    expect(setSportCompetition).toHaveBeenCalledWith(USER_ID, "tennis", "wta");
+    expect(setSportCompetition).toHaveBeenCalledWith(USER_ID, "lol", "lck");
     expect(logImpersonatedMutation).toHaveBeenCalledWith({
       action: "sportFavorite.competition",
       entityTable: "user_sports_preferences",
       entityId: ROW.id,
-      metadata: { sportId: "tennis", competition: "wta" },
+      metadata: { sportId: "lol", competition: "lck" },
     });
     // Re-rendered, not revalidated: expiring /portal would expire the cached
     // provider feeds the dashboard reads along with it.
@@ -193,7 +193,10 @@ describe("setSportCompetitionAction", () => {
   });
 
   it.each([
-    [{ sportId: "tennis", competition: "lck" }],
+    [{ sportId: "football", competition: "lck" }],
+    // Men only: tennis and padel have no tour to pick.
+    [{ sportId: "tennis", competition: "wta" }],
+    [{ sportId: "padel", competition: "women" }],
     [{ sportId: "football", competition: "bundesliga" }],
     [{ sportId: "nba", competition: null }],
     [{ sportId: "cricket", competition: null }],
@@ -209,7 +212,7 @@ describe("setSportCompetitionAction", () => {
   it("says so when the sport is not a favourite, and refreshes nothing", async () => {
     vi.mocked(setSportCompetition).mockResolvedValueOnce(null);
 
-    const result = await setSportCompetitionAction({ sportId: "padel", competition: "women" });
+    const result = await setSportCompetitionAction({ sportId: "lol", competition: "lpl" });
 
     expect(result).toEqual({ success: false, error: "Add this sport to your favorites first" });
     expect(logImpersonatedMutation).not.toHaveBeenCalled();
@@ -219,7 +222,7 @@ describe("setSportCompetitionAction", () => {
   it("turns an unauthenticated request into the generic error, before validating", async () => {
     vi.mocked(requireEffectiveContext).mockRejectedValueOnce(new Error("Unauthorized"));
 
-    const result = await setSportCompetitionAction({ sportId: "tennis", competition: "atp" });
+    const result = await setSportCompetitionAction({ sportId: "lol", competition: "lck" });
 
     expect(result).toEqual({ success: false, error: "Action failed" });
     expect(setSportCompetition).not.toHaveBeenCalled();
@@ -228,7 +231,7 @@ describe("setSportCompetitionAction", () => {
   it("swallows a service failure into the error envelope", async () => {
     vi.mocked(setSportCompetition).mockRejectedValueOnce(new Error("pg boom"));
 
-    const result = await setSportCompetitionAction({ sportId: "tennis", competition: "atp" });
+    const result = await setSportCompetitionAction({ sportId: "lol", competition: "lck" });
 
     expect(result).toEqual({ success: false, error: "Action failed" });
     expect(refresh).not.toHaveBeenCalled();

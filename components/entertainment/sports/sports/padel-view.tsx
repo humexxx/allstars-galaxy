@@ -21,10 +21,7 @@ export function PadelView({ data }: PadelViewProps) {
       // Padel in 2024, and padelapi.org — what this reads — covers Premier
       // Padel and FIP.
       subtitle={`Premier Padel · Season ${data.men.season}`}
-      tours={[
-        { value: "men", label: "Men", data: data.men },
-        { value: "women", label: "Women", data: data.women },
-      ]}
+      data={data.men}
     />
   );
 }

@@ -50,12 +50,12 @@ function halves<T>(list: T[]): [T[], T[]] {
 const reducedMotion = (): boolean =>
   typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-/** Each column's left edge, in the scrolled content's own coordinates. */
+/**
+ * Each column's left edge within the scrolled content, from layout offsets
+ * (the canvas is their offset parent), so a dialog zooming in does not skew it.
+ */
 function columnLefts(viewport: HTMLElement): number[] {
-  const origin = viewport.getBoundingClientRect().left - viewport.scrollLeft;
-  return [...viewport.querySelectorAll<HTMLElement>("[data-column]")].map(
-    (column) => column.getBoundingClientRect().left - origin
-  );
+  return [...viewport.querySelectorAll<HTMLElement>("[data-column]")].map((column) => column.offsetLeft);
 }
 
 /**

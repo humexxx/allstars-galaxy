@@ -36,20 +36,21 @@ export function SportStripSkeleton(): React.ReactElement {
 }
 
 /** What the left of a sport's Overview holds, for its skeleton. */
-type Shape = "matches" | "races" | "tournament";
+type Shape = "matches" | "events";
 
+/** F1, padel and tennis lead with one event, big, and the ones after it as tiles. */
 const SHAPES: Partial<Record<SportId, Shape>> = {
-  f1: "races",
-  padel: "tournament",
-  tennis: "tournament",
+  f1: "events",
+  padel: "events",
+  tennis: "events",
 };
 
 /**
  * One sport's page while it loads, laid out as `SportShell` is — the name
  * row, the tabs over their rule — then the Overview's two columns: the left
- * as the sport fills it (days of match cards; F1's next race and the races
- * after it; the tournament on now with its draw), each part under a line set
- * like a day heading, and beside it the table's label and card: its ten rows
+ * as the sport fills it (days of match cards; or, for F1, padel and tennis,
+ * the event on now or next and the ones after it), each part under a line
+ * set like a day heading, and beside it the table's label and card: its ten rows
  * and the "Show more" line under them, as every table in the hub. The
  * route's `loading.tsx` uses it too, under the strip, with no sport to go by.
  */
@@ -70,17 +71,11 @@ export function SportSkeleton({ sport }: { sport?: SportId } = {}): React.ReactE
       </div>
       <div className="grid items-start gap-6 pt-6 @4xl:grid-cols-[2fr_1fr]">
         <div className="flex min-w-0 flex-col gap-6">
-          {shape === "races" ? (
-            <RacesSkeleton />
-          ) : shape === "tournament" ? (
-            <TournamentSkeleton />
-          ) : (
-            <MatchesSkeleton />
-          )}
+          {shape === "events" ? <EventsSkeleton /> : <MatchesSkeleton />}
         </div>
         <div className="flex flex-col gap-2">
           <HeadingLine className="w-20" />
-          <TableSkeleton withToggle={shape === "races"} />
+          <TableSkeleton withToggle={sport === "f1"} />
         </div>
       </div>
     </div>
@@ -109,8 +104,8 @@ function MatchesSkeleton(): React.ReactElement {
   );
 }
 
-/** F1: the next race's card, then the races after it as tiles. */
-function RacesSkeleton(): React.ReactElement {
+/** The event on now or next as a card, then the ones after it as tiles. */
+function EventsSkeleton(): React.ReactElement {
   return (
     <>
       <section className="flex flex-col gap-2">
@@ -141,36 +136,6 @@ function RacesSkeleton(): React.ReactElement {
         </div>
       </section>
     </>
-  );
-}
-
-/** Padel and tennis: the tournament on now in one card, its draw in columns. */
-function TournamentSkeleton(): React.ReactElement {
-  return (
-    <section className="flex flex-col gap-2">
-      <HeadingLine className="w-20" />
-      <Card>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Skeleton className="h-5 w-24 rounded-full" />
-            <Skeleton className="h-6 w-72 max-w-full" />
-            <Skeleton className="h-4 w-56 max-w-full" />
-          </div>
-          <div className="grid grid-cols-2 gap-4 @xl:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, column) => (
-              <div
-                key={column}
-                className={cn("flex flex-col justify-around gap-3", column > 1 && "hidden @xl:flex")}
-              >
-                {Array.from({ length: 4 >> Math.min(column, 2) }).map((_, i) => (
-                  <Skeleton key={i} className="h-14 w-full rounded-lg" />
-                ))}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </section>
   );
 }
 

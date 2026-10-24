@@ -166,14 +166,23 @@ const ranking = (position: number): PlayerRanking => ({
   movement: 0,
 });
 
+const tile = (id: string): HTMLElement => document.querySelector<HTMLElement>(`[data-tournament="${id}"]`)!;
+const section = (title: string): HTMLElement => screen.getByRole("heading", { name: title }).closest("section")!;
+const tiles = (title: string): string[] =>
+  [...section(title).querySelectorAll("[data-tournament]")].map((t) => t.getAttribute("data-tournament")!);
+/** The tournaments played come in from the pill on their heading, three a tap. */
+const earlier = (): void => {
+  fireEvent.click(screen.getByRole("button", { name: /^Earlier:/ }));
+};
+
 describe("RacquetView, the tabs", () => {
-  it("offers Overview and Tournaments, and opens on Overview", () => {
+  it("offers Overview and Draw, and opens on Overview", () => {
     renderPadel();
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Tournaments"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Draw"]);
     expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("Overview");
   });
 
-  it("puts the tour's rankings beside the tournament, ten rows and a button for the rest", () => {
+  it("puts the tour's rankings beside the tournaments, ten rows and a button for the rest", () => {
     const ranked: PadelData = {
       ...PADEL,
       men: { ...MEN, rankings: Array.from({ length: 12 }, (_, i) => ranking(i + 1)) },
@@ -193,83 +202,88 @@ describe("RacquetView, the tabs", () => {
     expect(rows()).toBe(10);
   });
 
-  it("leaves the tournament the whole row when the tour publishes no rankings", () => {
+  it("leaves the tournaments the whole row when the tour publishes no rankings", () => {
     renderPadel();
     expect(screen.queryByText("Rankings")).toBeNull();
   });
+});
 
-  it("opens the tournament on Overview from View details", () => {
+describe("RacquetView, Overview", () => {
+  it("features the next tournament as F1 does its next race: poster, tier, venue, prize, when it starts", () => {
     renderPadel();
-    fireEvent.click(screen.getByRole("button", { name: "View details: Milano P1 2026" }));
-    expect(within(sheet()).getByRole("heading", { name: "Milano P1 2026" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Next up" })).toBeInTheDocument();
+    const card = screen.getByRole("heading", { name: "Kuwait P1 2026" }).closest<HTMLElement>("[data-slot='card']")!;
+    expect(within(card).getByText("P1")).toBeInTheDocument();
+    expect(within(card).getByText("Sheikh Saad Al-Abdullah Complex, Kuwait City")).toBeInTheDocument();
+    expect(within(card).getByText("€525,000")).toBeInTheDocument();
+    expect(within(card).getByText("Starts in 8 days")).toBeInTheDocument();
+    expect(card.querySelector("img")?.getAttribute("src")).toBe(
+      "https://media.padelapi.org/tournament-api/kuwait-p1-2026.webp"
+    );
+    // Not one big button that greys on hover: "View details" opens it.
+    expect(card.className).not.toMatch(/hover:bg/);
+    fireEvent.click(within(card).getByRole("button", { name: "View details: Kuwait P1 2026" }));
+    expect(within(sheet()).getByRole("heading", { name: "Kuwait P1 2026" })).toBeInTheDocument();
   });
 
-  it("shows the tournament just finished on Overview, with its champions and its draw", () => {
+  it("lists every tournament still to come under Coming up", () => {
     renderPadel();
+    expect(tiles("Coming up")).toEqual(["padelapi-749", "padelapi-750", "padelapi-751"]);
+  });
+
+  it("brings in the tournaments played three a tap, latest first, the calendar's own included", () => {
+    renderPadel();
+    expect(tiles("Earlier tournaments")).toEqual([]);
+
+    earlier();
+    expect(tiles("Earlier tournaments")).toEqual(["padelapi-747", "padelapi-746", "padelapi-744"]);
+    expect(within(tile("padelapi-747")).getByText("d. L. Augsburger / J. Lebron", { exact: false })).toBeInTheDocument();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /^Earlier:/ }));
+
+    earlier();
+    expect(tiles("Earlier tournaments")).toEqual(["padelapi-747", "padelapi-746", "padelapi-744", "padelapi-701"]);
+    // Nothing older: the pill goes, and the keyboard lands on what it brought in.
+    expect(screen.queryByRole("button", { name: /^Earlier:/ })).toBeNull();
+    expect(document.activeElement).toBe(tile("padelapi-701"));
+  });
+});
+
+describe("RacquetView, the Draw tab", () => {
+  it("draws the tournament just finished, with its champions, the whole width", () => {
+    renderPadel();
+    openTab("Draw");
     expect(screen.getByRole("heading", { name: "Milano P1 2026" })).toBeInTheDocument();
     expect(screen.getByText("Just finished")).toBeInTheDocument();
     expect(screen.getByText("d. L. Augsburger / J. Lebron", { exact: false })).toBeInTheDocument();
-    // The bracket itself: its rounds, and each pair as two names.
+    // The bracket itself, a semi-final each side of the final, each pair as two names.
     expect(screen.getByText("Final")).toBeInTheDocument();
-    // One semi-final on each side of the final.
     expect(screen.getAllByText("Semi-finals")).toHaveLength(2);
     expect(screen.getAllByText("Coello").length).toBeGreaterThan(0);
     expect(getRacquetDrawAction).not.toHaveBeenCalled();
   });
-});
 
-describe("RacquetView, the Tournaments tab", () => {
-  it("features the next tournament with its poster, tier, venue and prize", () => {
+  it("puts the bracket on the whole screen on Expand", () => {
     renderPadel();
-    openTab("Tournaments");
-    expect(screen.getByText("Next up")).toBeInTheDocument();
-    const featured = screen.getByRole("heading", { name: "Kuwait P1 2026" });
-    expect(featured.tagName).toBe("H3");
-    const card = featured.closest("[data-slot='card']") as HTMLElement;
-    expect(within(card).getByText("P1")).toBeInTheDocument();
-    expect(within(card).getByText("Sheikh Saad Al-Abdullah Complex, Kuwait City")).toBeInTheDocument();
-    expect(within(card).getByText("€525,000")).toBeInTheDocument();
-    expect(card.querySelector("img")?.getAttribute("src")).toBe(
-      "https://media.padelapi.org/tournament-api/kuwait-p1-2026.webp"
-    );
+    openTab("Draw");
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    const full = screen.getByRole("dialog");
+    expect(within(full).getByRole("heading", { name: "Milano P1 2026" })).toBeInTheDocument();
+    expect(within(full).getByText("Final")).toBeInTheDocument();
   });
 
-  it("lists the last three results, champions d. runners-up, then the next three", () => {
+  it("opens the tournament's sheet from View details", () => {
     renderPadel();
-    openTab("Tournaments");
-    const finished = screen.getByRole("heading", { name: "Just finished" }).closest("section")!;
-    expect(within(finished).getAllByRole("heading", { level: 4 }).map((h) => h.textContent)).toEqual([
-      "Milano P1 2026",
-      "Dubai P1 2026",
-      "Paris Major 2026",
-    ]);
-    expect(within(finished).getByText("d. L. Augsburger / J. Lebron", { exact: false })).toBeInTheDocument();
-    const next = screen.getByRole("heading", { name: "Coming up" }).closest("section")!;
-    expect(within(next).getAllByRole("heading", { level: 4 }).map((h) => h.textContent)).toEqual([
-      "Mexico P1 2026",
-      "Barcelona Master 2026",
-      "Finals 2026",
-    ]);
-  });
-
-  it("lists the whole season by month under Full calendar", () => {
-    renderPadel();
-    openTab("Tournaments");
-    expect(screen.queryByText("April 2026")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Full calendar/ }));
-    expect(screen.getByText("April 2026")).toBeInTheDocument();
-    expect(screen.getByText("December 2026")).toBeInTheDocument();
-    // A line only the calendar has still opens its sheet.
-    fireEvent.click(screen.getByRole("button", { name: /Madrid P1 2026/ }));
-    expect(within(sheet()).getByRole("heading", { name: "Madrid P1 2026" })).toBeInTheDocument();
+    openTab("Draw");
+    fireEvent.click(screen.getByRole("button", { name: "View details: Milano P1 2026" }));
+    expect(within(sheet()).getByRole("heading", { name: "Milano P1 2026" })).toBeInTheDocument();
   });
 });
 
 describe("RacquetView, the tournament sheet", () => {
   it("opens a draw that came with the page without asking for it", () => {
     renderPadel();
-    openTab("Tournaments");
-    fireEvent.click(screen.getByRole("button", { name: "Milano P1 2026" }));
+    earlier();
+    fireEvent.click(tile("padelapi-747"));
     const details = sheet();
     expect(within(details).getByRole("heading", { name: "Milano P1 2026" })).toBeInTheDocument();
     expect(within(details).getByText("€479,068")).toBeInTheDocument();
@@ -279,16 +293,14 @@ describe("RacquetView, the tournament sheet", () => {
 
   it("slides in from the right on a desktop", () => {
     renderPadel();
-    openTab("Tournaments");
-    fireEvent.click(screen.getByRole("button", { name: "Kuwait P1 2026" }));
+    fireEvent.click(screen.getByRole("button", { name: "View details: Kuwait P1 2026" }));
     expect(sheet()).toHaveAttribute("data-side", "right");
   });
 
   it("comes up from the bottom on a phone", () => {
     stubViewport(true);
     renderPadel();
-    openTab("Tournaments");
-    fireEvent.click(screen.getByRole("button", { name: "Kuwait P1 2026" }));
+    fireEvent.click(screen.getByRole("button", { name: "View details: Kuwait P1 2026" }));
     expect(sheet()).toHaveAttribute("data-side", "bottom");
   });
 
@@ -296,8 +308,8 @@ describe("RacquetView, the tournament sheet", () => {
     let answer: (value: Awaited<ReturnType<typeof getRacquetDrawAction>>) => void = () => {};
     vi.mocked(getRacquetDrawAction).mockReturnValue(new Promise((resolve) => (answer = resolve)));
     renderPadel();
-    openTab("Tournaments");
-    fireEvent.click(screen.getByRole("button", { name: "Dubai P1 2026" }));
+    earlier();
+    fireEvent.click(tile("padelapi-746"));
 
     expect(within(sheet()).getByRole("status", { name: "Loading the draw" })).toBeInTheDocument();
     expect(getRacquetDrawAction).toHaveBeenCalledWith({
@@ -311,7 +323,7 @@ describe("RacquetView, the tournament sheet", () => {
 
     fireEvent.keyDown(sheet(), { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    fireEvent.click(screen.getByRole("button", { name: "Dubai P1 2026" }));
+    fireEvent.click(tile("padelapi-746"));
     expect(within(sheet()).getByText("Final")).toBeInTheDocument();
     expect(getRacquetDrawAction).toHaveBeenCalledTimes(1);
   });
@@ -321,8 +333,8 @@ describe("RacquetView, the tournament sheet", () => {
       .mockResolvedValueOnce({ success: false, error: "The draw could not be loaded" })
       .mockResolvedValueOnce({ success: true, data: DUBAI_DRAW });
     renderPadel();
-    openTab("Tournaments");
-    fireEvent.click(screen.getByRole("button", { name: "Dubai P1 2026" }));
+    earlier();
+    fireEvent.click(tile("padelapi-746"));
 
     expect(await within(sheet()).findByText("The draw could not be loaded")).toBeInTheDocument();
     fireEvent.click(within(sheet()).getByRole("button", { name: "Try again" }));
@@ -336,9 +348,9 @@ describe("RacquetView, the tournament sheet", () => {
       data: { tournamentId: "padelapi-701", rounds: [], players: [], resultsHidden: true },
     });
     renderPadel();
-    openTab("Tournaments");
-    fireEvent.click(screen.getByRole("button", { name: /Full calendar/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Madrid P1 2026/ }));
+    earlier();
+    earlier();
+    fireEvent.click(tile("padelapi-701"));
 
     expect(await within(sheet()).findByText(/only kept for about six months/)).toBeInTheDocument();
     expect(within(sheet()).getAllByText("A. Coello / A. Tapia").length).toBeGreaterThan(0);
@@ -346,8 +358,7 @@ describe("RacquetView, the tournament sheet", () => {
 
   it("asks for no draw weeks before one can exist", () => {
     renderPadel();
-    openTab("Tournaments");
-    fireEvent.click(screen.getByRole("button", { name: "Mexico P1 2026" }));
+    fireEvent.click(tile("padelapi-749"));
     expect(within(sheet()).getByText("The draw is not out yet")).toBeInTheDocument();
     expect(getRacquetDrawAction).not.toHaveBeenCalled();
   });
@@ -368,8 +379,9 @@ describe("RacquetView, the tournament sheet", () => {
         <PadelView data={fixture} />
       </SportsTodayProvider>
     );
-    openTab("Tournaments");
-    fireEvent.click(screen.getByRole("button", { name: "Qatar Major" }));
+    // A season over shows its last tournaments from the start.
+    expect(screen.getByText("The season is over")).toBeInTheDocument();
+    fireEvent.click(tile("wpt-m-doha"));
     expect(within(sheet()).getByText("This draw is not available")).toBeInTheDocument();
     expect(getRacquetDrawAction).not.toHaveBeenCalled();
   });
@@ -438,6 +450,9 @@ describe("RacquetView, tennis", () => {
         expect.objectContaining({ tournamentId: "espn-328-2026-mens-singles" })
       )
     );
+    // The Draw tab draws the one picked too.
+    openTab("Draw");
+    expect(screen.getByRole("heading", { name: "Swiss Indoors Basel" })).toBeInTheDocument();
   });
 
   it("shows no picker with one tournament being played", () => {
@@ -449,7 +464,7 @@ describe("RacquetView, tennis", () => {
     expect(screen.queryByRole("group", { name: "Tournaments on now" })).toBeNull();
   });
 
-  it("features the event being played, with last year's champion", async () => {
+  it("features the event being played, with last year's champion, and draws it on Draw", async () => {
     vi.mocked(getRacquetDrawAction).mockResolvedValue({
       success: true,
       data: { tournamentId: "espn-vienna", rounds: [], players: [] },
@@ -459,14 +474,16 @@ describe("RacquetView, tennis", () => {
         <TennisView data={tennis} />
       </SportsTodayProvider>
     );
-    // Overview opens on the tournament being played, not on last week's final,
-    // and asks for its draw when the feed did not ship one.
+    // Overview opens on the tournament being played, not on last week's final.
+    expect(screen.getByRole("heading", { name: "On now" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Erste Bank Open" })).toBeInTheDocument();
+    expect(screen.getByText("defends the title", { exact: false })).toBeInTheDocument();
+    earlier();
+    expect(within(tile("espn-315-2026-mens-singles")).getByText("Shanghai, China PR")).toBeInTheDocument();
+
+    // Its draw, asked for when the feed did not ship one.
+    openTab("Draw");
     expect(await screen.findByText("The draw has not been published")).toBeInTheDocument();
     expect(getRacquetDrawAction).toHaveBeenCalledTimes(1);
-    openTab("Tournaments");
-    expect(screen.getByText("On now")).toBeInTheDocument();
-    expect(screen.getByText("defends the title", { exact: false })).toBeInTheDocument();
-    expect(screen.getByText("Shanghai, China PR")).toBeInTheDocument();
   });
 });

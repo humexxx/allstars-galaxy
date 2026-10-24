@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mono, Text } from "@/components/ui/typography";
-import { currentTournament, drawIsOut } from "@/lib/sports/racquet";
+import { currentTournament, drawIsOut, featuredTournament } from "@/lib/sports/racquet";
 import { cn } from "@/lib/utils";
 import type { RacquetData, RacquetTour, RacquetTournament } from "@/types/sports";
 
@@ -37,7 +37,7 @@ import {
   type RacquetSport,
 } from "./racquet-draw";
 import { RacquetTournamentSheet } from "./racquet-tournament-sheet";
-import { findTournament, RacquetCurrent, RacquetTournaments } from "./racquet-tournaments";
+import { findTournament, RacquetDrawTab, RacquetOverview, seasonOf } from "./racquet-tournaments";
 
 type TourTab = { value: string; label: string; data: RacquetData };
 
@@ -72,12 +72,16 @@ export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetVie
   const data = activeTour.data;
   const variant: DrawVariant = sport === "padel" ? "pair" : "player";
 
-  // Every tournament being played; the one picked on Overview, per tour,
-  // else the first of them (or the one just finished).
+  // Every tournament being played, and the one picked of them, per tour. The
+  // Overview features it, else the first, else the next to start; the Draw
+  // tab draws it, else the first, else the one just finished.
   const onNow = data.tournaments.filter((t) => t.status === "live");
   const [picked, setPicked] = useState<Partial<Record<RacquetTour, string>>>({});
-  const current =
-    onNow.find((t) => t.id === picked[data.tour]) ?? currentTournament(data.tournaments);
+  const pickedLive = onNow.find((t) => t.id === picked[data.tour]);
+  const current = pickedLive ?? currentTournament(data.tournaments);
+  const featured =
+    pickedLive ?? featuredTournament(data.tournaments) ?? featuredTournament(seasonOf(data));
+  const pick = (id: string): void => setPicked((p) => ({ ...p, [data.tour]: id }));
   const { draws, load } = useRacquetDraws(sport);
   // Which tournament the sheet shows outlives whether it is open, so the
   // sheet keeps its content while it slides away.
@@ -139,32 +143,43 @@ export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetVie
         tabs={
           <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="tournaments">Tournaments</TabsTrigger>
+            <TabsTrigger value="draw">Draw</TabsTrigger>
           </TabsList>
         }
       >
-        {/* The tournament on now (else just finished) and the tour's rankings
-            on one tab, as football's matches and table. A tour with no
-            rankings published leaves the tournament the whole row. */}
+        {/* As F1's Overview: the tournament on now (else the next) and the
+            season around it, the tour's rankings beside them. A tour with no
+            rankings published leaves the tournaments the whole row. */}
         <TabsContent value="overview">
           <OverviewSplit
             matches={
-              <RacquetCurrent
-                tournament={current}
-                draw={currentDraw}
+              <RacquetOverview
+                key={tourValue}
+                data={data}
+                featured={featured}
+                draw={featured && featured.id === current?.id ? currentDraw : undefined}
                 variant={variant}
-                onOpen={openTournament}
-                onRetry={() => current && load(data.tour, current.id)}
+                today={today}
                 onNow={onNow}
-                onPick={(id) => setPicked((p) => ({ ...p, [data.tour]: id }))}
+                onPick={pick}
+                onOpen={openTournament}
               />
             }
             table={data.rankings.length > 0 && <RankingsTable key={tourValue} data={data} />}
             tableLabel="Rankings"
           />
         </TabsContent>
-        <TabsContent value="tournaments">
-          <RacquetTournaments data={data} variant={variant} onOpen={openTournament} />
+        {/* The bracket, the whole width of the page, and the whole screen on "Expand". */}
+        <TabsContent value="draw">
+          <RacquetDrawTab
+            tournament={current}
+            draw={currentDraw}
+            variant={variant}
+            onOpen={openTournament}
+            onRetry={() => current && load(data.tour, current.id)}
+            onNow={onNow}
+            onPick={pick}
+          />
         </TabsContent>
       </SportShell>
       <RacquetTournamentSheet

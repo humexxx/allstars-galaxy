@@ -52,9 +52,8 @@ function layOut(container: HTMLElement): { viewport: HTMLElement; scrollTo: Retu
   const width = all.length * 200;
   Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 400 });
   Object.defineProperty(viewport, "scrollWidth", { configurable: true, value: width });
-  viewport.getBoundingClientRect = () => ({ left: 0 }) as DOMRect;
   all.forEach((column, i) => {
-    column.getBoundingClientRect = () => ({ left: i * 200 - viewport.scrollLeft }) as DOMRect;
+    Object.defineProperty(column, "offsetLeft", { configurable: true, value: i * 200 });
   });
   const scrollTo = vi.fn(({ left }: ScrollToOptions) => {
     viewport.scrollLeft = Math.max(0, Math.min(left ?? 0, width - 400));

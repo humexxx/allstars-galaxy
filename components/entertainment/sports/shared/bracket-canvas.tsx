@@ -50,6 +50,24 @@ export function elbow(x1: number, y1: number, x2: number, y2: number): string {
 }
 
 /**
+ * A box's place in the canvas from layout offsets, which a transform does not
+ * touch: measured on screen, a bracket opened in a dialog that zooms in drew
+ * its branches where the boxes were mid-zoom, and nothing measured again.
+ */
+function placeIn(canvas: HTMLElement, el: HTMLElement): { left: number; right: number; middle: number } | null {
+  let left = 0;
+  let top = 0;
+  let node: HTMLElement | null = el;
+  while (node && node !== canvas) {
+    left += node.offsetLeft;
+    top += node.offsetTop;
+    node = node.offsetParent as HTMLElement | null;
+  }
+  if (node !== canvas) return null;
+  return { left, right: left + el.offsetWidth, middle: top + el.offsetHeight / 2 };
+}
+
+/**
  * Columns of boxes joined by branches — the layout every bracket in the hub
  * shares, Swiss stage and knockout alike.
  *
@@ -82,21 +100,17 @@ export function BracketCanvas({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const measure = () => {
-      const origin = canvas.getBoundingClientRect();
       const next: string[] = [];
       for (const edge of edges) {
-        const from = boxes.current.get(edge.from)?.getBoundingClientRect();
-        const to = boxes.current.get(edge.to)?.getBoundingClientRect();
+        const fromBox = boxes.current.get(edge.from);
+        const toBox = boxes.current.get(edge.to);
+        const from = fromBox && placeIn(canvas, fromBox);
+        const to = toBox && placeIn(canvas, toBox);
         if (!from || !to) continue;
         // From the side of the box that faces the one it feeds.
         const rightward = from.left <= to.left;
         next.push(
-          elbow(
-            (rightward ? from.right : from.left) - origin.left,
-            from.top + from.height / 2 - origin.top,
-            (rightward ? to.left : to.right) - origin.left,
-            to.top + to.height / 2 - origin.top
-          )
+          elbow(rightward ? from.right : from.left, from.middle, rightward ? to.left : to.right, to.middle)
         );
       }
       setPaths((prev) => (prev.join() === next.join() ? prev : next));

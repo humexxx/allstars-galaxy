@@ -5,6 +5,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "rea
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
+import { isCalendarDay } from "@/lib/utils/date";
 import type { Team } from "@/types/sports";
 
 import type { MatchTimeFormat } from "./match-time";
@@ -50,9 +51,9 @@ export function elbow(x1: number, y1: number, x2: number, y2: number): string {
 }
 
 /**
- * A box's place in the canvas from layout offsets, which a transform does not
- * touch: measured on screen, a bracket opened in a dialog that zooms in drew
- * its branches where the boxes were mid-zoom, and nothing measured again.
+ * A box's place in the canvas from layout offsets, the space the branches are
+ * drawn in: a scroll or a transform on an ancestor does not skew them as it
+ * does a box measured on screen.
  */
 function placeIn(canvas: HTMLElement, el: HTMLElement): { left: number; right: number; middle: number } | null {
   let left = 0;
@@ -190,14 +191,12 @@ export function BracketTeam({
   );
 }
 
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
  * When a match is, as the small print under it says it: the day and the
  * time, or just the day for a provider that dates matches by calendar day.
  */
 export function bracketWhen(date: string, format: MatchTimeFormat): string {
-  return DATE_ONLY.test(date) ? format.shortDay(date) : `${format.shortDay(date)} · ${format.time(date)}`;
+  return isCalendarDay(date) ? format.shortDay(date) : `${format.shortDay(date)} · ${format.time(date)}`;
 }
 
 /** The small print under a match: when it is, in the reader's zone. */

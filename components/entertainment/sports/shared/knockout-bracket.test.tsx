@@ -28,13 +28,16 @@ const rounds: BracketRound[] = SIZES.map((size, r) => ({
   ),
 }));
 
-function renderBracket(list: BracketRound[] = rounds, links?: BracketLink[]): HTMLElement {
-  const { container } = render(
+function bracket(list: BracketRound[], links?: BracketLink[]): React.ReactElement {
+  return (
     <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
       <KnockoutBracket rounds={list} teams={teams} links={links} />
     </ReaderTimeZoneProvider>
   );
-  return container;
+}
+
+function renderBracket(list: BracketRound[] = rounds, links?: BracketLink[]): HTMLElement {
+  return render(bracket(list, links)).container;
 }
 
 const columns = (container: HTMLElement): HTMLElement[] => [
@@ -169,5 +172,24 @@ describe("KnockoutBracket", () => {
     fireEvent.click(button("Scroll right"));
     expect(viewport.scrollLeft).toBe(200);
     expect(scrollTo).toHaveBeenCalledTimes(4);
+  });
+
+  it("follows the reader's scrolling once a bracket that opened undrawn is drawn", () => {
+    const undrawn = rounds.map((round) => ({
+      ...round,
+      matches: round.matches.map((m) => ({ ...m, homeTeamId: null, awayTeamId: null })),
+    }));
+    const { container, rerender } = render(bracket(undrawn));
+    expect(screen.getByText("The bracket is not drawn yet")).toBeInTheDocument();
+
+    rerender(bracket(rounds));
+    const { viewport } = layOut(container);
+    const button = (name: string): HTMLElement => screen.getByRole("button", { name });
+    expect(button("Right end of the bracket")).toBeEnabled();
+
+    viewport.scrollLeft = 1800;
+    fireEvent.scroll(viewport);
+    expect(button("Right end of the bracket")).toBeDisabled();
+    expect(button("Left end of the bracket")).toBeEnabled();
   });
 });

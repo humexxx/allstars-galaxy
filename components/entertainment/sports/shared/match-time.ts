@@ -13,7 +13,7 @@
  * printed as that day whatever the zone.
  */
 
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+import { isCalendarDay } from "@/lib/utils/date";
 
 export type MatchTimeFormat = {
   /** "Jul 5" */
@@ -75,7 +75,7 @@ export function matchTimeFormat(timeZone?: string): MatchTimeFormat {
     const inZone = new Intl.DateTimeFormat("en-US", { ...options, timeZone: zone });
     const asCalendarDay = new Intl.DateTimeFormat("en-US", { ...options, timeZone: "UTC" });
     return (value: string | Date): string => {
-      if (typeof value === "string" && DATE_ONLY.test(value)) {
+      if (typeof value === "string" && isCalendarDay(value)) {
         const [y, m, d] = value.split("-").map(Number);
         return asCalendarDay.format(new Date(Date.UTC(y, m - 1, d, 12)));
       }

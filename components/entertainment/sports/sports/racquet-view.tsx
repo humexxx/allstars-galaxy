@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 
+import { getRacquetDrawAction } from "@/app/actions/racquet";
 import {
   Table,
   TableBody,
@@ -13,16 +14,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mono, Text } from "@/components/ui/typography";
 import { tournamentPath } from "@/lib/sports/paths";
-import { currentTournament, drawIsOut, featuredTournament, seasonOf } from "@/lib/sports/racquet";
+import { drawVariant, featuredTournament, seasonOf, shippedDraw } from "@/lib/sports/racquet";
 import { cn } from "@/lib/utils";
-import type {
-  DrawState,
-  DrawVariant,
-  NewsStory,
-  RacquetData,
-  RacquetSport,
-  RacquetTournament,
-} from "@/types/sports";
+import { racquetDrawSchema } from "@/schemas/racquet";
+import type { NewsStory, RacquetData, RacquetDraw, RacquetSport } from "@/types/sports";
 
 import { NewsTab } from "../shared/news-list";
 import { OverviewSplit } from "../shared/overview-split";
@@ -31,7 +26,6 @@ import { SportShell } from "../shared/sport-shell";
 import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportsTh, TableCard } from "../shared/table-primitives";
 import { useSportsToday } from "../shared/time-zone-context";
-import { useRacquetDraws } from "./racquet-draw";
 import { RacquetOverview } from "./racquet-tournaments";
 
 type RacquetViewProps = {
@@ -48,18 +42,53 @@ type RacquetViewProps = {
   initialTab?: string;
 };
 
-/** A draw the feed shipped with the page: the featured and the current tournament's. */
-function shippedDraw(t: RacquetTournament, data: RacquetData): DrawState {
-  return {
-    status: "ready",
-    draw: {
-      tournamentId: t.id,
-      rounds: t.bracket ?? [],
-      players: data.drawPlayers ?? [],
-      champion: t.champion,
-      runnerUp: t.runnerUp,
+/** A draw asked for: what came back, or where the asking stands. */
+type AskedDraw = RacquetDraw | "loading" | "failed" | "unavailable";
+
+/**
+ * The draws asked for so far, by tournament, and the call that loads one: the
+ * featured tournament's, when the feed could not ship it.
+ *
+ * Each is asked for once in the life of the view, whatever came back — the
+ * server caches too, but each miss there spends a provider's daily budget.
+ */
+function useRacquetDraws(sport: RacquetSport): {
+  drawOf: (tournamentId: string) => RacquetDraw | undefined;
+  load: (tournamentId: string) => void;
+} {
+  const [draws, setDraws] = useState<Record<string, AskedDraw>>({});
+  const asked = useRef(new Set<string>());
+
+  const load = useCallback(
+    (tournamentId: string): void => {
+      if (asked.current.has(tournamentId)) return;
+      asked.current.add(tournamentId);
+      const set = (state: AskedDraw): void => setDraws((prev) => ({ ...prev, [tournamentId]: state }));
+      // The schema the action applies, checked here first: the fixture's ids
+      // ("wpt-m-rome") would only come back refused.
+      const request = racquetDrawSchema.safeParse({ sport, tournamentId });
+      if (!request.success) {
+        set("unavailable");
+        return;
+      }
+      set("loading");
+      getRacquetDrawAction(request.data)
+        .then((result): AskedDraw => (result.success ? result.data : "failed"))
+        .catch((): AskedDraw => "failed")
+        .then(set);
     },
-  };
+    [sport]
+  );
+
+  const drawOf = useCallback(
+    (tournamentId: string): RacquetDraw | undefined => {
+      const known = draws[tournamentId];
+      return typeof known === "object" ? known : undefined;
+    },
+    [draws]
+  );
+
+  return { drawOf, load };
 }
 
 /**
@@ -67,35 +96,40 @@ function shippedDraw(t: RacquetTournament, data: RacquetData): DrawState {
  * rankings, the season under it) and, with news, News. Every tournament
  * opens on its own page, its whole draw there.
  */
-export function RacquetView({ sport, emoji, title, subtitle, data, news, initialTab }: RacquetViewProps) {
+export function RacquetView({
+  sport,
+  emoji,
+  title,
+  subtitle,
+  data,
+  news,
+  initialTab,
+}: RacquetViewProps): React.ReactElement {
   const today = useSportsToday();
   const hasNews = (news?.length ?? 0) > 0;
-  const variant: DrawVariant = sport === "padel" ? "pair" : "player";
+  const variant = drawVariant(sport);
 
   // Every tournament being played, and the one picked of them. The Overview
   // features it, else the first, else the next to start.
   const onNow = data.tournaments.filter((t) => t.status === "live");
   const [picked, setPicked] = useState<string | null>(null);
-  const pickedLive = onNow.find((t) => t.id === picked);
-  const current = pickedLive ?? currentTournament(data.tournaments);
   const featured =
-    pickedLive ?? featuredTournament(data.tournaments) ?? featuredTournament(seasonOf(data));
-  const { draws, load } = useRacquetDraws(sport);
+    onNow.find((t) => t.id === picked) ??
+    featuredTournament(data.tournaments) ??
+    featuredTournament(seasonOf(data));
+  const { drawOf, load } = useRacquetDraws(sport);
 
-  // The feed ships the current draw when it can; when it could not (the
-  // provider failed that refresh), the view asks for it, for the round under
-  // way and the seeds, instead of standing on an empty draw.
-  const currentNeedsLoad =
-    current !== undefined && !current.bracket?.length && drawIsOut(current.status, current.startDate, today);
-  const currentKnown = current ? draws[current.id] : undefined;
+  // The feed ships the featured draw once it can exist. A live one it could
+  // not ship (the provider failed that refresh, or it was picked from several
+  // on now) the view asks for, for the round under way and the seeds. An
+  // upcoming one is left to the feed, which reads it and finds it empty until
+  // it is drawn: asking again would only repeat that.
+  const shipped = featured && shippedDraw(featured, data.drawPlayers ?? []);
+  const toLoad = featured?.status === "live" && !shipped ? featured.id : undefined;
   useEffect(() => {
-    if (current && currentNeedsLoad && !currentKnown) load(current.id);
-  }, [current, currentNeedsLoad, currentKnown, load]);
-  const currentDraw: DrawState | undefined = !current
-    ? undefined
-    : current.bracket?.length
-      ? shippedDraw(current, data)
-      : (currentKnown ?? (currentNeedsLoad ? { status: "loading" } : { status: "pending" }));
+    if (toLoad) load(toLoad);
+  }, [toLoad, load]);
+  const draw = shipped ?? (toLoad ? drawOf(toLoad) : undefined);
 
   return (
     <Tabs defaultValue={initialTab === "news" && hasNews ? "news" : "overview"} className="gap-6">
@@ -119,7 +153,7 @@ export function RacquetView({ sport, emoji, title, subtitle, data, news, initial
               <RacquetOverview
                 data={data}
                 featured={featured}
-                draw={featured && featured.id === current?.id && currentDraw?.status === "ready" ? currentDraw.draw : undefined}
+                draw={draw}
                 variant={variant}
                 today={today}
                 onNow={onNow}
@@ -228,13 +262,17 @@ function Movement({ movement }: { movement: number }) {
   if (movement > 0) {
     return (
       <span className="inline-flex items-center gap-0.5 text-xs font-medium text-success">
-        <ArrowUp className="size-3" aria-label="Up" /> {movement}
+        <ArrowUp className="size-3" aria-hidden />
+        <span className="sr-only">Up </span>
+        {movement}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-0.5 text-xs font-medium text-destructive">
-      <ArrowDown className="size-3" aria-label="Down" /> {Math.abs(movement)}
+      <ArrowDown className="size-3" aria-hidden />
+      <span className="sr-only">Down </span>
+      {Math.abs(movement)}
     </span>
   );
 }

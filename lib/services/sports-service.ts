@@ -6,13 +6,7 @@ import { and, asc, eq, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { userSportsPreferences, userSportsTeamFilters } from "@/db/schema";
 import { F1_DATA } from "@/lib/data/sports/f1";
-import { getFootballLeague } from "@/lib/data/sports/football";
-import { LOL_DATA } from "@/lib/data/sports/lol";
-import { NBA_DATA } from "@/lib/data/sports/nba";
-import { NFL_DATA } from "@/lib/data/sports/nfl";
-import { PADEL_DATA } from "@/lib/data/sports/padel";
 import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
-import { TENNIS_DATA } from "@/lib/data/sports/tennis";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
 import { getEspnNews } from "@/lib/services/espn-news-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
@@ -249,7 +243,7 @@ export async function getDashboardSportCard(
       // fixtures and bracket.
       const data = id === "world-cup" ? await getWorldCupData() : await getFootballLeagueData(id);
       return {
-        ...footballCard(base, data ?? getFootballLeague(id)),
+        ...footballCard(base, data),
         competitions: {
           value: id,
           options: FOOTBALL_COMPETITIONS.map((c) => ({ id: c.id, label: c.name })),
@@ -258,18 +252,18 @@ export async function getDashboardSportCard(
     }
     case "nba": {
       const [data, news] = await Promise.all([getNbaData(), getEspnNews("nba")]);
-      return { ...nbaCard(base, data ?? NBA_DATA), news: cardNews(news) };
+      return { ...nbaCard(base, data), news: cardNews(news) };
     }
     case "nfl": {
       const [data, news] = await Promise.all([getNflData(), getEspnNews("nfl")]);
-      return { ...nflCard(base, data ?? NFL_DATA), news: cardNews(news) };
+      return { ...nflCard(base, data), news: cardNews(news) };
     }
     case "lol":
-      return lolCard(base, (await getLolData()) ?? LOL_DATA, oneOf(LOL_REGIONS, competition));
+      return lolCard(base, await getLolData(), oneOf(LOL_REGIONS, competition));
     case "tennis":
-      return racquetCard(base, ((await getTennisData()) ?? TENNIS_DATA).atp, "ATP");
+      return racquetCard(base, (await getTennisData()).atp, "ATP");
     case "padel":
-      return racquetCard(base, ((await getPadelData()) ?? PADEL_DATA).men, "Premier Padel");
+      return racquetCard(base, (await getPadelData()).men, "Premier Padel");
     default:
       return null;
   }
@@ -555,11 +549,6 @@ function swissRecords(stage: SwissStage): { teamId: string; wins: number; losses
     .sort((a, b) => b.wins - a.wins || a.losses - b.losses);
 }
 
-/**
- * The tournament on or next and the rankings, across both tours or only the
- * one the card is set to. The line under the title names that choice: the
- * lead box already says whether the tournament is on now or next.
- */
 /** The men's tour only, so no championship to pick: the hub follows no women's tour. */
 function racquetCard(base: CardBase, data: RacquetData, context: string): DashboardSportCard {
   const tournaments = data.tournaments;

@@ -5,7 +5,7 @@ import { orderMatchesForDisplay, type MatchCaps } from "./match-order";
 type M = { id: string; date: string; status: string };
 
 const match = (id: string, date: string, status: string): M => ({ id, date, status });
-const order = (matches: M[], max?: number | MatchCaps): string[] =>
+const order = (matches: M[], max?: MatchCaps): string[] =>
   orderMatchesForDisplay(
     matches,
     (m) => m.date,
@@ -24,15 +24,6 @@ describe("orderMatchesForDisplay", () => {
       "f5", "f6", "f7", "f8", "f9",
       "r4", "r3", "r2", "r1",
     ]);
-  });
-
-  it("shares a cap between fixtures and results instead of filling it with fixtures", () => {
-    expect(order([...results, ...fixtures, live], 5)).toEqual(["live", "f5", "f6", "r4", "r3"]);
-  });
-
-  it("gives one side's unused room to the other", () => {
-    expect(order([...results.slice(0, 1), ...fixtures], 4)).toEqual(["f5", "f6", "f7", "r1"]);
-    expect(order([...results, ...fixtures.slice(0, 1)], 4)).toEqual(["f5", "r4", "r3", "r2"]);
   });
 
   it("keeps each side to its own room when given two caps, live always in", () => {

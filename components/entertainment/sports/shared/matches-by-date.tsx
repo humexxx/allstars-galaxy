@@ -38,8 +38,6 @@ const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "p
 /** Days one tap of the clock brings in: a matchday, a week of the NFL, three NBA nights. */
 const EARLIER_STEP = 3;
 
-
-
 /**
  * Where the list opens: the latest day up to today with a result in it, so
  * the freshest results lead and what is next follows. A season with no

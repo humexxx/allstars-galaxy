@@ -10,7 +10,7 @@ import { TeamBadge } from "./shared/team-badge";
 
 /**
  * The top of a sport's table on its dashboard card, one table at a time when
- * there are two (East / West, ATP / WTA).
+ * there are two (East / West, AFC / NFC).
  *
  * A client island inside a server card: which table is showing is the only
  * state, so that is all that ships.

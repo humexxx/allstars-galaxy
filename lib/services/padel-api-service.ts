@@ -414,11 +414,6 @@ function drawFrom(tournamentId: string, matches: PadelApiMatch[], category: Pade
   };
 }
 
-/** The men's draw out of the provider's list, which holds the women's too. */
-function drawsFrom(id: number, matches: PadelApiMatch[]): RacquetDraw {
-  return drawFrom(`padelapi-${id}`, matches, "men");
-}
-
 async function fetchPadel<T>(path: string): Promise<T> {
   const token = process.env.PADEL_API_KEY;
   if (!token) throw new Error("PADEL_API_KEY not configured");
@@ -433,13 +428,15 @@ async function fetchPadel<T>(path: string): Promise<T> {
 }
 
 /**
+ * The men's draw, out of a list that holds the women's too.
+ *
  * One call, final first: sorted by round, the first page of fifty holds the
  * final, semi-finals, quarter-finals and round of 16 of both categories' draws
  * (30 matches) with part of the round of 32 behind them. While the men's round
  * of 16 still has a side to fill, the rest of the draw is read too — two more
  * pages at most, and only in a tournament's first days.
  */
-async function fetchPadelDraws(id: number): Promise<RacquetDraw> {
+async function fetchPadelDraw(id: number): Promise<RacquetDraw> {
   const page = (n: number): Promise<PadelApiList<PadelApiMatch>> => {
     const params = new URLSearchParams({
       sort_by: "round",
@@ -453,9 +450,9 @@ async function fetchPadelDraws(id: number): Promise<RacquetDraw> {
   const pages = Math.min(first.meta?.last_page ?? 1, MAX_DRAW_PAGES);
   const men = mainDraw(first.data, "men");
   const settled = men.length === 0 || roundIsSet(men, FIRST_BRACKET_ROUND);
-  if (pages <= 1 || settled) return drawsFrom(id, first.data);
+  if (pages <= 1 || settled) return drawFrom(`padelapi-${id}`, first.data, "men");
   const rest = await Promise.all(Array.from({ length: pages - 1 }, (_, i) => page(i + 2)));
-  return drawsFrom(id, [...first.data, ...rest.flatMap((r) => r.data)]);
+  return drawFrom(`padelapi-${id}`, [...first.data, ...rest.flatMap((r) => r.data)], "men");
 }
 
 /**
@@ -463,24 +460,24 @@ async function fetchPadelDraws(id: number): Promise<RacquetDraw> {
  * caches, so a finished draw costs one request a day however often it is
  * opened, and a live one is never more than five minutes behind.
  */
-const getLiveDraws = cachedFeed<[number], RacquetDraw | null>(
+const getLiveDraw = cachedFeed<[number], RacquetDraw | null>(
   "padel-api draw",
-  fetchPadelDraws,
+  fetchPadelDraw,
   () => null,
   ["padel-api:draw:live"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:padel"] },
 );
 
-const getFinishedDraws = cachedFeed<[number], RacquetDraw | null>(
+const getFinishedDraw = cachedFeed<[number], RacquetDraw | null>(
   "padel-api draw",
-  fetchPadelDraws,
+  fetchPadelDraw,
   () => null,
   ["padel-api:draw:finished"],
   { revalidate: FINISHED_DRAW_SECONDS, tags: ["sports:padel"] },
 );
 
-function drawsFor(id: number, status: RacquetTournament["status"]): Promise<RacquetDraw | null> {
-  return status === "completed" ? getFinishedDraws(id) : getLiveDraws(id);
+function drawFor(id: number, status: RacquetTournament["status"]): Promise<RacquetDraw | null> {
+  return status === "completed" ? getFinishedDraw(id) : getLiveDraw(id);
 }
 
 /**
@@ -620,7 +617,7 @@ export async function getPadelData(): Promise<PadelData> {
     await Promise.all(
       wanted.map(async (t) => {
         const id = providerId(t.id);
-        return [t.id, id === null ? null : await drawsFor(id, t.status)] as const;
+        return [t.id, id === null ? null : await drawFor(id, t.status)] as const;
       })
     )
   );
@@ -628,7 +625,8 @@ export async function getPadelData(): Promise<PadelData> {
 }
 
 /**
- * One tournament's draw for the details sheet, by the id the view knows it by.
+ * One tournament's draw, for a tournament's page or the hub's featured
+ * tournament, by the id the view knows it by.
  *
  * Only a tournament on this season's calendar is fetched — the id arrives
  * from the browser, and each fetch spends the shared daily budget — and its
@@ -647,7 +645,7 @@ export async function getPadelDraw(tournamentId: string): Promise<RacquetDraw | 
   if (!drawIsOut(known.status, known.startDate, today)) {
     return { tournamentId, rounds: [], players: [] };
   }
-  const draw = await drawsFor(id, known.status);
+  const draw = await drawFor(id, known.status);
   if (!draw) return null;
   return { ...draw, champion: draw.champion ?? known.champion };
 }
@@ -665,6 +663,5 @@ export const __testing = {
   pairOf,
   setScore,
   drawFrom,
-  drawsFrom,
-  fetchPadelDraws,
+  fetchPadelDraw,
 };

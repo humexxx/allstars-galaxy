@@ -42,19 +42,18 @@ export function rememberSport(
   ownedBy(viewer).set(key, { ...entry, at: now });
 }
 
+/** Read while rendering, so it only reads: clearing is `rememberSport`'s, in an effect. */
 export function recallSport(viewer: string, key: string, now = Date.now()): SeenSport | undefined {
-  const entry = ownedBy(viewer).get(key);
-  if (entry && now - entry.at > SEEN_MS) {
-    seen.delete(key);
-    return undefined;
-  }
-  return entry;
+  if (owner !== viewer) return undefined;
+  const entry = seen.get(key);
+  return entry && now - entry.at <= SEEN_MS ? entry : undefined;
 }
 
 /**
  * A team pick just saved: every copy showing that list carries it from now
- * on. Saving does not refresh the page, so without this a copy would bring
- * back the teams picked before it.
+ * on. The refresh after saving renews only the copy on screen, while another
+ * address can show the same list (football's default league with and without
+ * `?league=`), and its copy would reopen on the teams picked before.
  */
 export function rememberTeams(list: TeamFilterList, teamIds: readonly string[]): void {
   const same = JSON.stringify(list);

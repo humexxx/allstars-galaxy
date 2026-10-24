@@ -1,93 +1,32 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
-import { ExternalLink, Newspaper, Play } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { Newspaper } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
-import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
-import { leadStory, type NewsInterest } from "@/lib/sports/news";
+import { Eyebrow, Heading, Text } from "@/components/ui/typography";
+import { leadStory, teamInterest, type NewsInterest } from "@/lib/sports/news";
 import { cn } from "@/lib/utils";
-import type { NewsStory } from "@/types/sports";
+import type { NewsStory, Team } from "@/types/sports";
 
+import { StoryFoot, StoryImage, StoryLink } from "./story-parts";
+import { useSavedTeamFilter } from "./team-filter-context";
 import { useMatchTime } from "./time-zone-context";
 
-/**
- * A story's way in: our own page for F1's stored wire — shareable, with the
- * rest of the wire under it and the source one tap away — or the source
- * itself, in a new tab, for ESPN's.
- */
-function StoryLink({
-  story,
-  className,
-  children,
-}: {
-  story: NewsStory;
-  className: string;
-  children: ReactNode;
-}) {
-  if (story.external) {
-    return (
-      <a href={story.href} target="_blank" rel="noopener noreferrer" className={className}>
-        {children}
-      </a>
-    );
-  }
-  return (
-    <Link href={story.href} className={className}>
-      {children}
-    </Link>
-  );
-}
-
-/** A picture, unoptimized: provider images come off whatever CDN the wire uses that week. */
-function StoryImage({ story, sizes, className }: { story: NewsStory; sizes: string; className: string }) {
-  if (!story.image) return null;
-  return (
-    <div className={cn("relative overflow-hidden bg-muted", className)}>
-      <Image
-        src={story.image.url}
-        alt={story.image.alt ?? story.headline}
-        fill
-        sizes={sizes}
-        className="object-cover"
-        unoptimized
-      />
-      {story.kind === "video" && (
-        <span className="absolute bottom-1 left-1 inline-flex items-center gap-0.5 rounded-sm bg-black/70 px-1 text-2xs font-medium text-white">
-          <Play aria-hidden className="size-2.5 fill-current" />
-          Video
-        </span>
-      )}
-    </div>
-  );
-}
-
-/** When, and — for a story opened at the source — that it leaves the page. */
-function StoryFoot({ story }: { story: NewsStory }) {
-  const format = useMatchTime();
-  return (
-    <span className="mt-auto flex items-center gap-1 text-muted-foreground">
-      <Mono className="text-2xs">{format.day(story.at)}</Mono>
-      {story.external && (
-        <>
-          <ExternalLink aria-hidden className="size-3" />
-          <span className="sr-only">(opens ESPN in a new tab)</span>
-        </>
-      )}
-    </span>
-  );
-}
-
-const CARD = "group flex rounded-lg border bg-card transition-colors hover:border-foreground/25";
+const CARD = "flex rounded-lg border bg-card transition-colors hover:border-foreground/25";
 
 /**
  * A sport's wire with one story leading it (`leadStory`), big — its picture,
  * its headline, more of its standfirst — so the tab is not a pile of cards
  * all the same size. The rest follow as cards.
  */
-export function NewsList({ lead, items }: { lead?: NewsStory | null; items: NewsStory[] }) {
+export function NewsList({
+  lead,
+  items,
+}: {
+  lead?: NewsStory | null;
+  items: NewsStory[];
+}): React.ReactElement {
+  const format = useMatchTime();
   if (!lead && items.length === 0) {
     return (
       <EmptyState icon={Newspaper} title="No news yet" description="Stories land here as the wire brings them." />
@@ -110,7 +49,7 @@ export function NewsList({ lead, items }: { lead?: NewsStory | null; items: News
             <Eyebrow size="sm" as="span">
               Top story
             </Eyebrow>
-            <Heading level="h3" as="h3" className="leading-snug">
+            <Heading level="h3" className="leading-snug">
               {lead.headline}
             </Heading>
             {lead.description && (
@@ -118,7 +57,7 @@ export function NewsList({ lead, items }: { lead?: NewsStory | null; items: News
                 {lead.description}
               </Text>
             )}
-            <StoryFoot story={lead} />
+            <StoryFoot story={lead} day={format.day(lead.at)} />
           </div>
         </StoryLink>
       )}
@@ -135,7 +74,7 @@ export function NewsList({ lead, items }: { lead?: NewsStory | null; items: News
                   {story.description}
                 </Text>
               )}
-              <StoryFoot story={story} />
+              <StoryFoot story={story} day={format.day(story.at)} />
             </div>
           </StoryLink>
         ))}
@@ -145,7 +84,21 @@ export function NewsList({ lead, items }: { lead?: NewsStory | null; items: News
 }
 
 /** A sport's News tab: its wire, led by the story most worth its reader's time. */
-export function NewsTab({ stories, interest }: { stories: NewsStory[]; interest: NewsInterest }) {
-  const wire = useMemo(() => leadStory(stories, interest), [stories, interest]);
+export function NewsTab({ stories, interest }: { stories: NewsStory[]; interest: NewsInterest }): React.ReactElement {
+  const wire = leadStory(stories, interest);
   return <NewsList lead={wire.lead} items={wire.rest} />;
+}
+
+/** A team sport's News tab: led by stories naming the teams picked in its match list or `leaders`, a point each. */
+export function TeamNewsTab({
+  stories,
+  teams,
+  leaders,
+}: {
+  stories: NewsStory[];
+  teams: ReadonlyMap<string, Team>;
+  leaders: readonly string[];
+}): React.ReactElement {
+  const saved = useSavedTeamFilter();
+  return <NewsTab stories={stories} interest={teamInterest(teams, saved?.teamIds ?? [], leaders)} />;
 }

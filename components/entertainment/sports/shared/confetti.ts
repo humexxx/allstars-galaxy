@@ -4,6 +4,8 @@
  * who asks for less motion. A few dozen lines rather than a dependency.
  */
 
+import { prefersReducedMotion } from "./reveal";
+
 const PIECES = 90;
 const DURATION_MS = 1800;
 const GRAVITY = 0.0012;
@@ -14,7 +16,7 @@ const GOLD = "#f5c542";
 type Piece = { x: number; y: number; vx: number; vy: number; spin: number; angle: number; color: string; w: number; h: number };
 
 export function burstConfetti(from: { x: number; y: number }): void {
-  if (typeof window === "undefined" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  if (prefersReducedMotion()) return;
   const canvas = document.createElement("canvas");
   const ratio = window.devicePixelRatio || 1;
   canvas.width = window.innerWidth * ratio;

@@ -110,13 +110,18 @@ const MEN: RacquetData = {
 
 const PADEL: PadelData = { men: MEN };
 
-function renderPadel(): void {
+function renderPadel(data: PadelData = PADEL, today = "2026-10-18"): void {
   render(
-    <SportsTodayProvider today="2026-10-18">
-      <PadelView data={PADEL} />
+    <SportsTodayProvider today={today}>
+      <PadelView data={data} />
     </SportsTodayProvider>
   );
 }
+
+/** The men's tour with each tournament changed by `edit`. */
+const padelWith = (edit: (t: RacquetTournament) => RacquetTournament): PadelData => ({
+  men: { ...MEN, tournaments: MEN.tournaments.map(edit) },
+});
 
 beforeEach(() => {
   vi.mocked(getRacquetDrawAction).mockResolvedValue({
@@ -140,6 +145,10 @@ const ranking = (position: number): PlayerRanking => ({
   movement: 0,
 });
 
+const cardOf = (name: string): HTMLElement =>
+  screen.getByRole("heading", { name }).closest<HTMLElement>("[data-slot='card']")!;
+const seedTitles = (list: HTMLElement): (string | null)[] =>
+  within(list).getAllByRole("listitem").map((li) => li.getAttribute("title"));
 const tile = (id: string): HTMLElement => document.querySelector<HTMLElement>(`[data-tournament="${id}"]`)!;
 const section = (title: string): HTMLElement => screen.getByRole("heading", { name: title }).closest("section")!;
 const tiles = (title: string): string[] =>
@@ -150,11 +159,10 @@ const earlier = (): void => {
 };
 
 describe("RacquetView, the tabs", () => {
-  it("offers Overview alone, with no tour to pick and no Draw tab: each draw is on its tournament's page", () => {
+  it("offers Overview alone, with no Draw tab: each draw is on its tournament's page", () => {
     renderPadel();
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview"]);
     expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("Overview");
-    expect(screen.queryByRole("combobox")).toBeNull();
   });
 
   it("puts the tour's rankings beside the tournaments, ten rows and a button for the rest", () => {
@@ -187,7 +195,7 @@ describe("RacquetView, Overview", () => {
   it("features the next tournament as F1 does its next race: poster, tier, venue, prize, when it starts", () => {
     renderPadel();
     expect(screen.getByRole("heading", { name: "Next up" })).toBeInTheDocument();
-    const card = screen.getByRole("heading", { name: "Kuwait P1 2026" }).closest<HTMLElement>("[data-slot='card']")!;
+    const card = cardOf("Kuwait P1 2026");
     expect(within(card).getByText("P1")).toBeInTheDocument();
     expect(within(card).getByText("Sheikh Saad Al-Abdullah Complex, Kuwait City")).toBeInTheDocument();
     expect(within(card).getByText("€525,000")).toBeInTheDocument();
@@ -195,12 +203,34 @@ describe("RacquetView, Overview", () => {
     expect(card.querySelector("img")?.getAttribute("src")).toBe(
       "https://media.padelapi.org/tournament-api/kuwait-p1-2026.webp"
     );
-    // Not one big link that greys on hover: "View details" opens its page.
-    expect(card.className).not.toMatch(/hover:bg/);
-    expect(within(card).getByRole("link", { name: "View details: Kuwait P1 2026" })).toHaveAttribute(
-      "href",
-      "/portal/entertainment/sports/padel/padelapi-748"
+    // Not one big link: "View details" is the one way from it to its page.
+    expect(card.closest("a")).toBeNull();
+    const details = within(card).getByRole("link", { name: "View details: Kuwait P1 2026" });
+    expect(within(card).getAllByRole("link")).toEqual([details]);
+    expect(details).toHaveAttribute("href", "/portal/entertainment/sports/padel/padelapi-748");
+  });
+
+  it("shows the next tournament's seeds once the feed ships its draw, days before it starts", () => {
+    renderPadel(
+      padelWith((t) => (t.id === "padelapi-748" ? { ...t, bracket: finalRounds("kuwait") } : t)),
+      "2026-10-24"
     );
+    expect(seedTitles(within(cardOf("Kuwait P1 2026")).getByRole("list", { name: "Top seeds" }))).toEqual([
+      "Seed 1: A. Coello / A. Tapia",
+      "Seed 2: A. Galan / F. Chingotto",
+      "Seed 3: L. Augsburger / J. Lebron",
+    ]);
+    expect(getRacquetDrawAction).not.toHaveBeenCalled();
+  });
+
+  it("asks for no draw while nothing is played and the next one is not out, last week's included", () => {
+    renderPadel(padelWith((t) => ({ ...t, bracket: undefined })));
+    expect(getRacquetDrawAction).not.toHaveBeenCalled();
+  });
+
+  it("leaves the next tournament's draw to the feed, which reads it until it is drawn", () => {
+    renderPadel(padelWith((t) => ({ ...t, bracket: undefined })), "2026-10-24");
+    expect(getRacquetDrawAction).not.toHaveBeenCalled();
   });
 
   it("lists every tournament still to come under Coming up, each a link to its page", () => {
@@ -257,20 +287,33 @@ describe("RacquetView, tennis", () => {
     drawPlayers: [],
   };
   const tennis: TennisData = { atp };
+  const player = (id: string, name: string, seed: number): Team => ({ id, name: "🇮🇹", shortName: name, code: String(seed) });
+  /** A draw down to its semi-finals: two ties, the final still to be filled. */
+  const semis = (prefix: string, [a, b, c, d]: string[]): BracketRound[] => [
+    {
+      id: "semi-final",
+      label: "Semi-finals",
+      matches: [
+        { id: `${prefix}-s1`, homeTeamId: a, awayTeamId: b },
+        { id: `${prefix}-s2`, homeTeamId: c, awayTeamId: d },
+      ],
+    },
+    { id: "final", label: "Final", matches: [{ id: `${prefix}-f`, homeTeamId: null, awayTeamId: null }] },
+  ];
+  const basel: RacquetTournament = {
+    id: "espn-328-2026-mens-singles",
+    name: "Swiss Indoors Basel",
+    location: "Basel",
+    startDate: "2026-10-19",
+    endDate: "2026-10-25",
+    status: "live",
+  };
 
   it("picks between the tournaments being played, and loads the one picked", async () => {
     vi.mocked(getRacquetDrawAction).mockResolvedValue({
       success: true,
       data: { tournamentId: "espn-basel", rounds: [], players: [] },
     });
-    const basel: RacquetTournament = {
-      id: "espn-328-2026-mens-singles",
-      name: "Swiss Indoors Basel",
-      location: "Basel",
-      startDate: "2026-10-19",
-      endDate: "2026-10-25",
-      status: "live",
-    };
     const two: TennisData = { ...tennis, atp: { ...atp, tournaments: [...atp.tournaments, basel] } };
     render(
       <SportsTodayProvider today="2026-10-19">
@@ -294,21 +337,7 @@ describe("RacquetView, tennis", () => {
   });
 
   it("shows the draw's three best seeds on the featured card, from its own players", () => {
-    const player = (id: string, name: string, seed: number): Team => ({ id, name: "🇮🇹", shortName: name, code: String(seed) });
-    const vienna: RacquetTournament = {
-      ...atp.tournaments[1],
-      bracket: [
-        {
-          id: "semi-final",
-          label: "Semi-finals",
-          matches: [
-            { id: "s1", homeTeamId: "sin", awayTeamId: "fri" },
-            { id: "s2", homeTeamId: "zve", awayTeamId: "alc" },
-          ],
-        },
-        { id: "final", label: "Final", matches: [{ id: "f", homeTeamId: null, awayTeamId: null }] },
-      ],
-    };
+    const vienna: RacquetTournament = { ...atp.tournaments[1], bracket: semis("vie", ["sin", "fri", "zve", "alc"]) };
     const seeded: TennisData = {
       ...tennis,
       atp: {
@@ -329,15 +358,62 @@ describe("RacquetView, tennis", () => {
         <TennisView data={seeded} />
       </SportsTodayProvider>
     );
-    const card = screen.getByRole("heading", { name: "Erste Bank Open" }).closest<HTMLElement>("[data-slot='card']")!;
+    const card = cardOf("Erste Bank Open");
     // No label on screen: the faces say it. The list is named for a screen reader.
     expect(within(card).queryByText("Top seeds")).toBeNull();
-    const seeds = within(card).getByRole("list", { name: "Top seeds" });
-    expect(within(seeds).getAllByRole("listitem").map((li) => li.getAttribute("title"))).toEqual([
+    expect(seedTitles(within(card).getByRole("list", { name: "Top seeds" }))).toEqual([
       "Seed 1: J. Sinner",
       "Seed 2: A. Zverev",
       "Seed 3: C. Alcaraz",
     ]);
+  });
+
+  it("puts the seeds on the poster of the tournament picked, though the last one's failed to load", async () => {
+    vi.mocked(getRacquetDrawAction).mockResolvedValue({
+      success: true,
+      data: {
+        tournamentId: basel.id,
+        rounds: semis("bas", ["sha", "mus", "rub", "auger"]),
+        players: [
+          player("sha", "B. Shelton", 1),
+          player("mus", "L. Musetti", 2),
+          player("rub", "A. Rublev", 3),
+          player("auger", "F. Auger-Aliassime", 4),
+        ],
+      },
+    });
+    const vienna: RacquetTournament = {
+      ...atp.tournaments[1],
+      imageUrl: "https://example.com/vienna.webp",
+      bracket: semis("vie", ["sin", "fri", "zve", "alc"]),
+    };
+    const two: TennisData = {
+      atp: {
+        ...atp,
+        tournaments: [atp.tournaments[0], vienna, { ...basel, imageUrl: "https://example.com/basel.webp" }],
+        drawPlayers: [
+          player("sin", "J. Sinner", 1),
+          player("zve", "A. Zverev", 2),
+          player("alc", "C. Alcaraz", 3),
+          player("fri", "T. Fritz", 4),
+        ],
+      },
+    };
+    render(
+      <SportsTodayProvider today="2026-10-19">
+        <TennisView data={two} />
+      </SportsTodayProvider>
+    );
+    // Vienna's poster fails: its seeds move off it, beside the badges.
+    fireEvent.error(cardOf("Erste Bank Open").querySelector("img")!);
+    expect(cardOf("Erste Bank Open").querySelector("img")).toBeNull();
+    expect(within(cardOf("Erste Bank Open")).getByRole("list", { name: "Top seeds" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Basel, Swiss Indoors Basel" }));
+
+    const poster = cardOf("Swiss Indoors Basel").querySelector("img")!.parentElement!;
+    expect(await within(poster).findByRole("list", { name: "Top seeds" })).toBeInTheDocument();
+    expect(seedTitles(within(poster).getByRole("list", { name: "Top seeds" }))[0]).toBe("Seed 1: B. Shelton");
   });
 
   it("has a News tab with the ATP's news", () => {

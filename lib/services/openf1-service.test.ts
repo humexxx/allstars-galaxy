@@ -1,8 +1,46 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { __testing } from "./openf1-service";
+// unstable_cache as it behaves on a stale entry: a refresh that throws leaves
+// the last good answer in place, and only a key never stored lets the error
+// out, to the feed's fallback.
+const cache = vi.hoisted(() => ({
+  entries: new Map<string, unknown>(),
+  reads: [] as Array<{ key: string; revalidate: number }>,
+}));
+
+vi.mock("next/cache", () => ({
+  unstable_cache:
+    <Args extends unknown[], T>(
+      fn: (...args: Args) => Promise<T>,
+      keyParts: string[],
+      options: { revalidate: number }
+    ) =>
+    async (...args: Args): Promise<T> => {
+      const key = `${keyParts.join(",")}:${JSON.stringify(args)}`;
+      cache.reads.push({ key, revalidate: options.revalidate });
+      try {
+        const value = await fn(...args);
+        cache.entries.set(key, value);
+        return value;
+      } catch (error) {
+        if (cache.entries.has(key)) return cache.entries.get(key) as T;
+        throw error;
+      }
+    },
+}));
+
+// No queue: the limiter is upstream's, and these calls would wait on the real clock.
+vi.mock("./upstream", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./upstream")>()),
+  rateLimiter: () => async (): Promise<void> => {},
+}));
+
+import { __testing, getF1WeekendResults } from "./openf1-service";
 
 const { clock, gapText, nameOf, sessionRows, fetchWeekendResults } = __testing;
+
+const json = (body: unknown): Response =>
+  new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 
 // Trimmed from OpenF1's own answers for the 2026 United States GP weekend.
 const DRIVERS = new Map([
@@ -23,6 +61,11 @@ describe("clock", () => {
     expect(clock(95.291)).toBe("1:35.291");
     expect(clock(59.5)).toBe("0:59.500");
     expect(clock(5599.273)).toBe("1:33:19.273");
+  });
+
+  it("carries a fraction that rounds up into the second", () => {
+    expect(clock(59.9996)).toBe("1:00.000");
+    expect(clock(3599.9999)).toBe("1:00:00.000");
   });
 });
 
@@ -99,9 +142,6 @@ describe("fetchWeekendResults", () => {
     vi.unstubAllGlobals();
   });
 
-  const json = (body: unknown): Response =>
-    new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
-
   it("asks only for the sessions that are over, in order, and skips one with nothing in", async () => {
     const urls: string[] = [];
     vi.stubGlobal(
@@ -159,5 +199,53 @@ describe("fetchWeekendResults", () => {
 
     expect(spy).toHaveBeenCalledTimes(1);
     expect(weekend.sessions).toEqual([]);
+  });
+});
+
+describe("getF1WeekendResults", () => {
+  beforeEach(() => {
+    cache.entries.clear();
+    cache.reads.length = 0;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const AUSTIN = ["2026-10-23T17:30:00Z", "2026-10-25T20:00:00Z"] as const;
+
+  it("keeps a weekend on five minutes until two days after its race, then a day", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(json([]))));
+
+    await getF1WeekendResults(2026, 19, ...AUSTIN, Date.parse("2026-10-26T02:00:00Z"));
+    expect(cache.reads.at(-1)).toEqual({ key: expect.stringMatching(/^openf1:weekend:/), revalidate: 300 });
+
+    await getF1WeekendResults(2026, 19, ...AUSTIN, Date.parse("2026-10-28T02:00:00Z"));
+    expect(cache.reads.at(-1)).toEqual({ key: expect.stringMatching(/^openf1:weekend-settled:/), revalidate: 86_400 });
+  });
+
+  it("never keeps a settled weekend with nothing in it for a day: the next read asks again", async () => {
+    let sessions: object[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url.includes("/sessions?")) return Promise.resolve(json(sessions));
+        if (url.includes("/drivers?")) return Promise.resolve(json([...DRIVERS.values()]));
+        return Promise.resolve(json(FP2));
+      })
+    );
+    const last = ["2025-10-17T17:30:00Z", "2025-10-19T19:00:00Z"] as const;
+
+    await expect(getF1WeekendResults(2025, 19, ...last)).resolves.toEqual({ season: 2025, round: 19, sessions: [] });
+    expect(cache.entries.size).toBe(0);
+
+    sessions = [
+      { session_key: 9002, session_name: "Practice 2", date_start: "2025-10-17T21:00:00+00:00", date_end: "2025-10-17T22:00:00+00:00", meeting_key: 1271 },
+    ];
+    const weekend = await getF1WeekendResults(2025, 19, ...last);
+    expect(weekend.sessions).toEqual([{ kind: "fp2", rows: sessionRows("fp2", FP2, DRIVERS) }]);
+    expect(cache.reads.map((r) => r.revalidate)).toEqual([86_400, 86_400]);
   });
 });

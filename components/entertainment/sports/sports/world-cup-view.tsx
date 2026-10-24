@@ -25,7 +25,12 @@ type WorldCupViewProps = {
   openNews?: boolean;
 };
 
-export function WorldCupView({ data, controls, news = [], openNews = false }: WorldCupViewProps) {
+export function WorldCupView({
+  data,
+  controls,
+  news = [],
+  openNews = false,
+}: WorldCupViewProps): React.ReactElement {
   const teamsMap = useMemo(
     () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
     [data],
@@ -36,7 +41,6 @@ export function WorldCupView({ data, controls, news = [], openNews = false }: Wo
   // The groups, then the knockout, in the order they are played — and the
   // knockout to open on: it is what is decided last.
   const defaultTab = openNews ? "news" : hasKnockout ? "knockout" : "groups";
-  // Once the final has a winner, who won it leads the page.
   const final = data.knockout?.find((r) => r.id === "final")?.matches.at(-1);
 
   return (
@@ -81,19 +85,14 @@ export function WorldCupView({ data, controls, news = [], openNews = false }: Wo
 
           <TabsContent value="groups">
             {hasGroups && data.groups ? (
-              // Compact tables, two to a row only once a row can hold two: a
-              // group is four teams and its points, and three full tables side
-              // by side were each clipped before the points column.
+              // Two to a row only once a row can hold two: any narrower, a
+              // table is clipped before its points column.
               <div className="grid gap-4 @2xl:grid-cols-2">
                 {data.groups.map((group) => (
                   <div key={group.label} className="flex min-w-0 flex-col gap-2">
                     <Eyebrow size="sm">{group.label}</Eyebrow>
                     <TableCard>
-                      <StandingsTable
-                        standings={group.standings}
-                        teams={teamsMap}
-                        variant="compact"
-                      />
+                      <StandingsTable standings={group.standings} teams={teamsMap} />
                     </TableCard>
                   </div>
                 ))}

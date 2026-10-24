@@ -2,7 +2,7 @@
 
 import { RotateCw, Timer } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type JSX, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { PageHeader } from "@/components/portal/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -62,9 +62,9 @@ export function F1RacePage({
   season,
   drivers,
   classification,
-  sessions: weekend,
+  sessions,
   current = false,
-}: F1RacePageProps): JSX.Element {
+}: F1RacePageProps): React.ReactElement {
   const router = useRouter();
   const format = useMatchTime();
   const now = useNow();
@@ -74,8 +74,8 @@ export function F1RacePage({
   const hasSessions = raceSessions(race).length > 0;
   const hasMarks = race.pole || race.fastestLap || race.sprintWinner;
   // The race of a finished weekend is the classification below, with points.
-  const sessions = weekend.filter((s) => !(s.kind === "race" && race.status === "completed"));
-  const hasTables = sessions.length > 0 || race.status === "completed";
+  const tabled = sessions.filter((s) => !(s.kind === "race" && race.status === "completed"));
+  const hasTables = tabled.length > 0 || race.status === "completed";
 
   return (
     <div className="@container flex flex-col gap-6">
@@ -124,7 +124,7 @@ export function F1RacePage({
 
           {hasSessions && (
             <Section title="Weekend">
-              <SessionList race={race} format={format} now={now} results={weekend} drivers={drivers} />
+              <SessionList race={race} format={format} now={now} results={sessions} drivers={drivers} />
             </Section>
           )}
 
@@ -155,9 +155,9 @@ export function F1RacePage({
 
         {hasTables && (
           <div className="flex min-w-0 flex-col gap-6">
-            {sessions.length > 0 && (
+            {tabled.length > 0 && (
               <Section title="Results">
-                <SessionResults sessions={sessions} drivers={drivers} />
+                <SessionResults sessions={tabled} drivers={drivers} />
               </Section>
             )}
             {race.status === "completed" && (
@@ -184,11 +184,11 @@ export function F1RacePage({
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }): JSX.Element {
+function Section({ title, children }: { title: string; children: ReactNode }): React.ReactElement {
   return (
     <section className="flex flex-col gap-2">
       <Eyebrow asChild>
-        <h3>{title}</h3>
+        <h2>{title}</h2>
       </Eyebrow>
       {children}
     </section>
@@ -226,8 +226,9 @@ function SessionResults({
 }: {
   sessions: F1SessionResult[];
   drivers: F1Driver[];
-}): JSX.Element {
-  const [picked, setPicked] = useState<F1SessionKind>(sessions[sessions.length - 1].kind);
+}): React.ReactElement {
+  // Unpicked, the latest: a refresh that brings in a newer session moves to it.
+  const [picked, setPicked] = useState<F1SessionKind | null>(null);
   const shown = sessions.find((s) => s.kind === picked) ?? sessions[sessions.length - 1];
   const rows = useShownRows(shown.rows, shown.kind);
   return (
@@ -242,8 +243,16 @@ function SessionResults({
           className="self-start"
         >
           {sessions.map((s) => (
-            <ToggleGroupItem key={s.kind} value={s.kind} aria-label={SESSION_NAME[s.kind]}>
+            <ToggleGroupItem key={s.kind} value={s.kind}>
               {SHORT_SESSION[s.kind]}
+              {/* "P1 (Practice 1)": the name starts with what is on the button. The
+                  space sits outside the span, as some readers trim an element's own text. */}
+              {SHORT_SESSION[s.kind] !== SESSION_NAME[s.kind] && (
+                <>
+                  {" "}
+                  <span className="sr-only">({SESSION_NAME[s.kind]})</span>
+                </>
+              )}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
@@ -301,7 +310,7 @@ function SessionResults({
   );
 }
 
-function Mark({ label, code, detail }: { label: string; code: string; detail?: string }): JSX.Element {
+function Mark({ label, code, detail }: { label: string; code: string; detail?: string }): React.ReactElement {
   return (
     <div className="flex min-w-0 flex-col gap-0.5 rounded-lg border p-2">
       <Eyebrow size="sm" asChild>
@@ -315,7 +324,7 @@ function Mark({ label, code, detail }: { label: string; code: string; detail?: s
   );
 }
 
-function ClassificationTable({ rows: all }: { rows: F1ClassificationRow[] }): JSX.Element {
+function ClassificationTable({ rows: all }: { rows: F1ClassificationRow[] }): React.ReactElement {
   const rows = useShownRows(all);
   return (
     <div className="overflow-hidden rounded-lg border">
@@ -349,7 +358,10 @@ function ClassificationTable({ rows: all }: { rows: F1ClassificationRow[] }): JS
               <TableCell className="text-right">
                 <span className="inline-flex items-center gap-1">
                   {row.fastestLap && (
-                    <Timer aria-label="Fastest lap" className="size-3.5 text-muted-foreground" />
+                    <>
+                      <Timer aria-hidden className="size-3.5 text-muted-foreground" />
+                      <span className="sr-only">Fastest lap</span>
+                    </>
                   )}
                   <Mono className="text-xs">{row.result}</Mono>
                 </span>

@@ -26,8 +26,8 @@ import {
 import { matchTimeFormat } from "@/components/entertainment/sports/shared/match-time";
 import { NewsRail } from "@/components/entertainment/sports/shared/news-rail";
 import { fromF1Wire } from "@/lib/sports/news";
+import { sportPath } from "@/lib/sports/paths";
 
-const F1_PATH = "/portal/entertainment/sports?sport=f1";
 /** A slider, so more than fits is fine — but not so many nobody reaches the end. */
 const SHOWN = 8;
 
@@ -74,7 +74,7 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
         )}
         <CardAction>
           <Button variant="outline" size="sm" asChild>
-            <Link href={F1_PATH}>
+            <Link href={sportPath("f1")}>
               Open <ArrowRight />
             </Link>
           </Button>
@@ -82,7 +82,7 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
       </CardHeader>
 
       <div className={SPORT_CARD_SECTION}>
-        {highlight && <F1NextRace highlight={highlight} format={format} href={F1_PATH} />}
+        {highlight && <F1NextRace highlight={highlight} format={format} href={sportPath("f1")} />}
       </div>
 
       <div className={SPORT_CARD_SECTION}>

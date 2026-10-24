@@ -178,8 +178,6 @@ export type Standing = {
   goalsFor: number;
   goalsAgainst: number;
   points: number;
-  /** Most-recent first; max 5. */
-  form?: FormResult[];
   /** Highlight band on the row (UCL/UEL qualification, relegation, etc.). */
   band?: StandingBand;
 };
@@ -495,7 +493,7 @@ export type F1Data = {
 
 export type NbaConference = "east" | "west";
 
-export type NbaStanding = Omit<Standing, "form" | "band"> & {
+export type NbaStanding = Omit<Standing, "band"> & {
   conference: NbaConference;
   /** Pct of games won, e.g. 0.812. */
   winPct: number;
@@ -566,7 +564,7 @@ export type RacquetTournament = {
   runnerUp?: string;
   /**
    * The draw, shipped only for the featured and the current tournament; any
-   * other one loads on demand (`getRacquetDrawAction`).
+   * other one is read on the tournament's page (`loadRacquetTournament`).
    */
   bracket?: BracketRound[];
   /** "Grand Slam", "Major", "P1". */
@@ -634,7 +632,6 @@ export type DrawVariant = "player" | "pair";
 export type DrawState =
   /** Upcoming, and too far off for a draw to exist. */
   | { status: "pending" }
-  | { status: "loading" }
   /** The provider did not answer; worth another try. */
   | { status: "error" }
   /** No provider knows this id — a fixture tournament, while the feed is down. */

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { getDashboardSportCard } from "@/lib/services/sports-service";
+import { sportPath } from "@/lib/sports/paths";
 import { cn } from "@/lib/utils";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import type {
@@ -29,8 +30,6 @@ import { matchTimeFormat, type MatchTimeFormat } from "./shared/match-time";
 import { NewsRail } from "./shared/news-rail";
 import { StatusPill } from "./shared/status-pill";
 import { TeamBadge } from "./shared/team-badge";
-
-const SPORTS_PATH = "/portal/entertainment/sports";
 
 /**
  * One favourite sport on the dashboard, laid out like the F1 card: what is on
@@ -134,9 +133,7 @@ export async function DashboardSportCard({
 /** The sport in the hub, and for football the league the card is set to. */
 function hubHref(card: DashboardSportCardData): string {
   const league = card.sportId === "football" ? card.competitions?.value : null;
-  return league
-    ? `${SPORTS_PATH}?sport=football&league=${league}`
-    : `${SPORTS_PATH}?sport=${card.sportId}`;
+  return league ? `${sportPath("football")}&league=${league}` : sportPath(card.sportId);
 }
 
 type MatchGroup = { label: string; matches: DashboardMatch[] };

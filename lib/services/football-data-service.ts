@@ -10,7 +10,6 @@ import type {
   FootballGroupStandings,
   FootballLeagueData,
   FootballLeagueId,
-  FormResult,
   Match,
   MatchStatus,
   Standing,
@@ -27,11 +26,9 @@ const REVALIDATE_SECONDS = 300;
 // Wide enough to stay populated for competitions between rounds (e.g. UCL
 // knockout, or a domestic league in its off-week). Matches are capped below.
 const MATCH_WINDOW_DAYS = 60;
-// The list opens on the freshest results and runs on through the fixtures;
-// the days before sit behind its clock, a few a tap. Forty shared between
-// both sides was two matchdays of results, so the clock ran out at once.
-// Now the results have room for the whole window back, and the fixtures a
-// month or so ahead.
+// Each side has its own cap: results reach back across the whole window,
+// because the list's clock brings earlier days in a few at a time, and
+// fixtures need only about a month ahead.
 const MATCH_CAPS = { upcoming: 30, results: 80 } as const;
 
 type CompetitionConfig = {
@@ -176,7 +173,6 @@ type FdTableRow = {
   goalsFor: number;
   goalsAgainst: number;
   points: number;
-  form?: string;
 };
 
 type FdStandingsResponse = {
@@ -307,47 +303,6 @@ function goalsOf(score: FdScore): Goals {
   };
 }
 
-function parseForm(form: string | null | undefined): FormResult[] | undefined {
-  if (!form) return undefined;
-  const tokens = form
-    .split(/[,\s]+/)
-    .map((t) => t.trim().toUpperCase())
-    .filter(Boolean);
-  if (tokens.length === 0) return undefined;
-  return tokens.slice(0, 5).map((t): FormResult => {
-    if (t === "W" || t === "D" || t === "L") return t;
-    return "-";
-  });
-}
-
-/**
- * Last five results per team, most recent first, from the matches already
- * fetched. The free tier sends `form: null` on every standings row, so the
- * table's form column never rendered.
- */
-function formFromMatches(matches: FdMatch[]): Map<string, FormResult[]> {
-  const finished = matches
-    .filter((m) => m.status === "FINISHED")
-    .sort((a, b) => b.utcDate.localeCompare(a.utcDate));
-  const form = new Map<string, FormResult[]>();
-  for (const m of finished) {
-    const home = teamFromFd(m.homeTeam);
-    const away = teamFromFd(m.awayTeam);
-    const { home: hg, away: ag } = goalsOf(m.score);
-    if (!home || !away || hg === null || ag === null) continue;
-    for (const [team, scored, conceded] of [
-      [home, hg, ag],
-      [away, ag, hg],
-    ] as const) {
-      const list = form.get(team.id) ?? [];
-      if (list.length >= 5) continue;
-      list.push(scored > conceded ? "W" : scored < conceded ? "L" : "D");
-      form.set(team.id, list);
-    }
-  }
-  return form;
-}
-
 /**
  * The free tier allows ten requests a minute per KEY, and the key is shared:
  * production, previews and every local dev server draw on the same ten. This
@@ -425,7 +380,6 @@ function windowDates(): { from: string; to: string } {
 function mapStandings(
   competition: CompetitionConfig,
   rows: FdTableRow[],
-  formByTeam: Map<string, FormResult[]> = new Map(),
 ): { standings: Standing[]; teams: Team[] } {
   const teamsMap = new Map<string, Team>();
   const total = rows.length;
@@ -444,7 +398,6 @@ function mapStandings(
       goalsFor: row.goalsFor,
       goalsAgainst: row.goalsAgainst,
       points: row.points,
-      form: parseForm(row.form) ?? formByTeam.get(team.id),
       band: ZONE_BAND_DEFAULTS[competition.internalId](row.position, total),
     });
   }
@@ -554,13 +507,17 @@ function buildRoundFromStage(
     if (tie.legs.length === 1) {
       // Single match (final, or one-legged round).
       const ft = goalsOf(leg1.score);
-      const winner = (leg1.score as FdScoreWithWinner).winner;
+      // football-data names whoever leads as `winner` while the match is
+      // still being played, which would crown a champion mid-final.
+      const winner =
+        leg1.status === "FINISHED" ? (leg1.score as FdScoreWithWinner).winner : null;
       matches.push({
         id: `m-${leg1.id}`,
         homeTeamId: homeId,
         awayTeamId: awayId,
         homeScore: ft.home,
         awayScore: ft.away,
+        ...(ft.penalties ? { penalties: ft.penalties } : {}),
         winnerTeamId:
           winner === "HOME_TEAM" ? homeId : winner === "AWAY_TEAM" ? awayId : null,
         date: leg1.utcDate,
@@ -845,11 +802,7 @@ async function fetchLeague(
   const seasonStart = standingsRes.season.startDate.slice(0, 4);
   const seasonEnd = standingsRes.season.endDate.slice(2, 4);
 
-  const { standings, teams: standingsTeams } = mapStandings(
-    competition,
-    tableBlock.table,
-    formFromMatches(matchesRes.matches),
-  );
+  const { standings, teams: standingsTeams } = mapStandings(competition, tableBlock.table);
   const teamsMap = new Map<string, Team>(standingsTeams.map((t) => [t.id, t]));
   const knockout = competition.hasKnockout
     ? buildKnockoutBracket(matchesRes.matches, teamsMap)
@@ -909,7 +862,6 @@ export const getFootballLeagueData = cachedFeed(
 /** The mappers and the request budget, exported for their tests. */
 export const __testing = {
   goalsOf,
-  formFromMatches,
   mapMatches,
   buildKnockoutBracket,
   noteBudget,

@@ -16,8 +16,7 @@ const {
   pairOf,
   setScore,
   drawFrom,
-  drawsFrom,
-  fetchPadelDraws,
+  fetchPadelDraw,
 } = __testing;
 
 // Milano P1 2026 as the API returns it, trimmed to what the mapper reads.
@@ -381,15 +380,6 @@ describe("drawFrom", () => {
   });
 });
 
-describe("drawsFrom", () => {
-  it("keeps the men's draw out of a list that holds the women's too", () => {
-    const draw = drawsFrom(747, MATCHES);
-    expect(draw.tournamentId).toBe("padelapi-747");
-    expect(draw.rounds[3].matches[0].id).toBe("13991");
-    expect(draw.champion).toBe("A. Coello / A. Tapia");
-  });
-});
-
 describe("the feed and the draws on demand", () => {
   const player = { id: 65, name: "Arturo Coello", nationality: "ES", ranking: 1, ranking_diff: 0, points: 11250 };
   const kuwait = { ...milano, id: 748, name: "Kuwait P1 2026", status: "pending", start_date: "2026-10-26", end_date: "2026-10-31", winners: null };
@@ -461,17 +451,24 @@ describe("the feed and the draws on demand", () => {
     expect(drawCalls().some((url) => url.includes("/748/"))).toBe(false);
   });
 
+  it("reads the men's draw out of a list that holds the women's too", async () => {
+    const draw = await fetchPadelDraw(747);
+    expect(draw.tournamentId).toBe("padelapi-747");
+    expect(draw.rounds[3].matches[0].id).toBe("13991");
+    expect(draw.champion).toBe("A. Coello / A. Tapia");
+  });
+
   it("reads the rest of a draw while its round of 16 is being filled, and only then", async () => {
     const pages = vi.fn<(url: string) => Promise<Response>>(async (url) =>
       respond(url.includes("page=1") ? { data: dayOne, meta: { last_page: 3 } } : { data: [] })
     );
     vi.stubGlobal("fetch", pages);
-    await fetchPadelDraws(748);
+    await fetchPadelDraw(748);
     expect(pages.mock.calls.map(([url]) => new URL(url).searchParams.get("page"))).toEqual(["1", "2", "3"]);
 
     pages.mockClear();
     pages.mockImplementation(async () => respond({ data: MATCHES, meta: { last_page: 3 } }));
-    await fetchPadelDraws(747);
+    await fetchPadelDraw(747);
     expect(pages).toHaveBeenCalledTimes(1);
   });
 

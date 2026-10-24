@@ -84,6 +84,9 @@ describe("F1Races", () => {
     ]);
     expect(screen.queryByRole("heading", { name: "Just finished" })).toBeNull();
     expect(tiles("Earlier races")).toEqual([]);
+    expect(
+      within(section("Earlier races")).getByRole("button", { name: "Earlier: Show rounds 15 – 17" })
+    ).toBeInTheDocument();
   });
 
   it("brings in the three just run, latest first, with winner, pole and fastest lap", () => {
@@ -99,16 +102,6 @@ describe("F1Races", () => {
     expect(singapore).toHaveTextContent(/WinnerVER/);
     expect(singapore).toHaveTextContent(/PoleRUS/);
     expect(singapore).toHaveTextContent(/Fastest lapLEC/);
-  });
-
-  it("has no full calendar: the races run come in from their heading", () => {
-    renderRaces();
-    expect(screen.queryByRole("button", { name: /Full calendar/ })).toBeNull();
-    expect(screen.queryByRole("list", { name: "Season calendar" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Later:/ })).toBeNull();
-    expect(
-      within(section("Earlier races")).getByRole("button", { name: "Earlier: Show rounds 15 – 17" })
-    ).toBeInTheDocument();
   });
 
   it("brings in earlier races below the ones shown, until the season has none left", () => {

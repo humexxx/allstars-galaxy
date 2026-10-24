@@ -30,14 +30,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { isBracketDrawn } from "@/lib/sports/bracket";
-import type {
-  LolChampion,
-  LolData,
-  LolMatch,
-  LolRegion,
-  LolSplit,
-  LolUpcoming,
-  Team,
+import {
+  isLolLeague,
+  type LolChampion,
+  type LolData,
+  type LolMatch,
+  type LolRegion,
+  type LolSplit,
+  type LolUpcoming,
+  type Team,
 } from "@/types/sports";
 
 import { ChampionCard } from "../shared/champion-card";
@@ -70,7 +71,7 @@ function useLeagueSplits(): {
   const [states, setStates] = useState<Record<string, SplitState>>({});
   const asked = useRef(new Set<string>());
   const load = useCallback((region: LolRegion, tournamentId: string) => {
-    if (asked.current.has(tournamentId)) return;
+    if (!isLolLeague(region) || asked.current.has(tournamentId)) return;
     asked.current.add(tournamentId);
     setStates((s) => ({ ...s, [tournamentId]: { status: "loading" } }));
     void getLolSplitAction({ region, tournamentId }).then((result) => {
@@ -86,10 +87,8 @@ function useLeagueSplits(): {
   return { states, load };
 }
 
-export function LolView({ data }: LolViewProps) {
+export function LolView({ data }: LolViewProps): ReactElement {
   const [region, setRegion] = useState<LolRegion>(data.splits[0]?.region ?? "lec");
-  // The picker offers each league's latest split; its others this season are
-  // moved between from inside the league, and the one picked is kept per league.
   const latest = useMemo(
     () => data.splits.find((s) => s.region === region) ?? data.splits[0],
     [data.splits, region],
@@ -120,8 +119,10 @@ export function LolView({ data }: LolViewProps) {
   // An international event is its stages, a tab each in the order they are
   // played — play-ins, Swiss stage, playoffs — and lands on the latest one
   // under way: the playoffs once drawn (locked till then), else the Swiss
-  // stage, else the play-ins. A league keeps its matches and its table.
-  const stages = Boolean(split.international) && (playIns !== null || swiss !== null || playoffs !== null);
+  // stage, else the play-ins. A league keeps its matches and its table, and so
+  // does an event whose only stage is a bracket not drawn yet: it has no stage
+  // under way to land on.
+  const stages = Boolean(split.international) && (playIns !== null || swiss !== null || playoffsDrawn);
   const opening = playoffsDrawn
     ? "playoffs"
     : swiss
@@ -133,9 +134,9 @@ export function LolView({ data }: LolViewProps) {
           : "matches";
 
   return (
-    // Keyed by region: switching to a region without playoffs while on the
-    // "playoffs" tab would otherwise strand the uncontrolled Tabs on a value
-    // whose trigger/content no longer exist (blank body).
+    // Keyed by region and split: switching to one without playoffs while on
+    // the "playoffs" tab would otherwise strand the uncontrolled Tabs on a
+    // value whose trigger/content no longer exist (blank body).
     <Tabs
       key={`${region}-${split.tournamentId ?? ""}`}
       defaultValue={opening}
@@ -151,9 +152,7 @@ export function LolView({ data }: LolViewProps) {
             <SelectTrigger className="w-56" aria-label="Region">
               <SelectValue placeholder="Region" />
             </SelectTrigger>
-            {/* This season's international events first — the ones that matter
-                most — then each league's latest split; a league's earlier ones
-                are moved between from inside it. */}
+            {/* International events first: they are the ones that matter most. */}
             <SelectContent>
               {[
                 { label: "International", splits: data.splits.filter((s) => s.international) },
@@ -210,7 +209,7 @@ export function LolView({ data }: LolViewProps) {
                   split={split}
                   champion={split.champion}
                   teams={teamsMap}
-                  upcoming={data.upcoming ?? []}
+                  upcoming={split === data.splits[0] ? data.upcoming ?? [] : []}
                 />
               )}
 
@@ -224,21 +223,23 @@ export function LolView({ data }: LolViewProps) {
                 </TabsContent>
               )}
 
-              <TabsContent value="matches">
-                {hasMatches ? (
-                  <div className="grid gap-2 @xl:grid-cols-2">
-                    {split.matches.map((m) => (
-                      <LolMatchCard key={m.id} match={m} teams={teamsMap} />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState
-                    icon={CalendarX}
-                    title="No matches to show"
-                    description="Lolesports has not sent this split's schedule."
-                  />
-                )}
-              </TabsContent>
+              {!stages && (
+                <TabsContent value="matches">
+                  {hasMatches ? (
+                    <div className="grid gap-2 @xl:grid-cols-2">
+                      {split.matches.map((m) => (
+                        <LolMatchCard key={m.id} match={m} teams={teamsMap} />
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState
+                      icon={CalendarX}
+                      title="No matches to show"
+                      description="Lolesports has not sent this split's schedule."
+                    />
+                  )}
+                </TabsContent>
+              )}
 
               {split.standings.length > 0 && (
                 <TabsContent value="standings">

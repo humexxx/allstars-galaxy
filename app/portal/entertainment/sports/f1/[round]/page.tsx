@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { F1RacePage } from "@/components/entertainment/sports/f1-race-page";
+import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { loadF1Race } from "@/lib/sports/detail";
 import { f1RoundSchema } from "@/schemas/f1";
 
@@ -15,6 +16,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 /** One race of the season, by its round: what "View details" and the tiles open. */
 export default async function F1RaceRoute({ params }: Props): Promise<React.ReactElement> {
+  await requireEffectiveContext();
   const round = f1RoundSchema.safeParse((await params).round);
   if (!round.success) notFound();
   const detail = await loadF1Race(round.data);

@@ -11,7 +11,7 @@ import type { F1ClassificationRow, F1Driver, F1Race, F1SessionResult } from "@/t
 import { AUSTIN, DRIVERS, SINGAPORE } from "./__fixtures__/f1";
 import { F1RacePage } from "./f1-race-page";
 
-function renderPage(
+function page(
   race: F1Race,
   {
     sessions = [],
@@ -24,8 +24,8 @@ function renderPage(
     drivers?: F1Driver[];
     current?: boolean;
   } = {}
-): void {
-  render(
+): React.ReactElement {
+  return (
     <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
       <F1RacePage
         race={race}
@@ -37,6 +37,10 @@ function renderPage(
       />
     </ReaderTimeZoneProvider>
   );
+}
+
+function renderPage(race: F1Race, options?: Parameters<typeof page>[1]): ReturnType<typeof render> {
+  return render(page(race, options));
 }
 
 const section = (title: string): HTMLElement =>
@@ -146,10 +150,10 @@ describe("F1RacePage", () => {
     const rows = within(within(section("Classification")).getByRole("table")).getAllByRole("row");
     expect(rows.slice(1).map((r) => [...r.querySelectorAll("td")].map((td) => td.textContent))).toEqual([
       ["1", "M. VerstappenRed Bull", "1:32:11.902", "25"],
-      ["2", "C. LeclercFerrari", "+5.402", "19"],
+      // Named for a screen reader beside the icon.
+      ["2", "C. LeclercFerrari", "Fastest lap+5.402", "19"],
       ["DNF", "L. StrollAston Martin", "Retired", "0"],
     ]);
-    expect(within(rows[2]).getByLabelText("Fastest lap")).toBeInTheDocument();
   });
 
   describe("Results", () => {
@@ -168,11 +172,12 @@ describe("F1RacePage", () => {
     it("shows the latest session's order, with a pick of the others", () => {
       renderPage(AUSTIN, { sessions: [fp1, quali] });
       const results = section("Results");
-      expect(within(results).getByRole("radio", { name: "Qualifying" })).toHaveAttribute("aria-checked", "true");
+      // Each pick reads as it shows, its full name after it.
+      expect(within(results).getByRole("radio", { name: "Q (Qualifying)" })).toHaveAttribute("aria-checked", "true");
       expect(within(results).getByRole("table", { name: "Qualifying" })).toHaveTextContent("L. Norris");
       expect(within(results).getByRole("table", { name: "Qualifying" })).toHaveTextContent("Q31:32.501");
 
-      fireEvent.click(within(results).getByRole("radio", { name: "Practice 1" }));
+      fireEvent.click(within(results).getByRole("radio", { name: "P1 (Practice 1)" }));
 
       const table = within(results).getByRole("table", { name: "Practice 1" });
       // No faces in the fixture: each driver is the disc with their code.
@@ -181,6 +186,20 @@ describe("F1RacePage", () => {
         "1LECC. LeclercFerrari1:36.052",
         "2VERM. VerstappenRed Bull Racing1:36.120+0.068",
       ]);
+    });
+
+    it("moves to a session that comes in with a refresh, until the reader picks one", () => {
+      const sprint = { kind: "sprint" as const, rows: [{ position: "1", code: "VER", name: "M. Verstappen", team: "Red Bull Racing", time: "28:01.115" }] };
+      const { rerender } = renderPage(AUSTIN, { sessions: [fp1] });
+      expect(within(section("Results")).getByRole("table", { name: "Practice 1" })).toBeInTheDocument();
+
+      rerender(page(AUSTIN, { sessions: [fp1, quali] }));
+      expect(within(section("Results")).getByRole("table", { name: "Qualifying" })).toBeInTheDocument();
+
+      fireEvent.click(within(section("Results")).getByRole("radio", { name: "P1 (Practice 1)" }));
+      rerender(page(AUSTIN, { sessions: [fp1, quali, sprint] }));
+      expect(within(section("Results")).getByRole("table", { name: "Practice 1" })).toBeInTheDocument();
+      expect(within(section("Results")).getByRole("radio", { name: "Sprint" })).toHaveAttribute("aria-checked", "false");
     });
 
     it("draws each driver by their face from the standings, by the name there too", () => {

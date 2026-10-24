@@ -104,4 +104,4 @@ export const getEspnNews = cachedFeed(
 );
 
 /** The mappers, exported for their tests — nothing here touches the network. */
-export const __testing = { storyFrom, pictureOf, PATHS };
+export const __testing = { storyFrom };

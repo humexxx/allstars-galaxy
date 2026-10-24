@@ -33,13 +33,15 @@ describe("seen sports", () => {
     rememberSport("me", "nba|", entry(), 0);
     expect(recallSport("me", "nba|", SEEN_MS)?.today).toBe("2026-10-23");
     expect(recallSport("me", "nba|", SEEN_MS + 1)).toBeUndefined();
-    expect(recallSport("me", "nba|", 0)).toBeUndefined();
   });
 
-  it("is emptied when another account is looked at", () => {
+  it("gives another account nothing, and is emptied once that account's sport is remembered", () => {
     rememberSport("admin", "nba|", entry());
     expect(recallSport("client", "nba|")).toBeUndefined();
-    expect(recallSport("admin", "nba|")).toBeUndefined();
+    expect(recallSport("admin", "nba|")).toBeDefined();
+    rememberSport("client", "f1|", { ...entry(), teamFilter: null });
+    expect(recallSport("client", "nba|")).toBeUndefined();
+    expect(recallSport("client", "f1|")).toBeDefined();
   });
 
   it("carries a team pick just saved into every copy of that list", () => {

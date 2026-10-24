@@ -11,17 +11,15 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
-import { teamInterest } from "@/lib/sports/news";
 import type { FootballLeagueData, FootballLeagueId, NewsStory, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { MatchesByDate } from "../shared/matches-by-date";
-import { NewsTab } from "../shared/news-list";
+import { TeamNewsTab } from "../shared/news-list";
 import { OverviewSplit } from "../shared/overview-split";
 import { SportShell } from "../shared/sport-shell";
 import { StandingsTable } from "../shared/standings-table";
 import { TableCard } from "../shared/table-primitives";
-import { useSavedTeamFilter } from "../shared/team-filter-context";
 import { useSportsNavigation } from "../sports-navigation";
 import { WorldCupView } from "./world-cup-view";
 
@@ -103,7 +101,6 @@ function LeagueView({
     [league],
   );
 
-  const saved = useSavedTeamFilter();
   const hasKnockoutData = !!league.knockout && league.knockout.length > 0;
   const defaultTab: TabKey = openNews ? "news" : hasKnockoutData ? "knockout" : "overview";
 
@@ -138,7 +135,7 @@ function LeagueView({
             table={
               league.standings.length > 0 && (
                 <TableCard>
-                  <StandingsTable standings={league.standings} teams={teamsMap} variant="compact" />
+                  <StandingsTable standings={league.standings} teams={teamsMap} />
                 </TableCard>
               )
             }
@@ -155,16 +152,13 @@ function LeagueView({
           </TabsContent>
         )}
 
-        {/* Led by the teams picked in the matches, else the table's top three. */}
+        {/* Led by the teams picked in the matches and the table's top three. */}
         {news.length > 0 && (
           <TabsContent value="news">
-            <NewsTab
+            <TeamNewsTab
               stories={news}
-              interest={teamInterest(
-                teamsMap,
-                saved?.teamIds ?? [],
-                league.standings.filter((s) => s.position <= 3).map((s) => s.teamId)
-              )}
+              teams={teamsMap}
+              leaders={league.standings.filter((s) => s.position <= 3).map((s) => s.teamId)}
             />
           </TabsContent>
         )}

@@ -12,6 +12,7 @@ import {
   setSportFavorite,
   setSportTeamFilter,
 } from "@/lib/services/sports-service";
+import { SPORTS_PATH } from "@/lib/sports/paths";
 import {
   setSportCompetitionSchema,
   setSportFavoriteSchema,
@@ -21,7 +22,6 @@ import {
   type SetSportTeamFilterData,
 } from "@/schemas/sports";
 
-const SPORTS_PATH = "/portal/entertainment/sports";
 const DASHBOARD_PATH = "/portal";
 
 export async function setSportFavoriteAction(

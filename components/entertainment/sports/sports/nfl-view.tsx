@@ -13,14 +13,12 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { teamInterest } from "@/lib/sports/news";
 import { cn } from "@/lib/utils";
 import type { NewsStory, NflConference, NflData, Team } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { MatchesByDate } from "../shared/matches-by-date";
-import { NewsTab } from "../shared/news-list";
-import { useSavedTeamFilter } from "../shared/team-filter-context";
+import { TeamNewsTab } from "../shared/news-list";
 import { OverviewSplit } from "../shared/overview-split";
 import { SportShell } from "../shared/sport-shell";
 import { ShowMoreRows, useShownRows } from "../shared/show-more";
@@ -40,7 +38,6 @@ export function NflView({ data, news = [], initialTab }: NflViewProps): React.Re
     () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
     [data.teams],
   );
-  const saved = useSavedTeamFilter();
 
   const hasPlayoffs = data.playoffs.length > 0;
   const opening = initialTab === "news" && news.length > 0 ? "news" : hasPlayoffs ? "playoffs" : "overview";
@@ -89,16 +86,13 @@ export function NflView({ data, news = [], initialTab }: NflViewProps): React.Re
           </TabsContent>
         )}
 
-        {/* Led by the teams picked in the week's games, else each conference's top two. */}
+        {/* Led by the teams picked in the week's games and each conference's top two. */}
         {news.length > 0 && (
           <TabsContent value="news">
-            <NewsTab
+            <TeamNewsTab
               stories={news}
-              interest={teamInterest(
-                teamsMap,
-                saved?.teamIds ?? [],
-                data.standings.filter((s) => s.position <= 2).map((s) => s.teamId)
-              )}
+              teams={teamsMap}
+              leaders={data.standings.filter((s) => s.position <= 2).map((s) => s.teamId)}
             />
           </TabsContent>
         )}

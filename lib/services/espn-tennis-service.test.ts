@@ -309,13 +309,13 @@ describe("tourFrom", () => {
   };
 
   it("runs in date order, the bigger draw first on the same day", () => {
-    const tour = tourFrom("atp", board as never, { rankings: [] }, NOW);
+    const tour = tourFrom(board as never, { rankings: [] }, NOW);
     expect(tour.tournaments.map((t) => t.name)).toEqual(["Shanghai Masters", "Almaty Open"]);
     expect(tour.season).toBe(2026);
   });
 
   it("ships the draw of the tournament being played, and loads the rest on demand", () => {
-    const tour = tourFrom("atp", board as never, { rankings: [] }, NOW);
+    const tour = tourFrom(board as never, { rankings: [] }, NOW);
     const byName = new Map(tour.tournaments.map((t) => [t.name, t]));
     expect(byName.get("Shanghai Masters")!.bracket).toHaveLength(2);
     expect(byName.get("Almaty Open")!.bracket).toBeUndefined();
@@ -335,7 +335,7 @@ describe("tourFrom", () => {
         { ...board.events[0], id: "later", name: "Later Open", date: "2026-10-26T04:00Z" },
       ],
     };
-    const tour = tourFrom("atp", quiet as never, { rankings: [] }, NOW);
+    const tour = tourFrom(quiet as never, { rankings: [] }, NOW);
     expect(tour.tournaments.filter((t) => t.bracket).map((t) => t.name)).toEqual([
       "Shanghai Masters",
       "Almaty Open",
@@ -347,7 +347,7 @@ describe("tourFrom", () => {
       { id: "espn-1000-mens-singles", name: "Shanghai Masters", startDate: "2026-10-12", endDate: "2026-10-18" },
       { id: "espn-99-2026-mens-singles", name: "Australian Open", startDate: "2026-01-11", endDate: "2026-02-01" },
     ];
-    const tour = withCalendar(tourFrom("atp", board as never, { rankings: [] }, NOW), seeds, "2026-10-18");
+    const tour = withCalendar(tourFrom(board as never, { rankings: [] }, NOW), seeds, "2026-10-18");
     expect(tour.calendar).toEqual([
       { ...seeds[0], status: "live", champion: undefined },
       { ...seeds[1], status: "completed" },
@@ -359,7 +359,7 @@ describe("tourFrom", () => {
     const rankings = {
       rankings: [{ ranks: [{ current: 1, athlete: { id: "a-A", displayName: "A", headshot: headshot("1") } }] }],
     };
-    const tour = tourFrom("atp", board as never, rankings, NOW);
+    const tour = tourFrom(board as never, rankings, NOW);
     const byId = new Map(tour.drawPlayers!.map((p) => [p.id, p]));
     expect(byId.get("a-A")!.logoUrl).toBe(resized("1"));
     expect(byId.get("a-B")!.logoUrl).toBeUndefined();
@@ -372,7 +372,7 @@ describe("tourFrom", () => {
       points: 1000 - i,
       athlete: { displayName: `Player ${i + 1}` },
     }));
-    const tour = tourFrom("atp", board as never, { rankings: [{ ranks }] }, NOW);
+    const tour = tourFrom(board as never, { rankings: [{ ranks }] }, NOW);
     expect(tour.rankings).toHaveLength(20);
     expect(tour.rankings[0]).toMatchObject({ position: 1, movement: 0 });
   });
@@ -593,7 +593,7 @@ describe("fetchCalendarFromApi", () => {
   it("reads the season asked for", async () => {
     const fetchMock = vi.fn<(url: string) => Promise<Response>>(async () => respond(CALENDAR));
     vi.stubGlobal("fetch", fetchMock);
-    const seeds = await fetchCalendarFromApi("atp", 2026);
+    const seeds = await fetchCalendarFromApi(2026);
     expect(seeds).toHaveLength(3);
     expect(fetchMock.mock.calls[0][0]).toBe(
       "https://sports.core.api.espn.com/v2/sports/tennis/leagues/atp/calendar/whitelist?dates=2026"
@@ -606,14 +606,14 @@ describe("fetchCalendarFromApi", () => {
       respond(url.endsWith("dates=2027") ? { sections: [] } : CALENDAR)
     );
     vi.stubGlobal("fetch", fetchMock);
-    const seeds = await fetchCalendarFromApi("atp", 2027);
+    const seeds = await fetchCalendarFromApi(2027);
     expect(seeds[0].id).toBe("espn-315-2026-mens-singles");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("throws on a failed call, so the cache keeps its last good calendar", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 503 }) as Response));
-    await expect(fetchCalendarFromApi("atp", 2026)).rejects.toThrow("503");
+    await expect(fetchCalendarFromApi(2026)).rejects.toThrow("503");
   });
 });
 
@@ -684,7 +684,7 @@ describe("fetchTennisDraw", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const draw = await fetchTennisDraw("atp", "315-2026", "2026-10-18");
+    const draw = await fetchTennisDraw("315-2026", "2026-10-18");
 
     const scoreboardCall = fetchMock.mock.calls.find(([url]) => url.includes("/scoreboard"))!;
     expect(scoreboardCall[0]).toBe(
@@ -703,7 +703,7 @@ describe("fetchTennisDraw", () => {
 
   it("throws when the event is not on that day, so nothing empty is cached", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => respond({ events: [] })));
-    await expect(fetchTennisDraw("atp", "315-2026", "2026-10-18")).rejects.toThrow("315-2026");
+    await expect(fetchTennisDraw("315-2026", "2026-10-18")).rejects.toThrow("315-2026");
   });
 });
 

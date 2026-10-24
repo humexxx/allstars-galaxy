@@ -1,5 +1,4 @@
 import { Timer, Trophy } from "lucide-react";
-import type { JSX } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Mono, Text } from "@/components/ui/typography";
@@ -35,16 +34,16 @@ export function SessionList({
   race,
   format,
   now,
-  results = [],
-  drivers = [],
+  results,
+  drivers,
 }: {
   race: F1Race;
   format: MatchTimeFormat;
   now: number | null;
-  results?: F1SessionResult[];
+  results: F1SessionResult[];
   /** The standings' drivers, whose faces and names the leaders take. */
-  drivers?: F1Driver[];
-}): JSX.Element {
+  drivers: F1Driver[];
+}): React.ReactElement {
   const state = now === null ? {} : weekendNow(race, now);
   return (
     <ol className="flex flex-col">
@@ -53,6 +52,7 @@ export function SessionList({
         const live = state.live?.kind === session.kind;
         const next = state.next?.kind === session.kind;
         const done = now !== null && !live && Date.parse(session.startsAt) <= now;
+        const leader = leaderOf(session.kind, results);
         return (
           <li
             key={`${session.kind}-${session.startsAt}`}
@@ -72,12 +72,8 @@ export function SessionList({
               {live && <StatusPill status="live" />}
               {next && <Badge variant="info">Next</Badge>}
             </span>
-            {leaderOf(session.kind, results) ? (
-              <SessionLeader
-                kind={session.kind}
-                row={leaderOf(session.kind, results)!}
-                drivers={drivers}
-              />
+            {leader ? (
+              <SessionLeader kind={session.kind} row={leader} drivers={drivers} />
             ) : (
               <Mono className="shrink-0 text-xs">{format.dayTime(session.startsAt)}</Mono>
             )}
@@ -115,7 +111,7 @@ function SessionLeader({
   kind: F1SessionKind;
   row: F1SessionResultRow;
   drivers: F1Driver[];
-}): JSX.Element {
+}): React.ReactElement {
   const { name, subject } = sessionDriver(row, drivers);
   return (
     <span className="flex min-w-0 shrink items-center gap-2 text-foreground">
@@ -130,7 +126,7 @@ function SessionLeader({
 }
 
 /** Winner, pole and fastest lap on one line, for a finished race's card. */
-export function ResultsLine({ race }: { race: F1Race }): JSX.Element {
+export function ResultsLine({ race }: { race: F1Race }): React.ReactElement {
   const winner = race.winner?.code ?? race.podium?.[0];
   if (!winner) {
     return (
@@ -167,7 +163,7 @@ export function ResultsLine({ race }: { race: F1Race }): JSX.Element {
  * The top three with their gaps. Names and faces come from the standings,
  * since the race feed carries only the codes.
  */
-export function Podium({ race, drivers }: { race: F1Race; drivers: F1Driver[] }): JSX.Element | null {
+export function Podium({ race, drivers }: { race: F1Race; drivers: F1Driver[] }): React.ReactElement | null {
   if (!race.podium) return null;
   const byCode = new Map(drivers.map((d) => [d.code, d]));
   const times = [race.winner?.time, race.podiumGaps?.[0], race.podiumGaps?.[1]];

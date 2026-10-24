@@ -6,9 +6,9 @@ import type { F1Race, F1Session, F1SessionKind } from "@/types/sports";
  *
  * Nothing here reads the clock: every rule takes `now`. The feed is cached for
  * five minutes, and a "Qualifying in 3h" worked out inside it would still say
- * so three hours later. The dashboard passes the request's time; the Races tab
- * passes the browser's, after mount, so the server's render never disagrees
- * with the one that hydrates it.
+ * so three hours later. The dashboard passes the request's time; F1's
+ * Overview races (`F1Races`) pass the browser's, after mount, so the server's
+ * render never disagrees with the one that hydrates it.
  */
 
 export const SESSION_LABEL: Record<F1SessionKind, string> = {

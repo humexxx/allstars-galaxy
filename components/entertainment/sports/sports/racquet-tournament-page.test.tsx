@@ -4,8 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
-// The view's draw loader shares the module; the page never calls it.
-vi.mock("@/app/actions/racquet", () => ({ getRacquetDrawAction: vi.fn() }));
 
 import type { BracketRound, DrawState, RacquetTournament, Team } from "@/types/sports";
 
@@ -111,6 +109,17 @@ describe("RacquetTournamentPage", () => {
       "Seed 2: A. Galan / F. Chingotto",
       "Seed 3: L. Augsburger / J. Lebron",
     ]);
+  });
+
+  it("lays the seeds over the poster, and beside the facts once the poster fails to load", () => {
+    renderPage({ ...KUWAIT, status: "live" }, ready());
+    const img = document.querySelector("img")!;
+    expect(screen.getAllByRole("list", { name: "Top seeds" })).toHaveLength(1);
+    expect(within(img.parentElement!).getByRole("list", { name: "Top seeds" })).toBeInTheDocument();
+
+    fireEvent.error(img);
+    expect(document.querySelector("img")).toBeNull();
+    expect(screen.getAllByRole("list", { name: "Top seeds" })).toHaveLength(1);
   });
 
   it("says when a tournament not drawn yet starts, and that its draw is not out", () => {

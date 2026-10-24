@@ -15,8 +15,8 @@ export const setSportFavoriteSchema = z.object({
 export type SetSportFavoriteData = z.infer<typeof setSportFavoriteSchema>;
 
 // The championship a dashboard card shows, checked against that sport's own
-// list; null hands the card back its own pick. A sport with no list (NBA,
-// NFL, F1) has nothing to choose, so any value is refused.
+// list; null hands the card back its own pick. A sport missing from
+// SPORT_COMPETITIONS has nothing to choose, so any value is refused.
 export const setSportCompetitionSchema = z
   .object({
     sportId: sportIdSchema,

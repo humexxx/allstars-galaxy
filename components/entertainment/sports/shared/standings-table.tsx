@@ -11,7 +11,6 @@ import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { Standing, Team } from "@/types/sports";
 
-import { Last5Form } from "./last-5-form";
 import { ShowMoreRows, useShownRows } from "./show-more";
 import { SportsTh, TableCellNum } from "./table-primitives";
 import { TeamBadge } from "./team-badge";
@@ -19,15 +18,6 @@ import { TeamBadge } from "./team-badge";
 type StandingsTableProps = {
   standings: Standing[];
   teams: Map<string, Team>;
-  /** Show the form column when the data set carries it. */
-  showForm?: boolean;
-  /**
-   * `compact` keeps only #, club, played, goal difference and points — for a
-   * side column (the football overview), where the full table was clipped
-   * before it ever reached the points.
-   */
-  variant?: "full" | "compact";
-  className?: string;
 };
 
 // Qualification bands are categories, not states: the first two take the
@@ -40,29 +30,23 @@ const BAND_STYLES: Record<string, string> = {
   relegation: "bg-destructive",
 };
 
-// Narrow on a phone: seven 48px stat columns pushed Pts — the one column
-// everybody reads — off the right edge of a 390px screen.
+// Narrow on a phone, so the club's name keeps the room and Pts — the one
+// column everybody reads — never leaves the right edge of a 390px screen.
 const NUM_TH = "w-8 px-1 text-center sm:w-12 sm:px-2";
 const NUM_TD = "px-1 sm:px-2";
-/** Goals for/against: the first thing a phone can do without. */
-const WIDE_ONLY = "hidden sm:table-cell";
 
-export function StandingsTable({
-  standings,
-  teams,
-  showForm = true,
-  variant = "full",
-  className,
-}: StandingsTableProps) {
-  const compact = variant === "compact";
-  const hasForm = !compact && showForm && standings.some((s) => s.form && s.form.length > 0);
-
+/**
+ * A league or group table cut to #, club, played, goal difference and points:
+ * it sits in a side column (the football overview, a World Cup group), where
+ * a full table was clipped before it ever reached the points.
+ */
+export function StandingsTable({ standings, teams }: StandingsTableProps): React.ReactElement {
   const rows = useShownRows(standings);
   // No frame or scroller of its own: callers sit it flush in a TableCard,
   // and `Table` already scrolls. A second scroller broke horizontal swipes.
   return (
     <>
-      <Table className={className}>
+      <Table>
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
             <SportsTh className="w-8 pl-3">#</SportsTh>
@@ -70,27 +54,14 @@ export function StandingsTable({
             <SportsTh className={NUM_TH}>
               <abbr title="Matches played" className="no-underline">MP</abbr>
             </SportsTh>
-            {!compact && (
-              <>
-                <SportsTh className={NUM_TH}>W</SportsTh>
-                <SportsTh className={NUM_TH}>D</SportsTh>
-                <SportsTh className={NUM_TH}>L</SportsTh>
-                <SportsTh className={cn(NUM_TH, WIDE_ONLY)}>GF</SportsTh>
-                <SportsTh className={cn(NUM_TH, WIDE_ONLY)}>GA</SportsTh>
-              </>
-            )}
             <SportsTh className={NUM_TH}>
               <abbr title="Goal difference" className="no-underline">GD</abbr>
             </SportsTh>
             <SportsTh className="w-10 px-1 text-center text-foreground sm:w-14 sm:px-2">Pts</SportsTh>
-            {hasForm && (
-              // Five chips are wider than the rest of a tablet's table.
-              <SportsTh className="hidden text-center lg:table-cell">Last 5</SportsTh>
-            )}
           </TableRow>
         </TableHeader>
         <TableBody>
-            {rows.shown.map((row) => {
+          {rows.shown.map((row) => {
             const team = teams.get(row.teamId);
             const goalDiff = row.goalsFor - row.goalsAgainst;
             const bandClass = row.band ? BAND_STYLES[row.band] : null;
@@ -112,15 +83,6 @@ export function StandingsTable({
                   </div>
                 </TableCell>
                 <TableCellNum value={row.played} className={NUM_TD} />
-                {!compact && (
-                  <>
-                    <TableCellNum value={row.won} className={NUM_TD} />
-                    <TableCellNum value={row.drawn} className={NUM_TD} />
-                    <TableCellNum value={row.lost} className={NUM_TD} />
-                    <TableCellNum value={row.goalsFor} className={cn(NUM_TD, WIDE_ONLY)} />
-                    <TableCellNum value={row.goalsAgainst} className={cn(NUM_TD, WIDE_ONLY)} />
-                  </>
-                )}
                 <TableCellNum
                   value={`${goalDiff > 0 ? "+" : ""}${goalDiff}`}
                   className={cn(NUM_TD, goalDiff >= 0 ? "text-foreground" : "text-destructive")}
@@ -128,18 +90,6 @@ export function StandingsTable({
                 <TableCell className="px-1 text-center sm:px-2">
                   <Mono className="text-sm font-semibold tabular-nums">{row.points}</Mono>
                 </TableCell>
-                {hasForm && (
-                  <TableCell className="hidden text-center lg:table-cell">
-                    {row.form && row.form.length > 0 ? (
-                      <Last5Form
-                        results={row.form}
-                        className="justify-center"
-                      />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                )}
               </TableRow>
             );
           })}

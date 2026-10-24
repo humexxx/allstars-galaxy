@@ -185,6 +185,15 @@ describe("LolView, an international event's stages", () => {
     expect(openTab()).toBe("Playoffs");
   });
 
+  it("lays out an event whose only stage is an undrawn bracket as a league, on its matches", () => {
+    const msi: LolSplit = { ...worlds, region: "msi", name: "MSI 2026", champion: undefined, standings: lck.standings, playoffs: undrawn };
+    renderView({ splits: [msi, lck] });
+    expect(tabs()).toEqual(["Matches", "Standings", "Playoffs"]);
+    expect(openTab()).toBe("Matches");
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Playoffs" }), { button: 0 });
+    expect(screen.getByText("The bracket is not drawn yet")).toBeInTheDocument();
+  });
+
   it("leaves a league its matches and its table", () => {
     renderView({ splits: [lck, during] });
     expect(tabs()).toEqual(["Matches", "Standings"]);
@@ -221,6 +230,21 @@ describe("LolView, a league's other splits", () => {
     fireEvent.click(pill("LCK Split 3"));
     expect(screen.getByText("LCK Split 3 · 2026")).toBeInTheDocument();
     expect(getLolSplitAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("says when the leagues are back only under the split the feed leads with", async () => {
+    const won: LolSplit = { ...first, champion: { teamId: "t1", final: FINAL } };
+    vi.mocked(getLolSplitAction).mockResolvedValue({ success: true, data: won });
+    renderView({
+      splits: [latest, worlds],
+      upcoming: [{ region: "lck", name: "LCK Split 1", startDate: "2027-01-13" }],
+    });
+
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Splits of 2026" })).getByRole("radio", { name: "LCK Split 1" })
+    );
+    await waitFor(() => expect(screen.getByText("LCK Split 1 champions")).toBeInTheDocument());
+    expect(screen.queryByText("Next up")).not.toBeInTheDocument();
   });
 
   it("offers no pills to an international event", () => {

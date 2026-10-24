@@ -19,6 +19,7 @@ import {
   type BracketColumn,
   type BracketEdge,
 } from "./bracket-canvas";
+import { prefersReducedMotion } from "./reveal";
 import { useMatchTime } from "./time-zone-context";
 
 type KnockoutBracketProps = {
@@ -53,12 +54,10 @@ function halves<T>(list: T[]): [T[], T[]] {
   return [list.slice(0, mid), list.slice(mid)];
 }
 
-const reducedMotion = (): boolean =>
-  typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-
 /**
  * Each column's left edge within the scrolled content, from layout offsets
- * (the canvas is their offset parent), so a dialog zooming in does not skew it.
+ * (the canvas is their offset parent): they are what `scrollLeft` counts in,
+ * and a transform on an ancestor does not skew them.
  */
 function columnLefts(viewport: HTMLElement): number[] {
   return [...viewport.querySelectorAll<HTMLElement>("[data-column]")].map((column) => column.offsetLeft);
@@ -146,6 +145,7 @@ export function KnockoutBracket({
     return links ? { rounds: main, paired: main.map(() => false) } : treeOrder(main);
   }, [rounds, links]);
   const thirdPlace = rounds.find((r) => r.id === "third-place");
+  const drawn = rounds.length > 0 && isBracketDrawn(rounds);
   const viewport = useRef<HTMLDivElement>(null);
   const [ends, setEnds] = useState({ overflow: false, atStart: true, atEnd: true });
 
@@ -248,10 +248,10 @@ export function KnockoutBracket({
       observer.disconnect();
       el.removeEventListener("scroll", readEnds);
     };
-  }, [readEnds]);
+  }, [readEnds, drawn]);
 
   const scrollTo = (left: number): void => {
-    viewport.current?.scrollTo({ left, behavior: reducedMotion() ? "auto" : "smooth" });
+    viewport.current?.scrollTo({ left, behavior: prefersReducedMotion() ? "auto" : "smooth" });
   };
   /** To the next column's left edge that way, or the end. */
   const step = (direction: 1 | -1): void => {
@@ -264,7 +264,7 @@ export function KnockoutBracket({
     scrollTo(next ?? (direction > 0 ? el.scrollWidth : 0));
   };
 
-  if (rounds.length === 0 || !isBracketDrawn(rounds)) {
+  if (!drawn) {
     return (
       <EmptyState
         icon={Trophy}

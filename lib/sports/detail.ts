@@ -2,12 +2,13 @@ import "server-only";
 
 import { cache } from "react";
 
-import { getTennisData, getTennisDraw } from "@/lib/services/espn-tennis-service";
+import { getTennisData } from "@/lib/services/espn-tennis-service";
 import { getF1Data, getF1RaceClassification } from "@/lib/services/jolpica-f1-service";
 import { getF1WeekendResults } from "@/lib/services/openf1-service";
-import { getPadelData, getPadelDraw } from "@/lib/services/padel-api-service";
+import { getPadelData } from "@/lib/services/padel-api-service";
+import { getRacquetDraw } from "@/lib/services/racquet-draw-service";
 import { racesTabGroups, weekendWindow } from "@/lib/sports/f1-weekend";
-import { drawIsOut, findTournament } from "@/lib/sports/racquet";
+import { drawIsOut, findTournament, shippedDraw } from "@/lib/sports/racquet";
 import { getRequestTodayIso } from "@/lib/utils/request-today";
 import { racquetDrawSchema } from "@/schemas/racquet";
 import type {
@@ -42,16 +43,8 @@ export const loadRacquetTournament = cache(
     const tournament = findTournament(data, tournamentId);
     if (!tournament) return null;
 
-    if (tournament.bracket?.length) {
-      const draw = {
-        tournamentId,
-        rounds: tournament.bracket,
-        players: data.drawPlayers ?? [],
-        champion: tournament.champion,
-        runnerUp: tournament.runnerUp,
-      };
-      return { tournament, draw: { status: "ready", draw }, today };
-    }
+    const shipped = shippedDraw(tournament, data.drawPlayers ?? []);
+    if (shipped) return { tournament, draw: { status: "ready", draw: shipped }, today };
     // A fixture tournament ("wpt-m-rome", while the feed is down) is on no
     // provider's books.
     if (!racquetDrawSchema.safeParse({ sport, tournamentId }).success) {
@@ -60,7 +53,7 @@ export const loadRacquetTournament = cache(
     if (!drawIsOut(tournament.status, tournament.startDate, today)) {
       return { tournament, draw: { status: "pending" }, today };
     }
-    const draw = sport === "padel" ? await getPadelDraw(tournamentId) : await getTennisDraw(tournamentId);
+    const draw = await getRacquetDraw(sport, tournamentId);
     return { tournament, draw: draw ? { status: "ready", draw } : { status: "error" }, today };
   }
 );

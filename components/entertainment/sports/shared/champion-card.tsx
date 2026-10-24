@@ -11,12 +11,13 @@ import { burstConfetti } from "./confetti";
 import { TeamBadge } from "./team-badge";
 import { useMatchTime } from "./time-zone-context";
 
-/** Champions already celebrated this visit: the burst is for opening, not for every tab switch. */
+/** Champions already celebrated this visit: the burst is for the first sight of one, not every return to it. */
 const celebrated = new Set<string>();
 
 /**
- * "Beat Argentina 1–0 in the final", read off the final itself; "Won the
- * final" where the score or the other side is missing.
+ * "Beat Argentina 1–0 in the final", or "Beat France 1–1, 4–3 on penalties,
+ * in the final", read off the final itself; "Won the final" where the score
+ * or the other side is missing.
  */
 function finalLine(championId: string, final: BracketMatch, teams: Map<string, Team>): string {
   const atHome = final.homeTeamId === championId;
@@ -24,9 +25,13 @@ function finalLine(championId: string, final: BracketMatch, teams: Map<string, T
   const runnerUp = runnerUpId ? teams.get(runnerUpId) : undefined;
   const won = atHome ? final.homeScore : final.awayScore;
   const lost = atHome ? final.awayScore : final.homeScore;
-  return runnerUp && won != null && lost != null
-    ? `Beat ${runnerUp.shortName} ${won}–${lost} in the final`
-    : "Won the final";
+  if (!runnerUp || won == null || lost == null) return "Won the final";
+  const pens = final.penalties;
+  if (won === lost && pens) {
+    const [wonPens, lostPens] = atHome ? [pens.home, pens.away] : [pens.away, pens.home];
+    return `Beat ${runnerUp.shortName} ${won}–${lost}, ${wonPens}–${lostPens} on penalties, in the final`;
+  }
+  return `Beat ${runnerUp.shortName} ${won}–${lost} in the final`;
 }
 
 /**
@@ -48,7 +53,7 @@ export function ChampionCard({
   final: BracketMatch;
   teams: Map<string, Team>;
   aside?: ReactNode;
-}) {
+}): React.ReactElement {
   const format = useMatchTime();
   const crest = useRef<HTMLDivElement>(null);
   const winner = teams.get(championId);

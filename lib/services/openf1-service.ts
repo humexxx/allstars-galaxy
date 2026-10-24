@@ -16,6 +16,9 @@ import { cachedFeed, rateLimiter, upstreamSignal } from "./upstream";
  */
 const BASE_URL = "https://api.openf1.org/v1";
 const REVALIDATE_SECONDS = 300;
+const DAY_SECONDS = 24 * 60 * 60;
+/** Jolpica's settling window: by then the stewards are done with the weekend. */
+const SETTLING_MS = 48 * 60 * 60 * 1000;
 
 // About three requests a second without a key. A weekend is at most seven
 // calls (its sessions, its drivers, five results), queued rather than burst.
@@ -71,8 +74,11 @@ const SEGMENTS = ["Q1", "Q2", "Q3"] as const;
 
 /** 95.291 → "1:35.291"; 5599.273 → "1:33:19.273". */
 function clock(seconds: number): string {
-  const whole = Math.floor(seconds);
-  const millis = Math.round((seconds - whole) * 1000);
+  // Rounded whole, then split: rounding the fraction alone turned 59.9996
+  // into "0:59.1000".
+  const total = Math.round(seconds * 1000);
+  const millis = total % 1000;
+  const whole = (total - millis) / 1000;
   const h = Math.floor(whole / 3600);
   const m = Math.floor((whole % 3600) / 60);
   const s = whole % 60;
@@ -188,19 +194,54 @@ async function fetchWeekendResults(
   return { season, round, sessions: results };
 }
 
-/**
- * One weekend's session results, five minutes at a time: a weekend under way
- * gains a session every few hours, and a finished one never changes. Nothing
- * on a failure, so the card and the sheet simply go without.
- */
-export const getF1WeekendResults = cachedFeed(
+async function fetchSettledWeekend(
+  season: number,
+  round: number,
+  from: string,
+  to: string
+): Promise<F1WeekendResults> {
+  const weekend = await fetchWeekendResults(season, round, from, to);
+  // Thrown, not returned: an empty answer would be kept for a day.
+  if (weekend.sessions.length === 0) throw new Error(`OpenF1 has no sessions for ${season} round ${round}`);
+  return weekend;
+}
+
+const noWeekend = (season: number, round: number): F1WeekendResults => ({ season, round, sessions: [] });
+
+const recentWeekend = cachedFeed(
   "OpenF1 weekend",
   (season: number, round: number, from: string, to: string) =>
     fetchWeekendResults(season, round, from, to),
-  (season: number, round: number): F1WeekendResults => ({ season, round, sessions: [] }),
+  noWeekend,
   ["openf1:weekend"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:f1"] }
 );
+
+const settledWeekend = cachedFeed(
+  "OpenF1 weekend",
+  fetchSettledWeekend,
+  noWeekend,
+  ["openf1:weekend-settled"],
+  { revalidate: DAY_SECONDS, tags: ["sports:f1"] }
+);
+
+/**
+ * One weekend's session results: five minutes at a time while it gains a
+ * session every few hours, a day at a time once it has settled (two days
+ * after its race) and no longer changes. Nothing on a failure, so the card
+ * and the race page simply go without.
+ */
+export async function getF1WeekendResults(
+  season: number,
+  round: number,
+  from: string,
+  to: string,
+  now: number = Date.now()
+): Promise<F1WeekendResults> {
+  return now - Date.parse(to) > SETTLING_MS
+    ? settledWeekend(season, round, from, to)
+    : recentWeekend(season, round, from, to);
+}
 
 /** Pure helpers, exported for their tests — nothing here touches the network. */
 export const __testing = { clock, gapText, nameOf, sessionRows, fetchWeekendResults };

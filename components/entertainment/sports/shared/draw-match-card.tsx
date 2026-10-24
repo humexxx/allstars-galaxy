@@ -1,13 +1,11 @@
 import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import { formatWeekdayDay } from "@/lib/utils/date";
+import { formatWeekdayDay, isCalendarDay } from "@/lib/utils/date";
 import type { BracketMatch, Team } from "@/types/sports";
 
 import { BracketDate, bracketWhen, MatchHover } from "./bracket-canvas";
 import { Portrait } from "./portrait";
 import { useMatchTime } from "./time-zone-context";
-
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 const OUTCOMES: Record<"walkover" | "retired", string> = {
   walkover: "Walkover",
@@ -42,7 +40,8 @@ function setLabel(set: NonNullable<BracketMatch["legs"]>[number]): string {
  *
  * `variant="pair"` is a padel tie: two players a side, both surnames stacked
  * (`shortName` is "Coello / Tapia"), a seed and the sets — no flag, since the
- * provider sends no nationality, and no photo.
+ * provider sends no nationality; their photos (`photos`) when the draw has any
+ * (`withFaces`).
  */
 export function DrawMatchCard({
   match,
@@ -72,7 +71,7 @@ export function DrawMatchCard({
   // (`toDay` reads it local, never as UTC midnight); an instant, padel's
   // schedule, is the day and time in the reader's zone.
   const date = match.date;
-  const isDay = date !== undefined && DATE_ONLY.test(date);
+  const isDay = date !== undefined && isCalendarDay(date);
   const when = !date ? null : isDay ? formatWeekdayDay(date) : bracketWhen(date, format);
   const whenInFull = !date ? null : isDay ? when : format.dayTime(date);
 
@@ -274,7 +273,7 @@ function PairRow({
  * the order their names read down the row. A photo that does not load (a
  * wildcard or a qualifier the provider has none of) is the player's initial.
  */
-export function PairFaces({ pair, size = "xs" }: { pair: Team; size?: "xs" | "md" | "lg" }) {
+export function PairFaces({ pair, size = "xs" }: { pair: Team; size?: "xs" | "lg" }): React.ReactElement {
   const surnames = pair.shortName.split(" / ");
   return (
     <span aria-hidden className="flex shrink-0 items-center">

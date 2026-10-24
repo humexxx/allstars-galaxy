@@ -15,8 +15,9 @@ import { roundInPlay } from "./bracket";
  * Which tournament each part of a racquet view is about.
  *
  * Shared by the feeds, which ship a draw only for the featured and the current
- * tournament, and by the view, which shows them: had the two picked
- * differently, the view would open on a draw that was never sent.
+ * tournament, by the view, which features the same tournament, and by the
+ * tournament pages, which reuse a shipped draw: had they picked differently,
+ * each would ask a provider for a draw the feed already had.
  *
  * Every list here runs in date order, the bigger draw first on a day.
  */

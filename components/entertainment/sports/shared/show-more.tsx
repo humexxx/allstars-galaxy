@@ -11,7 +11,7 @@ export const ROWS_SHOWN = 10;
 
 /**
  * The first `ROWS_SHOWN` of `rows`, and ten more a tap. Back to ten when
- * `resetKey` changes (another conference, another tour), and on "Show fewer".
+ * `resetKey` changes (another conference, another session), and on "Show fewer".
  * A key rather than `rows` itself: callers filter and sort inline, so the
  * array is new on every render.
  */

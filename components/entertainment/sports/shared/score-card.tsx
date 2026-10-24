@@ -12,11 +12,6 @@ import { useMatchTime } from "./time-zone-context";
 type ScoreCardProps = {
   match: Match;
   teams: Map<string, Team>;
-  /**
-   * Leave the stage label off — for a list already grouped under that very
-   * label, where printing it again on every card is the same line twice.
-   */
-  hideStage?: boolean;
   className?: string;
 };
 
@@ -42,7 +37,7 @@ function formatStatus(match: Match): string | null {
   }
 }
 
-export function ScoreCard({ match, teams, hideStage = false, className }: ScoreCardProps) {
+export function ScoreCard({ match, teams, className }: ScoreCardProps): React.ReactElement | null {
   const format = useMatchTime();
   const home = teams.get(match.homeTeamId);
   const away = teams.get(match.awayTeamId);
@@ -70,7 +65,7 @@ export function ScoreCard({ match, teams, hideStage = false, className }: ScoreC
       )}
     >
       <div className="flex min-w-0 flex-col gap-1">
-        {match.stageLabel && !hideStage && (
+        {match.stageLabel && (
           <Eyebrow size="sm" className="truncate">
             {match.stageLabel}
           </Eyebrow>
@@ -131,7 +126,7 @@ const SHORT_CHANNEL: Record<string, string> = { "Prime Video": "Prime" };
  * column and never wider (`w-0 min-w-full`), so a long name is cut rather
  * than moving this card's divider off its neighbours'.
  */
-function Channels({ names }: { names: string[] }) {
+function Channels({ names }: { names: string[] }): React.ReactElement {
   const all = names.join(", ");
   return (
     <span

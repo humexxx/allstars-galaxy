@@ -308,7 +308,11 @@ const REGULAR_STAGE_SLUGS = new Set([
  */
 function isBracketStage(slug: string | undefined): boolean {
   if (REGULAR_STAGE_SLUGS.has(slug ?? "")) return false;
-  return !/play[-_]?ins?/.test(slug ?? "");
+  return !isPlayInStage(slug);
+}
+
+function isPlayInStage(slug: string | undefined): boolean {
+  return /play[-_]?ins?/.test(slug ?? "");
 }
 
 const ROUND_BY_TBD: Record<number, { id: BracketRoundId; label: string }> = {
@@ -785,24 +789,28 @@ async function getStandingsAndPlayoffs(tournamentId: string): Promise<{
   const playoffSections: PlayoffSection[] = [];
   const playInSections: PlayoffSection[] = [];
   const swissMatches: LolesportsStandingsMatch[] = [];
+  const addTeams = (matches: LolesportsStandingsMatch[]): void => {
+    for (const match of matches) {
+      for (const team of match.teams) {
+        if (team.code === "TBD") continue;
+        const t = toTeam(team);
+        if (!teamsMap.has(t.id)) teamsMap.set(t.id, t);
+      }
+    }
+  };
 
   for (const entry of data.data.standings) {
     for (const stage of entry.stages) {
       const isRegular = REGULAR_STAGE_SLUGS.has(stage.slug ?? "");
       const isBracket = isBracketStage(stage.slug);
-      const isPlayIn = /play[-_]?ins?/.test(stage.slug ?? "");
+      const isPlayIn = isPlayInStage(stage.slug);
       for (const section of stage.sections) {
         // Ranked nowhere (no table until it is played), so its teams and
         // matches are only here.
         if (stage.slug === "swiss") {
-          for (const match of section.matches ?? []) {
-            for (const team of match.teams) {
-              if (team.code === "TBD") continue;
-              const t = toTeam(team);
-              if (!teamsMap.has(t.id)) teamsMap.set(t.id, t);
-            }
-            swissMatches.push(match);
-          }
+          const matches = section.matches ?? [];
+          addTeams(matches);
+          swissMatches.push(...matches);
         }
         // Standings rows come from regular-season rankings.
         if (isRegular) {
@@ -823,26 +831,14 @@ async function getStandingsAndPlayoffs(tournamentId: string): Promise<{
         // the event's main stage. A league's (LCK's) stay out of its playoffs.
         const playInMatches = isPlayIn ? (section.matches ?? []) : [];
         if (playInMatches.length > 0) {
-          for (const match of playInMatches) {
-            for (const team of match.teams) {
-              if (team.code === "TBD") continue;
-              const t = toTeam(team);
-              if (!teamsMap.has(t.id)) teamsMap.set(t.id, t);
-            }
-          }
+          addTeams(playInMatches);
           playInSections.push({ name: section.name ?? null, matches: playInMatches });
         }
         // Bracket matches come from the playoff stages, split into rounds below.
         if (isBracket) {
           const sectionMatches = section.matches ?? [];
           if (sectionMatches.length === 0) continue;
-          for (const match of sectionMatches) {
-            for (const team of match.teams) {
-              if (team.code === "TBD") continue;
-              const t = toTeam(team);
-              if (!teamsMap.has(t.id)) teamsMap.set(t.id, t);
-            }
-          }
+          addTeams(sectionMatches);
           playoffSections.push({
             name: section.name ?? null,
             matches: sectionMatches,
@@ -1054,7 +1050,7 @@ async function fetchSplit(
   target: TargetLeague,
   league: LolesportsLeague,
   tournament: LolesportsTournament | null,
-  season: LolesportsTournament[] = [],
+  season: LolesportsTournament[],
 ): Promise<LolSplit> {
   const noStandings = {
     teams: [] as Team[],

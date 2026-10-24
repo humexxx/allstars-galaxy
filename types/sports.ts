@@ -746,6 +746,13 @@ export type LolSplit = {
   region: LolRegion;
   name: string;
   season: string;
+  /** Lolesports' id for the tournament: what another of the league's splits is asked for beside. */
+  tournamentId?: string;
+  /**
+   * A league's tournaments this season so far, in order, this one among them:
+   * moved between from inside the league, not offered in the picker.
+   */
+  seasonSplits?: Array<{ id: string; name: string }>;
   /** Worlds, MSI or First Stand rather than a regional league. */
   international?: boolean;
   teams: Team[];

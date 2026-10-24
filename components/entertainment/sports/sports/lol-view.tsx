@@ -1,14 +1,21 @@
 "use client";
 
-import { useMemo, useState, type ReactElement } from "react";
-import { CalendarX, Lock, Trophy } from "lucide-react";
+import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
+import { CalendarX, Lock, RotateCw, Trophy } from "lucide-react";
 
+import { getLolSplitAction } from "@/app/actions/lol";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -46,12 +53,55 @@ type LolViewProps = {
   data: LolData;
 };
 
+type SplitState =
+  | { status: "loading" }
+  | { status: "ready"; split: LolSplit }
+  | { status: "error"; error: string };
+
+/**
+ * A league's other splits this season, read when one is picked and kept for
+ * the visit; a failure is forgotten, so picking it again asks again.
+ */
+function useLeagueSplits(): {
+  states: Record<string, SplitState>;
+  load: (region: LolRegion, tournamentId: string) => void;
+} {
+  const [states, setStates] = useState<Record<string, SplitState>>({});
+  const asked = useRef(new Set<string>());
+  const load = useCallback((region: LolRegion, tournamentId: string) => {
+    if (asked.current.has(tournamentId)) return;
+    asked.current.add(tournamentId);
+    setStates((s) => ({ ...s, [tournamentId]: { status: "loading" } }));
+    void getLolSplitAction({ region, tournamentId }).then((result) => {
+      if (!result.success) asked.current.delete(tournamentId);
+      setStates((s) => ({
+        ...s,
+        [tournamentId]: result.success
+          ? { status: "ready", split: result.data }
+          : { status: "error", error: result.error ?? "The split could not be loaded" },
+      }));
+    });
+  }, []);
+  return { states, load };
+}
+
 export function LolView({ data }: LolViewProps) {
   const [region, setRegion] = useState<LolRegion>(data.splits[0]?.region ?? "lec");
-  const split = useMemo(
+  // The picker offers each league's latest split; its others this season are
+  // moved between from inside the league, and the one picked is kept per league.
+  const latest = useMemo(
     () => data.splits.find((s) => s.region === region) ?? data.splits[0],
     [data.splits, region],
   );
+  const [picked, setPicked] = useState<Partial<Record<LolRegion, string>>>({});
+  const { states, load } = useLeagueSplits();
+  const pickedId = picked[region];
+  const other = pickedId && pickedId !== latest.tournamentId ? states[pickedId] : undefined;
+  const split = other?.status === "ready" ? other.split : latest;
+  const pickSplit = (id: string): void => {
+    setPicked((p) => ({ ...p, [region]: id }));
+    if (id !== latest.tournamentId) load(region, id);
+  };
   const teamsMap = useMemo(
     () => new Map<string, Team>(split.teams.map((t) => [t.id, t])),
     [split],
@@ -86,7 +136,7 @@ export function LolView({ data }: LolViewProps) {
     // "playoffs" tab would otherwise strand the uncontrolled Tabs on a value
     // whose trigger/content no longer exist (blank body).
     <Tabs
-      key={region}
+      key={`${region}-${split.tournamentId ?? ""}`}
       defaultValue={opening}
       className="gap-6"
     >
@@ -100,12 +150,26 @@ export function LolView({ data }: LolViewProps) {
             <SelectTrigger className="w-56" aria-label="Region">
               <SelectValue placeholder="Region" />
             </SelectTrigger>
+            {/* This season's international events first — the ones that matter
+                most — then each league's latest split; a league's earlier ones
+                are moved between from inside it. */}
             <SelectContent>
-              {data.splits.map((s) => (
-                <SelectItem key={s.region} value={s.region}>
-                  {s.name}
-                </SelectItem>
-              ))}
+              {[
+                { label: "International", splits: data.splits.filter((s) => s.international) },
+                { label: "Leagues", splits: data.splits.filter((s) => !s.international) },
+              ]
+                .filter((group) => group.splits.length > 0)
+                .map((group, i) => (
+                  <SelectGroup key={group.label}>
+                    {i > 0 && <SelectSeparator />}
+                    <SelectLabel>{group.label}</SelectLabel>
+                    {group.splits.map((s) => (
+                      <SelectItem key={s.region} value={s.region}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
             </SelectContent>
           </Select>
         }
@@ -128,69 +192,153 @@ export function LolView({ data }: LolViewProps) {
         }
       >
         <div className="flex flex-col gap-4">
-          {split.champion && (
-            <LolSeasonEnd
-              split={split}
-              champion={split.champion}
-              teams={teamsMap}
-              upcoming={data.upcoming ?? []}
+          {latest.seasonSplits && latest.seasonSplits.length > 1 && latest.tournamentId && (
+            <SeasonSplits
+              season={latest.season}
+              splits={latest.seasonSplits}
+              value={pickedId ?? latest.tournamentId}
+              onPick={pickSplit}
             />
           )}
+          {other && other.status !== "ready" ? (
+            <SplitPending state={other} onRetry={() => pickedId && load(region, pickedId)} />
+          ) : (
+            <>
+              {split.champion && (
+                <LolSeasonEnd
+                  split={split}
+                  champion={split.champion}
+                  teams={teamsMap}
+                  upcoming={data.upcoming ?? []}
+                />
+              )}
 
-          {stages && playIns && (
-            <TabsContent value="play-ins">
-              <Card size="sm">
-                <CardContent>
-                  <KnockoutBracket rounds={playIns} teams={teamsMap} links={split.playInLinks} />
-                </CardContent>
-              </Card>
-            </TabsContent>
-          )}
+              {stages && playIns && (
+                <TabsContent value="play-ins">
+                  <Card size="sm">
+                    <CardContent>
+                      <KnockoutBracket rounds={playIns} teams={teamsMap} links={split.playInLinks} />
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              )}
 
-          <TabsContent value="matches">
-            {hasMatches ? (
-              <div className="grid gap-2 @xl:grid-cols-2">
-                {split.matches.map((m) => (
-                  <LolMatchCard key={m.id} match={m} teams={teamsMap} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                icon={CalendarX}
-                title="No matches to show"
-                description="Lolesports has not sent this split's schedule."
-              />
-            )}
-          </TabsContent>
+              <TabsContent value="matches">
+                {hasMatches ? (
+                  <div className="grid gap-2 @xl:grid-cols-2">
+                    {split.matches.map((m) => (
+                      <LolMatchCard key={m.id} match={m} teams={teamsMap} />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={CalendarX}
+                    title="No matches to show"
+                    description="Lolesports has not sent this split's schedule."
+                  />
+                )}
+              </TabsContent>
 
-          {split.standings.length > 0 && (
-            <TabsContent value="standings">
-              <LolStandings split={split} teamsMap={teamsMap} />
-            </TabsContent>
-          )}
+              {split.standings.length > 0 && (
+                <TabsContent value="standings">
+                  <LolStandings split={split} teamsMap={teamsMap} />
+                </TabsContent>
+              )}
 
-          {swiss && (
-            <TabsContent value="swiss">
-              <Card size="sm">
-                <CardContent>
-                  <SwissBracket stage={swiss} teams={teamsMap} />
-                </CardContent>
-              </Card>
-            </TabsContent>
-          )}
+              {swiss && (
+                <TabsContent value="swiss">
+                  <Card size="sm">
+                    <CardContent>
+                      <SwissBracket stage={swiss} teams={teamsMap} />
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              )}
 
-          {playoffs && (
-            <TabsContent value="playoffs">
-              <Card size="sm">
-                <CardContent>
-                  <KnockoutBracket rounds={playoffs} teams={teamsMap} links={split.playoffLinks} />
-                </CardContent>
-              </Card>
-            </TabsContent>
+              {playoffs && (
+                <TabsContent value="playoffs">
+                  <Card size="sm">
+                    <CardContent>
+                      <KnockoutBracket rounds={playoffs} teams={teamsMap} links={split.playoffLinks} />
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              )}
+            </>
           )}
         </div>
       </SportShell>
     </Tabs>
+  );
+}
+
+/**
+ * A league's splits this season, a pill each — "Split 1", "Split 2" — to move
+ * between from inside the league; the picker above offers only its latest.
+ */
+function SeasonSplits({
+  season,
+  splits,
+  value,
+  onPick,
+}: {
+  season: string;
+  splits: Array<{ id: string; name: string }>;
+  value: string;
+  onPick: (id: string) => void;
+}): ReactElement {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Eyebrow size="sm" as="span">
+        {season}
+      </Eyebrow>
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        value={value}
+        onValueChange={(id) => id && onPick(id)}
+        aria-label={`Splits of ${season}`}
+      >
+        {splits.map((s) => (
+          <ToggleGroupItem key={s.id} value={s.id} aria-label={s.name} className="h-6 rounded-full px-2.5">
+            {/* "LCK Split 2" under the league's own name: "Split 2". */}
+            {s.name.replace(/^\S+\s/, "")}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </div>
+  );
+}
+
+/** A split being read, or one that could not be. */
+function SplitPending({
+  state,
+  onRetry,
+}: {
+  state: Exclude<SplitState, { status: "ready" }>;
+  onRetry: () => void;
+}): ReactElement {
+  if (state.status === "loading") {
+    return (
+      <div role="status" aria-label="Loading the split" className="flex flex-col gap-3">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+  return (
+    <EmptyState
+      icon={CalendarX}
+      title={state.error}
+      description="Lolesports did not answer. It usually does on a second try."
+      action={
+        <Button variant="outline" size="sm" onClick={onRetry}>
+          <RotateCw />
+          Try again
+        </Button>
+      }
+    />
   );
 }
 

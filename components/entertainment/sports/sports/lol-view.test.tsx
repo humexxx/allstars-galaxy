@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/app/actions/lol", () => ({ getLolSplitAction: vi.fn() }));
+
+import { getLolSplitAction } from "@/app/actions/lol";
 
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
 import type { BracketMatch, LolData, LolSplit, Team } from "@/types/sports";
@@ -184,5 +188,43 @@ describe("LolView, an international event's stages", () => {
   it("leaves a league its matches and its table", () => {
     renderView({ splits: [lck, during] });
     expect(tabs()).toEqual(["Matches", "Standings"]);
+  });
+});
+
+describe("LolView, a league's other splits", () => {
+  const seasonSplits = [
+    { id: "115548106590082745", name: "LCK Split 1" },
+    { id: "115548128960088078", name: "LCK Split 2" },
+    { id: "115548147890329817", name: "LCK Split 3" },
+  ];
+  const latest: LolSplit = { ...lck, name: "LCK Split 3", tournamentId: "115548147890329817", seasonSplits };
+  const first: LolSplit = { ...lck, name: "LCK Split 1", tournamentId: "115548106590082745", seasonSplits };
+
+  it("moves between this season's splits from inside the league", async () => {
+    vi.mocked(getLolSplitAction).mockResolvedValue({ success: true, data: first });
+    renderView({ splits: [latest, worlds] });
+    // The view is drawn anew for each split: the pills are looked up each time.
+    const pill = (name: string): HTMLElement =>
+      within(screen.getByRole("group", { name: "Splits of 2026" })).getByRole("radio", { name });
+    expect(
+      within(screen.getByRole("group", { name: "Splits of 2026" }))
+        .getAllByRole("radio")
+        .map((r) => r.textContent)
+    ).toEqual(["Split 1", "Split 2", "Split 3"]);
+    expect(pill("LCK Split 3")).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(pill("LCK Split 1"));
+    expect(getLolSplitAction).toHaveBeenCalledWith({ region: "lck", tournamentId: "115548106590082745" });
+    await waitFor(() => expect(screen.getByText("LCK Split 1 · 2026")).toBeInTheDocument());
+
+    // Back to the latest: the feed's own, nothing asked.
+    fireEvent.click(pill("LCK Split 3"));
+    expect(screen.getByText("LCK Split 3 · 2026")).toBeInTheDocument();
+    expect(getLolSplitAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers no pills to an international event", () => {
+    renderView({ splits: [worlds, latest] });
+    expect(screen.queryByRole("group", { name: /^Splits of/ })).toBeNull();
   });
 });

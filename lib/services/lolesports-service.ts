@@ -81,11 +81,26 @@ type LolesportsTournament = {
   endDate: string;
 };
 
-/** A league's tournament on now (or last played), and the next one it lists. */
+/** A league's tournament on now (or last played), its season so far, and the next one it lists. */
 type LeagueTournaments = {
   current: LolesportsTournament | null;
+  /** The season's tournaments that have started, first first; the current one among them. */
+  season: LolesportsTournament[];
   next: LolesportsTournament | null;
 };
+
+/** The tournaments of `current`'s year that have started, in order. */
+function seasonSoFar(
+  tournaments: LolesportsTournament[],
+  current: LolesportsTournament | null,
+  today = todayIso(),
+): LolesportsTournament[] {
+  if (!current) return [];
+  const year = current.startDate.slice(0, 4);
+  return tournaments
+    .filter((t) => t.startDate.slice(0, 4) === year && t.startDate <= today)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
 
 type LolesportsTeamRef = {
   name: string;
@@ -269,8 +284,10 @@ async function getLeagueTournaments(leagueId: string, today: string): Promise<Le
     data: { leagues: Array<{ tournaments: LolesportsTournament[] }> };
   }>(`/getTournamentsForLeague?leagueId=${leagueId}`);
   const tournaments = data.data.leagues[0]?.tournaments ?? [];
+  const current = pickActiveTournament(tournaments, today);
   return {
-    current: pickActiveTournament(tournaments, today),
+    current,
+    season: seasonSoFar(tournaments, current, today),
     next: pickNextTournament(tournaments, today),
   };
 }
@@ -1037,6 +1054,7 @@ async function fetchSplit(
   target: TargetLeague,
   league: LolesportsLeague,
   tournament: LolesportsTournament | null,
+  season: LolesportsTournament[] = [],
 ): Promise<LolSplit> {
   const noStandings = {
     teams: [] as Team[],
@@ -1081,6 +1099,11 @@ async function fetchSplit(
     region: target.region,
     name: tournamentName(target, league, tournament),
     season: seasonOf(tournament),
+    ...(tournament ? { tournamentId: tournament.id } : {}),
+    // A league's earlier splits this season, to move between from inside it.
+    ...(!target.international && season.length > 1
+      ? { seasonSplits: season.map((t) => ({ id: t.id, name: tournamentName(target, league, t) })) }
+      : {}),
     ...(target.international ? { international: true } : {}),
     teams,
     standings: standingsWithForm,
@@ -1155,7 +1178,7 @@ async function fetchLolDataFromApi(): Promise<LolData> {
   );
 
   const fetched = await Promise.all(
-    listed.map(async ({ target, league, current }): Promise<FetchedSplit | null> => {
+    listed.map(async ({ target, league, current, season }): Promise<FetchedSplit | null> => {
       // The event being played leads; this season's earlier ones (MSI in
       // October) stay to be looked back on. Last season's do not.
       const isCurrent = target.international && isCurrentEvent(current, regionalStarts, today);
@@ -1163,7 +1186,7 @@ async function fetchLolDataFromApi(): Promise<LolData> {
       if (target.international && !isCurrent && !thisSeason) return null;
       try {
         return {
-          split: await fetchSplit(target, league, current),
+          split: await fetchSplit(target, league, current, season),
           tournament: current,
           ...(target.international && !isCurrent ? { over: true } : {}),
         };
@@ -1190,6 +1213,32 @@ async function fetchLolDataFromApi(): Promise<LolData> {
   return { splits: orderSplits(live, today), upcoming };
 }
 
+/**
+ * One of a league's splits this season, for the view to move to from the
+ * split on screen. Only a tournament of that league, of this season and
+ * started, is read — the id arrives from the browser. A day's cache: a split
+ * that is over does not change, and the one being played is the feed's.
+ */
+async function fetchLeagueSplit(region: LolRegion, tournamentId: string): Promise<LolSplit | null> {
+  const target = TARGET_LEAGUES.find((t) => t.region === region && !t.international);
+  if (!target) return null;
+  const leagues = await fetchLolesports<{ data: { leagues: LolesportsLeague[] } }>("/getLeagues");
+  const league = leagues.data.leagues.find((l) => l.slug.toLowerCase() === target.slug);
+  if (!league) return null;
+  const { season } = await getLeagueTournaments(league.id, todayIso());
+  const tournament = season.find((t) => t.id === tournamentId);
+  if (!tournament) return null;
+  return fetchSplit(target, league, tournament, season);
+}
+
+export const getLolSplit = cachedFeed(
+  "Lolesports split",
+  fetchLeagueSplit,
+  (): LolSplit | null => null,
+  ["lolesports:split"],
+  { revalidate: 86_400, tags: ["sports:lol"] },
+);
+
 export const getLolData = cachedFeed(
   "Lolesports",
   fetchLolDataFromApi,
@@ -1210,6 +1259,7 @@ export const __testing = {
   orderSplits,
   pickActiveTournament,
   pickNextTournament,
+  seasonSoFar,
   toTeam,
   withinTournament,
 };

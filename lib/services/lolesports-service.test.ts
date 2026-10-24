@@ -16,6 +16,7 @@ const {
   orderSplits,
   pickActiveTournament,
   pickNextTournament,
+  seasonSoFar,
   toTeam,
   withinTournament,
 } = __testing;
@@ -229,6 +230,25 @@ describe("isCurrentEvent", () => {
   it("never shows one that has not started", () => {
     expect(isCurrentEvent(worlds, season2026, "2026-10-14")).toBe(false);
     expect(isCurrentEvent(null, season2026, "2026-10-18")).toBe(false);
+  });
+});
+
+describe("seasonSoFar", () => {
+  const t = (id: string, startDate: string, endDate: string) => ({ id, slug: id, startDate, endDate });
+  const list = [
+    t("s3", "2026-07-28", "2026-09-13"),
+    t("s1", "2026-01-14", "2026-03-01"),
+    t("old", "2025-07-20", "2025-09-10"),
+    t("s2", "2026-04-01", "2026-06-20"),
+    t("next", "2027-01-13", "2027-03-01"),
+  ];
+
+  it("is the current split's year so far, first first", () => {
+    expect(seasonSoFar(list, list[0], "2026-10-23").map((x) => x.id)).toEqual(["s1", "s2", "s3"]);
+  });
+
+  it("is nothing without a current split", () => {
+    expect(seasonSoFar(list, null, "2026-10-23")).toEqual([]);
   });
 });
 

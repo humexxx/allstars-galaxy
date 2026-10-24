@@ -1,7 +1,7 @@
 "use client";
 
-import { CalendarClock, ChevronRight, Flag, History } from "lucide-react";
-import { useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
+import { ChevronRight, Flag, History } from "lucide-react";
+import { Children, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,11 +29,11 @@ const TILE =
   "flex w-full flex-col gap-3 rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring/50";
 
 /**
- * F1's races, the left of its Overview: the race on now or next, large; the
- * three after it; the three just run. As the match lists bring in earlier
- * days, "Later" and "Earlier" on those headings bring in three more races a
- * tap, below the ones shown, until the season runs out either way. Every
- * race opens its sheet.
+ * F1's races, the left of its Overview: the race on now or next, large, then
+ * every race still to come, then the ones run — none until asked for: as the
+ * match lists bring in earlier days, "Earlier" on the "Earlier races" line
+ * brings in three a tap, latest first, right where it was tapped, until the
+ * season runs out. Every race opens its sheet.
  *
  * Its own container, so the tiles follow the column's width rather than the
  * page's. Each part opens on a heading set like a day heading in the match
@@ -61,38 +61,35 @@ export function F1Races({
   const race = raceId ? (data.races.find((r) => r.id === raceId) ?? null) : null;
   const opener = useRef<HTMLElement | null>(null);
 
-  // How many more than RACES_SHOWN each list shows, and the races a tap added.
-  const [moreLater, setMoreLater] = useState(0);
-  const [moreEarlier, setMoreEarlier] = useState(0);
+  // The races run that are shown. None while there is a race to come; once
+  // the season is over they are all there is, so it opens on the last few.
+  const [shownEarlier, setShownEarlier] = useState(featured ? 0 : RACES_SHOWN);
   const listRef = useRef<HTMLDivElement>(null);
-  const added = useRef<{ ids: string[]; pill: Reveal } | null>(null);
-  const coming = comingUp.slice(0, RACES_SHOWN + moreLater);
-  const finished = justFinished.slice(0, RACES_SHOWN + moreEarlier);
-  const nextLater = comingUp.slice(coming.length, coming.length + RACES_SHOWN);
-  const nextEarlier = justFinished.slice(finished.length, finished.length + RACES_SHOWN);
+  const added = useRef<string[] | null>(null);
+  const earlier = justFinished.slice(0, shownEarlier);
+  const nextEarlier = justFinished.slice(earlier.length, earlier.length + RACES_SHOWN);
 
   // The new races are in, under the ones shown. They fade in; the focus
   // stays on the pill for the next three, or goes to the first of them once
-  // the season has no more that way.
+  // the season has no more.
   useLayoutEffect(() => {
-    const done = added.current;
+    const ids = added.current;
     const root = listRef.current;
     added.current = null;
-    if (!done || !root) return;
-    const tiles = done.ids
+    if (!ids || !root) return;
+    const tiles = ids
       .map((id) => root.querySelector<HTMLElement>(`[data-race="${id}"]`))
       .filter((t): t is HTMLElement => t !== null);
-    const pill = root.querySelector<HTMLElement>(`[data-reveal="${done.pill}"]`);
+    const pill = root.querySelector<HTMLElement>("[data-reveal]");
     (pill ?? tiles[0])?.focus({ preventScroll: true });
     tiles.forEach((tile, i) => fadeIn(tile, i * 40));
-  }, [moreLater, moreEarlier]);
+  }, [shownEarlier]);
 
-  const reveal = (which: Reveal): void => {
+  const revealEarlier = (): void => {
     if (!listRef.current) return;
     holdScrollStill(listRef.current);
-    added.current = { ids: (which === "later" ? nextLater : nextEarlier).map((r) => r.id), pill: which };
-    if (which === "later") setMoreLater(moreLater + RACES_SHOWN);
-    else setMoreEarlier(moreEarlier + RACES_SHOWN);
+    added.current = nextEarlier.map((r) => r.id);
+    setShownEarlier(shownEarlier + RACES_SHOWN);
   };
 
   const open: OpenRace = (next, from) => {
@@ -118,48 +115,37 @@ export function F1Races({
           <EmptyState
             icon={Flag}
             title={`The ${data.season} season is over`}
-            description="Every round is under Just finished below."
+            description="Every round is under Earlier races below."
           />
         )}
       </section>
 
-      {coming.length > 0 && (
-        <RaceSection
-          title="Coming up"
-          action={
-            nextLater.length > 0 && (
-              <RevealPill
-                icon={CalendarClock}
-                label="Later"
-                detail={showRounds(nextLater)}
-                data-reveal="later"
-                onClick={() => reveal("later")}
-              />
-            )
-          }
-        >
-          {coming.map((r) => (
+      {comingUp.length > 0 && (
+        <RaceSection title="Coming up">
+          {comingUp.map((r) => (
             <RaceTile key={r.id} race={r} onOpen={open} />
           ))}
         </RaceSection>
       )}
 
-      {finished.length > 0 && (
+      {/* Its line stands from the start, the pill on it: what a tap brings in
+          lands right under it rather than past the races to come. */}
+      {justFinished.length > 0 && (
         <RaceSection
-          title="Just finished"
+          title="Earlier races"
           action={
             nextEarlier.length > 0 && (
               <RevealPill
                 icon={History}
                 label="Earlier"
                 detail={showRounds(nextEarlier)}
-                data-reveal="earlier"
-                onClick={() => reveal("earlier")}
+                data-reveal
+                onClick={revealEarlier}
               />
             )
           }
         >
-          {finished.map((r) => (
+          {earlier.map((r) => (
             <RaceTile key={r.id} race={r} onOpen={open} />
           ))}
         </RaceSection>
@@ -180,6 +166,7 @@ export function F1Races({
         onRetryWeekend={() => {
           if (race) void weekends.load(race);
         }}
+        current={race !== null && race.id === featured?.id}
       />
     </div>
   );
@@ -193,8 +180,6 @@ function RaceHeading({ children }: { children: ReactNode }): JSX.Element {
     </Eyebrow>
   );
 }
-
-type Reveal = "later" | "earlier";
 
 /** What a tap brings in: "Show rounds 13 – 15", or "Show round 13". */
 function showRounds(races: F1Race[]): string {
@@ -220,7 +205,9 @@ function RaceSection({
         <RaceHeading>{title}</RaceHeading>
         {action}
       </div>
-      <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">{children}</div>
+      {Children.count(children) > 0 && (
+        <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">{children}</div>
+      )}
     </section>
   );
 }

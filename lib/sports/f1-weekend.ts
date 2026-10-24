@@ -114,7 +114,7 @@ export function leadRace(races: F1Race[]): F1Race | undefined {
   );
 }
 
-/** How many races "Coming up" and "Just finished" show before a tap brings in more. */
+/** How many races run a tap on "Earlier" brings in, and are shown once the season is over. */
 export const RACES_SHOWN = 3;
 
 export type RacesTabGroups = {
@@ -140,8 +140,8 @@ export function weekendWindow(race: F1Race, now?: number): { from: string; to: s
 }
 
 /**
- * The races' split of the calendar, whole: the view shows `RACES_SHOWN` of
- * each list and brings in the rest a few at a tap. Races arrive in round
+ * The races' split of the calendar, whole: the view shows every race to
+ * come and brings in the ones run a few at a tap. Races arrive in round
  * order.
  */
 export function racesTabGroups(races: F1Race[]): RacesTabGroups {

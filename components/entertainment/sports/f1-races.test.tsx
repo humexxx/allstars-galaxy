@@ -38,6 +38,10 @@ const tiles = (title: string): HTMLElement[] =>
 const rounds = (title: string): string[] =>
   tiles(title).map((t) => t.textContent?.match(/Round (\d+)/)?.[1] ?? "");
 const sheet = (): HTMLElement => screen.getByRole("dialog");
+// The races run come in from the pill on their heading, three a tap.
+const showEarlier = (): void => {
+  fireEvent.click(within(section("Earlier races")).getByRole("button", { name: /^Earlier:/ }));
+};
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -84,22 +88,26 @@ describe("F1Races", () => {
     expect(within(featured).getByText("Sprint live")).toBeInTheDocument();
   });
 
-  it("lists the three races after it under Coming up", () => {
+  it("lists every race after it under Coming up, and none run until asked for", () => {
     renderRaces();
     expect(tiles("Coming up").map((t) => within(t).getByText(/Grand Prix$/).textContent)).toEqual([
       "Mexico City Grand Prix",
       "São Paulo Grand Prix",
       "Las Vegas Grand Prix",
+      "Qatar Grand Prix",
     ]);
+    expect(screen.queryByRole("heading", { name: "Just finished" })).toBeNull();
+    expect(tiles("Earlier races")).toEqual([]);
   });
 
-  it("lists the three just run, latest first, with winner, pole and fastest lap", () => {
+  it("brings in the three just run, latest first, with winner, pole and fastest lap", () => {
     renderRaces();
-    const [singapore, baku, monza] = tiles("Just finished");
+    showEarlier();
+    const [singapore, baku, monza] = tiles("Earlier races");
     expect(within(singapore).getByText("Singapore Grand Prix")).toBeInTheDocument();
     expect(within(baku).getByText("Azerbaijan Grand Prix")).toBeInTheDocument();
     expect(within(monza).getByText("Italian Grand Prix")).toBeInTheDocument();
-    expect(tiles("Just finished")).toHaveLength(3);
+    expect(tiles("Earlier races")).toHaveLength(3);
 
     // Winner VER, pole RUS, fastest lap LEC — each named for a screen reader.
     expect(singapore).toHaveTextContent(/WinnerVER/);
@@ -107,25 +115,28 @@ describe("F1Races", () => {
     expect(singapore).toHaveTextContent(/Fastest lapLEC/);
   });
 
-  it("has no full calendar: earlier and later races come in from their headings", () => {
+  it("has no full calendar: the races run come in from their heading", () => {
     renderRaces();
     expect(screen.queryByRole("button", { name: /Full calendar/ })).toBeNull();
     expect(screen.queryByRole("list", { name: "Season calendar" })).toBeNull();
-    expect(within(section("Just finished")).getByRole("button", { name: "Earlier: Show round 14" })).toBeInTheDocument();
-    expect(within(section("Coming up")).getByRole("button", { name: "Later: Show round 22" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Later:/ })).toBeNull();
+    expect(
+      within(section("Earlier races")).getByRole("button", { name: "Earlier: Show rounds 15 – 17" })
+    ).toBeInTheDocument();
   });
 
   it("brings in earlier races below the ones shown, until the season has none left", () => {
     const scrollBy = vi.spyOn(window, "scrollBy").mockImplementation(() => {});
     renderRaces();
-    expect(rounds("Just finished")).toEqual(["17", "16", "15"]);
+    showEarlier();
+    expect(rounds("Earlier races")).toEqual(["17", "16", "15"]);
 
     fireEvent.click(screen.getByRole("button", { name: "Earlier: Show round 14" }));
 
-    expect(rounds("Just finished")).toEqual(["17", "16", "15", "14"]);
+    expect(rounds("Earlier races")).toEqual(["17", "16", "15", "14"]);
     // Nothing older: the pill goes, and the keyboard lands on the race it brought in.
     expect(screen.queryByRole("button", { name: /^Earlier:/ })).toBeNull();
-    expect(document.activeElement).toBe(tiles("Just finished")[3]);
+    expect(document.activeElement).toBe(tiles("Earlier races")[3]);
     expect(scrollBy).not.toHaveBeenCalled();
   });
 
@@ -143,22 +154,13 @@ describe("F1Races", () => {
       ],
     };
     renderRaces(long);
+    showEarlier();
 
     fireEvent.click(screen.getByRole("button", { name: "Earlier: Show rounds 12 – 14" }));
 
-    expect(rounds("Just finished")).toEqual(["17", "16", "15", "14", "13", "12"]);
+    expect(rounds("Earlier races")).toEqual(["17", "16", "15", "14", "13", "12"]);
     const pill = screen.getByRole("button", { name: "Earlier: Show rounds 9 – 11" });
     expect(document.activeElement).toBe(pill);
-  });
-
-  it("brings in later races under Coming up the same way", () => {
-    renderRaces();
-    expect(rounds("Coming up")).toEqual(["19", "20", "21"]);
-
-    fireEvent.click(screen.getByRole("button", { name: "Later: Show round 22" }));
-
-    expect(rounds("Coming up")).toEqual(["19", "20", "21", "22"]);
-    expect(screen.queryByRole("button", { name: /^Later:/ })).toBeNull();
   });
 
   it("opens a finished race's sheet from its tile and loads its classification", async () => {
@@ -173,7 +175,8 @@ describe("F1Races", () => {
       },
     });
     renderRaces();
-    fireEvent.click(tiles("Just finished")[0]);
+    showEarlier();
+    fireEvent.click(tiles("Earlier races")[0]);
 
     expect(within(sheet()).getByRole("heading", { name: "Singapore Grand Prix" })).toBeInTheDocument();
     expect(getF1RaceClassificationAction).toHaveBeenCalledWith({ season: 2026, round: 17 });
@@ -197,7 +200,8 @@ describe("F1Races", () => {
         },
       });
     renderRaces();
-    fireEvent.click(tiles("Just finished")[0]);
+    showEarlier();
+    fireEvent.click(tiles("Earlier races")[0]);
 
     const alert = await within(sheet()).findByRole("alert");
     expect(alert).toHaveTextContent("The classification isn't available yet");
@@ -207,14 +211,13 @@ describe("F1Races", () => {
 
     // Closed and opened again: the rows are kept, nothing is asked.
     fireEvent.keyDown(sheet(), { key: "Escape" });
-    fireEvent.click(tiles("Just finished")[0]);
+    fireEvent.click(tiles("Earlier races")[0]);
     expect(within(sheet()).getByRole("table")).toBeInTheDocument();
     expect(getF1RaceClassificationAction).toHaveBeenCalledTimes(2);
   });
 
-  it("opens an upcoming race brought in by Later without asking for results", () => {
+  it("opens an upcoming race without asking for results", () => {
     renderRaces();
-    fireEvent.click(screen.getByRole("button", { name: "Later: Show round 22" }));
     fireEvent.click(within(section("Coming up")).getByRole("button", { name: /Qatar Grand Prix/ }));
 
     expect(within(sheet()).getByRole("heading", { name: "Qatar Grand Prix" })).toBeInTheDocument();
@@ -281,7 +284,8 @@ describe("F1Races", () => {
 
   it("asks for a race's sessions when its sheet opens, once its weekend has started", () => {
     renderRaces();
-    fireEvent.click(tiles("Just finished")[0]);
+    showEarlier();
+    fireEvent.click(tiles("Earlier races")[0]);
     expect(getF1WeekendResultsAction).toHaveBeenCalledWith(
       expect.objectContaining({ season: 2026, round: expect.any(Number) })
     );
@@ -301,6 +305,8 @@ describe("F1Races", () => {
     renderRaces(over);
     expect(screen.getByText("The 2026 season is over")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Coming up" })).toBeNull();
-    expect(tiles("Just finished")).toHaveLength(3);
+    // With nothing to come, the latest races run are there from the start.
+    expect(rounds("Earlier races")).toEqual(["17", "16", "15"]);
+    expect(screen.getByRole("button", { name: "Earlier: Show round 14" })).toBeInTheDocument();
   });
 });

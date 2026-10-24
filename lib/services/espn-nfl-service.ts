@@ -1,6 +1,7 @@
 import "server-only";
 
 import { NFL_DATA } from "@/lib/data/sports/nfl";
+import { siteBroadcasts } from "@/lib/sports/espn-broadcasts";
 import { espnImage } from "@/lib/sports/espn-images";
 import { orderMatchesForDisplay } from "@/lib/sports/match-order";
 import type {
@@ -55,6 +56,8 @@ type EspnEvent = {
     status?: EspnStatus;
     notes?: Array<{ headline?: string }>;
     competitors?: EspnCompetitor[];
+    broadcasts?: Array<{ market?: string; names?: string[] }>;
+    geoBroadcasts?: Array<{ media?: { shortName?: string }; type?: { shortName?: string } }>;
   }>;
 };
 
@@ -201,6 +204,7 @@ function matchFrom(event: EspnEvent): { match: Match; teams: Team[] } | null {
   const status = statusFrom(competition?.status ?? event.status);
   // ESPN sends "0" for a game that has not kicked off.
   const scored = status === "live" || status === "ft";
+  const broadcasts = siteBroadcasts(competition);
   return {
     match: {
       id: event.id,
@@ -211,6 +215,7 @@ function matchFrom(event: EspnEvent): { match: Match; teams: Team[] } | null {
       kickoff: competition?.date ?? event.date ?? "",
       status,
       stageLabel: stageLabel(event),
+      ...(broadcasts.length > 0 ? { broadcasts } : {}),
     },
     teams: [homeTeam, awayTeam],
   };

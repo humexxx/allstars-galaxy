@@ -22,6 +22,8 @@ const {
   tipOffFrom,
   championFrom,
   preseasonFrom,
+  channelsFrom,
+  withChannels,
 } = __testing;
 
 const logo = (slug: string) =>
@@ -497,6 +499,89 @@ describe("preseasonFrom", () => {
   });
 });
 
+describe("channelsFrom and withChannels", () => {
+  const fixture = (id: string, home: string, away: string, kickoff: string): Match => ({
+    id,
+    homeTeamId: home,
+    awayTeamId: away,
+    homeScore: null,
+    awayScore: null,
+    kickoff,
+    status: "scheduled",
+  });
+  const on = (home: string, away: string, startsAt: string, broadcasts: string[]) => ({
+    homeTeamId: home,
+    awayTeamId: away,
+    startsAt,
+    broadcasts,
+  });
+
+  it("keys ESPN's games by balldontlie's codes, and skips one with no national channel", () => {
+    const channels = channelsFrom({
+      sports: [
+        {
+          leagues: [
+            {
+              events: [
+                {
+                  date: "2026-10-28T23:00Z",
+                  broadcast: "ESPN",
+                  competitors: [
+                    { homeAway: "home", abbreviation: "IND" },
+                    { homeAway: "away", abbreviation: "PHI" },
+                  ],
+                },
+                {
+                  date: "2026-10-29T00:30Z",
+                  broadcast: "",
+                  competitors: [
+                    { homeAway: "home", abbreviation: "SA" },
+                    { homeAway: "away", abbreviation: "NY" },
+                  ],
+                },
+                {
+                  date: "2026-10-29T02:00Z",
+                  broadcast: "NBA TV",
+                  competitors: [
+                    { homeAway: "home", abbreviation: "UTAH" },
+                    { homeAway: "away", abbreviation: "WSH" },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(channels).toEqual([
+      on("IND", "PHI", "2026-10-28T23:00Z", ["ESPN"]),
+      on("UTA", "WAS", "2026-10-29T02:00Z", ["NBA TV"]),
+    ]);
+  });
+
+  it("takes the channels of the same sides' game nearest in time", () => {
+    // A playoff pair two nights apart; the second game has no time yet.
+    const games = [
+      fixture("1", "OKC", "DEN", "2027-05-05T01:30:00Z"),
+      fixture("2", "OKC", "DEN", "2027-05-07T00:00:00Z"),
+    ];
+    const channels = [
+      on("OKC", "DEN", "2027-05-05T01:30:00Z", ["ESPN"]),
+      on("OKC", "DEN", "2027-05-07T01:00:00Z", ["Prime Video"]),
+    ];
+    expect(withChannels(games, channels).map((g) => g.broadcasts)).toEqual([["ESPN"], ["Prime Video"]]);
+  });
+
+  it("names nothing for the sides the other way round, or a game days away", () => {
+    const games = [fixture("1", "BOS", "NYK", "2026-11-01T00:00:00Z")];
+    const channels = [
+      on("NYK", "BOS", "2026-11-01T00:00:00Z", ["ESPN"]),
+      on("BOS", "NYK", "2026-11-03T00:00:00Z", ["NBC"]),
+    ];
+    expect(withChannels(games, channels)[0].broadcasts).toBeUndefined();
+  });
+});
+
 type ScoreboardHeader = Parameters<typeof playoffsFrom>[0];
 
 // ESPN's 2025–26 postseason as the scoreboard header sent it, trimmed to what
@@ -748,8 +833,11 @@ describe("getNbaData through the year", () => {
     });
     const data = await getNbaData();
 
-    expect(calls()).toHaveLength(2);
-    expect(calls()).toEqual(expect.arrayContaining([STANDINGS(2027), HEADER("20261001-20261019")]));
+    // The table, the preseason, and the opening week's channels.
+    expect(calls()).toHaveLength(3);
+    expect(calls()).toEqual(
+      expect.arrayContaining([STANDINGS(2027), HEADER("20261001-20261019"), HEADER("20261017-20261026")])
+    );
     expect(data.season).toBe("2026–27");
     // The preseason's last two weeks of results, then the opening week;
     // June's finals belong to 2025–26 and are not listed.
@@ -800,7 +888,7 @@ describe("getNbaData through the year", () => {
     });
     const data = await getNbaData();
 
-    expect(calls()).toEqual([STANDINGS(2027)]);
+    expect(calls()).toEqual([STANDINGS(2027), HEADER("20261020-20261029")]);
     expect(data.season).toBe("2026–27");
     expect(data.games.slice(0, 3).map((g) => g.status)).toEqual(["ft", "ft", "ft"]);
     expect(data.games).toHaveLength(10);
@@ -859,7 +947,67 @@ describe("getNbaData through the year", () => {
     expect(data.games).toHaveLength(3);
     expect(data.tipOff).toBeUndefined();
     expect(data.champion).toBeUndefined();
-    expect(calls()).toEqual([STANDINGS(2026)]);
+    // No preseason and no bracket; only the week's channels.
+    expect(calls()).toEqual([STANDINGS(2026), HEADER("20260216-20260225")]);
+  });
+
+  it("puts ESPN's national channels on balldontlie's fixtures", async () => {
+    vi.setSystemTime(new Date(2026, 9, 21, 12));
+    const event = (home: string, away: string, date: string, broadcast: string, broadcasts: unknown[]) => ({
+      id: `${away}@${home}`,
+      date,
+      seasonType: "2",
+      broadcast,
+      broadcasts,
+      competitors: [
+        { homeAway: "home", abbreviation: home },
+        { homeAway: "away", abbreviation: away },
+      ],
+    });
+    stubFeeds({
+      games: pageOct21,
+      standings: () => json(openingNightTable),
+      header: () =>
+        json({
+          sports: [
+            {
+              leagues: [
+                {
+                  events: [
+                    event("MIA", "MIN", "2026-10-21T23:30Z", "ESPN", [{ name: "ESPN", type: "TV" }]),
+                    // ESPN's "GS" is balldontlie's "GSW"; streaming goes after TV.
+                    event("LAL", "GS", "2026-10-22T02:00Z", "Peacock/NBC", [
+                      { name: "Peacock", type: "Streaming" },
+                      { name: "NBC", type: "TV" },
+                    ]),
+                    event("ORL", "ATL", "2026-10-21T23:00Z", "", [
+                      { name: "NBA League Pass", type: "Subscription Package" },
+                    ]),
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+    });
+    const data = await getNbaData();
+
+    const on = (fixture: string): string[] | undefined =>
+      data.games.find((g) => `${g.awayTeamId}@${g.homeTeamId}` === fixture)?.broadcasts;
+    expect(on("MIN@MIA")).toEqual(["ESPN"]);
+    expect(on("GSW@LAL")).toEqual(["NBC", "Peacock"]);
+    // League Pass only: nothing national to name.
+    expect(on("ATL@ORL")).toBeUndefined();
+  });
+
+  it("still lists the fixtures when ESPN's channels do not answer", async () => {
+    vi.setSystemTime(new Date(2026, 9, 21, 12));
+    stubFeeds({ games: pageOct21, standings: () => json(openingNightTable), header: () => json({}, 502) });
+    const data = await getNbaData();
+
+    expect(data).not.toBe(NBA_DATA);
+    expect(data.games.length).toBeGreaterThan(0);
+    expect(data.games.some((g) => g.broadcasts)).toBe(false);
   });
 
   it("makes no extra request in the middle of the season", async () => {

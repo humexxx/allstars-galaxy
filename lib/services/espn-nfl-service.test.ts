@@ -62,6 +62,22 @@ describe("matchFrom", () => {
     expect(match.status).toBe("scheduled");
   });
 
+  it("names the game's national channels, TV first, and no regional ones", () => {
+    const game = event("5", "PHI", "DAL", ["0", "0"], "pre");
+    Object.assign(game.competitions[0], {
+      broadcasts: [{ market: "national", names: ["ESPN", "ABC", "Disney+"] }],
+      geoBroadcasts: [
+        { media: { shortName: "Disney+" }, type: { shortName: "Streaming" } },
+        { media: { shortName: "ESPN" }, type: { shortName: "TV" } },
+      ],
+    });
+    expect(matchFrom(game)!.match.broadcasts).toEqual(["ESPN", "ABC", "Disney+"]);
+
+    const regional = event("6", "MIA", "BUF", ["0", "0"], "pre");
+    Object.assign(regional.competitions[0], { broadcasts: [{ market: "home", names: ["WFOR"] }] });
+    expect(matchFrom(regional)!.match).not.toHaveProperty("broadcasts");
+  });
+
   it("keeps the score of a game in progress", () => {
     const { match } = matchFrom(event("3", "LAR", "ARI", ["9", "15"], "in"))!;
     expect(match).toMatchObject({ status: "live", homeScore: 9, awayScore: 15 });

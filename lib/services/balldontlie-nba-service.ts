@@ -1,6 +1,7 @@
 import "server-only";
 
 import { NBA_DATA } from "@/lib/data/sports/nba";
+import { headerBroadcasts } from "@/lib/sports/espn-broadcasts";
 import { espnImage } from "@/lib/sports/espn-images";
 import type {
   BracketMatch,
@@ -456,6 +457,9 @@ type EspnHeaderEvent = {
   note?: string;
   fullStatus?: { type?: { name?: string; state?: "pre" | "in" | "post" } };
   competitors?: EspnHeaderCompetitor[];
+  /** The national channels, "Peacock/NBC"; "" when there are none. */
+  broadcast?: string | null;
+  broadcasts?: Array<{ name?: string; type?: string }>;
 };
 
 type EspnScoreboardHeader = {
@@ -585,6 +589,7 @@ function preseasonFrom(json: EspnScoreboardHeader): NbaPreseason {
     if (!teams.has(awayId)) teams.set(awayId, headerTeam(away, awayId));
     const status = preseasonStatus(event.fullStatus?.type);
     const played = status === "ft" || status === "live";
+    const broadcasts = headerBroadcasts(event);
     games.push({
       id: `espn-${event.id}`,
       homeTeamId: homeId,
@@ -594,6 +599,7 @@ function preseasonFrom(json: EspnScoreboardHeader): NbaPreseason {
       kickoff: event.date,
       status,
       stageLabel: "Preseason",
+      ...(broadcasts.length > 0 ? { broadcasts } : {}),
     });
   }
   return { games, teams: [...teams.values()] };
@@ -860,6 +866,66 @@ function playoffsFrom(json: EspnScoreboardHeader): NbaPlayoffs {
   return { rounds, teams: [...teams.values()] };
 }
 
+/** A game's national channels on ESPN, to join onto balldontlie's game. */
+type NbaChannels = {
+  homeTeamId: string;
+  awayTeamId: string;
+  startsAt: string;
+  broadcasts: string[];
+};
+
+/** Yesterday (a late tip-off is tomorrow in UTC) through the week of fixtures listed. */
+const CHANNEL_DAYS = { behind: 1, ahead: FIXTURE_DAYS + 1 };
+/**
+ * balldontlie's tip-off is a bare date when it has no time yet ("T00:00Z"),
+ * up to a day off ESPN's; a playoff pair plays again two nights later.
+ */
+const CHANNEL_MATCH_MS = 36 * 3_600_000;
+
+/**
+ * The national channels of the games in the days around `from`, from the
+ * scores bar's feed: balldontlie has none. One request for the whole range.
+ */
+async function fetchChannels(from: string): Promise<EspnScoreboardHeader> {
+  const days = CHANNEL_DAYS.behind + CHANNEL_DAYS.ahead;
+  const end = iso(new Date(Date.parse(`${from}T00:00:00Z`) + days * DAY_MS));
+  const dates = `${from.replace(/-/g, "")}-${end.replace(/-/g, "")}`;
+  const res = await fetch(
+    `${ESPN_SCOREBOARD_URL}?sport=basketball&league=nba&dates=${dates}&limit=${HEADER_LIMIT}`,
+    { signal: upstreamSignal() }
+  );
+  if (!res.ok) throw new Error(`espn nba channels ${res.status}`);
+  return (await res.json()) as EspnScoreboardHeader;
+}
+
+function channelsFrom(json: EspnScoreboardHeader): NbaChannels[] {
+  const channels: NbaChannels[] = [];
+  for (const event of headerEvents(json)) {
+    const broadcasts = headerBroadcasts(event);
+    const home = playoffTeamId(event.competitors?.find((c) => c.homeAway === "home"));
+    const away = playoffTeamId(event.competitors?.find((c) => c.homeAway === "away"));
+    if (broadcasts.length === 0 || !home || !away || !event.date) continue;
+    channels.push({ homeTeamId: home, awayTeamId: away, startsAt: event.date, broadcasts });
+  }
+  return channels;
+}
+
+/** Each game with the channels of ESPN's game between the same sides, nearest in time. */
+function withChannels(games: Match[], channels: NbaChannels[]): Match[] {
+  if (channels.length === 0) return games;
+  return games.map((game) => {
+    if (game.broadcasts) return game;
+    const at = Date.parse(game.kickoff);
+    let best: NbaChannels | undefined;
+    for (const c of channels) {
+      if (c.homeTeamId !== game.homeTeamId || c.awayTeamId !== game.awayTeamId) continue;
+      const off = Math.abs(Date.parse(c.startsAt) - at);
+      if (off <= CHANNEL_MATCH_MS && (!best || off < Math.abs(Date.parse(best.startsAt) - at))) best = c;
+    }
+    return best ? { ...game, broadcasts: best.broadcasts } : game;
+  });
+}
+
 /**
  * balldontlie's games and ESPN's table for the season shown: the part of the
  * feed with one cache entry. The bracket and the preseason are joined in by
@@ -973,6 +1039,18 @@ const getNbaPreseason = cachedFeed(
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:nba"] }
 );
 
+/**
+ * The channels, keyed by the day they start from, so each day reads its own
+ * week. Without them the games are listed all the same.
+ */
+const getNbaChannels = cachedFeed(
+  "ESPN NBA channels",
+  async (from: string): Promise<NbaChannels[]> => channelsFrom(await fetchChannels(from)),
+  (): NbaChannels[] => [],
+  ["nba-channels"],
+  { revalidate: REVALIDATE_SECONDS, tags: ["sports:nba"] }
+);
+
 const getNbaFeed = cachedFeed(
   "balldontlie NBA",
   () => fetchNbaFromApi(new Date()),
@@ -995,11 +1073,20 @@ const getNbaFeed = cachedFeed(
 export async function getNbaData(): Promise<NbaData> {
   const feed = await getNbaFeed();
   if (!feed) return NBA_DATA;
-  const [bracket, preseason] = await Promise.all([
+  const today = new Date();
+  const from = iso(shift(today, -CHANNEL_DAYS.behind));
+  // Only while a game to come is close enough to have its channels named:
+  // all summer the next one is months away.
+  const soon = feed.games.some(
+    (g) => g.status !== "ft" && Date.parse(g.kickoff) - today.getTime() < CHANNEL_DAYS.ahead * DAY_MS
+  );
+  const [bracket, preseason, channels] = await Promise.all([
     feed.playoffYear === null ? Promise.resolve(NO_PLAYOFFS) : getNbaPlayoffs(feed.playoffYear),
     feed.tipOff ? getNbaPreseason(feed.season) : Promise.resolve(NO_PRESEASON),
+    soon ? getNbaChannels(from) : Promise.resolve([]),
   ]);
-  return nbaDataFrom(feed, bracket, preseason);
+  const data = nbaDataFrom(feed, bracket, preseason);
+  return { ...data, games: withChannels(data.games, channels) };
 }
 
 /** Pure helpers, exported for their tests — nothing here touches the network. */
@@ -1017,4 +1104,6 @@ export const __testing = {
   tipOffFrom,
   championFrom,
   preseasonFrom,
+  channelsFrom,
+  withChannels,
 };

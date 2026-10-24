@@ -1,6 +1,6 @@
 "use client";
 
-import { Circle } from "lucide-react";
+import { Circle, Tv } from "lucide-react";
 
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
@@ -114,8 +114,36 @@ export function ScoreCard({ match, teams, hideStage = false, className }: ScoreC
         {scheduled && (
           <Mono className="text-2xs text-muted-foreground">{format.time(match.kickoff)}</Mono>
         )}
+        {(scheduled || isLive) && match.broadcasts?.length ? (
+          <Channels names={match.broadcasts} />
+        ) : null}
       </div>
     </div>
+  );
+}
+
+/** A name too wide for the column under the time, as the channel brands itself. */
+const SHORT_CHANNEL: Record<string, string> = { "Prime Video": "Prime" };
+
+/**
+ * Where to watch, under the time: the first channel (TV before streaming),
+ * every one of them in its title and for a screen reader. As wide as the
+ * column and never wider (`w-0 min-w-full`), so a long name is cut rather
+ * than moving this card's divider off its neighbours'.
+ */
+function Channels({ names }: { names: string[] }) {
+  const all = names.join(", ");
+  return (
+    <span
+      title={`On ${all}`}
+      className="flex w-0 min-w-full items-center justify-end gap-0.5 text-2xs text-muted-foreground"
+    >
+      <Tv aria-hidden className="size-2.5 shrink-0" />
+      <span aria-hidden className="truncate">
+        {SHORT_CHANNEL[names[0]] ?? names[0]}
+      </span>
+      <span className="sr-only">On {all}</span>
+    </span>
   );
 }
 

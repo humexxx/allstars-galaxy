@@ -159,6 +159,8 @@ export type Match = {
   /** Optional red-card indicator next to each team. */
   homeRedCard?: boolean;
   awayRedCard?: boolean;
+  /** Where it is on in the US, nationally: TV first ("NBC", "Peacock"). */
+  broadcasts?: string[];
 };
 
 /** League / group-stage row. */

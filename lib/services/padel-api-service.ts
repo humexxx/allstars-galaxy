@@ -38,8 +38,14 @@ const CALENDAR_LOOKBACK_DAYS = 45;
 const PAGE_SIZE = 50;
 /** Just-finished draws read for their finals' runners-up. */
 const JUST_FINISHED = 3;
-/** The draw starts at the round of 16: the byes are all in the rounds before it. */
+/**
+ * The draw starts at the round of 16 once everybody in it is known: the byes
+ * are all in the rounds before it. Until then it is the whole draw, or its
+ * first days showed an empty round of 16 as "not drawn yet".
+ */
 const FIRST_BRACKET_ROUND = 8;
+/** A Major's whole main draw, both categories: 126 matches, three pages. */
+const MAX_DRAW_PAGES = 3;
 /** What the free plan sends in place of a result older than about six months. */
 const HIDDEN = "hidden_free_plan";
 
@@ -100,7 +106,7 @@ type PadelApiMatch = {
   } | null;
 };
 
-type PadelApiList<T> = { data: T[] };
+type PadelApiList<T> = { data: T[]; meta?: { last_page?: number } };
 
 /** Both categories' draws: the provider sends them in one list. */
 export type PadelDraws = Record<PadelCategory, RacquetDraw>;
@@ -294,8 +300,31 @@ function isHidden(m: PadelApiMatch): boolean {
   return m.score === HIDDEN || m.winner === HIDDEN;
 }
 
+/** One category's main-draw matches. */
+function mainDraw(matches: PadelApiMatch[], category: PadelCategory): PadelApiMatch[] {
+  return matches.filter(
+    (m) => (m.category ?? category) === category && (m.draw ?? "main") === "main"
+  );
+}
+
 /**
- * One category's draw from the round of 16 to the final.
+ * Every side of the round `size` is known: named by the provider, or the
+ * winner of the match before it that feeds it.
+ */
+function roundIsSet(own: PadelApiMatch[], size: number): boolean {
+  const at = new Map(own.map((m) => [`${m.round}:${m.index}`, m]));
+  const won = (m: PadelApiMatch | undefined): boolean => m?.winner === "team_1" || m?.winner === "team_2";
+  return Array.from({ length: size }, (_, i) => i).every((i) => {
+    const m = at.get(`${size}:${i}`);
+    const home = Boolean(m?.players?.team_1?.length) || won(at.get(`${size * 2}:${i * 2}`));
+    const away = Boolean(m?.players?.team_2?.length) || won(at.get(`${size * 2}:${i * 2 + 1}`));
+    return home && away;
+  });
+}
+
+/**
+ * One category's draw from the round of 16 to the final, or from its first
+ * round while the round of 16 is still being filled.
  *
  * The provider places every match by (round, index), and the winner of slot i
  * always plays the next round's slot i / 2 — on top when i is even. That
@@ -307,12 +336,10 @@ function isHidden(m: PadelApiMatch): boolean {
  * winners in it says less than the champions do.
  */
 function drawFrom(tournamentId: string, matches: PadelApiMatch[], category: PadelCategory): RacquetDraw {
-  const own = matches.filter(
-    (m) => (m.category ?? category) === category && (m.draw ?? "main") === "main"
-  );
+  const own = mainDraw(matches, category);
   if (own.length === 0) return { tournamentId, rounds: [], players: [] };
   const largest = Math.max(...own.map((m) => m.round));
-  const first = Math.min(FIRST_BRACKET_ROUND, largest);
+  const first = roundIsSet(own, FIRST_BRACKET_ROUND) ? Math.min(FIRST_BRACKET_ROUND, largest) : largest;
   if (own.some((m) => m.round <= first && isHidden(m))) {
     return { tournamentId, rounds: [], players: [], resultsHidden: true };
   }
@@ -337,6 +364,7 @@ function drawFrom(tournamentId: string, matches: PadelApiMatch[], category: Pade
       winnerTeamId: m.winner === "team_1" ? homeTeamId : m.winner === "team_2" ? awayTeamId : null,
       date: m.scheduled_at ?? m.played_at ?? undefined,
       ...(m.status === "walkover" && { outcome: "walkover" as const }),
+      ...(m.status === "bye" && { outcome: "bye" as const }),
       ...(m.status === "retired" && { outcome: "retired" as const }),
     };
   };
@@ -411,18 +439,27 @@ async function fetchPadel<T>(path: string): Promise<T> {
 /**
  * One call for both categories, final first: sorted by round, the first page
  * of fifty holds the final, semi-finals, quarter-finals and round of 16 of
- * both draws (30 matches) with part of the round of 32 behind them.
+ * both draws (30 matches) with part of the round of 32 behind them. While a
+ * round of 16 still has a side to fill, the rest of the draw is read too —
+ * two more pages at most, and only in a tournament's first days.
  */
 async function fetchPadelDraws(id: number): Promise<PadelDraws> {
-  const params = new URLSearchParams({
-    sort_by: "round",
-    order_by: "asc",
-    per_page: String(PAGE_SIZE),
-  });
-  const res = await fetchPadel<PadelApiList<PadelApiMatch>>(
-    `/tournaments/${id}/matches?${params.toString()}`
-  );
-  return drawsFrom(id, res.data);
+  const page = (n: number): Promise<PadelApiList<PadelApiMatch>> => {
+    const params = new URLSearchParams({
+      sort_by: "round",
+      order_by: "asc",
+      per_page: String(PAGE_SIZE),
+      page: String(n),
+    });
+    return fetchPadel<PadelApiList<PadelApiMatch>>(`/tournaments/${id}/matches?${params.toString()}`);
+  };
+  const first = await page(1);
+  const pages = Math.min(first.meta?.last_page ?? 1, MAX_DRAW_PAGES);
+  const categories = (["men", "women"] as const).filter((c) => mainDraw(first.data, c).length > 0);
+  const settled = categories.every((c) => roundIsSet(mainDraw(first.data, c), FIRST_BRACKET_ROUND));
+  if (pages <= 1 || settled) return drawsFrom(id, first.data);
+  const rest = await Promise.all(Array.from({ length: pages - 1 }, (_, i) => page(i + 2)));
+  return drawsFrom(id, [...first.data, ...rest.flatMap((r) => r.data)]);
 }
 
 /**
@@ -657,4 +694,5 @@ export const __testing = {
   setScore,
   drawFrom,
   drawsFrom,
+  fetchPadelDraws,
 };

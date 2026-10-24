@@ -217,8 +217,8 @@ export type BracketMatch = {
     homeTiebreak?: number | null;
     awayTiebreak?: number | null;
   }>;
-  /** A racquet tie decided without being played out. */
-  outcome?: "walkover" | "retired";
+  /** A racquet tie decided without being played out; a bye has nobody on one side. */
+  outcome?: "walkover" | "retired" | "bye";
   homeScore?: number | null;
   awayScore?: number | null;
   aggregateHome?: number | null;

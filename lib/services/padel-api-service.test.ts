@@ -17,6 +17,7 @@ const {
   setScore,
   drawFrom,
   drawsFrom,
+  fetchPadelDraws,
 } = __testing;
 
 // Milano P1 2026 as the API returns it, trimmed to what the mapper reads.
@@ -51,6 +52,14 @@ const without = (drop: (m: FixtureMatch) => boolean) => MATCHES.filter((m) => !d
 const pairId = (m: FixtureMatch, side: "team_1" | "team_2") => pairOf(m.players?.[side])!.id;
 const fixture = (category: string, round: number, index: number) =>
   MATCHES.find((m) => m.category === category && m.round === round && m.index === index)!;
+/** The same draw before a ball is struck: the round of 16 on, nobody named. */
+const dayOne: FixtureMatch[] = MATCHES.map((m) => ({
+  ...m,
+  score: null,
+  winner: null,
+  status: "scheduled",
+  ...(m.round <= 8 && { players: { team_1: [], team_2: [] } }),
+}));
 
 describe("mapStatus", () => {
   it("reads the provider's current state names", () => {
@@ -323,10 +332,28 @@ describe("drawFrom", () => {
   });
 
   it("seeds the round of 16 from the round of 32, byes included", () => {
+    // Only part of the round of 32 is here, so the round of 16 is not all
+    // known: the draw opens on the round of 32.
     const draw = drawFrom(ID, without((m) => m.round <= 8), "women");
-    // Triay / Brea had a bye in the round of 32: still through, on top.
-    expect(draw.rounds[0].matches[0].homeTeamId).toBe("433-434");
-    expect(draw.rounds[0].matches[0].awayTeamId).toBe(pairId(fixture("women", 16, 1), "team_2"));
+    expect(draw.rounds[0].id).toBe("round-of-32");
+    // Triay / Brea had a bye in the round of 32, which says so: still through, on top.
+    expect(draw.rounds[0].matches[0].outcome).toBe("bye");
+    expect(draw.rounds[1].matches[0].homeTeamId).toBe("433-434");
+    expect(draw.rounds[1].matches[0].awayTeamId).toBe(pairId(fixture("women", 16, 1), "team_2"));
+  });
+
+  it("opens on the first round while the round of 16 is still being filled", () => {
+    // Day one: the draw is out, nothing played, the round of 16 empty.
+    const draw = drawFrom(ID, dayOne, "men");
+    expect(draw.rounds.map((r) => r.id)).toEqual([
+      "round-of-32",
+      "round-of-16",
+      "quarter-final",
+      "semi-final",
+      "final",
+    ]);
+    expect(draw.rounds[0].matches.some((m) => m.homeTeamId && m.awayTeamId)).toBe(true);
+    expect(draw.rounds[1].matches.every((m) => !m.homeTeamId && !m.awayTeamId)).toBe(true);
   });
 
   it("shows only the champions when the free plan hides the results", () => {
@@ -427,6 +454,20 @@ describe("the feed and the draws on demand", () => {
       players: [],
     });
     expect(drawCalls().some((url) => url.includes("/748/"))).toBe(false);
+  });
+
+  it("reads the rest of a draw while its round of 16 is being filled, and only then", async () => {
+    const pages = vi.fn<(url: string) => Promise<Response>>(async (url) =>
+      respond(url.includes("page=1") ? { data: dayOne, meta: { last_page: 3 } } : { data: [] })
+    );
+    vi.stubGlobal("fetch", pages);
+    await fetchPadelDraws(748);
+    expect(pages.mock.calls.map(([url]) => new URL(url).searchParams.get("page"))).toEqual(["1", "2", "3"]);
+
+    pages.mockClear();
+    pages.mockImplementation(async () => respond({ data: MATCHES, meta: { last_page: 3 } }));
+    await fetchPadelDraws(747);
+    expect(pages).toHaveBeenCalledTimes(1);
   });
 
   it("asks for no tournament this season's calendar does not list", async () => {

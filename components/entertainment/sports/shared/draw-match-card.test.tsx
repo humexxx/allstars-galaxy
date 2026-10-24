@@ -140,4 +140,18 @@ describe("DrawMatchCard, a padel pair", () => {
     });
     expect(screen.getByText("Thu, Oct 15 · Walkover")).toBeInTheDocument();
   });
+
+  it("names a bye where the missing pair would be, and only there", () => {
+    inCostaRica({
+      ...milanoFinal,
+      awayTeamId: null,
+      legs: undefined,
+      outcome: "bye",
+      date: "2026-10-26",
+      winnerTeamId: "65-66",
+    });
+    expect(screen.getByText("Bye")).toBeInTheDocument();
+    expect(screen.queryByText("TBD")).toBeNull();
+    expect(screen.getByText("Mon, Oct 26")).toBeInTheDocument();
+  });
 });

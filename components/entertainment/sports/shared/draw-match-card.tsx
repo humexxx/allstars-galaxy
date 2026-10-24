@@ -9,7 +9,7 @@ import { useMatchTime } from "./time-zone-context";
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
-const OUTCOMES: Record<NonNullable<BracketMatch["outcome"]>, string> = {
+const OUTCOMES: Record<"walkover" | "retired", string> = {
   walkover: "Walkover",
   retired: "Retired",
 };
@@ -64,7 +64,9 @@ export function DrawMatchCard({
   const sets = match.legs ?? [];
   const decided = !!match.winnerTeamId;
   const played = sets.filter((s) => s.homeScore !== null && s.awayScore !== null);
-  const outcome = match.outcome ? OUTCOMES[match.outcome] : null;
+  // A bye says so in place of its missing side, not in the small print too.
+  const outcome = match.outcome && match.outcome !== "bye" ? OUTCOMES[match.outcome] : null;
+  const nobody = match.outcome === "bye" ? "Bye" : "TBD";
 
   // A calendar day — tennis dates a match by its day — stays the day it names
   // (`toDay` reads it local, never as UTC midnight); an instant, padel's
@@ -83,8 +85,8 @@ export function DrawMatchCard({
         details={
           <>
             <span className="font-semibold">
-              {(variant === "pair" ? home?.name : home?.shortName) ?? "TBD"} vs{" "}
-              {(variant === "pair" ? away?.name : away?.shortName) ?? "TBD"}
+              {(variant === "pair" ? home?.name : home?.shortName) ?? nobody} vs{" "}
+              {(variant === "pair" ? away?.name : away?.shortName) ?? nobody}
             </span>
             {whenInFull && <span>{whenInFull}</span>}
             {(played.length > 0 || decided) && (
@@ -108,6 +110,7 @@ export function DrawMatchCard({
             opponentScores: sets.map((s) => s[`${other}Score`]),
             isWinner: decided && match.winnerTeamId === (side === "home" ? match.homeTeamId : match.awayTeamId),
             decided,
+            nobody,
           };
           return variant === "pair" ? (
             <PairRow key={side} {...props} />
@@ -125,6 +128,8 @@ export function DrawMatchCard({
 
 type RowProps = {
   player: Team | null;
+  /** What an empty side says: "TBD", or "Bye". */
+  nobody: string;
   scores: Array<number | null>;
   opponentScores: Array<number | null>;
   isWinner: boolean;
@@ -179,6 +184,7 @@ function PlayerRow({
   opponentScores,
   isWinner,
   decided,
+  nobody,
   withFaces,
 }: RowProps & { withFaces: boolean }) {
   if (!player) {
@@ -186,7 +192,7 @@ function PlayerRow({
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span className={cn("shrink-0", withFaces ? "w-6" : "w-5")} />
         <span className="w-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">TBD</span>
+        <span className="min-w-0 flex-1 truncate">{nobody}</span>
       </div>
     );
   }
@@ -223,12 +229,12 @@ function PlayerRow({
 }
 
 /** A padel pair: both surnames stacked, so neither is cut off in a narrow column. */
-function PairRow({ player, scores, opponentScores, isWinner, decided }: RowProps) {
+function PairRow({ player, scores, opponentScores, isWinner, decided, nobody }: RowProps) {
   if (!player) {
     return (
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span className="w-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">TBD</span>
+        <span className="min-w-0 flex-1 truncate">{nobody}</span>
       </div>
     );
   }

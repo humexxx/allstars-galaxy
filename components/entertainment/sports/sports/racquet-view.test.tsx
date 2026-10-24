@@ -406,6 +406,48 @@ describe("RacquetView, tennis", () => {
   };
   const tennis: TennisData = { atp, wta: { ...atp, tour: "wta", tournaments: [] } };
 
+  it("picks between the tournaments being played, and loads the one picked", async () => {
+    vi.mocked(getRacquetDrawAction).mockResolvedValue({
+      success: true,
+      data: { tournamentId: "espn-basel", rounds: [], players: [] },
+    });
+    const basel: RacquetTournament = {
+      id: "espn-328-2026-mens-singles",
+      name: "Swiss Indoors Basel",
+      location: "Basel",
+      startDate: "2026-10-19",
+      endDate: "2026-10-25",
+      status: "live",
+    };
+    const two: TennisData = { ...tennis, atp: { ...atp, tournaments: [...atp.tournaments, basel] } };
+    render(
+      <SportsTodayProvider today="2026-10-19">
+        <TennisView data={two} />
+      </SportsTodayProvider>
+    );
+    const picker = screen.getByRole("group", { name: "Tournaments on now" });
+    expect(within(picker).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Vienna", "Basel"]);
+    expect(within(picker).getByRole("radio", { name: "Erste Bank Open" })).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(within(picker).getByRole("radio", { name: "Swiss Indoors Basel" }));
+
+    expect(screen.getByRole("heading", { name: "Swiss Indoors Basel" })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(getRacquetDrawAction).toHaveBeenCalledWith(
+        expect.objectContaining({ tournamentId: "espn-328-2026-mens-singles" })
+      )
+    );
+  });
+
+  it("shows no picker with one tournament being played", () => {
+    render(
+      <SportsTodayProvider today="2026-10-19">
+        <TennisView data={tennis} />
+      </SportsTodayProvider>
+    );
+    expect(screen.queryByRole("group", { name: "Tournaments on now" })).toBeNull();
+  });
+
   it("features the event being played, with last year's champion", async () => {
     vi.mocked(getRacquetDrawAction).mockResolvedValue({
       success: true,

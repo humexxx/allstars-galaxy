@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { comingUp, featuredTournament, justFinished } from "@/lib/sports/racquet";
 import { cn } from "@/lib/utils";
@@ -59,6 +60,12 @@ function placeOf(t: RacquetTournament): string | null {
   const city = t.location && t.location !== "—" ? t.location : undefined;
   if (t.venue && city && !t.venue.includes(city)) return `${t.venue}, ${city}`;
   return t.venue ?? city ?? null;
+}
+
+/** A tournament on now by its city, or by its name where two share one. */
+function chipLabel(t: RacquetTournament, all: RacquetTournament[]): string {
+  const city = t.location && t.location !== "—" ? t.location : undefined;
+  return city && all.filter((o) => o.location === city).length === 1 ? city : t.name;
 }
 
 function prizeOf(prize: RacquetTournament["prize"]): string | null {
@@ -469,12 +476,17 @@ export function RacquetCurrent({
   variant,
   onOpen,
   onRetry,
+  onNow = [],
+  onPick,
 }: {
   tournament: RacquetTournament | undefined;
   draw: DrawState;
   variant: DrawVariant;
   onOpen: (id: string) => void;
   onRetry?: () => void;
+  /** Every tournament being played: two or more, and the heading picks between them. */
+  onNow?: RacquetTournament[];
+  onPick?: (id: string) => void;
 }) {
   if (!t) {
     return (
@@ -492,9 +504,36 @@ export function RacquetCurrent({
     // starts level with the rankings card beside it (`OverviewSplit`). Its
     // own container, so the card follows the column's width.
     <section className="@container flex min-w-0 flex-col gap-2">
-      <Eyebrow size="sm" asChild>
-        <h3 className="py-1">{t.status === "live" ? "On now" : "Just finished"}</h3>
-      </Eyebrow>
+      {/* Several on at once (a week of tennis is three or four): a pill for
+          each on the heading's line, its negative margins keeping the line
+          as tall as the Rankings label beside it. Under it on a phone. */}
+      <div className="flex flex-col gap-2 @md:flex-row @md:items-center @md:justify-between">
+        <Eyebrow size="sm" asChild>
+          <h3 className="py-1">{t.status === "live" ? "On now" : "Just finished"}</h3>
+        </Eyebrow>
+        {onNow.length > 1 && onPick && (
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            value={t.id}
+            onValueChange={(id) => id && onPick(id)}
+            aria-label="Tournaments on now"
+            className="@md:-my-1.5 @md:justify-end"
+          >
+            {onNow.map((o) => (
+              <ToggleGroupItem
+                key={o.id}
+                value={o.id}
+                aria-label={o.name}
+                className="h-6 rounded-full px-2.5"
+              >
+                {chipLabel(o, onNow)}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        )}
+      </div>
       <Card>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 @xl:flex-row @xl:items-start @xl:justify-between">

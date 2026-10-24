@@ -72,7 +72,12 @@ export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetVie
   const data = activeTour.data;
   const variant: DrawVariant = sport === "padel" ? "pair" : "player";
 
-  const current = currentTournament(data.tournaments);
+  // Every tournament being played; the one picked on Overview, per tour,
+  // else the first of them (or the one just finished).
+  const onNow = data.tournaments.filter((t) => t.status === "live");
+  const [picked, setPicked] = useState<Partial<Record<RacquetTour, string>>>({});
+  const current =
+    onNow.find((t) => t.id === picked[data.tour]) ?? currentTournament(data.tournaments);
   const { draws, load } = useRacquetDraws(sport);
   // Which tournament the sheet shows outlives whether it is open, so the
   // sheet keeps its content while it slides away.
@@ -150,6 +155,8 @@ export function RacquetView({ sport, emoji, title, subtitle, tours }: RacquetVie
                 variant={variant}
                 onOpen={openTournament}
                 onRetry={() => current && load(data.tour, current.id)}
+                onNow={onNow}
+                onPick={(id) => setPicked((p) => ({ ...p, [data.tour]: id }))}
               />
             }
             table={data.rankings.length > 0 && <RankingsTable key={tourValue} data={data} />}

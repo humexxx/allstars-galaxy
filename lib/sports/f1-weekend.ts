@@ -114,9 +114,6 @@ export function leadRace(races: F1Race[]): F1Race | undefined {
   );
 }
 
-/** How many races run a tap on "Earlier" brings in, and are shown once the season is over. */
-export const RACES_SHOWN = 3;
-
 export type RacesTabGroups = {
   /** On now or next; none once the season is over. */
   featured?: F1Race;

@@ -279,9 +279,10 @@ describe("RacquetView, tennis", () => {
     );
     const picker = screen.getByRole("group", { name: "Tournaments on now" });
     expect(within(picker).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Vienna", "Basel"]);
-    expect(within(picker).getByRole("radio", { name: "Erste Bank Open" })).toHaveAttribute("aria-checked", "true");
+    // Each named as it reads, the city first, then the tournament it stands for.
+    expect(within(picker).getByRole("radio", { name: "Vienna, Erste Bank Open" })).toHaveAttribute("aria-checked", "true");
 
-    fireEvent.click(within(picker).getByRole("radio", { name: "Swiss Indoors Basel" }));
+    fireEvent.click(within(picker).getByRole("radio", { name: "Basel, Swiss Indoors Basel" }));
 
     expect(screen.getByRole("heading", { name: "Swiss Indoors Basel" })).toBeInTheDocument();
     await waitFor(() =>

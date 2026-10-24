@@ -1,37 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, Flag, History } from "lucide-react";
-import { Children, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
+import { Flag } from "lucide-react";
+import { useMemo } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
-import { isRaceWeekend, RACES_SHOWN, racesTabGroups, weekendPhrase } from "@/lib/sports/f1-weekend";
+import { isRaceWeekend, racesTabGroups, weekendPhrase } from "@/lib/sports/f1-weekend";
+import { cn } from "@/lib/utils";
 import { f1RacePath } from "@/lib/sports/paths";
 import type { F1Data, F1Race, F1SessionResult, F1WeekendResults } from "@/types/sports";
 
 import { F1CircuitOutline } from "./f1-circuit-outline";
 import { racePlace, raceWhen, SprintBadge } from "./f1-race-labels";
 import { ResultsLine, SessionList } from "./f1-race-parts";
-import { fadeIn, holdScrollStill } from "./shared/reveal";
-import { RevealPill } from "./shared/reveal-pill";
-import { useMatchTime } from "./shared/time-zone-context";
 import { StatusPill } from "./shared/status-pill";
+import {
+  EarlierPill,
+  SectionHeading,
+  TILE,
+  TileSection,
+  useRevealEarlier,
+  ViewDetailsLink,
+} from "./shared/tile-section";
+import { useMatchTime } from "./shared/time-zone-context";
 import { useNow } from "./use-now";
-
-// A tile is a link, but it does not grey on hover: its border firms up.
-const TILE =
-  "flex w-full flex-col gap-3 rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring/50";
 
 /**
  * F1's races, the left of its Overview: the race on now or next, large, then
- * every race still to come, then the ones run — none until asked for: as the
- * match lists bring in earlier days, "Earlier" on the "Earlier races" line
- * brings in three a tap, latest first, right where it was tapped, until the
- * season runs out. Every race opens its own page.
+ * every race still to come, then the ones run, latest first, brought in from
+ * their heading as the match lists bring in earlier days (`useRevealEarlier`).
+ * Every race opens its own page.
  *
  * Its own container, so the tiles follow the column's width rather than the
  * page's. Each part opens on a heading set like a day heading in the match
@@ -45,50 +46,20 @@ export function F1Races({
   data: F1Data;
   /** The sessions run so far of the race on now or next, read with the page. */
   weekend?: F1WeekendResults;
-}): JSX.Element {
+}): React.ReactElement {
   const { featured, comingUp, justFinished } = useMemo(
     () => racesTabGroups(data.races),
     [data.races]
   );
   const featuredResults = featured && weekend?.round === featured.round ? weekend.sessions : [];
-
-  // The races run that are shown. None while there is a race to come; once
-  // the season is over they are all there is, so it opens on the last few.
-  const [shownEarlier, setShownEarlier] = useState(featured ? 0 : RACES_SHOWN);
-  const listRef = useRef<HTMLDivElement>(null);
-  const added = useRef<string[] | null>(null);
-  const earlier = justFinished.slice(0, shownEarlier);
-  const nextEarlier = justFinished.slice(earlier.length, earlier.length + RACES_SHOWN);
-
-  // The new races are in, under the ones shown. They fade in; the focus
-  // stays on the pill for the next three, or goes to the first of them once
-  // the season has no more.
-  useLayoutEffect(() => {
-    const ids = added.current;
-    const root = listRef.current;
-    added.current = null;
-    if (!ids || !root) return;
-    const tiles = ids
-      .map((id) => root.querySelector<HTMLElement>(`[data-race="${id}"]`))
-      .filter((t): t is HTMLElement => t !== null);
-    const pill = root.querySelector<HTMLElement>("[data-reveal]");
-    (pill ?? tiles[0])?.focus({ preventScroll: true });
-    tiles.forEach((tile, i) => fadeIn(tile, i * 40));
-  }, [shownEarlier]);
-
-  const revealEarlier = (): void => {
-    if (!listRef.current) return;
-    holdScrollStill(listRef.current);
-    added.current = nextEarlier.map((r) => r.id);
-    setShownEarlier(shownEarlier + RACES_SHOWN);
-  };
+  const { listRef, earlier, next, reveal } = useRevealEarlier(justFinished, { open: !featured, attr: "data-race" });
 
   return (
     <div ref={listRef} className="@container flex min-w-0 flex-col gap-6">
       <section className="flex flex-col gap-2">
-        <RaceHeading>{featured?.status === "live" ? "On now" : "Next race"}</RaceHeading>
+        <SectionHeading>{featured?.status === "live" ? "On now" : "Next race"}</SectionHeading>
         {featured ? (
-<FeaturedRace race={featured} results={featuredResults} drivers={data.drivers} />
+          <FeaturedRace race={featured} results={featuredResults} drivers={data.drivers} />
         ) : (
           <EmptyState
             icon={Flag}
@@ -99,46 +70,26 @@ export function F1Races({
       </section>
 
       {comingUp.length > 0 && (
-        <RaceSection title="Coming up">
+        <TileSection title="Coming up">
           {comingUp.map((r) => (
             <RaceTile key={r.id} race={r} />
           ))}
-        </RaceSection>
+        </TileSection>
       )}
 
       {/* Its line stands from the start, the pill on it: what a tap brings in
           lands right under it rather than past the races to come. */}
       {justFinished.length > 0 && (
-        <RaceSection
+        <TileSection
           title="Earlier races"
-          action={
-            nextEarlier.length > 0 && (
-              <RevealPill
-                icon={History}
-                label="Earlier"
-                detail={showRounds(nextEarlier)}
-                data-reveal
-                onClick={revealEarlier}
-              />
-            )
-          }
+          action={next.length > 0 && <EarlierPill detail={showRounds(next)} onClick={reveal} />}
         >
           {earlier.map((r) => (
             <RaceTile key={r.id} race={r} />
           ))}
-        </RaceSection>
+        </TileSection>
       )}
-
     </div>
-  );
-}
-
-/** The size, padding and gap of a day heading in `MatchesByDate`. */
-function RaceHeading({ children }: { children: ReactNode }): JSX.Element {
-  return (
-    <Eyebrow size="sm" asChild>
-      <h3 className="py-1">{children}</h3>
-    </Eyebrow>
   );
 }
 
@@ -150,34 +101,11 @@ function showRounds(races: F1Race[]): string {
     : `Show round ${rounds[0]}`;
 }
 
-function RaceSection({
-  title,
-  action,
-  children,
-}: {
-  title: string;
-  /** At the end of the heading's line: the pill that brings in more. */
-  action?: ReactNode;
-  children: ReactNode;
-}): JSX.Element {
-  return (
-    <section className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <RaceHeading>{title}</RaceHeading>
-        {action}
-      </div>
-      {Children.count(children) > 0 && (
-        <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">{children}</div>
-      )}
-    </section>
-  );
-}
-
 /**
  * The weekend as it stands: on track, next up, or a race weekend under way.
  * Read from the browser's clock after mount, never the server's render.
  */
-function WhatsNext({ race }: { race: F1Race }): JSX.Element {
+function WhatsNext({ race }: { race: F1Race }): React.ReactElement {
   const now = useNow();
   const phrase = now === null ? null : weekendPhrase(race, now);
   const weekend = now !== null && isRaceWeekend(race, now);
@@ -203,7 +131,7 @@ function FeaturedRace({
   race: F1Race;
   results: F1SessionResult[];
   drivers: F1Data["drivers"];
-}): JSX.Element {
+}): React.ReactElement {
   const format = useMatchTime();
   const now = useNow();
   return (
@@ -217,7 +145,7 @@ function FeaturedRace({
             <Eyebrow>Round {race.round}</Eyebrow>
             {race.sprint && <SprintBadge />}
           </div>
-          <Heading level="h3" className="flex items-center gap-3">
+          <Heading level="h3" as="h4" className="flex items-center gap-3">
             <span aria-hidden className="text-3xl leading-none">
               {race.flagEmoji}
             </span>
@@ -242,24 +170,18 @@ function FeaturedRace({
           <SessionList race={race} format={format} now={now} results={results} drivers={drivers} />
         </div>
 
-        {/* At the card's foot, on its right. */}
         <div className="col-span-2 flex justify-end">
-          <Button variant="outline" size="sm" asChild>
-            <Link href={f1RacePath(race.round)} aria-label={`View details: ${race.name}`}>
-              View details
-              <ChevronRight data-icon="inline-end" />
-            </Link>
-          </Button>
+          <ViewDetailsLink href={f1RacePath(race.round)} name={race.name} />
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function RaceTile({ race }: { race: F1Race }): JSX.Element {
+function RaceTile({ race }: { race: F1Race }): React.ReactElement {
   const format = useMatchTime();
   return (
-    <Link href={f1RacePath(race.round)} data-race={race.id} className={TILE}>
+    <Link href={f1RacePath(race.round)} data-race={race.id} className={cn(TILE, "gap-3")}>
       <span className="flex w-full items-start justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2">
           <span aria-hidden className="text-xl leading-none">

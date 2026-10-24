@@ -2,7 +2,6 @@ import "server-only";
 
 import { cache } from "react";
 
-import type { DrawState, RacquetSport } from "@/components/entertainment/sports/sports/racquet-draw";
 import { getTennisData, getTennisDraw } from "@/lib/services/espn-tennis-service";
 import { getF1Data, getF1RaceClassification } from "@/lib/services/jolpica-f1-service";
 import { getF1WeekendResults } from "@/lib/services/openf1-service";
@@ -12,10 +11,12 @@ import { drawIsOut, findTournament } from "@/lib/sports/racquet";
 import { getRequestTodayIso } from "@/lib/utils/request-today";
 import { racquetDrawSchema } from "@/schemas/racquet";
 import type {
+  DrawState,
   F1ClassificationRow,
   F1Data,
   F1Race,
   F1SessionResult,
+  RacquetSport,
   RacquetTournament,
 } from "@/types/sports";
 

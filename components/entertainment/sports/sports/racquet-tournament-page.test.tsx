@@ -7,9 +7,8 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 // The view's draw loader shares the module; the page never calls it.
 vi.mock("@/app/actions/racquet", () => ({ getRacquetDrawAction: vi.fn() }));
 
-import type { BracketRound, RacquetTournament, Team } from "@/types/sports";
+import type { BracketRound, DrawState, RacquetTournament, Team } from "@/types/sports";
 
-import type { DrawState } from "./racquet-draw";
 import { RacquetTournamentPage } from "./racquet-tournament-page";
 
 const pair = (id: string, name: string, shortName: string, seed = ""): Team => ({ id, name, shortName, code: seed });
@@ -90,8 +89,9 @@ describe("RacquetTournamentPage", () => {
   it("names the tournament, its tier, when and where, its prize and its champions", () => {
     renderPage(MILANO, ready());
     expect(screen.getByRole("heading", { level: 1, name: "Milano P1 2026" })).toBeInTheDocument();
-    // The venue already names the city.
-    expect(screen.getByText("Oct 12 – 18, 2026 · Allianz Cloud Milano")).toBeInTheDocument();
+    // Once, in the facts: the venue already names the city.
+    expect(screen.getAllByText("Oct 12 – 18, 2026")).toHaveLength(1);
+    expect(screen.getByText("Allianz Cloud Milano")).toBeInTheDocument();
     expect(screen.getByText("€479,068")).toBeInTheDocument();
     expect(screen.getByText("d. L. Augsburger / J. Lebron", { exact: false })).toBeInTheDocument();
   });

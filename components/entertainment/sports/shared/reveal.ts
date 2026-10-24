@@ -8,12 +8,14 @@ export const SLIDE_MS = 220;
 export const FADE_MS = 200;
 export const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 
+/** A reader who asked for less motion. Read when the motion is about to start, never while rendering. */
+export function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+}
+
 /** A reader who asked for less motion, or a runtime with no Web Animations API (a test). */
 export function holdStill(el: HTMLElement): boolean {
-  return (
-    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true ||
-    typeof el.animate !== "function"
-  );
+  return prefersReducedMotion() || typeof el.animate !== "function";
 }
 
 /** Fades `el` in from a little above, after `delay`. */

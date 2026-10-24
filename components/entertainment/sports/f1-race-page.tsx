@@ -12,7 +12,6 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { raceSessions, SESSION_LABEL, weekendNow } from "@/lib/sports/f1-weekend";
-import { SPORTS_PATH, sportPath } from "@/lib/sports/paths";
 import { cn } from "@/lib/utils";
 import type {
   F1ClassificationRow,
@@ -81,13 +80,7 @@ export function F1RacePage({
   return (
     <div className="@container flex flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <SportsBreadcrumbs
-          trail={[
-            { label: "Sports", href: SPORTS_PATH },
-            { label: "Formula 1", href: sportPath("f1") },
-          ]}
-          current={race.name}
-        />
+        <SportsBreadcrumbs sport="f1" current={race.name} />
         <PageHeader
           eyebrow={`Round ${race.round} · ${season}`}
           title={

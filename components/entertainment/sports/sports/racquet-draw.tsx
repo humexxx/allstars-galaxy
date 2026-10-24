@@ -8,32 +8,18 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/typography";
-import { racquetDrawSchema, type RacquetDrawData } from "@/schemas/racquet";
+import { racquetDrawSchema } from "@/schemas/racquet";
 import type {
   BracketRound,
-  RacquetDraw,
+  DrawState,
+  DrawVariant,
+  RacquetSport,
   RacquetTournament,
   Team,
 } from "@/types/sports";
 
 import { DrawMatchCard } from "../shared/draw-match-card";
 import { KnockoutBracket } from "../shared/knockout-bracket";
-
-export type RacquetSport = RacquetDrawData["sport"];
-
-/** Singles players with a flag and a seed, or padel pairs: two names, a seed, no flag. */
-export type DrawVariant = "player" | "pair";
-
-/** Where one tournament's draw stands in the view. */
-export type DrawState =
-  /** Upcoming, and too far off for a draw to exist. */
-  | { status: "pending" }
-  | { status: "loading" }
-  /** The provider did not answer; worth another try. */
-  | { status: "error" }
-  /** No provider knows this id — a fixture tournament, while the feed is down. */
-  | { status: "unavailable" }
-  | { status: "ready"; draw: RacquetDraw };
 
 /**
  * The draws asked for so far, by tournament, and the call that loads one: the

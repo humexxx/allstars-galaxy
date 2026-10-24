@@ -1,4 +1,15 @@
-import type { RacquetCalendarEntry, RacquetData, RacquetTournament } from "@/types/sports";
+import type {
+  BracketRound,
+  DrawVariant,
+  RacquetCalendarEntry,
+  RacquetData,
+  RacquetDraw,
+  RacquetSport,
+  RacquetTournament,
+  Team,
+} from "@/types/sports";
+
+import { roundInPlay } from "./bracket";
 
 /**
  * Which tournament each part of a racquet view is about.
@@ -17,7 +28,10 @@ export function featuredTournament<T extends Dated>(list: T[]): T | undefined {
   return list.find((t) => t.status === "live") ?? list.find((t) => t.status === "upcoming");
 }
 
-/** The one whose draw Overview opens on: being played, else just finished. */
+/**
+ * The other draw the feed ships: being played, else just finished, so the
+ * page of last week's final needs no provider call.
+ */
 export function currentTournament<T extends Dated>(list: T[]): T | undefined {
   return list.find((t) => t.status === "live") ?? justFinished(list, 1)[0];
 }
@@ -28,11 +42,6 @@ export function justFinished<T extends Dated>(list: T[], count: number): T[] {
     .filter((t) => t.status === "completed")
     .sort((a, b) => b.endDate.localeCompare(a.endDate))
     .slice(0, count);
-}
-
-/** What starts after the featured tournament, soonest first. */
-export function comingUp<T extends Dated>(list: T[], count: number, featuredId?: string): T[] {
-  return list.filter((t) => t.status === "upcoming" && t.id !== featuredId).slice(0, count);
 }
 
 /** The ids whose draws travel with the feed. */
@@ -106,4 +115,68 @@ export function findTournament(data: RacquetData, id: string): RacquetTournament
   if (listed) return listed;
   const entry = data.calendar?.find((e) => e.id === id);
   return entry ? fromCalendar(entry) : undefined;
+}
+
+/** How a sport's ties are drawn: singles players, or padel's pairs. */
+export function drawVariant(sport: RacquetSport): DrawVariant {
+  return sport === "padel" ? "pair" : "player";
+}
+
+function drawnIds(rounds: BracketRound[]): Set<string | null> {
+  return new Set(rounds.flatMap((r) => r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId])));
+}
+
+/**
+ * The draw a tournament came with from the feed, its players narrowed to the
+ * ones in it: the tour's list spans every draw the feed carries.
+ */
+export function shippedDraw(t: RacquetTournament, players: Team[]): RacquetDraw | undefined {
+  if (!t.bracket?.length) return undefined;
+  const drawn = drawnIds(t.bracket);
+  return {
+    tournamentId: t.id,
+    rounds: t.bracket,
+    players: players.filter((p) => drawn.has(p.id)),
+    champion: t.champion,
+    runnerUp: t.runnerUp,
+  };
+}
+
+/** The draw's three best seeds, among the players in its own rounds. */
+export function topSeeds(draw: Pick<RacquetDraw, "rounds" | "players">): Team[] {
+  const drawn = drawnIds(draw.rounds);
+  return draw.players
+    .filter((p) => drawn.has(p.id) && /^\d+$/.test(p.code.trim()))
+    .sort((a, b) => Number(a.code) - Number(b.code))
+    .slice(0, 3);
+}
+
+/** The city, unless the feed has none for it ("—"). */
+export function cityOf(t: Pick<RacquetTournament, "location">): string | undefined {
+  return t.location && t.location !== "—" ? t.location : undefined;
+}
+
+/**
+ * "Sheikh Saad Al-Abdullah Complex, Kuwait City"; the venue alone where it
+ * already names the city ("Allianz Cloud Milano"); else the city alone.
+ */
+export function placeOf(t: RacquetTournament): string | null {
+  const city = cityOf(t);
+  if (t.venue && city && !t.venue.includes(city)) return `${t.venue}, ${city}`;
+  return t.venue ?? city ?? null;
+}
+
+/** "Starts today", "Starts tomorrow", "Starts in 5 days", by the reader's calendar day. */
+export function startsInDays(startDate: string, today: string): string {
+  const days = Math.round((Date.parse(startDate) - Date.parse(today)) / 86_400_000);
+  if (days <= 0) return "Starts today";
+  if (days === 1) return "Starts tomorrow";
+  return `Starts in ${days} days`;
+}
+
+/** Where play stands: the round under way, when it starts, or nothing to say. */
+export function playLine(t: RacquetTournament, rounds: BracketRound[] | undefined, today: string): string | null {
+  if (t.status === "upcoming") return startsInDays(t.startDate, today);
+  const round = t.status === "live" && rounds ? roundInPlay(rounds) : undefined;
+  return round ? `${round.label} under way` : null;
 }

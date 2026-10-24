@@ -2,51 +2,40 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Children, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  Banknote,
-  CalendarDays,
-  ChevronRight,
-  History,
-  MapPin,
-  Shield,
-  Trophy,
-  type LucideIcon,
-} from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Banknote, CalendarDays, MapPin, Shield, Trophy, type LucideIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
-import { roundInPlay } from "@/lib/sports/bracket";
-import { seasonOf } from "@/lib/sports/racquet";
+import { cityOf, justFinished, placeOf, playLine, seasonOf, topSeeds } from "@/lib/sports/racquet";
 import { cn } from "@/lib/utils";
 import { formatDayRange } from "@/lib/utils/date";
-import type { RacquetData, RacquetDraw, RacquetTournament, Team } from "@/types/sports";
+import type { DrawVariant, RacquetData, RacquetDraw, RacquetTournament, Team } from "@/types/sports";
 
 import { PairFaces } from "../shared/draw-match-card";
 import { Portrait } from "../shared/portrait";
-import { fadeIn, holdScrollStill } from "../shared/reveal";
-import { RevealPill } from "../shared/reveal-pill";
 import { StatusPill } from "../shared/status-pill";
-import type { DrawState, DrawVariant } from "./racquet-draw";
-
-/** Tournaments run that a tap on "Earlier" brings in, and that show once the season is over. */
-const EARLIER_STEP = 3;
-
-/** "Allianz Cloud Milano, Milan", "Shanghai, China PR" — or the city alone. */
-export function placeOf(t: RacquetTournament): string | null {
-  const city = t.location && t.location !== "—" ? t.location : undefined;
-  if (t.venue && city && !t.venue.includes(city)) return `${t.venue}, ${city}`;
-  return t.venue ?? city ?? null;
-}
+import {
+  EarlierPill,
+  SectionHeading,
+  TILE,
+  TileSection,
+  useRevealEarlier,
+  ViewDetailsLink,
+} from "../shared/tile-section";
 
 /** A tournament on now by its city, or by its name where two share one. */
 function chipLabel(t: RacquetTournament, all: RacquetTournament[]): string {
-  const city = t.location && t.location !== "—" ? t.location : undefined;
-  return city && all.filter((o) => o.location === city).length === 1 ? city : t.name;
+  const city = cityOf(t);
+  return city && all.filter((o) => cityOf(o) === city).length === 1 ? city : t.name;
+}
+
+/** What a tournament is, in one word: its tier, else its surface. */
+function kindOf(t: RacquetTournament): string | undefined {
+  return t.tier ?? t.surface;
 }
 
 function prizeOf(prize: RacquetTournament["prize"]): string | null {
@@ -60,47 +49,6 @@ function prizeOf(prize: RacquetTournament["prize"]): string | null {
   } catch {
     return null;
   }
-}
-
-/**
- * The event's poster, unoptimized: it comes off the provider's media host,
- * which is not on the optimizer's allowlist — the call `Portrait` makes for
- * faces. A poster that fails to load is left out rather than drawn broken.
- */
-export function TournamentPoster({
-  src,
-  className,
-  onFail,
-  children,
-}: {
-  src: string;
-  className?: string;
-  /** Told when the poster does not load, so what was laid over it can go elsewhere. */
-  onFail?: () => void;
-  /** Laid over the poster. */
-  children?: ReactNode;
-}) {
-  const [failed, setFailed] = useState(false);
-  if (failed) return null;
-  return (
-    <span
-      className={cn("relative block aspect-video shrink-0 overflow-hidden rounded-lg bg-muted", className)}
-    >
-      <Image
-        src={src}
-        alt=""
-        fill
-        sizes="(min-width: 768px) 24rem, 100vw"
-        className="object-cover"
-        unoptimized
-        onError={() => {
-          setFailed(true);
-          onFail?.();
-        }}
-      />
-      {children}
-    </span>
-  );
 }
 
 /** "Champions" for a pair, "Champion" for a player. */
@@ -117,7 +65,7 @@ export function TournamentFacts({
 }: {
   tournament: RacquetTournament;
   variant: DrawVariant;
-}) {
+}): React.ReactElement {
   const place = placeOf(t);
   const prize = prizeOf(t.prize);
   const facts: Fact[] = [
@@ -164,103 +112,13 @@ export function TournamentFacts({
   );
 }
 
-function ChampionLine({ champion, runnerUp }: { champion: string; runnerUp?: string }) {
+function ChampionLine({ champion, runnerUp }: { champion: string; runnerUp?: string }): React.ReactElement {
   return (
     <>
       <span className="font-medium">{champion}</span>
       {runnerUp && <span className="text-muted-foreground"> d. {runnerUp}</span>}
     </>
   );
-}
-
-// A tile is a link, but it does not grey on hover: its border firms up.
-const TILE =
-  "flex w-full flex-col gap-2 rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring/50";
-
-/** The size, padding and gap of a day heading in `MatchesByDate`. */
-function SectionHeading({ children }: { children: ReactNode }) {
-  return (
-    <Eyebrow size="sm" asChild>
-      <h3 className="py-1">{children}</h3>
-    </Eyebrow>
-  );
-}
-
-function TileSection({
-  title,
-  action,
-  children,
-}: {
-  title: string;
-  /** At the end of the heading's line: the pill that brings in more. */
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <SectionHeading>{title}</SectionHeading>
-        {action}
-      </div>
-      {Children.count(children) > 0 && (
-        <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">{children}</div>
-      )}
-    </section>
-  );
-}
-
-/**
- * The heading over the tournament on now, and with two or more being played
- * (a week of tennis is three or four) a pill for each on its line, its
- * negative margins keeping the line as tall as the Rankings label beside it.
- * Under it on a phone.
- */
-function OnNowHeading({
-  tournament: t,
-  onNow,
-  onPick,
-  idle,
-}: {
-  tournament: RacquetTournament;
-  onNow: RacquetTournament[];
-  onPick?: (id: string) => void;
-  /** What the heading says while nothing is being played. */
-  idle: string;
-}) {
-  return (
-    <div className="flex flex-col gap-2 @md:flex-row @md:items-center @md:justify-between">
-      <SectionHeading>{t.status === "live" ? "On now" : idle}</SectionHeading>
-      {onNow.length > 1 && onPick && (
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          value={t.id}
-          onValueChange={(id) => id && onPick(id)}
-          aria-label="Tournaments on now"
-          className="@md:-my-1.5 @md:justify-end"
-        >
-          {onNow.map((o) => (
-            <ToggleGroupItem key={o.id} value={o.id} aria-label={o.name} className="h-6 rounded-full px-2.5">
-              {chipLabel(o, onNow)}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      )}
-    </div>
-  );
-}
-
-/**
- * The draw's three best seeds, among the players in its own rounds: the
- * tour's list of players spans every draw the page carries.
- */
-export function topSeeds(draw: RacquetDraw): Team[] {
-  const inDraw = new Set(draw.rounds.flatMap((r) => r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId])));
-  return draw.players
-    .filter((p) => inDraw.has(p.id) && /^\d+$/.test(p.code.trim()))
-    .sort((a, b) => Number(a.code) - Number(b.code))
-    .slice(0, 3);
 }
 
 /**
@@ -270,7 +128,15 @@ export function topSeeds(draw: RacquetDraw): Team[] {
  * no photo, the seed in its tooltip and for a screen reader. `onImage` sets
  * it over a poster.
  */
-export function TopSeeds({ seeds, variant, onImage = false }: { seeds: Team[]; variant: DrawVariant; onImage?: boolean }) {
+function TopSeeds({
+  seeds,
+  variant,
+  onImage = false,
+}: {
+  seeds: Team[];
+  variant: DrawVariant;
+  onImage?: boolean;
+}): React.ReactElement {
   return (
     <ol aria-label="Top seeds" className="flex shrink-0 items-start gap-2">
       {seeds.map((p) => {
@@ -307,12 +173,56 @@ export function TopSeeds({ seeds, variant, onImage = false }: { seeds: Team[]; v
   );
 }
 
-/** "Starts today", "Starts tomorrow", "Starts in 5 days" — by the reader's calendar day. */
-export function startsIn(startDate: string, today: string): string {
-  const days = Math.round((Date.parse(startDate) - Date.parse(today)) / 86_400_000);
-  if (days <= 0) return "Starts today";
-  if (days === 1) return "Starts tomorrow";
-  return `Starts in ${days} days`;
+/**
+ * A tournament's card: its poster where it has one, beside the content the
+ * card's whole height and flush with its edge (the card clips it to its
+ * corners), above it on a phone, with the draw's best seeds along its foot
+ * over a dark fade. With no poster, or one that fails to load, the seeds go
+ * to the content as `corner` to place. The poster comes off the provider's
+ * media host, unoptimized like `Portrait`'s faces.
+ *
+ * Key it by tournament where the tournament can change, or a failed poster
+ * is remembered for the next one.
+ */
+export function TournamentCard({
+  tournament: t,
+  seeds,
+  variant,
+  posterHeight,
+  children,
+}: {
+  tournament: RacquetTournament;
+  seeds: Team[];
+  variant: DrawVariant;
+  /** The poster's least height beside the content. */
+  posterHeight: "@2xl:min-h-64" | "@2xl:min-h-80";
+  children: (corner: ReactNode) => ReactNode;
+}): React.ReactElement {
+  const [posterGone, setPosterGone] = useState(false);
+  const poster = posterGone ? undefined : t.imageUrl;
+  const corner = seeds.length > 0 && !poster ? <TopSeeds seeds={seeds} variant={variant} /> : null;
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4 @2xl:flex-row @2xl:items-stretch @2xl:gap-6">
+        {poster && (
+          <span
+            className={cn(
+              "relative block aspect-video shrink-0 overflow-hidden rounded-lg bg-muted @2xl:-my-6 @2xl:-ml-6 @2xl:aspect-auto @2xl:w-2/5 @2xl:rounded-none",
+              posterHeight
+            )}
+          >
+            <Image src={poster} alt="" fill className="object-cover" unoptimized onError={() => setPosterGone(true)} />
+            {seeds.length > 0 && (
+              <span className="absolute inset-x-0 bottom-0 flex justify-end bg-linear-to-t from-black/80 to-transparent px-2 pt-6 pb-1.5">
+                <TopSeeds seeds={seeds} variant={variant} onImage />
+              </span>
+            )}
+          </span>
+        )}
+        {children(corner)}
+      </CardContent>
+    </Card>
+  );
 }
 
 /**
@@ -329,46 +239,22 @@ function FeaturedTournament({
   href,
 }: {
   tournament: RacquetTournament;
-  draw?: DrawState;
+  draw?: RacquetDraw;
   variant: DrawVariant;
   today: string;
   href: string;
-}) {
-  const ready = draw?.status === "ready" ? draw.draw : undefined;
-  const round = t.status === "live" && ready ? roundInPlay(ready.rounds) : undefined;
-  const seeds = ready ? topSeeds(ready) : [];
-  // On the poster where there is one (padel's), along its foot; else in the
-  // card's top right corner.
-  const [posterGone, setPosterGone] = useState(false);
-  const seedsOnPoster = Boolean(t.imageUrl) && !posterGone && seeds.length > 0;
+}): React.ReactElement {
+  const kind = kindOf(t);
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 @2xl:flex-row @2xl:items-stretch @2xl:gap-6">
-        {/* Beside the facts, the poster runs the card's whole height, flush
-            with its edge (the card clips it to its corners); above them on a
-            phone, the width of the card. */}
-        {t.imageUrl && (
-          <TournamentPoster
-            key={t.imageUrl}
-            src={t.imageUrl}
-            className="@2xl:-my-6 @2xl:-ml-6 @2xl:aspect-auto @2xl:min-h-80 @2xl:w-2/5 @2xl:rounded-none"
-            onFail={() => setPosterGone(true)}
-          >
-            {seedsOnPoster && (
-              <span className="absolute inset-x-0 bottom-0 flex justify-end bg-linear-to-t from-black/80 to-transparent px-2 pt-6 pb-1.5">
-                <TopSeeds seeds={seeds} variant={variant} onImage />
-              </span>
-            )}
-          </TournamentPoster>
-        )}
+    <TournamentCard tournament={t} seeds={draw ? topSeeds(draw) : []} variant={variant} posterHeight="@2xl:min-h-80">
+      {(corner) => (
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              {t.tier && <Badge variant="outline">{t.tier}</Badge>}
-              {t.surface && !t.tier && <Badge variant="outline">{t.surface}</Badge>}
+              {kind && <Badge variant="outline">{kind}</Badge>}
               <StatusPill status={t.status} />
             </div>
-            {seeds.length > 0 && !seedsOnPoster && <TopSeeds seeds={seeds} variant={variant} />}
+            {corner}
           </div>
           <Heading level="h3" as="h4">
             {t.name}
@@ -376,28 +262,71 @@ function FeaturedTournament({
           <TournamentFacts tournament={t} variant={variant} />
           {/* Holds a line's height either way, so the button does not jump. */}
           <Text as="p" weight="medium" className="min-h-6">
-            {t.status === "live" ? (round ? `${round.label} under way` : null) : startsIn(t.startDate, today)}
+            {playLine(t, draw?.rounds, today)}
           </Text>
           <div className="flex justify-end">
-            <Button variant="outline" size="sm" asChild>
-              <Link href={href} aria-label={`View details: ${t.name}`}>
-                View details
-                <ChevronRight data-icon="inline-end" />
-              </Link>
-            </Button>
+            <ViewDetailsLink href={href} name={t.name} />
           </div>
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </TournamentCard>
+  );
+}
+
+/**
+ * The heading over the tournament on now, and with two or more being played
+ * (a week of tennis is three or four) a pill for each on its line, its
+ * negative margins keeping the line as tall as the Rankings label beside it.
+ * Under it on a phone.
+ */
+function OnNowHeading({
+  tournament: t,
+  onNow,
+  onPick,
+}: {
+  tournament: RacquetTournament;
+  onNow: RacquetTournament[];
+  onPick: (id: string) => void;
+}): React.ReactElement {
+  return (
+    <div className="flex flex-col gap-2 @md:flex-row @md:items-center @md:justify-between">
+      <SectionHeading>{t.status === "live" ? "On now" : "Next up"}</SectionHeading>
+      {onNow.length > 1 && (
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={t.id}
+          onValueChange={(id) => id && onPick(id)}
+          aria-label="Tournaments on now"
+          className="@md:-my-1.5 @md:justify-end"
+        >
+          {onNow.map((o) => {
+            const label = chipLabel(o, onNow);
+            return (
+              <ToggleGroupItem
+                key={o.id}
+                value={o.id}
+                // The name a screen reader hears starts with the city on the pill.
+                aria-label={label === o.name ? undefined : `${label}, ${o.name}`}
+                className="h-6 rounded-full px-2.5"
+              >
+                {label}
+              </ToggleGroupItem>
+            );
+          })}
+        </ToggleGroup>
+      )}
+    </div>
   );
 }
 
 /** One tournament as a tile to its page: what, where, when — and who won, once somebody has. */
-function TournamentTile({ tournament: t, href }: { tournament: RacquetTournament; href: string }) {
+function TournamentTile({ tournament: t, href }: { tournament: RacquetTournament; href: string }): React.ReactElement {
   const place = placeOf(t);
-  const kind = t.tier ?? t.surface;
+  const kind = kindOf(t);
   return (
-    <Link href={href} data-tournament={t.id} className={TILE}>
+    <Link href={href} data-tournament={t.id} className={cn(TILE, "gap-2")}>
       <span className="flex w-full items-start justify-between gap-2">
         <span className="flex min-w-0 flex-col leading-tight">
           {kind && (
@@ -421,14 +350,15 @@ function TournamentTile({ tournament: t, href }: { tournament: RacquetTournament
       </span>
       {t.status === "completed" && t.champion ? (
         <span className="flex items-start gap-2 border-t pt-2 text-xs">
-          <Trophy className="mt-0.5 size-3.5 shrink-0 text-warning" aria-label="Champion" />
+          <Trophy aria-hidden className="mt-0.5 size-3.5 shrink-0 text-warning" />
           <span className="min-w-0">
+            <span className="sr-only">Champion: </span>
             <ChampionLine champion={t.champion} runnerUp={t.runnerUp} />
           </span>
         </span>
       ) : t.defendingChampion ? (
         <span className="flex items-start gap-2 border-t pt-2 text-xs text-muted-foreground">
-          <Shield className="mt-0.5 size-3.5 shrink-0" aria-label="Defending champion" />
+          <Shield aria-hidden className="mt-0.5 size-3.5 shrink-0" />
           <span className="min-w-0">{t.defendingChampion} defends the title</span>
         </span>
       ) : null}
@@ -444,9 +374,9 @@ function showNames(list: RacquetTournament[]): string {
 /**
  * The left of padel's and tennis's Overview, laid out as F1's races: the
  * tournament on now (a pill each when several are) or the next, big; every
- * tournament still to come after it; and the ones played — none until asked
- * for: "Earlier" on their line brings in three a tap, latest first, right
- * where it was tapped. Every tile opens the tournament's own page.
+ * tournament still to come after it; and the ones played, latest first,
+ * brought in from their heading (`useRevealEarlier`). Every tile opens the
+ * tournament's own page.
  *
  * Its own container, so the tiles follow the column's width. Each part opens
  * on a heading set like a day heading, which puts the first card level with
@@ -465,53 +395,23 @@ export function RacquetOverview({
   data: RacquetData;
   /** The tournament on now (the one picked, else the first) or the next. */
   featured: RacquetTournament | undefined;
-  /** Its draw, for the round under way. */
-  draw?: DrawState;
+  /** Its draw, for the round under way and the seeds. */
+  draw?: RacquetDraw;
   variant: DrawVariant;
   today: string;
   onNow: RacquetTournament[];
   onPick: (id: string) => void;
   /** A tournament's own page. */
   hrefFor: (id: string) => string;
-}) {
+}): React.ReactElement {
   const season = useMemo(() => seasonOf(data), [data]);
   // Every one still to start; those being played are the pills on the heading.
   const ahead = season.filter((t) => t.status === "upcoming" && t.id !== featured?.id);
-  const played = useMemo(
-    () => season.filter((t) => t.status === "completed").sort((a, b) => b.endDate.localeCompare(a.endDate)),
-    [season]
-  );
-
-  // The tournaments played that are shown. None while there is one to come;
-  // once the season is over they are all there is, so it opens on the last few.
-  const [shownEarlier, setShownEarlier] = useState(featured ? 0 : EARLIER_STEP);
-  const listRef = useRef<HTMLDivElement>(null);
-  const added = useRef<string[] | null>(null);
-  const earlier = played.slice(0, shownEarlier);
-  const nextEarlier = played.slice(earlier.length, earlier.length + EARLIER_STEP);
-
-  // The new tiles are in under the ones shown: they fade in, and the focus
-  // stays on the pill for more, or goes to the first of them once there is
-  // nothing older.
-  useLayoutEffect(() => {
-    const ids = added.current;
-    const root = listRef.current;
-    added.current = null;
-    if (!ids || !root) return;
-    const tiles = ids
-      .map((id) => root.querySelector<HTMLElement>(`[data-tournament="${id}"]`))
-      .filter((t): t is HTMLElement => t !== null);
-    const pill = root.querySelector<HTMLElement>("[data-reveal]");
-    (pill ?? tiles[0])?.focus({ preventScroll: true });
-    tiles.forEach((tile, i) => fadeIn(tile, i * 40));
-  }, [shownEarlier]);
-
-  const revealEarlier = (): void => {
-    if (!listRef.current) return;
-    holdScrollStill(listRef.current);
-    added.current = nextEarlier.map((t) => t.id);
-    setShownEarlier(shownEarlier + EARLIER_STEP);
-  };
+  const played = useMemo(() => justFinished(season, season.length), [season]);
+  const { listRef, earlier, next, reveal } = useRevealEarlier(played, {
+    open: !featured,
+    attr: "data-tournament",
+  });
 
   if (season.length === 0) {
     return <EmptyState icon={CalendarDays} title="No tournaments on the calendar for this tour." />;
@@ -522,8 +422,9 @@ export function RacquetOverview({
       <section className="flex flex-col gap-2">
         {featured ? (
           <>
-            <OnNowHeading tournament={featured} onNow={onNow} onPick={onPick} idle="Next up" />
+            <OnNowHeading tournament={featured} onNow={onNow} onPick={onPick} />
             <FeaturedTournament
+              key={featured.id}
               tournament={featured}
               draw={draw}
               variant={variant}
@@ -554,17 +455,7 @@ export function RacquetOverview({
       {played.length > 0 && (
         <TileSection
           title="Earlier tournaments"
-          action={
-            nextEarlier.length > 0 && (
-              <RevealPill
-                icon={History}
-                label="Earlier"
-                detail={showNames(nextEarlier)}
-                data-reveal
-                onClick={revealEarlier}
-              />
-            )
-          }
+          action={next.length > 0 && <EarlierPill detail={showNames(next)} onClick={reveal} />}
         >
           {earlier.map((t) => (
             <TournamentTile key={t.id} tournament={t} href={hrefFor(t.id)} />

@@ -79,7 +79,7 @@ export type DashboardSportCard = {
   /** Racquet sports have tournaments rather than matches on the dashboard. */
   event?: { name: string; detail: string; status: "live" | "upcoming" | "completed" };
   matches: DashboardMatch[];
-  /** More than one shows as a toggle (East / West, ATP / WTA). */
+  /** More than one shows as a toggle (East / West, AFC / NFC). */
   tables: DashboardTable[];
   /**
    * In place of a table the sport has none of yet: the NBA's last champion
@@ -231,6 +231,8 @@ export type BracketMatch = {
   awayScore?: number | null;
   aggregateHome?: number | null;
   aggregateAway?: number | null;
+  /** A shoot-out, kept apart from the score it settled. */
+  penalties?: { home: number; away: number };
   winnerTeamId?: string | null;
   /** ISO date for the decisive match. */
   date?: string;
@@ -580,7 +582,7 @@ export type RacquetTournament = {
 
 /** One line of a tour's season calendar: no draw, just enough to list it and open it. */
 export type RacquetCalendarEntry = {
-  /** The same id the tour's `tournaments` use, so a calendar row opens the same sheet. */
+  /** The same id the tour's `tournaments` use, so a calendar row opens the same page. */
   id: string;
   name: string;
   /** Calendar days, `YYYY-MM-DD`. */
@@ -590,7 +592,7 @@ export type RacquetCalendarEntry = {
   champion?: string;
 };
 
-/** One tournament's draw as the details sheet loads it. */
+/** One tournament's draw, as its page or the hub reads it. */
 export type RacquetDraw = {
   tournamentId: string;
   rounds: BracketRound[];
@@ -621,6 +623,23 @@ export type RacquetData = {
    */
   drawPlayers?: Team[];
 };
+
+/** The sports drawn as racquet tours. */
+export type RacquetSport = Extract<SportId, "padel" | "tennis">;
+
+/** Singles players with a flag and a seed, or padel pairs: two names, a seed, no flag. */
+export type DrawVariant = "player" | "pair";
+
+/** Where one tournament's draw stands. */
+export type DrawState =
+  /** Upcoming, and too far off for a draw to exist. */
+  | { status: "pending" }
+  | { status: "loading" }
+  /** The provider did not answer; worth another try. */
+  | { status: "error" }
+  /** No provider knows this id — a fixture tournament, while the feed is down. */
+  | { status: "unavailable" }
+  | { status: "ready"; draw: RacquetDraw };
 
 export type TennisData = {
   atp: RacquetData;
@@ -667,10 +686,19 @@ export type NflData = {
 
 // ---------- League of Legends ----------
 
+/** The four regional leagues: each has splits of its own, read on demand. */
+export const LOL_LEAGUE_REGIONS = ["lec", "lcs", "lck", "lpl"] as const;
+
+export type LolLeagueRegion = (typeof LOL_LEAGUE_REGIONS)[number];
+
 /** The four regional leagues, plus the international events while they run. */
-export const LOL_REGIONS = ["lec", "lcs", "lck", "lpl", "worlds", "msi", "first-stand"] as const;
+export const LOL_REGIONS = [...LOL_LEAGUE_REGIONS, "worlds", "msi", "first-stand"] as const;
 
 export type LolRegion = (typeof LOL_REGIONS)[number];
+
+export function isLolLeague(region: LolRegion): region is LolLeagueRegion {
+  return (LOL_LEAGUE_REGIONS as readonly string[]).includes(region);
+}
 
 export type LolStanding = {
   position: number;

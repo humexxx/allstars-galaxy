@@ -15,7 +15,14 @@ import { Mono, Text } from "@/components/ui/typography";
 import { tournamentPath } from "@/lib/sports/paths";
 import { currentTournament, drawIsOut, featuredTournament, seasonOf } from "@/lib/sports/racquet";
 import { cn } from "@/lib/utils";
-import type { NewsStory, RacquetData, RacquetTournament } from "@/types/sports";
+import type {
+  DrawState,
+  DrawVariant,
+  NewsStory,
+  RacquetData,
+  RacquetSport,
+  RacquetTournament,
+} from "@/types/sports";
 
 import { NewsTab } from "../shared/news-list";
 import { OverviewSplit } from "../shared/overview-split";
@@ -24,7 +31,7 @@ import { SportShell } from "../shared/sport-shell";
 import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportsTh, TableCard } from "../shared/table-primitives";
 import { useSportsToday } from "../shared/time-zone-context";
-import { useRacquetDraws, type DrawState, type DrawVariant, type RacquetSport } from "./racquet-draw";
+import { useRacquetDraws } from "./racquet-draw";
 import { RacquetOverview } from "./racquet-tournaments";
 
 type RacquetViewProps = {
@@ -112,7 +119,7 @@ export function RacquetView({ sport, emoji, title, subtitle, data, news, initial
               <RacquetOverview
                 data={data}
                 featured={featured}
-                draw={featured && featured.id === current?.id ? currentDraw : undefined}
+                draw={featured && featured.id === current?.id && currentDraw?.status === "ready" ? currentDraw.draw : undefined}
                 variant={variant}
                 today={today}
                 onNow={onNow}

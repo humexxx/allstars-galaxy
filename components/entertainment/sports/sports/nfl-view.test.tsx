@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
 
 import { NFL_DATA } from "@/lib/data/sports/nfl";
+import type { NflData } from "@/types/sports";
 
 import { NflView } from "./nfl-view";
 
@@ -23,6 +26,33 @@ describe("NflView", () => {
     expect(standings.parentElement).toHaveClass("@4xl:grid-cols-[2fr_1fr]");
     expect(standings).toHaveClass("@4xl:sticky");
     expect(within(standings).getByRole("group", { name: "Conference" })).toBeInTheDocument();
-    expect(within(standings).getByRole("table")).toBeInTheDocument();
+    expect(within(standings).getByRole("table", { name: "AFC standings" })).toBeInTheDocument();
+  });
+
+  it("names the table by the conference shown, each row by its team, and spells out W, L and T", () => {
+    render(<NflView data={{ ...NFL_DATA, playoffs: [] }} />);
+    const afc = screen.getByRole("table", { name: "AFC standings" });
+    expect(within(afc).getAllByRole("rowheader")[0]).toHaveTextContent("Bills");
+    for (const [name, letter] of [["Wins", "W"], ["Losses", "L"], ["Ties", "T"]]) {
+      expect(within(afc).getByRole("columnheader", { name })).toHaveTextContent(letter);
+    }
+
+    fireEvent.click(screen.getByRole("radio", { name: "NFC" }));
+    expect(screen.getByRole("table", { name: "NFC standings" })).toBeInTheDocument();
+  });
+
+  it("keeps the Playoffs locked while the bracket has nobody in it, and opens on it once it has", () => {
+    const [home, away] = NFL_DATA.teams;
+    const round = (homeTeamId: string | null, awayTeamId: string | null): NflData["playoffs"] => [
+      { id: "final", label: "Super Bowl", matches: [{ id: "sb", homeTeamId, awayTeamId }] },
+    ];
+    const { unmount } = render(<NflView data={{ ...NFL_DATA, playoffs: round(null, null) }} />);
+    expect(screen.getByRole("tab", { name: "Playoffs" })).toBeDisabled();
+    unmount();
+
+    render(<NflView data={{ ...NFL_DATA, playoffs: round(home.id, away.id) }} />);
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("Playoffs");
+    expect(screen.getByText("Super Bowl")).toBeInTheDocument();
   });
 });
+

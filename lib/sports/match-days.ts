@@ -10,13 +10,19 @@ export function matchDay(kickoff: string, timeZone: string): string {
 
 /**
  * Matches by the reader's calendar day, oldest day first and each day in
- * kickoff order, optionally only one team's. A late kickoff in UTC is the
- * evening before west of Greenwich, so the day is the reader's, not UTC's.
+ * kickoff order, optionally only those of some teams (no teams: all). A late
+ * kickoff in UTC is the evening before west of Greenwich, so the day is the
+ * reader's, not UTC's.
  */
-export function matchDays(matches: Match[], timeZone: string, teamId?: string | null): MatchDay[] {
-  const shown = teamId
-    ? matches.filter((m) => m.homeTeamId === teamId || m.awayTeamId === teamId)
-    : matches;
+export function matchDays(
+  matches: Match[],
+  timeZone: string,
+  teamIds?: ReadonlySet<string> | null
+): MatchDay[] {
+  const shown =
+    teamIds && teamIds.size > 0
+      ? matches.filter((m) => teamIds.has(m.homeTeamId) || teamIds.has(m.awayTeamId))
+      : matches;
   const sorted = [...shown].sort(
     (a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime()
   );

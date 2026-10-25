@@ -1,24 +1,27 @@
 "use client";
 
-import type { TennisData } from "@/types/sports";
+import { tourLine } from "@/lib/sports/racquet";
+import type { NewsStory, TennisData } from "@/types/sports";
 
 import { RacquetView } from "./racquet-view";
 
 type TennisViewProps = {
   data: TennisData;
+  /** The ATP's news, ESPN's. */
+  news?: NewsStory[];
+  /** `?tab=news` opens on the news. */
+  initialTab?: string;
 };
 
-export function TennisView({ data }: TennisViewProps) {
+export function TennisView({ data, news, initialTab }: TennisViewProps): React.ReactElement {
   return (
     <RacquetView
       sport="tennis"
-      emoji="🎾"
       title="Tennis"
-      subtitle={`Season ${data.atp.season}`}
-      tours={[
-        { value: "atp", label: "ATP", data: data.atp },
-        { value: "wta", label: "WTA", data: data.wta },
-      ]}
+      subtitle={tourLine("tennis", data.atp.season)}
+      data={data.atp}
+      news={news}
+      initialTab={initialTab}
     />
   );
 }

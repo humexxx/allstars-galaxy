@@ -1,35 +1,37 @@
+"use client";
+
 import {
   Table,
   TableBody,
   TableCell,
+  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Mono } from "@/components/ui/typography";
+import { Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import type { Standing, Team } from "@/types/sports";
+import type { FootballLeagueId, Standing, StandingBand, Team } from "@/types/sports";
 
-import { Last5Form } from "./last-5-form";
+import { ShowMoreRows, useShownRows } from "./show-more";
 import { SportsTh, TableCellNum } from "./table-primitives";
 import { TeamBadge } from "./team-badge";
+import { usePickTeam } from "./team-filter-context";
+import { TeamPick } from "./team-pick";
+
+type Zone = NonNullable<StandingBand>;
 
 type StandingsTableProps = {
   standings: Standing[];
   teams: Map<string, Team>;
-  /** Show the form column when the data set carries it. */
-  showForm?: boolean;
-  /**
-   * `compact` keeps only #, club, played, goal difference and points — for a
-   * side column (the football overview), where the full table was clipped
-   * before it ever reached the points.
-   */
-  variant?: "full" | "compact";
-  className?: string;
+  /** Names its zones: a band leads somewhere different in each competition. */
+  competition: FootballLeagueId;
+  /** The table's accessible name: the league, the group. */
+  label?: string;
 };
 
 // Qualification bands are categories, not states: the first two take the
 // categorical chart slots in order; the rest keep their status meaning.
-const BAND_STYLES: Record<string, string> = {
+const BAND_STYLES: Record<Zone, string> = {
   champions: "bg-chart-1",
   europa: "bg-chart-2",
   conference: "bg-success",
@@ -37,108 +39,125 @@ const BAND_STYLES: Record<string, string> = {
   relegation: "bg-destructive",
 };
 
-// Narrow on a phone: seven 48px stat columns pushed Pts — the one column
-// everybody reads — off the right edge of a 390px screen.
+const DOMESTIC_ZONES: Partial<Record<Zone, string>> = {
+  champions: "Champions League",
+  europa: "Europa League",
+  conference: "Conference League",
+  relegation: "Relegation",
+};
+
+// "champions" is the Champions League from a league, but the next round from
+// the UCL's league phase or a World Cup group (`ZONE_BAND_DEFAULTS`).
+const ZONE_LABELS: Record<FootballLeagueId, Partial<Record<Zone, string>>> = {
+  "premier-league": DOMESTIC_ZONES,
+  "la-liga": DOMESTIC_ZONES,
+  "serie-a": DOMESTIC_ZONES,
+  "uefa-champions-league": { champions: "Round of 16", playoff: "Knockout play-off" },
+  "world-cup": { champions: "Round of 32", playoff: "Best third places" },
+};
+
+// Narrow on a phone, so the club's name keeps the room and Pts — the one
+// column everybody reads — never leaves the right edge of a 390px screen.
 const NUM_TH = "w-8 px-1 text-center sm:w-12 sm:px-2";
 const NUM_TD = "px-1 sm:px-2";
-/** Goals for/against: the first thing a phone can do without. */
-const WIDE_ONLY = "hidden sm:table-cell";
 
+/**
+ * A league or group table cut to #, club, played, goal difference and points:
+ * it sits in a side column (the football overview, a World Cup group), where
+ * a full table was clipped before it ever reached the points.
+ *
+ * A row's zone is a coloured stripe, so it is also named: in the position cell
+ * for a screen reader, and in a key under the table for the eye.
+ */
 export function StandingsTable({
   standings,
   teams,
-  showForm = true,
-  variant = "full",
-  className,
-}: StandingsTableProps) {
-  const compact = variant === "compact";
-  const hasForm = !compact && showForm && standings.some((s) => s.form && s.form.length > 0);
-
+  competition,
+  label,
+}: StandingsTableProps): React.ReactElement {
+  const rows = useShownRows(standings);
+  // A team's name is what a tap picks, with its own hover: the row keeps still.
+  const pickable = usePickTeam() !== null;
+  const zoneLabels = ZONE_LABELS[competition];
+  const zones = [...new Set(rows.shown.map((row) => row.band))].filter(
+    (band): band is Zone => !!band && !!zoneLabels[band]
+  );
+  // No frame or scroller of its own: callers sit it flush in a TableCard,
+  // and `Table` already scrolls. A second scroller broke horizontal swipes.
   return (
-    // No frame or scroller of its own: callers sit it flush in a TableCard,
-    // and `Table` already scrolls. A second scroller broke horizontal swipes.
-    <Table className={className}>
-      <TableHeader>
-        <TableRow className="bg-muted/40 hover:bg-muted/40">
-          <SportsTh className="w-8 pl-3">#</SportsTh>
-          <SportsTh>Club</SportsTh>
-          <SportsTh className={NUM_TH}>
-            <abbr title="Matches played" className="no-underline">MP</abbr>
-          </SportsTh>
-          {!compact && (
-            <>
-              <SportsTh className={NUM_TH}>W</SportsTh>
-              <SportsTh className={NUM_TH}>D</SportsTh>
-              <SportsTh className={NUM_TH}>L</SportsTh>
-              <SportsTh className={cn(NUM_TH, WIDE_ONLY)}>GF</SportsTh>
-              <SportsTh className={cn(NUM_TH, WIDE_ONLY)}>GA</SportsTh>
-            </>
-          )}
-          <SportsTh className={NUM_TH}>
-            <abbr title="Goal difference" className="no-underline">GD</abbr>
-          </SportsTh>
-          <SportsTh className="w-10 px-1 text-center text-foreground sm:w-14 sm:px-2">Pts</SportsTh>
-          {hasForm && (
-            // Five chips are wider than the rest of a tablet's table.
-            <SportsTh className="hidden text-center lg:table-cell">Last 5</SportsTh>
-          )}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {standings.map((row) => {
-          const team = teams.get(row.teamId);
-          const goalDiff = row.goalsFor - row.goalsAgainst;
-          const bandClass = row.band ? BAND_STYLES[row.band] : null;
-          return (
-            <TableRow key={row.teamId} className="relative">
-              <TableCell className="relative pl-3 text-sm tabular-nums text-muted-foreground">
-                {bandClass && (
-                  <span
-                    aria-hidden
-                    className={cn("absolute inset-y-1 left-0 w-1 rounded-r-sm", bandClass)}
-                  />
-                )}
-                {row.position}
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  {team && <TeamBadge team={team} size="sm" />}
-                  <span className="truncate">{team?.shortName ?? row.teamId}</span>
-                </div>
-              </TableCell>
-              <TableCellNum value={row.played} className={NUM_TD} />
-              {!compact && (
-                <>
-                  <TableCellNum value={row.won} className={NUM_TD} />
-                  <TableCellNum value={row.drawn} className={NUM_TD} />
-                  <TableCellNum value={row.lost} className={NUM_TD} />
-                  <TableCellNum value={row.goalsFor} className={cn(NUM_TD, WIDE_ONLY)} />
-                  <TableCellNum value={row.goalsAgainst} className={cn(NUM_TD, WIDE_ONLY)} />
-                </>
-              )}
-              <TableCellNum
-                value={`${goalDiff > 0 ? "+" : ""}${goalDiff}`}
-                className={cn(NUM_TD, goalDiff >= 0 ? "text-foreground" : "text-destructive")}
-              />
-              <TableCell className="px-1 text-center sm:px-2">
-                <Mono className="text-sm font-semibold tabular-nums">{row.points}</Mono>
-              </TableCell>
-              {hasForm && (
-                <TableCell className="hidden text-center lg:table-cell">
-                  {row.form && row.form.length > 0 ? (
-                    <Last5Form
-                      results={row.form}
-                      className="justify-center"
+    <>
+      <Table aria-label={label}>
+        <TableHeader>
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
+            <SportsTh className="w-8 pl-3" label="Position">
+              #
+            </SportsTh>
+            <SportsTh>Club</SportsTh>
+            <SportsTh className={NUM_TH} label="Matches played">
+              <abbr title="Matches played" className="no-underline">MP</abbr>
+            </SportsTh>
+            <SportsTh className={NUM_TH} label="Goal difference">
+              <abbr title="Goal difference" className="no-underline">GD</abbr>
+            </SportsTh>
+            <SportsTh className="w-10 px-1 text-center text-foreground sm:w-14 sm:px-2" label="Points">
+              Pts
+            </SportsTh>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.shown.map((row) => {
+            const team = teams.get(row.teamId);
+            const goalDiff = row.goalsFor - row.goalsAgainst;
+            const zoneLabel = row.band ? zoneLabels[row.band] : undefined;
+            return (
+              <TableRow key={row.teamId} className={cn("relative", pickable && "hover:bg-transparent")}>
+                <TableCell className="relative pl-3 text-sm tabular-nums text-muted-foreground">
+                  {row.band && (
+                    <span
+                      aria-hidden
+                      className={cn("absolute inset-y-1 left-0 w-1 rounded-r-sm", BAND_STYLES[row.band])}
                     />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
                   )}
+                  {row.position}
+                  {zoneLabel && <span className="sr-only">, {zoneLabel}</span>}
                 </TableCell>
-              )}
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+                {/* The row's header, so a cell down the Pts column is read with its club. */}
+                <TableHead scope="row" className="h-auto py-2 font-normal text-foreground">
+                  {team ? (
+                    <TeamPick team={team}>
+                      <TeamBadge team={team} size="sm" />
+                      <span className="truncate">{team.shortName}</span>
+                    </TeamPick>
+                  ) : (
+                    row.teamId
+                  )}
+                </TableHead>
+                <TableCellNum value={row.played} className={NUM_TD} />
+                <TableCellNum
+                  value={`${goalDiff > 0 ? "+" : ""}${goalDiff}`}
+                  className={cn(NUM_TD, goalDiff >= 0 ? "text-foreground" : "text-destructive")}
+                />
+                <TableCell className="px-1 text-center sm:px-2">
+                  <Mono className="text-sm font-semibold tabular-nums">{row.points}</Mono>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+      <ShowMoreRows rows={rows} className="border-t py-1" />
+      {zones.length > 0 && (
+        <ul role="list" aria-label="Key" className="flex flex-wrap gap-x-3 gap-y-1 border-t px-3 py-2">
+          {zones.map((zone) => (
+            <li key={zone} className="flex items-center gap-1.5">
+              <span aria-hidden className={cn("h-3 w-1 rounded-sm", BAND_STYLES[zone])} />
+              <Text variant="small" as="span">
+                {zoneLabels[zone]}
+              </Text>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }

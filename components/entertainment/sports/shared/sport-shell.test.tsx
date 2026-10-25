@@ -3,21 +3,27 @@ import type { ReactNode } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { SportBarEnd, SportShell } from "./sport-shell";
+import { SportHubControls, SportShell } from "./sport-shell";
 
+/**
+ * `hub`, when given, is what the sports hub sets at the end of the name row;
+ * `menu`, the competitions the title switches to.
+ */
 function renderShell(
   defaultValue = "overview",
-  overview: ReactNode = "Matches"
+  hub?: ReactNode,
+  menu?: ReactNode
 ): ReturnType<typeof render> {
-  return render(
+  const shell = (
     <Tabs defaultValue={defaultValue}>
       <SportShell
         emoji="⚽"
         title="UEFA Champions League"
         subtitle="Europe · Season 2026"
-        controls={<button type="button">League</button>}
+        titleMenu={menu}
         tabs={
           <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -25,15 +31,28 @@ function renderShell(
           </TabsList>
         }
       >
-        <TabsContent value="overview">{overview}</TabsContent>
+        <TabsContent value="overview">Matches</TabsContent>
         <TabsContent value="knockout">Bracket</TabsContent>
       </SportShell>
     </Tabs>
+  );
+  return render(
+    hub ? <SportHubControls.Provider value={hub}>{shell}</SportHubControls.Provider> : shell
   );
 }
 
 /** The sticky row the tablist sits in (through its sideways scroller). */
 const tabsRow = (): HTMLElement => screen.getByRole("tablist").closest<HTMLElement>(".sticky")!;
+
+/** The row with the h1, which scrolls away above the tabs row. */
+const nameRow = (): HTMLElement => tabsRow().previousElementSibling as HTMLElement;
+
+const HUB = (
+  <>
+    <button type="button">Manage favorites (2)</button>
+    <button type="button">⚽ Football, change sport</button>
+  </>
+);
 
 const rect = (top: number, bottom: number): DOMRect =>
   ({ top, bottom, left: 0, right: 0, width: 0, height: bottom - top, x: 0, y: top }) as DOMRect;
@@ -70,18 +89,37 @@ afterEach(() => {
 });
 
 describe("SportShell", () => {
+  it("leads with the sport's emoji from the registry, unless the view brings its own", () => {
+    const { unmount } = render(
+      <SportShell sportId="padel" title="Padel">
+        <div />
+      </SportShell>
+    );
+    expect(screen.getByText("🏓")).toBeInTheDocument();
+    unmount();
+
+    render(
+      <SportShell sportId="football" emoji="🏆" title="World Cup">
+        <div />
+      </SportShell>
+    );
+    expect(screen.getByText("🏆")).toBeInTheDocument();
+    expect(screen.queryByText("⚽")).toBeNull();
+  });
+
   it("names the page: the competition is the one h1", () => {
     renderShell();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("UEFA Champions League");
     expect(screen.getByText("Europe · Season 2026")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "League" })).toBeInTheDocument();
   });
 
   it("keeps the tabs in a sticky row of their own, clear of the app header", () => {
     renderShell();
     const row = tabsRow();
     expect(row).toHaveClass("sticky", "top-14", "md:top-0", "bg-background", "border-b");
+    // What globals.css keys the content's scroll margin on, so focus is not left under the bar.
+    expect(row).toHaveAttribute("data-sport-tabs");
     // The name is a row above it, which scrolls away.
     expect(row.contains(screen.getByRole("heading", { level: 1 }))).toBe(false);
   });
@@ -95,33 +133,62 @@ describe("SportShell", () => {
     expect(scroller).toHaveClass("min-w-0", "overflow-x-auto", "overflow-y-hidden");
   });
 
-  it("puts a tab's own control at the end of the tabs row, and takes it away with the tab", () => {
-    renderShell(
-      "overview",
-      <>
-        <SportBarEnd>
-          <button type="button">Filter</button>
-        </SportBarEnd>
-        Matches
-      </>
-    );
-    const filter = screen.getByRole("button", { name: "Filter" });
-    expect(tabsRow()).toContainElement(filter);
-    expect(tabsRow().lastElementChild).toContainElement(filter);
-    expect(screen.getByRole("tabpanel")).not.toContainElement(filter);
+  it("makes the title the competitions' menu, in the heading's own type", () => {
+    renderShell("overview", undefined, <DropdownMenuItem>LaLiga</DropdownMenuItem>);
+    const heading = screen.getByRole("heading", { level: 1, name: "UEFA Champions League" });
+    const title = within(heading).getByRole("button", { name: "UEFA Champions League" });
+    expect(title).toHaveAttribute("aria-haspopup", "menu");
+    // The stuck bar is the tabs alone.
+    expect(within(tabsRow()).queryAllByRole("button")).toHaveLength(0);
 
-    pick("Knockout");
-
-    expect(screen.queryByRole("button", { name: "Filter" })).toBeNull();
-    expect(tabsRow().lastElementChild).toBeEmptyDOMElement();
+    // Radix opens its menu on pointerdown, which jsdom's clicks lack; Enter opens it too.
+    fireEvent.keyDown(title, { key: "Enter" });
+    expect(within(screen.getByRole("menu")).getByRole("menuitem", { name: "LaLiga" })).toBeInTheDocument();
   });
 
-  it("reads top to bottom: the name and its controls, then the tabs", () => {
+  it("pulls the heading out by the title button's padding, so the button is never capped short of the name", () => {
+    renderShell("overview", undefined, <DropdownMenuItem>LaLiga</DropdownMenuItem>);
+    const heading = screen.getByRole("heading", { level: 1 });
+    const title = within(heading).getByRole("button");
+    expect(heading).toHaveClass("-mx-2");
+    expect(title).toHaveClass("px-2", "max-w-full");
+    expect(title).not.toHaveClass("-mx-2");
+  });
+
+  it("draws the title button's focus ring at full strength", () => {
+    renderShell("overview", undefined, <DropdownMenuItem>LaLiga</DropdownMenuItem>);
+    const title = within(screen.getByRole("heading", { level: 1 })).getByRole("button");
+    expect(title).toHaveClass("focus-visible:ring-2", "focus-visible:ring-ring");
+    expect(title).not.toHaveClass("focus-visible:ring-ring/50");
+  });
+
+  it("keeps a title with nothing to switch to as plain text", () => {
     renderShell();
-    const tablist = screen.getByRole("tablist");
-    const league = screen.getByRole("button", { name: "League" });
-    expect(league.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(tabsRow().contains(league)).toBe(false);
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(within(heading).queryByRole("button")).toBeNull();
+    expect(heading).not.toHaveClass("-mx-2");
+  });
+
+  it("sets the hub's favourites and sport picker at the end of the name row", () => {
+    renderShell("overview", HUB);
+    const favorites = screen.getByRole("button", { name: "Manage favorites (2)" });
+    const sport = screen.getByRole("button", { name: "⚽ Football, change sport" });
+    const end = nameRow().lastElementChild!;
+    expect(end).toContainElement(favorites);
+    expect(end).toContainElement(sport);
+    expect(end).not.toContainElement(screen.getByRole("heading", { level: 1 }));
+    // Favourites first, then the sport.
+    expect(favorites.compareDocumentPosition(sport) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // They scroll away with the name.
+    expect(tabsRow()).not.toContainElement(favorites);
+    expect(tabsRow()).not.toContainElement(sport);
+  });
+
+  it("leaves the name row to the name outside the hub", () => {
+    renderShell();
+    expect(nameRow().children).toHaveLength(1);
+    expect(within(nameRow()).queryAllByRole("button")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: /change sport/ })).toBeNull();
   });
 
   it("puts a small copy of the name in the tabs row once the name has scrolled away", () => {

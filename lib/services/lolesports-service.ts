@@ -3,6 +3,7 @@ import "server-only";
 import { LOL_DATA } from "@/lib/data/sports/lol";
 import { orderMatchesForDisplay } from "@/lib/sports/match-order";
 import type {
+  BracketLink,
   BracketMatch,
   BracketRound,
   BracketRoundId,
@@ -32,9 +33,9 @@ const REVALIDATE_SECONDS = 300;
 type TargetLeague = { slug: string; region: LolRegion; international?: boolean };
 
 /**
- * The leagues on the strip. Worlds was not on it at all, so October showed
- * September's finals. Which one leads is `orderSplits`' call; this order only
- * breaks its ties.
+ * The leagues the region picker offers. Worlds was not among them at all,
+ * so October showed September's finals. Which one leads is `orderSplits`'
+ * call; this order only breaks its ties.
  */
 const TARGET_LEAGUES: TargetLeague[] = [
   { slug: "worlds", region: "worlds", international: true },
@@ -80,11 +81,26 @@ type LolesportsTournament = {
   endDate: string;
 };
 
-/** A league's tournament on now (or last played), and the next one it lists. */
+/** A league's tournament on now (or last played), its season so far, and the next one it lists. */
 type LeagueTournaments = {
   current: LolesportsTournament | null;
+  /** The season's tournaments that have started, first first; the current one among them. */
+  season: LolesportsTournament[];
   next: LolesportsTournament | null;
 };
+
+/** The tournaments of `current`'s year that have started, in order. */
+function seasonSoFar(
+  tournaments: LolesportsTournament[],
+  current: LolesportsTournament | null,
+  today = todayIso(),
+): LolesportsTournament[] {
+  if (!current) return [];
+  const year = current.startDate.slice(0, 4);
+  return tournaments
+    .filter((t) => t.startDate.slice(0, 4) === year && t.startDate <= today)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
 
 type LolesportsTeamRef = {
   name: string;
@@ -268,8 +284,10 @@ async function getLeagueTournaments(leagueId: string, today: string): Promise<Le
     data: { leagues: Array<{ tournaments: LolesportsTournament[] }> };
   }>(`/getTournamentsForLeague?leagueId=${leagueId}`);
   const tournaments = data.data.leagues[0]?.tournaments ?? [];
+  const current = pickActiveTournament(tournaments, today);
   return {
-    current: pickActiveTournament(tournaments, today),
+    current,
+    season: seasonSoFar(tournaments, current, today),
     next: pickNextTournament(tournaments, today),
   };
 }
@@ -290,7 +308,11 @@ const REGULAR_STAGE_SLUGS = new Set([
  */
 function isBracketStage(slug: string | undefined): boolean {
   if (REGULAR_STAGE_SLUGS.has(slug ?? "")) return false;
-  return !/play[-_]?ins?/.test(slug ?? "");
+  return !isPlayInStage(slug);
+}
+
+function isPlayInStage(slug: string | undefined): boolean {
+  return /play[-_]?ins?/.test(slug ?? "");
 }
 
 const ROUND_BY_TBD: Record<number, { id: BracketRoundId; label: string }> = {
@@ -471,6 +493,106 @@ function findChampion(playoffs: BracketRound[] | undefined): LolChampion | null 
   const wins = final.winnerTeamId === final.homeTeamId ? final.homeScore : final.awayScore;
   if ((wins ?? 0) < Math.ceil((final.bestOf ?? 5) / 2)) return null;
   return { teamId: final.winnerTeamId, final };
+}
+
+/** Rounds that are a plain knockout: each halving into the next, down to one final. */
+function isKnockoutTree(rounds: BracketRound[]): boolean {
+  return (
+    rounds.length > 0 &&
+    rounds[rounds.length - 1].matches.length === 1 &&
+    rounds.every((r, i) => i === rounds.length - 1 || r.matches.length === rounds[i + 1].matches.length * 2)
+  );
+}
+
+/** A team plays twice in one of them: several rounds the schedule did not tell apart. */
+function mixesRounds(rounds: BracketRound[]): boolean {
+  return rounds.some((round) => {
+    const seen = new Set<string>();
+    return round.matches.some((m) =>
+      [m.homeTeamId, m.awayTeamId].some((id) => {
+        if (!id) return false;
+        if (seen.has(id)) return true;
+        seen.add(id);
+        return false;
+      }),
+    );
+  });
+}
+
+/**
+ * A stage the schedule does not split into rounds — MSI's double elimination
+ * is one "Knockouts" block of thirteen and the final, its play-ins one block
+ * of six — laid out by where its teams went, since the API links no match to
+ * the ones feeding it. In the order they were played, each match sits one
+ * column after the later of its teams' previous matches; one between two
+ * teams that have both lost before is the lower bracket's; and each winner's
+ * next match is linked to the one it won. A last column of one match is the
+ * final.
+ */
+function flowBracket(
+  matches: LolesportsStandingsMatch[],
+  schedule: Map<string, ScheduledMatch>,
+): { rounds: BracketRound[]; links: BracketLink[] } {
+  const inOrder = matches
+    .map((m, index) => {
+      const match = toBracketMatch(m, `flow-${index}`);
+      return { match, index, at: schedule.get(match.id)?.date ?? "" };
+    })
+    .sort((a, b) => a.at.localeCompare(b.at) || a.index - b.index);
+
+  const column = new Map<string, number>();
+  const previous = new Map<string, { id: string; won: boolean }>();
+  const losses = new Map<string, number>();
+  const links: BracketLink[] = [];
+  const placed: Array<{ match: BracketMatch; column: number }> = [];
+  let deepest = 0;
+  for (const { match } of inOrder) {
+    const teams = [match.homeTeamId, match.awayTeamId].filter((id): id is string => Boolean(id));
+    const before = teams.flatMap((t) => {
+      const p = previous.get(t);
+      return p ? [p] : [];
+    });
+    const at = teams.length > 0 ? 1 + Math.max(0, ...before.map((p) => column.get(p.id) ?? 0)) : deepest + 1;
+    column.set(match.id, at);
+    deepest = Math.max(deepest, at);
+    for (const p of before) if (p.won) links.push({ from: p.id, to: match.id });
+    const lower = teams.length > 0 && teams.every((t) => (losses.get(t) ?? 0) > 0);
+    placed.push({ match: { ...match, side: lower ? "lower" : "upper" }, column: at });
+    for (const t of teams) {
+      const won = match.winnerTeamId === t;
+      previous.set(t, { id: match.id, won });
+      if (match.winnerTeamId && !won) losses.set(t, (losses.get(t) ?? 0) + 1);
+    }
+  }
+
+  const columns = Array.from({ length: deepest }, (_, i) =>
+    placed
+      .filter((p) => p.column === i + 1)
+      .map((p) => p.match)
+      // The upper bracket above the lower, each in the order played.
+      .sort((a, b) => (a.side === b.side ? 0 : a.side === "upper" ? -1 : 1)),
+  ).filter((c) => c.length > 0);
+  const rounds = columns.map((list, i): BracketRound => ({
+    id: `round-${i + 1}`,
+    label: i === columns.length - 1 && list.length === 1 ? "Final" : `Round ${i + 1}`,
+    matches: list,
+  }));
+  return { rounds: withSchedule(rounds, schedule), links };
+}
+
+/**
+ * A stage's bracket: the schedule's blocks as its rounds, or — where a block
+ * holds several rounds, as a double elimination's does — the rounds its
+ * teams' paths make, with the branches between them.
+ */
+function buildStageBracket(
+  sections: PlayoffSection[],
+  blockByMatchId: Map<string, string>,
+  schedule: Map<string, ScheduledMatch>,
+): { rounds: BracketRound[]; links?: BracketLink[] } {
+  const rounds = buildLolBracket(sections, blockByMatchId, schedule);
+  if (isKnockoutTree(rounds) || !mixesRounds(rounds)) return { rounds };
+  return flowBracket(sections.flatMap((s) => s.matches), schedule);
 }
 
 type PlayoffSection = { name: string | null; matches: LolesportsStandingsMatch[] };
@@ -655,6 +777,7 @@ async function getStandingsAndPlayoffs(tournamentId: string): Promise<{
   teams: Team[];
   standings: LolStanding[];
   playoffSections: PlayoffSection[];
+  playInSections: PlayoffSection[];
   swissMatches: LolesportsStandingsMatch[];
 }> {
   const data = await fetchLolesports<{
@@ -664,24 +787,30 @@ async function getStandingsAndPlayoffs(tournamentId: string): Promise<{
   const teamsMap = new Map<string, Team>();
   const rows: LolStanding[] = [];
   const playoffSections: PlayoffSection[] = [];
+  const playInSections: PlayoffSection[] = [];
   const swissMatches: LolesportsStandingsMatch[] = [];
+  const addTeams = (matches: LolesportsStandingsMatch[]): void => {
+    for (const match of matches) {
+      for (const team of match.teams) {
+        if (team.code === "TBD") continue;
+        const t = toTeam(team);
+        if (!teamsMap.has(t.id)) teamsMap.set(t.id, t);
+      }
+    }
+  };
 
   for (const entry of data.data.standings) {
     for (const stage of entry.stages) {
       const isRegular = REGULAR_STAGE_SLUGS.has(stage.slug ?? "");
       const isBracket = isBracketStage(stage.slug);
+      const isPlayIn = isPlayInStage(stage.slug);
       for (const section of stage.sections) {
         // Ranked nowhere (no table until it is played), so its teams and
         // matches are only here.
         if (stage.slug === "swiss") {
-          for (const match of section.matches ?? []) {
-            for (const team of match.teams) {
-              if (team.code === "TBD") continue;
-              const t = toTeam(team);
-              if (!teamsMap.has(t.id)) teamsMap.set(t.id, t);
-            }
-            swissMatches.push(match);
-          }
+          const matches = section.matches ?? [];
+          addTeams(matches);
+          swissMatches.push(...matches);
         }
         // Standings rows come from regular-season rankings.
         if (isRegular) {
@@ -698,17 +827,18 @@ async function getStandingsAndPlayoffs(tournamentId: string): Promise<{
             }
           }
         }
+        // An international event's play-ins: a bracket of their own, before
+        // the event's main stage. A league's (LCK's) stay out of its playoffs.
+        const playInMatches = isPlayIn ? (section.matches ?? []) : [];
+        if (playInMatches.length > 0) {
+          addTeams(playInMatches);
+          playInSections.push({ name: section.name ?? null, matches: playInMatches });
+        }
         // Bracket matches come from the playoff stages, split into rounds below.
         if (isBracket) {
           const sectionMatches = section.matches ?? [];
           if (sectionMatches.length === 0) continue;
-          for (const match of sectionMatches) {
-            for (const team of match.teams) {
-              if (team.code === "TBD") continue;
-              const t = toTeam(team);
-              if (!teamsMap.has(t.id)) teamsMap.set(t.id, t);
-            }
-          }
+          addTeams(sectionMatches);
           playoffSections.push({
             name: section.name ?? null,
             matches: sectionMatches,
@@ -726,6 +856,7 @@ async function getStandingsAndPlayoffs(tournamentId: string): Promise<{
     teams: Array.from(teamsMap.values()),
     standings: dedupedStandings,
     playoffSections,
+    playInSections,
     swissMatches,
   };
 }
@@ -919,11 +1050,13 @@ async function fetchSplit(
   target: TargetLeague,
   league: LolesportsLeague,
   tournament: LolesportsTournament | null,
+  season: LolesportsTournament[],
 ): Promise<LolSplit> {
   const noStandings = {
     teams: [] as Team[],
     standings: [] as LolStanding[],
     playoffSections: [] as PlayoffSection[],
+    playInSections: [] as PlayoffSection[],
     swissMatches: [] as LolesportsStandingsMatch[],
   };
   const [standingsRes, scheduleRes] = await Promise.all([
@@ -934,14 +1067,15 @@ async function fetchSplit(
   ]);
   // Built here rather than with the standings: the rounds are named by the
   // schedule's blocks.
-  const playoffs =
-    standingsRes.playoffSections.length > 0
-      ? buildLolBracket(
-          standingsRes.playoffSections,
-          scheduleRes.blockByMatchId,
-          scheduleRes.scheduleByMatchId,
-        )
+  const stage = (sections: PlayoffSection[]) =>
+    sections.length > 0
+      ? buildStageBracket(sections, scheduleRes.blockByMatchId, scheduleRes.scheduleByMatchId)
       : undefined;
+  const playoffStage = stage(standingsRes.playoffSections);
+  const playoffs = playoffStage?.rounds;
+  // Only an international event's: a league's play-ins decide its bracket's
+  // last seeds and are not a stage worth a tab.
+  const playIns = target.international ? stage(standingsRes.playInSections) : undefined;
   const swiss = buildSwissStage(standingsRes.swissMatches, scheduleRes.scheduleByMatchId);
 
   const teamsMap = new Map<string, Team>();
@@ -961,17 +1095,31 @@ async function fetchSplit(
     region: target.region,
     name: tournamentName(target, league, tournament),
     season: seasonOf(tournament),
+    ...(tournament ? { tournamentId: tournament.id } : {}),
+    // A league's earlier splits this season, to move between from inside it.
+    ...(!target.international && season.length > 1
+      ? { seasonSplits: season.map((t) => ({ id: t.id, name: tournamentName(target, league, t) })) }
+      : {}),
     ...(target.international ? { international: true } : {}),
     teams,
     standings: standingsWithForm,
     matches: scheduleRes.matches.slice(0, 24),
+    ...(playIns && playIns.rounds.length > 0
+      ? { playIns: playIns.rounds, ...(playIns.links ? { playInLinks: playIns.links } : {}) }
+      : {}),
     ...(swiss ? { swiss } : {}),
     playoffs,
+    ...(playoffStage?.links ? { playoffLinks: playoffStage.links } : {}),
     ...(champion ? { champion } : {}),
   };
 }
 
-type FetchedSplit = { split: LolSplit; tournament: LolesportsTournament | null };
+type FetchedSplit = {
+  split: LolSplit;
+  tournament: LolesportsTournament | null;
+  /** An international event that is no longer the one being played: it goes by its end date. */
+  over?: boolean;
+};
 
 /**
  * The current international event, then the regional splits being played
@@ -980,8 +1128,8 @@ type FetchedSplit = { split: LolSplit; tournament: LolesportsTournament | null }
  * up after LCK and LPL had started the new season.
  */
 function orderSplits(fetched: FetchedSplit[], today = todayIso()): LolSplit[] {
-  const rank = ({ split, tournament }: FetchedSplit): number => {
-    if (split.international) return 0;
+  const rank = ({ split, tournament, over }: FetchedSplit): number => {
+    if (split.international && !over) return 0;
     if (tournament && tournament.startDate <= today && today <= tournament.endDate) return 1;
     return 2;
   };
@@ -1026,12 +1174,18 @@ async function fetchLolDataFromApi(): Promise<LolData> {
   );
 
   const fetched = await Promise.all(
-    listed.map(async ({ target, league, current }): Promise<FetchedSplit | null> => {
-      // Out of season an international event would be last year's results
-      // under this year's name.
-      if (target.international && !isCurrentEvent(current, regionalStarts, today)) return null;
+    listed.map(async ({ target, league, current, season }): Promise<FetchedSplit | null> => {
+      // The event being played leads; this season's earlier ones (MSI in
+      // October) stay to be looked back on. Last season's do not.
+      const isCurrent = target.international && isCurrentEvent(current, regionalStarts, today);
+      const thisSeason = current !== null && current.startDate.slice(0, 4) === today.slice(0, 4);
+      if (target.international && !isCurrent && !thisSeason) return null;
       try {
-        return { split: await fetchSplit(target, league, current), tournament: current };
+        return {
+          split: await fetchSplit(target, league, current, season),
+          tournament: current,
+          ...(target.international && !isCurrent ? { over: true } : {}),
+        };
       } catch (err) {
         console.warn(`Lolesports fetch failed for ${target.slug}:`, err);
         return null;
@@ -1055,6 +1209,32 @@ async function fetchLolDataFromApi(): Promise<LolData> {
   return { splits: orderSplits(live, today), upcoming };
 }
 
+/**
+ * One of a league's splits this season, for the view to move to from the
+ * split on screen. Only a tournament of that league, of this season and
+ * started, is read — the id arrives from the browser. A day's cache: a split
+ * that is over does not change, and the one being played is the feed's.
+ */
+async function fetchLeagueSplit(region: LolRegion, tournamentId: string): Promise<LolSplit | null> {
+  const target = TARGET_LEAGUES.find((t) => t.region === region && !t.international);
+  if (!target) return null;
+  const leagues = await fetchLolesports<{ data: { leagues: LolesportsLeague[] } }>("/getLeagues");
+  const league = leagues.data.leagues.find((l) => l.slug.toLowerCase() === target.slug);
+  if (!league) return null;
+  const { season } = await getLeagueTournaments(league.id, todayIso());
+  const tournament = season.find((t) => t.id === tournamentId);
+  if (!tournament) return null;
+  return fetchSplit(target, league, tournament, season);
+}
+
+export const getLolSplit = cachedFeed(
+  "Lolesports split",
+  fetchLeagueSplit,
+  (): LolSplit | null => null,
+  ["lolesports:split"],
+  { revalidate: 86_400, tags: ["sports:lol"] },
+);
+
 export const getLolData = cachedFeed(
   "Lolesports",
   fetchLolDataFromApi,
@@ -1066,13 +1246,16 @@ export const getLolData = cachedFeed(
 /** Pure mappers, exported for their tests — nothing here touches the network. */
 export const __testing = {
   buildLolBracket,
+  buildStageBracket,
   buildSwissStage,
+  flowBracket,
   findChampion,
   isBracketStage,
   isCurrentEvent,
   orderSplits,
   pickActiveTournament,
   pickNextTournament,
+  seasonSoFar,
   toTeam,
   withinTournament,
 };

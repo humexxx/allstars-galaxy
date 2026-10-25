@@ -5,7 +5,7 @@ import type { Team } from "@/types/sports";
 
 import { __testing, getFootballLeagueData } from "./football-data-service";
 
-const { goalsOf, formFromMatches, mapMatches, buildKnockoutBracket, noteBudget, budget } =
+const { goalsOf, mapMatches, buildKnockoutBracket, noteBudget, budget } =
   __testing;
 
 const team = (name: string, tla: string) => ({ id: tla.length, name, shortName: name, tla });
@@ -16,7 +16,7 @@ type MatchInput = {
   away: string;
   utcDate?: string;
   stage?: string;
-  status?: "FINISHED" | "TIMED";
+  status?: "FINISHED" | "TIMED" | "IN_PLAY";
   score?: Record<string, unknown>;
 };
 
@@ -93,35 +93,6 @@ describe("mapMatches", () => {
   });
 });
 
-describe("formFromMatches", () => {
-  it("builds each side's last five, most recent first", () => {
-    // The free tier sends `form: null` on every row, so this is the only
-    // source the table's form column has.
-    const games = [
-      match({ id: 1, home: "Arsenal", away: "Chelsea", utcDate: "2026-09-01T15:00:00Z" }),
-      match({
-        id: 2,
-        home: "Chelsea",
-        away: "Arsenal",
-        utcDate: "2026-09-20T15:00:00Z",
-        score: { duration: "REGULAR", fullTime: { home: 2, away: 2 } },
-      }),
-      match({ id: 3, home: "Arsenal", away: "Spurs", utcDate: "2026-10-01T15:00:00Z", status: "TIMED", score: { fullTime: { home: null, away: null } } }),
-    ];
-    const form = formFromMatches(games as never);
-    expect(form.get("arsenal")).toEqual(["D", "W"]);
-    expect(form.get("chelsea")).toEqual(["D", "L"]);
-    expect(form.has("spurs")).toBe(false);
-  });
-
-  it("stops at five", () => {
-    const games = Array.from({ length: 8 }, (_, i) =>
-      match({ id: i, home: "Arsenal", away: `Rival ${i}`, utcDate: `2026-09-${10 + i}T15:00:00Z` })
-    );
-    expect(formFromMatches(games as never).get("arsenal")).toHaveLength(5);
-  });
-});
-
 describe("buildKnockoutBracket", () => {
   it("leaves a leg-two shoot-out out of the aggregate and still names the winner", () => {
     const legs = [
@@ -155,6 +126,30 @@ describe("buildKnockoutBracket", () => {
       aggregateHome: 1,
       aggregateAway: 1,
       winnerTeamId: "inter",
+    });
+  });
+  it("names no winner of a one-leg final still being played", () => {
+    const live = match({
+      id: 3,
+      home: "Argentina",
+      away: "France",
+      stage: "FINAL",
+      status: "IN_PLAY",
+      score: { winner: "HOME_TEAM", duration: "REGULAR", fullTime: { home: 1, away: 0 } },
+    });
+    const [final] = buildKnockoutBracket([live] as never, new Map())!;
+    expect(final.id).toBe("final");
+    expect(final.matches[0]).toMatchObject({ homeScore: 1, awayScore: 0, winnerTeamId: null });
+  });
+
+  it("carries a final's shoot-out beside the draw it settled", () => {
+    const decided = match({ id: 4, home: "Argentina", away: "France", stage: "FINAL", score: SHOOTOUT });
+    const [final] = buildKnockoutBracket([decided] as never, new Map())!;
+    expect(final.matches[0]).toMatchObject({
+      homeScore: 1,
+      awayScore: 1,
+      penalties: { home: 3, away: 4 },
+      winnerTeamId: "france",
     });
   });
 });
@@ -207,7 +202,6 @@ describe("getFootballLeagueData", () => {
             goalsFor: 1,
             goalsAgainst: 0,
             points: 3,
-            form: null,
           },
         ],
       },
@@ -231,7 +225,7 @@ describe("getFootballLeagueData", () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("fetch is disabled in unit tests"))));
   });
 
-  it("maps the live table and fills the form the free tier leaves out", async () => {
+  it("maps the live table", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string) =>
@@ -240,7 +234,7 @@ describe("getFootballLeagueData", () => {
     );
     const data = await getFootballLeagueData("premier-league");
     expect(data.league.season).toBe("2026–27");
-    expect(data.standings[0]).toMatchObject({ teamId: "arsenal", points: 3, form: ["W"] });
+    expect(data.standings[0]).toMatchObject({ teamId: "arsenal", points: 3 });
     expect(data.matches).toHaveLength(1);
   });
 

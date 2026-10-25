@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Match, Team } from "@/types/sports";
@@ -34,5 +34,38 @@ describe("ScoreCard", () => {
     render(<ScoreCard match={shootout} teams={teams} />);
     expect(screen.getByText("Paraguay")).toHaveClass("font-semibold");
     expect(screen.getByText("Germany")).not.toHaveClass("font-semibold");
+  });
+
+  describe("where to watch", () => {
+    const fixture: Match = {
+      id: "m-2",
+      homeTeamId: "germany",
+      awayTeamId: "paraguay",
+      homeScore: null,
+      awayScore: null,
+      kickoff: "2026-10-28T23:00:00Z",
+      status: "scheduled",
+      broadcasts: ["NBC", "Peacock"],
+    };
+
+    it("names the first channel under the time, and every one for a screen reader", () => {
+      render(<ScoreCard match={fixture} teams={teams} />);
+      const line = screen.getByTitle("On NBC, Peacock");
+      expect(within(line).getByText("NBC")).toHaveAttribute("aria-hidden");
+      expect(within(line).getByText("On NBC, Peacock")).toHaveClass("sr-only");
+      expect(line.querySelector("svg")).not.toBeNull();
+    });
+
+    it("cuts a name too wide for the column to the channel's own short one", () => {
+      render(<ScoreCard match={{ ...fixture, broadcasts: ["Prime Video"] }} teams={teams} />);
+      expect(within(screen.getByTitle("On Prime Video")).getByText("Prime")).toBeInTheDocument();
+    });
+
+    it("keeps it while the game is on, and drops it once it is over", () => {
+      const { rerender } = render(<ScoreCard match={{ ...fixture, status: "live", homeScore: 50, awayScore: 48 }} teams={teams} />);
+      expect(screen.getByTitle("On NBC, Peacock")).toBeInTheDocument();
+      rerender(<ScoreCard match={{ ...fixture, status: "ft", homeScore: 101, awayScore: 99 }} teams={teams} />);
+      expect(screen.queryByTitle("On NBC, Peacock")).toBeNull();
+    });
   });
 });

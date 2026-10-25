@@ -6,16 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Text } from "@/components/ui/typography";
 import { listUserFavoriteSports } from "@/lib/services/sports-service";
+import { SPORTS_PATH } from "@/lib/sports/paths";
 import type { SportId } from "@/types/sports";
 
 import { DashboardF1Card } from "./dashboard-f1-card";
 import { DashboardSportCard } from "./dashboard-sport-card";
 import { DashboardSportCardSkeleton } from "./dashboard-sport-card-skeleton";
 
-const SPORTS_PATH = "/portal/entertainment/sports";
-
 /** The sports that have a dashboard card of their own. */
-const CARD_SPORTS = new Set<SportId>(["football", "nba", "nfl", "lol", "tennis", "padel", "f1"]);
+const CARD_SPORTS = new Set<SportId>(["football", "nba", "nfl", "mlb", "nhl", "lol", "tennis", "padel", "f1"]);
 
 /**
  * One card per favourite sport, in the order they were picked, each on the
@@ -25,7 +24,7 @@ const CARD_SPORTS = new Set<SportId>(["football", "nba", "nfl", "lol", "tennis",
  * and one slow feed should only hold up its own card. The cards are grid
  * items of the dashboard itself — Suspense and the fragment add no wrapper.
  */
-export async function DashboardSportCards({ userId }: { userId: string }) {
+export async function DashboardSportCards({ userId }: { userId: string }): Promise<React.ReactElement> {
   const favorites = (await listUserFavoriteSports(userId)).filter((f) => CARD_SPORTS.has(f.sportId));
 
   if (favorites.length === 0) {

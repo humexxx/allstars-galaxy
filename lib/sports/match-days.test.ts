@@ -34,9 +34,20 @@ describe("matchDays", () => {
   });
 
   it("narrows to one team's matches, home or away", () => {
-    expect(matchDays(list, "UTC", "rma").flatMap((d) => d.matches.map((m) => m.id))).toEqual([
+    expect(matchDays(list, "UTC", new Set(["rma"])).flatMap((d) => d.matches.map((m) => m.id))).toEqual([
       "early",
       "late",
     ]);
+  });
+
+  it("narrows to any of several teams' matches, a match between two of them once", () => {
+    const ids = (teams: string[]): string[] =>
+      matchDays(list, "UTC", new Set(teams)).flatMap((d) => d.matches.map((m) => m.id));
+    expect(ids(["rma", "bar"])).toEqual(["early", "late"]);
+    expect(ids(["bar", "psg"])).toEqual(["night", "late"]);
+  });
+
+  it("shows every match for no teams", () => {
+    expect(matchDays(list, "UTC", new Set()).flatMap((d) => d.matches)).toHaveLength(list.length);
   });
 });

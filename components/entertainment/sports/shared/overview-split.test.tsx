@@ -2,6 +2,8 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
+
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
 import type { Match, Team } from "@/types/sports";
 
@@ -65,7 +67,7 @@ describe("OverviewSplit", () => {
     expect(tableSection()).not.toHaveClass("@4xl:top-12");
   });
 
-  it("opens the table on a line set like a day heading, so the two cards start level", () => {
+  it("opens the table on a heading set like a day heading, so the two cards start level", () => {
     const { container } = render(
       <ReaderTimeZoneProvider timeZone="UTC">
         <SportsTodayProvider today="2026-10-18">
@@ -84,6 +86,7 @@ describe("OverviewSplit", () => {
     // Both columns open on the list, not a label row above it.
     expect(day.parentElement!.parentElement!.firstElementChild).toBe(day.parentElement);
     expect(tableSection().firstElementChild).toBe(label);
+    expect(screen.getByRole("heading", { level: 2, name: "Standings" })).toBe(label);
     for (const cls of ["text-2xs", "py-1"]) {
       expect(heading).toHaveClass(cls);
       expect(label).toHaveClass(cls);

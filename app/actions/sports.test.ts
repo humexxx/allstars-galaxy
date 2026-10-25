@@ -13,6 +13,7 @@ vi.mock("@/lib/services/impersonation", () => ({
 vi.mock("@/lib/services/sports-service", () => ({
   setSportFavorite: vi.fn(),
   setSportCompetition: vi.fn(),
+  setSportTeamFilter: vi.fn(),
 }));
 
 import { refresh, revalidatePath } from "next/cache";
@@ -20,9 +21,17 @@ import {
   logImpersonatedMutation,
   requireEffectiveContext,
 } from "@/lib/services/impersonation";
-import { setSportCompetition, setSportFavorite } from "@/lib/services/sports-service";
+import {
+  setSportCompetition,
+  setSportFavorite,
+  setSportTeamFilter,
+} from "@/lib/services/sports-service";
 
-import { setSportCompetitionAction, setSportFavoriteAction } from "./sports";
+import {
+  setSportCompetitionAction,
+  setSportFavoriteAction,
+  setSportTeamFilterAction,
+} from "./sports";
 
 const USER_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -150,8 +159,8 @@ describe("setSportCompetitionAction", () => {
   const ROW = {
     id: "22222222-2222-2222-2222-222222222222",
     userId: USER_ID,
-    sportId: "tennis",
-    competition: "wta",
+    sportId: "lol",
+    competition: "lck",
     createdAt: new Date(),
   };
 
@@ -160,15 +169,15 @@ describe("setSportCompetitionAction", () => {
   });
 
   it("stores the championship on the caller's favourite and refreshes the dashboard", async () => {
-    const result = await setSportCompetitionAction({ sportId: "tennis", competition: "wta" });
+    const result = await setSportCompetitionAction({ sportId: "lol", competition: "lck" });
 
     expect(result).toEqual({ success: true });
-    expect(setSportCompetition).toHaveBeenCalledWith(USER_ID, "tennis", "wta");
+    expect(setSportCompetition).toHaveBeenCalledWith(USER_ID, "lol", "lck");
     expect(logImpersonatedMutation).toHaveBeenCalledWith({
       action: "sportFavorite.competition",
       entityTable: "user_sports_preferences",
       entityId: ROW.id,
-      metadata: { sportId: "tennis", competition: "wta" },
+      metadata: { sportId: "lol", competition: "lck" },
     });
     // Re-rendered, not revalidated: expiring /portal would expire the cached
     // provider feeds the dashboard reads along with it.
@@ -184,7 +193,10 @@ describe("setSportCompetitionAction", () => {
   });
 
   it.each([
-    [{ sportId: "tennis", competition: "lck" }],
+    [{ sportId: "football", competition: "lck" }],
+    // Men only: tennis and padel have no tour to pick.
+    [{ sportId: "tennis", competition: "wta" }],
+    [{ sportId: "padel", competition: "women" }],
     [{ sportId: "football", competition: "bundesliga" }],
     [{ sportId: "nba", competition: null }],
     [{ sportId: "cricket", competition: null }],
@@ -200,7 +212,7 @@ describe("setSportCompetitionAction", () => {
   it("says so when the sport is not a favourite, and refreshes nothing", async () => {
     vi.mocked(setSportCompetition).mockResolvedValueOnce(null);
 
-    const result = await setSportCompetitionAction({ sportId: "padel", competition: "women" });
+    const result = await setSportCompetitionAction({ sportId: "lol", competition: "lpl" });
 
     expect(result).toEqual({ success: false, error: "Add this sport to your favorites first" });
     expect(logImpersonatedMutation).not.toHaveBeenCalled();
@@ -210,7 +222,7 @@ describe("setSportCompetitionAction", () => {
   it("turns an unauthenticated request into the generic error, before validating", async () => {
     vi.mocked(requireEffectiveContext).mockRejectedValueOnce(new Error("Unauthorized"));
 
-    const result = await setSportCompetitionAction({ sportId: "tennis", competition: "atp" });
+    const result = await setSportCompetitionAction({ sportId: "lol", competition: "lck" });
 
     expect(result).toEqual({ success: false, error: "Action failed" });
     expect(setSportCompetition).not.toHaveBeenCalled();
@@ -219,7 +231,7 @@ describe("setSportCompetitionAction", () => {
   it("swallows a service failure into the error envelope", async () => {
     vi.mocked(setSportCompetition).mockRejectedValueOnce(new Error("pg boom"));
 
-    const result = await setSportCompetitionAction({ sportId: "tennis", competition: "atp" });
+    const result = await setSportCompetitionAction({ sportId: "lol", competition: "lck" });
 
     expect(result).toEqual({ success: false, error: "Action failed" });
     expect(refresh).not.toHaveBeenCalled();
@@ -238,5 +250,72 @@ describe("setSportCompetitionAction", () => {
     await setSportCompetitionAction({ sportId: "football", competition: "la-liga" });
 
     expect(setSportCompetition).toHaveBeenCalledWith(IMPERSONATED, "football", "la-liga");
+  });
+});
+
+describe("setSportTeamFilterAction", () => {
+  it("remembers the caller's teams for that list and re-renders the page", async () => {
+    vi.mocked(setSportTeamFilter).mockResolvedValueOnce({
+      id: "f",
+      teamIds: ["arsenal", "chelsea"],
+    } as never);
+
+    const result = await setSportTeamFilterAction({
+      sportId: "football",
+      competition: "premier-league",
+      teamIds: ["arsenal", "chelsea"],
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(setSportTeamFilter).toHaveBeenCalledWith(
+      USER_ID,
+      { sportId: "football", competition: "premier-league" },
+      ["arsenal", "chelsea"]
+    );
+    expect(logImpersonatedMutation).toHaveBeenCalledWith({
+      action: "sportTeamFilter.set",
+      entityTable: "user_sports_team_filters",
+      entityId: "f",
+      metadata: { sportId: "football", competition: "premier-league", teams: 2 },
+    });
+    // A re-render, not revalidatePath: that would expire the provider feeds.
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("clears the list back to every team", async () => {
+    vi.mocked(setSportTeamFilter).mockResolvedValueOnce(null);
+
+    const result = await setSportTeamFilterAction({ sportId: "nba", competition: "nba", teamIds: [] });
+
+    expect(result).toEqual({ success: true });
+    expect(setSportTeamFilter).toHaveBeenCalledWith(USER_ID, { sportId: "nba", competition: "nba" }, []);
+  });
+
+  it("refuses a list that is not the sport's", async () => {
+    const result = await setSportTeamFilterAction({
+      sportId: "nba",
+      competition: "premier-league",
+      teamIds: [],
+    } as never);
+
+    expect(result).toEqual({ success: false, error: "Invalid team filter" });
+    expect(setSportTeamFilter).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("writes the impersonated user's teams, not the admin's", async () => {
+    const IMPERSONATED = "11111111-1111-1111-1111-111111111111";
+    vi.mocked(requireEffectiveContext).mockResolvedValueOnce({
+      realUser: { id: USER_ID } as never,
+      realRole: "admin",
+      impersonatedUser: { id: IMPERSONATED, email: "x@y.com", fullName: "X" },
+      effectiveUserId: IMPERSONATED,
+      isImpersonating: true,
+    });
+
+    await setSportTeamFilterAction({ sportId: "nfl", competition: "nfl", teamIds: ["kc"] });
+
+    expect(setSportTeamFilter).toHaveBeenCalledWith(IMPERSONATED, { sportId: "nfl", competition: "nfl" }, ["kc"]);
   });
 });

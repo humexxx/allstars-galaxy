@@ -10,12 +10,12 @@ import { TeamBadge } from "./shared/team-badge";
 
 /**
  * The top of a sport's table on its dashboard card, one table at a time when
- * there are two (East / West, ATP / WTA).
+ * there are two (East / West, AFC / NFC).
  *
  * A client island inside a server card: which table is showing is the only
  * state, so that is all that ships.
  */
-export function DashboardSportTables({ tables }: { tables: DashboardTable[] }) {
+export function DashboardSportTables({ tables }: { tables: DashboardTable[] }): React.ReactElement | null {
   const [active, setActive] = useState(tables[0]?.id);
   const table = tables.find((t) => t.id === active) ?? tables[0];
   if (!table) return null;
@@ -38,9 +38,11 @@ export function DashboardSportTables({ tables }: { tables: DashboardTable[] }) {
           ))}
         </ToggleGroup>
       ) : (
-        <Eyebrow size="sm">{table.label}</Eyebrow>
+        <Eyebrow size="sm" asChild>
+          <h3>{table.label}</h3>
+        </Eyebrow>
       )}
-      <ol className="flex flex-col gap-1">
+      <ol role="list" className="flex flex-col gap-1">
         {table.rows.map((row) => (
           <li
             key={`${table.id}-${row.position}-${row.name}`}
@@ -60,7 +62,7 @@ export function DashboardSportTables({ tables }: { tables: DashboardTable[] }) {
 }
 
 /** A player's face, a team's crest, or what stands in for them. */
-function RowImage({ row }: { row: DashboardTableRow }) {
+function RowImage({ row }: { row: DashboardTableRow }): React.ReactElement {
   if (row.image?.kind === "photo") {
     return (
       <span className="relative size-6 shrink-0 overflow-hidden rounded-full bg-muted ring-1 ring-border">

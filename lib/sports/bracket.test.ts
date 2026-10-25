@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isBracketDrawn } from "./bracket";
+import { isBracketDrawn, roundInPlay } from "./bracket";
 import type { BracketRound } from "@/types/sports";
 
 const round = (matches: Array<[string | null, string | null]>): BracketRound =>
@@ -30,5 +30,28 @@ describe("isBracketDrawn", () => {
 
   it("is false for no rounds at all", () => {
     expect(isBracketDrawn([])).toBe(false);
+  });
+});
+
+describe("roundInPlay", () => {
+  const decided = (home: string, away: string): BracketRound["matches"][number] => ({
+    id: `${home}-${away}`,
+    homeTeamId: home,
+    awayTeamId: away,
+    winnerTeamId: home,
+  });
+
+  it("is the first round with a tie both sides of which are known and undecided", () => {
+    const first: BracketRound = { ...round([["a", "b"], ["c", "d"]]), label: "Semi-finals" };
+    first.matches = [decided("a", "b"), first.matches[1]];
+    const final: BracketRound = { ...round([["a", null]]), label: "Final" };
+    expect(roundInPlay([first, final])?.label).toBe("Semi-finals");
+  });
+
+  it("passes over byes and slots still to fill, and is nothing once all is decided", () => {
+    const bye = { ...round([["a", null]]), label: "Round of 64" };
+    expect(roundInPlay([bye])).toBeUndefined();
+    const done = { ...round([]), label: "Final", matches: [decided("a", "b")] };
+    expect(roundInPlay([done])).toBeUndefined();
   });
 });

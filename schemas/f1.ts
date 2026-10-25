@@ -1,10 +1,8 @@
 import { z } from "zod";
 
-// One race of a season, as the classification action takes it. The bounds
-// keep anything that is not a round number out of Jolpica's URL.
-export const f1RaceRefSchema = z.object({
-  season: z.number().int().min(1950).max(2100),
-  round: z.number().int().min(1).max(40),
-});
+// A race's page, by its round in the URL: digits only, no leading zero.
+// Number() also reads "1.0", "0x3" and "1e1", which would give one race
+// several addresses. Whether the round exists is the loader's to say.
+export const f1RoundSchema = z.string().regex(/^[1-9]\d?$/).transform(Number);
 
-export type F1RaceRefData = z.infer<typeof f1RaceRefSchema>;
+export type F1RoundData = z.infer<typeof f1RoundSchema>;

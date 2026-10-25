@@ -48,8 +48,10 @@ import {
   listUserFavoriteSportIds,
   listUserFavoriteSports,
   listUserSportsFavorites,
+  getSportTeamFilter,
   setSportCompetition,
   setSportFavorite,
+  setSportTeamFilter,
 } from "./sports-service";
 
 const dbMock = vi.mocked(db, true);
@@ -189,13 +191,13 @@ describe("setSportFavorite", () => {
 
 describe("setSportCompetition", () => {
   it("updates only the caller's favourite row for that sport and hands it back", async () => {
-    const row = { id: "a", userId: USER_ID, sportId: "tennis", competition: "wta", createdAt: new Date() };
+    const row = { id: "a", userId: USER_ID, sportId: "lol", competition: "lck", createdAt: new Date() };
     const chain = mockUpdate([row]);
 
-    await expect(setSportCompetition(USER_ID, "tennis", "wta")).resolves.toEqual(row);
+    await expect(setSportCompetition(USER_ID, "lol", "lck")).resolves.toEqual(row);
 
     expect(dbMock.update).toHaveBeenCalledOnce();
-    expect(chain.set).toHaveBeenCalledWith({ competition: "wta" });
+    expect(chain.set).toHaveBeenCalledWith({ competition: "lck" });
     expect(chain.where).toHaveBeenCalledOnce();
     // Never an insert: a card, and so a choice, exists only for a favourite.
     expect(dbMock.insert).not.toHaveBeenCalled();
@@ -212,7 +214,83 @@ describe("setSportCompetition", () => {
   it("is null when the sport is not one of the caller's favourites", async () => {
     mockUpdate([]);
 
-    await expect(setSportCompetition(USER_ID, "padel", "women")).resolves.toBeNull();
+    await expect(setSportCompetition(USER_ID, "lol", "lck")).resolves.toBeNull();
+  });
+});
+
+// ---------- team filters ----------
+
+describe("getSportTeamFilter", () => {
+  function mockFilterRow(rows: unknown[]) {
+    const chain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue(rows),
+    };
+    dbMock.select.mockReturnValue(chain as never);
+    return chain;
+  }
+
+  it("hands back the teams last picked in that list", async () => {
+    const chain = mockFilterRow([{ teamIds: ["arsenal", "chelsea"] }]);
+
+    await expect(
+      getSportTeamFilter(USER_ID, { sportId: "football", competition: "premier-league" })
+    ).resolves.toEqual(["arsenal", "chelsea"]);
+    expect(chain.where).toHaveBeenCalledOnce();
+    expect(chain.limit).toHaveBeenCalledWith(1);
+  });
+
+  it("is every team, [], when nothing is remembered", async () => {
+    mockFilterRow([]);
+
+    await expect(getSportTeamFilter(USER_ID, { sportId: "nba", competition: "nba" })).resolves.toEqual([]);
+  });
+});
+
+describe("setSportTeamFilter", () => {
+  function mockUpsert(rows: unknown[]) {
+    const chain = {
+      values: vi.fn().mockReturnThis(),
+      onConflictDoUpdate: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue(rows),
+    };
+    dbMock.insert.mockReturnValue(chain as never);
+    return chain;
+  }
+
+  it("upserts the caller's row for that list, each team once, in the order picked", async () => {
+    const row = { id: "f", teamIds: ["chelsea", "arsenal"] };
+    const chain = mockUpsert([row]);
+
+    await expect(
+      setSportTeamFilter(USER_ID, { sportId: "football", competition: "premier-league" }, [
+        "chelsea",
+        "arsenal",
+        "chelsea",
+      ])
+    ).resolves.toEqual(row);
+
+    expect(chain.values).toHaveBeenCalledWith({
+      userId: USER_ID,
+      sportId: "football",
+      competition: "premier-league",
+      teamIds: ["chelsea", "arsenal"],
+    });
+    const [conflict] = chain.onConflictDoUpdate.mock.calls[0];
+    expect(conflict.target).toHaveLength(3);
+    expect(conflict.set.teamIds).toEqual(["chelsea", "arsenal"]);
+    expect(conflict.set.updatedAt).toBeInstanceOf(Date);
+    expect(dbMock.delete).not.toHaveBeenCalled();
+  });
+
+  it("deletes the row for every team rather than keep an empty one", async () => {
+    const chain = mockDelete();
+
+    await expect(setSportTeamFilter(USER_ID, { sportId: "nfl", competition: "nfl" }, [])).resolves.toBeNull();
+
+    expect(chain.where).toHaveBeenCalledOnce();
+    expect(dbMock.insert).not.toHaveBeenCalled();
   });
 });
 
@@ -285,10 +363,49 @@ describe("getDashboardSportCard", () => {
     expect(card).toMatchObject({ sportId: "football", label: "Football", emoji: "⚽" });
     expect(card.context).toMatch(/Champions League/);
     expect(card.featured).toBeDefined();
-    expect(card.matches.length).toBeLessThanOrEqual(2);
+    // Stepped through in the lead box rather than listed under it.
+    expect(card.following!.length).toBeLessThanOrEqual(4);
+    expect(card.matches).toEqual([]);
     expect(card.tables.map((t) => t.id)).toEqual(["table"]);
     expect(card.tables[0].rows).toHaveLength(5);
     expect(card.tables[0].rows[0]).toMatchObject({ position: 1, value: expect.stringMatching(/ pts$/) });
+  });
+
+  it("gives football, the NBA and the NFL their latest ESPN news, and no clips", async () => {
+    const article = (id: number, type: string, headline: string) => ({
+      id,
+      type,
+      headline,
+      published: `2026-10-24T0${id}:00:00Z`,
+      images: [{ type: "header", url: `https://a.espncdn.com/photo/${id}.jpg`, width: 600 }],
+      links: { web: { href: `https://www.espn.com/nba/story/_/id/${id}` } },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.includes("site.api.espn.com") && url.includes("/news")
+          ? new Response(
+              JSON.stringify({
+                articles: [
+                  article(1, "HeadlineNews", "Giannis stays hot"),
+                  article(2, "Media", "Game Highlights"),
+                  article(3, "Recap", "Lakers past Clippers"),
+                ],
+              }),
+              { status: 200 }
+            )
+          : Promise.reject(new Error("fetch is disabled in unit tests"))
+      )
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (const sport of ["football", "nba", "nfl"] as const) {
+        const card = (await getDashboardSportCard(sport))!;
+        expect(card.news?.map((n) => n.headline)).toEqual(["Lakers past Clippers", "Giannis stays hot"]);
+      }
+    } finally {
+      vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("fetch is disabled in unit tests"))));
+    }
   });
 
   it("gives the NBA both conferences, each a W–L table", async () => {
@@ -335,6 +452,38 @@ describe("getDashboardSportCard", () => {
     expect(card?.note).toBeUndefined();
   });
 
+  it("steps through the four games after the featured one, soonest first", async () => {
+    const at = (id: number, hour: number) => {
+      const datetime = `2026-10-22T0${hour}:00:00Z`;
+      return { ...nbaGame(id, "scheduled", 0, 0), date: "2026-10-22", datetime, status: datetime };
+    };
+    const games = [at(5, 5), at(1, 1), at(7, 7), at(3, 3), at(2, 2), at(6, 6), at(4, 4)];
+    const card = (await withNbaGames(games, () => getDashboardSportCard("nba")))!;
+
+    const hours = [card.featured!, ...card.following!].map((m) => new Date(m.startsAt).getUTCHours());
+    expect(hours).toEqual([1, 2, 3, 4, 5]);
+    expect(card.matches).toEqual([]);
+  });
+
+  it("puts another game being played before the fixtures, and the latest results when nothing is ahead", async () => {
+    const at = (id: number, state: string, hour: number) => {
+      const datetime = `2026-10-21T0${hour}:00:00Z`;
+      return { ...nbaGame(id, state, 50, 40), date: "2026-10-21", datetime, status: state === "final" ? "Final" : datetime };
+    };
+    const busy = (await withNbaGames(
+      [at(1, "scheduled", 9), at(2, "in", 1), at(3, "in", 2), at(4, "final", 0)],
+      () => getDashboardSportCard("nba")
+    ))!;
+    expect([busy.featured!, ...busy.following!].map((m) => m.status)).toEqual(["live", "live", "upcoming"]);
+
+    const over = (await withNbaGames(
+      [at(1, "final", 1), at(2, "final", 3), at(3, "final", 2)],
+      () => getDashboardSportCard("nba")
+    ))!;
+    const hours = [over.featured!, ...over.following!].map((m) => new Date(m.startsAt).getUTCHours());
+    expect(hours).toEqual([3, 2, 1]);
+  });
+
   it("reads the NBA from the live feed, not the fixture", async () => {
     const card = await withNbaGames([nbaGame(1, "scheduled", 0, 0)], () => getDashboardSportCard("nba"));
 
@@ -355,11 +504,12 @@ describe("getDashboardSportCard", () => {
     });
   });
 
-  it("gives tennis its tournament and both tours' rankings, with flags for the players", async () => {
+  it("gives tennis its tournament and the ATP's rankings, with flags for the players", async () => {
     const card = (await getDashboardSportCard("tennis"))!;
 
     expect(card.featured).toBeUndefined();
-    expect(card.tables.map((t) => t.label)).toEqual(["ATP", "WTA"]);
+    expect(card.context).toBe("ATP");
+    expect(card.tables.map((t) => t.label)).toEqual(["Rankings"]);
     expect(card.tables[0].rows[0]).toMatchObject({ position: 1, flagEmoji: expect.any(String) });
     expect(card.tables[0].rows[0].code).toBeUndefined();
   });
@@ -402,38 +552,16 @@ describe("getDashboardSportCard", () => {
     expect(card.competitions?.value).toBe("uefa-champions-league");
   });
 
-  it("narrows tennis to the tour it is set to, and names it under the title", async () => {
-    const both = (await getDashboardSportCard("tennis"))!;
-    const wta = (await getDashboardSportCard("tennis", "wta"))!;
+  it("offers no tour to pick for tennis or padel, whatever is stored: men only", async () => {
+    // A favourite set to the WTA or the women's draw before they were dropped.
+    const tennis = (await getDashboardSportCard("tennis", "wta"))!;
+    const padel = (await getDashboardSportCard("padel", "women"))!;
 
-    expect(both.context).toBe("Both tours");
-    expect(both.competitions).toEqual({
-      value: null,
-      automatic: "Both tours",
-      options: [
-        { id: "atp", label: "ATP" },
-        { id: "wta", label: "WTA" },
-      ],
-    });
-    expect(wta.context).toBe("WTA");
-    expect(wta.competitions?.value).toBe("wta");
-    expect(wta.tables.map((t) => t.label)).toEqual(["WTA"]);
-    expect(wta.tables[0].rows[0].name).toBe("I. Świątek");
-  });
-
-  it("narrows padel to the category it is set to", async () => {
-    const card = (await getDashboardSportCard("padel", "women"))!;
-
-    expect(card.context).toBe("Women");
-    expect(card.tables.map((t) => t.label)).toEqual(["Women"]);
-    expect(card.competitions).toMatchObject({ value: "women", automatic: "Men and women" });
-  });
-
-  it("ignores a stored value that is not the sport's: tennis with padel's category", async () => {
-    const card = (await getDashboardSportCard("tennis", "women"))!;
-
-    expect(card.tables.map((t) => t.label)).toEqual(["ATP", "WTA"]);
-    expect(card.competitions?.value).toBeNull();
+    expect(tennis.competitions).toBeUndefined();
+    expect(tennis.tables[0].rows[0].name).not.toBe("I. Świątek");
+    expect(padel.competitions).toBeUndefined();
+    expect(padel.context).toBe("Premier Padel");
+    expect(padel.tables.map((t) => t.label)).toEqual(["Rankings"]);
   });
 
   it("offers no choice for the NBA, whatever is stored", async () => {
@@ -709,19 +837,11 @@ describe("racquetCard", () => {
     tournaments,
   });
   const base = { sportId: "tennis", label: "Tennis", emoji: "🎾" } as const;
-  const tours = [
-    { id: "atp", label: "ATP", data: tour([tournament("Paris Masters", "upcoming")]) },
-    { id: "wta", label: "WTA", data: tour([tournament("WTA Finals", "live")]) },
-  ];
 
-  it("leads with whichever tour has a tournament on when none is chosen", () => {
-    expect(__testing.racquetCard(base, tours, null, "Both tours").event?.name).toBe("WTA Finals");
-  });
-
-  it("leads with the chosen tour's own tournament, even with the other's on", () => {
-    expect(__testing.racquetCard(base, tours, "atp", "Both tours").event).toMatchObject({
-      name: "Paris Masters",
-      status: "upcoming",
-    });
+  it("leads with the tournament on, else the next to start", () => {
+    const week = tour([tournament("Paris Masters", "upcoming"), tournament("Vienna", "live")]);
+    expect(__testing.racquetCard(base, week, "ATP").event).toMatchObject({ name: "Vienna", status: "live" });
+    const off = tour([tournament("Paris Masters", "upcoming")]);
+    expect(__testing.racquetCard(base, off, "ATP").event).toMatchObject({ name: "Paris Masters", status: "upcoming" });
   });
 });

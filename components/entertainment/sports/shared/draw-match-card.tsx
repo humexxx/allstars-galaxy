@@ -1,15 +1,13 @@
 import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import { formatWeekdayDay } from "@/lib/utils/date";
+import { formatWeekdayDay, isCalendarDay } from "@/lib/utils/date";
 import type { BracketMatch, Team } from "@/types/sports";
 
 import { BracketDate, bracketWhen, MatchHover } from "./bracket-canvas";
 import { Portrait } from "./portrait";
 import { useMatchTime } from "./time-zone-context";
 
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-
-const OUTCOMES: Record<NonNullable<BracketMatch["outcome"]>, string> = {
+const OUTCOMES: Record<"walkover" | "retired", string> = {
   walkover: "Walkover",
   retired: "Retired",
 };
@@ -17,7 +15,7 @@ const OUTCOMES: Record<NonNullable<BracketMatch["outcome"]>, string> = {
 /**
  * "6–4", or "7–6(1)" for a set that went to a tie-break — the loser's points,
  * the way a scoreline prints them. The boxes have no room for it; the
- * tooltip does.
+ * popover does.
  */
 function setLabel(set: NonNullable<BracketMatch["legs"]>[number]): string {
   const base = `${set.homeScore}–${set.awayScore}`;
@@ -42,7 +40,8 @@ function setLabel(set: NonNullable<BracketMatch["legs"]>[number]): string {
  *
  * `variant="pair"` is a padel tie: two players a side, both surnames stacked
  * (`shortName` is "Coello / Tapia"), a seed and the sets — no flag, since the
- * provider sends no nationality, and no photo.
+ * provider sends no nationality; their photos (`photos`) when the draw has any
+ * (`withFaces`).
  */
 export function DrawMatchCard({
   match,
@@ -57,20 +56,22 @@ export function DrawMatchCard({
   withFaces?: boolean;
   variant?: "player" | "pair";
   className?: string;
-}) {
+}): React.ReactElement {
   const format = useMatchTime();
   const home = match.homeTeamId ? (teams.get(match.homeTeamId) ?? null) : null;
   const away = match.awayTeamId ? (teams.get(match.awayTeamId) ?? null) : null;
   const sets = match.legs ?? [];
   const decided = !!match.winnerTeamId;
   const played = sets.filter((s) => s.homeScore !== null && s.awayScore !== null);
-  const outcome = match.outcome ? OUTCOMES[match.outcome] : null;
+  // A bye says so in place of its missing side, not in the small print too.
+  const outcome = match.outcome && match.outcome !== "bye" ? OUTCOMES[match.outcome] : null;
+  const nobody = match.outcome === "bye" ? "Bye" : "TBD";
 
   // A calendar day — tennis dates a match by its day — stays the day it names
   // (`toDay` reads it local, never as UTC midnight); an instant, padel's
   // schedule, is the day and time in the reader's zone.
   const date = match.date;
-  const isDay = date !== undefined && DATE_ONLY.test(date);
+  const isDay = date !== undefined && isCalendarDay(date);
   const when = !date ? null : isDay ? formatWeekdayDay(date) : bracketWhen(date, format);
   const whenInFull = !date ? null : isDay ? when : format.dayTime(date);
 
@@ -83,8 +84,8 @@ export function DrawMatchCard({
         details={
           <>
             <span className="font-semibold">
-              {(variant === "pair" ? home?.name : home?.shortName) ?? "TBD"} vs{" "}
-              {(variant === "pair" ? away?.name : away?.shortName) ?? "TBD"}
+              {(variant === "pair" ? home?.name : home?.shortName) ?? nobody} vs{" "}
+              {(variant === "pair" ? away?.name : away?.shortName) ?? nobody}
             </span>
             {whenInFull && <span>{whenInFull}</span>}
             {(played.length > 0 || decided) && (
@@ -108,9 +109,10 @@ export function DrawMatchCard({
             opponentScores: sets.map((s) => s[`${other}Score`]),
             isWinner: decided && match.winnerTeamId === (side === "home" ? match.homeTeamId : match.awayTeamId),
             decided,
+            nobody,
           };
           return variant === "pair" ? (
-            <PairRow key={side} {...props} />
+            <PairRow key={side} {...props} withFaces={withFaces} />
           ) : (
             <PlayerRow key={side} {...props} withFaces={withFaces} />
           );
@@ -125,13 +127,15 @@ export function DrawMatchCard({
 
 type RowProps = {
   player: Team | null;
+  /** What an empty side says: "TBD", or "Bye". */
+  nobody: string;
   scores: Array<number | null>;
   opponentScores: Array<number | null>;
   isWinner: boolean;
   decided: boolean;
 };
 
-function SetScores({ scores, opponentScores }: Pick<RowProps, "scores" | "opponentScores">) {
+function SetScores({ scores, opponentScores }: Pick<RowProps, "scores" | "opponentScores">): React.ReactElement {
   return (
     <span className="flex shrink-0 items-center gap-0.5">
       {scores.map((score, i) => (
@@ -159,7 +163,7 @@ function SetScores({ scores, opponentScores }: Pick<RowProps, "scores" | "oppone
  * the name and the sets it read as a first set ("1 6 6" against "14 2 2").
  * The column is there for the unseeded too, so the names line up.
  */
-function Seed({ player }: { player: Team }) {
+function Seed({ player }: { player: Team }): React.ReactElement {
   const seed = player.code?.trim();
   return (
     <span className="w-4 shrink-0 text-right text-2xs tabular-nums text-muted-foreground">
@@ -179,21 +183,22 @@ function PlayerRow({
   opponentScores,
   isWinner,
   decided,
+  nobody,
   withFaces,
-}: RowProps & { withFaces: boolean }) {
+}: RowProps & { withFaces: boolean }): React.ReactElement {
   if (!player) {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span className={cn("shrink-0", withFaces ? "w-6" : "w-5")} />
         <span className="w-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">TBD</span>
-      </div>
+        <span className="min-w-0 flex-1 truncate">{nobody}</span>
+      </span>
     );
   }
 
   const flag = <span className="text-base leading-none">{player.name}</span>;
   return (
-    <div
+    <span
       className={cn(
         "flex items-center gap-1.5 text-xs",
         decided && !isWinner && "text-muted-foreground"
@@ -217,30 +222,43 @@ function PlayerRow({
       <span className={cn("min-w-0 flex-1 truncate", isWinner && "font-semibold")}>
         {player.shortName}
       </span>
+      {/* Every flag on screen is hidden from assistive tech; read once here, it says the country. */}
+      {player.name && <span className="sr-only">{`, ${player.name}`}</span>}
+      {isWinner && <span className="sr-only">, won</span>}
       <SetScores scores={scores} opponentScores={opponentScores} />
-    </div>
+    </span>
   );
 }
 
 /** A padel pair: both surnames stacked, so neither is cut off in a narrow column. */
-function PairRow({ player, scores, opponentScores, isWinner, decided }: RowProps) {
+function PairRow({
+  player,
+  scores,
+  opponentScores,
+  isWinner,
+  decided,
+  nobody,
+  withFaces,
+}: RowProps & { withFaces: boolean }): React.ReactElement {
   if (!player) {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span className="w-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">TBD</span>
-      </div>
+        {withFaces && <span className="w-8.5 shrink-0" />}
+        <span className="min-w-0 flex-1 truncate">{nobody}</span>
+      </span>
     );
   }
 
   return (
-    <div
+    <span
       className={cn(
         "flex items-center gap-1.5 text-xs",
         decided && !isWinner && "text-muted-foreground"
       )}
     >
       <Seed player={player} />
+      {withFaces && <PairFaces pair={player} />}
       <span className={cn("flex min-w-0 flex-1 flex-col", isWinner && "font-semibold")}>
         {player.shortName.split(" / ").map((name, i) => (
           <span key={i} className="truncate leading-tight">
@@ -248,8 +266,35 @@ function PairRow({ player, scores, opponentScores, isWinner, decided }: RowProps
           </span>
         ))}
       </span>
+      {isWinner && <span className="sr-only">, won</span>}
       <SetScores scores={scores} opponentScores={opponentScores} />
-    </div>
+    </span>
+  );
+}
+
+/**
+ * A pair's two players side by side, the second a little over the first, in
+ * the order their names read down the row. A photo that does not load (a
+ * wildcard or a qualifier the provider has none of) is the player's initial.
+ */
+export function PairFaces({ pair, size = "xs" }: { pair: Team; size?: "xs" | "lg" }): React.ReactElement {
+  const surnames = pair.shortName.split(" / ");
+  return (
+    <span aria-hidden className="flex shrink-0 items-center">
+      {surnames.map((surname, i) => (
+        <Portrait
+          key={i}
+          size={size}
+          subject={{ name: surname, imageUrl: pair.photos?.[i] ?? undefined }}
+          fallback={
+            <span className="grid size-full place-items-center rounded-full bg-muted text-2xs font-medium text-muted-foreground">
+              {surname.charAt(0)}
+            </span>
+          }
+          className={cn(i > 0 && "rounded-full ring-2 ring-card", i > 0 && (size === "lg" ? "-ml-3" : "-ml-1.5"))}
+        />
+      ))}
+    </span>
   );
 }
 

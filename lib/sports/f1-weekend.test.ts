@@ -11,6 +11,7 @@ import {
   startsIn,
   weekendNow,
   weekendPhrase,
+  weekendWindow,
 } from "./f1-weekend";
 
 // Austin 2026 as Jolpica lists it, a normal weekend.
@@ -122,11 +123,11 @@ describe("leadRace", () => {
 });
 
 describe("racesTabGroups", () => {
-  it("features the next race, then the three after it and the three just run", () => {
+  it("features the next race, then every race after it and every one run, latest first", () => {
     const groups = racesTabGroups(F1_DATA.races);
     expect(groups.featured?.round).toBe(7);
     expect(groups.comingUp.map((r) => r.round)).toEqual([8, 9, 10]);
-    expect(groups.justFinished.map((r) => r.round)).toEqual([6, 5, 4]);
+    expect(groups.justFinished.map((r) => r.round)).toEqual([6, 5, 4, 3, 2, 1]);
   });
 
   it("has no featured race once the season is over", () => {
@@ -134,6 +135,25 @@ describe("racesTabGroups", () => {
     const groups = racesTabGroups(over);
     expect(groups.featured).toBeUndefined();
     expect(groups.comingUp).toEqual([]);
-    expect(groups.justFinished.map((r) => r.round)).toEqual([10, 9, 8]);
+    expect(groups.justFinished.map((r) => r.round)).toEqual([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
+  });
+});
+
+describe("weekendWindow", () => {
+  it("runs from the first session to the race", () => {
+    expect(weekendWindow(austin)).toEqual({
+      from: austin.sessions![0].startsAt,
+      to: austin.sessions![austin.sessions!.length - 1].startsAt,
+    });
+  });
+
+  it("is nothing before the first session: OpenF1 has no results yet", () => {
+    const first = Date.parse(austin.sessions![0].startsAt);
+    expect(weekendWindow(austin, first - 1)).toBeNull();
+    expect(weekendWindow(austin, first + 1)).not.toBeNull();
+  });
+
+  it("is nothing for a race with no times", () => {
+    expect(weekendWindow({ ...austin, sessions: undefined, startsAt: undefined })).toBeNull();
   });
 });

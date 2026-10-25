@@ -1,10 +1,11 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode, type Ref } from "react";
 
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
+import { isCalendarDay } from "@/lib/utils/date";
 import type { Team } from "@/types/sports";
 
 import type { MatchTimeFormat } from "./match-time";
@@ -22,27 +23,51 @@ export type BracketColumn = {
   label: string;
   /** The round being played: its heading is lit. */
   current?: boolean;
+  /** Which half of a two-sided draw the column is, whose round name the other half repeats. */
+  half?: "top" | "bottom";
   items: BracketItem[];
 };
 
 /** A branch from one box to another, by their item keys. */
 export type BracketEdge = { from: string; to: string };
 
-/** A horizontal run, a rounded turn, the vertical drop, and in again. */
+/**
+ * A horizontal run, a rounded turn, the vertical drop, and in again — either
+ * way across: a two-sided bracket's right half runs right to left.
+ */
 export function elbow(x1: number, y1: number, x2: number, y2: number): string {
   const mid = (x1 + x2) / 2;
   const dy = y2 - y1;
-  const r = Math.min(8, Math.abs(dy) / 2, (x2 - x1) / 4);
+  const dx = x2 < x1 ? -1 : 1;
+  const r = Math.min(8, Math.abs(dy) / 2, Math.abs(x2 - x1) / 4);
   if (r < 1) return `M${x1},${y1} L${x2},${y2}`;
   const s = Math.sign(dy);
   return [
     `M${x1},${y1}`,
-    `H${mid - r}`,
+    `H${mid - dx * r}`,
     `Q${mid},${y1} ${mid},${y1 + s * r}`,
     `V${y2 - s * r}`,
-    `Q${mid},${y2} ${mid + r},${y2}`,
+    `Q${mid},${y2} ${mid + dx * r},${y2}`,
     `H${x2}`,
   ].join(" ");
+}
+
+/**
+ * A box's place in the canvas from layout offsets, the space the branches are
+ * drawn in: a scroll or a transform on an ancestor does not skew them as it
+ * does a box measured on screen.
+ */
+function placeIn(canvas: HTMLElement, el: HTMLElement): { left: number; right: number; middle: number } | null {
+  let left = 0;
+  let top = 0;
+  let node: HTMLElement | null = el;
+  while (node && node !== canvas) {
+    left += node.offsetLeft;
+    top += node.offsetTop;
+    node = node.offsetParent as HTMLElement | null;
+  }
+  if (node !== canvas) return null;
+  return { left, right: left + el.offsetWidth, middle: top + el.offsetHeight / 2 };
 }
 
 /**
@@ -60,13 +85,16 @@ export function BracketCanvas({
   edges,
   minColumnWidth = "8rem",
   className,
+  viewportRef,
 }: {
   columns: BracketColumn[];
   edges: BracketEdge[];
   /** A column never narrows past this; a tennis draw's set scores need more. */
   minColumnWidth?: string;
   className?: string;
-}) {
+  /** The part that scrolls sideways, for controls that move it. Its columns carry `data-column`. */
+  viewportRef?: Ref<HTMLDivElement>;
+}): React.ReactElement {
   const canvasRef = useRef<HTMLDivElement>(null);
   const boxes = useRef(new Map<string, HTMLElement>());
   const [paths, setPaths] = useState<string[]>([]);
@@ -74,20 +102,18 @@ export function BracketCanvas({
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const measure = () => {
-      const origin = canvas.getBoundingClientRect();
+    const measure = (): void => {
       const next: string[] = [];
       for (const edge of edges) {
-        const from = boxes.current.get(edge.from)?.getBoundingClientRect();
-        const to = boxes.current.get(edge.to)?.getBoundingClientRect();
+        const fromBox = boxes.current.get(edge.from);
+        const toBox = boxes.current.get(edge.to);
+        const from = fromBox && placeIn(canvas, fromBox);
+        const to = toBox && placeIn(canvas, toBox);
         if (!from || !to) continue;
+        // From the side of the box that faces the one it feeds.
+        const rightward = from.left <= to.left;
         next.push(
-          elbow(
-            from.right - origin.left,
-            from.top + from.height / 2 - origin.top,
-            to.left - origin.left,
-            to.top + to.height / 2 - origin.top
-          )
+          elbow(rightward ? from.right : from.left, from.middle, rightward ? to.left : to.right, to.middle)
         );
       }
       setPaths((prev) => (prev.join() === next.join() ? prev : next));
@@ -105,7 +131,7 @@ export function BracketCanvas({
   };
 
   return (
-    <div className={cn("-mx-1 overflow-x-auto px-1 pb-1", className)}>
+    <div ref={viewportRef} className={cn("-mx-1 overflow-x-auto px-1 pb-1", className)}>
       <div
         ref={canvasRef}
         className="relative grid w-max min-w-full gap-x-5"
@@ -113,29 +139,37 @@ export function BracketCanvas({
       >
         <svg
           aria-hidden
-          className="pointer-events-none absolute inset-0 size-full overflow-visible text-muted-foreground/50"
+          className="pointer-events-none absolute inset-0 size-full overflow-visible text-muted-foreground"
         >
           {paths.map((d, i) => (
             <path key={i} d={d} fill="none" stroke="currentColor" strokeWidth={1.5} />
           ))}
         </svg>
-        {columns.map((column) => (
-          <div key={column.key} className="flex flex-col gap-2">
-            <Eyebrow as="div" size="sm" className={cn(column.current && "text-foreground")}>
+        {columns.map((column, i) => (
+          <div
+            key={column.key}
+            data-column={i}
+            role="group"
+            aria-label={[column.label, column.half && `${column.half} half`, column.current && "being played"]
+              .filter(Boolean)
+              .join(", ")}
+            className="flex flex-col gap-2"
+          >
+            <Eyebrow as="div" size="sm" aria-hidden className={cn(column.current && "text-foreground")}>
               {column.label}
             </Eyebrow>
-            <div className="flex flex-1 flex-col justify-around gap-4">
+            <ul role="list" className="flex flex-1 flex-col justify-around gap-4">
               {column.items.map((item) => (
-                <div key={item.key} className="flex flex-col gap-1">
+                <li key={item.key} className="flex flex-col gap-1">
                   {item.caption && (
                     <Eyebrow as="div" size="sm">
                       {item.caption}
                     </Eyebrow>
                   )}
                   <div ref={register(item.key)}>{item.node}</div>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         ))}
       </div>
@@ -152,7 +186,7 @@ export function BracketTeam({
   team?: Team | null;
   muted?: boolean;
   strong?: boolean;
-}) {
+}): React.ReactElement {
   return (
     <span className={cn("flex min-w-0 items-center gap-1.5", muted && "text-muted-foreground")}>
       {team ? (
@@ -163,28 +197,30 @@ export function BracketTeam({
       <span className={cn("truncate", strong && "font-semibold", !team && "text-muted-foreground")}>
         {team?.code ?? "TBD"}
       </span>
+      {strong && <span className="sr-only">, won</span>}
     </span>
   );
 }
-
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * When a match is, as the small print under it says it: the day and the
  * time, or just the day for a provider that dates matches by calendar day.
  */
 export function bracketWhen(date: string, format: MatchTimeFormat): string {
-  return DATE_ONLY.test(date) ? format.shortDay(date) : `${format.shortDay(date)} · ${format.time(date)}`;
+  return isCalendarDay(date) ? format.shortDay(date) : `${format.shortDay(date)} · ${format.time(date)}`;
 }
 
 /** The small print under a match: when it is, in the reader's zone. */
-export function BracketDate({ children }: { children: ReactNode }) {
+export function BracketDate({ children }: { children: ReactNode }): React.ReactElement {
   return <Mono className="block truncate text-2xs text-muted-foreground">{children}</Mono>;
 }
 
 /**
- * One match's box contents as a hover target: it lights up under the pointer
- * or focus and opens a tooltip with what the box has no room for.
+ * One match's box contents as a button that opens a popover with what the
+ * box has no room for. A click, not a hover: a tooltip never opens for a tap,
+ * nor for a screen reader that reads the page without moving focus.
+ *
+ * A button holds only phrasing content, so whatever goes in is spans.
  */
 export function MatchHover({
   children,
@@ -194,23 +230,36 @@ export function MatchHover({
   children: ReactNode;
   details: ReactNode;
   className?: string;
-}) {
+}): ReactElement {
+  const [open, setOpen] = useState(false);
   return (
-    <Tooltip delayDuration={100}>
-      <TooltipTrigger asChild>
-        <div
-          tabIndex={0}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
           className={cn(
-            "cursor-default outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+            "w-full cursor-pointer text-left focus-visible:outline-hidden transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-expanded:bg-muted/60",
             className
           )}
         >
           {children}
-        </div>
-      </TooltipTrigger>
-      <TooltipContent side="right" sideOffset={6}>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        aria-label="Match details"
+        side="right"
+        sideOffset={6}
+        className="w-auto max-w-xs p-3 text-xs"
+        // The popover sits at the end of <body>: Tab out of it would leave the
+        // bracket. Closing it hands focus back to the box, and Tab goes on from there.
+        onKeyDown={(event) => {
+          if (event.key !== "Tab") return;
+          event.preventDefault();
+          setOpen(false);
+        }}
+      >
         <div className="grid gap-0.5">{details}</div>
-      </TooltipContent>
-    </Tooltip>
+      </PopoverContent>
+    </Popover>
   );
 }

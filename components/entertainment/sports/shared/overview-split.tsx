@@ -8,17 +8,18 @@ import { cn } from "@/lib/utils";
 import { scrollParent, scrollportHeight } from "./scroll";
 
 type OverviewSplitProps = {
-  /** The day-by-day list (`MatchesByDate`). */
+  /** The day-by-day list (`MatchesByDate`), or F1's races. */
   matches: ReactNode;
   /** The table beside it. Without one the matches fill the row. */
   table?: ReactNode;
-  /** The table's eyebrow: "Table", "Standings". */
+  /** The table's heading, set as an eyebrow: "Table", "Standings". */
   tableLabel?: string;
 };
 
 /**
- * An Overview tab's two columns (football, the NBA, the NFL): every match on
- * the left and the table beside them from `@4xl`, stacked below that.
+ * An Overview tab's two columns (football, the NBA, the NFL, F1, padel and
+ * tennis): every match (F1's races, the tournament on now) on the left and the
+ * table beside them from `@4xl`, stacked below that.
  *
  * The table opens on a label set like a day heading, so its card starts level
  * with the first match card and the two columns read as one layout.
@@ -48,8 +49,8 @@ export function OverviewSplit({
           )}
         >
           {/* The size, padding and gap of a day heading in MatchesByDate. */}
-          <Eyebrow size="sm" as="div" className="py-1">
-            {tableLabel}
+          <Eyebrow size="sm" asChild>
+            <h2 className="py-1">{tableLabel}</h2>
           </Eyebrow>
           {table}
         </section>

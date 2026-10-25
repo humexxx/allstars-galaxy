@@ -9,37 +9,49 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
+import Link from "next/link";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
-import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Heading, Text } from "@/components/ui/typography";
+import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
+import { cn } from "@/lib/utils";
+import type { SportId } from "@/types/sports";
 
-import { scrollByFrom } from "./scroll";
-
-const BarEndContext = createContext<HTMLElement | null>(null);
+import { revealInRow, scrollByFrom } from "./scroll";
 
 /**
- * Puts its children at the right end of the sticky tabs row: a control that
- * belongs to one tab (the Overview's team filter) rendered from inside that
- * tab's panel. Radix unmounts a panel that is not open, so the control comes
- * and goes with its tab. Nothing without a tabs row.
+ * What the hub sets at the end of every sport's name row: the favourites
+ * button and the sport picker. A context, so each view's shell carries them
+ * without every view passing them on.
  */
-export function SportBarEnd({ children }: { children: ReactNode }): React.ReactPortal | null {
-  const slot = useContext(BarEndContext);
-  return slot ? createPortal(children, slot) : null;
-}
+export const SportHubControls = createContext<ReactNode>(null);
 
 type SportShellProps = {
-  /** Big emoji or logo shown at the top-left next to the title. */
+  /** The sport, whose emoji (the sport picker's) leads the title. */
+  sportId?: SportId;
+  /** An emoji of the view's own instead of the sport's (the World Cup's trophy). */
   emoji?: string;
   title: string;
   subtitle?: string;
-  /** Optional pill controls (league/conference/region selector). */
-  controls?: ReactNode;
+  /**
+   * The competitions the title can switch to (football's leagues, LoL's
+   * leagues and events), as a dropdown menu's items: the title becomes the
+   * menu's button, in the same type.
+   */
+  titleMenu?: ReactNode;
+  /**
+   * The page this one sits under (a tournament's sport): the title becomes a
+   * breadcrumb in the heading's type, "Padel › Kuwait Major 2026", its first
+   * step the way back.
+   */
+  parent?: { label: string; href: string };
   /** Tab strip: the sticky row under the name. */
   tabs?: ReactNode;
-  /** Right-aligned tabs/sub-navigation. */
-  rightSlot?: ReactNode;
   children: ReactNode;
   className?: string;
 };
@@ -50,27 +62,30 @@ type SportShellProps = {
  * the `<h1>`.
  *
  * Two rows, at every width, the way a repository or a league page reads: the
- * name (with the controls on its right) scrolls away, and the tabs under it
- * stick below the app header. Once the name has gone, a compact copy of it
+ * name (with the hub's favourites and sport picker on its right, and the
+ * competitions to switch to under the title itself) scrolls away, and the
+ * tabs under it stick below the app header. Once the name has gone, a compact copy of it
  * slides into the tabs row so a stuck bar still says what it is about. The
  * name and the tabs used to share one row from `@4xl`, where a two-line title
  * centred on the row and tabs sitting on its border never lined up.
  */
 export function SportShell({
-  emoji,
+  sportId,
+  emoji: ownEmoji,
   title,
   subtitle,
-  controls,
+  titleMenu,
+  parent,
   tabs,
-  rightSlot,
   children,
   className,
 }: SportShellProps): React.ReactElement {
+  const hubControls = useContext(SportHubControls);
+  const emoji = ownEmoji ?? (sportId && SPORTS_BY_ID.get(sportId)?.emoji);
   const titleRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [barEnd, setBarEnd] = useState<HTMLDivElement | null>(null);
   const hasTabs = Boolean(tabs);
   const titleGone = useScrolledAway(titleRef, hasTabs);
 
@@ -83,19 +98,50 @@ export function SportShell({
     const scroller = scrollerRef.current;
     const content = contentRef.current;
     if (!tabsRow || !scroller || !content) return;
-    revealSelectedTab(scroller);
+    // A view can open on its last tab (LoL's playoffs), past a phone's edge.
+    const revealSelectedTab = (): void =>
+      revealInRow(scroller, scroller.querySelector('[role="tab"][aria-selected="true"]'));
+    revealSelectedTab();
+    // A switch of league can bring its opening tab in already selected.
+    const isPicked = (node: Node): boolean =>
+      node instanceof Element && node.matches('[role="tab"][aria-selected="true"]');
     const observer = new MutationObserver((records) => {
-      const picked = records.some(
-        (record) => (record.target as Element).getAttribute("aria-selected") === "true"
+      const picked = records.some((record) =>
+        record.type === "childList" ? Array.from(record.addedNodes).some(isPicked) : isPicked(record.target)
       );
       if (!picked) return;
-      revealSelectedTab(scroller);
+      revealSelectedTab();
       const hidden = tabsRow.getBoundingClientRect().bottom - content.getBoundingClientRect().top;
       if (hidden > 0) scrollByFrom(content, -hidden);
     });
-    observer.observe(tabsRow, { subtree: true, attributes: true, attributeFilter: ["aria-selected"] });
+    observer.observe(tabsRow, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-selected"] });
     return () => observer.disconnect();
   }, [hasTabs]);
+
+  // With a menu, the heading is pulled out by the button's padding, so the
+  // name still lines up with the subtitle. Pulling the button out instead
+  // capped it at the heading's width, 16px short of the name.
+  const heading = (
+    <Heading level="h4" as="h1" className={cn("min-w-0", titleMenu && "-mx-2")}>
+      {titleMenu ? (
+        <DropdownMenu>
+          {/* The sidebar's hover step: `muted` hardly shows on the page's grey. */}
+          <DropdownMenuTrigger className="group/title -my-0.5 flex max-w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-0.5 text-left transition-colors focus-visible:outline-hidden hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-sidebar-accent dark:hover:bg-muted dark:data-[state=open]:bg-muted">
+            <span className="truncate">{title}</span>
+            <ChevronDown
+              aria-hidden
+              className="size-4 shrink-0 text-muted-foreground transition-transform group-hover/title:text-foreground group-data-[state=open]/title:rotate-180"
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-56">
+            {titleMenu}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <span className="block truncate">{title}</span>
+      )}
+    </Heading>
+  );
 
   return (
     <div className={cn("@container flex flex-col", className)}>
@@ -107,15 +153,30 @@ export function SportShell({
           {emoji && (
             <span
               aria-hidden
-              className="grid size-10 shrink-0 place-items-center rounded-lg bg-muted/60 text-xl ring-1 ring-foreground/10"
+              className="grid size-10 shrink-0 place-items-center rounded-lg bg-card text-xl ring-1 ring-foreground/10"
             >
               {emoji}
             </span>
           )}
           <div className="flex min-w-0 flex-col">
-            <Heading level="h4" as="h1" className="truncate">
-              {title}
-            </Heading>
+            {parent ? (
+              <div className="flex min-w-0 items-center gap-1.5">
+                <nav aria-label="Breadcrumb" className="shrink-0">
+                  <Heading level="h4" asChild>
+                    <Link
+                      href={parent.href}
+                      className="rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+                    >
+                      {parent.label}
+                    </Link>
+                  </Heading>
+                </nav>
+                <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                {heading}
+              </div>
+            ) : (
+              heading
+            )}
             {subtitle && (
               <Text variant="muted" className="truncate">
                 {subtitle}
@@ -123,16 +184,14 @@ export function SportShell({
             )}
           </div>
         </div>
-        {(controls || rightSlot) && (
-          <div className="flex flex-wrap items-center gap-2">
-            {controls}
-            {rightSlot}
-          </div>
-        )}
+        {hubControls && <div className="flex max-w-full min-w-0 items-center gap-2">{hubControls}</div>}
       </div>
       {tabs && (
+        // globals.css gives what follows `data-sport-tabs` a scroll margin, so
+        // a control that takes focus is scrolled clear of the bar.
         <div
           ref={tabsRef}
+          data-sport-tabs
           className="sticky top-14 z-20 flex h-12 min-w-0 items-end gap-4 border-b bg-background md:top-0"
         >
           {/* The name again, small, only while the row above is out of
@@ -156,12 +215,10 @@ export function SportShell({
           >
             {tabs}
           </div>
-          {/* `SportBarEnd`'s slot, level with the tab labels. */}
-          <div ref={setBarEnd} className="mb-1 flex shrink-0 items-center empty:hidden" />
         </div>
       )}
       <div ref={contentRef} className="min-w-0 pt-6">
-        <BarEndContext.Provider value={barEnd}>{children}</BarEndContext.Provider>
+        {children}
       </div>
     </div>
   );
@@ -186,19 +243,4 @@ function useScrolledAway(ref: RefObject<HTMLElement | null>, active: boolean): b
     return () => observer.disconnect();
   }, [ref, active]);
   return gone;
-}
-
-/**
- * Slides the tabs row, never the page, until the selected tab is whole: a
- * view that opens on its last tab (LoL's playoffs) would otherwise start with
- * it cut off at a phone's edge. Focus scrolls a tab in by itself; a tap or a
- * default value does not.
- */
-function revealSelectedTab(scroller: HTMLElement): void {
-  const tab = scroller.querySelector('[role="tab"][aria-selected="true"]');
-  if (!tab) return;
-  const row = scroller.getBoundingClientRect();
-  const { left, right } = tab.getBoundingClientRect();
-  if (right > row.right) scroller.scrollLeft += right - row.right;
-  else if (left < row.left) scroller.scrollLeft -= row.left - left;
 }

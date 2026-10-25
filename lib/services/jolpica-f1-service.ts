@@ -15,7 +15,7 @@ import type {
   F1SessionKind,
 } from "@/types/sports";
 import { getF1DriverPortraits, teamLogo } from "./espn-f1-standings-service";
-import { cachedFeed, upstreamSignal } from "./upstream";
+import { cachedFeed, rateLimiter, upstreamSignal } from "./upstream";
 
 const JOLPICA_BASE_URL = "https://api.jolpi.ca/ergast/f1";
 const REVALIDATE_SECONDS = 300;
@@ -303,28 +303,6 @@ function driverShortName(driver: JolpicaDriver): string {
 
 function driverCode(driver: JolpicaDriver): string {
   return driver.code ?? driver.familyName.slice(0, 3).toUpperCase();
-}
-
-/**
- * Hands out at most `limit` starts in any `windowMs`, queueing the rest.
- *
- * Jolpica allows bursts of about four requests a second and a cold read makes
- * nine, which used to go out at once: the calls past the fourth could come
- * back 429, and a podium went missing.
- */
-function rateLimiter(limit: number, windowMs: number): () => Promise<void> {
-  const starts: number[] = [];
-  return async function slot(): Promise<void> {
-    for (;;) {
-      const now = Date.now();
-      while (starts.length > 0 && now - starts[0] >= windowMs) starts.shift();
-      if (starts.length < limit) {
-        starts.push(now);
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, windowMs - (now - starts[0])));
-    }
-  };
 }
 
 // A little over a second: requests started a second apart can still arrive
@@ -922,5 +900,4 @@ export const __testing = {
   fastestLapsByRound,
   sprintWinnersByRound,
   deriveRaceStatus,
-  rateLimiter,
 };

@@ -1,14 +1,23 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Trophy } from "lucide-react";
+import {
+  Fragment,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Mono } from "@/components/ui/typography";
 import { isBracketDrawn } from "@/lib/sports/bracket";
 import { cn } from "@/lib/utils";
-import type { BracketMatch, BracketRound, Team } from "@/types/sports";
+import type { BracketLink, BracketMatch, BracketRound, Team } from "@/types/sports";
 
 import {
   BracketCanvas,
@@ -18,7 +27,9 @@ import {
   MatchHover,
   type BracketColumn,
   type BracketEdge,
+  type BracketItem,
 } from "./bracket-canvas";
+import { prefersReducedMotion } from "./reveal";
 import { useMatchTime } from "./time-zone-context";
 
 type KnockoutBracketProps = {
@@ -32,10 +43,13 @@ type KnockoutBracketProps = {
   renderMatch?: (match: BracketMatch, teams: Map<string, Team>) => ReactNode;
   /** Passed to the canvas: a column never narrows past this. */
   minColumnWidth?: string;
+  /**
+   * A bracket that is not a plain knockout (a double elimination) brings its
+   * own branches, each winner to its next match. It is drawn one-sided, its
+   * rounds in the order played, the lower bracket's ties under the upper's.
+   */
+  links?: BracketLink[];
 };
-
-/** Rounds on screen at once: a Grand Slam's seven page through, the rest fit. */
-const VISIBLE_ROUNDS = 4;
 
 /** Index of the CURRENT round: first with an undecided tie; a fully decided
  *  bracket lands on the final instead of opening on the oldest round. */
@@ -44,8 +58,19 @@ function currentRoundIndex(rounds: BracketRound[]): number {
   return idx === -1 ? rounds.length - 1 : idx;
 }
 
-function initialWindowStart(rounds: BracketRound[]): number {
-  return Math.min(currentRoundIndex(rounds), Math.max(0, rounds.length - VISIBLE_ROUNDS));
+/** A round's ties by the half of the draw they are in: the top half, then the bottom. */
+function halves<T>(list: T[]): [T[], T[]] {
+  const mid = Math.ceil(list.length / 2);
+  return [list.slice(0, mid), list.slice(mid)];
+}
+
+/**
+ * Each column's left edge within the scrolled content, from layout offsets
+ * (the canvas is their offset parent): they are what `scrollLeft` counts in,
+ * and a transform on an ancestor does not skew them.
+ */
+function columnLefts(viewport: HTMLElement): number[] {
+  return [...viewport.querySelectorAll<HTMLElement>("[data-column]")].map((column) => column.offsetLeft);
 }
 
 /**
@@ -106,10 +131,15 @@ function treeOrder(rounds: BracketRound[]): { rounds: BracketRound[]; paired: bo
 }
 
 /**
- * A knockout as a tree, drawn like the Swiss stage: a column per round, a box
- * per tie, and branches joining each pair of ties to the one they feed. The
- * third-place match stands in a column of its own after the final, with no
- * branch into it — it is fed by the semi-finals' losers, not their winners.
+ * A knockout as a tree, drawn as a printed bracket is: the top half of the
+ * draw on the left running in, the bottom half mirrored on the right, and
+ * the final between them — the third-place match under it, with no branch
+ * into it, as it is fed by the semi-finals' losers. A box per tie, branches
+ * joining each pair of ties to the one they feed.
+ *
+ * Wider than its card, it scrolls sideways (swipe, or the buttons over it: a
+ * column a tap, or straight to either end, the other half of the draw). It
+ * opens on the round being played, its top half centred.
  */
 export function KnockoutBracket({
   rounds,
@@ -117,56 +147,147 @@ export function KnockoutBracket({
   className,
   renderMatch,
   minColumnWidth,
-}: KnockoutBracketProps) {
-  const tree = useMemo(() => treeOrder(rounds.filter((r) => r.id !== "third-place")), [rounds]);
+  links,
+}: KnockoutBracketProps): React.ReactElement | null {
+  const tree = useMemo(() => {
+    const main = rounds.filter((r) => r.id !== "third-place");
+    // Given branches mean the rounds do not halve: nothing to sort by them.
+    return links ? { rounds: main, paired: main.map(() => false) } : treeOrder(main);
+  }, [rounds, links]);
   const thirdPlace = rounds.find((r) => r.id === "third-place");
+  const drawn = rounds.length > 0 && isBracketDrawn(rounds);
+  const viewport = useRef<HTMLDivElement>(null);
+  const [ends, setEnds] = useState({ overflow: false, atStart: true, atEnd: true });
 
-  const [windowStart, setWindowStart] = useState(() => initialWindowStart(tree.rounds));
-  // Re-focus when the rounds themselves change (league switch, revalidation):
-  // a stale start could point past the new bracket's last round. React's
-  // render-time derived-state reset, not an effect.
-  const [prevRounds, setPrevRounds] = useState(rounds);
-  if (prevRounds !== rounds) {
-    setPrevRounds(rounds);
-    setWindowStart(initialWindowStart(tree.rounds));
-  }
-
-  const maxStart = Math.max(0, tree.rounds.length - VISIBLE_ROUNDS);
-  const start = Math.min(windowStart, maxStart);
-  const visible = useMemo(() => tree.rounds.slice(start, start + VISIBLE_ROUNDS), [tree, start]);
-
-  const { columns, edges } = useMemo(() => {
+  const { columns, edges, opening, finalAt } = useMemo(() => {
     const current = currentRoundIndex(tree.rounds);
-    const box = (match: BracketMatch) => (
-      <TieBox match={match} teams={teams} renderMatch={renderMatch} />
-    );
-    const columns: BracketColumn[] = visible.map((round, i) => ({
-      key: `${round.id}-${start + i}`,
-      label: round.label,
-      current: start + i === current,
-      items: round.matches.map((m) => ({ key: m.id, node: box(m) })),
-    }));
-    const showsFinal = start + visible.length === tree.rounds.length;
-    if (thirdPlace && showsFinal && thirdPlace.matches.length > 0) {
-      columns.push({
-        key: "third-place",
-        label: thirdPlace.label,
-        items: thirdPlace.matches.map((m) => ({ key: m.id, node: box(m) })),
-      });
-    }
-    const edges: BracketEdge[] = visible.flatMap((round, i) => {
-      const next = visible[i + 1];
-      if (!next || !tree.paired[start + i]) return [];
-      return next.matches.flatMap((target, k) =>
-        [round.matches[k * 2], round.matches[k * 2 + 1]]
-          .filter((feeder): feeder is BracketMatch => Boolean(feeder))
-          .map((feeder) => ({ from: feeder.id, to: target.id }))
-      );
+    const last = tree.rounds.length - 1;
+    // A decided bracket opens on its final, but nothing in it is being played.
+    const playing = tree.rounds[current]?.matches.some((m) => !m.winnerTeamId) ?? false;
+    const item = (match: BracketMatch, caption?: string): BracketItem => ({
+      key: match.id,
+      caption,
+      node: <TieBox match={match} teams={teams} renderMatch={renderMatch} />,
     });
-    return { columns, edges };
-  }, [tree, visible, start, thirdPlace, teams, renderMatch]);
+    const column = (
+      round: BracketRound,
+      i: number,
+      side: "top" | "bottom" | "all",
+      matches: BracketMatch[]
+    ): BracketColumn => ({
+      key: `${round.id}-${side}`,
+      label: round.label,
+      current: playing && i === current,
+      half: side === "all" ? undefined : side,
+      items: matches.map((m) => item(m)),
+    });
+    const before = tree.rounds.slice(0, last);
+    const final = tree.rounds[last];
+    const finalColumn: BracketColumn = {
+      key: `${final?.id ?? "final"}-centre`,
+      label: final?.label ?? "",
+      current: playing && last === current,
+      items: [
+        ...(final?.matches ?? []).map((m) => item(m)),
+        ...(thirdPlace?.matches ?? []).map((m) => item(m, thirdPlace?.label)),
+      ],
+    };
+    // Two halves only for a knockout: every round before the final splits
+    // evenly, and from the second on each feeds the next (the NFL's wild-card
+    // round of six does not halve into four, but the rest does). A double
+    // elimination (MSI's, a league's) has no halves.
+    const twoSided =
+      !links &&
+      last > 0 &&
+      final?.matches.length === 1 &&
+      before.every((r, i) => r.matches.length % 2 === 0 && (i === 0 || tree.paired[i]));
+    const columns: BracketColumn[] = twoSided
+      ? [
+          ...before.map((round, i) => column(round, i, "top", halves(round.matches)[0])),
+          finalColumn,
+          ...before.map((round, i) => column(round, i, "bottom", halves(round.matches)[1])).reverse(),
+        ]
+      : [
+          ...before.map((round, i) => ({
+            ...column(round, i, "all", round.matches),
+            // The lower bracket's first tie in each round says so.
+            items: round.matches.map((m, k) =>
+              item(m, m.side === "lower" && round.matches[k - 1]?.side !== "lower" ? "Lower bracket" : undefined)
+            ),
+          })),
+          finalColumn,
+        ];
+    const edges: BracketEdge[] =
+      links ??
+      before.flatMap((round, i) => {
+        if (!tree.paired[i]) return [];
+        return tree.rounds[i + 1].matches.flatMap((target, k) =>
+          [round.matches[k * 2], round.matches[k * 2 + 1]]
+            .filter((feeder): feeder is BracketMatch => Boolean(feeder))
+            .map((feeder) => ({ from: feeder.id, to: target.id }))
+        );
+      });
+    // The round being played (its top half's column, two-sided); the final's
+    // own once only the final is left.
+    // The final's column: the middle of a two-sided draw, the last of a one-sided one.
+    return { columns, edges, opening: Math.min(current, last), finalAt: twoSided ? before.length : columns.length - 1 };
+  }, [tree, thirdPlace, teams, renderMatch, links]);
 
-  if (rounds.length === 0 || !isBracketDrawn(rounds)) {
+  const readEnds = useCallback(() => {
+    const el = viewport.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const next = { overflow: max > 1, atStart: el.scrollLeft <= 1, atEnd: el.scrollLeft >= max - 1 };
+    setEnds((prev) =>
+      prev.overflow === next.overflow && prev.atStart === next.atStart && prev.atEnd === next.atEnd
+        ? prev
+        : next
+    );
+  }, []);
+
+  /** Where the viewport sits with column `index` in its middle. */
+  const centredOn = useCallback((index: number): number | null => {
+    const el = viewport.current;
+    const target = el?.querySelector<HTMLElement>(`[data-column="${index}"]`);
+    if (!el || !target) return null;
+    return Math.max(0, (columnLefts(el)[index] ?? 0) - (el.clientWidth - target.offsetWidth) / 2);
+  }, []);
+
+  // On the round being played, before the first paint; again for new rounds
+  // (another league, a revalidation), never on the reader's own scrolling.
+  useLayoutEffect(() => {
+    const left = centredOn(opening);
+    if (viewport.current && left !== null) viewport.current.scrollLeft = left;
+    readEnds();
+  }, [rounds, opening, readEnds, centredOn]);
+
+  useLayoutEffect(() => {
+    const el = viewport.current;
+    if (!el) return;
+    const observer = new ResizeObserver(readEnds);
+    observer.observe(el);
+    el.addEventListener("scroll", readEnds, { passive: true });
+    return () => {
+      observer.disconnect();
+      el.removeEventListener("scroll", readEnds);
+    };
+  }, [readEnds, drawn]);
+
+  const scrollTo = (left: number): void => {
+    viewport.current?.scrollTo({ left, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  };
+  /** To the next column's left edge that way, or the end. */
+  const step = (direction: 1 | -1): void => {
+    const el = viewport.current;
+    if (!el) return;
+    const at = el.scrollLeft;
+    const lefts = columnLefts(el);
+    const next =
+      direction > 0 ? lefts.find((x) => x > at + 1) : [...lefts].reverse().find((x) => x < at - 1);
+    scrollTo(next ?? (direction > 0 ? el.scrollWidth : 0));
+  };
+
+  if (!drawn) {
     return (
       <EmptyState
         icon={Trophy}
@@ -179,33 +300,80 @@ export function KnockoutBracket({
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {maxStart > 0 && (
+      {ends.overflow && (
         <div className="flex items-center justify-between gap-2">
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={start === 0}
-            onClick={() => setWindowStart(Math.max(0, start - 1))}
-            aria-label="Earlier rounds"
+          <div className="flex items-center">
+            <ScrollButton label="Left end of the bracket" off={ends.atStart} onPress={() => scrollTo(0)}>
+              <ChevronsLeft />
+            </ScrollButton>
+            <ScrollButton label="Scroll left" off={ends.atStart} onPress={() => step(-1)}>
+              <ChevronLeft />
+            </ScrollButton>
+          </div>
+          {/* Back to the middle of it all: the final, in the centre. */}
+          <ScrollButton
+            label="Centre on the final"
+            off={false}
+            onPress={() => {
+              const left = centredOn(finalAt);
+              if (left !== null) scrollTo(left);
+            }}
           >
-            <ChevronLeft />
-          </Button>
-          <Mono className="text-xs text-muted-foreground">
-            {visible[0]?.label} – {visible[visible.length - 1]?.label}
-          </Mono>
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={start >= maxStart}
-            onClick={() => setWindowStart(Math.min(maxStart, start + 1))}
-            aria-label="Later rounds"
-          >
-            <ChevronRight />
-          </Button>
+            <Trophy />
+          </ScrollButton>
+          <div className="flex items-center">
+            <ScrollButton label="Scroll right" off={ends.atEnd} onPress={() => step(1)}>
+              <ChevronRight />
+            </ScrollButton>
+            <ScrollButton
+              label="Right end of the bracket"
+              off={ends.atEnd}
+              onPress={() => scrollTo(viewport.current?.scrollWidth ?? 0)}
+            >
+              <ChevronsRight />
+            </ScrollButton>
+          </div>
         </div>
       )}
-      <BracketCanvas columns={columns} edges={edges} minColumnWidth={minColumnWidth} />
+      <BracketCanvas
+        columns={columns}
+        edges={edges}
+        minColumnWidth={minColumnWidth}
+        viewportRef={viewport}
+      />
     </div>
+  );
+}
+
+/**
+ * A control over the bracket, off at the end it moves towards. Off is
+ * `aria-disabled`, not `disabled`: a button that disables itself under focus
+ * drops that focus to the page, and a keyboard or screen-reader user is lost.
+ */
+function ScrollButton({
+  label,
+  off,
+  onPress,
+  children,
+}: {
+  label: string;
+  off: boolean;
+  onPress: () => void;
+  children: ReactNode;
+}): ReactElement {
+  return (
+    <Button
+      size="icon"
+      variant="ghost"
+      aria-label={label}
+      aria-disabled={off}
+      onClick={() => {
+        if (!off) onPress();
+      }}
+      className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+    >
+      {children}
+    </Button>
   );
 }
 
@@ -218,7 +386,7 @@ function TieBox({
   match: BracketMatch;
   teams: Map<string, Team>;
   renderMatch?: KnockoutBracketProps["renderMatch"];
-}) {
+}): React.ReactElement {
   if (renderMatch) return <>{renderMatch(match, teams)}</>;
   return (
     <div className="overflow-hidden rounded-lg border bg-card">
@@ -234,9 +402,9 @@ const has = (n: number | null | undefined): n is number => n !== null && n !== u
  *
  * A two-legged tie shows its aggregate once both legs are in, the running
  * total until then, and the day of each leg; the legs' own scores are in the
- * tooltip. A single match or series shows its score and its day and time.
+ * popover. A single match or series shows its score and its day and time.
  */
-function TieRows({ match, teams }: { match: BracketMatch; teams: Map<string, Team> }) {
+function TieRows({ match, teams }: { match: BracketMatch; teams: Map<string, Team> }): React.ReactElement | null {
   const format = useMatchTime();
   const legs = match.legs ?? [];
   const decided = Boolean(match.winnerTeamId);
@@ -254,11 +422,22 @@ function TieRows({ match, teams }: { match: BracketMatch; teams: Map<string, Tea
     { id: match.homeTeamId, score: scoreOf("home") },
     { id: match.awayTeamId, score: scoreOf("away") },
   ].map((side) => ({ ...side, team: side.id ? teams.get(side.id) : undefined }));
-  const name = (i: 0 | 1) => sides[i].team?.code ?? "TBD";
+  const name = (i: 0 | 1): string => sides[i].team?.code ?? "TBD";
   const scored = has(sides[0].score) && has(sides[1].score);
 
-  const legDays = legs.map((l, i) => (l.date ? `L${i + 1} ${format.shortDay(l.date)}` : null)).filter(Boolean);
-  const when = legDays.length > 0 ? legDays.join(" · ") : match.date ? bracketWhen(match.date, format) : null;
+  const dated = legs.flatMap((l, i) => (l.date ? [{ leg: i + 1, day: format.shortDay(l.date) }] : []));
+  const when =
+    dated.length > 0
+      ? dated.map(({ leg, day }, i) => (
+          <Fragment key={leg}>
+            {i > 0 && " · "}
+            <span aria-hidden>L{leg}</span>
+            <span className="sr-only">Leg {leg}</span> {day}
+          </Fragment>
+        ))
+      : match.date
+        ? bracketWhen(match.date, format)
+        : null;
 
   return (
     <MatchHover
@@ -290,12 +469,12 @@ function TieRows({ match, teams }: { match: BracketMatch; teams: Map<string, Tea
       {sides.map((side, i) => {
         const won = decided && side.id === match.winnerTeamId;
         return (
-          <div key={i} className="flex items-center justify-between gap-2 text-xs">
+          <span key={i} className="flex items-center justify-between gap-2 text-xs">
             <BracketTeam team={side.team} muted={decided && !won} strong={won} />
             {has(side.score) && (
               <Mono className={cn(won ? "font-semibold" : "text-muted-foreground")}>{side.score}</Mono>
             )}
-          </div>
+          </span>
         );
       })}
       {when && <BracketDate>{when}</BracketDate>}

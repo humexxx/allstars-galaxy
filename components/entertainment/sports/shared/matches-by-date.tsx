@@ -1,56 +1,77 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CalendarX, History, ListFilter } from "lucide-react";
+import { CalendarX, ChevronDown, History, ListFilter } from "lucide-react";
 
 import { useReaderTimeZone } from "@/components/reader-time-zone";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Eyebrow } from "@/components/ui/typography";
 import { matchDays, type MatchDay } from "@/lib/sports/match-days";
 import { cn } from "@/lib/utils";
 import type { Match, MatchStatus, Team } from "@/types/sports";
 
+import { EASE, fadeIn, holdScrollStill, holdStill, SLIDE_MS } from "./reveal";
+import { RevealPill } from "./reveal-pill";
 import { ScoreCard } from "./score-card";
 import { scrollParent } from "./scroll";
-import { SportBarEnd } from "./sport-shell";
 import { TeamBadge } from "./team-badge";
+import { useTeamPicks } from "./team-picks";
 import { useMatchTime, useSportsToday } from "./time-zone-context";
-
-const ALL_TEAMS = "all";
 
 const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "pen"]);
 
+/** Days one tap of the clock brings in: a matchday, a week of the NFL, three NBA nights. */
+const EARLIER_STEP = 3;
+
+/** Results a team's own fixtures open on: one is a single day, too little to read its form by. */
+const TEAM_RESULTS = 3;
+
 /**
- * Where the list opens: the latest day up to today with a result in it, so
- * the freshest results lead and what is next follows. A season with no
- * result yet opens on its first day.
+ * Where the list opens: far enough back for `results` results up to today,
+ * so the freshest lead and what is next follows. The whole list needs one
+ * day's; a season with no result yet opens on its first day, and one with
+ * fewer than asked for on its first result.
  */
-export function openingDayIndex(days: MatchDay[], today: string): number {
+export function openingDayIndex(days: MatchDay[], today: string, results = 1): number {
+  let seen = 0;
+  let first = -1;
   for (let i = days.length - 1; i >= 0; i--) {
     const { day, matches } = days[i];
-    if (day <= today && matches.some((m) => FINISHED.has(m.status))) return i;
+    if (day > today) continue;
+    const played = matches.filter((m) => FINISHED.has(m.status)).length;
+    if (played === 0) continue;
+    seen += played;
+    first = i;
+    if (seen >= results) return i;
   }
-  return 0;
+  return Math.max(first, 0);
 }
 
 /**
  * Every match, one day at a time: oldest first, each day under its own
- * heading in the reader's zone. A team filter, at the end of the sport bar,
- * narrows it to one team's fixtures and results.
+ * heading in the reader's zone. A team filter, on the first day's heading,
+ * narrows it to some teams' fixtures and results, opening on their last three
+ * results. It opens on the teams last picked in this list and remembers a new
+ * pick when its menu closes. Inside a view that shares its picks
+ * (`TeamPicksProvider`), a tap on a team in the table or a card picks it too.
  *
  * The page is the only scroller. The list opens on its freshest results
  * rather than scrolling to them, with the days before behind a clock on the
  * first day's heading: a scroll on load never ran on a phone, where the list
- * had no box of its own to scroll.
+ * had no box of its own to scroll. Each tap brings in a few more days above
+ * without moving the page: the days on screen slide down to make room, the
+ * new ones fade in where the reader is looking, and the clock stays on top
+ * for the next few.
  *
  * It opens on a day heading, not a label of its own, so that a column beside
  * it which opens on a line like one (`OverviewSplit`'s table) starts its card
@@ -70,11 +91,14 @@ export function MatchesByDate({
   const timeZone = useReaderTimeZone();
   const format = useMatchTime();
   const today = useSportsToday();
-  const [team, setTeam] = useState(ALL_TEAMS);
-  const [showEarlier, setShowEarlier] = useState(false);
+  const { picks, setPicks, save } = useTeamPicks();
+  // The filter's menu is the list's, not its pill's: the pill rides the first
+  // day's heading, and a tick that changes which day comes first moves it to
+  // another heading, while the menu stays open as it was, search and all.
+  const [filterOpen, setFilterOpen] = useState(false);
+  const pickedAtOpen = useRef("");
   const listRef = useRef<HTMLDivElement>(null);
-  const revealed = useRef<string | null>(null);
-  const picked = useRef(false);
+  const reveal = useRef<{ tops: Map<string, number>; added: string[] } | null>(null);
 
   const options = useMemo(() => {
     const ids = new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]));
@@ -84,50 +108,89 @@ export function MatchesByDate({
       .sort((a, b) => a.shortName.localeCompare(b.shortName));
   }, [matches, teams]);
 
+  // A remembered team that has left the list (relegated, knocked out) is
+  // let go rather than leaving the list empty.
+  const picked = useMemo(() => {
+    const present = new Set(options.map((t) => t.id));
+    return picks.filter((id) => present.has(id));
+  }, [options, picks]);
+
   const days = useMemo(
-    () => matchDays(matches, timeZone, team === ALL_TEAMS ? null : team),
-    [matches, team, timeZone]
+    () => matchDays(matches, timeZone, new Set(picked)),
+    [matches, picked, timeZone]
   );
 
-  const earlier = showEarlier ? 0 : openingDayIndex(days, today);
+  const filtering = options.length > 1;
+  const crests = picked
+    .map((id) => options.find((t) => t.id === id))
+    .filter((t): t is Team => Boolean(t));
+
+  // How many days before the opening one are shown. Other teams, picked here
+  // or anywhere on the view, open on their own freshest results.
+  const pickKey = sameTeams(picked);
+  const [shownEarlier, setShownEarlier] = useState({ pickKey, extra: 0 });
+  const extra = shownEarlier.pickKey === pickKey ? shownEarlier.extra : 0;
+  const setExtra = (next: number): void => setShownEarlier({ pickKey, extra: next });
+
+  const opening = openingDayIndex(days, today, picked.length > 0 ? TEAM_RESULTS : 1);
+  const earlier = Math.max(0, opening - extra);
   const shown = days.slice(earlier);
+  const step = Math.min(EARLIER_STEP, earlier);
 
-  // The older days go in above the first heading. Bring the newest of them
-  // into view and give it focus, so the list reads on upward from where the
-  // clock was instead of jumping to the season's first day, and a keyboard is
-  // not left on <body> when the button goes.
+  // The new days are in, above the ones that were shown, and the page has
+  // not scrolled. The focus goes to the clock on the new first heading, for
+  // the next few days, or to that heading's day once there are none.
   useLayoutEffect(() => {
-    const day = revealed.current;
-    revealed.current = null;
-    const target = day ? listRef.current?.querySelector<HTMLElement>(`[data-day="${day}"]`) : null;
-    if (!target) return;
-    target.focus({ preventScroll: true });
-    if (typeof target.scrollIntoView === "function") target.scrollIntoView({ block: "start" });
-  }, [showEarlier]);
+    const done = reveal.current;
+    const list = listRef.current;
+    reveal.current = null;
+    if (!done || !list) return;
+    const clock = list.querySelector<HTMLElement>("[data-earlier]");
+    (clock ?? list.querySelector<HTMLElement>("[data-day]"))?.focus({ preventScroll: true });
+    slideIn(list, done.tops, done.added);
+  }, [extra]);
 
-  // The filter sits in the stuck bar, so a team can be picked deep in the
-  // list, which left the new, shorter list starting above the screen. Put
-  // its first day back under the bar; a list already in view stays put.
+  // A pick can leave the new, shorter list starting above the screen: the
+  // filter rides the first day's heading, stuck under the bar while that day
+  // is read, and a team tapped in the table (under the list on a phone) is
+  // further down still. Put its first day back under the bar; a list already
+  // in view stays put.
+  const pickedKey = useRef(pickKey);
   useLayoutEffect(() => {
-    if (!picked.current) return;
-    picked.current = false;
+    if (pickedKey.current === pickKey) return;
+    pickedKey.current = pickKey;
     const first = listRef.current?.querySelector<HTMLElement>("[data-day]");
     if (first && hiddenUnderBar(first)) first.scrollIntoView({ block: "start" });
-  }, [team]);
+  }, [pickKey]);
 
   const revealEarlier = (): void => {
-    revealed.current = days[earlier - 1]?.day ?? null;
-    setShowEarlier(true);
+    const list = listRef.current;
+    if (!list || step === 0) return;
+    const tops = new Map<string, number>();
+    for (const el of list.querySelectorAll<HTMLElement>("[data-day]")) {
+      tops.set(el.dataset.day ?? "", el.getBoundingClientRect().top);
+    }
+    holdScrollStill(list);
+    reveal.current = { tops, added: days.slice(earlier - step, earlier).map((d) => d.day) };
+    setExtra(extra + step);
   };
 
-  // Another team opens on its own freshest results, as the list did.
-  const pickTeam = (value: string): void => {
-    picked.current = true;
-    setTeam(value);
-    setShowEarlier(false);
+  // Saved once, when the menu closes having changed: a run of ticks is one write.
+  const openFilter = (open: boolean): void => {
+    if (open) pickedAtOpen.current = pickKey;
+    else if (pickKey !== pickedAtOpen.current) save(picked);
+    setFilterOpen(open);
   };
 
-  const earlierLabel = `Earlier results, ${earlier} ${earlier === 1 ? "day" : "days"}`;
+  // What a tap brings in, by its dates: "Show Oct 10 – Oct 14", or one day.
+  const batch = days.slice(earlier - step, earlier);
+  const earlierDates =
+    batch.length > 1
+      ? `${format.shortDay(batch[0].day)} – ${format.shortDay(batch[batch.length - 1].day)}`
+      : batch[0]
+        ? format.shortDay(batch[0].day)
+        : "";
+  const earlierLabel = `Show ${earlierDates}`;
 
   const heading = (day: string): string => {
     const name = format.longDay(day);
@@ -139,113 +202,192 @@ export function MatchesByDate({
     // Its own container, so the columns follow the list's width: beside a
     // table it is two-thirds of the row, alone it is all of it.
     <section className={cn("@container flex min-w-0 flex-col", className)}>
-      {options.length > 1 && (
-        <SportBarEnd>
-          <TeamFilter team={team} options={options} onPick={pickTeam} />
-        </SportBarEnd>
-      )}
       {days.length === 0 ? (
         <EmptyState icon={CalendarX} title={emptyTitle} />
       ) : (
-        <div ref={listRef} className="flex flex-col gap-4">
-          {shown.map(({ day, matches: list }, i) => (
-            // The scroll margin and the heading's offset clear the sport bar
-            // (and on a phone the app header above it): SPACING.md.
-            <div
-              key={day}
-              data-day={day}
-              tabIndex={-1}
-              className="flex scroll-mt-26 flex-col gap-2 outline-none md:scroll-mt-12"
-            >
-              <Eyebrow
-                size="sm"
-                as="div"
-                className={cn(
-                  "sticky top-26 z-10 flex items-center justify-between gap-2 bg-background py-1 md:top-12",
-                  day === today && "text-foreground"
-                )}
-              >
-                {heading(day)}
-                {i === 0 && earlier > 0 && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      {/* A 24px target in a 22px line: the negative margins
-                          keep the line, and the table's label beside it, as
-                          they are. */}
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        className="-my-1.5 -mr-1 text-muted-foreground"
-                        aria-label={earlierLabel}
-                        onClick={revealEarlier}
-                      >
-                        <History className="size-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{earlierLabel}</TooltipContent>
-                  </Tooltip>
-                )}
-              </Eyebrow>
-              <div className="grid gap-2 @xl:grid-cols-2 @5xl:grid-cols-3">
-                {list.map((match) => (
-                  <ScoreCard key={match.id} match={match} teams={teams} />
-                ))}
+        <Popover open={filterOpen} onOpenChange={openFilter}>
+          <div ref={listRef} className="flex flex-col gap-4">
+            {shown.map(({ day, matches: list }, i) => (
+              // The heading's offset clears the sport bar (and on a phone the
+              // app header above it), as the scroller's scroll padding does
+              // for a day scrolled to: SPACING.md.
+              <div key={day} data-day={day} tabIndex={-1} className="flex flex-col gap-2 outline-none">
+                <Eyebrow
+                  size="sm"
+                  as="div"
+                  className={cn(
+                    "sticky top-26 z-10 flex items-center justify-between gap-2 bg-background py-1 md:top-12",
+                    day === today && "text-foreground"
+                  )}
+                >
+                  {/* The day alone: the controls beside it stay out of its name. */}
+                  <h2 className="min-w-0">{heading(day)}</h2>
+                  {/* On the first day's line: the teams, then the days before. */}
+                  {i === 0 && (filtering || earlier > 0) && (
+                    <span className="flex items-center gap-1.5">
+                      {filtering && <TeamFilterPill crests={crests} />}
+                      {earlier > 0 && (
+                        <RevealPill
+                          icon={History}
+                          label="Earlier"
+                          detail={earlierLabel}
+                          data-earlier
+                          onClick={revealEarlier}
+                        />
+                      )}
+                    </span>
+                  )}
+                </Eyebrow>
+                <ul role="list" className="grid gap-2 @xl:grid-cols-2 @5xl:grid-cols-3">
+                  {list.map((match) => (
+                    <ScoreCard key={match.id} as="li" match={match} teams={teams} />
+                  ))}
+                </ul>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+          {filtering && <TeamFilterMenu options={options} picked={picked} onPick={setPicks} />}
+        </Popover>
       )}
     </section>
   );
 }
 
-/** Whether `day`'s top is up under the sport bar, which its scroll margin clears. */
-function hiddenUnderBar(day: HTMLElement): boolean {
-  const scrollerTop = scrollParent(day)?.getBoundingClientRect().top ?? 0;
-  const margin = Number.parseFloat(getComputedStyle(day).scrollMarginTop) || 0;
-  return day.getBoundingClientRect().top < scrollerTop + margin;
+/** A pick as a key that ignores the order the teams were ticked in. */
+function sameTeams(ids: readonly string[]): string {
+  return [...ids].sort().join(",");
 }
 
 /**
- * The team filter, quiet in the sport bar: a filter icon or the picked
- * team's crest, with the name and the chevron beside it once the bar has
- * room. On a phone it is the icon alone, so a stuck bar keeps room for the
- * sport's name and its tabs.
+ * The days that were on screen slide from where they were to where they are
+ * now (down, by the height of the days added), and the added days fade in
+ * after them. Nothing moves for a reader who asked for less motion, or where
+ * there is no Web Animations API (a test).
  */
-function TeamFilter({
-  team,
+function slideIn(list: HTMLElement, tops: Map<string, number>, added: string[]): void {
+  if (holdStill(list)) return;
+  for (const el of list.querySelectorAll<HTMLElement>("[data-day]")) {
+    const day = el.dataset.day ?? "";
+    const was = tops.get(day);
+    if (was !== undefined) {
+      const by = was - el.getBoundingClientRect().top;
+      if (by !== 0) {
+        el.animate([{ transform: `translateY(${by}px)` }, { transform: "none" }], {
+          duration: SLIDE_MS,
+          easing: EASE,
+        });
+      }
+    } else if (added.includes(day)) {
+      fadeIn(el, SLIDE_MS / 2);
+    }
+  }
+}
+
+/** Whether `day`'s top is up under the sport bar, which the scroller's scroll padding clears. */
+function hiddenUnderBar(day: HTMLElement): boolean {
+  const scroller = scrollParent(day);
+  const margin = Number.parseFloat(getComputedStyle(day).scrollMarginTop) || 0;
+  return day.getBoundingClientRect().top < (scroller?.getBoundingClientRect().top ?? 0) + margin;
+}
+
+/**
+ * The team filter's pill, on the first day's heading line beside "Earlier",
+ * set as that one is: a filter icon or the picked teams' crests, with what is
+ * picked and a chevron once the list has room; on a phone the icons alone,
+ * so the line keeps room for the day. Its name says which teams the crests
+ * are.
+ */
+function TeamFilterPill({ crests }: { crests: Team[] }): React.ReactElement {
+  const label =
+    crests.length === 0
+      ? "All teams"
+      : crests.length === 1
+        ? crests[0].shortName
+        : `${crests.length} teams`;
+  const names = crests.length > 1 ? ` (${crests.map((t) => t.shortName).join(", ")})` : "";
+
+  return (
+    <PopoverTrigger asChild>
+      <Button
+        variant="outline"
+        size="xs"
+        aria-label={`Filter by team: ${label}${names}`}
+        className="-my-1.5 rounded-full font-medium tracking-normal normal-case"
+      >
+        {crests.length === 0 ? (
+          <ListFilter data-icon="inline-start" />
+        ) : (
+          <span className="flex -space-x-1.5">
+            {crests.slice(0, 3).map((t) => (
+              <TeamBadge key={t.id} team={t} size="sm" className="size-4 ring-2 ring-background" />
+            ))}
+          </span>
+        )}
+        <span className="sr-only @md:not-sr-only">{label}</span>
+        <ChevronDown data-icon="inline-end" className="@max-md:hidden" />
+      </Button>
+    </PopoverTrigger>
+  );
+}
+
+/**
+ * The filter's menu: several teams, with a search for a twenty- or
+ * thirty-six-team league. The list behind it follows each tick. It is
+ * rendered once, beside the days rather than under the pill (it is portalled,
+ * so where it sits in the tree is all that changes), so a tick that moves the
+ * pill to another day keeps the search, the highlight and the focus.
+ *
+ * A tick is `aria-checked`, not a selection: cmdk spends `aria-selected` on
+ * its highlight, so the list is not `aria-multiselectable`.
+ */
+function TeamFilterMenu({
   options,
+  picked,
   onPick,
 }: {
-  team: string;
   options: Team[];
-  onPick: (team: string) => void;
+  picked: readonly string[];
+  onPick: (teamIds: readonly string[]) => void;
 }): React.ReactElement {
-  const picked = options.find((t) => t.id === team);
+  const chosen = new Set(picked);
+  const toggle = (id: string): void =>
+    onPick(chosen.has(id) ? picked.filter((p) => p !== id) : [...picked, id]);
+
   return (
-    <Select value={team} onValueChange={onPick}>
-      <SelectTrigger
-        size="sm"
-        aria-label="Filter by team"
-        className={cn(
-          "border-transparent bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground @max-md:px-2 @max-md:[&>svg]:hidden dark:bg-transparent dark:hover:bg-muted/50",
-          picked && "text-foreground"
-        )}
-      >
-        <SelectValue>
-          {picked ? <TeamBadge team={picked} size="sm" className="size-5" /> : <ListFilter />}
-          <span className="sr-only @md:not-sr-only">{picked?.shortName ?? "All teams"}</span>
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent position="popper" align="end">
-        <SelectItem value={ALL_TEAMS}>All teams</SelectItem>
-        {options.map((t) => (
-          <SelectItem key={t.id} value={t.id}>
-            <TeamBadge team={t} size="sm" className="size-5" />
-            {t.shortName}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <PopoverContent aria-label="Filter by team" align="end" className="w-64 p-0">
+      <Command label="Search teams">
+        <CommandInput placeholder="Search teams…" />
+        <CommandList label="Teams, pick one or more">
+          <CommandEmpty>No team found.</CommandEmpty>
+          {/* A rule under it rather than a separator, which a listbox may not hold. */}
+          <CommandGroup className="border-b">
+            <CommandItem
+              value="All teams"
+              data-checked={picked.length === 0}
+              aria-checked={picked.length === 0}
+              onSelect={() => onPick([])}
+            >
+              <ListFilter />
+              All teams
+            </CommandItem>
+          </CommandGroup>
+          <CommandGroup>
+            {options.map((t) => (
+              <CommandItem
+                key={t.id}
+                value={t.id}
+                keywords={[t.shortName, t.name, t.code]}
+                data-checked={chosen.has(t.id)}
+                aria-checked={chosen.has(t.id)}
+                onSelect={() => toggle(t.id)}
+              >
+                <TeamBadge team={t} size="sm" className="size-5" />
+                {t.shortName}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </Command>
+    </PopoverContent>
   );
 }

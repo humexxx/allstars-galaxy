@@ -22,6 +22,8 @@ const {
   tipOffFrom,
   championFrom,
   preseasonFrom,
+  channelsFrom,
+  withChannels,
 } = __testing;
 
 const logo = (slug: string) =>
@@ -102,14 +104,37 @@ describe("recentAndNext", () => {
     ]);
   });
 
-  it("trims a long season down to six either side of today", () => {
-    const games = Array.from({ length: 20 }, (_, i) =>
-      match(`2026-01-${String(i + 1).padStart(2, "0")}T00:30:00Z`, i < 10 ? "ft" : "scheduled")
-    );
-    const out = recentAndNext(games);
+  it("keeps two weeks of results and a week of fixtures out of a long season", () => {
+    // A game a night from Dec 20: three weeks played, then January ahead.
+    const games = Array.from({ length: 40 }, (_, i) => {
+      const day = new Date(Date.UTC(2025, 11, 20 + i, 0, 30));
+      return match(day.toISOString().replace(".000", ""), i < 21 ? "ft" : "scheduled");
+    });
+    const out = recentAndNext(games).map((g) => g.kickoff.slice(0, 10));
 
-    expect(out).toHaveLength(12);
-    expect(out[0].kickoff).toBe("2026-01-05T00:30:00Z");
+    // The last played is Jan 9; two weeks back is Dec 27, a week on Jan 16.
+    expect(out[0]).toBe("2025-12-27");
+    expect(out.at(-1)).toBe("2026-01-16");
+    expect(out).toHaveLength(21);
+  });
+
+  it("lists every game of a busy week ahead, not one night's worth", () => {
+    // Twelve games a night: six by count was today alone.
+    const night = (day: string): Match[] =>
+      Array.from({ length: 12 }, (_, i) => ({ ...match(`2026-10-${day}T23:00:00Z`), id: `${day}-${i}` }));
+    const games = ["23", "24", "25", "26", "27", "28", "29", "30", "31"].flatMap(night);
+
+    const days = new Set(recentAndNext(games).map((g) => g.kickoff.slice(0, 10)));
+
+    expect([...days]).toEqual([
+      "2026-10-23",
+      "2026-10-24",
+      "2026-10-25",
+      "2026-10-26",
+      "2026-10-27",
+      "2026-10-28",
+      "2026-10-29",
+    ]);
   });
 
   it("interleaves ESPN's preseason and balldontlie's games by kickoff", () => {
@@ -199,12 +224,12 @@ describe("statusFrom", () => {
 });
 
 describe("gameWindow", () => {
-  it("asks for a few nights either side of today in season", () => {
+  it("asks for two weeks back and a week ahead in season", () => {
     // One page is the OLDEST hundred games in the range. ±130 days in
     // December would have stopped at the season's first fortnight.
     expect(gameWindow(new Date(2026, 11, 15, 12))).toEqual({
-      start: "2026-12-11",
-      end: "2026-12-19",
+      start: "2026-12-01",
+      end: "2026-12-22",
     });
   });
 
@@ -218,13 +243,13 @@ describe("gameWindow", () => {
   it("keeps the finals in view until the new season has a week of games", () => {
     expect(gameWindow(new Date(2026, 9, 18, 12)).start).toBe("2026-06-01");
     expect(gameWindow(new Date(2026, 9, 28, 12))).toEqual({
-      start: "2026-10-24",
-      end: "2026-11-01",
+      start: "2026-10-14",
+      end: "2026-11-04",
     });
   });
 
   it("stays narrow while the finals are still being played", () => {
-    expect(gameWindow(new Date(2026, 5, 10, 12)).start).toBe("2026-06-06");
+    expect(gameWindow(new Date(2026, 5, 10, 12)).start).toBe("2026-05-27");
   });
 });
 
@@ -471,6 +496,89 @@ describe("preseasonFrom", () => {
       ["scheduled", null, null],
       ["cancelled", null, null],
     ]);
+  });
+});
+
+describe("channelsFrom and withChannels", () => {
+  const fixture = (id: string, home: string, away: string, kickoff: string): Match => ({
+    id,
+    homeTeamId: home,
+    awayTeamId: away,
+    homeScore: null,
+    awayScore: null,
+    kickoff,
+    status: "scheduled",
+  });
+  const on = (home: string, away: string, startsAt: string, broadcasts: string[]) => ({
+    homeTeamId: home,
+    awayTeamId: away,
+    startsAt,
+    broadcasts,
+  });
+
+  it("keys ESPN's games by balldontlie's codes, and skips one with no national channel", () => {
+    const channels = channelsFrom({
+      sports: [
+        {
+          leagues: [
+            {
+              events: [
+                {
+                  date: "2026-10-28T23:00Z",
+                  broadcast: "ESPN",
+                  competitors: [
+                    { homeAway: "home", abbreviation: "IND" },
+                    { homeAway: "away", abbreviation: "PHI" },
+                  ],
+                },
+                {
+                  date: "2026-10-29T00:30Z",
+                  broadcast: "",
+                  competitors: [
+                    { homeAway: "home", abbreviation: "SA" },
+                    { homeAway: "away", abbreviation: "NY" },
+                  ],
+                },
+                {
+                  date: "2026-10-29T02:00Z",
+                  broadcast: "NBA TV",
+                  competitors: [
+                    { homeAway: "home", abbreviation: "UTAH" },
+                    { homeAway: "away", abbreviation: "WSH" },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(channels).toEqual([
+      on("IND", "PHI", "2026-10-28T23:00Z", ["ESPN"]),
+      on("UTA", "WAS", "2026-10-29T02:00Z", ["NBA TV"]),
+    ]);
+  });
+
+  it("takes the channels of the same sides' game nearest in time", () => {
+    // A playoff pair two nights apart; the second game has no time yet.
+    const games = [
+      fixture("1", "OKC", "DEN", "2027-05-05T01:30:00Z"),
+      fixture("2", "OKC", "DEN", "2027-05-07T00:00:00Z"),
+    ];
+    const channels = [
+      on("OKC", "DEN", "2027-05-05T01:30:00Z", ["ESPN"]),
+      on("OKC", "DEN", "2027-05-07T01:00:00Z", ["Prime Video"]),
+    ];
+    expect(withChannels(games, channels).map((g) => g.broadcasts)).toEqual([["ESPN"], ["Prime Video"]]);
+  });
+
+  it("names nothing for the sides the other way round, or a game days away", () => {
+    const games = [fixture("1", "BOS", "NYK", "2026-11-01T00:00:00Z")];
+    const channels = [
+      on("NYK", "BOS", "2026-11-01T00:00:00Z", ["ESPN"]),
+      on("BOS", "NYK", "2026-11-03T00:00:00Z", ["NBC"]),
+    ];
+    expect(withChannels(games, channels)[0].broadcasts).toBeUndefined();
   });
 });
 
@@ -725,18 +833,23 @@ describe("getNbaData through the year", () => {
     });
     const data = await getNbaData();
 
-    expect(calls()).toHaveLength(2);
-    expect(calls()).toEqual(expect.arrayContaining([STANDINGS(2027), HEADER("20261001-20261019")]));
+    // The table, the preseason, and the opening week's channels.
+    expect(calls()).toHaveLength(3);
+    expect(calls()).toEqual(
+      expect.arrayContaining([STANDINGS(2027), HEADER("20261001-20261019"), HEADER("20261017-20261026")])
+    );
     expect(data.season).toBe("2026–27");
-    // The last six preseason results, then the first six fixtures; June's
-    // finals belong to 2025–26 and are not listed.
+    // The preseason's last two weeks of results, then the opening week;
+    // June's finals belong to 2025–26 and are not listed.
     expect(fixtures(data)).toEqual([
-      "CHA@MEM", "WAS@NOP", "MIN@CHI", "POR@GSW", "UTA@PHX", "DEN@LAL",
-      "BOS@DET", "PHI@NYK", "OKC@SAS", "ATL@ORL", "MIL@WAS", "MIN@MIA",
+      "MIA@TOR", "HOU@DAL", "LON@POR", "MIL@IND", "ATL@DAL", "SAC@SAS", "CHA@MEM", "WAS@NOP", "MIN@CHI",
+      "POR@GSW", "UTA@PHX", "DEN@LAL",
+      "BOS@DET", "PHI@NYK", "OKC@SAS", "ATL@ORL", "MIL@WAS", "MIN@MIA", "CHA@BKN", "CHI@TOR", "UTA@MEM",
+      "GSW@LAL",
     ]);
     expect(data.games.map((g) => g.stageLabel ?? "")).toEqual([
-      ...Array(6).fill("Preseason"),
-      ...Array(6).fill(""),
+      ...Array(12).fill("Preseason"),
+      ...Array(10).fill(""),
     ]);
     expect(data.champion).toEqual({
       season: "2025–26",
@@ -758,7 +871,10 @@ describe("getNbaData through the year", () => {
     const data = await getNbaData();
 
     expect(data).not.toBe(NBA_DATA);
-    expect(fixtures(data)).toEqual(["BOS@DET", "PHI@NYK", "OKC@SAS", "ATL@ORL", "MIL@WAS", "MIN@MIA"]);
+    expect(fixtures(data)).toEqual([
+      "BOS@DET", "PHI@NYK", "OKC@SAS", "ATL@ORL", "MIL@WAS", "MIN@MIA", "CHA@BKN", "CHI@TOR", "UTA@MEM",
+      "GSW@LAL",
+    ]);
     expect(data.champion?.teamId).toBe("NYK");
     expect(data.tipOff).toBe("2026-10-20T19:00:00.000Z");
   });
@@ -772,10 +888,10 @@ describe("getNbaData through the year", () => {
     });
     const data = await getNbaData();
 
-    expect(calls()).toEqual([STANDINGS(2027)]);
+    expect(calls()).toEqual([STANDINGS(2027), HEADER("20261020-20261029")]);
     expect(data.season).toBe("2026–27");
     expect(data.games.slice(0, 3).map((g) => g.status)).toEqual(["ft", "ft", "ft"]);
-    expect(data.games).toHaveLength(9);
+    expect(data.games).toHaveLength(10);
     expect(data.games.some((g) => g.stageLabel)).toBe(false);
     expect(data.champion).toBeUndefined();
     expect(data.tipOff).toBeUndefined();
@@ -831,7 +947,67 @@ describe("getNbaData through the year", () => {
     expect(data.games).toHaveLength(3);
     expect(data.tipOff).toBeUndefined();
     expect(data.champion).toBeUndefined();
-    expect(calls()).toEqual([STANDINGS(2026)]);
+    // No preseason and no bracket; only the week's channels.
+    expect(calls()).toEqual([STANDINGS(2026), HEADER("20260216-20260225")]);
+  });
+
+  it("puts ESPN's national channels on balldontlie's fixtures", async () => {
+    vi.setSystemTime(new Date(2026, 9, 21, 12));
+    const event = (home: string, away: string, date: string, broadcast: string, broadcasts: unknown[]) => ({
+      id: `${away}@${home}`,
+      date,
+      seasonType: "2",
+      broadcast,
+      broadcasts,
+      competitors: [
+        { homeAway: "home", abbreviation: home },
+        { homeAway: "away", abbreviation: away },
+      ],
+    });
+    stubFeeds({
+      games: pageOct21,
+      standings: () => json(openingNightTable),
+      header: () =>
+        json({
+          sports: [
+            {
+              leagues: [
+                {
+                  events: [
+                    event("MIA", "MIN", "2026-10-21T23:30Z", "ESPN", [{ name: "ESPN", type: "TV" }]),
+                    // ESPN's "GS" is balldontlie's "GSW"; streaming goes after TV.
+                    event("LAL", "GS", "2026-10-22T02:00Z", "Peacock/NBC", [
+                      { name: "Peacock", type: "Streaming" },
+                      { name: "NBC", type: "TV" },
+                    ]),
+                    event("ORL", "ATL", "2026-10-21T23:00Z", "", [
+                      { name: "NBA League Pass", type: "Subscription Package" },
+                    ]),
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+    });
+    const data = await getNbaData();
+
+    const on = (fixture: string): string[] | undefined =>
+      data.games.find((g) => `${g.awayTeamId}@${g.homeTeamId}` === fixture)?.broadcasts;
+    expect(on("MIN@MIA")).toEqual(["ESPN"]);
+    expect(on("GSW@LAL")).toEqual(["NBC", "Peacock"]);
+    // League Pass only: nothing national to name.
+    expect(on("ATL@ORL")).toBeUndefined();
+  });
+
+  it("still lists the fixtures when ESPN's channels do not answer", async () => {
+    vi.setSystemTime(new Date(2026, 9, 21, 12));
+    stubFeeds({ games: pageOct21, standings: () => json(openingNightTable), header: () => json({}, 502) });
+    const data = await getNbaData();
+
+    expect(data).not.toBe(NBA_DATA);
+    expect(data.games.length).toBeGreaterThan(0);
+    expect(data.games.some((g) => g.broadcasts)).toBe(false);
   });
 
   it("makes no extra request in the middle of the season", async () => {

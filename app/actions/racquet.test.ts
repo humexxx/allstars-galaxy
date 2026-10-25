@@ -30,35 +30,27 @@ afterEach(() => {
 });
 
 describe("getRacquetDrawAction", () => {
-  it("reads a padel draw for the category asked for", async () => {
+  it("reads a padel draw", async () => {
     vi.mocked(getPadelDraw).mockResolvedValue(DRAW);
-    const result = await getRacquetDrawAction({
-      sport: "padel",
-      tour: "wpt-women",
-      tournamentId: "padelapi-747",
-    });
+    const result = await getRacquetDrawAction({ sport: "padel", tournamentId: "padelapi-747" });
     expect(result).toEqual({ success: true, data: DRAW });
-    expect(getPadelDraw).toHaveBeenCalledWith("wpt-women", "padelapi-747");
+    expect(getPadelDraw).toHaveBeenCalledWith("padelapi-747");
     expect(getTennisDraw).not.toHaveBeenCalled();
   });
 
-  it("reads a tennis draw for the tour asked for", async () => {
+  it("reads a tennis draw", async () => {
     const draw = { ...DRAW, tournamentId: "espn-315-2026-mens-singles" };
     vi.mocked(getTennisDraw).mockResolvedValue(draw);
-    const result = await getRacquetDrawAction({
-      sport: "tennis",
-      tour: "atp",
-      tournamentId: "espn-315-2026-mens-singles",
-    });
+    const result = await getRacquetDrawAction({ sport: "tennis", tournamentId: "espn-315-2026-mens-singles" });
     expect(result).toEqual({ success: true, data: draw });
-    expect(getTennisDraw).toHaveBeenCalledWith("atp", "espn-315-2026-mens-singles");
+    expect(getTennisDraw).toHaveBeenCalledWith("espn-315-2026-mens-singles");
   });
 
   it.each([
-    ["an id of the other sport's shape", { sport: "padel", tour: "wpt-men", tournamentId: "espn-315-2026-mens-singles" }],
-    ["a tour of the other sport", { sport: "tennis", tour: "wpt-men", tournamentId: "espn-315-2026-mens-singles" }],
-    ["an unknown sport", { sport: "squash", tour: "atp", tournamentId: "padelapi-1" }],
-    ["a path in the id", { sport: "padel", tour: "wpt-men", tournamentId: "padelapi-1/../../rankings" }],
+    ["an id of the other sport's shape", { sport: "padel", tournamentId: "espn-315-2026-mens-singles" }],
+    ["a women's draw", { sport: "tennis", tournamentId: "espn-315-2026-womens-singles" }],
+    ["an unknown sport", { sport: "squash", tournamentId: "padelapi-1" }],
+    ["a path in the id", { sport: "padel", tournamentId: "padelapi-1/../../rankings" }],
   ])("refuses %s before any provider is asked", async (_label, input) => {
     // A server action is a public POST endpoint; the argument is whatever was sent.
     const result = await getRacquetDrawAction(input as never);
@@ -69,21 +61,13 @@ describe("getRacquetDrawAction", () => {
 
   it("says so when the draw is not on the calendar or the provider failed", async () => {
     vi.mocked(getPadelDraw).mockResolvedValue(null);
-    const result = await getRacquetDrawAction({
-      sport: "padel",
-      tour: "wpt-men",
-      tournamentId: "padelapi-1",
-    });
+    const result = await getRacquetDrawAction({ sport: "padel", tournamentId: "padelapi-1" });
     expect(result).toEqual({ success: false, error: "The draw could not be loaded" });
   });
 
   it("asks nothing of a provider for somebody signed out", async () => {
     vi.mocked(requireAuth).mockRejectedValue(new Error("Unauthorized"));
-    const result = await getRacquetDrawAction({
-      sport: "padel",
-      tour: "wpt-men",
-      tournamentId: "padelapi-747",
-    });
+    const result = await getRacquetDrawAction({ sport: "padel", tournamentId: "padelapi-747" });
     expect(result).toEqual({ success: false, error: "Action failed" });
     expect(getPadelDraw).not.toHaveBeenCalled();
   });

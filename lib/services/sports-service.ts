@@ -1,20 +1,17 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, type SQL } from "drizzle-orm";
 
 import { db } from "@/db";
-import { userSportsPreferences } from "@/db/schema";
+import { userSportsPreferences, userSportsTeamFilters } from "@/db/schema";
 import { F1_DATA } from "@/lib/data/sports/f1";
-import { getFootballLeague } from "@/lib/data/sports/football";
-import { LOL_DATA } from "@/lib/data/sports/lol";
-import { NBA_DATA } from "@/lib/data/sports/nba";
-import { NFL_DATA } from "@/lib/data/sports/nfl";
-import { PADEL_DATA } from "@/lib/data/sports/padel";
 import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
-import { TENNIS_DATA } from "@/lib/data/sports/tennis";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
+import { getMlbData } from "@/lib/services/espn-mlb-service";
+import { getEspnNews } from "@/lib/services/espn-news-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
+import { getNhlData } from "@/lib/services/espn-nhl-service";
 import {
   FOOTBALL_COMPETITIONS,
   getFootballLeagueData,
@@ -25,6 +22,7 @@ import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
 import { leadRace, startsIn, weekendNow } from "@/lib/sports/f1-weekend";
+import { splitSeasonLabel } from "@/lib/sports/season";
 import { formatDayRange } from "@/lib/utils/date";
 import type {
   BracketMatch,
@@ -43,23 +41,24 @@ import type {
   LolData,
   LolMatch,
   LolRegion,
+  NewsStory,
   LolSplit,
   Match,
-  NbaConference,
+  MlbData,
   NbaData,
-  NflConference,
   NflData,
+  NhlData,
   RacquetData,
   SportId,
   SwissStage,
   Team,
+  TeamFilterList,
   UserSportsPreference,
+  UserSportsTeamFilter,
 } from "@/types/sports";
 import {
   FOOTBALL_COMPETITION_IDS,
   LOL_REGIONS,
-  PADEL_CATEGORIES,
-  TENNIS_TOURS,
 } from "@/types/sports";
 
 // ---------- Favourite CRUD ----------
@@ -139,10 +138,62 @@ export async function setSportCompetition(
   return row ?? null;
 }
 
+// ---------- Team filters ----------
+
+const sameList = (userId: string, list: TeamFilterList): SQL | undefined =>
+  and(
+    eq(userSportsTeamFilters.userId, userId),
+    eq(userSportsTeamFilters.sportId, list.sportId),
+    eq(userSportsTeamFilters.competition, list.competition)
+  );
+
+/** The teams the caller last narrowed this match list to; [] for every team. */
+export async function getSportTeamFilter(
+  userId: string,
+  list: TeamFilterList
+): Promise<string[]> {
+  const [row] = await db
+    .select({ teamIds: userSportsTeamFilters.teamIds })
+    .from(userSportsTeamFilters)
+    .where(sameList(userId, list))
+    .limit(1);
+  return row?.teamIds ?? [];
+}
+
+/**
+ * Remembers the teams the caller narrowed a match list to, once each, in the
+ * order picked. Every team (an empty list) deletes the row instead: no row
+ * already means that. Null when there was nothing to keep.
+ */
+export async function setSportTeamFilter(
+  userId: string,
+  list: TeamFilterList,
+  teamIds: readonly string[]
+): Promise<UserSportsTeamFilter | null> {
+  const unique = [...new Set(teamIds)];
+  if (unique.length === 0) {
+    await db.delete(userSportsTeamFilters).where(sameList(userId, list));
+    return null;
+  }
+  const [row] = await db
+    .insert(userSportsTeamFilters)
+    .values({ userId, sportId: list.sportId, competition: list.competition, teamIds: unique })
+    .onConflictDoUpdate({
+      target: [
+        userSportsTeamFilters.userId,
+        userSportsTeamFilters.sportId,
+        userSportsTeamFilters.competition,
+      ],
+      set: { teamIds: unique, updatedAt: new Date() },
+    })
+    .returning();
+  return row ?? null;
+}
+
 // ---------- Dashboard cards ----------
 
-/** Matches listed under a card's featured one. */
-const CARD_MATCHES = 2;
+/** Games the lead box steps through after its featured one. */
+const CARD_FOLLOWING = 4;
 /**
  * LoL lists more: a day of an event is several series back to back, and two
  * did not reach the end of one.
@@ -192,49 +243,56 @@ export async function getDashboardSportCard(
     case "football": {
       const id = oneOf(FOOTBALL_COMPETITION_IDS, competition) ?? DEFAULT_FOOTBALL;
       // The World Cup has a feed of its own: one call for its groups,
-      // fixtures and bracket.
-      const data = id === "world-cup" ? await getWorldCupData() : await getFootballLeagueData(id);
+      // fixtures and bracket. The news is ESPN's, and costs football-data nothing.
+      const [data, news] = await Promise.all([
+        id === "world-cup" ? getWorldCupData() : getFootballLeagueData(id),
+        getEspnNews(id),
+      ]);
       return {
-        ...footballCard(base, data ?? getFootballLeague(id)),
+        ...footballCard(base, data),
+        news: cardNews(news),
         competitions: {
           value: id,
           options: FOOTBALL_COMPETITIONS.map((c) => ({ id: c.id, label: c.name })),
         },
       };
     }
-    case "nba":
-      return nbaCard(base, (await getNbaData()) ?? NBA_DATA);
-    case "nfl":
-      return nflCard(base, (await getNflData()) ?? NFL_DATA);
+    case "nba": {
+      const [data, news] = await Promise.all([getNbaData(), getEspnNews("nba")]);
+      return { ...nbaCard(base, data), news: cardNews(news) };
+    }
+    case "nfl": {
+      const [data, news] = await Promise.all([getNflData(), getEspnNews("nfl")]);
+      return { ...nflCard(base, data), news: cardNews(news) };
+    }
+    case "mlb": {
+      const [data, news] = await Promise.all([getMlbData(), getEspnNews("mlb")]);
+      return { ...mlbCard(base, data), news: cardNews(news) };
+    }
+    case "nhl": {
+      const [data, news] = await Promise.all([getNhlData(), getEspnNews("nhl")]);
+      return { ...nhlCard(base, data), news: cardNews(news) };
+    }
     case "lol":
-      return lolCard(base, (await getLolData()) ?? LOL_DATA, oneOf(LOL_REGIONS, competition));
-    case "tennis": {
-      const data = (await getTennisData()) ?? TENNIS_DATA;
-      return racquetCard(
-        base,
-        [
-          { id: "atp", label: "ATP", data: data.atp },
-          { id: "wta", label: "WTA", data: data.wta },
-        ],
-        oneOf(TENNIS_TOURS, competition),
-        "Both tours"
-      );
-    }
-    case "padel": {
-      const data = (await getPadelData()) ?? PADEL_DATA;
-      return racquetCard(
-        base,
-        [
-          { id: "men", label: "Men", data: data.men },
-          { id: "women", label: "Women", data: data.women },
-        ],
-        oneOf(PADEL_CATEGORIES, competition),
-        "Men and women"
-      );
-    }
+      return lolCard(base, await getLolData(), oneOf(LOL_REGIONS, competition));
+    case "tennis":
+      return racquetCard(base, (await getTennisData()).atp, "ATP");
+    case "padel":
+      return racquetCard(base, (await getPadelData()).men, "Premier Padel");
     default:
       return null;
   }
+}
+
+/** How many stories a card's rail carries. */
+const CARD_NEWS = 6;
+
+/**
+ * A card's latest news: its stories and recaps, newest first — a clip's page
+ * is a video player, not something to read off a dashboard.
+ */
+function cardNews(stories: NewsStory[]): NewsStory[] {
+  return stories.filter((s) => s.kind !== "video").slice(0, CARD_NEWS);
 }
 
 /** `value` when it is one of `choices`, else null. */
@@ -268,12 +326,10 @@ export async function getF1DashboardHighlight(
 
 function footballCard(base: CardBase, data: FootballLeagueData): DashboardSportCard {
   const teams = teamsById(data.teams);
-  const { featured, matches } = featuredAndNext(data.matches, teams);
   return {
     ...base,
     context: data.league.name,
-    featured,
-    matches,
+    ...featuredAndFollowing(data.matches, teams),
     tables:
       data.standings.length > 0
         ? [
@@ -289,24 +345,46 @@ function footballCard(base: CardBase, data: FootballLeagueData): DashboardSportC
   };
 }
 
+/**
+ * One table per group (a conference, a league), its first `CARD_ROWS` teams
+ * by position; a group with nobody in it is left out.
+ */
+function groupTables<S extends { position: number; teamId: string }, G extends string>(
+  standings: S[],
+  teams: Map<string, Team>,
+  groupOf: (s: S) => G,
+  groups: ReadonlyArray<{ id: NoInfer<G>; label: string }>,
+  record: (s: S) => string
+): DashboardTable[] {
+  return groups
+    .map(({ id, label }) => ({
+      id,
+      label,
+      rows: standings
+        .filter((s) => groupOf(s) === id)
+        .sort((a, b) => a.position - b.position)
+        .slice(0, CARD_ROWS)
+        .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, record(s))),
+    }))
+    .filter((t) => t.rows.length > 0);
+}
+
 function nbaCard(base: CardBase, data: NbaData): DashboardSportCard {
   const teams = teamsById(data.teams);
-  const { featured, matches } = featuredAndNext(data.games, teams);
-  const conference = (id: NbaConference, label: string): DashboardTable => ({
-    id,
-    label,
-    rows: data.standings
-      .filter((s) => s.conference === id)
-      .sort((a, b) => a.position - b.position)
-      .slice(0, CARD_ROWS)
-      .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.won}–${s.lost}`)),
-  });
-  const tables = [conference("east", "East"), conference("west", "West")].filter((t) => t.rows.length > 0);
+  const tables = groupTables(
+    data.standings,
+    teams,
+    (s) => s.conference,
+    [
+      { id: "east", label: "East" },
+      { id: "west", label: "West" },
+    ],
+    (s) => `${s.won}–${s.lost}`
+  );
   return {
     ...base,
     context: `Season ${data.season}`,
-    featured,
-    matches,
+    ...featuredAndFollowing(data.games, teams),
     tables,
     note: tables.length === 0 ? nbaNote(data) : undefined,
   };
@@ -323,29 +401,59 @@ function nbaNote(data: NbaData): DashboardSportCard["note"] {
 
 function nflCard(base: CardBase, data: NflData): DashboardSportCard {
   const teams = teamsById(data.teams);
-  const { featured, matches } = featuredAndNext(data.games, teams);
-  const conference = (id: NflConference, label: string): DashboardTable => ({
-    id,
-    label,
-    rows: data.standings
-      .filter((s) => s.conference === id)
-      .sort((a, b) => a.position - b.position)
-      .slice(0, CARD_ROWS)
-      .map((s) =>
-        teamRow(
-          s.position,
-          teams.get(s.teamId),
-          s.teamId,
-          s.ties > 0 ? `${s.wins}–${s.losses}–${s.ties}` : `${s.wins}–${s.losses}`
-        )
-      ),
-  });
   return {
     ...base,
     context: `Season ${data.season}`,
-    featured,
-    matches,
-    tables: [conference("afc", "AFC"), conference("nfc", "NFC")].filter((t) => t.rows.length > 0),
+    ...featuredAndFollowing(data.games, teams),
+    tables: groupTables(
+      data.standings,
+      teams,
+      (s) => s.conference,
+      [
+        { id: "afc", label: "AFC" },
+        { id: "nfc", label: "NFC" },
+      ],
+      (s) => (s.ties > 0 ? `${s.wins}–${s.losses}–${s.ties}` : `${s.wins}–${s.losses}`)
+    ),
+  };
+}
+
+function mlbCard(base: CardBase, data: MlbData): DashboardSportCard {
+  const teams = teamsById(data.teams);
+  return {
+    ...base,
+    context: `Season ${data.season}`,
+    ...featuredAndFollowing(data.games, teams),
+    tables: groupTables(
+      data.standings,
+      teams,
+      (s) => s.league,
+      [
+        { id: "al", label: "American League" },
+        { id: "nl", label: "National League" },
+      ],
+      (s) => `${s.wins}–${s.losses}`
+    ),
+  };
+}
+
+/** Each conference by points, the hockey table's own order. */
+function nhlCard(base: CardBase, data: NhlData): DashboardSportCard {
+  const teams = teamsById(data.teams);
+  return {
+    ...base,
+    context: `Season ${splitSeasonLabel(data.season)}`,
+    ...featuredAndFollowing(data.games, teams),
+    tables: groupTables(
+      data.standings,
+      teams,
+      (s) => s.conference,
+      [
+        { id: "east", label: "Eastern" },
+        { id: "west", label: "Western" },
+      ],
+      (s) => `${s.points} pts`
+    ),
   };
 }
 
@@ -506,20 +614,9 @@ function swissRecords(stage: SwissStage): { teamId: string; wins: number; losses
     .sort((a, b) => b.wins - a.wins || a.losses - b.losses);
 }
 
-/**
- * The tournament on or next and the rankings, across both tours or only the
- * one the card is set to. The line under the title names that choice: the
- * lead box already says whether the tournament is on now or next.
- */
-function racquetCard(
-  base: CardBase,
-  tours: { id: string; label: string; data: RacquetData }[],
-  chosen: string | null,
-  automatic: string
-): DashboardSportCard {
-  const pick = tours.find((t) => t.id === chosen);
-  const shown = pick ? [pick] : tours;
-  const tournaments = shown.flatMap((t) => t.data.tournaments);
+/** The men's tour only, so no championship to pick: the hub follows no women's tour. */
+function racquetCard(base: CardBase, data: RacquetData, context: string): DashboardSportCard {
+  const tournaments = data.tournaments;
   const event =
     tournaments.find((t) => t.status === "live") ??
     tournaments
@@ -527,7 +624,7 @@ function racquetCard(
       .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
   return {
     ...base,
-    context: pick?.label ?? automatic,
+    context,
     event: event
       ? {
           name: event.name,
@@ -538,11 +635,11 @@ function racquetCard(
         }
       : undefined,
     matches: [],
-    tables: shown
-      .map((t) => ({
-        id: t.id,
-        label: t.label,
-        rows: t.data.rankings.slice(0, CARD_ROWS).map(
+    tables: [
+      {
+        id: data.tour,
+        label: "Rankings",
+        rows: data.rankings.slice(0, CARD_ROWS).map(
           (p): DashboardTableRow => ({
             position: p.position,
             name: p.shortName,
@@ -551,13 +648,8 @@ function racquetCard(
             value: p.points.toLocaleString("en-US"),
           })
         ),
-      }))
-      .filter((t) => t.rows.length > 0),
-    competitions: {
-      value: pick?.id ?? null,
-      automatic,
-      options: tours.map((t) => ({ id: t.id, label: t.label })),
-    },
+      },
+    ].filter((t) => t.rows.length > 0),
   };
 }
 
@@ -594,15 +686,16 @@ function teamRow(position: number, team: Team | undefined, id: string, value: st
 const FINISHED = new Set<Match["status"]>(["ft", "aet", "pen"]);
 
 /**
- * The card's featured match and the ones listed under it: whatever else is
- * live, then the next fixtures — or, with nothing ahead, the latest results.
+ * The card's featured match and the games its box steps through after it:
+ * whatever else is live, then the next fixtures — or, with nothing ahead, the
+ * latest results.
  */
-function featuredAndNext(
+function featuredAndFollowing(
   all: Match[],
   teams: Map<string, Team>
-): { featured?: DashboardMatch; matches: DashboardMatch[] } {
+): Pick<DashboardSportCard, "featured" | "following" | "matches"> {
   const featured = pickFeaturedMatch(all);
-  if (!featured) return { matches: [] };
+  if (!featured) return { following: [], matches: [] };
   const others = all.filter((m) => m.id !== featured.id);
   const ahead = [
     ...others.filter((m) => m.status === "live"),
@@ -615,7 +708,8 @@ function featuredAndNext(
     .sort((a, b) => new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime());
   return {
     featured: cardMatch(featured, teams),
-    matches: (ahead.length > 0 ? ahead : behind).slice(0, CARD_MATCHES).map((m) => cardMatch(m, teams)),
+    following: (ahead.length > 0 ? ahead : behind).slice(0, CARD_FOLLOWING).map((m) => cardMatch(m, teams)),
+    matches: [],
   };
 }
 

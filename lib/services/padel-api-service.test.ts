@@ -16,7 +16,7 @@ const {
   pairOf,
   setScore,
   drawFrom,
-  drawsFrom,
+  fetchPadelDraw,
 } = __testing;
 
 // Milano P1 2026 as the API returns it, trimmed to what the mapper reads.
@@ -51,6 +51,14 @@ const without = (drop: (m: FixtureMatch) => boolean) => MATCHES.filter((m) => !d
 const pairId = (m: FixtureMatch, side: "team_1" | "team_2") => pairOf(m.players?.[side])!.id;
 const fixture = (category: string, round: number, index: number) =>
   MATCHES.find((m) => m.category === category && m.round === round && m.index === index)!;
+/** The same draw before a ball is struck: the round of 16 on, nobody named. */
+const dayOne: FixtureMatch[] = MATCHES.map((m) => ({
+  ...m,
+  score: null,
+  winner: null,
+  status: "scheduled",
+  ...(m.round <= 8 && { players: { team_1: [], team_2: [] } }),
+}));
 
 describe("mapStatus", () => {
   it("reads the provider's current state names", () => {
@@ -213,6 +221,11 @@ describe("pairOf", () => {
       name: "A. Coello / A. Tapia",
       shortName: "Coello / Tapia",
       code: "1",
+      // In the order the surnames read, spelled as the rankings' faces are.
+      photos: [
+        "https://media.padelapi.org/player-api/arturo-coello.webp",
+        "https://media.padelapi.org/player-api/agustin-tapia.webp",
+      ],
     });
   });
 
@@ -323,10 +336,28 @@ describe("drawFrom", () => {
   });
 
   it("seeds the round of 16 from the round of 32, byes included", () => {
+    // Only part of the round of 32 is here, so the round of 16 is not all
+    // known: the draw opens on the round of 32.
     const draw = drawFrom(ID, without((m) => m.round <= 8), "women");
-    // Triay / Brea had a bye in the round of 32: still through, on top.
-    expect(draw.rounds[0].matches[0].homeTeamId).toBe("433-434");
-    expect(draw.rounds[0].matches[0].awayTeamId).toBe(pairId(fixture("women", 16, 1), "team_2"));
+    expect(draw.rounds[0].id).toBe("round-of-32");
+    // Triay / Brea had a bye in the round of 32, which says so: still through, on top.
+    expect(draw.rounds[0].matches[0].outcome).toBe("bye");
+    expect(draw.rounds[1].matches[0].homeTeamId).toBe("433-434");
+    expect(draw.rounds[1].matches[0].awayTeamId).toBe(pairId(fixture("women", 16, 1), "team_2"));
+  });
+
+  it("opens on the first round while the round of 16 is still being filled", () => {
+    // Day one: the draw is out, nothing played, the round of 16 empty.
+    const draw = drawFrom(ID, dayOne, "men");
+    expect(draw.rounds.map((r) => r.id)).toEqual([
+      "round-of-32",
+      "round-of-16",
+      "quarter-final",
+      "semi-final",
+      "final",
+    ]);
+    expect(draw.rounds[0].matches.some((m) => m.homeTeamId && m.awayTeamId)).toBe(true);
+    expect(draw.rounds[1].matches.every((m) => !m.homeTeamId && !m.awayTeamId)).toBe(true);
   });
 
   it("shows only the champions when the free plan hides the results", () => {
@@ -346,15 +377,6 @@ describe("drawFrom", () => {
 
   it("has nothing to draw before the matches are published", () => {
     expect(drawFrom(ID, [], "men")).toEqual({ tournamentId: ID, rounds: [], players: [] });
-  });
-});
-
-describe("drawsFrom", () => {
-  it("splits one list into both categories' draws", () => {
-    const draws = drawsFrom(747, MATCHES);
-    expect(draws.men.rounds[3].matches[0].id).toBe("13991");
-    expect(draws.women.tournamentId).toBe("padelapi-747");
-    expect(draws.women.rounds[0].matches).toHaveLength(8);
   });
 });
 
@@ -406,14 +428,14 @@ describe("the feed and the draws on demand", () => {
     expect(data.men.calendar!.map((t) => t.id)).toEqual(["padelapi-701", "padelapi-747", "padelapi-748"]);
   });
 
-  it("reads one category's draw for the sheet", async () => {
-    const draw = await getPadelDraw("wpt-women", "padelapi-747");
-    expect(draw!.champion).toBe("A. Sanchez / A. Ustero");
+  it("reads the men's draw on demand", async () => {
+    const draw = await getPadelDraw("padelapi-747");
+    expect(draw!.champion).toBe("A. Coello / A. Tapia");
     expect(draw!.rounds).toHaveLength(4);
   });
 
   it("names the champions of a draw whose results the free plan hides", async () => {
-    expect(await getPadelDraw("wpt-men", "padelapi-701")).toMatchObject({
+    expect(await getPadelDraw("padelapi-701")).toMatchObject({
       rounds: [],
       resultsHidden: true,
       champion: "A. Coello / A. Tapia",
@@ -421,7 +443,7 @@ describe("the feed and the draws on demand", () => {
   });
 
   it("has no draw yet for a tournament more than a few days off, and asks nobody", async () => {
-    expect(await getPadelDraw("wpt-men", "padelapi-748")).toEqual({
+    expect(await getPadelDraw("padelapi-748")).toEqual({
       tournamentId: "padelapi-748",
       rounds: [],
       players: [],
@@ -429,8 +451,29 @@ describe("the feed and the draws on demand", () => {
     expect(drawCalls().some((url) => url.includes("/748/"))).toBe(false);
   });
 
+  it("reads the men's draw out of a list that holds the women's too", async () => {
+    const draw = await fetchPadelDraw(747);
+    expect(draw.tournamentId).toBe("padelapi-747");
+    expect(draw.rounds[3].matches[0].id).toBe("13991");
+    expect(draw.champion).toBe("A. Coello / A. Tapia");
+  });
+
+  it("reads the rest of a draw while its round of 16 is being filled, and only then", async () => {
+    const pages = vi.fn<(url: string) => Promise<Response>>(async (url) =>
+      respond(url.includes("page=1") ? { data: dayOne, meta: { last_page: 3 } } : { data: [] })
+    );
+    vi.stubGlobal("fetch", pages);
+    await fetchPadelDraw(748);
+    expect(pages.mock.calls.map(([url]) => new URL(url).searchParams.get("page"))).toEqual(["1", "2", "3"]);
+
+    pages.mockClear();
+    pages.mockImplementation(async () => respond({ data: MATCHES, meta: { last_page: 3 } }));
+    await fetchPadelDraw(747);
+    expect(pages).toHaveBeenCalledTimes(1);
+  });
+
   it("asks for no tournament this season's calendar does not list", async () => {
-    expect(await getPadelDraw("wpt-men", "padelapi-999")).toBeNull();
+    expect(await getPadelDraw("padelapi-999")).toBeNull();
     expect(drawCalls().some((url) => url.includes("/999/"))).toBe(false);
   });
 });

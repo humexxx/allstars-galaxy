@@ -14,12 +14,17 @@
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
+/** A `YYYY-MM-DD` calendar day rather than an instant. */
+export function isCalendarDay(value: string): boolean {
+  return DATE_ONLY.test(value);
+}
+
 export type DateInput = Date | string;
 
 /** A date-only string as local midnight; anything else as the instant it is. */
 export function toDay(value: DateInput): Date {
   if (value instanceof Date) return value;
-  if (DATE_ONLY.test(value)) {
+  if (isCalendarDay(value)) {
     const [y, m, d] = value.split("-").map(Number);
     return new Date(y, m - 1, d);
   }
@@ -64,7 +69,7 @@ const zoned = new Map<string, Intl.DateTimeFormat>();
  */
 function formatIn(base: Intl.DateTimeFormat, value: DateInput, timeZone?: string): string {
   if (!timeZone) return base.format(toDay(value));
-  if (typeof value === "string" && DATE_ONLY.test(value)) {
+  if (typeof value === "string" && isCalendarDay(value)) {
     const [y, m, d] = value.split("-").map(Number);
     return zonedFormatter(base, "UTC").format(new Date(Date.UTC(y, m - 1, d)));
   }

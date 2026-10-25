@@ -20,3 +20,16 @@ export function scrollportHeight(el: HTMLElement): number {
 export function scrollByFrom(el: HTMLElement, top: number): void {
   (scrollParent(el) ?? window).scrollBy({ top });
 }
+
+/**
+ * Slides `row` sideways, never the page, until `item` is whole: a row that
+ * opens on an item past a phone's edge would otherwise start with it cut off.
+ * Focus scrolls an item in by itself; a tap or a default value does not.
+ */
+export function revealInRow(row: HTMLElement, item: Element | null): void {
+  if (!item) return;
+  const box = row.getBoundingClientRect();
+  const { left, right } = item.getBoundingClientRect();
+  if (right > box.right) row.scrollLeft += right - box.right;
+  else if (left < box.left) row.scrollLeft -= box.left - left;
+}

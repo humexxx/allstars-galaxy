@@ -7,13 +7,16 @@ import { __testing, getLolData } from "./lolesports-service";
 
 const {
   buildLolBracket,
+  buildStageBracket,
   buildSwissStage,
+  flowBracket,
   findChampion,
   isBracketStage,
   isCurrentEvent,
   orderSplits,
   pickActiveTournament,
   pickNextTournament,
+  seasonSoFar,
   toTeam,
   withinTournament,
 } = __testing;
@@ -110,6 +113,75 @@ describe("buildLolBracket", () => {
   });
 });
 
+describe("flowBracket", () => {
+  // Worlds 2026's play-ins, a double elimination of four, as Lolesports sends
+  // them: one section, one schedule block, nothing linking a match to the
+  // ones before it.
+  const playIns = [
+    tie("m1", "KC", "C9", [3, 2]),
+    tie("m2", "MVK", "FUR", [3, 0]),
+    tie("m3", "KC", "MVK", [3, 0]),
+    tie("m6", "MVK", "FUR", [3, 1]),
+    tie("m4", "FUR", "C9", [3, 1]),
+    tie("m5", "KC", "MVK", [3, 0]),
+  ];
+  const schedule = new Map(
+    [
+      ["m1", "2026-10-15T18:00:00Z"],
+      ["m2", "2026-10-15T23:00:00Z"],
+      ["m3", "2026-10-16T18:00:00Z"],
+      ["m4", "2026-10-16T23:00:00Z"],
+      ["m6", "2026-10-17T18:00:00Z"],
+      ["m5", "2026-10-18T18:00:00Z"],
+    ].map(([id, date]) => [id, { date, bestOf: 5 as const }])
+  );
+
+  it("lays a double elimination out by where its teams went, in the order played", () => {
+    const { rounds } = flowBracket(playIns, schedule);
+    expect(rounds.map((r) => [r.label, r.matches.map((m) => m.id)])).toEqual([
+      ["Round 1", ["m1", "m2"]],
+      ["Round 2", ["m3", "m4"]],
+      ["Round 3", ["m6"]],
+      ["Final", ["m5"]],
+    ]);
+  });
+
+  it("puts a match between two teams that have lost in the lower bracket", () => {
+    const sides = Object.fromEntries(
+      flowBracket(playIns, schedule).rounds.flatMap((r) => r.matches.map((m) => [m.id, m.side]))
+    );
+    expect(sides).toEqual({ m1: "upper", m2: "upper", m3: "upper", m4: "lower", m6: "lower", m5: "upper" });
+  });
+
+  it("links each winner to their next match, and no loser to theirs", () => {
+    expect(flowBracket(playIns, schedule).links).toEqual([
+      { from: "m1", to: "m3" },
+      { from: "m2", to: "m3" },
+      { from: "m4", to: "m6" },
+      { from: "m3", to: "m5" },
+      { from: "m6", to: "m5" },
+    ]);
+  });
+
+  it("keeps a knockout's schedule blocks, and rebuilds a block that holds several rounds", () => {
+    const knockout = buildStageBracket(
+      [{ name: "Knockouts", matches: [tie("q1", "T1", "GEN"), tie("q2", "HLE", "KT"), tie("f", "TBD", "TBD")] }],
+      new Map([["q1", "Semifinals"], ["q2", "Semifinals"], ["f", "Finals"]]),
+      new Map()
+    );
+    expect(knockout.rounds.map((r) => r.label)).toEqual(["Semifinals", "Finals"]);
+    expect(knockout.links).toBeUndefined();
+
+    const rebuilt = buildStageBracket(
+      [{ name: "Play-Ins", matches: playIns }],
+      new Map(playIns.map((m) => [m.id, "Play-Ins"])),
+      schedule
+    );
+    expect(rebuilt.rounds).toHaveLength(4);
+    expect(rebuilt.links).toHaveLength(5);
+  });
+});
+
 describe("isBracketStage", () => {
   it("draws the playoff stages, whatever the league calls them", () => {
     expect(isBracketStage("playoffs")).toBe(true);
@@ -158,6 +230,25 @@ describe("isCurrentEvent", () => {
   it("never shows one that has not started", () => {
     expect(isCurrentEvent(worlds, season2026, "2026-10-14")).toBe(false);
     expect(isCurrentEvent(null, season2026, "2026-10-18")).toBe(false);
+  });
+});
+
+describe("seasonSoFar", () => {
+  const t = (id: string, startDate: string, endDate: string) => ({ id, slug: id, startDate, endDate });
+  const list = [
+    t("s3", "2026-07-28", "2026-09-13"),
+    t("s1", "2026-01-14", "2026-03-01"),
+    t("old", "2025-07-20", "2025-09-10"),
+    t("s2", "2026-04-01", "2026-06-20"),
+    t("next", "2027-01-13", "2027-03-01"),
+  ];
+
+  it("is the current split's year so far, first first", () => {
+    expect(seasonSoFar(list, list[0], "2026-10-23").map((x) => x.id)).toEqual(["s1", "s2", "s3"]);
+  });
+
+  it("is nothing without a current split", () => {
+    expect(seasonSoFar(list, null, "2026-10-23")).toEqual([]);
   });
 });
 
@@ -241,6 +332,19 @@ describe("orderSplits", () => {
       "2026-11-20"
     );
     expect(regions(ordered)).toEqual(["worlds", "lcs", "lec", "lpl", "lck"]);
+  });
+
+  it("puts an international event that is over among the rest, by when it ended", () => {
+    const ordered = orderSplits(
+      [
+        { split: split("worlds", true), tournament: tournament("2026-10-15", "2026-11-15") },
+        { split: split("msi", true), tournament: tournament("2026-06-27", "2026-07-12"), over: true },
+        { split: split("lec"), tournament: tournament("2026-07-23", "2026-09-20") },
+        { split: split("lck"), tournament: tournament("2026-07-28", "2026-09-13") },
+      ],
+      "2026-10-23"
+    );
+    expect(regions(ordered)).toEqual(["worlds", "lec", "lck", "msi"]);
   });
 
   it("puts the splits being played today ahead of the finished ones", () => {

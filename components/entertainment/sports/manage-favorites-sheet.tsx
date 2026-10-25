@@ -37,14 +37,17 @@ const COVERAGE: Record<SportId, string> = {
   nba: "Scores and conference standings",
   tennis: "ATP and WTA rankings and draws",
   nfl: "Scores, standings and playoffs",
+  mlb: "Scores, standings and the postseason",
+  nhl: "Scores, standings and the playoffs",
+  surf: "The Championship Tour: its events, heats and rankings",
   lol: "LEC, LCS, LCK and LPL",
 };
 
 type ManageFavoritesSheetProps = {
   favoriteSportIds: SportId[];
   /**
-   * `icon`: a round star button with the count on its corner, for the end of
-   * the hub's sport strip. `button` spells out "Manage favorites".
+   * `icon`: a round star button with the count on its corner, beside the
+   * hub's sport picker. `button` spells out "Manage favorites".
    */
   trigger?: "button" | "icon";
 };
@@ -113,7 +116,7 @@ export function ManageFavoritesSheet({
                 {count > 0 && (
                   <Badge
                     aria-hidden
-                    className="pointer-events-none absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 text-2xs tabular-nums"
+                    className="pointer-events-none absolute -top-1.5 -right-1.5 h-4 min-w-4 bg-foreground px-1 text-2xs text-background tabular-nums"
                   >
                     {count}
                   </Badge>
@@ -129,7 +132,7 @@ export function ManageFavoritesSheet({
             <Star />
             Manage favorites
             {count > 0 && (
-              <Badge variant="info" className="tabular-nums">
+              <Badge variant="info" className="text-foreground tabular-nums">
                 {count}
               </Badge>
             )}

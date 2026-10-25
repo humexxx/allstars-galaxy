@@ -18,19 +18,6 @@ const ATP_RANKINGS: PlayerRanking[] = [
   { position: 10, name: "Stefanos Tsitsipas", shortName: "S. Tsitsipas", countryCode: "GRE", flagEmoji: "🇬🇷", points: 3320, movement: -1 },
 ];
 
-const WTA_RANKINGS: PlayerRanking[] = [
-  { position: 1, name: "Iga Świątek", shortName: "I. Świątek", countryCode: "POL", flagEmoji: "🇵🇱", points: 10870, movement: 0 },
-  { position: 2, name: "Aryna Sabalenka", shortName: "A. Sabalenka", countryCode: "BLR", flagEmoji: "🇧🇾", points: 9580, movement: 0 },
-  { position: 3, name: "Coco Gauff", shortName: "C. Gauff", countryCode: "USA", flagEmoji: "🇺🇸", points: 7720, movement: 0 },
-  { position: 4, name: "Elena Rybakina", shortName: "E. Rybakina", countryCode: "KAZ", flagEmoji: "🇰🇿", points: 6240, movement: 0 },
-  { position: 5, name: "Jessica Pegula", shortName: "J. Pegula", countryCode: "USA", flagEmoji: "🇺🇸", points: 5310, movement: 1 },
-  { position: 6, name: "Jasmine Paolini", shortName: "J. Paolini", countryCode: "ITA", flagEmoji: "🇮🇹", points: 4980, movement: 2 },
-  { position: 7, name: "Qinwen Zheng", shortName: "Q. Zheng", countryCode: "CHN", flagEmoji: "🇨🇳", points: 4520, movement: -1 },
-  { position: 8, name: "Emma Navarro", shortName: "E. Navarro", countryCode: "USA", flagEmoji: "🇺🇸", points: 3870, movement: 0 },
-  { position: 9, name: "Daria Kasatkina", shortName: "D. Kasatkina", countryCode: "RUS", flagEmoji: "🇷🇺", points: 3210, movement: -2 },
-  { position: 10, name: "Barbora Krejčíková", shortName: "B. Krejčíková", countryCode: "CZE", flagEmoji: "🇨🇿", points: 3050, movement: 0 },
-];
-
 const ATP_TOURNAMENTS: RacquetTournament[] = [
   { id: "atp-ao", name: "Australian Open", tier: "Grand Slam", surface: "Hard", location: "Melbourne", startDate: "2026-01-19", endDate: "2026-02-01", status: "completed", champion: "J. Sinner", runnerUp: "A. Zverev" },
   { id: "atp-iw", name: "Indian Wells", surface: "Hard", location: "Indian Wells", startDate: "2026-03-09", endDate: "2026-03-22", status: "completed", champion: "C. Alcaraz", runnerUp: "D. Medvedev" },
@@ -39,16 +26,6 @@ const ATP_TOURNAMENTS: RacquetTournament[] = [
   { id: "atp-rome", name: "Italian Open", surface: "Clay", location: "Rome", startDate: "2026-05-08", endDate: "2026-05-18", status: "completed", champion: "J. Sinner", runnerUp: "C. Alcaraz" },
   { id: "atp-rg", name: "Roland Garros", tier: "Grand Slam", surface: "Clay", location: "Paris", venue: "Stade Roland Garros, Paris", defendingChampion: "C. Alcaraz", startDate: "2026-05-25", endDate: "2026-06-07", status: "live" },
   { id: "atp-wim", name: "Wimbledon", tier: "Grand Slam", surface: "Grass", location: "London", defendingChampion: "J. Sinner", startDate: "2026-06-29", endDate: "2026-07-12", status: "upcoming" },
-];
-
-const WTA_TOURNAMENTS: RacquetTournament[] = [
-  { id: "wta-ao", name: "Australian Open", tier: "Grand Slam", surface: "Hard", location: "Melbourne", startDate: "2026-01-19", endDate: "2026-02-01", status: "completed", champion: "A. Sabalenka", runnerUp: "Q. Zheng" },
-  { id: "wta-iw", name: "Indian Wells", surface: "Hard", location: "Indian Wells", startDate: "2026-03-09", endDate: "2026-03-22", status: "completed", champion: "I. Świątek", runnerUp: "C. Gauff" },
-  { id: "wta-miami", name: "Miami Open", surface: "Hard", location: "Miami", startDate: "2026-03-23", endDate: "2026-04-05", status: "completed", champion: "A. Sabalenka", runnerUp: "J. Paolini" },
-  { id: "wta-madrid", name: "Madrid Open", surface: "Clay", location: "Madrid", startDate: "2026-04-25", endDate: "2026-05-04", status: "completed", champion: "I. Świątek", runnerUp: "A. Sabalenka" },
-  { id: "wta-rome", name: "Italian Open", surface: "Clay", location: "Rome", startDate: "2026-05-08", endDate: "2026-05-18", status: "completed", champion: "I. Świątek", runnerUp: "C. Gauff" },
-  { id: "wta-rg", name: "Roland Garros", tier: "Grand Slam", surface: "Clay", location: "Paris", venue: "Stade Roland Garros, Paris", defendingChampion: "C. Gauff", startDate: "2026-05-25", endDate: "2026-06-07", status: "live" },
-  { id: "wta-wim", name: "Wimbledon", tier: "Grand Slam", surface: "Grass", location: "London", defendingChampion: "I. Świątek", startDate: "2026-06-29", endDate: "2026-07-12", status: "upcoming" },
 ];
 
 /** The season's lines, as the live feed lists them beside its tournaments. */
@@ -70,12 +47,5 @@ export const TENNIS_DATA: TennisData = {
     rankings: ATP_RANKINGS,
     tournaments: ATP_TOURNAMENTS,
     calendar: calendarOf(ATP_TOURNAMENTS),
-  },
-  wta: {
-    tour: "wta",
-    season: 2026,
-    rankings: WTA_RANKINGS,
-    tournaments: WTA_TOURNAMENTS,
-    calendar: calendarOf(WTA_TOURNAMENTS),
   },
 };

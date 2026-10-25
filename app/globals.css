@@ -100,7 +100,9 @@
   --secondary-foreground: oklch(0.21 0.006 285.885);
 
   --muted: oklch(0.945 0.005 286);
-  --muted-foreground: oklch(0.6 0.012 286); /* secondaryLabel */
+  /* Deeper than iOS's secondaryLabel (#7F7F87 was 3.5:1 on the page, 4:1 on a
+     card): text-safe, 4.9:1 on the page, 5.5:1 on a card, 4.7:1 on muted. */
+  --muted-foreground: oklch(0.52 0.012 286);
 
   --accent: oklch(0.945 0.005 286);
   --accent-foreground: oklch(0.205 0 0);
@@ -278,6 +280,23 @@ body {
     html,
     body {
       overscroll-behavior: none;
+    }
+  }
+
+  /* The sports hub's tab bar is sticky, so whatever scrolls under it keeps
+     the bar's height clear above it: an element the keyboard focuses, or a
+     day the list scrolls to, lands below the bar instead of hidden under it.
+     Below `md` the page scrolls under the header and the bar (`top-14` +
+     `h-12`); from `md` under the bar alone. A margin on what follows the bar,
+     not padding on the scroller: padding would count the stuck bar itself as
+     hidden and scroll the page each time one of its tabs took focus. See
+     docs/SPACING.md. */
+  [data-sport-tabs] ~ * * {
+    scroll-margin-top: --spacing(26);
+  }
+  @media (min-width: 48rem) {
+    [data-sport-tabs] ~ * * {
+      scroll-margin-top: --spacing(12);
     }
   }
 

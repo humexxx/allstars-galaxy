@@ -1,125 +1,122 @@
 "use client";
 
-import { CalendarDays, ChevronDown, Flag } from "lucide-react";
-import { useMemo, useRef, useState, type JSX, type ReactNode } from "react";
+import Link from "next/link";
+import { Flag } from "lucide-react";
+import { useMemo } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { isRaceWeekend, racesTabGroups, weekendPhrase } from "@/lib/sports/f1-weekend";
 import { cn } from "@/lib/utils";
-import type { F1Data, F1Race } from "@/types/sports";
+import { f1RacePath } from "@/lib/sports/paths";
+import type { F1Data, F1Race, F1SessionResult, F1WeekendResults } from "@/types/sports";
 
 import { F1CircuitOutline } from "./f1-circuit-outline";
 import { racePlace, raceWhen, SprintBadge } from "./f1-race-labels";
 import { ResultsLine, SessionList } from "./f1-race-parts";
-import { F1RaceSheet, useRaceClassifications } from "./f1-race-sheet";
-import { useMatchTime } from "./shared/time-zone-context";
 import { StatusPill } from "./shared/status-pill";
+import {
+  EarlierPill,
+  SectionHeading,
+  TILE,
+  TileSection,
+  useRevealEarlier,
+  ViewDetailsLink,
+} from "./shared/tile-section";
+import { useMatchTime } from "./shared/time-zone-context";
 import { useNow } from "./use-now";
 
-/** `opener` gets the focus back when the sheet closes. */
-type OpenRace = (race: F1Race, opener: HTMLElement) => void;
-
-const TILE =
-  "flex w-full flex-col gap-3 rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50";
-
 /**
- * The Races tab: the race on now or next, large; the three after it; the
- * three just run; and the whole calendar on request. Every race opens its
- * sheet.
+ * F1's races, the left of its Overview: the race on now or next, large, then
+ * every race still to come, then the ones run, latest first, brought in from
+ * their heading as the match lists bring in earlier days (`useRevealEarlier`).
+ * Every race opens its own page.
+ *
+ * Its own container, so the tiles follow the column's width rather than the
+ * page's. Each part opens on a heading set like a day heading in the match
+ * lists, which is what puts the first card level with the standings card
+ * beside it (`OverviewSplit`).
  */
-export function F1Races({ data }: { data: F1Data }): JSX.Element {
+export function F1Races({
+  data,
+  weekend,
+}: {
+  data: F1Data;
+  /** The sessions run so far of the race on now or next, read with the page. */
+  weekend?: F1WeekendResults;
+}): React.ReactElement {
   const { featured, comingUp, justFinished } = useMemo(
     () => racesTabGroups(data.races),
     [data.races]
   );
-  const classifications = useRaceClassifications(data.season);
-  // Kept after the sheet closes, so its content does not vanish mid-slide.
-  const [raceId, setRaceId] = useState<string | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const race = raceId ? (data.races.find((r) => r.id === raceId) ?? null) : null;
-  const opener = useRef<HTMLElement | null>(null);
-
-  const open: OpenRace = (next, from) => {
-    opener.current = from;
-    setRaceId(next.id);
-    setSheetOpen(true);
-    if (next.status === "completed") void classifications.load(next.round);
-  };
+  const featuredResults = featured && weekend?.round === featured.round ? weekend.sessions : [];
+  const { listRef, earlier, next, reveal } = useRevealEarlier(justFinished, { open: !featured, attr: "data-race" });
 
   return (
-    <div className="flex flex-col gap-6">
-      {featured ? (
-        <FeaturedRace race={featured} onOpen={open} />
-      ) : (
-        <EmptyState
-          icon={Flag}
-          title={`The ${data.season} season is over`}
-          description="Every round is in the calendar below."
-        />
-      )}
+    <div ref={listRef} className="@container flex min-w-0 flex-col gap-6">
+      <section className="flex flex-col gap-2">
+        <SectionHeading>{featured?.status === "live" ? "On now" : "Next race"}</SectionHeading>
+        {featured ? (
+          <FeaturedRace race={featured} results={featuredResults} drivers={data.drivers} />
+        ) : (
+          <EmptyState
+            icon={Flag}
+            title={`The ${data.season} season is over`}
+            description="Every round is under Earlier races below."
+          />
+        )}
+      </section>
 
       {comingUp.length > 0 && (
-        <RaceSection title="Coming up">
+        <TileSection title="Coming up">
           {comingUp.map((r) => (
-            <RaceTile key={r.id} race={r} onOpen={open} />
+            <RaceTile key={r.id} race={r} />
           ))}
-        </RaceSection>
+        </TileSection>
       )}
 
+      {/* Its line stands from the start, the pill on it: what a tap brings in
+          lands right under it rather than past the races to come. */}
       {justFinished.length > 0 && (
-        <RaceSection title="Just finished">
-          {justFinished.map((r) => (
-            <RaceTile key={r.id} race={r} onOpen={open} />
+        <TileSection
+          title="Earlier races"
+          action={next.length > 0 && <EarlierPill detail={showRounds(next)} onClick={reveal} />}
+        >
+          {earlier.map((r) => (
+            <RaceTile key={r.id} race={r} />
           ))}
-        </RaceSection>
+        </TileSection>
       )}
-
-      <FullCalendar races={data.races} featuredId={featured?.id} onOpen={open} />
-
-      <F1RaceSheet
-        race={race}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        returnFocus={opener}
-        season={data.season}
-        drivers={data.drivers}
-        classification={race ? classifications.get(race.round) : undefined}
-        onRetry={() => {
-          if (race) void classifications.load(race.round);
-        }}
-      />
     </div>
   );
 }
 
-function RaceSection({ title, children }: { title: string; children: ReactNode }): JSX.Element {
-  return (
-    <section className="flex flex-col gap-3">
-      <Eyebrow asChild>
-        <h3>{title}</h3>
-      </Eyebrow>
-      <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">{children}</div>
-    </section>
-  );
+/** What a tap brings in: "Show rounds 13 – 15", or "Show round 13". */
+function showRounds(races: F1Race[]): string {
+  const rounds = races.map((r) => r.round).sort((a, b) => a - b);
+  return rounds.length > 1
+    ? `Show rounds ${rounds[0]} – ${rounds[rounds.length - 1]}`
+    : `Show round ${rounds[0]}`;
 }
 
 /**
  * The weekend as it stands: on track, next up, or a race weekend under way.
  * Read from the browser's clock after mount, never the server's render.
  */
-function WhatsNext({ race }: { race: F1Race }): JSX.Element {
+function WhatsNext({ race }: { race: F1Race }): React.ReactElement {
   const now = useNow();
   const phrase = now === null ? null : weekendPhrase(race, now);
   const weekend = now !== null && isRaceWeekend(race, now);
   return (
     // Holds a badge's height before mount, so the timetable does not jump.
     <div className="flex min-h-6 flex-wrap items-center gap-2">
-      {weekend && phrase?.tone !== "live" && <Badge variant="info">Race weekend</Badge>}
+      {weekend && phrase?.tone !== "live" && (
+        <Badge variant="info" className="text-foreground">
+          Race weekend
+        </Badge>
+      )}
       {phrase?.tone === "live" && <StatusPill status="live" label={phrase.text} />}
       {phrase && phrase.tone !== "live" && (
         <Text as="span" weight="medium">
@@ -130,31 +127,35 @@ function WhatsNext({ race }: { race: F1Race }): JSX.Element {
   );
 }
 
-function FeaturedRace({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX.Element {
+function FeaturedRace({
+  race,
+  results,
+  drivers,
+}: {
+  race: F1Race;
+  results: F1SessionResult[];
+  drivers: F1Data["drivers"];
+}): React.ReactElement {
   const format = useMatchTime();
   const now = useNow();
   return (
-    // The whole card opens the race: the title's button is stretched over it.
-    <Card className="relative transition-colors hover:bg-muted/40 has-focus-visible:ring-2 has-focus-visible:ring-ring/50">
-      <CardContent className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-5 @2xl:gap-x-8">
+    // The card is not one big link that greys on hover: "View details"
+    // opens the race's page, and the card itself stays still.
+    <Card>
+      {/* The circuit gets two-fifths of the card, centred in it: sized by
+          what the sessions left over, it came out small and pushed right. */}
+      <CardContent className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-5 @2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] @2xl:gap-x-8">
         <div className="flex min-w-0 flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Eyebrow>
-              {race.status === "live" ? "On now" : "Next race"} · Round {race.round}
-            </Eyebrow>
+            {/* "Next race" or "On now" is the heading above the card. */}
+            <Eyebrow>Round {race.round}</Eyebrow>
             {race.sprint && <SprintBadge />}
           </div>
           <Heading level="h3" className="flex items-center gap-3">
             <span aria-hidden className="text-3xl leading-none">
               {race.flagEmoji}
             </span>
-            <button
-              type="button"
-              onClick={(event) => onOpen(race, event.currentTarget)}
-              className="text-left outline-none after:absolute after:inset-0"
-            >
-              {race.name}
-            </button>
+            {race.name}
           </Heading>
           <Text variant="muted">{racePlace(race)}</Text>
           <Mono className="text-sm">{raceWhen(race, format)}</Mono>
@@ -162,7 +163,7 @@ function FeaturedRace({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX
 
         <F1CircuitOutline
           circuitId={race.circuitId}
-          className="size-20 text-foreground @2xl:row-span-3 @2xl:size-48 @2xl:self-center @4xl:size-56"
+          className="size-20 text-foreground @2xl:row-span-3 @2xl:size-auto @2xl:w-full @2xl:max-w-72 @2xl:place-self-center"
         />
 
         {/* Pinned to the first column: a circuit with no outline leaves the
@@ -172,17 +173,21 @@ function FeaturedRace({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX
         </div>
 
         <div className="col-span-2 @2xl:col-span-1 @2xl:col-start-1">
-          <SessionList race={race} format={format} now={now} />
+          <SessionList race={race} format={format} now={now} results={results} drivers={drivers} />
+        </div>
+
+        <div className="col-span-2 flex justify-end">
+          <ViewDetailsLink href={f1RacePath(race.round)} name={race.name} />
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function RaceTile({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX.Element {
+function RaceTile({ race }: { race: F1Race }): React.ReactElement {
   const format = useMatchTime();
   return (
-    <button type="button" onClick={(event) => onOpen(race, event.currentTarget)} className={TILE}>
+    <Link href={f1RacePath(race.round)} data-race={race.id} className={cn(TILE, "gap-3")}>
       <span className="flex w-full items-start justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2">
           <span aria-hidden className="text-xl leading-none">
@@ -211,75 +216,6 @@ function RaceTile({ race, onOpen }: { race: F1Race; onOpen: OpenRace }): JSX.Ele
           <ResultsLine race={race} />
         </span>
       )}
-    </button>
+    </Link>
   );
-}
-
-/** Every round on one line each, folded away until asked for. */
-function FullCalendar({
-  races,
-  featuredId,
-  onOpen,
-}: {
-  races: F1Race[];
-  featuredId?: string;
-  onOpen: OpenRace;
-}): JSX.Element {
-  const format = useMatchTime();
-  const [open, setOpen] = useState(false);
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} className="flex flex-col gap-3">
-      <CollapsibleTrigger asChild>
-        <Button variant="outline" className="self-start">
-          <CalendarDays />
-          {open ? "Hide calendar" : "Full calendar"}
-          <ChevronDown className={cn("transition-transform", open && "rotate-180")} />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <Card className="gap-0 py-0">
-          <ol aria-label="Season calendar" className="divide-y">
-            {races.map((race) => (
-              <li key={race.id}>
-                <button
-                  type="button"
-                  onClick={(event) => onOpen(race, event.currentTarget)}
-                  className={cn(
-                    "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors outline-none hover:bg-muted/40 focus-visible:bg-muted/40",
-                    race.status === "completed" && "text-muted-foreground"
-                  )}
-                >
-                  <Mono className="w-6 shrink-0 text-xs text-muted-foreground">{race.round}</Mono>
-                  <span aria-hidden className="text-base leading-none">
-                    {race.flagEmoji}
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                    <Text
-                      as="span"
-                      weight={race.id === featuredId ? "semibold" : "medium"}
-                      className={cn("truncate", race.status === "completed" && "text-muted-foreground")}
-                    >
-                      {race.name}
-                    </Text>
-                    <Mono className="text-2xs text-muted-foreground">{raceWhen(race, format)}</Mono>
-                  </span>
-                  <CalendarRowEnd race={race} isNext={race.id === featuredId} />
-                </button>
-              </li>
-            ))}
-          </ol>
-        </Card>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function CalendarRowEnd({ race, isNext }: { race: F1Race; isNext: boolean }): JSX.Element | null {
-  if (race.status === "live") return <StatusPill status="live" />;
-  if (isNext) return <Badge variant="info">Next</Badge>;
-  const winner = race.winner?.code ?? race.podium?.[0];
-  if (race.status === "completed" && winner) {
-    return <Mono className="shrink-0 text-xs font-semibold text-foreground">{winner}</Mono>;
-  }
-  return race.sprint ? <SprintBadge /> : null;
 }

@@ -1,39 +1,35 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-  type MouseEvent,
-} from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Info, Star } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Info } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import { SPORTS } from "@/lib/data/sports/registry";
 import type { SportPayload } from "@/lib/sports/payload";
-import type { SportId, SportMeta } from "@/types/sports";
+import type { SavedTeamFilter, SportId } from "@/types/sports";
 
 import { ManageFavoritesSheet } from "./manage-favorites-sheet";
+import { recallSport, rememberSport, seenKey } from "./seen-sports";
+import { SportHubControls } from "./shared/sport-shell";
+import { SavedTeamFilterProvider } from "./shared/team-filter-context";
 import { SportsTodayProvider } from "./shared/time-zone-context";
+import { favoritesFirst, SportPicker } from "./sport-picker";
 import { SportSkeleton, SportsNavigationContext } from "./sports-navigation";
 import { F1View } from "./sports/f1-view";
 import { FootballView } from "./sports/football-view";
 import { LolView } from "./sports/lol-view";
+import { MlbView } from "./sports/mlb-view";
 import { NbaView } from "./sports/nba-view";
 import { NflView } from "./sports/nfl-view";
+import { NhlView } from "./sports/nhl-view";
 import { PadelView } from "./sports/padel-view";
+import { SurfView } from "./sports/surf-view";
 import { TennisView } from "./sports/tennis-view";
 
 type SportsHubProps = {
   activeSport: SportId;
-  /** Favourites surface as starred tabs and get pinned to the front of the strip. */
+  /** Favourites are starred and listed first in the sport picker. */
   favoriteSportIds?: SportId[];
   /** Exactly the sport being shown — the page fetches one, not all eight. */
   payload: SportPayload;
@@ -41,7 +37,33 @@ type SportsHubProps = {
   initialTab?: string;
   /** The reader's today, decided on the server (`getRequestTodayIso`). */
   today: string;
+  /** The match list on screen and the teams last picked in it; null for a sport without one. */
+  teamFilter?: SavedTeamFilter | null;
+  /** Whose hub this is (the effective user): the sports seen are kept per account. */
+  viewerId: string;
 };
+
+const SPORT_PICKER = '[role="group"][aria-label="Sports"]';
+
+/**
+ * Where focus goes back to once a move has unmounted the control it was made
+ * from: that control as found again in what replaced the view, or (null) the
+ * view itself.
+ */
+const RETURN_TO = {
+  title: 'h1 [aria-haspopup="menu"]',
+  sport: `${SPORT_PICKER} [aria-current="page"]`,
+  view: null,
+} as const;
+
+type ReturnTo = keyof typeof RETURN_TO;
+
+/** The title's menu is portalled to <body>, so a league picked in it is never inside the content. */
+function returnFrom(active: Element | null, content: HTMLElement | null): ReturnTo | null {
+  if (active?.closest('[role="menu"]')) return "title";
+  if (active?.closest(SPORT_PICKER)) return "sport";
+  return content?.contains(active) ? "view" : null;
+}
 
 export function SportsHub({
   activeSport,
@@ -49,79 +71,109 @@ export function SportsHub({
   payload,
   initialTab,
   today,
+  teamFilter = null,
+  viewerId,
 }: SportsHubProps): React.ReactElement {
   const favSet = useMemo(() => new Set(favoriteSportIds), [favoriteSportIds]);
   const router = useRouter();
   const [loading, startLoading] = useTransition();
   const [target, setTarget] = useState<SportId | null>(null);
+  const [targetKey, setTargetKey] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const fromContent = useRef(false);
+  const returnTo = useRef<ReturnTo | null>(null);
+
+  // Each sport is remembered as it arrives, by the address that asked for it.
+  const currentKey = seenKey(activeSport, useSearchParams().get("league"));
+  useEffect(() => {
+    rememberSport(viewerId, currentKey, { payload, teamFilter, today });
+  }, [viewerId, currentKey, payload, teamFilter, today]);
 
   // Every move inside the hub — another sport, another league — runs in this
-  // one transition: until the next sport's data is on screen, the content is
-  // a skeleton of it rather than the old sport with a spinner by its control.
+  // one transition. Until the next sport's data is here, the content is the
+  // copy last seen of it (within half an hour), so going back to a sport is
+  // instant and the fresh copy takes its place when it lands; a sport not
+  // seen yet is a skeleton of it rather than the old one with a spinner.
   const navigate = useCallback(
     (href: string) => {
-      const sport = new URLSearchParams(href.split("?")[1] ?? "").get("sport");
-      fromContent.current = Boolean(contentRef.current?.contains(document.activeElement));
-      setTarget(sport as SportId | null);
+      const params = new URLSearchParams(href.split("?")[1] ?? "");
+      const sport = (params.get("sport") as SportId | null) ?? activeSport;
+      returnTo.current = returnFrom(document.activeElement, contentRef.current);
+      setTarget(sport);
+      setTargetKey(seenKey(sport, params.get("league")));
       startLoading(() => router.push(href, { scroll: false }));
     },
-    [router]
+    [router, activeSport]
   );
-
-  // A control inside the view (the league picker) unmounts under the
-  // skeleton, and focus fell to <body>. Give it back to the view it opened.
-  useEffect(() => {
-    if (loading || !fromContent.current) return;
-    fromContent.current = false;
-    if (document.activeElement === document.body) contentRef.current?.focus({ preventScroll: true });
-  }, [loading]);
 
   const loadingLabel = SPORTS.find((s) => s.id === (target ?? activeSport))?.label;
+  const copy = loading && targetKey ? recallSport(viewerId, targetKey) : undefined;
+  const shown = copy ?? (loading ? null : { payload, teamFilter, today });
+  const shownKey = copy && targetKey ? targetKey : currentKey;
+  const skeleton = !shown;
+
+  // The control a move was made from (a league in the title's menu, a sport
+  // in the picker) unmounts with the view it sat in, and focus fell to
+  // <body>. Put it on that control again in each view that replaces it: the
+  // copy, the skeleton's picker, the fresh view. The skeleton has no title,
+  // so a league waits for the view. A passive effect, so a closed menu has
+  // lifted the aria-hidden it laid over the page first.
+  useEffect(() => {
+    const to = returnTo.current;
+    if (!to) return;
+    const root = contentRef.current;
+    if (document.activeElement === document.body) {
+      const selector = RETURN_TO[to];
+      const control = selector ? root?.querySelector<HTMLElement>(selector) : null;
+      if (control) control.focus({ preventScroll: true });
+      else if (!loading) root?.focus({ preventScroll: true });
+    }
+    if (!loading) returnTo.current = null;
+  }, [loading, shownKey, skeleton]);
 
   // Render favourites first so the user lands on their most-watched sports.
-  const orderedSports = useMemo(
-    () =>
-      [...SPORTS].sort((a, b) => {
-        const aFav = favSet.has(a.id) ? 0 : 1;
-        const bFav = favSet.has(b.id) ? 0 : 1;
-        return aFav - bFav;
-      }),
-    [favSet]
-  );
+  const orderedSports = useMemo(() => favoritesFirst(favSet), [favSet]);
+  const shownSport = loading && target ? target : activeSport;
 
   return (
     <SportsNavigationContext.Provider value={navigate}>
-      {/* No page header: the strip is the first row, and the sport's own bar
-          names the page (SportShell). */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-start gap-3">
-          <SportSelector
-            active={loading && target ? target : activeSport}
-            favSet={favSet}
-            sports={orderedSports}
-            onPick={(sport) => navigate(`?sport=${sport}`)}
-          />
-          <ManageFavoritesSheet favoriteSportIds={favoriteSportIds} trigger="icon" />
-        </div>
+      {/* No page header and no strip of sports: the sport's own name row is
+          the first row, with the favourites and the sport picker at its end. */}
+      <SportHubControls.Provider
+        value={
+          <>
+            <ManageFavoritesSheet favoriteSportIds={favoriteSportIds} trigger="icon" />
+            <SportPicker
+              active={shownSport}
+              sports={orderedSports}
+              favorites={favSet}
+              onPick={(sport) => {
+                if (sport !== shownSport) navigate(`?sport=${sport}`);
+              }}
+            />
+          </>
+        }
+      >
         {/* The skeleton is aria-hidden; this is what a screen reader hears. */}
         <p role="status" className="sr-only">
           {loading ? `Loading ${loadingLabel ?? "sport"}…` : ""}
         </p>
         <div ref={contentRef} tabIndex={-1} aria-busy={loading} className="outline-none">
-          {loading ? (
-            <SportSkeleton />
-          ) : (
-            <SportsTodayProvider today={today}>
-              <div className="flex flex-col gap-6">
-                {payload.sample && <SampleDataNotice />}
-                <SportContent payload={payload} initialTab={initialTab} />
-              </div>
+          {shown ? (
+            // Keyed by address: a copy and the fresh one of the same sport are
+            // one view, and keep its tab and picks; another sport starts anew.
+            <SportsTodayProvider key={shownKey} today={shown.today}>
+              <SavedTeamFilterProvider filter={shown.teamFilter}>
+                <div className="flex flex-col gap-6">
+                  {shown.payload.sample && <SampleDataNotice />}
+                  <SportContent payload={shown.payload} initialTab={copy ? undefined : initialTab} />
+                </div>
+              </SavedTeamFilterProvider>
             </SportsTodayProvider>
+          ) : (
+            <SportSkeleton sport={target ?? activeSport} />
           )}
         </div>
-      </div>
+      </SportHubControls.Provider>
     </SportsNavigationContext.Provider>
   );
 }
@@ -148,81 +200,6 @@ function SampleDataNotice(): React.ReactElement {
   );
 }
 
-/**
- * The sport strip. Each sport is a link (`?sport=`), so it navigates like one:
- * middle-click opens it, Back returns, and the active one is `aria-current`.
- */
-function SportSelector({
-  active,
-  favSet,
-  sports,
-  onPick,
-}: {
-  active: SportId;
-  favSet: Set<SportId>;
-  sports: SportMeta[];
-  onPick: (sport: SportId) => void;
-}): React.ReactElement {
-  // A plain click goes through the hub's transition; a modified one (a new
-  // tab, a new window) stays the link it is.
-  const pick = (event: MouseEvent<HTMLAnchorElement>, sport: SportId): void => {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    event.preventDefault();
-    if (sport !== active) onPick(sport);
-  };
-  return (
-    // Scrolls sideways on its own when the chips outrun a phone; the
-    // favourites button beside it stays put. Bled to the left only: bled to
-    // the right too, the chips ran on under the button.
-    <nav aria-label="Sports" className="relative -ml-2 min-w-0 flex-1 overflow-x-auto pb-1 pl-2">
-      <ul className="flex gap-2">
-        {sports.map((sport) => {
-          const isActive = sport.id === active;
-          const link = (
-            <Link
-              href={`?sport=${sport.id}`}
-              scroll={false}
-              onClick={(event) => pick(event, sport.id)}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                isActive
-                  ? "border-foreground/15 bg-foreground/5 text-foreground shadow-xs"
-                  : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-            >
-              <span aria-hidden className="text-base leading-none">
-                {sport.emoji}
-              </span>
-              <span>{sport.shortLabel}</span>
-              {favSet.has(sport.id) && (
-                <>
-                  <Star aria-hidden className="size-3 fill-warning text-warning" strokeWidth={2} />
-                  <span className="sr-only">(favorite)</span>
-                </>
-              )}
-            </Link>
-          );
-          return (
-            <li key={sport.id} className="shrink-0">
-              {/* The strip shows the short label; the full name ("League of
-                  Legends") rides in a tooltip where the two differ. */}
-              {sport.label === sport.shortLabel ? (
-                link
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger asChild>{link}</TooltipTrigger>
-                  <TooltipContent>{sport.label}</TooltipContent>
-                </Tooltip>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
-  );
-}
-
 function SportContent({
   payload,
   initialTab,
@@ -232,17 +209,32 @@ function SportContent({
 }): React.ReactElement {
   switch (payload.sport) {
     case "football":
-      return <FootballView league={payload.league} options={payload.options} />;
+      return (
+        <FootballView league={payload.league} options={payload.options} news={payload.news} initialTab={initialTab} />
+      );
     case "f1":
-      return <F1View data={payload.data} news={payload.news} initialTab={initialTab} />;
+      return (
+        <F1View
+          data={payload.data}
+          news={payload.news}
+          initialTab={initialTab}
+          weekend={payload.weekend}
+        />
+      );
     case "nba":
-      return <NbaView data={payload.data} />;
+      return <NbaView data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "tennis":
-      return <TennisView data={payload.data} />;
+      return <TennisView data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "padel":
       return <PadelView data={payload.data} />;
     case "nfl":
-      return <NflView data={payload.data} />;
+      return <NflView data={payload.data} news={payload.news} initialTab={initialTab} />;
+    case "mlb":
+      return <MlbView data={payload.data} news={payload.news} initialTab={initialTab} />;
+    case "nhl":
+      return <NhlView data={payload.data} news={payload.news} initialTab={initialTab} />;
+    case "surf":
+      return <SurfView data={payload.data} initialTab={initialTab} />;
     case "lol":
       return <LolView data={payload.data} />;
   }

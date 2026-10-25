@@ -126,10 +126,10 @@ When you only need to measure one component's spacing/sizes:
    `app/spacing-check/page.tsx`) that reproduces the exact markup/classes. Wrap a
    sub-tree in `style={{ maxWidth: 390 }}` to simulate a phone if the preview
    viewport is wider.
-2. The user's `pnpm dev` already runs on `:3010` (the dev wrench is visible in
+2. The user's `pnpm dev` already runs on `:3000` (the dev wrench is visible in
    their screenshots) and hot-reloads the new route. Next 16 refuses a second dev
    server in the same dir, so drive the user's existing one via the Chrome MCP
-   (`navigate` to `http://localhost:3010/spacing-check`, then `javascript_tool`
+   (`navigate` to `http://localhost:3000/spacing-check`, then `javascript_tool`
    to read `getComputedStyle(...).fontSize` / `getBoundingClientRect()`).
 3. Note the page viewport may be pinned (~502px) by a side panel — that's still
    `< 640`, so mobile classes apply; use a `maxWidth` wrapper for narrower checks.

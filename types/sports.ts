@@ -2,7 +2,7 @@
 // designed to be filled by a real API later (e.g. football-data.org, ergast,
 // nba-api, etc.) without changing the UI layer.
 
-import type { F1NewsImage, userSportsPreferences } from "@/db/schema";
+import type { F1NewsImage, userSportsPreferences, userSportsTeamFilters } from "@/db/schema";
 
 /** The single list of sport keys — `sportIdSchema` validates against it. */
 export const SPORT_IDS = [
@@ -12,12 +12,17 @@ export const SPORT_IDS = [
   "nba",
   "tennis",
   "nfl",
+  "mlb",
+  "nhl",
+  "surf",
   "lol",
 ] as const;
 
 export type SportId = (typeof SPORT_IDS)[number];
 
 export type UserSportsPreference = typeof userSportsPreferences.$inferSelect;
+
+export type UserSportsTeamFilter = typeof userSportsTeamFilters.$inferSelect;
 
 /** One side of a match on a dashboard card. */
 export type DashboardSide = {
@@ -74,10 +79,16 @@ export type DashboardSportCard = {
   /** The line under the title: the competition, its stage. */
   context: string;
   featured?: DashboardMatch;
+  /**
+   * The games after the featured one, which its box steps through rather
+   * than listing them under it (football, the NBA, the NFL).
+   */
+  following?: DashboardMatch[];
   /** Racquet sports have tournaments rather than matches on the dashboard. */
   event?: { name: string; detail: string; status: "live" | "upcoming" | "completed" };
+  /** Listed under the lead (LoL: a day of an event is several series back to back). */
   matches: DashboardMatch[];
-  /** More than one shows as a toggle (East / West, ATP / WTA). */
+  /** More than one shows as a toggle (East / West, AFC / NFC). */
   tables: DashboardTable[];
   /**
    * In place of a table the sport has none of yet: the NBA's last champion
@@ -87,6 +98,8 @@ export type DashboardSportCard = {
   note?: { title: string; text?: string; when?: { label: string; startsAt: string } };
   /** The championship picker, on a sport that has a choice (`SPORT_COMPETITIONS`). */
   competitions?: DashboardCompetitions;
+  /** The latest stories, for a sport with a wire (football's, the NBA's, the NFL's — ESPN). */
+  news?: NewsStory[];
 };
 
 /**
@@ -128,6 +141,8 @@ export type Team = {
   logoUrl?: string;
   /** Tailwind-friendly hex used for branded backgrounds. */
   primaryColor?: string;
+  /** A padel pair's two photos, in the order `shortName` names its players. */
+  photos?: Array<string | null>;
 };
 
 export type MatchStatus =
@@ -157,6 +172,14 @@ export type Match = {
   /** Optional red-card indicator next to each team. */
   homeRedCard?: boolean;
   awayRedCard?: boolean;
+  /** Where it is on in the US, nationally: TV first ("NBC", "Peacock"). */
+  broadcasts?: string[];
+  /**
+   * Where a game stands in its own sport's words, over football's codes and
+   * minute: live "Top 7th" or "P2 12:34", final "OT", "SO" or "F/10". The
+   * spoken form is what a screen reader hears.
+   */
+  statusText?: { short: string; spoken: string };
 };
 
 /** League / group-stage row. */
@@ -170,8 +193,6 @@ export type Standing = {
   goalsFor: number;
   goalsAgainst: number;
   points: number;
-  /** Most-recent first; max 5. */
-  form?: FormResult[];
   /** Highlight band on the row (UCL/UEL qualification, relegation, etc.). */
   band?: StandingBand;
 };
@@ -198,12 +219,16 @@ export type BracketRoundId =
   | "quarter-final"
   | "semi-final"
   | "third-place"
-  | "final";
+  | "final"
+  // A double elimination's columns, numbered in the order they are played.
+  | `round-${number}`;
 
 export type BracketMatch = {
   id: string;
   homeTeamId: string | null;
   awayTeamId: string | null;
+  /** A double elimination's half: the lower bracket is where a team plays on after its first loss. */
+  side?: "upper" | "lower";
   /** When the tie is two-legged, leg scores live here (a tennis draw's sets). */
   legs?: Array<{
     homeScore: number | null;
@@ -213,18 +238,23 @@ export type BracketMatch = {
     homeTiebreak?: number | null;
     awayTiebreak?: number | null;
   }>;
-  /** A racquet tie decided without being played out. */
-  outcome?: "walkover" | "retired";
+  /** A racquet tie decided without being played out; a bye has nobody on one side. */
+  outcome?: "walkover" | "retired" | "bye";
   homeScore?: number | null;
   awayScore?: number | null;
   aggregateHome?: number | null;
   aggregateAway?: number | null;
+  /** A shoot-out, kept apart from the score it settled. */
+  penalties?: { home: number; away: number };
   winnerTeamId?: string | null;
   /** ISO date for the decisive match. */
   date?: string;
   /** A series' format: an esports best-of, or an NBA playoff series' seven. */
   bestOf?: 1 | 3 | 5 | 7;
 };
+
+/** A winner's way from one match (`from`) to the next (`to`), by match id. */
+export type BracketLink = { from: string; to: string };
 
 export type BracketRound = {
   id: BracketRoundId;
@@ -244,6 +274,22 @@ export const FOOTBALL_COMPETITION_IDS = [
 ] as const;
 
 export type FootballLeagueId = (typeof FOOTBALL_COMPETITION_IDS)[number];
+
+/** The sports whose page shows one match list, which the team filter keys by the sport's own id. */
+export const SINGLE_LIST_SPORTS = ["nba", "nfl", "mlb", "nhl"] as const satisfies readonly SportId[];
+
+export type SingleListSport = (typeof SINGLE_LIST_SPORTS)[number];
+
+/**
+ * A match list the team filter remembers: one football league, or a sport
+ * with a single list, keyed by its own id.
+ */
+export type TeamFilterList =
+  | { sportId: "football"; competition: FootballLeagueId }
+  | { [S in SingleListSport]: { sportId: S; competition: S } }[SingleListSport];
+
+/** The list on screen and the teams last picked in it ([] is every team). */
+export type SavedTeamFilter = { list: TeamFilterList; teamIds: string[] };
 
 export type FootballLeague = {
   id: FootballLeagueId;
@@ -407,6 +453,38 @@ export type F1RaceClassification = {
   rows: F1ClassificationRow[];
 };
 
+/** One car in a session's order: practice, qualifying, a sprint or the race. */
+export type F1SessionResultRow = {
+  /** "1" to "22", or "DNF" / "DNS" / "DSQ" for a car that did not finish it. */
+  position: string;
+  /** "LEC" */
+  code: string;
+  /** "C. Leclerc" */
+  name: string;
+  team: string;
+  /** The team's colour as "#RRGGBB". */
+  teamColor?: string;
+  /** The best lap ("1:35.291"); for a race or sprint, the winner's total time. */
+  time?: string;
+  /** "+0.042", "+2 laps"; none for the leader. */
+  gap?: string;
+  laps?: number;
+  /** In qualifying, the part the time was set in. */
+  segment?: "Q1" | "Q2" | "Q3";
+};
+
+export type F1SessionResult = {
+  kind: F1SessionKind;
+  rows: F1SessionResultRow[];
+};
+
+/** What each session of one weekend finished in, in time order, the finished ones only. */
+export type F1WeekendResults = {
+  season: number;
+  round: number;
+  sessions: F1SessionResult[];
+};
+
 /**
  * The race on the dashboard's F1 card, with what the weekend is doing now.
  * The sessions are decided per request, never inside the cached feed: the
@@ -434,7 +512,7 @@ export type F1Data = {
 
 export type NbaConference = "east" | "west";
 
-export type NbaStanding = Omit<Standing, "form" | "band"> & {
+export type NbaStanding = Omit<Standing, "band"> & {
   conference: NbaConference;
   /** Pct of games won, e.g. 0.812. */
   winPct: number;
@@ -475,7 +553,8 @@ export type NbaData = {
 
 // ---------- Tennis / Padel rankings ----------
 
-export type RacquetTour = "atp" | "wta" | "wpt-men" | "wpt-women";
+/** The men's tours only: the hub follows no women's tour. */
+export type RacquetTour = "atp" | "wpt-men";
 
 export type PlayerRanking = {
   position: number;
@@ -504,7 +583,7 @@ export type RacquetTournament = {
   runnerUp?: string;
   /**
    * The draw, shipped only for the featured and the current tournament; any
-   * other one loads on demand (`getRacquetDrawAction`).
+   * other one is read on the tournament's page (`loadRacquetTournament`).
    */
   bracket?: BracketRound[];
   /** "Grand Slam", "Major", "P1". */
@@ -520,7 +599,7 @@ export type RacquetTournament = {
 
 /** One line of a tour's season calendar: no draw, just enough to list it and open it. */
 export type RacquetCalendarEntry = {
-  /** The same id the tour's `tournaments` use, so a calendar row opens the same sheet. */
+  /** The same id the tour's `tournaments` use, so a calendar row opens the same page. */
   id: string;
   name: string;
   /** Calendar days, `YYYY-MM-DD`. */
@@ -530,7 +609,7 @@ export type RacquetCalendarEntry = {
   champion?: string;
 };
 
-/** One tournament's draw as the details sheet loads it. */
+/** One tournament's draw, as its page or the hub reads it. */
 export type RacquetDraw = {
   tournamentId: string;
   rounds: BracketRound[];
@@ -562,14 +641,28 @@ export type RacquetData = {
   drawPlayers?: Team[];
 };
 
+/** The sports drawn as racquet tours. */
+export type RacquetSport = Extract<SportId, "padel" | "tennis">;
+
+/** Singles players with a flag and a seed, or padel pairs: two names, a seed, no flag. */
+export type DrawVariant = "player" | "pair";
+
+/** Where one tournament's draw stands. */
+export type DrawState =
+  /** Upcoming, and too far off for a draw to exist. */
+  | { status: "pending" }
+  /** The provider did not answer; worth another try. */
+  | { status: "error" }
+  /** No provider knows this id — a fixture tournament, while the feed is down. */
+  | { status: "unavailable" }
+  | { status: "ready"; draw: RacquetDraw };
+
 export type TennisData = {
   atp: RacquetData;
-  wta: RacquetData;
 };
 
 export type PadelData = {
   men: RacquetData;
-  women: RacquetData;
 };
 
 // ---------- NFL ----------
@@ -607,12 +700,148 @@ export type NflData = {
   playoffs: BracketRound[];
 };
 
+// ---------- MLB ----------
+
+export type MlbLeague = "al" | "nl";
+export type MlbDivision = "al-east" | "al-central" | "al-west" | "nl-east" | "nl-central" | "nl-west";
+
+export type MlbStanding = {
+  /** Within its league, by ESPN's playoff seed (1–15). */
+  position: number;
+  teamId: string;
+  league: MlbLeague;
+  division: MlbDivision;
+  wins: number;
+  losses: number;
+  pct: number;
+  /** Behind the division's leader; 0 for the leader. */
+  gamesBehind: number;
+  streak: string;
+};
+
+export type MlbData = {
+  season: number;
+  teams: Team[];
+  games: Match[];
+  standings: MlbStanding[];
+  /** The postseason's series as bracket ties: wins for the score, `bestOf` the series' length. */
+  playoffs: BracketRound[];
+};
+
+// ---------- NHL ----------
+
+export type NhlConference = "east" | "west";
+export type NhlDivision = "atlantic" | "metropolitan" | "central" | "pacific";
+
+export type NhlStanding = {
+  /** Within its conference, by ESPN's seed (points, then the tiebreaks). */
+  position: number;
+  teamId: string;
+  conference: NhlConference;
+  division: NhlDivision;
+  gamesPlayed: number;
+  wins: number;
+  /** In regulation. */
+  losses: number;
+  /** In overtime or a shoot-out, a point each. */
+  otLosses: number;
+  points: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  streak: string;
+};
+
+export type NhlData = {
+  season: number;
+  teams: Team[];
+  games: Match[];
+  standings: NhlStanding[];
+  /** The playoffs' series as bracket ties: wins for the score, best of seven. */
+  playoffs: BracketRound[];
+};
+
+// ---------- Surf ----------
+
+export type SurfStatus = "completed" | "live" | "upcoming";
+
+/** One stop of the men's Championship Tour. */
+export type SurfEvent = {
+  /** The WSL's joint event id, the one in its addresses. */
+  id: string;
+  slug: string;
+  name: string;
+  /** The break and where it is: "Supertubos, Peniche, Portugal". */
+  location: string;
+  /** YYYY-MM-DD: the waiting period's first and last days, calendar days. */
+  startDate: string;
+  endDate: string;
+  status: SurfStatus;
+  /** Its stop on the tour ("Event 10"). */
+  stop: number;
+  winner?: string;
+  runnerUp?: string;
+};
+
+export type SurfSurfer = {
+  athleteId?: string;
+  /** A seed's place ("Event seed #16") until the draw names the surfer. */
+  name: string;
+  imageUrl?: string;
+  /** The heat total: the two best waves'. */
+  score: number | null;
+  /** 1 for the heat's winner. */
+  place?: number;
+};
+
+export type SurfHeat = {
+  id: string;
+  number: number;
+  status: SurfStatus;
+  surfers: SurfSurfer[];
+};
+
+/** "Round 1" … "Final", its heats in order. */
+export type SurfRound = { label: string; heats: SurfHeat[] };
+
+export type SurfDraw = { eventId: string; rounds: SurfRound[] };
+
+/** Who won a stop, and whom they beat in the Final. */
+export type SurfFinal = { winner: string; runnerUp?: string };
+
+export type SurfRanking = {
+  position: number;
+  athleteId: string;
+  name: string;
+  country: string;
+  flagUrl?: string;
+  imageUrl?: string;
+  points: number;
+};
+
+export type SurfData = {
+  season: number;
+  /** The men's Championship Tour, in date order. */
+  events: SurfEvent[];
+  /** The draw of the event on now, else the next, else the last one surfed. */
+  draw?: SurfDraw;
+  rankings: SurfRanking[];
+};
+
 // ---------- League of Legends ----------
 
+/** The four regional leagues: each has splits of its own, read on demand. */
+export const LOL_LEAGUE_REGIONS = ["lec", "lcs", "lck", "lpl"] as const;
+
+export type LolLeagueRegion = (typeof LOL_LEAGUE_REGIONS)[number];
+
 /** The four regional leagues, plus the international events while they run. */
-export const LOL_REGIONS = ["lec", "lcs", "lck", "lpl", "worlds", "msi", "first-stand"] as const;
+export const LOL_REGIONS = [...LOL_LEAGUE_REGIONS, "worlds", "msi", "first-stand"] as const;
 
 export type LolRegion = (typeof LOL_REGIONS)[number];
+
+export function isLolLeague(region: LolRegion): region is LolLeagueRegion {
+  return (LOL_LEAGUE_REGIONS as readonly string[]).includes(region);
+}
 
 export type LolStanding = {
   position: number;
@@ -689,14 +918,31 @@ export type LolSplit = {
   region: LolRegion;
   name: string;
   season: string;
+  /** Lolesports' id for the tournament: what another of the league's splits is asked for beside. */
+  tournamentId?: string;
+  /**
+   * A league's tournaments this season so far, in order, this one among them:
+   * moved between from inside the league, not offered in the picker.
+   */
+  seasonSplits?: Array<{ id: string; name: string }>;
   /** Worlds, MSI or First Stand rather than a regional league. */
   international?: boolean;
   teams: Team[];
   standings: LolStanding[];
   matches: LolMatch[];
+  /** An international event's play-ins, before its Swiss stage or knockouts. */
+  playIns?: BracketRound[];
+  /** The play-ins' branches, when they are a double elimination (see `playoffLinks`). */
+  playInLinks?: BracketLink[];
   /** Worlds' Swiss stage, between the play-ins and the knockouts. */
   swiss?: SwissStage;
   playoffs?: BracketRound[];
+  /**
+   * Who went where, for a bracket that is not a plain knockout (MSI's double
+   * elimination): each winner's next match. Without it the branches are read
+   * off the rounds, each halving into the next.
+   */
+  playoffLinks?: BracketLink[];
   /** Once the final is decided. */
   champion?: LolChampion;
 };
@@ -742,6 +988,26 @@ export type F1DriverPortrait = {
 
 // ---------- F1 news (RapidAPI, stored daily) ----------
 
+/**
+ * One story on a sport's News tab, whatever wire it came from: F1's stored
+ * one (opened on our own page) or ESPN's (opened at the source).
+ */
+export type NewsStory = {
+  id: string;
+  headline: string;
+  description: string | null;
+  href: string;
+  /** Opened at the source, in a new tab, rather than on our own page. */
+  external: boolean;
+  image: { url: string; alt?: string } | null;
+  /** ISO: when it was published, or — for a wire that says nothing — first seen. */
+  at: string;
+  /** A video or a game recap leads nothing; an article can. */
+  kind: "story" | "recap" | "video";
+  /** The teams and players it is filed under. */
+  about: string[];
+};
+
 export type F1NewsArticle = {
   id: string;
   headline: string;
@@ -753,12 +1019,6 @@ export type F1NewsArticle = {
 
 // ---------- Dashboard competitions ----------
 
-/** The tours a tennis card can narrow to: `TennisData`'s keys. */
-export const TENNIS_TOURS = ["atp", "wta"] as const satisfies readonly (keyof TennisData)[];
-
-/** The categories a padel card can narrow to: `PadelData`'s keys. */
-export const PADEL_CATEGORIES = ["men", "women"] as const satisfies readonly (keyof PadelData)[];
-
 /**
  * What each sport's dashboard card can be set to
  * (`user_sports_preferences.competition`, null for the card's own pick). A
@@ -767,6 +1027,4 @@ export const PADEL_CATEGORIES = ["men", "women"] as const satisfies readonly (ke
 export const SPORT_COMPETITIONS: Partial<Record<SportId, readonly string[]>> = {
   football: FOOTBALL_COMPETITION_IDS,
   lol: LOL_REGIONS,
-  tennis: TENNIS_TOURS,
-  padel: PADEL_CATEGORIES,
 };

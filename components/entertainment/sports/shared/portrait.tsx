@@ -24,8 +24,12 @@ export type PortraitSubject = {
 };
 
 const SIZES = {
+  // A padel pair's two faces, side by side in a bracket box.
+  xs: { disc: "size-5", flag: "size-2", px: "20px" },
   sm: { disc: "size-6", flag: "size-2.5", px: "24px" },
   md: { disc: "size-7", flag: "size-3", px: "28px" },
+  // A tournament's top seeds on its featured card.
+  lg: { disc: "size-10", flag: "size-3.5", px: "40px" },
   // A standings table on a 375px phone has no width to spare: the full disc
   // pushed its last column past the card's edge.
   table: { disc: "size-6 sm:size-7", flag: "size-2.5 sm:size-3", px: "28px" },
@@ -51,7 +55,7 @@ export function Portrait({
   size?: keyof typeof SIZES;
   fallback?: ReactNode;
   className?: string;
-}) {
+}): React.ReactElement {
   const [failed, setFailed] = useState<string | null>(null);
   const { disc, flag, px } = SIZES[size];
   const logo = subject.logoUrl;

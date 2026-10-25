@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { setSportCompetitionSchema } from "./sports";
+import type { TeamFilterList } from "@/types/sports";
+
+import { setSportCompetitionSchema, setSportTeamFilterSchema, type SetSportTeamFilterData } from "./sports";
 
 const valid = (sportId: string, competition: string | null): boolean =>
   setSportCompetitionSchema.safeParse({ sportId, competition }).success;
@@ -16,16 +18,22 @@ describe("setSportCompetitionSchema", () => {
     ["lol", "msi"],
     ["lol", "first-stand"],
     ["lol", "lck"],
-    ["tennis", "atp"],
-    ["tennis", "wta"],
-    ["padel", "men"],
-    ["padel", "women"],
   ])("accepts %s's %s", (sportId, competition) => {
     expect(valid(sportId, competition)).toBe(true);
   });
 
-  it.each(["football", "lol", "tennis", "padel"])("accepts null for %s: the card's own pick", (sportId) => {
+  it.each(["football", "lol"])("accepts null for %s: the card's own pick", (sportId) => {
     expect(valid(sportId, null)).toBe(true);
+  });
+
+  it.each([
+    ["tennis", "atp"],
+    ["tennis", "wta"],
+    ["padel", "men"],
+    ["padel", "women"],
+    ["tennis", null],
+  ])("refuses %s %s: men only, so no tour to pick", (sportId, competition) => {
+    expect(valid(sportId, competition)).toBe(false);
   });
 
   it.each([
@@ -50,5 +58,48 @@ describe("setSportCompetitionSchema", () => {
   it("refuses an unknown sport and a missing championship", () => {
     expect(valid("cricket", null)).toBe(false);
     expect(setSportCompetitionSchema.safeParse({ sportId: "tennis" }).success).toBe(false);
+  });
+});
+
+describe("setSportTeamFilterSchema", () => {
+  const valid = (input: unknown): boolean => setSportTeamFilterSchema.safeParse(input).success;
+
+  it.each([
+    ["football", "premier-league"],
+    ["football", "world-cup"],
+    ["nba", "nba"],
+    ["nfl", "nfl"],
+  ])("accepts %s's %s list", (sportId, competition) => {
+    expect(valid({ sportId, competition, teamIds: ["arsenal", "chelsea"] })).toBe(true);
+  });
+
+  it("accepts no teams: every team", () => {
+    expect(valid({ sportId: "nba", competition: "nba", teamIds: [] })).toBe(true);
+  });
+
+  it.each([
+    ["football", "nba"],
+    ["football", "bundesliga"],
+    ["nba", "nfl"],
+    ["nfl", "premier-league"],
+    ["f1", "f1"],
+    ["lol", "worlds"],
+  ])("refuses %s with %s, which is not one of its lists", (sportId, competition) => {
+    expect(valid({ sportId, competition, teamIds: [] })).toBe(false);
+  });
+
+  it("refuses a blank team, an overlong one and more teams than any league has", () => {
+    const list = { sportId: "nfl", competition: "nfl" };
+    expect(valid({ ...list, teamIds: [" "] })).toBe(false);
+    expect(valid({ ...list, teamIds: ["x".repeat(65)] })).toBe(false);
+    expect(valid({ ...list, teamIds: Array.from({ length: 65 }, (_, i) => `t${i}`) })).toBe(false);
+    expect(valid(list)).toBe(false);
+  });
+});
+
+describe("setSportTeamFilterSchema's lists", () => {
+  it("are exactly TeamFilterList's, so a sport added to one cannot be missing from the other", () => {
+    type ListOf<T> = T extends unknown ? Omit<T, "teamIds"> : never;
+    expectTypeOf<ListOf<SetSportTeamFilterData>>().toEqualTypeOf<TeamFilterList>();
   });
 });

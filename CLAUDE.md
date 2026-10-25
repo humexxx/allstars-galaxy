@@ -42,7 +42,7 @@ exact change-to-doc map.
 ## Commands
 
 ```bash
-pnpm dev            # Start dev server (http://localhost:3010)
+pnpm dev            # Start dev server (http://localhost:3000)
 pnpm build          # Production build
 pnpm lint           # ESLint
 pnpm test           # Vitest — unit + integration (mocked DB)
@@ -64,7 +64,7 @@ pnpm db:seed        # Seed database
   (the setup stubs the `server-only` marker so server modules can be imported
   from the test runner, and gives jsdom a `matchMedia` that matches nothing —
   a wide screen with motion allowed; a test that needs a phone stubs its own).
-- **Playwright** (`e2e/*.spec.ts`) drives the real app at `http://localhost:3010`.
+- **Playwright** (`e2e/*.spec.ts`) drives the real app at `http://localhost:3000`.
   Requires a dedicated Supabase test user — copy [`.env.test.example`](.env.test.example)
   to `.env.test` and fill `TEST_USER_EMAIL` / `TEST_USER_PASSWORD`. The auth
   fixture logs in once and persists `storageState` to `playwright/.auth/user.json`
@@ -376,8 +376,8 @@ API_SPORTS_KEY          # Free tier hard-locked to seasons 2022-2024, unusable
                         # plan if we ever upgrade. https://dashboard.api-sports.io
 ```
 
-F1 (Jolpica, plus ESPN for the dashboard card), LoL (Lolesports), tennis and
-the NFL (ESPN) are key-less — nothing to configure in `.env`. The NBA's games
+F1 (Jolpica, plus ESPN for the dashboard card and OpenF1 for each session's
+results), LoL (Lolesports), tennis and the NFL (ESPN) are key-less — nothing to configure in `.env`. The NBA's games
 need `BALLDONTLIE_API_KEY`; its table comes from ESPN, also key-less.
 
 ## Common Workflows

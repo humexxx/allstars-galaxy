@@ -2,13 +2,18 @@ import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import type {
   F1Data,
   F1NewsArticle,
+  F1WeekendResults,
   FootballLeagueData,
   FootballLeagueId,
   LolData,
+  MlbData,
   NbaData,
+  NewsStory,
   NflData,
+  NhlData,
   PadelData,
   SportId,
+  SurfData,
   TennisData,
 } from "@/types/sports";
 
@@ -25,13 +30,24 @@ export type SportPayload = (
       league: FootballLeagueData;
       /** What the picker offers, by name; the other leagues are not loaded. */
       options: ReadonlyArray<{ id: FootballLeagueId; name: string }>;
+      /** The league's news, ESPN's. */
+      news?: NewsStory[];
     }
-  | { sport: "f1"; data: F1Data; news: F1NewsArticle[] }
+  | {
+      sport: "f1";
+      data: F1Data;
+      news: F1NewsArticle[];
+      /** The sessions run so far of the race on now or next. */
+      weekend?: F1WeekendResults;
+    }
   | { sport: "lol"; data: LolData }
   | { sport: "padel"; data: PadelData }
-  | { sport: "tennis"; data: TennisData }
-  | { sport: "nba"; data: NbaData }
-  | { sport: "nfl"; data: NflData }
+  | { sport: "tennis"; data: TennisData; news?: NewsStory[] }
+  | { sport: "nba"; data: NbaData; news?: NewsStory[] }
+  | { sport: "nfl"; data: NflData; news?: NewsStory[] }
+  | { sport: "mlb"; data: MlbData; news?: NewsStory[] }
+  | { sport: "nhl"; data: NhlData; news?: NewsStory[] }
+  | { sport: "surf"; data: SurfData }
 ) & {
   /**
    * The live feed has never answered, so the view is showing its fixture.

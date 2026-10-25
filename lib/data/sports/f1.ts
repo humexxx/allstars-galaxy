@@ -27,8 +27,8 @@ const CONSTRUCTORS: F1Constructor[] = [
 ];
 
 // Rounds 5 to 8 carry a whole weekend (5 and 6 are sprints) and 4 to 6 their
-// results, so the sample exercises the Races tab's featured card, its lists
-// and the race sheet.
+// results, so the sample exercises the Overview's featured race, its lists
+// and the race page.
 const RACES: F1Race[] = [
   { id: "r-1", round: 1, name: "Bahrain Grand Prix", circuit: "Bahrain International Circuit", circuitId: "bahrain", location: "Sakhir", country: "Bahrain", flagEmoji: "🇧🇭", date: "2026-03-08", startsAt: "2026-03-08T15:00:00.000Z", status: "completed", podium: ["ANT", "RUS", "LEC"] },
   { id: "r-2", round: 2, name: "Saudi Arabian GP", circuit: "Jeddah Corniche", circuitId: "jeddah", location: "Jeddah", country: "Saudi Arabia", flagEmoji: "🇸🇦", date: "2026-03-15", startsAt: "2026-03-15T17:00:00.000Z", status: "completed", podium: ["ANT", "VER", "RUS"] },

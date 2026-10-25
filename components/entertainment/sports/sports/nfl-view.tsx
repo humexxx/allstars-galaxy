@@ -1,84 +1,41 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Lock } from "lucide-react";
+import { useState } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { cn } from "@/lib/utils";
-import type { NflConference, NflData, Team } from "@/types/sports";
+import type { NewsStory, NflConference, NflData, Team } from "@/types/sports";
 
-import { KnockoutBracket } from "../shared/knockout-bracket";
-import { MatchesByDate } from "../shared/matches-by-date";
-import { OverviewSplit } from "../shared/overview-split";
-import { SportShell } from "../shared/sport-shell";
+import { LeagueView, StandingsTeamCell, useTeamsMap } from "../shared/league-view";
+import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportsTh, TableCellNum } from "../shared/table-primitives";
-import { TeamBadge } from "../shared/team-badge";
 
 type NflViewProps = {
   data: NflData;
+  /** ESPN's NFL news; no News tab without any. */
+  news?: NewsStory[];
+  /** `?tab=news` opens on the news. */
+  initialTab?: string;
 };
 
-export function NflView({ data }: NflViewProps): React.ReactElement {
-  const teamsMap = useMemo(
-    () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
-    [data.teams],
-  );
-
-  const hasPlayoffs = data.playoffs.length > 0;
-
+export function NflView({ data, news = [], initialTab }: NflViewProps): React.ReactElement {
+  const teamsMap = useTeamsMap(data.teams);
   return (
-    <Tabs defaultValue={hasPlayoffs ? "playoffs" : "overview"} className="gap-6">
-      <SportShell
-        emoji="🏈"
-        title="American Football · NFL"
-        subtitle={`Season ${data.season}`}
-        tabs={
-          <TabsList variant="line">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            {/* Always there, locked until the postseason: where the bracket
-                will be is worth knowing before it exists. */}
-            <TabsTrigger value="playoffs" disabled={!hasPlayoffs}>
-              {!hasPlayoffs && <Lock aria-hidden />}
-              Playoffs
-            </TabsTrigger>
-          </TabsList>
-        }
-      >
-        {/* The week's games and the table on one tab. */}
-        <TabsContent value="overview">
-          <OverviewSplit
-            matches={
-              <MatchesByDate
-                matches={data.games}
-                teams={teamsMap}
-                emptyTitle="No games this week."
-              />
-            }
-            table={<NflStandings data={data} teamsMap={teamsMap} />}
-            tableLabel="Standings"
-          />
-        </TabsContent>
-
-        {hasPlayoffs && (
-          <TabsContent value="playoffs">
-            <Card size="sm">
-              <CardContent>
-                <KnockoutBracket rounds={data.playoffs} teams={teamsMap} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
-      </SportShell>
-    </Tabs>
+    <LeagueView
+      sportId="nfl"
+      title="American Football · NFL"
+      subtitle={`Season ${data.season}`}
+      games={data.games}
+      teams={teamsMap}
+      standings={data.standings}
+      playoffs={data.playoffs}
+      bracketLabel="Playoffs"
+      news={news}
+      initialTab={initialTab}
+      emptyTitle="No games this week."
+      table={<NflStandings data={data} teamsMap={teamsMap} />}
+    />
   );
 }
 
@@ -93,6 +50,7 @@ function NflStandings({
   const rows = data.standings
     .filter((s) => s.conference === conf)
     .sort((a, b) => a.position - b.position);
+  const shownRows = useShownRows(rows, conf);
 
   return (
     <Card size="sm">
@@ -108,43 +66,36 @@ function NflStandings({
           <ToggleGroupItem value="afc">AFC</ToggleGroupItem>
           <ToggleGroupItem value="nfc">NFC</ToggleGroupItem>
         </ToggleGroup>
-        <Table>
+        <Table aria-label={`${conf.toUpperCase()} standings`}>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <SportsTh className="w-8">
+              <SportsTh className="w-8" label="Seed">
                 #
               </SportsTh>
               <SportsTh>
                 Team
               </SportsTh>
-              <SportsTh className="text-center">
+              <SportsTh className="text-center" label="Wins">
                 W
               </SportsTh>
-              <SportsTh className="text-center">
+              <SportsTh className="text-center" label="Losses">
                 L
               </SportsTh>
-              <SportsTh className="text-center">
+              <SportsTh className="text-center" label="Ties">
                 T
               </SportsTh>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => {
+            {shownRows.shown.map((row) => {
               const team = teamsMap.get(row.teamId);
               const isLeader = row.position === 1;
               return (
-                <TableRow key={row.teamId}>
+                <TableRow key={row.teamId} className="hover:bg-transparent">
                   <TableCell className="text-sm tabular-nums text-muted-foreground">
                     {row.position}
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {team && <TeamBadge team={team} size="sm" />}
-                      <span className={cn("text-sm", isLeader && "font-semibold")}>
-                        {team?.shortName ?? row.teamId}
-                      </span>
-                    </div>
-                  </TableCell>
+                  <StandingsTeamCell team={team} teamId={row.teamId} isLeader={isLeader} />
                   <TableCellNum value={row.wins} />
                   <TableCellNum value={row.losses} />
                   <TableCellNum value={row.ties} />
@@ -153,6 +104,7 @@ function NflStandings({
             })}
           </TableBody>
         </Table>
+        <ShowMoreRows rows={shownRows} />
       </CardContent>
     </Card>
   );

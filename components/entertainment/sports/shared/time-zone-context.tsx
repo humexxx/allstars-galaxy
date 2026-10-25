@@ -24,7 +24,7 @@ const SportsTodayContext = createContext<string | null>(null);
  * could hydrate on the other side of midnight from the server and print
  * "Today" on a different day.
  */
-export function SportsTodayProvider({ today, children }: { today: string; children: ReactNode }) {
+export function SportsTodayProvider({ today, children }: { today: string; children: ReactNode }): React.ReactElement {
   return <SportsTodayContext.Provider value={today}>{children}</SportsTodayContext.Provider>;
 }
 

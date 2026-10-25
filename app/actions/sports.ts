@@ -7,15 +7,21 @@ import {
   logImpersonatedMutation,
   requireEffectiveContext,
 } from "@/lib/services/impersonation";
-import { setSportCompetition, setSportFavorite } from "@/lib/services/sports-service";
+import {
+  setSportCompetition,
+  setSportFavorite,
+  setSportTeamFilter,
+} from "@/lib/services/sports-service";
+import { SPORTS_PATH } from "@/lib/sports/paths";
 import {
   setSportCompetitionSchema,
   setSportFavoriteSchema,
+  setSportTeamFilterSchema,
   type SetSportCompetitionData,
   type SetSportFavoriteData,
+  type SetSportTeamFilterData,
 } from "@/schemas/sports";
 
-const SPORTS_PATH = "/portal/entertainment/sports";
 const DASHBOARD_PATH = "/portal";
 
 export async function setSportFavoriteAction(
@@ -73,6 +79,35 @@ export async function setSportCompetitionAction(
     // every provider feed it reads (the path is one of their soft tags), for
     // every user, and a reader flipping leagues would spend football-data's
     // ten calls a minute and get the sample tables.
+    refresh();
+    return { success: true };
+  });
+}
+
+/**
+ * Remembers the teams a match list on the sports page is narrowed to, so the
+ * list reopens on them; an empty list goes back to every team.
+ */
+export async function setSportTeamFilterAction(
+  input: SetSportTeamFilterData
+): Promise<ActionResult> {
+  return safe("sports", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = setSportTeamFilterSchema.safeParse(input);
+    if (!parsed.success) {
+      return { success: false, error: "Invalid team filter" };
+    }
+    const { teamIds, ...list } = parsed.data;
+    const row = await setSportTeamFilter(ctx.effectiveUserId, list, teamIds);
+    await logImpersonatedMutation({
+      action: "sportTeamFilter.set",
+      entityTable: "user_sports_team_filters",
+      entityId: row?.id,
+      metadata: { ...list, teams: row?.teamIds.length ?? 0 },
+    });
+    // refresh(), as for the championship: the page re-renders with the saved
+    // teams, so Back to this list reopens on them, without expiring the
+    // provider feeds a revalidatePath would.
     refresh();
     return { success: true };
   });

@@ -14,7 +14,7 @@ import { DashboardSportCard } from "./dashboard-sport-card";
 import { DashboardSportCardSkeleton } from "./dashboard-sport-card-skeleton";
 
 /** The sports that have a dashboard card of their own. */
-const CARD_SPORTS = new Set<SportId>(["football", "nba", "nfl", "lol", "tennis", "padel", "f1"]);
+const CARD_SPORTS = new Set<SportId>(["football", "nba", "nfl", "mlb", "nhl", "lol", "tennis", "padel", "f1"]);
 
 /**
  * One card per favourite sport, in the order they were picked, each on the

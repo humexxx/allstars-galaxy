@@ -142,7 +142,9 @@ function FeaturedRace({
     // The card is not one big link that greys on hover: "View details"
     // opens the race's page, and the card itself stays still.
     <Card>
-      <CardContent className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-5 @2xl:gap-x-8">
+      {/* The circuit gets two-fifths of the card, centred in it: sized by
+          what the sessions left over, it came out small and pushed right. */}
+      <CardContent className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-5 @2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] @2xl:gap-x-8">
         <div className="flex min-w-0 flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
             {/* "Next race" or "On now" is the heading above the card. */}
@@ -161,7 +163,7 @@ function FeaturedRace({
 
         <F1CircuitOutline
           circuitId={race.circuitId}
-          className="size-20 text-foreground @2xl:row-span-3 @2xl:size-48 @2xl:self-center @4xl:size-56"
+          className="size-20 text-foreground @2xl:row-span-3 @2xl:size-auto @2xl:w-full @2xl:max-w-72 @2xl:place-self-center"
         />
 
         {/* Pinned to the first column: a circuit with no outline leaves the

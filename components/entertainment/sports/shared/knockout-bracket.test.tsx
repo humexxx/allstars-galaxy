@@ -251,6 +251,20 @@ describe("KnockoutBracket", () => {
     expect(scrollTo).toHaveBeenCalledTimes(4);
   });
 
+  it("comes back to the final, in the middle of the view, from anywhere", () => {
+    const container = renderBracket();
+    const { viewport } = layOut(container);
+    const final = screen.getByRole("button", { name: "Centre on the final" });
+
+    fireEvent.click(final);
+    // The final is the sixth of eleven columns, 200px apart, in a view 400px wide.
+    expect(viewport.scrollLeft).toBe(1000 - (400 - columns(container)[5].offsetWidth) / 2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Right end of the bracket" }));
+    fireEvent.click(final);
+    expect(viewport.scrollLeft).toBe(1000 - (400 - columns(container)[5].offsetWidth) / 2);
+  });
+
   it("keeps the focus on a button that reaches its end, and does nothing more from there", () => {
     const { scrollTo } = layOut(renderBracket());
     const end = screen.getByRole("button", { name: "Right end of the bracket" });

@@ -33,7 +33,7 @@ export function TeamPick({
       onClick={() => picker.pick(team.id)}
       className={cn(
         layout,
-        "-mx-1 cursor-pointer rounded-md px-1 text-left transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden aria-pressed:bg-muted"
+        "-mx-2 -my-1 cursor-pointer rounded-md px-2 py-1 text-left transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden aria-pressed:bg-muted"
       )}
     >
       {children}

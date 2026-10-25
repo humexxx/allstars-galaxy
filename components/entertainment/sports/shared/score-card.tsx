@@ -20,6 +20,7 @@ type ScoreCardProps = {
 
 /** The status code, or null for a fixture (which shows its date instead). */
 function formatStatus(match: Match): string | null {
+  if (match.statusText && match.status !== "scheduled") return match.statusText.short;
   switch (match.status) {
     case "ft":
       return "FT";
@@ -42,6 +43,7 @@ function formatStatus(match: Match): string | null {
 
 /** The status in words: a listener hears "FT" as two letters and "CAN" as "can". */
 function spokenStatus(match: Match): string | null {
+  if (match.statusText && match.status !== "scheduled") return match.statusText.spoken;
   switch (match.status) {
     case "ft":
       return "Full time";

@@ -14,7 +14,7 @@ import type { SportId, SportMeta } from "@/types/sports";
 import { revealInRow } from "./shared/scroll";
 
 /**
- * Every sport as one button group, each with its emoji and name, the
+ * Every sport as a button group in two rows, each with its emoji and name, the
  * favourites first and the sport on screen shaded and underlined. On a phone
  * the group runs past the screen's edge and slides sideways, as the old strip
  * of sports did, rather than cutting the names. A sport whose name is
@@ -37,10 +37,11 @@ export function SportPicker({
 }): React.ReactElement {
   const group = useRef<HTMLDivElement>(null);
 
-  // On a phone the sport on screen can sit past the group's edge.
+  // On a phone the sport on screen can sit past its row's edge.
   useEffect(() => {
-    const row = group.current;
-    if (row) revealInRow(row, row.querySelector('[aria-current="page"]'));
+    const current = group.current?.querySelector<HTMLElement>('[aria-current="page"]');
+    const row = current?.closest<HTMLElement>("[data-slot='button-group']");
+    if (row) revealInRow(row, current ?? null);
   }, [active]);
 
   const pick = (event: MouseEvent<HTMLAnchorElement>, sport: SportId): void => {
@@ -49,50 +50,76 @@ export function SportPicker({
     onPick(sport);
   };
 
+  // Two rows, so eleven sports keep a name row's width; each half in its order.
+  const half = Math.ceil(sports.length / 2);
+  const rows = [sports.slice(0, half), sports.slice(half)];
+
   return (
-    // Padded inside its scroller and pulled back out, so a focus ring is not clipped.
-    <ButtonGroup ref={group} aria-label="Sports" className="no-scrollbar -m-1 max-w-full min-w-0 overflow-x-auto p-1">
-      {sports.map((sport) => {
-        const current = sport.id === active;
-        const link = (
-          <Button
-            key={sport.id}
-            variant="outline"
-            size="sm"
-            asChild
-            // A bar as well as the shade: the shade alone is 1.18:1, and a hovered
-            // sport looks the same. `dark:bg-muted` replaces the variant's
-            // `dark:bg-input/30`, which would otherwise win.
-            className={cn(
-              current
-                ? "relative bg-muted text-foreground after:absolute after:inset-x-2 after:bottom-0 after:border-b-2 after:border-primary dark:bg-muted"
-                : "text-muted-foreground"
-            )}
-          >
-            <Link
-              href={sportPath(sport.id)}
-              scroll={false}
+    <div ref={group} role="group" aria-label="Sports" className="flex max-w-full min-w-0 flex-col items-end gap-1">
+      {rows.map((row, r) => (
+        // Padded inside its scroller and pulled back out, so a focus ring is not clipped.
+        <ButtonGroup key={r} role="none" className="no-scrollbar -m-1 max-w-full min-w-0 overflow-x-auto p-1">
+          {row.map((sport) => (
+            <SportLink
+              key={sport.id}
+              sport={sport}
+              current={sport.id === active}
+              favorite={favorites.has(sport.id)}
               onClick={(event) => pick(event, sport.id)}
-              aria-current={current ? "page" : undefined}
-              aria-label={favorites.has(sport.id) ? `${sport.shortLabel} (favorite)` : sport.shortLabel}
-            >
-              <span aria-hidden className="text-base leading-none">
-                {sport.emoji}
-              </span>
-              {sport.shortLabel}
-            </Link>
-          </Button>
-        );
-        return sport.label === sport.shortLabel ? (
-          link
-        ) : (
-          <Tooltip key={sport.id}>
-            <TooltipTrigger asChild>{link}</TooltipTrigger>
-            <TooltipContent>{sport.label}</TooltipContent>
-          </Tooltip>
-        );
-      })}
-    </ButtonGroup>
+            />
+          ))}
+        </ButtonGroup>
+      ))}
+    </div>
+  );
+}
+
+/** One sport in the group: its emoji and name, the full name in a tooltip where shortened. */
+function SportLink({
+  sport,
+  current,
+  favorite,
+  onClick,
+}: {
+  sport: SportMeta;
+  current: boolean;
+  favorite: boolean;
+  onClick: (event: MouseEvent<HTMLAnchorElement>) => void;
+}): React.ReactElement {
+  const link = (
+    <Button
+      variant="outline"
+      size="sm"
+      asChild
+      // A bar as well as the shade: the shade alone is 1.18:1, and a hovered
+      // sport looks the same. `dark:bg-muted` replaces the variant's
+      // `dark:bg-input/30`, which would otherwise win.
+      className={cn(
+        current
+          ? "relative bg-muted text-foreground after:absolute after:inset-x-2 after:bottom-0 after:border-b-2 after:border-primary dark:bg-muted"
+          : "text-muted-foreground"
+      )}
+    >
+      <Link
+        href={sportPath(sport.id)}
+        scroll={false}
+        onClick={onClick}
+        aria-current={current ? "page" : undefined}
+        aria-label={favorite ? `${sport.shortLabel} (favorite)` : sport.shortLabel}
+      >
+        <span aria-hidden className="text-base leading-none">
+          {sport.emoji}
+        </span>
+        {sport.shortLabel}
+      </Link>
+    </Button>
+  );
+  if (sport.label === sport.shortLabel) return link;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{link}</TooltipTrigger>
+      <TooltipContent>{sport.label}</TooltipContent>
+    </Tooltip>
   );
 }
 

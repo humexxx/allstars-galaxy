@@ -3,20 +3,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { ShellHeadSkeleton } from "../sports-navigation";
 
-/** The breadcrumbs, then a page header: eyebrow, title, the line under it. */
-function HeaderSkeleton(): React.ReactElement {
-  return (
-    <div className="flex flex-col gap-3">
-      <Skeleton className="h-4 w-56 max-w-full" />
-      <div className="flex flex-col gap-1">
-        <Skeleton className="h-3 w-24" />
-        <Skeleton className="h-9 w-80 max-w-full" />
-        <Skeleton className="h-4 w-64 max-w-full" />
-      </div>
-    </div>
-  );
-}
-
 /**
  * A padel or tennis tournament's page while it loads (`loading.tsx`): laid
  * out as the page is, the sport's name row with the breadcrumb's longer
@@ -45,8 +31,9 @@ export function TournamentPageSkeleton(): React.ReactElement {
 }
 
 /**
- * A race's page while it loads: the header, the circuit's card and the
- * weekend's timetable on the left, the results table on the right, with a
+ * A race's page while it loads (`loading.tsx`): laid out as the page is, F1's
+ * name row with the breadcrumb's longer title and the tabs, then the
+ * Overview it opens on: the circuit's card beside the weekend's timetable. A
  * status for a screen reader beside it.
  */
 export function RacePageSkeleton(): React.ReactElement {
@@ -55,28 +42,18 @@ export function RacePageSkeleton(): React.ReactElement {
       <span role="status" className="sr-only">
         Loading race…
       </span>
-      <div className="@container flex flex-col gap-6" aria-hidden="true">
-        <HeaderSkeleton />
-        <div className="grid gap-6 @4xl:grid-cols-2">
-          <div className="flex flex-col gap-6">
-            <Card>
-              <CardContent className="flex items-center gap-4 @md:gap-6">
-                <Skeleton className="size-24 shrink-0 @md:size-32" />
-                <div className="flex flex-col gap-2">
-                  <Skeleton className="h-5 w-24" />
-                  <Skeleton className="h-4 w-40" />
-                </div>
-              </CardContent>
-            </Card>
-            <div className="flex flex-col gap-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
-              ))}
-            </div>
-          </div>
+      <div className="@container flex flex-col">
+        <ShellHeadSkeleton title="w-72" />
+        <div className="grid gap-6 pt-6 @4xl:grid-cols-2 @4xl:items-start" aria-hidden="true">
+          <Card>
+            <CardContent className="flex flex-col items-center gap-4">
+              <Skeleton className="aspect-square w-full max-w-72" />
+              <Skeleton className="h-4 w-40" />
+            </CardContent>
+          </Card>
           <div className="flex flex-col gap-2">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
             ))}
           </div>
         </div>

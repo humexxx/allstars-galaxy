@@ -158,7 +158,7 @@ export function KnockoutBracket({
   const viewport = useRef<HTMLDivElement>(null);
   const [ends, setEnds] = useState({ overflow: false, atStart: true, atEnd: true });
 
-  const { columns, edges, opening } = useMemo(() => {
+  const { columns, edges, opening, finalAt } = useMemo(() => {
     const current = currentRoundIndex(tree.rounds);
     const last = tree.rounds.length - 1;
     // A decided bracket opens on its final, but nothing in it is being played.
@@ -228,7 +228,8 @@ export function KnockoutBracket({
       });
     // The round being played (its top half's column, two-sided); the final's
     // own once only the final is left.
-    return { columns, edges, opening: Math.min(current, last) };
+    // The final's column: the middle of a two-sided draw, the last of a one-sided one.
+    return { columns, edges, opening: Math.min(current, last), finalAt: twoSided ? before.length : columns.length - 1 };
   }, [tree, thirdPlace, teams, renderMatch, links]);
 
   const readEnds = useCallback(() => {
@@ -243,17 +244,21 @@ export function KnockoutBracket({
     );
   }, []);
 
+  /** Where the viewport sits with column `index` in its middle. */
+  const centredOn = useCallback((index: number): number | null => {
+    const el = viewport.current;
+    const target = el?.querySelector<HTMLElement>(`[data-column="${index}"]`);
+    if (!el || !target) return null;
+    return Math.max(0, (columnLefts(el)[index] ?? 0) - (el.clientWidth - target.offsetWidth) / 2);
+  }, []);
+
   // On the round being played, before the first paint; again for new rounds
   // (another league, a revalidation), never on the reader's own scrolling.
   useLayoutEffect(() => {
-    const el = viewport.current;
-    const target = el?.querySelector<HTMLElement>(`[data-column="${opening}"]`);
-    if (el && target) {
-      const left = columnLefts(el)[opening] ?? 0;
-      el.scrollLeft = Math.max(0, left - (el.clientWidth - target.offsetWidth) / 2);
-    }
+    const left = centredOn(opening);
+    if (viewport.current && left !== null) viewport.current.scrollLeft = left;
     readEnds();
-  }, [rounds, opening, readEnds]);
+  }, [rounds, opening, readEnds, centredOn]);
 
   useLayoutEffect(() => {
     const el = viewport.current;
@@ -304,6 +309,17 @@ export function KnockoutBracket({
               <ChevronLeft />
             </ScrollButton>
           </div>
+          {/* Back to the middle of it all: the final, in the centre. */}
+          <ScrollButton
+            label="Centre on the final"
+            off={false}
+            onPress={() => {
+              const left = centredOn(finalAt);
+              if (left !== null) scrollTo(left);
+            }}
+          >
+            <Trophy />
+          </ScrollButton>
           <div className="flex items-center">
             <ScrollButton label="Scroll right" off={ends.atEnd} onPress={() => step(1)}>
               <ChevronRight />

@@ -12,6 +12,9 @@ export const SPORT_IDS = [
   "nba",
   "tennis",
   "nfl",
+  "mlb",
+  "nhl",
+  "surf",
   "lol",
 ] as const;
 
@@ -171,6 +174,12 @@ export type Match = {
   awayRedCard?: boolean;
   /** Where it is on in the US, nationally: TV first ("NBC", "Peacock"). */
   broadcasts?: string[];
+  /**
+   * Where a game stands in its own sport's words, over football's codes and
+   * minute: live "Top 7th" or "P2 12:34", final "OT", "SO" or "F/10". The
+   * spoken form is what a screen reader hears.
+   */
+  statusText?: { short: string; spoken: string };
 };
 
 /** League / group-stage row. */
@@ -273,7 +282,9 @@ export type FootballLeagueId = (typeof FOOTBALL_COMPETITION_IDS)[number];
 export type TeamFilterList =
   | { sportId: "football"; competition: FootballLeagueId }
   | { sportId: "nba"; competition: "nba" }
-  | { sportId: "nfl"; competition: "nfl" };
+  | { sportId: "nfl"; competition: "nfl" }
+  | { sportId: "mlb"; competition: "mlb" }
+  | { sportId: "nhl"; competition: "nhl" };
 
 /** The list on screen and the teams last picked in it ([] is every team). */
 export type SavedTeamFilter = { list: TeamFilterList; teamIds: string[] };
@@ -685,6 +696,133 @@ export type NflData = {
   games: Match[];
   standings: NflStanding[];
   playoffs: BracketRound[];
+};
+
+// ---------- MLB ----------
+
+export type MlbLeague = "al" | "nl";
+export type MlbDivision = "al-east" | "al-central" | "al-west" | "nl-east" | "nl-central" | "nl-west";
+
+export type MlbStanding = {
+  /** Within its league, by ESPN's playoff seed (1–15). */
+  position: number;
+  teamId: string;
+  league: MlbLeague;
+  division: MlbDivision;
+  wins: number;
+  losses: number;
+  pct: number;
+  /** Behind the division's leader; 0 for the leader. */
+  gamesBehind: number;
+  streak: string;
+};
+
+export type MlbData = {
+  season: number;
+  teams: Team[];
+  games: Match[];
+  standings: MlbStanding[];
+  /** The postseason's series as bracket ties: wins for the score, `bestOf` the series' length. */
+  playoffs: BracketRound[];
+};
+
+// ---------- NHL ----------
+
+export type NhlConference = "east" | "west";
+export type NhlDivision = "atlantic" | "metropolitan" | "central" | "pacific";
+
+export type NhlStanding = {
+  /** Within its conference, by ESPN's seed (points, then the tiebreaks). */
+  position: number;
+  teamId: string;
+  conference: NhlConference;
+  division: NhlDivision;
+  gamesPlayed: number;
+  wins: number;
+  /** In regulation. */
+  losses: number;
+  /** In overtime or a shoot-out, a point each. */
+  otLosses: number;
+  points: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  streak: string;
+};
+
+export type NhlData = {
+  season: number;
+  teams: Team[];
+  games: Match[];
+  standings: NhlStanding[];
+  /** The playoffs' series as bracket ties: wins for the score, best of seven. */
+  playoffs: BracketRound[];
+};
+
+// ---------- Surf ----------
+
+export type SurfStatus = "completed" | "live" | "upcoming";
+
+/** One stop of the men's Championship Tour. */
+export type SurfEvent = {
+  /** The WSL's joint event id, the one in its addresses. */
+  id: string;
+  slug: string;
+  name: string;
+  /** The break and where it is: "Supertubos, Peniche, Portugal". */
+  location: string;
+  /** YYYY-MM-DD: the waiting period's first and last days, calendar days. */
+  startDate: string;
+  endDate: string;
+  status: SurfStatus;
+  /** Its stop on the tour ("Event 10"). */
+  stop: number;
+  winner?: string;
+  runnerUp?: string;
+};
+
+export type SurfSurfer = {
+  athleteId?: string;
+  /** A seed's place ("Event seed #16") until the draw names the surfer. */
+  name: string;
+  imageUrl?: string;
+  /** The heat total: the two best waves'. */
+  score: number | null;
+  /** 1 for the heat's winner. */
+  place?: number;
+};
+
+export type SurfHeat = {
+  id: string;
+  number: number;
+  status: SurfStatus;
+  surfers: SurfSurfer[];
+};
+
+/** "Round 1" … "Final", its heats in order. */
+export type SurfRound = { label: string; heats: SurfHeat[] };
+
+export type SurfDraw = { eventId: string; rounds: SurfRound[] };
+
+/** Who won a stop, and whom they beat in the Final. */
+export type SurfFinal = { winner: string; runnerUp?: string };
+
+export type SurfRanking = {
+  position: number;
+  athleteId: string;
+  name: string;
+  country: string;
+  flagUrl?: string;
+  imageUrl?: string;
+  points: number;
+};
+
+export type SurfData = {
+  season: number;
+  /** The men's Championship Tour, in date order. */
+  events: SurfEvent[];
+  /** The draw of the event on now, else the next, else the last one surfed. */
+  draw?: SurfDraw;
+  rankings: SurfRanking[];
 };
 
 // ---------- League of Legends ----------

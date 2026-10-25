@@ -128,6 +128,9 @@ describe("SportsHub", () => {
       "/portal/entertainment/sports?sport=padel",
       "/portal/entertainment/sports?sport=tennis",
       "/portal/entertainment/sports?sport=nfl",
+      "/portal/entertainment/sports?sport=mlb",
+      "/portal/entertainment/sports?sport=nhl",
+      "/portal/entertainment/sports?sport=surf",
       "/portal/entertainment/sports?sport=lol",
     ]);
     const [f1, nba, football, ...others] = links;
@@ -143,7 +146,7 @@ describe("SportsHub", () => {
     expect(current).toHaveAccessibleName("NBA (favorite)");
     expect(current).toHaveTextContent(/^🏀NBA$/);
     expect(sport("Football")).toHaveTextContent(/^⚽Football$/);
-    expect(within(picker()).getAllByRole("link", { current: false })).toHaveLength(6);
+    expect(within(picker()).getAllByRole("link", { current: false })).toHaveLength(9);
   });
 
   it("moves to a sport in its own transition, and leaves a modified click to the browser", () => {

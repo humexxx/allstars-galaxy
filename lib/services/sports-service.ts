@@ -8,8 +8,10 @@ import { userSportsPreferences, userSportsTeamFilters } from "@/db/schema";
 import { F1_DATA } from "@/lib/data/sports/f1";
 import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
+import { getMlbData } from "@/lib/services/espn-mlb-service";
 import { getEspnNews } from "@/lib/services/espn-news-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
+import { getNhlData } from "@/lib/services/espn-nhl-service";
 import {
   FOOTBALL_COMPETITIONS,
   getFootballLeagueData,
@@ -20,6 +22,7 @@ import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
 import { leadRace, startsIn, weekendNow } from "@/lib/sports/f1-weekend";
+import { splitSeasonLabel } from "@/lib/sports/season";
 import { formatDayRange } from "@/lib/utils/date";
 import type {
   BracketMatch,
@@ -41,10 +44,14 @@ import type {
   NewsStory,
   LolSplit,
   Match,
+  MlbData,
+  MlbLeague,
   NbaConference,
   NbaData,
   NflConference,
   NflData,
+  NhlConference,
+  NhlData,
   RacquetData,
   SportId,
   SwissStage,
@@ -262,6 +269,14 @@ export async function getDashboardSportCard(
       const [data, news] = await Promise.all([getNflData(), getEspnNews("nfl")]);
       return { ...nflCard(base, data), news: cardNews(news) };
     }
+    case "mlb": {
+      const [data, news] = await Promise.all([getMlbData(), getEspnNews("mlb")]);
+      return { ...mlbCard(base, data), news: cardNews(news) };
+    }
+    case "nhl": {
+      const [data, news] = await Promise.all([getNhlData(), getEspnNews("nhl")]);
+      return { ...nhlCard(base, data), news: cardNews(news) };
+    }
     case "lol":
       return lolCard(base, await getLolData(), oneOf(LOL_REGIONS, competition));
     case "tennis":
@@ -387,6 +402,45 @@ function nflCard(base: CardBase, data: NflData): DashboardSportCard {
     context: `Season ${data.season}`,
     ...featuredAndFollowing(data.games, teams),
     tables: [conference("afc", "AFC"), conference("nfc", "NFC")].filter((t) => t.rows.length > 0),
+  };
+}
+
+function mlbCard(base: CardBase, data: MlbData): DashboardSportCard {
+  const teams = teamsById(data.teams);
+  const league = (id: MlbLeague, label: string): DashboardTable => ({
+    id,
+    label,
+    rows: data.standings
+      .filter((s) => s.league === id)
+      .sort((a, b) => a.position - b.position)
+      .slice(0, CARD_ROWS)
+      .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.wins}–${s.losses}`)),
+  });
+  return {
+    ...base,
+    context: `Season ${data.season}`,
+    ...featuredAndFollowing(data.games, teams),
+    tables: [league("al", "American League"), league("nl", "National League")].filter((t) => t.rows.length > 0),
+  };
+}
+
+/** Each conference by points, the hockey table's own order. */
+function nhlCard(base: CardBase, data: NhlData): DashboardSportCard {
+  const teams = teamsById(data.teams);
+  const conference = (id: NhlConference, label: string): DashboardTable => ({
+    id,
+    label,
+    rows: data.standings
+      .filter((s) => s.conference === id)
+      .sort((a, b) => a.position - b.position)
+      .slice(0, CARD_ROWS)
+      .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.points} pts`)),
+  });
+  return {
+    ...base,
+    context: `Season ${splitSeasonLabel(data.season)}`,
+    ...featuredAndFollowing(data.games, teams),
+    tables: [conference("east", "Eastern"), conference("west", "Western")].filter((t) => t.rows.length > 0),
   };
 }
 

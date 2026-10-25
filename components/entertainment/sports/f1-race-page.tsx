@@ -1,17 +1,19 @@
 "use client";
 
-import { RotateCw, Timer } from "lucide-react";
+import { Lock, RotateCw, Timer } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode, type Ref } from "react";
 
-import { PageHeader } from "@/components/portal/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
+import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { raceSessions, SESSION_LABEL, weekendNow } from "@/lib/sports/f1-weekend";
+import { sportPath } from "@/lib/sports/paths";
 import { cn } from "@/lib/utils";
 import type {
   F1ClassificationRow,
@@ -19,6 +21,7 @@ import type {
   F1Race,
   F1SessionKind,
   F1SessionResult,
+  SportId,
 } from "@/types/sports";
 
 import { F1CircuitOutline } from "./f1-circuit-outline";
@@ -26,11 +29,14 @@ import { racePlace, raceWhen, SprintBadge } from "./f1-race-labels";
 import { Podium, sessionDriver, SessionList } from "./f1-race-parts";
 import { Portrait } from "./shared/portrait";
 import { ShowMoreRows, useShownRows } from "./shared/show-more";
-import { SportsBreadcrumbs } from "./shared/sports-breadcrumbs";
+import { SportShell } from "./shared/sport-shell";
 import { useMatchTime } from "./shared/time-zone-context";
 import { StatusPill } from "./shared/status-pill";
 import { SportsTh } from "./shared/table-primitives";
+import { SportPageControls } from "./sport-page-controls";
 import { useNow } from "./use-now";
+
+const F1 = SPORTS_BY_ID.get("f1");
 
 type F1RacePageProps = {
   race: F1Race;
@@ -45,14 +51,19 @@ type F1RacePageProps = {
    * the next one, by name and time, rather than the race's own start.
    */
   current?: boolean;
+  favoriteSportIds: SportId[];
+  /** `?tab=results` opens on the results, once there are some. */
+  initialTab?: string;
 };
 
 /**
- * One race on a page of its own: the way back to F1, its circuit, every
- * session's order as it comes in, the timetable, podium, pole, fastest lap,
- * sprint and — for a finished race — the whole field with its points. The
- * timetable and podium on the left, the tables on the right, on a wide
- * screen; one column on a phone.
+ * One race on a page of its own, laid out as F1's page is: the same name
+ * row with the favourites and the sport picker, its title a breadcrumb
+ * ("Formula 1 › Mexico City Grand Prix"). Overview: the circuit, big, with
+ * its place and what is on or next, beside the weekend's timetable, the
+ * podium, pole, fastest lap and sprint. Results (locked until a session has
+ * run): every session's order as it comes in and, for a finished race, the
+ * whole field with its points.
  *
  * Everything comes with the page (read on the server); what was not in yet is
  * asked for again by refreshing it.
@@ -64,6 +75,8 @@ export function F1RacePage({
   classification,
   sessions,
   current = false,
+  favoriteSportIds,
+  initialTab,
 }: F1RacePageProps): React.ReactElement {
   const router = useRouter();
   const [retrying, startRetry] = useTransition();
@@ -96,124 +109,133 @@ export function F1RacePage({
   }, [classification]);
 
   return (
-    <div className="@container flex flex-col gap-6">
-      <div className="flex flex-col gap-3">
-        <SportsBreadcrumbs sport="f1" current={race.name} />
-        <PageHeader
-          eyebrow={`Round ${race.round} · ${season}`}
-          title={
-            <span className="flex items-center gap-3">
-              <span aria-hidden className="leading-none">
-                {race.flagEmoji}
-              </span>
-              {race.name}
-            </span>
+    <SportPageControls sport="f1" favoriteSportIds={favoriteSportIds}>
+      <Tabs defaultValue={initialTab === "results" && hasTables ? "results" : "overview"} className="gap-6">
+        <SportShell
+          emoji={F1?.emoji}
+          title={race.name}
+          subtitle={`Round ${race.round} · ${season} Season`}
+          parent={{ label: F1?.label ?? "Formula 1", href: sportPath("f1") }}
+          tabs={
+            <TabsList variant="line">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              {/* Locked until a session has run: where its orders will be is worth knowing. */}
+              <TabsTrigger value="results" disabled={!hasTables}>
+                {!hasTables && <Lock aria-hidden />}
+                Results
+              </TabsTrigger>
+            </TabsList>
           }
-          description={racePlace(race)}
-        />
-      </div>
+        >
+          <TabsContent value="overview">
+            <div className="grid gap-6 @4xl:grid-cols-2 @4xl:items-start">
+              <Card>
+                <CardContent className="flex flex-col items-center gap-4 text-center">
+                  <F1CircuitOutline circuitId={race.circuitId} className="h-auto w-full max-w-72 text-foreground" />
+                  <div className="flex flex-col items-center gap-2">
+                    <Text variant="muted">{racePlace(race)}</Text>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      {session ? (
+                        <StatusPill
+                          status={state.live ? "live" : "upcoming"}
+                          label={`${state.live ? "On track" : "Next"} · ${SESSION_LABEL[session.kind]}`}
+                        />
+                      ) : (
+                        <StatusPill status={race.status} />
+                      )}
+                      {race.sprint && <SprintBadge />}
+                    </div>
+                    <Mono className="text-sm">
+                      {session ? format.dayTime(session.startsAt) : raceWhen(race, format)}
+                    </Mono>
+                  </div>
+                </CardContent>
+              </Card>
 
-      <div className={cn("grid gap-6", hasTables && "@4xl:grid-cols-2 @4xl:items-start")}>
-        <div className="flex min-w-0 flex-col gap-6">
-          <Card>
-            <CardContent className="flex items-center gap-4 @md:gap-6">
-              <F1CircuitOutline
-                circuitId={race.circuitId}
-                className="size-24 shrink-0 text-foreground @md:size-32"
-              />
-              <div className="flex min-w-0 flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  {session ? (
-                    <StatusPill
-                      status={state.live ? "live" : "upcoming"}
-                      label={`${state.live ? "On track" : "Next"} · ${SESSION_LABEL[session.kind]}`}
-                    />
-                  ) : (
-                    <StatusPill status={race.status} />
-                  )}
-                  {race.sprint && <SprintBadge />}
-                </div>
-                <Mono className="text-sm">
-                  {session ? format.dayTime(session.startsAt) : raceWhen(race, format)}
-                </Mono>
-              </div>
-            </CardContent>
-          </Card>
-
-          {hasSessions && (
-            <Section title="Weekend">
-              <SessionList race={race} format={format} now={now} results={sessions} drivers={drivers} />
-            </Section>
-          )}
-
-          {race.podium && (
-            <Section title="Podium">
-              <Podium race={race} drivers={drivers} />
-            </Section>
-          )}
-
-          {hasMarks && (
-            <dl className="grid grid-cols-3 gap-2">
-              {race.pole && <Mark label="Pole" code={race.pole.code} detail={race.pole.time} />}
-              {race.fastestLap && (
-                <Mark
-                  label="Fastest lap"
-                  code={race.fastestLap.code}
-                  detail={[race.fastestLap.time, race.fastestLap.lap && `Lap ${race.fastestLap.lap}`]
-                    .filter(Boolean)
-                    .join(" · ")}
-                />
-              )}
-              {race.sprintWinner && (
-                <Mark label="Sprint" code={race.sprintWinner.code} detail={race.sprintWinner.team} />
-              )}
-            </dl>
-          )}
-        </div>
-
-        {hasTables && (
-          <div className="flex min-w-0 flex-col gap-6">
-            {tabled.length > 0 && (
-              <Section title="Results">
-                <SessionResults sessions={tabled} drivers={drivers} />
-              </Section>
-            )}
-            {race.status === "completed" && (
-              <Section title="Classification" headingRef={classificationHeading}>
-                {classification ? (
-                  <ClassificationTable rows={classification} />
-                ) : (
-                  // Not destructive: a race just run usually has no results in yet.
-                  <Alert>
-                    <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-                      The classification isn&apos;t available yet
-                      {/* aria-disabled, not disabled, so the button keeps focus while it asks. */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        aria-disabled={retrying || undefined}
-                        onClick={() => {
-                          if (retrying) return;
-                          setRetried(true);
-                          handOff.current = true;
-                          startRetry(() => router.refresh());
-                        }}
-                      >
-                        <RotateCw className={cn(retrying && "motion-safe:animate-spin")} /> Retry
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
+              <div className="flex min-w-0 flex-col gap-6">
+                {hasSessions && (
+                  <Section title="Weekend">
+                    <div className="rounded-lg border bg-card px-3">
+                      <SessionList race={race} format={format} now={now} results={sessions} drivers={drivers} />
+                    </div>
+                  </Section>
                 )}
-                {/* Outside the branch, so it is there before its words change. */}
-                <span role="status" className="sr-only">
-                  {retryStatus}
-                </span>
-              </Section>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+
+                {race.podium && (
+                  <Section title="Podium">
+                    <div className="rounded-lg border bg-card p-1">
+                      <Podium race={race} drivers={drivers} />
+                    </div>
+                  </Section>
+                )}
+
+                {hasMarks && (
+                  <dl className="grid grid-cols-3 gap-2">
+                    {race.pole && <Mark label="Pole" code={race.pole.code} detail={race.pole.time} />}
+                    {race.fastestLap && (
+                      <Mark
+                        label="Fastest lap"
+                        code={race.fastestLap.code}
+                        detail={[race.fastestLap.time, race.fastestLap.lap && `Lap ${race.fastestLap.lap}`]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      />
+                    )}
+                    {race.sprintWinner && (
+                      <Mark label="Sprint" code={race.sprintWinner.code} detail={race.sprintWinner.team} />
+                    )}
+                  </dl>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          {hasTables && (
+            <TabsContent value="results">
+              <div className="grid gap-6 @4xl:grid-cols-2 @4xl:items-start">
+                {tabled.length > 0 && (
+                  <Section title="Sessions">
+                    <SessionResults sessions={tabled} drivers={drivers} />
+                  </Section>
+                )}
+                {race.status === "completed" && (
+                  <Section title="Classification" headingRef={classificationHeading}>
+                    {classification ? (
+                      <ClassificationTable rows={classification} />
+                    ) : (
+                      // Not destructive: a race just run usually has no results in yet.
+                      <Alert>
+                        <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+                          The classification isn&apos;t available yet
+                          {/* aria-disabled, not disabled, so the button keeps focus while it asks. */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            aria-disabled={retrying || undefined}
+                            onClick={() => {
+                              if (retrying) return;
+                              setRetried(true);
+                              handOff.current = true;
+                              startRetry(() => router.refresh());
+                            }}
+                          >
+                            <RotateCw className={cn(retrying && "motion-safe:animate-spin")} /> Retry
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    {/* Outside the branch, so it is there before its words change. */}
+                    <span role="status" className="sr-only">
+                      {retryStatus}
+                    </span>
+                  </Section>
+                )}
+              </div>
+            </TabsContent>
+          )}
+        </SportShell>
+      </Tabs>
+    </SportPageControls>
   );
 }
 
@@ -301,7 +323,7 @@ function SessionResults({
           ))}
         </ToggleGroup>
       )}
-      <div className="overflow-hidden rounded-lg border">
+      <div className="overflow-hidden rounded-lg border bg-card">
         <Table aria-label={SESSION_NAME[shown.kind]}>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -356,7 +378,7 @@ function SessionResults({
 
 function Mark({ label, code, detail }: { label: string; code: string; detail?: string }): React.ReactElement {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 rounded-lg border p-2">
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-lg border bg-card p-2">
       <Eyebrow size="sm" asChild>
         <dt>{label}</dt>
       </Eyebrow>
@@ -371,7 +393,7 @@ function Mark({ label, code, detail }: { label: string; code: string; detail?: s
 function ClassificationTable({ rows: all }: { rows: F1ClassificationRow[] }): React.ReactElement {
   const rows = useShownRows(all);
   return (
-    <div className="overflow-hidden rounded-lg border">
+    <div className="overflow-hidden rounded-lg border bg-card">
       <Table aria-label="Classification">
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">

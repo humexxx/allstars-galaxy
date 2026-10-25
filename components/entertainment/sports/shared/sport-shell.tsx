@@ -147,7 +147,7 @@ export function SportShell({
           {emoji && (
             <span
               aria-hidden
-              className="grid size-10 shrink-0 place-items-center rounded-lg bg-muted/60 text-xl ring-1 ring-foreground/10"
+              className="grid size-10 shrink-0 place-items-center rounded-lg bg-card text-xl ring-1 ring-foreground/10"
             >
               {emoji}
             </span>

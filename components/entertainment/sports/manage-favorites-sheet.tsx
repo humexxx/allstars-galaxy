@@ -37,6 +37,9 @@ const COVERAGE: Record<SportId, string> = {
   nba: "Scores and conference standings",
   tennis: "ATP and WTA rankings and draws",
   nfl: "Scores, standings and playoffs",
+  mlb: "Scores, standings and the postseason",
+  nhl: "Scores, standings and the playoffs",
+  surf: "The Championship Tour: its events, heats and rankings",
   lol: "LEC, LCS, LCK and LPL",
 };
 

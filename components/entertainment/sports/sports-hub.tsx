@@ -19,9 +19,12 @@ import { SportSkeleton, SportsNavigationContext } from "./sports-navigation";
 import { F1View } from "./sports/f1-view";
 import { FootballView } from "./sports/football-view";
 import { LolView } from "./sports/lol-view";
+import { MlbView } from "./sports/mlb-view";
 import { NbaView } from "./sports/nba-view";
 import { NflView } from "./sports/nfl-view";
+import { NhlView } from "./sports/nhl-view";
 import { PadelView } from "./sports/padel-view";
+import { SurfView } from "./sports/surf-view";
 import { TennisView } from "./sports/tennis-view";
 
 type SportsHubProps = {
@@ -226,6 +229,12 @@ function SportContent({
       return <PadelView data={payload.data} />;
     case "nfl":
       return <NflView data={payload.data} news={payload.news} initialTab={initialTab} />;
+    case "mlb":
+      return <MlbView data={payload.data} news={payload.news} initialTab={initialTab} />;
+    case "nhl":
+      return <NhlView data={payload.data} news={payload.news} initialTab={initialTab} />;
+    case "surf":
+      return <SurfView data={payload.data} initialTab={initialTab} />;
     case "lol":
       return <LolView data={payload.data} />;
   }

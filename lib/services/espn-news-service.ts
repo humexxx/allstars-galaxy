@@ -11,11 +11,13 @@ const REVALIDATE_SECONDS = 900;
 const LIMIT = 24;
 
 /** Every wire a News tab reads, by the hub's own names. */
-export type NewsFeed = "nba" | "nfl" | "atp" | FootballLeagueId;
+export type NewsFeed = "nba" | "nfl" | "mlb" | "nhl" | "atp" | FootballLeagueId;
 
 const PATHS: Record<NewsFeed, string> = {
   nba: "basketball/nba",
   nfl: "football/nfl",
+  mlb: "baseball/mlb",
+  nhl: "hockey/nhl",
   atp: "tennis/atp",
   "premier-league": "soccer/eng.1",
   "la-liga": "soccer/esp.1",

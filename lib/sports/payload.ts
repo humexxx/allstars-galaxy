@@ -6,11 +6,14 @@ import type {
   FootballLeagueData,
   FootballLeagueId,
   LolData,
+  MlbData,
   NbaData,
   NewsStory,
   NflData,
+  NhlData,
   PadelData,
   SportId,
+  SurfData,
   TennisData,
 } from "@/types/sports";
 
@@ -42,6 +45,9 @@ export type SportPayload = (
   | { sport: "tennis"; data: TennisData; news?: NewsStory[] }
   | { sport: "nba"; data: NbaData; news?: NewsStory[] }
   | { sport: "nfl"; data: NflData; news?: NewsStory[] }
+  | { sport: "mlb"; data: MlbData; news?: NewsStory[] }
+  | { sport: "nhl"; data: NhlData; news?: NewsStory[] }
+  | { sport: "surf"; data: SurfData }
 ) & {
   /**
    * The live feed has never answered, so the view is showing its fixture.

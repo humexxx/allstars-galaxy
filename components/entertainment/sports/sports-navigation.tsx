@@ -63,6 +63,7 @@ const SHAPES: Partial<Record<SportId, Shape>> = {
   f1: "events",
   padel: "events",
   tennis: "events",
+  surf: "events",
 };
 
 /**

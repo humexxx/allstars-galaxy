@@ -10,13 +10,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-} from "@/components/ui/select";
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -40,7 +39,6 @@ import {
 } from "@/types/sports";
 
 import { ChampionCard } from "../shared/champion-card";
-import { CompetitionTrigger } from "../shared/competition-trigger";
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { Last5Form } from "../shared/last-5-form";
 import { SportShell } from "../shared/sport-shell";
@@ -143,32 +141,31 @@ export function LolView({ data }: LolViewProps): ReactElement {
     >
       <SportShell
         emoji="🎮"
-        title="League of Legends"
-        // "Worlds 2026" already names its year; "LEC Split 3" does not.
-        subtitle={split.name.includes(String(split.season)) ? split.name : `${split.name} · ${split.season}`}
-        controls={
-          <Select value={region} onValueChange={(v) => setRegion(v as LolRegion)}>
-            <CompetitionTrigger label="Region" />
+        // The competition on screen names the page, as football's league
+        // does; the sport goes under it. "Worlds 2026" already names its
+        // year; "LEC Split 3" does not.
+        title={split.name}
+        subtitle={split.name.includes(String(split.season)) ? "League of Legends" : `League of Legends · ${split.season}`}
+        titleMenu={
+          <DropdownMenuRadioGroup value={region} onValueChange={(v) => setRegion(v as LolRegion)}>
             {/* International events first: they are the ones that matter most. */}
-            <SelectContent>
-              {[
-                { label: "International", splits: data.splits.filter((s) => s.international) },
-                { label: "Leagues", splits: data.splits.filter((s) => !s.international) },
-              ]
-                .filter((group) => group.splits.length > 0)
-                .map((group, i) => (
-                  <SelectGroup key={group.label}>
-                    {i > 0 && <SelectSeparator />}
-                    <SelectLabel>{group.label}</SelectLabel>
-                    {group.splits.map((s) => (
-                      <SelectItem key={s.region} value={s.region}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                ))}
-            </SelectContent>
-          </Select>
+            {[
+              { label: "International", splits: data.splits.filter((s) => s.international) },
+              { label: "Leagues", splits: data.splits.filter((s) => !s.international) },
+            ]
+              .filter((group) => group.splits.length > 0)
+              .map((group, i) => (
+                <DropdownMenuGroup key={group.label}>
+                  {i > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuLabel>{group.label}</DropdownMenuLabel>
+                  {group.splits.map((s) => (
+                    <DropdownMenuRadioItem key={s.region} value={s.region}>
+                      {s.name}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuGroup>
+              ))}
+          </DropdownMenuRadioGroup>
         }
         tabs={
           <TabsList variant="line">

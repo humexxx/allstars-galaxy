@@ -57,17 +57,20 @@ describe("FootballView", () => {
     expect(screen.queryByRole("table")).toBeNull();
   });
 
-  it("keeps the League picker at the end of the tabs row, on every tab", () => {
+  it("switches competition from its title, a menu of every league on offer", () => {
     renderLeague("uefa-champions-league");
-    const league = (): HTMLElement => screen.getByRole("combobox", { name: "League" });
-    expect(openTab()).toBe("Knockout");
-    expect(tabsRow()).toContainElement(league());
-    expect(tabsRow().lastElementChild).toContainElement(league());
-    expect(screen.getByRole("tabpanel")).not.toContainElement(league());
+    const title = within(screen.getByRole("heading", { level: 1 })).getByRole("button", {
+      name: "UEFA Champions League",
+    });
+    expect(within(tabsRow()).queryByRole("combobox")).toBeNull();
 
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Overview" }), { button: 0 });
-
-    expect(tabsRow().lastElementChild).toContainElement(league());
+    // Radix opens its menu on pointerdown, which jsdom's clicks lack; Enter opens it too.
+    fireEvent.keyDown(title, { key: "Enter" });
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getAllByRole("menuitemradio").map((l) => l.textContent)).toContain("La Liga");
+    expect(within(menu).getByRole("menuitemradio", { checked: true })).toHaveTextContent(
+      "UEFA Champions League"
+    );
   });
 
   it("puts the team filter on the first day's heading in Overview, and only there", () => {

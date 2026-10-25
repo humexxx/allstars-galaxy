@@ -17,8 +17,8 @@ import { TableCard } from "../shared/table-primitives";
 
 type WorldCupViewProps = {
   data: FootballLeagueData;
-  /** Football's competition picker: the World Cup is one of its leagues. */
-  controls?: ReactNode;
+  /** Football's competitions, under the title: the World Cup is one of its leagues. */
+  leagues?: ReactNode;
   /** ESPN's World Cup news; no News tab without any. */
   news?: NewsStory[];
   /** `?tab=news` asked for it. */
@@ -27,7 +27,7 @@ type WorldCupViewProps = {
 
 export function WorldCupView({
   data,
-  controls,
+  leagues,
   news = [],
   openNews = false,
 }: WorldCupViewProps): React.ReactElement {
@@ -49,7 +49,7 @@ export function WorldCupView({
         emoji="🏆"
         title={data.league.name}
         subtitle={`${data.league.region} · ${data.league.season}`}
-        controls={controls}
+        titleMenu={leagues}
         tabs={
           <TabsList variant="line">
             <TabsTrigger value="groups" disabled={!hasGroups}>

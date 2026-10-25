@@ -1,22 +1,22 @@
 "use client";
 
-import { Fragment, type MouseEvent } from "react";
+import { useEffect, useRef, type MouseEvent } from "react";
 import Link from "next/link";
-import { Check, ChevronDown, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import type { SportId, SportMeta } from "@/types/sports";
 
+import { revealInRow } from "./shared/scroll";
+
 /**
- * The sport on screen as one long button, and every sport in its menu, the
- * favourites first and starred. Each is a link (`?sport=`), so a modified
+ * Every sport as one button group, each with its emoji and name, the
+ * favourites first and the sport on screen shaded. On a phone the group runs
+ * past the screen's edge and slides sideways, as the old strip of sports did,
+ * rather than cutting the names. A sport whose name is shortened ("LoL")
+ * gives the full one in a tooltip. Each is a link (`?sport=`), so a modified
  * click still opens it in a new tab and Back returns; a plain one goes
  * through the hub's own transition (`onPick`).
  */
@@ -27,13 +27,18 @@ export function SportPicker({
   onPick,
 }: {
   active: SportId;
-  /** In the menu's order: the favourites first. */
+  /** In the group's order: the favourites first. */
   sports: SportMeta[];
   favorites: ReadonlySet<SportId>;
   onPick: (sport: SportId) => void;
 }): React.ReactElement {
-  const current = sports.find((s) => s.id === active);
-  const lastFavorite = sports.findLastIndex((s) => favorites.has(s.id));
+  const group = useRef<HTMLDivElement>(null);
+
+  // On a phone the sport on screen can sit past the group's edge.
+  useEffect(() => {
+    const row = group.current;
+    if (row) revealInRow(row, row.querySelector('[aria-current="page"]'));
+  }, [active]);
 
   const pick = (event: MouseEvent<HTMLAnchorElement>, sport: SportId): void => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -42,47 +47,41 @@ export function SportPicker({
   };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="w-44 justify-between rounded-full">
-          <span className="flex min-w-0 items-center gap-2">
-            <span aria-hidden className="text-base leading-none">
-              {current?.emoji}
-            </span>
-            <span className="truncate">{current?.shortLabel}</span>
-            <span className="sr-only">, change sport</span>
-          </span>
-          <ChevronDown data-icon="inline-end" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
-        {sports.map((sport, i) => (
-          <Fragment key={sport.id}>
-            <DropdownMenuItem asChild>
-              <Link
-                href={`?sport=${sport.id}`}
-                scroll={false}
-                onClick={(event) => pick(event, sport.id)}
-                aria-current={sport.id === active ? "page" : undefined}
-                title={sport.label === sport.shortLabel ? undefined : sport.label}
-              >
-                <span aria-hidden className="text-base leading-none">
-                  {sport.emoji}
-                </span>
-                <span className="flex-1">{sport.shortLabel}</span>
-                {favorites.has(sport.id) && (
-                  <>
-                    <Star aria-hidden className="size-3 fill-warning text-warning" strokeWidth={2} />
-                    <span className="sr-only">(favorite)</span>
-                  </>
-                )}
-                <Check aria-hidden className={sport.id === active ? undefined : "invisible"} />
-              </Link>
-            </DropdownMenuItem>
-            {i === lastFavorite && i < sports.length - 1 && <DropdownMenuSeparator />}
-          </Fragment>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    // Padded inside its scroller and pulled back out, so a focus ring is not clipped.
+    <ButtonGroup ref={group} aria-label="Sports" className="no-scrollbar -m-1 max-w-full min-w-0 overflow-x-auto p-1">
+      {sports.map((sport) => {
+        const current = sport.id === active;
+        const link = (
+          <Button
+            key={sport.id}
+            variant="outline"
+            size="sm"
+            asChild
+            className={cn(current ? "bg-muted text-foreground" : "text-muted-foreground")}
+          >
+            <Link
+              href={`?sport=${sport.id}`}
+              scroll={false}
+              onClick={(event) => pick(event, sport.id)}
+              aria-current={current ? "page" : undefined}
+              aria-label={favorites.has(sport.id) ? `${sport.shortLabel} (favorite)` : sport.shortLabel}
+            >
+              <span aria-hidden className="text-base leading-none">
+                {sport.emoji}
+              </span>
+              {sport.shortLabel}
+            </Link>
+          </Button>
+        );
+        return sport.label === sport.shortLabel ? (
+          link
+        ) : (
+          <Tooltip key={sport.id}>
+            <TooltipTrigger asChild>{link}</TooltipTrigger>
+            <TooltipContent>{sport.label}</TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </ButtonGroup>
   );
 }

@@ -23,9 +23,6 @@ export function useSportsNavigation(): (href: string) => void {
 /** What the left of a sport's Overview holds, for its skeleton. */
 type Shape = "matches" | "events";
 
-/** The sports with a competition picker at the end of their tabs row. */
-const PICKS_COMPETITION = new Set<SportId>(["football", "lol"]);
-
 /** F1, padel and tennis lead with one event, big, and the ones after it as tiles. */
 const SHAPES: Partial<Record<SportId, Shape>> = {
   f1: "events",
@@ -58,18 +55,17 @@ export function SportSkeleton({ sport }: { sport?: SportId } = {}): React.ReactE
           </div>
         </div>
         {hubControls ? (
-          <div className="flex items-center gap-2">{hubControls}</div>
+          <div className="flex max-w-full min-w-0 items-center gap-2">{hubControls}</div>
         ) : (
           <div className="flex items-center gap-2" aria-hidden="true">
             <Skeleton className="size-8 rounded-full" />
-            <Skeleton className="h-8 w-44 rounded-full" />
+            <Skeleton className="h-8 w-112 max-w-full rounded-md" />
           </div>
         )}
       </div>
       <div className="flex h-12 items-end gap-4 border-b pb-2" aria-hidden="true">
         <Skeleton className="h-6 w-20" />
         <Skeleton className="h-6 w-20" />
-        {sport && PICKS_COMPETITION.has(sport) && <Skeleton className="mb-0.5 ml-auto h-8 w-44" />}
       </div>
       <div className="grid items-start gap-6 pt-6 @4xl:grid-cols-[2fr_1fr]" aria-hidden="true">
         <div className="flex min-w-0 flex-col gap-6">

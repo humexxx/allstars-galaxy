@@ -224,11 +224,14 @@ describe("LolView, a league's other splits", () => {
 
     fireEvent.click(pill("LCK Split 1"));
     expect(getLolSplitAction).toHaveBeenCalledWith({ region: "lck", tournamentId: "115548106590082745" });
-    await waitFor(() => expect(screen.getByText("LCK Split 1 · 2026")).toBeInTheDocument());
+    // The split on screen names the page; the sport and its season go under it.
+    const title = (): HTMLElement => screen.getByRole("heading", { level: 1 });
+    await waitFor(() => expect(title()).toHaveTextContent(/^LCK Split 1$/));
+    expect(screen.getByText("League of Legends · 2026")).toBeInTheDocument();
 
     // Back to the latest: the feed's own, nothing asked.
     fireEvent.click(pill("LCK Split 3"));
-    expect(screen.getByText("LCK Split 3 · 2026")).toBeInTheDocument();
+    expect(title()).toHaveTextContent(/^LCK Split 3$/);
     expect(getLolSplitAction).toHaveBeenCalledTimes(1);
   });
 

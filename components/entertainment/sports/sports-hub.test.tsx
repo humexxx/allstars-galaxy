@@ -45,14 +45,9 @@ beforeEach(() => {
   forgetSeenSports();
 });
 
-const picker = (): HTMLElement => screen.getByRole("button", { name: /change sport$/ });
+const picker = (): HTMLElement => screen.getByRole("group", { name: "Sports" });
 const favorites = (): HTMLElement => screen.getByRole("button", { name: "Manage favorites (2)" });
-
-/** Radix opens its menu on pointerdown, which jsdom's clicks lack; Enter opens it too. */
-function openPicker(): HTMLElement {
-  fireEvent.keyDown(picker(), { key: "Enter" });
-  return screen.getByRole("menu");
-}
+const sport = (name: RegExp | string): HTMLElement => within(picker()).getByRole("link", { name });
 
 afterEach(() => {
   push.mockReset();
@@ -69,10 +64,9 @@ describe("SportsHub", () => {
   it("has no strip of sports above the bar any more", () => {
     renderHub();
     expect(screen.queryByRole("navigation", { name: "Sports" })).toBeNull();
-    expect(screen.queryByRole("link", { name: /Football/ })).toBeNull();
   });
 
-  it("ends the name row with the favourites button, the count on it, then the sport picker", () => {
+  it("ends the name row with the favourites button, the count on it, then the sports", () => {
     renderHub();
     const controls = picker().parentElement;
     expect(controls?.firstElementChild).toBe(favorites());
@@ -85,25 +79,13 @@ describe("SportsHub", () => {
     expect(nameRow).not.toContainElement(screen.getByRole("tablist"));
   });
 
-  it("names the sport on screen on the picker", () => {
+  it("groups every sport, the favourites first, each a link to its page", () => {
     renderHub();
-    expect(picker()).toHaveAccessibleName(/^NBA\s*, change sport$/);
-    expect(picker()).toHaveAttribute("aria-haspopup", "menu");
-  });
-
-  it("names the sport by its short label, F1 for Formula 1", () => {
-    renderHub("f1", F1);
-    expect(picker()).toHaveAccessibleName(/^F1\s*, change sport$/);
-  });
-
-  it("lists every sport in its menu, the favourites first and starred, a line, then the rest", () => {
-    renderHub();
-    const menu = openPicker();
-    const items = within(menu).getAllByRole("menuitem");
+    const links = within(picker()).getAllByRole("link");
 
     // Favourites keep the registry's order among themselves (F1 before NBA),
     // and so do the rest.
-    expect(items.map((item) => item.getAttribute("href"))).toEqual([
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
       "?sport=f1",
       "?sport=nba",
       "?sport=football",
@@ -112,22 +94,20 @@ describe("SportsHub", () => {
       "?sport=nfl",
       "?sport=lol",
     ]);
-    const [f1, nba, football, ...others] = items;
-    expect(f1).toHaveAccessibleName(/^F1.*\(favorite\)$/);
-    expect(nba).toHaveAccessibleName(/^NBA.*\(favorite\)$/);
+    const [f1, nba, football, ...others] = links;
+    expect(f1).toHaveAccessibleName("F1 (favorite)");
+    expect(nba).toHaveAccessibleName("NBA (favorite)");
     expect(football).toHaveAccessibleName("Football");
-    for (const item of others) expect(item).not.toHaveAccessibleName(/\(favorite\)/);
-
-    const separator = within(menu).getByRole("separator");
-    expect(separator.previousElementSibling).toBe(nba);
-    expect(separator.nextElementSibling).toBe(football);
+    for (const link of others) expect(link).not.toHaveAccessibleName(/\(favorite\)/);
   });
 
-  it("marks the sport on screen in the menu", () => {
+  it("marks the sport on screen, every sport by its emoji and name", () => {
     renderHub();
-    const menu = openPicker();
-    expect(within(menu).getByRole("menuitem", { current: "page" })).toHaveAccessibleName(/^NBA/);
-    expect(within(menu).getAllByRole("menuitem", { current: false })).toHaveLength(6);
+    const current = within(picker()).getByRole("link", { current: "page" });
+    expect(current).toHaveAccessibleName("NBA (favorite)");
+    expect(current).toHaveTextContent(/^🏀NBA$/);
+    expect(sport("Football")).toHaveTextContent(/^⚽Football$/);
+    expect(within(picker()).getAllByRole("link", { current: false })).toHaveLength(6);
   });
 
   it("moves to a sport in its own transition, and leaves a modified click to the browser", () => {
@@ -136,10 +116,10 @@ describe("SportsHub", () => {
     document.addEventListener("click", stayPut);
     renderHub();
 
-    fireEvent.click(within(openPicker()).getByRole("menuitem", { name: "Football" }), { metaKey: true });
+    fireEvent.click(sport("Football"), { metaKey: true });
     expect(push).not.toHaveBeenCalled();
 
-    fireEvent.click(within(openPicker()).getByRole("menuitem", { name: "Football" }));
+    fireEvent.click(sport("Football"));
     expect(push).toHaveBeenCalledWith("?sport=football", { scroll: false });
     document.removeEventListener("click", stayPut);
   });
@@ -150,7 +130,7 @@ describe("SportsHub", () => {
       push.mockImplementation(() => new Promise(() => {}));
     });
     const go = (name: RegExp): void => {
-      fireEvent.click(within(openPicker()).getByRole("menuitem", { name }));
+      fireEvent.click(sport(name));
     };
 
     it("shows the copy last seen of it at once while the fresh one loads", async () => {
@@ -167,20 +147,16 @@ describe("SportsHub", () => {
       go(/^Football/);
 
       expect(await screen.findByRole("status")).toHaveTextContent("Loading Football…");
-      // Hidden ones too: an open menu would hide the page from the query.
       expect(screen.queryByRole("heading", { level: 1, hidden: true })).toBeNull();
     });
 
-    it("keeps the favourites and the picker, on the sport coming, usable over its skeleton", async () => {
+    it("keeps the favourites and the sports, on the sport coming, usable over its skeleton", async () => {
       renderHub();
       go(/^Football/);
 
       expect(await screen.findByRole("status")).toHaveTextContent("Loading Football…");
-      expect(picker()).toHaveAccessibleName(/^Football\s*, change sport$/);
       expect(picker().parentElement?.firstElementChild).toBe(favorites());
-      expect(within(openPicker()).getByRole("menuitem", { current: "page" })).toHaveAccessibleName(
-        "Football"
-      );
+      expect(within(picker()).getByRole("link", { current: "page" })).toHaveAccessibleName("Football");
     });
 
     it("never shows another account's copy", async () => {

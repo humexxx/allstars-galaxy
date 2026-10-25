@@ -2,16 +2,11 @@
 
 import { useMemo } from "react";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
+import { DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import type { FootballLeagueData, FootballLeagueId, NewsStory, Team } from "@/types/sports";
 
-import { CompetitionTrigger } from "../shared/competition-trigger";
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { MatchesByDate } from "../shared/matches-by-date";
 import { TeamNewsTab } from "../shared/news-list";
@@ -42,50 +37,46 @@ type TabKey = "overview" | "knockout" | "news";
  * fixtures and group tables rather than a season's single table.
  */
 export function FootballView({ league, options, news = [], initialTab }: FootballViewProps): React.ReactElement {
-  const picker = <LeaguePicker leagueId={league.league.id} options={options} />;
+  const leagues = <LeagueMenu leagueId={league.league.id} options={options} />;
   const openNews = initialTab === "news" && news.length > 0;
   return league.league.id === "world-cup" ? (
-    <WorldCupView data={league} controls={picker} news={news} openNews={openNews} />
+    <WorldCupView data={league} leagues={leagues} news={news} openNews={openNews} />
   ) : (
-    <LeagueView league={league} picker={picker} news={news} openNews={openNews} />
+    <LeagueView league={league} leagues={leagues} news={news} openNews={openNews} />
   );
 }
 
-function LeaguePicker({
+/** The competitions, under the title: picking one loads it in the hub's own transition. */
+function LeagueMenu({
   leagueId,
   options,
 }: {
   leagueId: FootballLeagueId;
   options: FootballViewProps["options"];
 }): React.ReactElement {
-  // The hub's own transition: while the league loads, the hub shows a
-  // skeleton of it.
   const navigate = useSportsNavigation();
   return (
-    <Select
+    <DropdownMenuRadioGroup
       value={leagueId}
-      onValueChange={(v) => navigate(`?sport=football&league=${v as FootballLeagueId}`)}
+      onValueChange={(v) => v !== leagueId && navigate(`?sport=football&league=${v}`)}
     >
-      <CompetitionTrigger label="League" />
-      <SelectContent>
-        {options.map((o) => (
-          <SelectItem key={o.id} value={o.id}>
-            {o.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+      {options.map((o) => (
+        <DropdownMenuRadioItem key={o.id} value={o.id}>
+          {o.name}
+        </DropdownMenuRadioItem>
+      ))}
+    </DropdownMenuRadioGroup>
   );
 }
 
 function LeagueView({
   league,
-  picker,
+  leagues,
   news,
   openNews,
 }: {
   league: FootballLeagueData;
-  picker: React.ReactNode;
+  leagues: React.ReactNode;
   news: NewsStory[];
   openNews: boolean;
 }): React.ReactElement {
@@ -109,7 +100,7 @@ function LeagueView({
         emoji="⚽"
         title={league.league.name}
         subtitle={`${league.league.region} · Season ${league.league.season}`}
-        controls={picker}
+        titleMenu={leagues}
         tabs={
           <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>

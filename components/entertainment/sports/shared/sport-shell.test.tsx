@@ -3,19 +3,27 @@ import type { ReactNode } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { SportHubControls, SportShell } from "./sport-shell";
 
-/** `hub`, when given, is what the sports hub sets at the end of the name row. */
-function renderShell(defaultValue = "overview", hub?: ReactNode): ReturnType<typeof render> {
+/**
+ * `hub`, when given, is what the sports hub sets at the end of the name row;
+ * `menu`, the competitions the title switches to.
+ */
+function renderShell(
+  defaultValue = "overview",
+  hub?: ReactNode,
+  menu?: ReactNode
+): ReturnType<typeof render> {
   const shell = (
     <Tabs defaultValue={defaultValue}>
       <SportShell
         emoji="⚽"
         title="UEFA Champions League"
         subtitle="Europe · Season 2026"
-        controls={<button type="button">League</button>}
+        titleMenu={menu}
         tabs={
           <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -86,7 +94,6 @@ describe("SportShell", () => {
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("UEFA Champions League");
     expect(screen.getByText("Europe · Season 2026")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "League" })).toBeInTheDocument();
   });
 
   it("keeps the tabs in a sticky row of their own, clear of the app header", () => {
@@ -106,15 +113,22 @@ describe("SportShell", () => {
     expect(scroller).toHaveClass("min-w-0", "overflow-x-auto", "overflow-y-hidden");
   });
 
-  it("puts the competition picker at the end of the sticky tabs row, not in the name row", () => {
+  it("makes the title the competitions' menu, in the heading's own type", () => {
+    renderShell("overview", undefined, <DropdownMenuItem>LaLiga</DropdownMenuItem>);
+    const heading = screen.getByRole("heading", { level: 1, name: "UEFA Champions League" });
+    const title = within(heading).getByRole("button", { name: "UEFA Champions League" });
+    expect(title).toHaveAttribute("aria-haspopup", "menu");
+    // The stuck bar is the tabs alone.
+    expect(within(tabsRow()).queryAllByRole("button")).toHaveLength(0);
+
+    // Radix opens its menu on pointerdown, which jsdom's clicks lack; Enter opens it too.
+    fireEvent.keyDown(title, { key: "Enter" });
+    expect(within(screen.getByRole("menu")).getByRole("menuitem", { name: "LaLiga" })).toBeInTheDocument();
+  });
+
+  it("keeps a title with nothing to switch to as plain text", () => {
     renderShell();
-    const league = screen.getByRole("button", { name: "League" });
-    expect(nameRow()).toContainElement(screen.getByRole("heading", { level: 1 }));
-    expect(tabsRow().lastElementChild).toContainElement(league);
-    expect(nameRow()).not.toContainElement(league);
-    // Level with the tabs, after them.
-    const tablist = screen.getByRole("tablist");
-    expect(tablist.compareDocumentPosition(league) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(screen.getByRole("heading", { level: 1 })).queryByRole("button")).toBeNull();
   });
 
   it("sets the hub's favourites and sport picker at the end of the name row", () => {
@@ -127,10 +141,9 @@ describe("SportShell", () => {
     expect(end).not.toContainElement(screen.getByRole("heading", { level: 1 }));
     // Favourites first, then the sport.
     expect(favorites.compareDocumentPosition(sport) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // They scroll away with the name; the stuck bar keeps the league alone.
+    // They scroll away with the name.
     expect(tabsRow()).not.toContainElement(favorites);
     expect(tabsRow()).not.toContainElement(sport);
-    expect(within(tabsRow()).getByRole("button", { name: "League" })).toBeInTheDocument();
   });
 
   it("leaves the name row to the name outside the hub", () => {

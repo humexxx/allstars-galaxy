@@ -218,7 +218,8 @@ describe("RacquetView, Overview", () => {
     expect(within(card).getByText("P1")).toBeInTheDocument();
     expect(within(card).getByText("Sheikh Saad Al-Abdullah Complex, Kuwait City")).toBeInTheDocument();
     expect(within(card).getByText("€525,000")).toBeInTheDocument();
-    expect(within(card).getByText("Starts in 8 days")).toBeInTheDocument();
+    // Nothing played yet: nothing said at its foot but the way in.
+    expect(within(card).queryByText(/Starts in|under way/)).toBeNull();
     expect(card.querySelector("img")?.getAttribute("src")).toBe(
       "https://media.padelapi.org/tournament-api/kuwait-p1-2026.webp"
     );
@@ -227,6 +228,20 @@ describe("RacquetView, Overview", () => {
     const details = within(card).getByRole("link", { name: "View details: Kuwait P1 2026" });
     expect(within(card).getAllByRole("link")).toEqual([details]);
     expect(details).toHaveAttribute("href", "/portal/entertainment/sports/padel/padelapi-748");
+  });
+
+  it("says the round under way at the card's foot, in the secondary text, beside View details", () => {
+    const final = finalRounds("kuwait").map((r) =>
+      r.id === "final" ? { ...r, matches: r.matches.map((m) => ({ ...m, winnerTeamId: undefined, legs: [] })) } : r
+    );
+    renderPadel(
+      padelWith((t) => (t.id === "padelapi-748" ? { ...t, status: "live", bracket: final } : t)),
+      "2026-10-27"
+    );
+    const card = cardOf("Kuwait P1 2026");
+    const line = within(card).getByText("Final under way");
+    expect(line).toHaveClass("text-muted-foreground");
+    expect(line.parentElement).toBe(within(card).getByRole("link", { name: /^View details/ }).parentElement);
   });
 
   it("shows the next tournament's seeds once the feed ships its draw, days before it starts", () => {
@@ -398,7 +413,7 @@ describe("RacquetView, tennis", () => {
     ]);
   });
 
-  it("puts the seeds on the poster of the tournament picked, though the last one's failed to load", async () => {
+  it("keeps the seeds beside the badges, off the poster, which shows whole", async () => {
     vi.mocked(getRacquetDrawAction).mockResolvedValue({
       success: true,
       data: {
@@ -434,16 +449,20 @@ describe("RacquetView, tennis", () => {
         <TennisView data={two} />
       </SportsTodayProvider>
     );
-    // Vienna's poster fails: its seeds move off it, beside the badges.
-    fireEvent.error(cardOf("Erste Bank Open").querySelector("img")!);
+    const viennaCard = cardOf("Erste Bank Open");
+    expect(within(viennaCard.querySelector("img")!.parentElement!).queryByRole("list")).toBeNull();
+    expect(within(viennaCard).getByRole("list", { name: "Top seeds" })).toBeInTheDocument();
+    // A poster that fails to load changes nothing about where they are.
+    fireEvent.error(viennaCard.querySelector("img")!);
     expect(cardOf("Erste Bank Open").querySelector("img")).toBeNull();
     expect(within(cardOf("Erste Bank Open")).getByRole("list", { name: "Top seeds" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: "Basel, Swiss Indoors Basel" }));
 
-    const poster = cardOf("Swiss Indoors Basel").querySelector("img")!.parentElement!;
-    expect(await within(poster).findByRole("list", { name: "Top seeds" })).toBeInTheDocument();
-    expect(seedTitles(within(poster).getByRole("list", { name: "Top seeds" }))[0]).toBe("Seed 1: B. Shelton");
+    const baselCard = cardOf("Swiss Indoors Basel");
+    const seeds = await within(baselCard).findByRole("list", { name: "Top seeds" });
+    expect(seedTitles(seeds)[0]).toBe("Seed 1: B. Shelton");
+    expect(baselCard.querySelector("img")!.parentElement).not.toContainElement(seeds);
   });
 
   it("has a News tab with the ATP's news", () => {

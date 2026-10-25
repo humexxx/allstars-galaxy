@@ -156,11 +156,11 @@ describe("RacquetTournamentPage", () => {
     ]);
   });
 
-  it("lays the seeds over the poster, and beside the facts once the poster fails to load", () => {
+  it("sets the seeds beside the facts, off the poster, which shows whole", () => {
     renderPage({ ...KUWAIT, status: "live" }, ready(), { tab: "overview" });
     const img = document.querySelector("img")!;
     expect(screen.getAllByRole("list", { name: "Top seeds" })).toHaveLength(1);
-    expect(within(img.parentElement!).getByRole("list", { name: "Top seeds" })).toBeInTheDocument();
+    expect(img.parentElement).not.toContainElement(screen.getByRole("list", { name: "Top seeds" }));
 
     fireEvent.error(img);
     expect(document.querySelector("img")).toBeNull();

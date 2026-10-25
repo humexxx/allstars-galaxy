@@ -131,18 +131,9 @@ function ChampionLine({ champion, runnerUp }: { champion: string; runnerUp?: str
  * Who leads the draw — a week of tennis splits the best players between
  * three or four events, and the seeds say which one has them. Just the
  * faces, big (a pair's two), each surname small under it for a player with
- * no photo, the seed in its tooltip and for a screen reader. `onImage` sets
- * it over a poster.
+ * no photo, the seed in its tooltip and for a screen reader.
  */
-function TopSeeds({
-  seeds,
-  variant,
-  onImage = false,
-}: {
-  seeds: Team[];
-  variant: DrawVariant;
-  onImage?: boolean;
-}): React.ReactElement {
+function TopSeeds({ seeds, variant }: { seeds: Team[]; variant: DrawVariant }): React.ReactElement {
   return (
     <ol aria-label="Top seeds" className="flex shrink-0 items-start gap-2">
       {seeds.map((p) => {
@@ -163,12 +154,7 @@ function TopSeeds({
                 fallback={<span className="text-2xl leading-none">{p.name}</span>}
               />
             )}
-            <span
-              className={cn(
-                "w-full truncate text-center text-2xs",
-                onImage ? "font-medium text-white" : "text-muted-foreground"
-              )}
-            >
+            <span className="w-full truncate text-center text-2xs text-muted-foreground">
               <span className="sr-only">Seed {p.code}: </span>
               {label}
             </span>
@@ -180,12 +166,11 @@ function TopSeeds({
 }
 
 /**
- * A tournament's card: its poster where it has one, beside the content the
- * card's whole height and flush with its edge (the card clips it to its
- * corners), above it on a phone, with the draw's best seeds along its foot
- * over a dark fade. With no poster, or one that fails to load, the seeds go
- * to the content as `corner` to place. The poster comes off the provider's
- * media host, unoptimized like `Portrait`'s faces.
+ * A tournament's card: its poster where it has one, beside the content and
+ * flush with the card's edge (the card clips it to its corners), above it on
+ * a phone; the draw's best seeds go to the content as `corner` to place. The
+ * poster comes off the provider's media host, unoptimized like `Portrait`'s
+ * faces.
  *
  * Key it by tournament where the tournament can change, or a failed poster
  * is remembered for the next one.
@@ -203,20 +188,17 @@ export function TournamentCard({
 }): React.ReactElement {
   const [posterGone, setPosterGone] = useState(false);
   const poster = posterGone ? undefined : t.imageUrl;
-  const corner = seeds.length > 0 && !poster ? <TopSeeds seeds={seeds} variant={variant} /> : null;
+  const corner = seeds.length > 0 ? <TopSeeds seeds={seeds} variant={variant} /> : null;
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 @2xl:flex-row @2xl:items-stretch @2xl:gap-6">
         {poster && (
-          // A floor, not a height: the card is as tall as what it says, so
-          // nothing is left empty under "View details".
-          <span className="relative block aspect-video shrink-0 overflow-hidden rounded-lg bg-muted @2xl:-my-6 @2xl:-ml-6 @2xl:aspect-auto @2xl:min-h-64 @2xl:w-2/5 @2xl:rounded-none">
+          // Padel's posters are A-format, portrait (1132×1600): beside the
+          // content the box keeps their shape, so the whole poster shows, and
+          // the card is at least its height. A 2:5 share of the card's width
+          // cut the top and the foot off, the event's name among them.
+          <span className="relative block aspect-video shrink-0 overflow-hidden rounded-lg bg-muted @2xl:-my-6 @2xl:-ml-6 @2xl:aspect-5/7 @2xl:w-56 @2xl:rounded-none">
             <Image src={poster} alt="" fill className="object-cover" unoptimized onError={() => setPosterGone(true)} />
-            {seeds.length > 0 && (
-              <span className="absolute inset-x-0 bottom-0 flex justify-end bg-linear-to-t from-black/80 to-transparent px-2 pt-6 pb-1.5">
-                <TopSeeds seeds={seeds} variant={variant} onImage />
-              </span>
-            )}
           </span>
         )}
         {children(corner)}
@@ -227,9 +209,9 @@ export function TournamentCard({
 
 /**
  * The tournament on now, else the next, as F1's next race: big, its poster
- * where it has one, its facts, the round under way (or when it starts), and
- * "View details" at its foot on the right, to the tournament's own page. The
- * card itself stays still.
+ * where it has one, its facts, and at its foot the round under way (nothing
+ * before play starts) beside "View details", to the tournament's own page.
+ * The card itself stays still.
  */
 function FeaturedTournament({
   tournament: t,
@@ -245,6 +227,7 @@ function FeaturedTournament({
   href: string;
 }): React.ReactElement {
   const kind = kindOf(t);
+  const line = t.status === "live" ? playLine(t, draw?.rounds, today) : null;
   return (
     <TournamentCard tournament={t} seeds={draw ? topSeeds(draw) : []} variant={variant}>
       {(corner) => (
@@ -258,11 +241,14 @@ function FeaturedTournament({
           </div>
           <Heading level="h3">{t.name}</Heading>
           <TournamentFacts tournament={t} variant={variant} />
-          {/* Holds a line's height either way, so the button does not jump. */}
-          <Text as="p" weight="medium" className="min-h-6">
-            {playLine(t, draw?.rounds, today)}
-          </Text>
-          <div className="flex justify-end">
+          {/* At the card's foot, clear of the facts: the round under way, once
+              play has started, beside the way to the tournament's page. */}
+          <div className="mt-auto flex items-center justify-end gap-3 pt-2">
+            {line && (
+              <Text variant="muted" className="mr-auto">
+                {line}
+              </Text>
+            )}
             <ViewDetailsLink href={href} name={t.name} />
           </div>
         </div>

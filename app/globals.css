@@ -100,7 +100,9 @@
   --secondary-foreground: oklch(0.21 0.006 285.885);
 
   --muted: oklch(0.945 0.005 286);
-  --muted-foreground: oklch(0.6 0.012 286); /* secondaryLabel */
+  /* Deeper than iOS's secondaryLabel (#7F7F87 was 3.5:1 on the page, 4:1 on a
+     card): text-safe, 4.9:1 on the page, 5.5:1 on a card, 4.7:1 on muted. */
+  --muted-foreground: oklch(0.52 0.012 286);
 
   --accent: oklch(0.945 0.005 286);
   --accent-foreground: oklch(0.205 0 0);

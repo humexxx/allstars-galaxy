@@ -119,6 +119,15 @@ export function findTournament(data: RacquetData, id: string): RacquetTournament
 }
 
 /** How a sport's ties are drawn: singles players, or padel's pairs. */
+/**
+ * The line under the sport's name, in the hub and on a tournament's page.
+ * Premier Padel, not World Padel Tour: WPT was absorbed into Premier Padel in
+ * 2024, and padelapi.org covers Premier Padel and FIP.
+ */
+export function tourLine(sport: RacquetSport, season: number): string {
+  return `${sport === "padel" ? "Premier Padel" : "ATP"} · Season ${season}`;
+}
+
 export function drawVariant(sport: RacquetSport): DrawVariant {
   return sport === "padel" ? "pair" : "player";
 }

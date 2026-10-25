@@ -1,6 +1,8 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { ShellHeadSkeleton } from "../sports-navigation";
+
 /** The breadcrumbs, then a page header: eyebrow, title, the line under it. */
 function HeaderSkeleton(): React.ReactElement {
   return (
@@ -16,9 +18,10 @@ function HeaderSkeleton(): React.ReactElement {
 }
 
 /**
- * A padel or tennis tournament's page while it loads (`loading.tsx`): the
- * header, the card of facts beside its poster, then the draw's columns, with
- * a status for a screen reader beside it.
+ * A padel or tennis tournament's page while it loads (`loading.tsx`): laid
+ * out as the page is, the sport's name row with the breadcrumb's longer
+ * title and the tabs, then the Bracket it opens on: the draw's columns. A
+ * status for a screen reader beside it.
  */
 export function TournamentPageSkeleton(): React.ReactElement {
   return (
@@ -26,28 +29,15 @@ export function TournamentPageSkeleton(): React.ReactElement {
       <span role="status" className="sr-only">
         Loading tournament…
       </span>
-      <div className="@container flex flex-col gap-6" aria-hidden="true">
-        <HeaderSkeleton />
-        <Card>
-          <CardContent className="flex flex-col gap-4 @2xl:flex-row @2xl:gap-6">
-            <Skeleton className="aspect-video @2xl:-my-6 @2xl:-ml-6 @2xl:aspect-auto @2xl:min-h-64 @2xl:w-2/5 @2xl:rounded-none" />
-            <div className="flex flex-1 flex-col gap-3">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-5 w-64 max-w-full" />
-              ))}
+      <div className="@container flex flex-col">
+        <ShellHeadSkeleton title="w-72" />
+        <div className="grid grid-cols-2 gap-3 pt-6 @2xl:grid-cols-4" aria-hidden="true">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex flex-col gap-3">
+              <Skeleton className="h-14" />
+              <Skeleton className="h-14" />
             </div>
-          </CardContent>
-        </Card>
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-6 w-16" />
-          <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex flex-col gap-3">
-                <Skeleton className="h-14" />
-                <Skeleton className="h-14" />
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
     </>

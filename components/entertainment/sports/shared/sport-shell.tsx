@@ -9,7 +9,8 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -39,6 +40,12 @@ type SportShellProps = {
    * menu's button, in the same type.
    */
   titleMenu?: ReactNode;
+  /**
+   * The page this one sits under (a tournament's sport): the title becomes a
+   * breadcrumb in the heading's type, "Padel › Kuwait Major 2026", its first
+   * step the way back.
+   */
+  parent?: { label: string; href: string };
   /** Tab strip: the sticky row under the name. */
   tabs?: ReactNode;
   children: ReactNode;
@@ -63,6 +70,7 @@ export function SportShell({
   title,
   subtitle,
   titleMenu,
+  parent,
   tabs,
   children,
   className,
@@ -104,6 +112,31 @@ export function SportShell({
     return () => observer.disconnect();
   }, [hasTabs]);
 
+  // With a menu, the heading is pulled out by the button's padding, so the
+  // name still lines up with the subtitle. Pulling the button out instead
+  // capped it at the heading's width, 16px short of the name.
+  const heading = (
+    <Heading level="h4" as="h1" className={cn("min-w-0", titleMenu && "-mx-2")}>
+      {titleMenu ? (
+        <DropdownMenu>
+          {/* The sidebar's hover step: `muted` hardly shows on the page's grey. */}
+          <DropdownMenuTrigger className="group/title -my-0.5 flex max-w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-0.5 text-left transition-colors focus-visible:outline-hidden hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-sidebar-accent dark:hover:bg-muted dark:data-[state=open]:bg-muted">
+            <span className="truncate">{title}</span>
+            <ChevronDown
+              aria-hidden
+              className="size-4 shrink-0 text-muted-foreground transition-transform group-hover/title:text-foreground group-data-[state=open]/title:rotate-180"
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-56">
+            {titleMenu}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <span className="block truncate">{title}</span>
+      )}
+    </Heading>
+  );
+
   return (
     <div className={cn("@container flex flex-col", className)}>
       <div
@@ -120,28 +153,24 @@ export function SportShell({
             </span>
           )}
           <div className="flex min-w-0 flex-col">
-            {/* With a menu, the heading is pulled out by the button's padding, so
-                the name still lines up with the subtitle. Pulling the button out
-                instead capped it at the heading's width, 16px short of the name. */}
-            <Heading level="h4" as="h1" className={cn("min-w-0", titleMenu && "-mx-2")}>
-              {titleMenu ? (
-                <DropdownMenu>
-                  {/* The sidebar's hover step: `muted` hardly shows on the page's grey. */}
-                  <DropdownMenuTrigger className="group/title -my-0.5 flex max-w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-0.5 text-left transition-colors focus-visible:outline-hidden hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-sidebar-accent dark:hover:bg-muted dark:data-[state=open]:bg-muted">
-                    <span className="truncate">{title}</span>
-                    <ChevronDown
-                      aria-hidden
-                      className="size-4 shrink-0 text-muted-foreground transition-transform group-hover/title:text-foreground group-data-[state=open]/title:rotate-180"
-                    />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="min-w-56">
-                    {titleMenu}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <span className="block truncate">{title}</span>
-              )}
-            </Heading>
+            {parent ? (
+              <div className="flex min-w-0 items-center gap-1.5">
+                <nav aria-label="Breadcrumb" className="shrink-0">
+                  <Heading level="h4" asChild>
+                    <Link
+                      href={parent.href}
+                      className="rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+                    >
+                      {parent.label}
+                    </Link>
+                  </Heading>
+                </nav>
+                <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                {heading}
+              </div>
+            ) : (
+              heading
+            )}
             {subtitle && (
               <Text variant="muted" className="truncate">
                 {subtitle}

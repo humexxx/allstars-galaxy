@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/sports/detail", () => ({ loadRacquetTournament: vi.fn() }));
 vi.mock("@/lib/services/impersonation", () => ({ requireEffectiveContext: vi.fn() }));
+vi.mock("@/lib/services/sports-service", () => ({ listUserFavoriteSportIds: vi.fn() }));
 vi.mock("@/components/entertainment/sports/sports/racquet-tournament-page", () => ({
   RacquetTournamentPage: () => null,
 }));
@@ -13,7 +14,8 @@ import { generateMetadata } from "./page";
 type Detail = Awaited<ReturnType<typeof loadRacquetTournament>>;
 
 const titleFor = async (tournamentId: string): Promise<unknown> =>
-  (await generateMetadata({ params: Promise.resolve({ tournamentId }) })).title;
+  (await generateMetadata({ params: Promise.resolve({ tournamentId }), searchParams: Promise.resolve({}) }))
+    .title;
 
 describe("a padel tournament's title", () => {
   it("is the tournament's name", async () => {

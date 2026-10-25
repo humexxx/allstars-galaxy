@@ -20,6 +20,41 @@ export function useSportsNavigation(): (href: string) => void {
   return useContext(SportsNavigationContext);
 }
 
+/**
+ * `SportShell`'s two rows while a page loads: the name row (tile, title,
+ * subtitle) and the tabs over their rule. Inside the hub the name row ends on
+ * the hub's own favourites and sport picker, usable while the page loads; a
+ * route's `loading.tsx` has no hub, so it draws their places.
+ */
+export function ShellHeadSkeleton({ title = "w-44" }: { title?: "w-44" | "w-72" } = {}): React.ReactElement {
+  const hubControls = useContext(SportHubControls);
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-4">
+        <div className="flex min-w-0 items-center gap-3" aria-hidden="true">
+          <Skeleton className="size-10 shrink-0 rounded-lg" />
+          <div className="flex min-w-0 flex-col gap-1">
+            <Skeleton className={cn("h-6 max-w-full", title)} />
+            <Skeleton className="h-4 w-28" />
+          </div>
+        </div>
+        {hubControls ? (
+          <div className="flex max-w-full min-w-0 items-center gap-2">{hubControls}</div>
+        ) : (
+          <div className="flex items-center gap-2" aria-hidden="true">
+            <Skeleton className="size-8 rounded-full" />
+            <Skeleton className="h-8 w-112 max-w-full rounded-md" />
+          </div>
+        )}
+      </div>
+      <div className="flex h-12 items-end gap-4 border-b pb-2" aria-hidden="true">
+        <Skeleton className="h-6 w-20" />
+        <Skeleton className="h-6 w-20" />
+      </div>
+    </>
+  );
+}
+
 /** What the left of a sport's Overview holds, for its skeleton. */
 type Shape = "matches" | "events";
 
@@ -43,30 +78,9 @@ const SHAPES: Partial<Record<SportId, Shape>> = {
  */
 export function SportSkeleton({ sport }: { sport?: SportId } = {}): React.ReactElement {
   const shape = (sport && SHAPES[sport]) ?? "matches";
-  const hubControls = useContext(SportHubControls);
   return (
     <div className="@container flex flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-4">
-        <div className="flex items-center gap-3" aria-hidden="true">
-          <Skeleton className="size-10 shrink-0 rounded-lg" />
-          <div className="flex flex-col gap-1">
-            <Skeleton className="h-6 w-44" />
-            <Skeleton className="h-4 w-28" />
-          </div>
-        </div>
-        {hubControls ? (
-          <div className="flex max-w-full min-w-0 items-center gap-2">{hubControls}</div>
-        ) : (
-          <div className="flex items-center gap-2" aria-hidden="true">
-            <Skeleton className="size-8 rounded-full" />
-            <Skeleton className="h-8 w-112 max-w-full rounded-md" />
-          </div>
-        )}
-      </div>
-      <div className="flex h-12 items-end gap-4 border-b pb-2" aria-hidden="true">
-        <Skeleton className="h-6 w-20" />
-        <Skeleton className="h-6 w-20" />
-      </div>
+      <ShellHeadSkeleton />
       <div className="grid items-start gap-6 pt-6 @4xl:grid-cols-[2fr_1fr]" aria-hidden="true">
         <div className="flex min-w-0 flex-col gap-6">
           {shape === "events" ? <EventsSkeleton /> : <MatchesSkeleton />}

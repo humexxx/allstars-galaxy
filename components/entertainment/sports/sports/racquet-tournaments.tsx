@@ -194,14 +194,11 @@ export function TournamentCard({
   tournament: t,
   seeds,
   variant,
-  posterHeight,
   children,
 }: {
   tournament: RacquetTournament;
   seeds: Team[];
   variant: DrawVariant;
-  /** The poster's least height beside the content. */
-  posterHeight: "@2xl:min-h-64" | "@2xl:min-h-80";
   children: (corner: ReactNode) => ReactNode;
 }): React.ReactElement {
   const [posterGone, setPosterGone] = useState(false);
@@ -211,12 +208,9 @@ export function TournamentCard({
     <Card>
       <CardContent className="flex flex-col gap-4 @2xl:flex-row @2xl:items-stretch @2xl:gap-6">
         {poster && (
-          <span
-            className={cn(
-              "relative block aspect-video shrink-0 overflow-hidden rounded-lg bg-muted @2xl:-my-6 @2xl:-ml-6 @2xl:aspect-auto @2xl:w-2/5 @2xl:rounded-none",
-              posterHeight
-            )}
-          >
+          // A floor, not a height: the card is as tall as what it says, so
+          // nothing is left empty under "View details".
+          <span className="relative block aspect-video shrink-0 overflow-hidden rounded-lg bg-muted @2xl:-my-6 @2xl:-ml-6 @2xl:aspect-auto @2xl:min-h-64 @2xl:w-2/5 @2xl:rounded-none">
             <Image src={poster} alt="" fill className="object-cover" unoptimized onError={() => setPosterGone(true)} />
             {seeds.length > 0 && (
               <span className="absolute inset-x-0 bottom-0 flex justify-end bg-linear-to-t from-black/80 to-transparent px-2 pt-6 pb-1.5">
@@ -252,7 +246,7 @@ function FeaturedTournament({
 }): React.ReactElement {
   const kind = kindOf(t);
   return (
-    <TournamentCard tournament={t} seeds={draw ? topSeeds(draw) : []} variant={variant} posterHeight="@2xl:min-h-80">
+    <TournamentCard tournament={t} seeds={draw ? topSeeds(draw) : []} variant={variant}>
       {(corner) => (
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex items-start justify-between gap-3">

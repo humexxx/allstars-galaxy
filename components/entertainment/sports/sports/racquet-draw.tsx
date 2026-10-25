@@ -6,6 +6,7 @@ import { CalendarClock, EyeOff, RotateCw, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Text } from "@/components/ui/typography";
+import { cn } from "@/lib/utils";
 import type { BracketRound, DrawState, DrawVariant, RacquetTournament, Team } from "@/types/sports";
 
 import { DrawMatchCard } from "../shared/draw-match-card";
@@ -56,11 +57,14 @@ export function DrawBody({
   state,
   variant,
   onRetry,
+  retrying = false,
 }: {
   tournament: RacquetTournament;
   state: DrawState;
   variant: DrawVariant;
   onRetry: () => void;
+  /** A retry is on its way: the button says so and keeps its focus. */
+  retrying?: boolean;
 }): React.ReactElement {
   const players = useMemo(
     () =>
@@ -78,10 +82,23 @@ export function DrawBody({
           title="The draw could not be loaded"
           description="The results service did not answer. It usually does on a second try."
           action={
-            <Button variant="outline" size="sm" onClick={onRetry}>
-              <RotateCw />
-              Try again
-            </Button>
+            <>
+              {/* aria-disabled, not disabled: a disabled button drops its focus. */}
+              <Button
+                variant="outline"
+                size="sm"
+                aria-disabled={retrying || undefined}
+                onClick={() => {
+                  if (!retrying) onRetry();
+                }}
+              >
+                <RotateCw className={cn(retrying && "motion-safe:animate-spin")} />
+                Try again
+              </Button>
+              <span role="status" className="sr-only">
+                {retrying ? "Checking for the draw…" : ""}
+              </span>
+            </>
           }
         />
       );

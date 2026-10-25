@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 
 import { RacquetTournamentPage } from "@/components/entertainment/sports/sports/racquet-tournament-page";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { listUserFavoriteSportIds } from "@/lib/services/sports-service";
 import { loadRacquetTournament } from "@/lib/sports/detail";
 
-type Props = { params: Promise<{ tournamentId: string }> };
+type Props = { params: Promise<{ tournamentId: string }>; searchParams: Promise<{ tab?: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const detail = await loadRacquetTournament("padel", (await params).tournamentId);
@@ -14,9 +15,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 /** One padel tournament, its whole draw: what "View details" and the tiles open. */
-export default async function PadelTournamentPage({ params }: Props): Promise<React.ReactElement> {
-  await requireEffectiveContext();
-  const detail = await loadRacquetTournament("padel", (await params).tournamentId);
+export default async function PadelTournamentPage({ params, searchParams }: Props): Promise<React.ReactElement> {
+  const ctx = await requireEffectiveContext();
+  const [detail, favorites, { tab }] = await Promise.all([
+    params.then(({ tournamentId }) => loadRacquetTournament("padel", tournamentId)),
+    listUserFavoriteSportIds(ctx.effectiveUserId),
+    searchParams,
+  ]);
   if (!detail) notFound();
   return (
     <RacquetTournamentPage
@@ -24,6 +29,9 @@ export default async function PadelTournamentPage({ params }: Props): Promise<Re
       tournament={detail.tournament}
       draw={detail.draw}
       today={detail.today}
+      season={detail.season}
+      favoriteSportIds={favorites}
+      initialTab={tab}
     />
   );
 }

@@ -14,7 +14,7 @@ import { recallSport, rememberSport, seenKey } from "./seen-sports";
 import { SportHubControls } from "./shared/sport-shell";
 import { SavedTeamFilterProvider } from "./shared/team-filter-context";
 import { SportsTodayProvider } from "./shared/time-zone-context";
-import { SportPicker } from "./sport-picker";
+import { favoritesFirst, SportPicker } from "./sport-picker";
 import { SportSkeleton, SportsNavigationContext } from "./sports-navigation";
 import { F1View } from "./sports/f1-view";
 import { FootballView } from "./sports/football-view";
@@ -128,15 +128,8 @@ export function SportsHub({
   }, [loading, shownKey, skeleton]);
 
   // Render favourites first so the user lands on their most-watched sports.
-  const orderedSports = useMemo(
-    () =>
-      [...SPORTS].sort((a, b) => {
-        const aFav = favSet.has(a.id) ? 0 : 1;
-        const bFav = favSet.has(b.id) ? 0 : 1;
-        return aFav - bFav;
-      }),
-    [favSet]
-  );
+  const orderedSports = useMemo(() => favoritesFirst(favSet), [favSet]);
+  const shownSport = loading && target ? target : activeSport;
 
   return (
     <SportsNavigationContext.Provider value={navigate}>
@@ -147,10 +140,12 @@ export function SportsHub({
           <>
             <ManageFavoritesSheet favoriteSportIds={favoriteSportIds} trigger="icon" />
             <SportPicker
-              active={loading && target ? target : activeSport}
+              active={shownSport}
               sports={orderedSports}
               favorites={favSet}
-              onPick={(sport) => navigate(`?sport=${sport}`)}
+              onPick={(sport) => {
+                if (sport !== shownSport) navigate(`?sport=${sport}`);
+              }}
             />
           </>
         }

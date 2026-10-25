@@ -6,6 +6,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { SPORTS } from "@/lib/data/sports/registry";
+import { sportPath } from "@/lib/sports/paths";
 import { cn } from "@/lib/utils";
 import type { SportId, SportMeta } from "@/types/sports";
 
@@ -16,9 +18,10 @@ import { revealInRow } from "./shared/scroll";
  * favourites first and the sport on screen shaded and underlined. On a phone
  * the group runs past the screen's edge and slides sideways, as the old strip
  * of sports did, rather than cutting the names. A sport whose name is
- * shortened ("LoL") gives the full one in a tooltip. Each is a link
- * (`?sport=`), so a modified click still opens it in a new tab and Back
- * returns; a plain one goes through the hub's own transition (`onPick`).
+ * shortened ("LoL") gives the full one in a tooltip. Each is a link to the
+ * sport's page, so a modified click still opens it in a new tab and Back
+ * returns; a plain one is the caller's (`onPick`): the hub's own transition,
+ * or, from a tournament's page, the way back to the sport.
  */
 export function SportPicker({
   active,
@@ -43,7 +46,7 @@ export function SportPicker({
   const pick = (event: MouseEvent<HTMLAnchorElement>, sport: SportId): void => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
-    if (sport !== active) onPick(sport);
+    onPick(sport);
   };
 
   return (
@@ -67,7 +70,7 @@ export function SportPicker({
             )}
           >
             <Link
-              href={`?sport=${sport.id}`}
+              href={sportPath(sport.id)}
               scroll={false}
               onClick={(event) => pick(event, sport.id)}
               aria-current={current ? "page" : undefined}
@@ -91,4 +94,9 @@ export function SportPicker({
       })}
     </ButtonGroup>
   );
+}
+
+/** Every sport, the favourites first, each group in the registry's order. */
+export function favoritesFirst(favorites: ReadonlySet<SportId>): SportMeta[] {
+  return [...SPORTS].sort((a, b) => Number(!favorites.has(a.id)) - Number(!favorites.has(b.id)));
 }

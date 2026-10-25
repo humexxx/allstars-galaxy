@@ -25,6 +25,8 @@ export type RacquetTournamentDetail = {
   tournament: RacquetTournament;
   draw: DrawState;
   today: string;
+  /** The tour's season, for the line under the sport's name. */
+  season: number;
 };
 
 /**
@@ -44,17 +46,18 @@ export const loadRacquetTournament = cache(
     if (!tournament) return null;
 
     const shipped = shippedDraw(tournament, data.drawPlayers ?? []);
-    if (shipped) return { tournament, draw: { status: "ready", draw: shipped }, today };
+    const season = data.season;
+    if (shipped) return { tournament, draw: { status: "ready", draw: shipped }, today, season };
     // A fixture tournament ("wpt-m-rome", while the feed is down) is on no
     // provider's books.
     if (!racquetDrawSchema.safeParse({ sport, tournamentId }).success) {
-      return { tournament, draw: { status: "unavailable" }, today };
+      return { tournament, draw: { status: "unavailable" }, today, season };
     }
     if (!drawIsOut(tournament.status, tournament.startDate, today)) {
-      return { tournament, draw: { status: "pending" }, today };
+      return { tournament, draw: { status: "pending" }, today, season };
     }
     const draw = await getRacquetDraw(sport, tournamentId);
-    return { tournament, draw: draw ? { status: "ready", draw } : { status: "error" }, today };
+    return { tournament, draw: draw ? { status: "ready", draw } : { status: "error" }, today, season };
   }
 );
 

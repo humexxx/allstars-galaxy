@@ -1,6 +1,7 @@
 "use client";
 
 import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
+import { tourLine } from "@/lib/sports/racquet";
 import type { PadelData } from "@/types/sports";
 
 import { RacquetView } from "./racquet-view";
@@ -17,10 +18,7 @@ export function PadelView({ data }: PadelViewProps) {
       // sport picker no longer uses.
       emoji={SPORTS_BY_ID.get("padel")?.emoji ?? "🏓"}
       title="Padel"
-      // Premier Padel, not World Padel Tour: WPT was absorbed into Premier
-      // Padel in 2024, and padelapi.org — what this reads — covers Premier
-      // Padel and FIP.
-      subtitle={`Premier Padel · Season ${data.men.season}`}
+      subtitle={tourLine("padel", data.men.season)}
       data={data.men}
     />
   );

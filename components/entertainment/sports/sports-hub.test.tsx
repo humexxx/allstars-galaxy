@@ -122,13 +122,13 @@ describe("SportsHub", () => {
     // Favourites keep the registry's order among themselves (F1 before NBA),
     // and so do the rest.
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "?sport=f1",
-      "?sport=nba",
-      "?sport=football",
-      "?sport=padel",
-      "?sport=tennis",
-      "?sport=nfl",
-      "?sport=lol",
+      "/portal/entertainment/sports?sport=f1",
+      "/portal/entertainment/sports?sport=nba",
+      "/portal/entertainment/sports?sport=football",
+      "/portal/entertainment/sports?sport=padel",
+      "/portal/entertainment/sports?sport=tennis",
+      "/portal/entertainment/sports?sport=nfl",
+      "/portal/entertainment/sports?sport=lol",
     ]);
     const [f1, nba, football, ...others] = links;
     expect(f1).toHaveAccessibleName("F1 (favorite)");
@@ -153,6 +153,10 @@ describe("SportsHub", () => {
     renderHub();
 
     fireEvent.click(sport("Football"), { metaKey: true });
+    expect(push).not.toHaveBeenCalled();
+
+    // The sport already on screen goes nowhere.
+    fireEvent.click(sport(/^NBA/));
     expect(push).not.toHaveBeenCalled();
 
     fireEvent.click(sport("Football"));

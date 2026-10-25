@@ -3,7 +3,9 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const refresh = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, push }) }));
+vi.mock("@/app/actions/sports", () => ({ setSportFavoriteAction: vi.fn() }));
 
 import type { BracketRound, DrawState, RacquetTournament, Team } from "@/types/sports";
 
@@ -59,8 +61,22 @@ const KUWAIT: RacquetTournament = {
   status: "upcoming",
 };
 
-function renderPage(tournament: RacquetTournament, draw: DrawState, sport: "padel" | "tennis" = "padel"): void {
-  render(<RacquetTournamentPage sport={sport} tournament={tournament} draw={draw} today="2026-10-18" />);
+function renderPage(
+  tournament: RacquetTournament,
+  draw: DrawState,
+  { sport = "padel", tab }: { sport?: "padel" | "tennis"; tab?: string } = {}
+): void {
+  render(
+    <RacquetTournamentPage
+      sport={sport}
+      tournament={tournament}
+      draw={draw}
+      today="2026-10-18"
+      season={2026}
+      favoriteSportIds={["f1", "padel"]}
+      initialTab={tab}
+    />
+  );
 }
 
 const ready = (rounds = ROUNDS): DrawState => ({
@@ -68,25 +84,59 @@ const ready = (rounds = ROUNDS): DrawState => ({
   draw: { tournamentId: "padelapi-747", rounds, players: PAIRS, champion: "A. Coello / A. Tapia" },
 });
 
+const openTab = (): string | null => screen.getByRole("tab", { selected: true }).textContent;
+
 afterEach(() => {
   refresh.mockClear();
+  push.mockClear();
 });
 
 describe("RacquetTournamentPage", () => {
-  it("leads with the way back to the sport and the hub", () => {
+  it("keeps the sport's own name row: its tile, its line, the favourites and the sports", () => {
     renderPage(MILANO, ready());
-    const trail = screen.getByRole("navigation", { name: "breadcrumb" });
-    expect(within(trail).getByRole("link", { name: "Sports" })).toHaveAttribute("href", "/portal/entertainment/sports");
+    expect(screen.getByText("Premier Padel · Season 2026")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Manage favorites (2)" })).toBeInTheDocument();
+    const sports = screen.getByRole("group", { name: "Sports" });
+    expect(within(sports).getByRole("link", { current: "page" })).toHaveAccessibleName("Padel (favorite)");
+  });
+
+  it("makes the title a breadcrumb, the sport its way back", () => {
+    renderPage(MILANO, ready());
+    const trail = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(within(trail).getByRole("link", { name: "Padel" })).toHaveAttribute(
       "href",
       "/portal/entertainment/sports?sport=padel"
     );
-    expect(within(trail).getByText("Milano P1 2026")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("heading", { level: 1, name: "Milano P1 2026" })).toBeInTheDocument();
+    expect(trail).not.toContainElement(screen.getByRole("heading", { level: 1 }));
   });
 
-  it("names the tournament, its tier, when and where, its prize and its champions", () => {
+  it("goes to a sport picked, its own included", () => {
     renderPage(MILANO, ready());
-    expect(screen.getByRole("heading", { level: 1, name: "Milano P1 2026" })).toBeInTheDocument();
+    const sports = screen.getByRole("group", { name: "Sports" });
+    fireEvent.click(within(sports).getByRole("link", { name: /^Padel/ }));
+    expect(push).toHaveBeenLastCalledWith("/portal/entertainment/sports?sport=padel");
+    fireEvent.click(within(sports).getByRole("link", { name: /^F1/ }));
+    expect(push).toHaveBeenLastCalledWith("/portal/entertainment/sports?sport=f1");
+  });
+
+  it("opens on the bracket, the whole draw, the Overview beside it", () => {
+    renderPage(MILANO, ready());
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Overview", "Bracket"]);
+    expect(openTab()).toBe("Bracket");
+    const panel = screen.getByRole("tabpanel");
+    expect(within(panel).getByText("Final")).toBeInTheDocument();
+    expect(within(panel).getAllByText("Semi-finals")).toHaveLength(2);
+  });
+
+  it("opens on the Overview when the address asks for it", () => {
+    renderPage(MILANO, ready(), { tab: "overview" });
+    expect(openTab()).toBe("Overview");
+  });
+
+  it("names its tier, when and where, its prize and its champions on the Overview", () => {
+    renderPage(MILANO, ready(), { tab: "overview" });
+    expect(screen.getByText("P1")).toBeInTheDocument();
     // Once, in the facts: the venue already names the city.
     expect(screen.getAllByText("Oct 12 – 18, 2026")).toHaveLength(1);
     expect(screen.getByText("Allianz Cloud Milano")).toBeInTheDocument();
@@ -96,15 +146,8 @@ describe("RacquetTournamentPage", () => {
     expect(within(runnerUp).getByText("defeated")).toHaveClass("sr-only");
   });
 
-  it("draws the whole bracket the width of the page, a semi-final each side of the final", () => {
-    renderPage(MILANO, ready());
-    const draw = screen.getByRole("heading", { name: "Draw" }).closest("section")!;
-    expect(within(draw).getByText("Final")).toBeInTheDocument();
-    expect(within(draw).getAllByText("Semi-finals")).toHaveLength(2);
-  });
-
   it("shows the draw's three best seeds", () => {
-    renderPage({ ...MILANO, status: "live" }, ready());
+    renderPage({ ...MILANO, status: "live" }, ready(), { tab: "overview" });
     const seeds = screen.getByRole("list", { name: "Top seeds" });
     expect(within(seeds).getAllByRole("listitem").map((li) => li.getAttribute("title"))).toEqual([
       "Seed 1: A. Coello / A. Tapia",
@@ -114,7 +157,7 @@ describe("RacquetTournamentPage", () => {
   });
 
   it("lays the seeds over the poster, and beside the facts once the poster fails to load", () => {
-    renderPage({ ...KUWAIT, status: "live" }, ready());
+    renderPage({ ...KUWAIT, status: "live" }, ready(), { tab: "overview" });
     const img = document.querySelector("img")!;
     expect(screen.getAllByRole("list", { name: "Top seeds" })).toHaveLength(1);
     expect(within(img.parentElement!).getByRole("list", { name: "Top seeds" })).toBeInTheDocument();
@@ -126,8 +169,10 @@ describe("RacquetTournamentPage", () => {
 
   it("says when a tournament not drawn yet starts, and that its draw is not out", () => {
     renderPage(KUWAIT, { status: "pending" });
-    expect(screen.getByText("Starts in 8 days")).toBeInTheDocument();
     expect(screen.getByText("The draw is not out yet")).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Overview" }), { button: 0 });
+    expect(screen.getByText("Starts in 8 days")).toBeInTheDocument();
     expect(document.querySelector("img")?.getAttribute("src")).toBe(KUWAIT.imageUrl);
   });
 
@@ -151,8 +196,15 @@ describe("RacquetTournamentPage", () => {
     expect(screen.getByText("This draw is not available")).toBeInTheDocument();
   });
 
-  it("goes back to Tennis from a tennis tournament", () => {
-    renderPage({ ...MILANO, id: "espn-315-2026-mens-singles", name: "Rolex Shanghai Masters" }, ready(), "tennis");
-    expect(screen.getByRole("link", { name: "Tennis" })).toHaveAttribute("href", "/portal/entertainment/sports?sport=tennis");
+  it("goes back to Tennis from a tennis tournament, under the ATP's line", () => {
+    renderPage({ ...MILANO, id: "espn-315-2026-mens-singles", name: "Rolex Shanghai Masters" }, ready(), {
+      sport: "tennis",
+    });
+    const trail = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(trail).getByRole("link", { name: "Tennis" })).toHaveAttribute(
+      "href",
+      "/portal/entertainment/sports?sport=tennis"
+    );
+    expect(screen.getByText("ATP · Season 2026")).toBeInTheDocument();
   });
 });

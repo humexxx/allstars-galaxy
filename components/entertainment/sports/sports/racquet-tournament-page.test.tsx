@@ -91,7 +91,9 @@ describe("RacquetTournamentPage", () => {
     expect(screen.getAllByText("Oct 12 – 18, 2026")).toHaveLength(1);
     expect(screen.getByText("Allianz Cloud Milano")).toBeInTheDocument();
     expect(screen.getByText("€479,068")).toBeInTheDocument();
-    expect(screen.getByText("d. L. Augsburger / J. Lebron", { exact: false })).toBeInTheDocument();
+    const runnerUp = screen.getByText("L. Augsburger / J. Lebron", { exact: false });
+    expect(within(runnerUp).getByText("d.")).toHaveAttribute("aria-hidden", "true");
+    expect(within(runnerUp).getByText("defeated")).toHaveClass("sr-only");
   });
 
   it("draws the whole bracket the width of the page, a semi-final each side of the final", () => {

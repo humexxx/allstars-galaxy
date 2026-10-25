@@ -49,8 +49,10 @@ describe("F1Races", () => {
     renderRaces();
     const featured = featuredCard();
 
-    // "Next race" is the heading above the card, which names the round.
-    expect(featured.closest("section")?.querySelector("h3")).toHaveTextContent("Next race");
+    // "Next race" is the heading above the card, which names the round; the
+    // race's name is a level under it.
+    expect(within(featured.closest("section")!).getByRole("heading", { level: 2 })).toHaveTextContent("Next race");
+    expect(within(featured).getByRole("heading", { level: 3 })).toHaveTextContent("United States Grand Prix");
     expect(featured).toHaveTextContent(/^Round 18/);
     expect(featured.querySelector('[data-slot="badge"]')).toHaveTextContent("Sprint");
     expect(featured).toHaveTextContent("Circuit of the Americas · Austin, USA");
@@ -72,6 +74,16 @@ describe("F1Races", () => {
     renderRaces();
     const featured = featuredCard();
     expect(within(featured).getByText("Sprint live")).toBeInTheDocument();
+  });
+
+  it("calls a race weekend between its sessions, in words that read on the badge's tint", () => {
+    // After Practice 1, before Sprint Qualifying.
+    vi.setSystemTime(new Date("2026-10-23T20:00:00Z"));
+    renderRaces();
+    const badge = within(featuredCard()).getByText("Race weekend");
+    expect(badge).toHaveAttribute("data-variant", "info");
+    expect(badge).toHaveClass("text-foreground");
+    expect(within(featuredCard()).getByText("Next")).toHaveClass("text-foreground");
   });
 
   it("lists every race after it under Coming up, and none run until asked for", () => {

@@ -12,7 +12,7 @@ type OverviewSplitProps = {
   matches: ReactNode;
   /** The table beside it. Without one the matches fill the row. */
   table?: ReactNode;
-  /** The table's eyebrow: "Table", "Standings". */
+  /** The table's heading, set as an eyebrow: "Table", "Standings". */
   tableLabel?: string;
 };
 
@@ -49,8 +49,8 @@ export function OverviewSplit({
           )}
         >
           {/* The size, padding and gap of a day heading in MatchesByDate. */}
-          <Eyebrow size="sm" as="div" className="py-1">
-            {tableLabel}
+          <Eyebrow size="sm" asChild>
+            <h2 className="py-1">{tableLabel}</h2>
           </Eyebrow>
           {table}
         </section>

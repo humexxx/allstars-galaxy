@@ -5,7 +5,7 @@ import type { MatchTimeFormat } from "./match-time";
 import { StoryFoot, StoryImage, StoryLink } from "./story-parts";
 
 const CARD =
-  "flex w-44 shrink-0 snap-start flex-col gap-2 rounded-lg border bg-card p-2 transition-colors hover:border-foreground/25";
+  "flex w-44 shrink-0 snap-start flex-col gap-2 rounded-lg border bg-card p-2 transition-colors focus-visible:outline-hidden hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
 /**
  * A dashboard card's "Latest news": a rail of small cards, picture over
@@ -24,7 +24,9 @@ export function NewsRail({
   if (stories.length === 0) return null;
   return (
     <div className="flex flex-col gap-1.5">
-      <Eyebrow size="sm">Latest news</Eyebrow>
+      <Eyebrow size="sm" asChild>
+        <h3>Latest news</h3>
+      </Eyebrow>
       <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1">
         {stories.map((story) => (
           <StoryLink key={story.id} story={story} className={CARD}>

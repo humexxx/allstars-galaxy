@@ -50,6 +50,25 @@ describe("NbaView", () => {
     expect(screen.getByText("NBA Finals")).toBeInTheDocument();
   });
 
+  it("names the table by the conference shown, each row by its team, and spells out its columns", () => {
+    render(<NbaView data={{ ...NBA_DATA, playoffs: [] }} />);
+    expect(screen.getByRole("table", { name: "Eastern Conference standings" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "West" }));
+
+    const table = screen.getByRole("table", { name: "Western Conference standings" });
+    expect(within(table).getAllByRole("rowheader")[0]).toHaveTextContent("Thunder");
+    expect(within(table).getAllByRole("columnheader").map((th) => th.getAttribute("aria-label"))).toEqual([
+      null,
+      null,
+      "Wins",
+      "Losses",
+      "Games behind",
+    ]);
+    // The letters stay on screen.
+    expect(within(table).getByRole("columnheader", { name: "Games behind" })).toHaveTextContent("GB");
+  });
+
   describe("before the opener", () => {
     const preseason: NbaData = {
       ...NBA_DATA,

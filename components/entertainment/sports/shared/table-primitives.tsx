@@ -7,13 +7,17 @@ import { cn } from "@/lib/utils";
  *  every standings/results table in the sports views. */
 export function SportsTh({
   className,
+  label,
   children,
 }: {
   className?: string;
+  /** The words an abbreviated header stands for ("Games behind" for GB), read in its place. */
+  label?: string;
   children?: React.ReactNode;
-}) {
+}): React.ReactElement {
   return (
     <TableHead
+      aria-label={label}
       className={cn(
         "text-xs uppercase tracking-wide text-muted-foreground",
         className,

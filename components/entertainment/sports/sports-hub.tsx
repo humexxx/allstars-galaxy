@@ -40,6 +40,28 @@ type SportsHubProps = {
   viewerId: string;
 };
 
+const SPORT_PICKER = '[role="group"][aria-label="Sports"]';
+
+/**
+ * Where focus goes back to once a move has unmounted the control it was made
+ * from: that control as found again in what replaced the view, or (null) the
+ * view itself.
+ */
+const RETURN_TO = {
+  title: 'h1 [aria-haspopup="menu"]',
+  sport: `${SPORT_PICKER} [aria-current="page"]`,
+  view: null,
+} as const;
+
+type ReturnTo = keyof typeof RETURN_TO;
+
+/** The title's menu is portalled to <body>, so a league picked in it is never inside the content. */
+function returnFrom(active: Element | null, content: HTMLElement | null): ReturnTo | null {
+  if (active?.closest('[role="menu"]')) return "title";
+  if (active?.closest(SPORT_PICKER)) return "sport";
+  return content?.contains(active) ? "view" : null;
+}
+
 export function SportsHub({
   activeSport,
   favoriteSportIds = [],
@@ -55,7 +77,7 @@ export function SportsHub({
   const [target, setTarget] = useState<SportId | null>(null);
   const [targetKey, setTargetKey] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const fromContent = useRef(false);
+  const returnTo = useRef<ReturnTo | null>(null);
 
   // Each sport is remembered as it arrives, by the address that asked for it.
   const currentKey = seenKey(activeSport, useSearchParams().get("league"));
@@ -72,7 +94,7 @@ export function SportsHub({
     (href: string) => {
       const params = new URLSearchParams(href.split("?")[1] ?? "");
       const sport = (params.get("sport") as SportId | null) ?? activeSport;
-      fromContent.current = Boolean(contentRef.current?.contains(document.activeElement));
+      returnTo.current = returnFrom(document.activeElement, contentRef.current);
       setTarget(sport);
       setTargetKey(seenKey(sport, params.get("league")));
       startLoading(() => router.push(href, { scroll: false }));
@@ -80,18 +102,30 @@ export function SportsHub({
     [router, activeSport]
   );
 
-  // A control inside the view (the league picker) unmounts under the
-  // skeleton, and focus fell to <body>. Give it back to the view it opened.
-  useEffect(() => {
-    if (loading || !fromContent.current) return;
-    fromContent.current = false;
-    if (document.activeElement === document.body) contentRef.current?.focus({ preventScroll: true });
-  }, [loading]);
-
   const loadingLabel = SPORTS.find((s) => s.id === (target ?? activeSport))?.label;
   const copy = loading && targetKey ? recallSport(viewerId, targetKey) : undefined;
   const shown = copy ?? (loading ? null : { payload, teamFilter, today });
   const shownKey = copy && targetKey ? targetKey : currentKey;
+  const skeleton = !shown;
+
+  // The control a move was made from (a league in the title's menu, a sport
+  // in the picker) unmounts with the view it sat in, and focus fell to
+  // <body>. Put it on that control again in each view that replaces it: the
+  // copy, the skeleton's picker, the fresh view. The skeleton has no title,
+  // so a league waits for the view. A passive effect, so a closed menu has
+  // lifted the aria-hidden it laid over the page first.
+  useEffect(() => {
+    const to = returnTo.current;
+    if (!to) return;
+    const root = contentRef.current;
+    if (document.activeElement === document.body) {
+      const selector = RETURN_TO[to];
+      const control = selector ? root?.querySelector<HTMLElement>(selector) : null;
+      if (control) control.focus({ preventScroll: true });
+      else if (!loading) root?.focus({ preventScroll: true });
+    }
+    if (!loading) returnTo.current = null;
+  }, [loading, shownKey, skeleton]);
 
   // Render favourites first so the user lands on their most-watched sports.
   const orderedSports = useMemo(

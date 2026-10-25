@@ -1,6 +1,6 @@
 "use client";
 
-import { Circle, Tv } from "lucide-react";
+import { Tv } from "lucide-react";
 
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,8 @@ import { useMatchTime } from "./time-zone-context";
 type ScoreCardProps = {
   match: Match;
   teams: Map<string, Team>;
+  /** `li` for a card in a list, so a card with a team missing leaves no empty item. */
+  as?: "div" | "li";
   className?: string;
 };
 
@@ -37,7 +39,34 @@ function formatStatus(match: Match): string | null {
   }
 }
 
-export function ScoreCard({ match, teams, className }: ScoreCardProps): React.ReactElement | null {
+/** The status in words: a listener hears "FT" as two letters and "CAN" as "can". */
+function spokenStatus(match: Match): string | null {
+  switch (match.status) {
+    case "ft":
+      return "Full time";
+    case "aet":
+      return "After extra time";
+    case "pen":
+      return match.penalties
+        ? `Penalties ${match.penalties.home}–${match.penalties.away}`
+        : "Penalties";
+    case "live":
+      return match.minute ? `Live, minute ${match.minute}` : "Live";
+    case "scheduled":
+      return null;
+    case "postponed":
+      return "Postponed";
+    case "cancelled":
+      return "Cancelled";
+  }
+}
+
+export function ScoreCard({
+  match,
+  teams,
+  as: Root = "div",
+  className,
+}: ScoreCardProps): React.ReactElement | null {
   const format = useMatchTime();
   const home = teams.get(match.homeTeamId);
   const away = teams.get(match.awayTeamId);
@@ -58,7 +87,7 @@ export function ScoreCard({ match, teams, className }: ScoreCardProps): React.Re
   const status = formatStatus(match);
 
   return (
-    <div
+    <Root
       className={cn(
         "relative grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border bg-card px-3 py-2.5",
         className,
@@ -93,14 +122,19 @@ export function ScoreCard({ match, teams, className }: ScoreCardProps): React.Re
           card of a list. */}
       <div className="flex min-w-16 flex-col items-end justify-center gap-0.5 border-l pl-3 text-right">
         {status !== null && (
+          // Live in the team names' colour, which a 10px green word is too
+          // faint for; the green is the dot's.
           <span
             className={cn(
               "inline-flex items-center gap-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground",
-              isLive && "text-success",
+              isLive && "text-foreground",
             )}
           >
-            {isLive && <Circle className="size-2 fill-current motion-safe:animate-pulse" aria-hidden />}
-            {status}
+            {isLive && (
+              <span aria-hidden className="size-2 rounded-full bg-success motion-safe:animate-pulse" />
+            )}
+            <span aria-hidden>{status}</span>
+            <span className="sr-only">{spokenStatus(match)}</span>
           </span>
         )}
         {!isLive && (
@@ -113,7 +147,7 @@ export function ScoreCard({ match, teams, className }: ScoreCardProps): React.Re
           <Channels names={match.broadcasts} />
         ) : null}
       </div>
-    </div>
+    </Root>
   );
 }
 

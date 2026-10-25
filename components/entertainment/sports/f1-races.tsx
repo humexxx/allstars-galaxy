@@ -112,7 +112,11 @@ function WhatsNext({ race }: { race: F1Race }): React.ReactElement {
   return (
     // Holds a badge's height before mount, so the timetable does not jump.
     <div className="flex min-h-6 flex-wrap items-center gap-2">
-      {weekend && phrase?.tone !== "live" && <Badge variant="info">Race weekend</Badge>}
+      {weekend && phrase?.tone !== "live" && (
+        <Badge variant="info" className="text-foreground">
+          Race weekend
+        </Badge>
+      )}
       {phrase?.tone === "live" && <StatusPill status="live" label={phrase.text} />}
       {phrase && phrase.tone !== "live" && (
         <Text as="span" weight="medium">
@@ -145,7 +149,7 @@ function FeaturedRace({
             <Eyebrow>Round {race.round}</Eyebrow>
             {race.sprint && <SprintBadge />}
           </div>
-          <Heading level="h3" as="h4" className="flex items-center gap-3">
+          <Heading level="h3" className="flex items-center gap-3">
             <span aria-hidden className="text-3xl leading-none">
               {race.flagEmoji}
             </span>

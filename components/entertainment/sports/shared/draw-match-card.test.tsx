@@ -48,6 +48,23 @@ describe("DrawMatchCard", () => {
     expect(screen.getByText("J. Sinner").className).not.toContain("font-semibold");
   });
 
+  it("tells a screen reader who won and where each player is from, not only by bold and a hidden flag", () => {
+    render(<DrawMatchCard match={final} teams={players} />);
+    const tie = screen.getByRole("button");
+    expect(tie).toHaveTextContent(/C\. Alcaraz, 🇪🇸, won/);
+    expect(tie).toHaveTextContent(/J\. Sinner, 🇮🇹(?!, won)/);
+    expect(screen.getAllByText(", won")).toHaveLength(1);
+  });
+
+  it("names no country for a player the provider has none for", () => {
+    const unknown = new Map([
+      playerEntry("alcaraz", "C. Alcaraz", "", 2),
+      playerEntry("sinner", "J. Sinner", "🇮🇹", 1),
+    ]);
+    render(<DrawMatchCard match={final} teams={unknown} />);
+    expect(screen.getByRole("button")).toHaveTextContent(/C\. Alcaraz, won/);
+  });
+
   it("shows a player's photo, and keeps the flag for one without", () => {
     const photo = "https://a.espncdn.com/combiner/i?img=/i/headshots/tennis/players/full/3782.png&w=96&h=96&scale=crop";
     const withPhoto = new Map([
@@ -125,9 +142,24 @@ describe("DrawMatchCard, a padel pair", () => {
   });
 
   it("prints a set that went to a tie-break with the loser's points", () => {
-    const { container } = inCostaRica(milanoFinal);
-    fireEvent.focus(container.querySelector("[tabindex='0']")!);
+    inCostaRica(milanoFinal);
+    fireEvent.click(screen.getByRole("button"));
     expect(screen.getAllByText(/4–6 6–3 7–6\(3\)/).length).toBeGreaterThan(0);
+  });
+
+  it("opens the pairs' full names on a click or a tap, which a tooltip never did", () => {
+    inCostaRica(milanoFinal);
+    const tie = screen.getByRole("button");
+    expect(tie).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(tie);
+    expect(tie).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("dialog")).toHaveTextContent("A. Coello / A. Tapia vs L. Augsburger / J. Lebron");
+  });
+
+  it("says which pair won", () => {
+    inCostaRica(milanoFinal);
+    expect(screen.getByRole("button")).toHaveTextContent(/Coello.*Tapia, won/);
+    expect(screen.getAllByText(", won")).toHaveLength(1);
   });
 
   it("says a tie was a walkover rather than inventing a score", () => {

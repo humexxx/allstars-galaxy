@@ -134,10 +134,14 @@ scrollers:
 | Piece | Value | Where |
 | --- | --- | --- |
 | Sport bar (the tabs row; the name row above it scrolls away) | `h-12` (48px) at `top-14 md:top-0`, `z-20`, opaque `bg-background` + `border-b` | [`sport-shell.tsx`](../components/entertainment/sports/shared/sport-shell.tsx) |
-| Day headings | `top-26 md:top-12` (header + bar, then the bar alone), `z-10`; days `scroll-mt-26 md:scroll-mt-12` | [`matches-by-date.tsx`](../components/entertainment/sports/shared/matches-by-date.tsx) |
+| Scroll margin (focus and `scrollIntoView` land below the bar) | `scroll-margin-top` of `--spacing(26)` (104px) below `md` (header + bar), `--spacing(12)` (48px) from `md` (the bar), on everything after `[data-sport-tabs]` (`[data-sport-tabs] ~ * *`). A margin on the content, not padding on the scroller, which would count the stuck bar as hidden and scroll each time a tab took focus | [`globals.css`](../app/globals.css) |
+| Day headings | `top-26 md:top-12` (header + bar, then the bar alone), `z-10`; no `scroll-mt-*` of their own, the rule above clears the bar | [`matches-by-date.tsx`](../components/entertainment/sports/shared/matches-by-date.tsx) |
 | Overview side table (`@4xl` only) | `top-12` (the bar, its label level with a stuck day heading); `bottom-6 self-end` once taller than the room below the bar | [`overview-split.tsx`](../components/entertainment/sports/shared/overview-split.tsx) |
 
-Change the bar's height and move the two rows under it by the same amount.
+Change the bar's height and move the two rows under it, and the scroll
+margin, by the same amount. Never add a `scroll-mt-*` under the bar as well:
+it would replace the rule's margin, not add to it, and pin that one element
+to another offset.
 
 ## Cards & sections
 

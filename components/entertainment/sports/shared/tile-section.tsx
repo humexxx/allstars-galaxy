@@ -29,13 +29,13 @@ const EARLIER_STEP = 3;
 
 /** A tile's frame; each list sets its own gap. */
 export const TILE =
-  "flex w-full flex-col rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring/50";
+  "flex w-full flex-col rounded-lg border bg-card p-3 text-left transition-colors focus-visible:outline-hidden hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring";
 
 /** The size, padding and gap of a day heading in `MatchesByDate`. */
 export function SectionHeading({ children }: { children: ReactNode }): React.ReactElement {
   return (
     <Eyebrow size="sm" asChild>
-      <h3 className="py-1">{children}</h3>
+      <h2 className="py-1">{children}</h2>
     </Eyebrow>
   );
 }

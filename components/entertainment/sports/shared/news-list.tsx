@@ -12,7 +12,8 @@ import { StoryFoot, StoryImage, StoryLink } from "./story-parts";
 import { useSavedTeamFilter } from "./team-filter-context";
 import { useMatchTime } from "./time-zone-context";
 
-const CARD = "flex rounded-lg border bg-card transition-colors hover:border-foreground/25";
+const CARD =
+  "flex rounded-lg border bg-card transition-colors focus-visible:outline-hidden hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
  * A sport's wire with one story leading it (`leadStory`), big — its picture,
@@ -49,7 +50,7 @@ export function NewsList({
             <Eyebrow size="sm" as="span">
               Top story
             </Eyebrow>
-            <Heading level="h3" className="leading-snug">
+            <Heading level="h3" as="h2" className="leading-snug">
               {lead.headline}
             </Heading>
             {lead.description && (
@@ -66,8 +67,8 @@ export function NewsList({
           <StoryLink key={story.id} story={story} className={cn(CARD, "gap-3 p-3")}>
             <StoryImage story={story} sizes="80px" className="size-20 shrink-0 rounded-md" />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <Text as="span" weight="medium" className="leading-snug">
-                {story.headline}
+              <Text asChild weight="medium" className="leading-snug">
+                <h2>{story.headline}</h2>
               </Text>
               {story.description && (
                 <Text variant="small" className="line-clamp-2">

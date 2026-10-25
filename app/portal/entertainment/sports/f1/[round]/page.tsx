@@ -11,7 +11,8 @@ type Props = { params: Promise<{ round: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const round = f1RoundSchema.safeParse((await params).round);
   const detail = round.success ? await loadF1Race(round.data) : null;
-  return { title: detail ? detail.race.name : "Formula 1" };
+  // No detail is the page's notFound(), which keeps this title: name the miss, not the sport.
+  return { title: detail ? detail.race.name : "Not on this season's calendar" };
 }
 
 /** One race of the season, by its round: what "View details" and the tiles open. */

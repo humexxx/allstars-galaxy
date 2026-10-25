@@ -126,6 +126,8 @@ describe("F1RacePage", () => {
       "Fastest lap": "LEC1:33.418 · Lap 52",
       Sprint: "NORMcLaren",
     });
+    // A grid of three on a phone: the lap wraps rather than being cut short.
+    expect(screen.getByText("1:33.418 · Lap 52")).not.toHaveClass("truncate");
   });
 
   it("says plainly when the classification is not in yet, and asks again on Retry", () => {
@@ -135,8 +137,50 @@ describe("F1RacePage", () => {
     expect(alert).toHaveTextContent("The classification isn't available yet");
     // Usually the results are simply not in yet: not an error colour.
     expect(alert.className).not.toMatch(/destructive/);
+    const status = within(section("Classification")).getByRole("status");
+    expect(status).toHaveTextContent(/^$/);
+
     fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
     expect(refresh).toHaveBeenCalledTimes(1);
+    // Nothing came in: said, since the alert itself does not change.
+    expect(status).toHaveTextContent("Still not available");
+    expect(within(alert).getByRole("button", { name: "Retry" })).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("hands focus to the classification's heading when a Retry brings it in", () => {
+    const { rerender } = renderPage(SINGAPORE, { classification: null });
+    const retry = screen.getByRole("button", { name: "Retry" });
+    retry.focus();
+    fireEvent.click(retry);
+
+    rerender(
+      page(SINGAPORE, {
+        classification: [
+          { position: "1", code: "VER", name: "M. Verstappen", team: "Red Bull", result: "1:32:11.902", points: 25 },
+        ],
+      })
+    );
+
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Classification" }));
+    expect(within(section("Classification")).getByRole("status")).toHaveTextContent(/^$/);
+  });
+
+  it("leaves focus where the reader took it while the Retry was out", () => {
+    const { rerender } = renderPage(SINGAPORE, { classification: null });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    const breadcrumb = screen.getByRole("link", { name: "Formula 1" });
+    breadcrumb.focus();
+
+    rerender(
+      page(SINGAPORE, {
+        classification: [
+          { position: "1", code: "VER", name: "M. Verstappen", team: "Red Bull", result: "1:32:11.902", points: 25 },
+        ],
+      })
+    );
+
+    expect(document.activeElement).toBe(breadcrumb);
   });
 
   it("lists the whole field once it is in, the fastest lap marked", () => {
@@ -147,7 +191,7 @@ describe("F1RacePage", () => {
         { position: "DNF", code: "STR", name: "L. Stroll", team: "Aston Martin", result: "Retired", points: 0 },
       ],
     });
-    const rows = within(within(section("Classification")).getByRole("table")).getAllByRole("row");
+    const rows = within(within(section("Classification")).getByRole("table", { name: "Classification" })).getAllByRole("row");
     expect(rows.slice(1).map((r) => [...r.querySelectorAll("td")].map((td) => td.textContent))).toEqual([
       ["1", "M. VerstappenRed Bull", "1:32:11.902", "25"],
       // Named for a screen reader beside the icon.

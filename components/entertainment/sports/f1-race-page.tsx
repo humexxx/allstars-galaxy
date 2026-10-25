@@ -2,7 +2,7 @@
 
 import { RotateCw, Timer } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode, type Ref } from "react";
 
 import { PageHeader } from "@/components/portal/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -66,6 +66,10 @@ export function F1RacePage({
   current = false,
 }: F1RacePageProps): React.ReactElement {
   const router = useRouter();
+  const [retrying, startRetry] = useTransition();
+  const [retried, setRetried] = useState(false);
+  const classificationHeading = useRef<HTMLHeadingElement>(null);
+  const handOff = useRef(false);
   const format = useMatchTime();
   const now = useNow();
   // The weekend under way, or about to be: what is on track, else what is next.
@@ -76,6 +80,20 @@ export function F1RacePage({
   // The race of a finished weekend is the classification below, with points.
   const tabled = sessions.filter((s) => !(s.kind === "race" && race.status === "completed"));
   const hasTables = tabled.length > 0 || race.status === "completed";
+  const retryStatus = retrying
+    ? "Checking for the classification…"
+    : retried && !classification
+      ? "Still not available"
+      : "";
+
+  // The table a Retry brought in replaced the alert, and the focused button
+  // with it: the reader carries on from the table's heading, not the page's
+  // top. Once, so a later refresh never takes focus there.
+  useEffect(() => {
+    if (!handOff.current || !classification) return;
+    handOff.current = false;
+    if (document.activeElement === document.body) classificationHeading.current?.focus();
+  }, [classification]);
 
   return (
     <div className="@container flex flex-col gap-6">
@@ -161,7 +179,7 @@ export function F1RacePage({
               </Section>
             )}
             {race.status === "completed" && (
-              <Section title="Classification">
+              <Section title="Classification" headingRef={classificationHeading}>
                 {classification ? (
                   <ClassificationTable rows={classification} />
                 ) : (
@@ -169,12 +187,27 @@ export function F1RacePage({
                   <Alert>
                     <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
                       The classification isn&apos;t available yet
-                      <Button variant="outline" size="sm" onClick={() => router.refresh()}>
-                        <RotateCw /> Retry
+                      {/* aria-disabled, not disabled, so the button keeps focus while it asks. */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-disabled={retrying || undefined}
+                        onClick={() => {
+                          if (retrying) return;
+                          setRetried(true);
+                          handOff.current = true;
+                          startRetry(() => router.refresh());
+                        }}
+                      >
+                        <RotateCw className={cn(retrying && "motion-safe:animate-spin")} /> Retry
                       </Button>
                     </AlertDescription>
                   </Alert>
                 )}
+                {/* Outside the branch, so it is there before its words change. */}
+                <span role="status" className="sr-only">
+                  {retryStatus}
+                </span>
               </Section>
             )}
           </div>
@@ -184,11 +217,22 @@ export function F1RacePage({
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }): React.ReactElement {
+function Section({
+  title,
+  headingRef,
+  children,
+}: {
+  title: string;
+  /** A heading focus can be sent to. */
+  headingRef?: Ref<HTMLHeadingElement>;
+  children: ReactNode;
+}): React.ReactElement {
   return (
     <section className="flex flex-col gap-2">
       <Eyebrow asChild>
-        <h2>{title}</h2>
+        <h2 ref={headingRef} tabIndex={headingRef ? -1 : undefined} className="outline-none">
+          {title}
+        </h2>
       </Eyebrow>
       {children}
     </section>
@@ -318,7 +362,7 @@ function Mark({ label, code, detail }: { label: string; code: string; detail?: s
       </Eyebrow>
       <dd className="flex min-w-0 flex-col">
         <Mono className="text-sm font-semibold">{code}</Mono>
-        {detail && <Mono className="truncate text-2xs text-muted-foreground">{detail}</Mono>}
+        {detail && <Mono className="text-2xs text-muted-foreground">{detail}</Mono>}
       </dd>
     </div>
   );
@@ -328,7 +372,7 @@ function ClassificationTable({ rows: all }: { rows: F1ClassificationRow[] }): Re
   const rows = useShownRows(all);
   return (
     <div className="overflow-hidden rounded-lg border">
-      <Table>
+      <Table aria-label="Classification">
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
             <SportsTh className="w-10 pl-3">Pos</SportsTh>

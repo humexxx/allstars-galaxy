@@ -67,8 +67,10 @@ export async function DashboardSportCard({
     groups.length > 0 &&
     groups.map((group) => (
       <div key={group.label} className="flex flex-col gap-1.5">
-        <Eyebrow size="sm">{group.label}</Eyebrow>
-        <ul className="flex flex-col gap-1">
+        <Eyebrow size="sm" asChild>
+          <h3>{group.label}</h3>
+        </Eyebrow>
+        <ul role="list" className="flex flex-col gap-1">
           {group.matches.map((m) => (
             <MatchLine key={m.id} match={m} format={format} />
           ))}
@@ -80,7 +82,9 @@ export async function DashboardSportCard({
       {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
       {card.note && (
         <div className="flex flex-col gap-1">
-          <Eyebrow size="sm">{card.note.title}</Eyebrow>
+          <Eyebrow size="sm" asChild>
+            <h3>{card.note.title}</h3>
+          </Eyebrow>
           {card.note.text && <span className="text-xs font-medium">{card.note.text}</span>}
           {card.note.when && (
             <Text variant="small" as="span">
@@ -121,7 +125,7 @@ export async function DashboardSportCard({
         <CardAction>
           <Button variant="outline" size="sm" asChild>
             <Link href={href}>
-              Open <ArrowRight />
+              Open <span className="sr-only">{card.label}</span> <ArrowRight />
             </Link>
           </Button>
         </CardAction>
@@ -221,6 +225,11 @@ function FeaturedMatch({
   className?: string;
 }): React.ReactElement {
   const decided = match.status === "result";
+  // A shoot-out stays out of the score, so two level sides with a winner went to penalties.
+  const shootOut =
+    decided && match.home.score !== null && match.home.score === match.away.score
+      ? [match.home, match.away].find((side) => side.winner)
+      : undefined;
   return (
     <FeatureBox
       href={href}
@@ -246,6 +255,11 @@ function FeaturedMatch({
           )}
         </div>
       ))}
+      {shootOut && (
+        <Text variant="small" as="span">
+          {shootOut.name} won on penalties
+        </Text>
+      )}
     </FeatureBox>
   );
 }
@@ -285,13 +299,14 @@ function MatchLine({ match, format }: { match: DashboardMatch; format: MatchTime
       </span>
       <span className="flex w-16 flex-col items-center leading-tight">
         {scored ? (
-          <Mono className={cn("text-xs font-semibold", match.status === "live" && "text-success")}>
+          <Mono className="text-xs font-semibold">
             {match.home.score}–{match.away.score}
           </Mono>
         ) : (
           <Mono className="text-2xs">{format.time(match.startsAt)}</Mono>
         )}
-        <Mono className="text-2xs text-muted-foreground">
+        <Mono className="flex items-center gap-1 text-2xs text-muted-foreground">
+          {match.status === "live" && <span aria-hidden className="size-1.5 rounded-full bg-success" />}
           {match.status === "live" ? "Live" : format.shortDay(match.startsAt)}
         </Mono>
       </span>

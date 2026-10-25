@@ -50,7 +50,7 @@ export function StoryImage({
       {/* The headline is the link's own text: an alt repeating it is read twice. */}
       <Image
         src={story.image.url}
-        alt={story.image.alt ?? ""}
+        alt=""
         fill
         sizes={sizes}
         className="object-cover"

@@ -45,8 +45,9 @@ type Championship = "drivers" | "constructors";
 
 const NUM = "px-1 text-right sm:px-2";
 // The table sits beside the races at about 300px and fills a phone at 343:
-// by the card's own width, Wins shows from 20rem and Podiums from 24rem, and
-// whichever column is last takes the row's end padding.
+// by the card's own width, Wins shows from 20rem and Podiums from 24rem (each
+// under the name until then), and whichever column is last takes the row's end
+// padding.
 const WINS = "hidden @xs:table-cell @max-sm:pr-3";
 const PODIUMS = "hidden @sm:table-cell pr-3 sm:pr-4";
 const POINTS = "@max-xs:pr-3";
@@ -141,7 +142,7 @@ function DriversTable({
   const rows = useShownRows(drivers);
   return (
     <>
-      <Table>
+      <Table aria-label="Drivers' championship">
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
             <SportsTh className="w-8 pl-3">#</SportsTh>
@@ -161,10 +162,13 @@ function DriversTable({
                 {showsFaces ? (
                   <div className="flex items-center gap-2 sm:gap-3">
                     <DriverAndTeam driver={d} team={teams.get(d.team)} />
-                    <Text as="span" weight="medium">
-                      {d.shortName}
-                      <span className="sr-only">, {d.team}</span>
-                    </Text>
+                    <span className="flex flex-col leading-tight">
+                      <Text as="span" weight="medium">
+                        {d.shortName}
+                        <span className="sr-only">, {d.team}</span>
+                      </Text>
+                      <DroppedFigures wins={d.wins} podiums={d.podiums} />
+                    </span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-3">
@@ -172,6 +176,7 @@ function DriversTable({
                     <div className="leading-tight">
                       <Text as="div" weight="medium">{d.shortName}</Text>
                       <Text variant="small" as="div">{d.team}</Text>
+                      <DroppedFigures wins={d.wins} podiums={d.podiums} />
                     </div>
                   </div>
                 )}
@@ -218,11 +223,30 @@ function DriverAndTeam({ driver, team }: { driver: F1Driver; team?: F1Constructo
   );
 }
 
+/** "1 win", "3 podiums". */
+function count(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
+/**
+ * Under the name, the figures of the columns the card is too narrow for: both
+ * below 20rem, only podiums until 24rem, none past it. Each is shown in one
+ * place at any width, so it is read once.
+ */
+function DroppedFigures({ wins, podiums }: { wins: number; podiums: number }): React.ReactElement {
+  return (
+    <Text variant="small" as="span" className="block @sm:hidden">
+      <span className="@xs:hidden">{count(wins, "win")} · </span>
+      {count(podiums, "podium")}
+    </Text>
+  );
+}
+
 function ConstructorsTable({ constructors }: { constructors: F1Constructor[] }) {
   const rows = useShownRows(constructors);
   return (
     <>
-      <Table>
+      <Table aria-label="Constructors' championship">
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
             <SportsTh className="w-8 pl-3">#</SportsTh>
@@ -249,7 +273,10 @@ function ConstructorsTable({ constructors }: { constructors: F1Constructor[] }) 
                   {/* The short name, as the drivers table labels the
                       team: with the logo beside it, "Cadillac F1
                       Team" pushed Podiums off a phone's screen. */}
-                  <Text as="span" weight="medium">{c.shortName}</Text>
+                  <span className="flex flex-col leading-tight">
+                    <Text as="span" weight="medium">{c.shortName}</Text>
+                    <DroppedFigures wins={c.wins} podiums={c.podiums} />
+                  </span>
                 </div>
               </TableCell>
               <TableCell className={cn(NUM, POINTS)}>

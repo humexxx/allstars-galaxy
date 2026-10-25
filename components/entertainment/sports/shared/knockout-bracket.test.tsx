@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
@@ -91,6 +91,83 @@ describe("KnockoutBracket", () => {
     expect(all[10].textContent).not.toContain("T0");
   });
 
+  it("names each column's round, its half, and the round being played, its ties a list", () => {
+    const container = renderBracket();
+    const groups = screen.getAllByRole("group");
+    expect(groups.map((group) => group.getAttribute("aria-label"))).toEqual([
+      "Round of 64, top half, being played",
+      "Round of 32, top half",
+      "Round of 16, top half",
+      "Quarter-finals, top half",
+      "Semi-finals, top half",
+      "Final",
+      "Semi-finals, bottom half",
+      "Quarter-finals, bottom half",
+      "Round of 16, bottom half",
+      "Round of 32, bottom half",
+      "Round of 64, bottom half, being played",
+    ]);
+    // The group names the round, so the label on screen is not read twice.
+    expect(columns(container)[0].firstElementChild).toHaveAttribute("aria-hidden", "true");
+    expect(within(groups[0]).getAllByRole("listitem")).toHaveLength(16);
+  });
+
+  it("says no round is being played once every tie is decided", () => {
+    const decided: BracketRound[] = [
+      {
+        id: "semi-final",
+        label: "Semi-finals",
+        matches: [
+          { id: "s0", homeTeamId: "t0", awayTeamId: "t1", winnerTeamId: "t0" },
+          { id: "s1", homeTeamId: "t2", awayTeamId: "t3", winnerTeamId: "t3" },
+        ],
+      },
+      { id: "final", label: "Final", matches: [{ id: "f", homeTeamId: "t0", awayTeamId: "t3", winnerTeamId: "t3" }] },
+    ];
+    renderBracket(decided);
+    for (const group of screen.getAllByRole("group")) expect(group).not.toHaveAccessibleName(/being played/);
+  });
+
+  it("opens a tie's details on a click or a tap, and says who went through", () => {
+    // Level on aggregate, settled on penalties: only the details have the legs.
+    const tie: BracketRound[] = [
+      {
+        id: "final",
+        label: "Final",
+        matches: [
+          {
+            id: "f",
+            homeTeamId: "t0",
+            awayTeamId: "t1",
+            winnerTeamId: "t1",
+            aggregateHome: 2,
+            aggregateAway: 2,
+            legs: [
+              { homeScore: 1, awayScore: 1, date: "2026-05-02T19:00:00Z" },
+              { homeScore: 1, awayScore: 1, date: "2026-05-09T19:00:00Z" },
+            ],
+          },
+        ],
+      },
+    ];
+    renderBracket(tie);
+    const box = screen.getByRole("button", { name: /T1, won/ });
+    expect(box).not.toHaveAccessibleName(/T0, won/);
+    // The box's small print says "L1", "L2"; a listener hears the legs.
+    expect(box).toHaveAccessibleName(/Leg 1 .+ · Leg 2 /);
+    expect(box).not.toHaveAccessibleName(/L1/);
+    fireEvent.click(box);
+    const details = screen.getByRole("dialog", { name: "Match details" });
+    expect(details).toHaveTextContent("T0 2–2 T1");
+    expect(details).toHaveTextContent(/Leg 1 · .+ · 1–1/);
+    expect(details).toHaveTextContent(/Leg 2 · .+ · 1–1/);
+
+    // Tab from the details closes them, back on the box, not off the bracket.
+    fireEvent.keyDown(details, { key: "Tab" });
+    expect(screen.queryByRole("dialog", { name: "Match details" })).toBeNull();
+    expect(box).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("puts the third-place match under the final", () => {
     const withThird: BracketRound[] = [
       ...rounds,
@@ -156,13 +233,13 @@ describe("KnockoutBracket", () => {
     const button = (name: string): HTMLElement => screen.getByRole("button", { name });
 
     // Day one opens on the first round: the left end.
-    expect(button("Left end of the bracket")).toBeDisabled();
-    expect(button("Scroll left")).toBeDisabled();
+    expect(button("Left end of the bracket")).toHaveAttribute("aria-disabled", "true");
+    expect(button("Scroll left")).toHaveAttribute("aria-disabled", "true");
 
     fireEvent.click(button("Right end of the bracket"));
     expect(viewport.scrollLeft).toBe(1800);
-    expect(button("Right end of the bracket")).toBeDisabled();
-    expect(button("Scroll right")).toBeDisabled();
+    expect(button("Right end of the bracket")).toHaveAttribute("aria-disabled", "true");
+    expect(button("Scroll right")).toHaveAttribute("aria-disabled", "true");
 
     fireEvent.click(button("Scroll left"));
     expect(viewport.scrollLeft).toBe(1600);
@@ -172,6 +249,21 @@ describe("KnockoutBracket", () => {
     fireEvent.click(button("Scroll right"));
     expect(viewport.scrollLeft).toBe(200);
     expect(scrollTo).toHaveBeenCalledTimes(4);
+  });
+
+  it("keeps the focus on a button that reaches its end, and does nothing more from there", () => {
+    const { scrollTo } = layOut(renderBracket());
+    const end = screen.getByRole("button", { name: "Right end of the bracket" });
+    end.focus();
+    fireEvent.click(end);
+    // Disabled under focus, a button drops that focus to the page.
+    expect(end).not.toBeDisabled();
+    expect(end).toHaveFocus();
+    expect(end).toHaveAttribute("aria-disabled", "true");
+
+    fireEvent.click(end);
+    fireEvent.click(screen.getByRole("button", { name: "Scroll right" }));
+    expect(scrollTo).toHaveBeenCalledTimes(1);
   });
 
   it("follows the reader's scrolling once a bracket that opened undrawn is drawn", () => {
@@ -185,11 +277,11 @@ describe("KnockoutBracket", () => {
     rerender(bracket(rounds));
     const { viewport } = layOut(container);
     const button = (name: string): HTMLElement => screen.getByRole("button", { name });
-    expect(button("Right end of the bracket")).toBeEnabled();
+    expect(button("Right end of the bracket")).toHaveAttribute("aria-disabled", "false");
 
     viewport.scrollLeft = 1800;
     fireEvent.scroll(viewport);
-    expect(button("Right end of the bracket")).toBeDisabled();
-    expect(button("Left end of the bracket")).toBeEnabled();
+    expect(button("Right end of the bracket")).toHaveAttribute("aria-disabled", "true");
+    expect(button("Left end of the bracket")).toHaveAttribute("aria-disabled", "false");
   });
 });

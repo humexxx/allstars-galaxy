@@ -308,6 +308,38 @@ describe("MatchesByDate", () => {
     expect(listScrolls(scrolled)).toEqual([container.querySelector("[data-day]")]);
   });
 
+  it("counts the day's scroll margin, which clears the bar, as under it", () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    // globals.css gives what follows the sport bar this margin: below md, the header and the bar.
+    const margin = document.createElement("style");
+    margin.textContent = "[data-day] { scroll-margin-top: 104px; }";
+    document.head.appendChild(margin);
+    try {
+      const { container } = renderList(season);
+      // On screen, but up under the bar.
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+        this: HTMLElement
+      ) {
+        const top = this.hasAttribute("data-day") ? 60 : 0;
+        return { top, bottom: top + 100, left: 0, right: 0, width: 0, height: 100, x: 0, y: top } as DOMRect;
+      });
+
+      pickTeam(/Barcelona/);
+
+      expect(listScrolls(scrolled)).toEqual([container.querySelector("[data-day]")]);
+    } finally {
+      margin.remove();
+    }
+  });
+
+  it("leaves the clearing of the bar to globals.css: no scroll margin of its own", () => {
+    const { container } = renderList(season);
+    for (const day of container.querySelectorAll("[data-day]")) {
+      expect(day.className).not.toMatch(/scroll-m/);
+    }
+  });
+
   it("leaves the page alone when the picked team's list already starts in view", () => {
     const scrolled = vi.fn();
     Element.prototype.scrollIntoView = scrolled;
@@ -347,6 +379,66 @@ describe("MatchesByDate", () => {
     expect(list.querySelector('[tabindex="0"]')).toBeNull();
   });
 
+  it("heads each day with a level-2 heading, the filter and Earlier beside it rather than in it", () => {
+    renderList(season);
+    const headings = screen.getAllByRole("heading", { level: 2 });
+    expect(headings.map((h) => h.textContent)).toEqual([
+      "Saturday, October 17, 2026",
+      "Today · Sunday, October 18, 2026",
+      "Wednesday, October 21, 2026",
+    ]);
+    expect(headings[0]).not.toContainElement(teamFilter());
+    expect(headings[0]).not.toContainElement(earlierButton());
+  });
+
+  it("lists a day's games, one item a card, and no empty item for a game with a side to come", () => {
+    const { container } = renderList([
+      ...season,
+      match("final", "2026-10-21T22:00:00Z", "scheduled", "rma", "tbd"),
+    ]);
+    const day = container.querySelector<HTMLElement>('[data-day="2026-10-21"]')!;
+    expect(within(within(day).getByRole("list")).getAllByRole("listitem")).toHaveLength(1);
+  });
+
+  it("says each card's status in words, and keeps the live minute's green off its words", () => {
+    const live: Match = { ...match("live", "2026-10-18T20:00:00Z", "live"), minute: 67 };
+    renderList([
+      match("ft", "2026-10-17T14:00:00Z", "ft"),
+      match("aet", "2026-10-17T16:00:00Z", "aet"),
+      match("ppd", "2026-10-17T18:00:00Z", "postponed"),
+      match("can", "2026-10-17T20:00:00Z", "cancelled"),
+      live,
+    ]);
+    for (const [code, words] of [
+      ["FT", "Full time"],
+      ["AET", "After extra time"],
+      ["PPD", "Postponed"],
+      ["CAN", "Cancelled"],
+      ["67'", "Live, minute 67"],
+    ]) {
+      expect(screen.getByText(code)).toHaveAttribute("aria-hidden");
+      expect(screen.getByText(words)).toHaveClass("sr-only");
+    }
+    const status = screen.getByText("67'").parentElement!;
+    expect(status).toHaveClass("text-foreground");
+    expect(status).not.toHaveClass("text-success");
+    expect(status.querySelector("[aria-hidden].bg-success")).not.toBeNull();
+  });
+
+  it("names the filter's menu, and keeps a tick a tick rather than a selection", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    renderList(league);
+    openFilter();
+
+    expect(screen.getByRole("dialog", { name: "Filter by team" })).toBeInTheDocument();
+    const list = screen.getByRole("listbox", { name: "Teams, pick one or more" });
+    // cmdk marks its highlight aria-selected, which a multi-select list would read as picked.
+    expect(list).not.toHaveAttribute("aria-multiselectable");
+    // A listbox holds options and groups only.
+    expect(within(list).queryByRole("separator")).toBeNull();
+    expect(within(list).getByRole("option", { name: /All teams/ })).toHaveAttribute("aria-checked", "true");
+  });
+
   it("keeps its empty state", () => {
     renderList([]);
     expect(screen.getByText("No matches available yet")).toBeInTheDocument();
@@ -366,7 +458,8 @@ describe("MatchesByDate", () => {
     expect(screen.getByRole("option", { name: /Real Madrid/ })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("option", { name: /Sevilla/ })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("option", { name: /Barcelona/ })).toHaveAttribute("aria-checked", "false");
-    expect(teamFilter()).toHaveAccessibleName("Filter by team: 2 teams");
+    // The crests are pictures: the name says whose they are.
+    expect(teamFilter()).toHaveAccessibleName("Filter by team: 2 teams (Real Madrid, Sevilla)");
 
     // Unticking one keeps the other; All teams lets both go.
     tick(/Sevilla/);
@@ -413,15 +506,23 @@ describe("MatchesByDate", () => {
     expect(setSportTeamFilterAction).toHaveBeenCalledWith({ ...LA_LIGA, teamIds: ["bar", "sev"] });
   });
 
-  it("keeps the menu open and saves the pick when a tick moves the filter to another day", () => {
+  it("keeps the menu open, its search and its focus, and saves the pick when a tick moves the filter to another day", () => {
     Element.prototype.scrollIntoView = vi.fn();
-    renderList(league, { list: LA_LIGA, teamIds: [] });
+    const { container } = renderList(league, { list: LA_LIGA, teamIds: [] });
 
     openFilter();
+    const search = screen.getByRole("combobox", { name: "Search teams" });
+    expect(document.activeElement).toBe(search);
+    fireEvent.change(search, { target: { value: "sev" } });
     // Sevilla's first game is a day later: the list now opens on that day,
     // and the filter goes with it.
     tick(/Sevilla/);
-    expect(screen.getByRole("option", { name: /Barcelona/ })).toBeInTheDocument();
+    expect(headingLine(container, "2026-10-18")).toContainElement(teamFilter());
+    expect(screen.getByRole("combobox", { name: "Search teams" })).toBe(search);
+    expect(search).toHaveValue("sev");
+    expect(document.activeElement).toBe(search);
+
+    fireEvent.change(search, { target: { value: "" } });
     tick(/Barcelona/);
     closeFilter();
 

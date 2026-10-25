@@ -113,7 +113,7 @@ export function ManageFavoritesSheet({
                 {count > 0 && (
                   <Badge
                     aria-hidden
-                    className="pointer-events-none absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 text-2xs tabular-nums"
+                    className="pointer-events-none absolute -top-1.5 -right-1.5 h-4 min-w-4 bg-foreground px-1 text-2xs text-background tabular-nums"
                   >
                     {count}
                   </Badge>
@@ -129,7 +129,7 @@ export function ManageFavoritesSheet({
             <Star />
             Manage favorites
             {count > 0 && (
-              <Badge variant="info" className="tabular-nums">
+              <Badge variant="info" className="text-foreground tabular-nums">
                 {count}
               </Badge>
             )}

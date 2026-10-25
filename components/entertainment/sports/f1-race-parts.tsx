@@ -70,7 +70,11 @@ export function SessionList({
                 {SESSION_LABEL[session.kind]}
               </Text>
               {live && <StatusPill status="live" />}
-              {next && <Badge variant="info">Next</Badge>}
+              {next && (
+                <Badge variant="info" className="text-foreground">
+                  Next
+                </Badge>
+              )}
             </span>
             {leader ? (
               <SessionLeader kind={session.kind} row={leader} drivers={drivers} />

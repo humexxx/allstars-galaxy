@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { F1_DATA } from "@/lib/data/sports/f1";
+import { getFootballLeague } from "@/lib/data/sports/football";
 import { NBA_DATA } from "@/lib/data/sports/nba";
 import type { SportPayload } from "@/lib/sports/payload";
 import type { SportId } from "@/types/sports";
 
-import { forgetSeenSports } from "./seen-sports";
+import { forgetSeenSports, rememberSport, seenKey } from "./seen-sports";
 import { SportsHub } from "./sports-hub";
 
 const push = vi.fn();
@@ -24,13 +25,18 @@ vi.mock("@/app/actions/lol", () => ({ getLolSplitAction: vi.fn() }));
 
 const NBA: SportPayload = { sport: "nba", data: { ...NBA_DATA, playoffs: [] } };
 const F1: SportPayload = { sport: "f1", data: F1_DATA, news: [] };
+const LEAGUES = [
+  { id: "premier-league", name: "Premier League" },
+  { id: "la-liga", name: "La Liga" },
+] as const;
+const football = (id: (typeof LEAGUES)[number]["id"]): SportPayload => ({
+  sport: "football",
+  league: getFootballLeague(id),
+  options: LEAGUES,
+});
 
-function renderHub(
-  activeSport: SportId = "nba",
-  payload: SportPayload = NBA,
-  viewerId = "viewer-1"
-): ReturnType<typeof render> {
-  return render(
+function hub(activeSport: SportId = "nba", payload: SportPayload = NBA, viewerId = "viewer-1"): React.ReactElement {
+  return (
     <SportsHub
       activeSport={activeSport}
       favoriteSportIds={["f1", "nba"]}
@@ -41,6 +47,14 @@ function renderHub(
   );
 }
 
+function renderHub(
+  activeSport: SportId = "nba",
+  payload: SportPayload = NBA,
+  viewerId = "viewer-1"
+): ReturnType<typeof render> {
+  return render(hub(activeSport, payload, viewerId));
+}
+
 beforeEach(() => {
   forgetSeenSports();
 });
@@ -48,8 +62,30 @@ beforeEach(() => {
 const picker = (): HTMLElement => screen.getByRole("group", { name: "Sports" });
 const favorites = (): HTMLElement => screen.getByRole("button", { name: "Manage favorites (2)" });
 const sport = (name: RegExp | string): HTMLElement => within(picker()).getByRole("link", { name });
+const title = (name: RegExp): HTMLElement =>
+  within(screen.getByRole("heading", { level: 1 })).getByRole("button", { name });
 
-afterEach(() => {
+/**
+ * The server answers when a test says so, and every answer still owed is
+ * given after the test: React holds every transition, in any root, until an
+ * async one still pending settles, so one left hanging stalls the next test's.
+ */
+const answers: Array<() => void> = [];
+const answerLater = (): void => {
+  push.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        answers.push(resolve);
+      })
+  );
+};
+const answer = (): Promise<void> =>
+  act(async () => {
+    for (const resolve of answers.splice(0)) resolve();
+  });
+
+afterEach(async () => {
+  await answer();
   push.mockReset();
 });
 
@@ -126,9 +162,7 @@ describe("SportsHub", () => {
 
   describe("going back to a sport", () => {
     // The server has not answered yet: the transition stays pending.
-    beforeEach(() => {
-      push.mockImplementation(() => new Promise(() => {}));
-    });
+    beforeEach(answerLater);
     const go = (name: RegExp): void => {
       fireEvent.click(sport(name));
     };
@@ -166,6 +200,102 @@ describe("SportsHub", () => {
 
       expect(await screen.findByRole("status")).toHaveTextContent("Loading Formula 1…");
       expect(screen.queryByRole("heading", { level: 1, hidden: true })).toBeNull();
+    });
+  });
+
+  describe("giving focus back after a move", () => {
+    beforeEach(answerLater);
+    const pickSport = (name: RegExp): void => {
+      sport(name).focus();
+      fireEvent.click(sport(name));
+    };
+    const pickLeague = (name: string): void => {
+      // Radix opens its menu on pointerdown, which jsdom's clicks lack; Enter opens it too.
+      fireEvent.keyDown(title(/Premier League/), { key: "Enter" });
+      const league = within(screen.getByRole("menu")).getByRole("menuitemradio", { name });
+      league.focus();
+      fireEvent.keyDown(league, { key: "Enter" });
+    };
+    /** Radix gives focus back to a closed menu's trigger a task later. */
+    const afterMenuCloses = (): Promise<void> =>
+      act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+
+    it("keeps it on the sport picked, over its skeleton and then in its view", async () => {
+      const { rerender } = renderHub();
+      const clicked = sport(/^Football/);
+      pickSport(/^Football/);
+
+      expect(screen.getByRole("status")).toHaveTextContent("Loading Football…");
+      expect(sport(/^Football/)).not.toBe(clicked);
+      expect(sport(/^Football/)).toHaveFocus();
+
+      rerender(hub("football", football("premier-league")));
+      await answer();
+
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Premier League");
+      expect(within(picker()).getByRole("link", { current: "page" })).toHaveAccessibleName("Football");
+      expect(sport(/^Football/)).toHaveFocus();
+    });
+
+    it("keeps it on the sport picked in the copy last seen of it", async () => {
+      renderHub("f1", F1).unmount();
+      renderHub();
+      pickSport(/^F1/);
+
+      expect(await screen.findByRole("heading", { level: 1, name: "Formula 1" })).toBeInTheDocument();
+      expect(sport(/^F1/)).toHaveFocus();
+    });
+
+    it("keeps it on a sport picked over another's skeleton, back to the one on screen", async () => {
+      renderHub("f1", F1);
+      pickSport(/^Football/);
+      expect(screen.getByRole("status")).toHaveTextContent("Loading Football…");
+
+      // F1's copy takes the skeleton's place under the same key as the page on screen.
+      pickSport(/^F1/);
+
+      expect(await screen.findByRole("heading", { level: 1, name: "Formula 1" })).toBeInTheDocument();
+      expect(sport(/^F1/)).toHaveFocus();
+    });
+
+    it("puts it on the title once a league picked from its menu lands", async () => {
+      const { rerender } = renderHub("football", football("premier-league"));
+      pickLeague("La Liga");
+
+      expect(push).toHaveBeenCalledWith("?sport=football&league=la-liga", { scroll: false });
+      expect(screen.queryByRole("heading", { level: 1, hidden: true })).toBeNull();
+
+      rerender(hub("football", football("la-liga")));
+      await answer();
+
+      expect(title(/La Liga/)).toHaveFocus();
+    });
+
+    it("puts it straight on the title of a league's copy, and Radix leaves it there", async () => {
+      rememberSport("viewer-1", seenKey("football", "la-liga"), {
+        payload: football("la-liga"),
+        teamFilter: null,
+        today: "2026-10-18",
+      });
+      renderHub("football", football("premier-league"));
+      pickLeague("La Liga");
+
+      expect(title(/La Liga/)).toHaveFocus();
+      await afterMenuCloses();
+      expect(title(/La Liga/)).toHaveFocus();
+    });
+
+    it("leaves it where the reader moved it while the sport loaded", async () => {
+      const elsewhere = document.body.appendChild(document.createElement("button"));
+      onTestFinished(() => elsewhere.remove());
+      const { rerender } = renderHub();
+      pickSport(/^Football/);
+      elsewhere.focus();
+
+      rerender(hub("football", football("premier-league")));
+      await answer();
+
+      expect(elsewhere).toHaveFocus();
     });
   });
 });

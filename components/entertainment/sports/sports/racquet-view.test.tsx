@@ -175,7 +175,7 @@ describe("RacquetView, the tabs", () => {
         <PadelView data={ranked} />
       </SportsTodayProvider>
     );
-    const rows = (): number => within(screen.getByRole("table")).getAllByRole("row").length - 1;
+    const rows = (): number => within(screen.getByRole("table", { name: "Rankings" })).getAllByRole("row").length - 1;
     expect(screen.getByText("Rankings")).toBeInTheDocument();
     expect(rows()).toBe(10);
 
@@ -183,6 +183,24 @@ describe("RacquetView, the tabs", () => {
     expect(rows()).toBe(12);
     fireEvent.click(screen.getByRole("button", { name: "Show fewer" }));
     expect(rows()).toBe(10);
+  });
+
+  it("colours a move by its arrow, its figure in the row's own ink", () => {
+    const moved: PadelData = {
+      ...PADEL,
+      men: { ...MEN, rankings: [{ ...ranking(1), movement: 2 }, { ...ranking(2), movement: -3 }] },
+    };
+    renderPadel(moved);
+    const [up, down] = within(screen.getByRole("table", { name: "Rankings" }))
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => r.lastElementChild!.firstElementChild!);
+    expect(up).toHaveTextContent("Up 2");
+    expect(up).not.toHaveClass("text-success");
+    expect(up.querySelector("svg")).toHaveClass("text-success");
+    expect(down).toHaveTextContent("Down 3");
+    expect(down).not.toHaveClass("text-destructive");
+    expect(down.querySelector("svg")).toHaveClass("text-destructive");
   });
 
   it("leaves the tournaments the whole row when the tour publishes no rankings", () => {
@@ -194,7 +212,8 @@ describe("RacquetView, the tabs", () => {
 describe("RacquetView, Overview", () => {
   it("features the next tournament as F1 does its next race: poster, tier, venue, prize, when it starts", () => {
     renderPadel();
-    expect(screen.getByRole("heading", { name: "Next up" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Next up" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "Kuwait P1 2026" })).toBeInTheDocument();
     const card = cardOf("Kuwait P1 2026");
     expect(within(card).getByText("P1")).toBeInTheDocument();
     expect(within(card).getByText("Sheikh Saad Al-Abdullah Complex, Kuwait City")).toBeInTheDocument();
@@ -245,7 +264,13 @@ describe("RacquetView, Overview", () => {
 
     earlier();
     expect(tiles("Earlier tournaments")).toEqual(["padelapi-747", "padelapi-746", "padelapi-744"]);
-    expect(within(tile("padelapi-747")).getByText("d. L. Augsburger / J. Lebron", { exact: false })).toBeInTheDocument();
+    // "d." on screen, "defeated" for a screen reader.
+    const runnerUp = within(tile("padelapi-747")).getByText("L. Augsburger / J. Lebron");
+    expect(within(runnerUp).getByText("d.")).toHaveAttribute("aria-hidden", "true");
+    expect(within(runnerUp).getByText("defeated")).toHaveClass("sr-only");
+    expect(tile("padelapi-747")).toHaveTextContent("A. Coello / A. Tapia d.defeated L. Augsburger / J. Lebron");
+    // jsdom's name drops the space before an sr-only piece; a browser keeps it.
+    expect(tile("padelapi-747")).toHaveAccessibleName(/A\. Tapia\s*defeated L\. Augsburger \/ J\. Lebron$/);
     expect(document.activeElement).toBe(screen.getByRole("button", { name: /^Earlier:/ }));
 
     earlier();
@@ -324,6 +349,11 @@ describe("RacquetView, tennis", () => {
     expect(within(picker).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Vienna", "Basel"]);
     // Each named as it reads, the city first, then the tournament it stands for.
     expect(within(picker).getByRole("radio", { name: "Vienna, Erste Bank Open" })).toHaveAttribute("aria-checked", "true");
+    // The pick reads in the foreground on its tint, not in primary.
+    expect(within(picker).getByRole("radio", { name: "Vienna, Erste Bank Open" })).toHaveClass(
+      "data-[state=on]:text-foreground",
+      "data-[state=on]:border-primary"
+    );
 
     fireEvent.click(within(picker).getByRole("radio", { name: "Basel, Swiss Indoors Basel" }));
 

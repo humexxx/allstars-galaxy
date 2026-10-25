@@ -1,8 +1,8 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode, type Ref } from "react";
 
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { isCalendarDay } from "@/lib/utils/date";
@@ -23,6 +23,8 @@ export type BracketColumn = {
   label: string;
   /** The round being played: its heading is lit. */
   current?: boolean;
+  /** Which half of a two-sided draw the column is, whose round name the other half repeats. */
+  half?: "top" | "bottom";
   items: BracketItem[];
 };
 
@@ -137,29 +139,37 @@ export function BracketCanvas({
       >
         <svg
           aria-hidden
-          className="pointer-events-none absolute inset-0 size-full overflow-visible text-muted-foreground/50"
+          className="pointer-events-none absolute inset-0 size-full overflow-visible text-muted-foreground"
         >
           {paths.map((d, i) => (
             <path key={i} d={d} fill="none" stroke="currentColor" strokeWidth={1.5} />
           ))}
         </svg>
         {columns.map((column, i) => (
-          <div key={column.key} data-column={i} className="flex flex-col gap-2">
-            <Eyebrow as="div" size="sm" className={cn(column.current && "text-foreground")}>
+          <div
+            key={column.key}
+            data-column={i}
+            role="group"
+            aria-label={[column.label, column.half && `${column.half} half`, column.current && "being played"]
+              .filter(Boolean)
+              .join(", ")}
+            className="flex flex-col gap-2"
+          >
+            <Eyebrow as="div" size="sm" aria-hidden className={cn(column.current && "text-foreground")}>
               {column.label}
             </Eyebrow>
-            <div className="flex flex-1 flex-col justify-around gap-4">
+            <ul role="list" className="flex flex-1 flex-col justify-around gap-4">
               {column.items.map((item) => (
-                <div key={item.key} className="flex flex-col gap-1">
+                <li key={item.key} className="flex flex-col gap-1">
                   {item.caption && (
                     <Eyebrow as="div" size="sm">
                       {item.caption}
                     </Eyebrow>
                   )}
                   <div ref={register(item.key)}>{item.node}</div>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         ))}
       </div>
@@ -187,6 +197,7 @@ export function BracketTeam({
       <span className={cn("truncate", strong && "font-semibold", !team && "text-muted-foreground")}>
         {team?.code ?? "TBD"}
       </span>
+      {strong && <span className="sr-only">, won</span>}
     </span>
   );
 }
@@ -205,8 +216,11 @@ export function BracketDate({ children }: { children: ReactNode }) {
 }
 
 /**
- * One match's box contents as a hover target: it lights up under the pointer
- * or focus and opens a tooltip with what the box has no room for.
+ * One match's box contents as a button that opens a popover with what the
+ * box has no room for. A click, not a hover: a tooltip never opens for a tap,
+ * nor for a screen reader that reads the page without moving focus.
+ *
+ * A button holds only phrasing content, so whatever goes in is spans.
  */
 export function MatchHover({
   children,
@@ -216,23 +230,36 @@ export function MatchHover({
   children: ReactNode;
   details: ReactNode;
   className?: string;
-}) {
+}): ReactElement {
+  const [open, setOpen] = useState(false);
   return (
-    <Tooltip delayDuration={100}>
-      <TooltipTrigger asChild>
-        <div
-          tabIndex={0}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
           className={cn(
-            "cursor-default outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+            "w-full cursor-pointer text-left focus-visible:outline-hidden transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-expanded:bg-muted/60",
             className
           )}
         >
           {children}
-        </div>
-      </TooltipTrigger>
-      <TooltipContent side="right" sideOffset={6}>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        aria-label="Match details"
+        side="right"
+        sideOffset={6}
+        className="w-auto max-w-xs p-3 text-xs"
+        // The popover sits at the end of <body>: Tab out of it would leave the
+        // bracket. Closing it hands focus back to the box, and Tab goes on from there.
+        onKeyDown={(event) => {
+          if (event.key !== "Tab") return;
+          event.preventDefault();
+          setOpen(false);
+        }}
+      >
         <div className="grid gap-0.5">{details}</div>
-      </TooltipContent>
-    </Tooltip>
+      </PopoverContent>
+    </Popover>
   );
 }

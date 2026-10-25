@@ -37,6 +37,16 @@ describe("FootballView", () => {
     expect(screen.getAllByRole("columnheader")).toHaveLength(5);
   });
 
+  it("heads the table at level 2, names it after the league, and keys its zones", () => {
+    renderLeague("la-liga");
+    expect(screen.getByRole("heading", { level: 2, name: "Table" })).toBeInTheDocument();
+    const { league, standings } = getFootballLeague("la-liga");
+    const table = screen.getByRole("table", { name: league.name });
+    expect(within(table).getAllByRole("rowheader")).toHaveLength(standings.length);
+    const key = screen.getByRole("list", { name: "Key" });
+    expect(within(key).getByText("Champions League")).toBeInTheDocument();
+  });
+
   it("lists ten teams, and the rest on a tap", () => {
     renderLeague("uefa-champions-league");
     expect(tabs()).toEqual(["Overview", "Knockout"]);

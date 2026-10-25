@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../shared/confetti", () => ({ burstConfetti: vi.fn() }));
@@ -96,6 +96,25 @@ describe("WorldCupView", () => {
     expect(tabs()).toEqual(["Groups", "Knockout"]);
     expect(openTab()).toBe("Groups");
     expect(screen.getByRole("tab", { name: "Knockout" })).toBeDisabled();
+  });
+
+  it("heads each group at level 2 and names its table after it", () => {
+    renderView({ data: { ...DATA, knockout: [] } });
+    expect(screen.getByRole("heading", { level: 2, name: "Group A" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Group A" })).toBeInTheDocument();
+  });
+
+  it("keys a group's zones by where they lead in the World Cup", () => {
+    const group = [row(1, "arg", 9), row(2, "fra", 6)].map((r, i) => ({
+      ...r,
+      band: i === 0 ? ("champions" as const) : ("playoff" as const),
+    }));
+    renderView({ data: { ...DATA, knockout: [], groups: [{ label: "Group A", standings: group }] } });
+    const key = screen.getByRole("list", { name: "Key" });
+    expect(within(key).getAllByRole("listitem").map((i) => i.textContent)).toEqual([
+      "Round of 32",
+      "Best third places",
+    ]);
   });
 
   it("opens on the news when the address asks for it", () => {

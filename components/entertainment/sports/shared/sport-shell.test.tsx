@@ -100,6 +100,8 @@ describe("SportShell", () => {
     renderShell();
     const row = tabsRow();
     expect(row).toHaveClass("sticky", "top-14", "md:top-0", "bg-background", "border-b");
+    // What globals.css keys the content's scroll margin on, so focus is not left under the bar.
+    expect(row).toHaveAttribute("data-sport-tabs");
     // The name is a row above it, which scrolls away.
     expect(row.contains(screen.getByRole("heading", { level: 1 }))).toBe(false);
   });
@@ -126,9 +128,27 @@ describe("SportShell", () => {
     expect(within(screen.getByRole("menu")).getByRole("menuitem", { name: "LaLiga" })).toBeInTheDocument();
   });
 
+  it("pulls the heading out by the title button's padding, so the button is never capped short of the name", () => {
+    renderShell("overview", undefined, <DropdownMenuItem>LaLiga</DropdownMenuItem>);
+    const heading = screen.getByRole("heading", { level: 1 });
+    const title = within(heading).getByRole("button");
+    expect(heading).toHaveClass("-mx-2");
+    expect(title).toHaveClass("px-2", "max-w-full");
+    expect(title).not.toHaveClass("-mx-2");
+  });
+
+  it("draws the title button's focus ring at full strength", () => {
+    renderShell("overview", undefined, <DropdownMenuItem>LaLiga</DropdownMenuItem>);
+    const title = within(screen.getByRole("heading", { level: 1 })).getByRole("button");
+    expect(title).toHaveClass("focus-visible:ring-2", "focus-visible:ring-ring");
+    expect(title).not.toHaveClass("focus-visible:ring-ring/50");
+  });
+
   it("keeps a title with nothing to switch to as plain text", () => {
     renderShell();
-    expect(within(screen.getByRole("heading", { level: 1 })).queryByRole("button")).toBeNull();
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(within(heading).queryByRole("button")).toBeNull();
+    expect(heading).not.toHaveClass("-mx-2");
   });
 
   it("sets the hub's favourites and sport picker at the end of the name row", () => {

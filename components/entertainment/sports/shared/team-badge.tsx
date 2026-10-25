@@ -28,12 +28,17 @@ const logoInset = {
   lg: "p-1.5",
 };
 
+/** The relative luminance of the dark ink, #111. */
+const DARK_INK_LUMINANCE = 0.0056;
+
 /**
- * Black or white, whichever can actually be read on that background.
+ * Black or white, whichever contrasts more with that background.
  *
  * Team colours are whatever the league uses, and some are nearly white — the
- * Spurs' silver rendered as white-on-white. Relative luminance per WCAG; the
- * 0.6 threshold is where white text drops under 4.5:1.
+ * Spurs' silver rendered as white-on-white. Relative luminance and contrast
+ * per WCAG. White drops under 4.5:1 once the background passes a luminance of
+ * about 0.18, so mid-light colours (Real Madrid's gold, City's sky blue) take
+ * the dark ink too.
  */
 export function readableInk(hex: string | undefined): string {
   if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return "#fff";
@@ -45,7 +50,9 @@ export function readableInk(hex: string | undefined): string {
   const g = channel(parseInt(hex.slice(3, 5), 16));
   const b = channel(parseInt(hex.slice(5, 7), 16));
   const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return luminance > 0.6 ? "#111" : "#fff";
+  const whiteContrast = 1.05 / (luminance + 0.05);
+  const darkContrast = (luminance + 0.05) / (DARK_INK_LUMINANCE + 0.05);
+  return whiteContrast >= darkContrast ? "#fff" : "#111";
 }
 
 export function TeamBadge({ team, size = "md", className }: TeamBadgeProps) {

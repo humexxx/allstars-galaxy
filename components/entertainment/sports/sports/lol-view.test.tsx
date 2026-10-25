@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/actions/lol", () => ({ getLolSplitAction: vi.fn() }));
 
@@ -89,6 +89,34 @@ function renderView(data: LolData): void {
 }
 
 const openTab = () => screen.getByRole("tab", { selected: true }).textContent;
+const title = (): HTMLElement => screen.getByRole("heading", { level: 1 });
+const titleButton = (): HTMLElement => within(title()).getByRole("button");
+const announced = (): string[] => screen.queryAllByRole("status").map((s) => s.textContent ?? "");
+
+describe("LolView's title menu", () => {
+  it("names each group of the menu by its label", async () => {
+    renderView({ splits: [worlds, lck] });
+    fireEvent.keyDown(titleButton(), { key: "Enter" });
+
+    const international = await screen.findByRole("group", { name: "International" });
+    expect(within(international).getByRole("menuitemradio", { name: "Worlds 2026" })).toBeInTheDocument();
+    const leagues = screen.getByRole("group", { name: "Leagues" });
+    expect(within(leagues).getByRole("menuitemradio", { name: "LCK Split 3" })).toBeInTheDocument();
+  });
+
+  it("keeps the focus on the title once another league is picked, on that league's own tab", async () => {
+    renderView({ splits: [worlds, lck] });
+    expect(openTab()).toBe("Playoffs");
+    titleButton().focus();
+    fireEvent.keyDown(titleButton(), { key: "Enter" });
+    fireEvent.keyDown(await screen.findByRole("menuitemradio", { name: "LCK Split 3" }), { key: "Enter" });
+
+    await waitFor(() => expect(title()).toHaveTextContent(/^LCK Split 3$/));
+    await waitFor(() => expect(titleButton()).toHaveFocus());
+    // Worlds' playoffs are not the LCK's: it opens on its own table.
+    expect(openTab()).toBe("Standings");
+  });
+});
 
 describe("LolView after a final", () => {
   it("crowns the champion above the finished bracket", () => {
@@ -133,6 +161,63 @@ describe("LolView after a final", () => {
 
     expect(screen.queryByText(/champions$/)).not.toBeInTheDocument();
     expect(screen.queryByText("Next up")).not.toBeInTheDocument();
+  });
+});
+
+describe("LolView, a league's matches and table", () => {
+  const played: LolSplit = {
+    ...lck,
+    matches: [
+      {
+        id: "m1",
+        homeTeamId: "t1",
+        awayTeamId: "gen",
+        homeScore: 2,
+        awayScore: 1,
+        bestOf: 3,
+        date: "2026-08-20T09:00:00Z",
+        status: "ft",
+        stageLabel: "Week 1",
+      },
+      {
+        id: "m2",
+        homeTeamId: "kt",
+        awayTeamId: "hle",
+        homeScore: 1,
+        awayScore: 0,
+        bestOf: 3,
+        date: "2026-08-21T09:00:00Z",
+        status: "live",
+        stageLabel: "Week 1",
+      },
+    ],
+  };
+
+  it("lists the matches, a status in words and the series length spelled out", () => {
+    renderView({ splits: [played] });
+
+    expect(openTab()).toBe("Matches");
+    const list = within(screen.getByRole("tabpanel")).getByRole("list");
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    // "FT" is football's full time; a series is final.
+    expect(within(list).getByText("Final")).toBeInTheDocument();
+    expect(within(list).queryByText("ft")).not.toBeInTheDocument();
+    expect(within(list).getByText("Live")).toHaveClass("text-foreground");
+    for (const bo of within(list).getAllByText("BO3")) expect(bo).toHaveAttribute("aria-hidden", "true");
+    expect(within(list).getAllByText("best of 3")).toHaveLength(2);
+  });
+
+  it("names the table, heads each row with its team and spells out W and L", () => {
+    renderView({ splits: [played] });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Standings" }), { button: 0 });
+
+    const table = screen.getByRole("table", { name: "LCK Split 3 standings" });
+    expect(within(table).getAllByRole("rowheader").map((h) => h.textContent)).toEqual([
+      "Gen.G",
+      "Hanwha Life Esports",
+    ]);
+    expect(within(table).getByRole("columnheader", { name: "Wins" })).toHaveTextContent("W");
+    expect(within(table).getByRole("columnheader", { name: "Losses" })).toHaveTextContent("L");
   });
 });
 
@@ -208,13 +293,16 @@ describe("LolView, a league's other splits", () => {
   ];
   const latest: LolSplit = { ...lck, name: "LCK Split 3", tournamentId: "115548147890329817", seasonSplits };
   const first: LolSplit = { ...lck, name: "LCK Split 1", tournamentId: "115548106590082745", seasonSplits };
+  const pill = (name: string): HTMLElement =>
+    within(screen.getByRole("group", { name: "Splits of 2026" })).getByRole("radio", { name });
+
+  beforeEach(() => {
+    vi.mocked(getLolSplitAction).mockReset();
+  });
 
   it("moves between this season's splits from inside the league", async () => {
     vi.mocked(getLolSplitAction).mockResolvedValue({ success: true, data: first });
     renderView({ splits: [latest, worlds] });
-    // The view is drawn anew for each split: the pills are looked up each time.
-    const pill = (name: string): HTMLElement =>
-      within(screen.getByRole("group", { name: "Splits of 2026" })).getByRole("radio", { name });
     expect(
       within(screen.getByRole("group", { name: "Splits of 2026" }))
         .getAllByRole("radio")
@@ -222,17 +310,47 @@ describe("LolView, a league's other splits", () => {
     ).toEqual(["Split 1", "Split 2", "Split 3"]);
     expect(pill("LCK Split 3")).toHaveAttribute("aria-checked", "true");
 
+    pill("LCK Split 1").focus();
     fireEvent.click(pill("LCK Split 1"));
     expect(getLolSplitAction).toHaveBeenCalledWith({ region: "lck", tournamentId: "115548106590082745" });
     // The split on screen names the page; the sport and its season go under it.
-    const title = (): HTMLElement => screen.getByRole("heading", { level: 1 });
     await waitFor(() => expect(title()).toHaveTextContent(/^LCK Split 1$/));
     expect(screen.getByText("League of Legends · 2026")).toBeInTheDocument();
+    // The pills outlive the split they show, so the one pressed keeps the focus.
+    expect(pill("LCK Split 1")).toHaveFocus();
 
     // Back to the latest: the feed's own, nothing asked.
+    pill("LCK Split 3").focus();
     fireEvent.click(pill("LCK Split 3"));
     expect(title()).toHaveTextContent(/^LCK Split 3$/);
+    expect(pill("LCK Split 3")).toHaveFocus();
     expect(getLolSplitAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("says which split is being read", () => {
+    vi.mocked(getLolSplitAction).mockReturnValue(new Promise(() => {}));
+    renderView({ splits: [latest, worlds] });
+    expect(announced()).not.toContain("Loading LCK Split 1…");
+
+    fireEvent.click(pill("LCK Split 1"));
+    expect(announced()).toContain("Loading LCK Split 1…");
+  });
+
+  it("says when a split could not be read, and keeps the focus on its pill to try again", async () => {
+    vi.mocked(getLolSplitAction)
+      .mockResolvedValueOnce({ success: false, error: "The split could not be loaded" })
+      .mockReturnValueOnce(new Promise(() => {}));
+    renderView({ splits: [latest, worlds] });
+
+    fireEvent.click(pill("LCK Split 1"));
+    await waitFor(() => expect(announced()).toContain("The split could not be loaded"));
+
+    const retry = screen.getByRole("button", { name: "Try again" });
+    retry.focus();
+    fireEvent.click(retry);
+    expect(getLolSplitAction).toHaveBeenCalledTimes(2);
+    expect(announced()).toContain("Loading LCK Split 1…");
+    expect(pill("LCK Split 1")).toHaveFocus();
   });
 
   it("says when the leagues are back only under the split the feed leads with", async () => {

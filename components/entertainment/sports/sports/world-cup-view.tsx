@@ -90,9 +90,16 @@ export function WorldCupView({
               <div className="grid gap-4 @2xl:grid-cols-2">
                 {data.groups.map((group) => (
                   <div key={group.label} className="flex min-w-0 flex-col gap-2">
-                    <Eyebrow size="sm">{group.label}</Eyebrow>
+                    <Eyebrow size="sm" asChild>
+                      <h2>{group.label}</h2>
+                    </Eyebrow>
                     <TableCard>
-                      <StandingsTable standings={group.standings} teams={teamsMap} />
+                      <StandingsTable
+                        standings={group.standings}
+                        teams={teamsMap}
+                        competition="world-cup"
+                        label={group.label}
+                      />
                     </TableCard>
                   </div>
                 ))}

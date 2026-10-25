@@ -281,6 +281,23 @@ body {
     }
   }
 
+  /* The sports hub's tab bar is sticky, so whatever scrolls under it keeps
+     the bar's height clear above it: an element the keyboard focuses, or a
+     day the list scrolls to, lands below the bar instead of hidden under it.
+     Below `md` the page scrolls under the header and the bar (`top-14` +
+     `h-12`); from `md` under the bar alone. A margin on what follows the bar,
+     not padding on the scroller: padding would count the stuck bar itself as
+     hidden and scroll the page each time one of its tabs took focus. See
+     docs/SPACING.md. */
+  [data-sport-tabs] ~ * * {
+    scroll-margin-top: --spacing(26);
+  }
+  @media (min-width: 48rem) {
+    [data-sport-tabs] ~ * * {
+      scroll-margin-top: --spacing(12);
+    }
+  }
+
   /* Tabular numerals for numeric/data-heavy surfaces. Opt-in via the
      `.tabular-nums` class or the `font-mono` utility. */
   .tabular-nums,

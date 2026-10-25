@@ -121,7 +121,12 @@ function LeagueView({
             table={
               league.standings.length > 0 && (
                 <TableCard>
-                  <StandingsTable standings={league.standings} teams={teamsMap} />
+                  <StandingsTable
+                    standings={league.standings}
+                    teams={teamsMap}
+                    competition={leagueId}
+                    label={league.league.name}
+                  />
                 </TableCard>
               )
             }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
@@ -25,6 +25,18 @@ describe("NflView", () => {
     expect(standings.parentElement).toHaveClass("@4xl:grid-cols-[2fr_1fr]");
     expect(standings).toHaveClass("@4xl:sticky");
     expect(within(standings).getByRole("group", { name: "Conference" })).toBeInTheDocument();
-    expect(within(standings).getByRole("table")).toBeInTheDocument();
+    expect(within(standings).getByRole("table", { name: "AFC standings" })).toBeInTheDocument();
+  });
+
+  it("names the table by the conference shown, each row by its team, and spells out W, L and T", () => {
+    render(<NflView data={{ ...NFL_DATA, playoffs: [] }} />);
+    const afc = screen.getByRole("table", { name: "AFC standings" });
+    expect(within(afc).getAllByRole("rowheader")[0]).toHaveTextContent("Bills");
+    for (const [name, letter] of [["Wins", "W"], ["Losses", "L"], ["Ties", "T"]]) {
+      expect(within(afc).getByRole("columnheader", { name })).toHaveTextContent(letter);
+    }
+
+    fireEvent.click(screen.getByRole("radio", { name: "NFC" }));
+    expect(screen.getByRole("table", { name: "NFC standings" })).toBeInTheDocument();
   });
 });

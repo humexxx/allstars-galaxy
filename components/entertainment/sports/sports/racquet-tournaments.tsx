@@ -116,7 +116,13 @@ function ChampionLine({ champion, runnerUp }: { champion: string; runnerUp?: str
   return (
     <>
       <span className="font-medium">{champion}</span>
-      {runnerUp && <span className="text-muted-foreground"> d. {runnerUp}</span>}
+      {runnerUp && (
+        <span className="text-muted-foreground">
+          {" "}
+          <span aria-hidden>d.</span>
+          <span className="sr-only">defeated</span> {runnerUp}
+        </span>
+      )}
     </>
   );
 }
@@ -256,9 +262,7 @@ function FeaturedTournament({
             </div>
             {corner}
           </div>
-          <Heading level="h3" as="h4">
-            {t.name}
-          </Heading>
+          <Heading level="h3">{t.name}</Heading>
           <TournamentFacts tournament={t} variant={variant} />
           {/* Holds a line's height either way, so the button does not jump. */}
           <Text as="p" weight="medium" className="min-h-6">
@@ -309,7 +313,9 @@ function OnNowHeading({
                 value={o.id}
                 // The name a screen reader hears starts with the city on the pill.
                 aria-label={label === o.name ? undefined : `${label}, ${o.name}`}
-                className="h-6 rounded-full px-2.5"
+                // Foreground on the tint: primary text on it is under 4.5:1. The
+                // full primary border keeps the pick visible.
+                className="h-6 rounded-full px-2.5 data-[state=on]:border-primary data-[state=on]:text-foreground"
               >
                 {label}
               </ToggleGroupItem>

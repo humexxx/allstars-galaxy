@@ -13,7 +13,6 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandSeparator,
 } from "@/components/ui/command";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -84,9 +83,9 @@ export function MatchesByDate({
   const today = useSportsToday();
   const saved = useSavedTeamFilter();
   const [picks, setPicks] = useState<readonly string[]>(() => saved?.teamIds ?? []);
-  // The filter's menu, kept here rather than in the filter: the filter rides
-  // the first day's heading, and a tick that changes which day comes first
-  // moves it to another heading, which must find its menu still open.
+  // The filter's menu is the list's, not its pill's: the pill rides the first
+  // day's heading, and a tick that changes which day comes first moves it to
+  // another heading, while the menu stays open as it was, search and all.
   const [filterOpen, setFilterOpen] = useState(false);
   const pickedAtOpen = useRef("");
   // How many days before the opening one are shown.
@@ -115,6 +114,11 @@ export function MatchesByDate({
     () => matchDays(matches, timeZone, new Set(picked)),
     [matches, picked, timeZone]
   );
+
+  const filtering = options.length > 1;
+  const crests = picked
+    .map((id) => options.find((t) => t.id === id))
+    .filter((t): t is Team => Boolean(t));
 
   const earlier = Math.max(0, openingDayIndex(days, today) - extra);
   const shown = days.slice(earlier);
@@ -204,57 +208,49 @@ export function MatchesByDate({
       {days.length === 0 ? (
         <EmptyState icon={CalendarX} title={emptyTitle} />
       ) : (
-        <div ref={listRef} className="flex flex-col gap-4">
-          {shown.map(({ day, matches: list }, i) => (
-            // The scroll margin and the heading's offset clear the sport bar
-            // (and on a phone the app header above it): SPACING.md.
-            <div
-              key={day}
-              data-day={day}
-              tabIndex={-1}
-              className="flex scroll-mt-26 flex-col gap-2 outline-none md:scroll-mt-12"
-            >
-              <Eyebrow
-                size="sm"
-                as="div"
-                className={cn(
-                  "sticky top-26 z-10 flex items-center justify-between gap-2 bg-background py-1 md:top-12",
-                  day === today && "text-foreground"
-                )}
-              >
-                {heading(day)}
-                {/* On the first day's line: the teams, then the days before. */}
-                {i === 0 && (options.length > 1 || earlier > 0) && (
-                  <span className="flex items-center gap-1.5">
-                    {options.length > 1 && (
-                      <TeamFilter
-                        options={options}
-                        picked={picked}
-                        onPick={pickTeams}
-                        open={filterOpen}
-                        onOpenChange={openFilter}
-                      />
-                    )}
-                    {earlier > 0 && (
-                      <RevealPill
-                        icon={History}
-                        label="Earlier"
-                        detail={earlierLabel}
-                        data-earlier
-                        onClick={revealEarlier}
-                      />
-                    )}
-                  </span>
-                )}
-              </Eyebrow>
-              <div className="grid gap-2 @xl:grid-cols-2 @5xl:grid-cols-3">
-                {list.map((match) => (
-                  <ScoreCard key={match.id} match={match} teams={teams} />
-                ))}
+        <Popover open={filterOpen} onOpenChange={openFilter}>
+          <div ref={listRef} className="flex flex-col gap-4">
+            {shown.map(({ day, matches: list }, i) => (
+              // The heading's offset clears the sport bar (and on a phone the
+              // app header above it), as the scroller's scroll padding does
+              // for a day scrolled to: SPACING.md.
+              <div key={day} data-day={day} tabIndex={-1} className="flex flex-col gap-2 outline-none">
+                <Eyebrow
+                  size="sm"
+                  as="div"
+                  className={cn(
+                    "sticky top-26 z-10 flex items-center justify-between gap-2 bg-background py-1 md:top-12",
+                    day === today && "text-foreground"
+                  )}
+                >
+                  {/* The day alone: the controls beside it stay out of its name. */}
+                  <h2 className="min-w-0">{heading(day)}</h2>
+                  {/* On the first day's line: the teams, then the days before. */}
+                  {i === 0 && (filtering || earlier > 0) && (
+                    <span className="flex items-center gap-1.5">
+                      {filtering && <TeamFilterPill crests={crests} />}
+                      {earlier > 0 && (
+                        <RevealPill
+                          icon={History}
+                          label="Earlier"
+                          detail={earlierLabel}
+                          data-earlier
+                          onClick={revealEarlier}
+                        />
+                      )}
+                    </span>
+                  )}
+                </Eyebrow>
+                <ul role="list" className="grid gap-2 @xl:grid-cols-2 @5xl:grid-cols-3">
+                  {list.map((match) => (
+                    <ScoreCard key={match.id} as="li" match={match} teams={teams} />
+                  ))}
+                </ul>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+          {filtering && <TeamFilterMenu options={options} picked={picked} onPick={pickTeams} />}
+        </Popover>
       )}
     </section>
   );
@@ -290,107 +286,111 @@ function slideIn(list: HTMLElement, tops: Map<string, number>, added: string[]):
   }
 }
 
-/** Whether `day`'s top is up under the sport bar, which its scroll margin clears. */
+/** Whether `day`'s top is up under the sport bar, which the scroller's scroll padding clears. */
 function hiddenUnderBar(day: HTMLElement): boolean {
-  const scrollerTop = scrollParent(day)?.getBoundingClientRect().top ?? 0;
+  const scroller = scrollParent(day);
   const margin = Number.parseFloat(getComputedStyle(day).scrollMarginTop) || 0;
-  return day.getBoundingClientRect().top < scrollerTop + margin;
+  return day.getBoundingClientRect().top < (scroller?.getBoundingClientRect().top ?? 0) + margin;
 }
 
 /**
- * The team filter, a pill on the first day's heading line beside "Earlier",
+ * The team filter's pill, on the first day's heading line beside "Earlier",
  * set as that one is: a filter icon or the picked teams' crests, with what is
  * picked and a chevron once the list has room; on a phone the icons alone,
- * so the line keeps room for the day.
- *
- * The menu picks several teams, with a search for a twenty- or thirty-six-team
- * league. The list behind it follows each tick; whether it is open is the
- * list's to keep (`open`), since a tick can move the filter to another day.
+ * so the line keeps room for the day. Its name says which teams the crests
+ * are.
  */
-function TeamFilter({
-  options,
-  picked,
-  onPick,
-  open,
-  onOpenChange,
-}: {
-  options: Team[];
-  picked: readonly string[];
-  onPick: (teamIds: readonly string[]) => void;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}): React.ReactElement {
-  const chosen = new Set(picked);
-  const crests = picked
-    .map((id) => options.find((t) => t.id === id))
-    .filter((t): t is Team => Boolean(t));
+function TeamFilterPill({ crests }: { crests: Team[] }): React.ReactElement {
   const label =
     crests.length === 0
       ? "All teams"
       : crests.length === 1
         ? crests[0].shortName
         : `${crests.length} teams`;
+  const names = crests.length > 1 ? ` (${crests.map((t) => t.shortName).join(", ")})` : "";
 
+  return (
+    <PopoverTrigger asChild>
+      <Button
+        variant="outline"
+        size="xs"
+        aria-label={`Filter by team: ${label}${names}`}
+        className="-my-1.5 rounded-full font-medium tracking-normal normal-case"
+      >
+        {crests.length === 0 ? (
+          <ListFilter data-icon="inline-start" />
+        ) : (
+          <span className="flex -space-x-1.5">
+            {crests.slice(0, 3).map((t) => (
+              <TeamBadge key={t.id} team={t} size="sm" className="size-4 ring-2 ring-background" />
+            ))}
+          </span>
+        )}
+        <span className="sr-only @md:not-sr-only">{label}</span>
+        <ChevronDown data-icon="inline-end" className="@max-md:hidden" />
+      </Button>
+    </PopoverTrigger>
+  );
+}
+
+/**
+ * The filter's menu: several teams, with a search for a twenty- or
+ * thirty-six-team league. The list behind it follows each tick. It is
+ * rendered once, beside the days rather than under the pill (it is portalled,
+ * so where it sits in the tree is all that changes), so a tick that moves the
+ * pill to another day keeps the search, the highlight and the focus.
+ *
+ * A tick is `aria-checked`, not a selection: cmdk spends `aria-selected` on
+ * its highlight, so the list is not `aria-multiselectable`.
+ */
+function TeamFilterMenu({
+  options,
+  picked,
+  onPick,
+}: {
+  options: Team[];
+  picked: readonly string[];
+  onPick: (teamIds: readonly string[]) => void;
+}): React.ReactElement {
+  const chosen = new Set(picked);
   const toggle = (id: string): void =>
     onPick(chosen.has(id) ? picked.filter((p) => p !== id) : [...picked, id]);
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="xs"
-          aria-label={`Filter by team: ${label}`}
-          className="-my-1.5 rounded-full font-medium tracking-normal normal-case"
-        >
-          {crests.length === 0 ? (
-            <ListFilter data-icon="inline-start" />
-          ) : (
-            <span className="flex -space-x-1.5">
-              {crests.slice(0, 3).map((t) => (
-                <TeamBadge key={t.id} team={t} size="sm" className="size-4 ring-2 ring-background" />
-              ))}
-            </span>
-          )}
-          <span className="sr-only @md:not-sr-only">{label}</span>
-          <ChevronDown data-icon="inline-end" className="@max-md:hidden" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 p-0">
-        <Command label="Search teams">
-          <CommandInput placeholder="Search teams…" />
-          <CommandList label="Teams" aria-multiselectable>
-            <CommandEmpty>No team found.</CommandEmpty>
-            <CommandGroup>
+    <PopoverContent aria-label="Filter by team" align="end" className="w-64 p-0">
+      <Command label="Search teams">
+        <CommandInput placeholder="Search teams…" />
+        <CommandList label="Teams, pick one or more">
+          <CommandEmpty>No team found.</CommandEmpty>
+          {/* A rule under it rather than a separator, which a listbox may not hold. */}
+          <CommandGroup className="border-b">
+            <CommandItem
+              value="All teams"
+              data-checked={picked.length === 0}
+              aria-checked={picked.length === 0}
+              onSelect={() => onPick([])}
+            >
+              <ListFilter />
+              All teams
+            </CommandItem>
+          </CommandGroup>
+          <CommandGroup>
+            {options.map((t) => (
               <CommandItem
-                value="All teams"
-                data-checked={crests.length === 0}
-                aria-checked={crests.length === 0}
-                onSelect={() => onPick([])}
+                key={t.id}
+                value={t.id}
+                keywords={[t.shortName, t.name, t.code]}
+                data-checked={chosen.has(t.id)}
+                aria-checked={chosen.has(t.id)}
+                onSelect={() => toggle(t.id)}
               >
-                <ListFilter />
-                All teams
+                <TeamBadge team={t} size="sm" className="size-5" />
+                {t.shortName}
               </CommandItem>
-            </CommandGroup>
-            <CommandSeparator />
-            <CommandGroup>
-              {options.map((t) => (
-                <CommandItem
-                  key={t.id}
-                  value={t.id}
-                  keywords={[t.shortName, t.name, t.code]}
-                  data-checked={chosen.has(t.id)}
-                  aria-checked={chosen.has(t.id)}
-                  onSelect={() => toggle(t.id)}
-                >
-                  <TeamBadge team={t} size="sm" className="size-5" />
-                  {t.shortName}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </Command>
+    </PopoverContent>
   );
 }

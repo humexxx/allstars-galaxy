@@ -38,9 +38,11 @@ export function DashboardSportTables({ tables }: { tables: DashboardTable[] }) {
           ))}
         </ToggleGroup>
       ) : (
-        <Eyebrow size="sm">{table.label}</Eyebrow>
+        <Eyebrow size="sm" asChild>
+          <h3>{table.label}</h3>
+        </Eyebrow>
       )}
-      <ol className="flex flex-col gap-1">
+      <ol role="list" className="flex flex-col gap-1">
         {table.rows.map((row) => (
           <li
             key={`${table.id}-${row.position}-${row.name}`}

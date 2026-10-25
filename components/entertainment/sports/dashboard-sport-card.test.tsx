@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { DashboardMatch, DashboardSportCard as Card } from "@/types/sports";
@@ -77,6 +77,11 @@ describe("DashboardSportCard", () => {
 
     const upNext = screen.getByText("Up next").parentElement!;
     const results = screen.getByText("Latest results").parentElement!;
+    // Headings under the card's own h2, so a reader can jump between them.
+    expect(screen.getByRole("heading", { level: 3, name: "Up next" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "Latest results" })).toBeInTheDocument();
+    // Preflight strips the bullets, and Safari the list with them, unless the role is spelled out.
+    expect(within(upNext).getByRole("list")).toHaveAttribute("role", "list");
     expect(within(upNext).getAllByRole("listitem")).toHaveLength(2);
     expect(within(results).getByRole("listitem")).toHaveTextContent("TSW");
     // Up next comes first.
@@ -124,6 +129,50 @@ describe("DashboardSportCard", () => {
     );
   });
 
+  it("names its Open link for the sport, so a page of cards has no seven links called Open", async () => {
+    await renderCard(card([]));
+
+    expect(screen.getByRole("link", { name: "Open League of Legends" })).toHaveAttribute(
+      "href",
+      "/portal/entertainment/sports?sport=lol"
+    );
+  });
+
+  it("says who went through on penalties, which the level score does not", async () => {
+    await renderCard({
+      ...card([]),
+      sportId: "football",
+      featured: {
+        id: "final",
+        status: "result",
+        startsAt: "2026-10-24T02:00:00Z",
+        label: "Final",
+        home: { name: "Arsenal", code: "ARS", score: 1, winner: true },
+        away: { name: "Chelsea", code: "CHE", score: 1, winner: false },
+      },
+    });
+
+    expect(screen.getByRole("link", { name: /Arsenal won on penalties/ })).toHaveAttribute(
+      "href",
+      "/portal/entertainment/sports?sport=football"
+    );
+  });
+
+  it("says nothing of penalties for a result decided in play, or a draw", async () => {
+    await renderCard({ ...card([]), featured: match("f", "result", "T1", "FLY") });
+    expect(screen.getByText("Final · Oct 23")).toBeInTheDocument();
+    expect(screen.queryByText(/won on penalties/)).toBeNull();
+    cleanup();
+
+    const draw = match("f", "result", "Arsenal", "Chelsea");
+    await renderCard({
+      ...card([]),
+      featured: { ...draw, home: { ...draw.home, winner: false }, away: { ...draw.away, score: 1 } },
+    });
+    expect(screen.getByText("Final · Oct 23")).toBeInTheDocument();
+    expect(screen.queryByText(/won on penalties/)).toBeNull();
+  });
+
   it("keeps the plain line for a sport with nothing to choose", async () => {
     await renderCard({ ...card([]), sportId: "nfl", context: "Season 2026" });
 
@@ -168,6 +217,35 @@ describe("DashboardSportCard", () => {
     const story = within(rail).getByRole("link", { name: /Giannis stays hot in a loss/ });
     expect(story).toHaveAttribute("href", "https://www.espn.com/nba/story/_/id/1");
     expect(story).toHaveAttribute("target", "_blank");
+    expect(screen.getByRole("heading", { level: 3, name: "Latest news" })).toBeInTheDocument();
+  });
+
+  it("opens each story's name on its headline, not on its photo's caption", async () => {
+    await renderCard({
+      ...card([]),
+      sportId: "nba",
+      label: "NBA",
+      news: [
+        {
+          id: "espn-1",
+          headline: "Giannis stays hot in a loss",
+          description: null,
+          href: "https://www.espn.com/nba/story/_/id/1",
+          external: true,
+          image: {
+            url: "https://a.espncdn.com/photo/1.jpg",
+            alt: "Giannis Antetokounmpo drives to the basket. (Photo by Stacy Revere/Getty Images)",
+          },
+          at: "2026-10-24T04:36:05Z",
+          kind: "story",
+          about: [],
+        },
+      ],
+    });
+
+    const story = screen.getByRole("link", { name: /Giannis stays hot in a loss/ });
+    expect(story).toHaveAccessibleName(/^Giannis stays hot in a loss/);
+    expect(story).not.toHaveAccessibleName(/Getty Images/);
   });
 
   it("steps through the games in the lead box, and moves the table up and the news to the last row", async () => {
@@ -221,6 +299,9 @@ describe("DashboardSportCard", () => {
     expect(rows).toHaveLength(4);
     expect(rows[2]).toHaveTextContent("J. Sinner");
     expect(rows[3]).toBeEmptyDOMElement();
+    // One table: its label is the row's heading, and its rows a list Safari still counts.
+    expect(within(rows[2] as HTMLElement).getByRole("heading", { level: 3, name: "Rankings" })).toBeInTheDocument();
+    expect(within(rows[2] as HTMLElement).getByRole("list")).toHaveAttribute("role", "list");
   });
 
   it("has no news rail for a sport without a wire", async () => {

@@ -8,6 +8,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
@@ -128,7 +129,7 @@ function NflStandings({
           <ToggleGroupItem value="afc">AFC</ToggleGroupItem>
           <ToggleGroupItem value="nfc">NFC</ToggleGroupItem>
         </ToggleGroup>
-        <Table>
+        <Table aria-label={`${conf.toUpperCase()} standings`}>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               <SportsTh className="w-8">
@@ -137,13 +138,13 @@ function NflStandings({
               <SportsTh>
                 Team
               </SportsTh>
-              <SportsTh className="text-center">
+              <SportsTh className="text-center" label="Wins">
                 W
               </SportsTh>
-              <SportsTh className="text-center">
+              <SportsTh className="text-center" label="Losses">
                 L
               </SportsTh>
-              <SportsTh className="text-center">
+              <SportsTh className="text-center" label="Ties">
                 T
               </SportsTh>
             </TableRow>
@@ -157,14 +158,14 @@ function NflStandings({
                   <TableCell className="text-sm tabular-nums text-muted-foreground">
                     {row.position}
                   </TableCell>
-                  <TableCell>
+                  <TableHead scope="row" className="font-normal text-foreground">
                     <div className="flex items-center gap-2">
                       {team && <TeamBadge team={team} size="sm" />}
                       <span className={cn("text-sm", isLeader && "font-semibold")}>
                         {team?.shortName ?? row.teamId}
                       </span>
                     </div>
-                  </TableCell>
+                  </TableHead>
                   <TableCellNum value={row.wins} />
                   <TableCellNum value={row.losses} />
                   <TableCellNum value={row.ties} />

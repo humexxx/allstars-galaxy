@@ -61,7 +61,7 @@ export function LeadCarousel({ label, children }: { label: string; children: Rea
             aria-label={`Show game ${i + 1} of ${slides.length}`}
             aria-current={i === shown}
             onClick={() => show(i)}
-            className="grid size-6 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="grid size-6 place-items-center rounded-full focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span
               className={cn(

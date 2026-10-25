@@ -75,7 +75,7 @@ export async function DashboardF1Card({ userId }: { userId: string }) {
         <CardAction>
           <Button variant="outline" size="sm" asChild>
             <Link href={sportPath("f1")}>
-              Open <ArrowRight />
+              Open <span className="sr-only">Formula 1</span> <ArrowRight />
             </Link>
           </Button>
         </CardAction>

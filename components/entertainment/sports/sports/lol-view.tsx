@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
+import {
+  Fragment,
+  useCallback,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type Ref,
+} from "react";
 import { CalendarX, Lock, RotateCw } from "lucide-react";
 
 import { getLolSplitAction } from "@/app/actions/lol";
@@ -20,6 +29,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
@@ -42,7 +52,7 @@ import { ChampionCard } from "../shared/champion-card";
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { Last5Form } from "../shared/last-5-form";
 import { SportShell } from "../shared/sport-shell";
-import { SwissBracket } from "../shared/swiss-bracket";
+import { STATUS_LABEL, SwissBracket } from "../shared/swiss-bracket";
 import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportsTh, TableCard } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
@@ -99,10 +109,13 @@ export function LolView({ data }: LolViewProps): ReactElement {
     setPicked((p) => ({ ...p, [region]: id }));
     if (id !== latest.tournamentId) load(region, id);
   };
+  const pickedName = latest.seasonSplits?.find((s) => s.id === pickedId)?.name;
   const teamsMap = useMemo(
     () => new Map<string, Team>(split.teams.map((t) => [t.id, t])),
     [split],
   );
+  const menuId = useId();
+  const splitsRef = useRef<HTMLDivElement>(null);
 
   const playoffs = split.playoffs && split.playoffs.length > 0 ? split.playoffs : null;
   // A bracket that exists but names nobody is not somewhere to land: opening
@@ -130,15 +143,20 @@ export function LolView({ data }: LolViewProps): ReactElement {
           ? "standings"
           : "matches";
 
+  // Each split opens on its own tab: one without playoffs, picked while on
+  // "playoffs", would otherwise be left on a tab it has no panel for (a blank
+  // body). Reset here, not by keying the Tabs: that remounted the shell too,
+  // and the title menu or split pill just used lost the focus to <body>.
+  const viewKey = `${region}-${split.tournamentId ?? ""}`;
+  const [tab, setTab] = useState(opening);
+  const [tabFor, setTabFor] = useState(viewKey);
+  if (tabFor !== viewKey) {
+    setTabFor(viewKey);
+    setTab(opening);
+  }
+
   return (
-    // Keyed by region and split: switching to one without playoffs while on
-    // the "playoffs" tab would otherwise strand the uncontrolled Tabs on a
-    // value whose trigger/content no longer exist (blank body).
-    <Tabs
-      key={`${region}-${split.tournamentId ?? ""}`}
-      defaultValue={opening}
-      className="gap-6"
-    >
+    <Tabs value={tab} onValueChange={setTab} className="gap-6">
       <SportShell
         emoji="🎮"
         // The competition on screen names the page, as football's league
@@ -155,9 +173,9 @@ export function LolView({ data }: LolViewProps): ReactElement {
             ]
               .filter((group) => group.splits.length > 0)
               .map((group, i) => (
-                <DropdownMenuGroup key={group.label}>
+                <DropdownMenuGroup key={group.label} aria-labelledby={`${menuId}-${i}`}>
                   {i > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuLabel>{group.label}</DropdownMenuLabel>
+                  <DropdownMenuLabel id={`${menuId}-${i}`}>{group.label}</DropdownMenuLabel>
                   {group.splits.map((s) => (
                     <DropdownMenuRadioItem key={s.region} value={s.region}>
                       {s.name}
@@ -188,16 +206,34 @@ export function LolView({ data }: LolViewProps): ReactElement {
         <div className="flex flex-col gap-4">
           {latest.seasonSplits && latest.seasonSplits.length > 1 && latest.tournamentId && (
             <SeasonSplits
+              ref={splitsRef}
               season={latest.season}
               splits={latest.seasonSplits}
               value={pickedId ?? latest.tournamentId}
               onPick={pickSplit}
             />
           )}
+          <p role="status" className="sr-only">
+            {other?.status === "loading"
+              ? `Loading ${pickedName ?? "the split"}…`
+              : other?.status === "error"
+                ? other.error
+                : ""}
+          </p>
           {other && other.status !== "ready" ? (
-            <SplitPending state={other} onRetry={() => pickedId && load(region, pickedId)} />
+            <SplitPending
+              state={other}
+              onRetry={() => {
+                // "Try again" goes the moment the retry starts; the pill it
+                // retries is still there to hold the focus.
+                splitsRef.current?.querySelector<HTMLElement>('[data-state="on"]')?.focus();
+                if (pickedId) load(region, pickedId);
+              }}
+            />
           ) : (
-            <>
+            // Drawn anew for each split: its champion, brackets and the
+            // table's "Show more" start over.
+            <Fragment key={viewKey}>
               {split.champion && (
                 <LolSeasonEnd
                   split={split}
@@ -220,11 +256,11 @@ export function LolView({ data }: LolViewProps): ReactElement {
               {!stages && (
                 <TabsContent value="matches">
                   {hasMatches ? (
-                    <div className="grid gap-2 @xl:grid-cols-2">
+                    <ul role="list" className="grid gap-2 @xl:grid-cols-2">
                       {split.matches.map((m) => (
                         <LolMatchCard key={m.id} match={m} teams={teamsMap} />
                       ))}
-                    </div>
+                    </ul>
                   ) : (
                     <EmptyState
                       icon={CalendarX}
@@ -260,7 +296,7 @@ export function LolView({ data }: LolViewProps): ReactElement {
                   </Card>
                 </TabsContent>
               )}
-            </>
+            </Fragment>
           )}
         </div>
       </SportShell>
@@ -273,18 +309,20 @@ export function LolView({ data }: LolViewProps): ReactElement {
  * between from inside the league; the picker above offers only its latest.
  */
 function SeasonSplits({
+  ref,
   season,
   splits,
   value,
   onPick,
 }: {
+  ref?: Ref<HTMLDivElement>;
   season: string;
   splits: Array<{ id: string; name: string }>;
   value: string;
   onPick: (id: string) => void;
 }): ReactElement {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div ref={ref} className="flex flex-wrap items-center gap-2">
       <Eyebrow size="sm" as="span">
         {season}
       </Eyebrow>
@@ -297,7 +335,12 @@ function SeasonSplits({
         aria-label={`Splits of ${season}`}
       >
         {splits.map((s) => (
-          <ToggleGroupItem key={s.id} value={s.id} aria-label={s.name} className="h-6 rounded-full px-2.5">
+          <ToggleGroupItem
+            key={s.id}
+            value={s.id}
+            aria-label={s.name}
+            className="h-6 rounded-full px-2.5 data-[state=on]:border-primary data-[state=on]:text-foreground"
+          >
             {/* "LCK Split 2" under the league's own name: "Split 2". */}
             {s.name.replace(/^\S+\s/, "")}
           </ToggleGroupItem>
@@ -317,7 +360,7 @@ function SplitPending({
 }): ReactElement {
   if (state.status === "loading") {
     return (
-      <div role="status" aria-label="Loading the split" className="flex flex-col gap-3">
+      <div aria-hidden className="flex flex-col gap-3">
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -388,7 +431,7 @@ function LolMatchCard({
 }: {
   match: LolMatch;
   teams: Map<string, Team>;
-}) {
+}): ReactElement | null {
   const format = useMatchTime();
   const home = teams.get(match.homeTeamId);
   const away = teams.get(match.awayTeamId);
@@ -405,11 +448,12 @@ function LolMatchCard({
     match.awayScore > match.homeScore;
 
   return (
-    <div className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
+    <li className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
       <div className="flex min-w-0 flex-col gap-1.5">
         {match.stageLabel && (
           <Eyebrow size="sm" as="div">
-            {match.stageLabel} · BO{match.bestOf}
+            {match.stageLabel} · <span aria-hidden>BO{match.bestOf}</span>
+            <span className="sr-only">best of {match.bestOf}</span>
           </Eyebrow>
         )}
         <LolTeamRow team={home} score={match.homeScore} winner={homeWon} scheduled={isScheduled} />
@@ -421,11 +465,12 @@ function LolMatchCard({
         {!isScheduled && (
           <span
             className={cn(
-              "text-2xs font-medium uppercase tracking-wide text-muted-foreground",
-              isLive && "text-success",
+              "inline-flex items-center gap-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground",
+              isLive && "text-foreground",
             )}
           >
-            {match.status}
+            {isLive && <span aria-hidden className="size-2 rounded-full bg-success motion-safe:animate-pulse" />}
+            {STATUS_LABEL[match.status]}
           </span>
         )}
         {!isLive && (
@@ -435,7 +480,7 @@ function LolMatchCard({
           <Mono className="text-2xs text-muted-foreground">{format.time(match.date)}</Mono>
         )}
       </div>
-    </div>
+    </li>
   );
 }
 
@@ -449,7 +494,7 @@ function LolTeamRow({
   score: number | null;
   winner: boolean;
   scheduled: boolean;
-}) {
+}): ReactElement {
   return (
     <div className="flex items-center justify-between gap-2 text-sm">
       <div className="flex min-w-0 items-center gap-2">
@@ -476,11 +521,11 @@ function LolStandings({
 }: {
   split: LolSplit;
   teamsMap: Map<string, Team>;
-}) {
+}): ReactElement {
   const rows = useShownRows(split.standings);
   return (
     <TableCard>
-        <Table>
+        <Table aria-label={`${split.name} standings`}>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               <SportsTh className="w-8 pl-3">
@@ -489,10 +534,10 @@ function LolStandings({
               <SportsTh>
                 Team
               </SportsTh>
-              <SportsTh className="text-center">
+              <SportsTh className="text-center" label="Wins">
                 W
               </SportsTh>
-              <SportsTh className="text-center">
+              <SportsTh className="text-center" label="Losses">
                 L
               </SportsTh>
               <SportsTh className="text-center">
@@ -508,12 +553,12 @@ function LolStandings({
                   <TableCell className="pl-3 text-sm tabular-nums text-muted-foreground">
                     {row.position}
                   </TableCell>
-                  <TableCell>
+                  <TableHead scope="row" className="font-normal text-foreground">
                     <div className="flex items-center gap-2">
                       {team && <TeamBadge team={team} size="sm" />}
                       <span className="text-sm">{team?.shortName ?? row.teamId}</span>
                     </div>
-                  </TableCell>
+                  </TableHead>
                   <TableCell className="text-center">
                     <Mono className="text-sm">{row.wins}</Mono>
                   </TableCell>

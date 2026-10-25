@@ -9,7 +9,8 @@ type Props = { params: Promise<{ tournamentId: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const detail = await loadRacquetTournament("padel", (await params).tournamentId);
-  return { title: detail ? detail.tournament.name : "Padel" };
+  // No detail is the page's notFound(), which keeps this title: name the miss, not the sport.
+  return { title: detail ? detail.tournament.name : "Not on this season's calendar" };
 }
 
 /** One padel tournament, its whole draw: what "View details" and the tiles open. */

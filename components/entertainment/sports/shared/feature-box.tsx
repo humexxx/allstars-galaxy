@@ -32,7 +32,7 @@ export function FeatureBox({
       href={href}
       className={cn(
         // The focus ring inside the border: a carousel's track clips anything drawn outside it.
-        "flex h-full min-h-28 flex-col gap-2 rounded-lg border bg-card p-2.5 transition-colors outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
+        "flex h-full min-h-28 flex-col gap-2 rounded-lg border bg-card p-2.5 transition-colors focus-visible:outline-hidden hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         className
       )}
     >

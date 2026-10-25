@@ -13,12 +13,12 @@ import { revealInRow } from "./shared/scroll";
 
 /**
  * Every sport as one button group, each with its emoji and name, the
- * favourites first and the sport on screen shaded. On a phone the group runs
- * past the screen's edge and slides sideways, as the old strip of sports did,
- * rather than cutting the names. A sport whose name is shortened ("LoL")
- * gives the full one in a tooltip. Each is a link (`?sport=`), so a modified
- * click still opens it in a new tab and Back returns; a plain one goes
- * through the hub's own transition (`onPick`).
+ * favourites first and the sport on screen shaded and underlined. On a phone
+ * the group runs past the screen's edge and slides sideways, as the old strip
+ * of sports did, rather than cutting the names. A sport whose name is
+ * shortened ("LoL") gives the full one in a tooltip. Each is a link
+ * (`?sport=`), so a modified click still opens it in a new tab and Back
+ * returns; a plain one goes through the hub's own transition (`onPick`).
  */
 export function SportPicker({
   active,
@@ -57,7 +57,14 @@ export function SportPicker({
             variant="outline"
             size="sm"
             asChild
-            className={cn(current ? "bg-muted text-foreground" : "text-muted-foreground")}
+            // A bar as well as the shade: the shade alone is 1.18:1, and a hovered
+            // sport looks the same. `dark:bg-muted` replaces the variant's
+            // `dark:bg-input/30`, which would otherwise win.
+            className={cn(
+              current
+                ? "relative bg-muted text-foreground after:absolute after:inset-x-2 after:bottom-0 after:border-b-2 after:border-primary dark:bg-muted"
+                : "text-muted-foreground"
+            )}
           >
             <Link
               href={`?sport=${sport.id}`}

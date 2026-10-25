@@ -195,7 +195,7 @@ function RankingsTable({ data }: { data: RacquetData }) {
 
   return (
     <TableCard>
-        <Table>
+        <Table aria-label="Rankings">
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               <SportsTh className="w-12 pl-3">
@@ -261,16 +261,16 @@ function Movement({ movement }: { movement: number }) {
   }
   if (movement > 0) {
     return (
-      <span className="inline-flex items-center gap-0.5 text-xs font-medium text-success">
-        <ArrowUp className="size-3" aria-hidden />
+      <span className="inline-flex items-center gap-0.5 text-xs font-medium">
+        <ArrowUp className="size-3 text-success" aria-hidden />
         <span className="sr-only">Up </span>
         {movement}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-0.5 text-xs font-medium text-destructive">
-      <ArrowDown className="size-3" aria-hidden />
+    <span className="inline-flex items-center gap-0.5 text-xs font-medium">
+      <ArrowDown className="size-3 text-destructive" aria-hidden />
       <span className="sr-only">Down </span>
       {Math.abs(movement)}
     </span>

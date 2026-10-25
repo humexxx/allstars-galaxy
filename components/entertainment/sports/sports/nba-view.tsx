@@ -8,6 +8,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
@@ -177,7 +178,7 @@ function NbaStandings({
           <ToggleGroupItem value="east">East</ToggleGroupItem>
           <ToggleGroupItem value="west">West</ToggleGroupItem>
         </ToggleGroup>
-        <Table>
+        <Table aria-label={`${conf === "east" ? "Eastern" : "Western"} Conference standings`}>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               <SportsTh className="w-8">
@@ -186,13 +187,13 @@ function NbaStandings({
               <SportsTh>
                 Team
               </SportsTh>
-              <SportsTh className="text-center">
+              <SportsTh className="text-center" label="Wins">
                 W
               </SportsTh>
-              <SportsTh className="text-center">
+              <SportsTh className="text-center" label="Losses">
                 L
               </SportsTh>
-              <SportsTh className="text-center">
+              <SportsTh className="text-center" label="Games behind">
                 GB
               </SportsTh>
             </TableRow>
@@ -206,14 +207,14 @@ function NbaStandings({
                   <TableCell className="text-sm tabular-nums text-muted-foreground">
                     {row.position}
                   </TableCell>
-                  <TableCell>
+                  <TableHead scope="row" className="font-normal text-foreground">
                     <div className="flex items-center gap-2">
                       {team && <TeamBadge team={team} size="sm" />}
                       <span className={cn("text-sm", isLeader && "font-semibold")}>
                         {team?.shortName ?? row.teamId}
                       </span>
                     </div>
-                  </TableCell>
+                  </TableHead>
                   <TableCellNum value={row.won} />
                   <TableCellNum value={row.lost} />
                   <TableCellNum value={row.gamesBehind === 0 ? "—" : row.gamesBehind} />

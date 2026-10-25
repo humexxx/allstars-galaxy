@@ -88,16 +88,19 @@ export function SportShell({
     const revealSelectedTab = (): void =>
       revealInRow(scroller, scroller.querySelector('[role="tab"][aria-selected="true"]'));
     revealSelectedTab();
+    // A switch of league can bring its opening tab in already selected.
+    const isPicked = (node: Node): boolean =>
+      node instanceof Element && node.matches('[role="tab"][aria-selected="true"]');
     const observer = new MutationObserver((records) => {
-      const picked = records.some(
-        (record) => (record.target as Element).getAttribute("aria-selected") === "true"
+      const picked = records.some((record) =>
+        record.type === "childList" ? Array.from(record.addedNodes).some(isPicked) : isPicked(record.target)
       );
       if (!picked) return;
       revealSelectedTab();
       const hidden = tabsRow.getBoundingClientRect().bottom - content.getBoundingClientRect().top;
       if (hidden > 0) scrollByFrom(content, -hidden);
     });
-    observer.observe(tabsRow, { subtree: true, attributes: true, attributeFilter: ["aria-selected"] });
+    observer.observe(tabsRow, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-selected"] });
     return () => observer.disconnect();
   }, [hasTabs]);
 
@@ -117,10 +120,14 @@ export function SportShell({
             </span>
           )}
           <div className="flex min-w-0 flex-col">
-            <Heading level="h4" as="h1" className="min-w-0">
+            {/* With a menu, the heading is pulled out by the button's padding, so
+                the name still lines up with the subtitle. Pulling the button out
+                instead capped it at the heading's width, 16px short of the name. */}
+            <Heading level="h4" as="h1" className={cn("min-w-0", titleMenu && "-mx-2")}>
               {titleMenu ? (
                 <DropdownMenu>
-                  <DropdownMenuTrigger className="group/title flex max-w-full items-center gap-1.5 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+                  {/* The sidebar's hover step: `muted` hardly shows on the page's grey. */}
+                  <DropdownMenuTrigger className="group/title -my-0.5 flex max-w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-0.5 text-left transition-colors focus-visible:outline-hidden hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-sidebar-accent dark:hover:bg-muted dark:data-[state=open]:bg-muted">
                     <span className="truncate">{title}</span>
                     <ChevronDown
                       aria-hidden
@@ -145,8 +152,11 @@ export function SportShell({
         {hubControls && <div className="flex max-w-full min-w-0 items-center gap-2">{hubControls}</div>}
       </div>
       {tabs && (
+        // globals.css gives what follows `data-sport-tabs` a scroll margin, so
+        // a control that takes focus is scrolled clear of the bar.
         <div
           ref={tabsRef}
+          data-sport-tabs
           className="sticky top-14 z-20 flex h-12 min-w-0 items-end gap-4 border-b bg-background md:top-0"
         >
           {/* The name again, small, only while the row above is out of

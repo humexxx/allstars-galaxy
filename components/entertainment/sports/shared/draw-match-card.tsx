@@ -15,7 +15,7 @@ const OUTCOMES: Record<"walkover" | "retired", string> = {
 /**
  * "6–4", or "7–6(1)" for a set that went to a tie-break — the loser's points,
  * the way a scoreline prints them. The boxes have no room for it; the
- * tooltip does.
+ * popover does.
  */
 function setLabel(set: NonNullable<BracketMatch["legs"]>[number]): string {
   const base = `${set.homeScore}–${set.awayScore}`;
@@ -188,17 +188,17 @@ function PlayerRow({
 }: RowProps & { withFaces: boolean }) {
   if (!player) {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span className={cn("shrink-0", withFaces ? "w-6" : "w-5")} />
         <span className="w-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate">{nobody}</span>
-      </div>
+      </span>
     );
   }
 
   const flag = <span className="text-base leading-none">{player.name}</span>;
   return (
-    <div
+    <span
       className={cn(
         "flex items-center gap-1.5 text-xs",
         decided && !isWinner && "text-muted-foreground"
@@ -222,8 +222,11 @@ function PlayerRow({
       <span className={cn("min-w-0 flex-1 truncate", isWinner && "font-semibold")}>
         {player.shortName}
       </span>
+      {/* Every flag on screen is hidden from assistive tech; read once here, it says the country. */}
+      {player.name && <span className="sr-only">{`, ${player.name}`}</span>}
+      {isWinner && <span className="sr-only">, won</span>}
       <SetScores scores={scores} opponentScores={opponentScores} />
-    </div>
+    </span>
   );
 }
 
@@ -239,16 +242,16 @@ function PairRow({
 }: RowProps & { withFaces: boolean }) {
   if (!player) {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span className="w-4 shrink-0" />
         {withFaces && <span className="w-8.5 shrink-0" />}
         <span className="min-w-0 flex-1 truncate">{nobody}</span>
-      </div>
+      </span>
     );
   }
 
   return (
-    <div
+    <span
       className={cn(
         "flex items-center gap-1.5 text-xs",
         decided && !isWinner && "text-muted-foreground"
@@ -263,8 +266,9 @@ function PairRow({
           </span>
         ))}
       </span>
+      {isWinner && <span className="sr-only">, won</span>}
       <SetScores scores={scores} opponentScores={opponentScores} />
-    </div>
+    </span>
   );
 }
 

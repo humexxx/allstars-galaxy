@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -152,15 +161,23 @@ export function KnockoutBracket({
   const { columns, edges, opening } = useMemo(() => {
     const current = currentRoundIndex(tree.rounds);
     const last = tree.rounds.length - 1;
+    // A decided bracket opens on its final, but nothing in it is being played.
+    const playing = tree.rounds[current]?.matches.some((m) => !m.winnerTeamId) ?? false;
     const item = (match: BracketMatch, caption?: string) => ({
       key: match.id,
       caption,
       node: <TieBox match={match} teams={teams} renderMatch={renderMatch} />,
     });
-    const column = (round: BracketRound, i: number, side: string, matches: BracketMatch[]) => ({
+    const column = (
+      round: BracketRound,
+      i: number,
+      side: "top" | "bottom" | "all",
+      matches: BracketMatch[]
+    ): BracketColumn => ({
       key: `${round.id}-${side}`,
       label: round.label,
-      current: i === current,
+      current: playing && i === current,
+      half: side === "all" ? undefined : side,
       items: matches.map((m) => item(m)),
     });
     const before = tree.rounds.slice(0, last);
@@ -168,7 +185,7 @@ export function KnockoutBracket({
     const finalColumn: BracketColumn = {
       key: `${final?.id ?? "final"}-centre`,
       label: final?.label ?? "",
-      current: last === current,
+      current: playing && last === current,
       items: [
         ...(final?.matches ?? []).map((m) => item(m)),
         ...(thirdPlace?.matches ?? []).map((m) => item(m, thirdPlace?.label)),
@@ -280,44 +297,24 @@ export function KnockoutBracket({
       {ends.overflow && (
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center">
-            <Button
-              size="icon"
-              variant="ghost"
-              disabled={ends.atStart}
-              onClick={() => scrollTo(0)}
-              aria-label="Left end of the bracket"
-            >
+            <ScrollButton label="Left end of the bracket" off={ends.atStart} onPress={() => scrollTo(0)}>
               <ChevronsLeft />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              disabled={ends.atStart}
-              onClick={() => step(-1)}
-              aria-label="Scroll left"
-            >
+            </ScrollButton>
+            <ScrollButton label="Scroll left" off={ends.atStart} onPress={() => step(-1)}>
               <ChevronLeft />
-            </Button>
+            </ScrollButton>
           </div>
           <div className="flex items-center">
-            <Button
-              size="icon"
-              variant="ghost"
-              disabled={ends.atEnd}
-              onClick={() => step(1)}
-              aria-label="Scroll right"
-            >
+            <ScrollButton label="Scroll right" off={ends.atEnd} onPress={() => step(1)}>
               <ChevronRight />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              disabled={ends.atEnd}
-              onClick={() => scrollTo(viewport.current?.scrollWidth ?? 0)}
-              aria-label="Right end of the bracket"
+            </ScrollButton>
+            <ScrollButton
+              label="Right end of the bracket"
+              off={ends.atEnd}
+              onPress={() => scrollTo(viewport.current?.scrollWidth ?? 0)}
             >
               <ChevronsRight />
-            </Button>
+            </ScrollButton>
           </div>
         </div>
       )}
@@ -328,6 +325,38 @@ export function KnockoutBracket({
         viewportRef={viewport}
       />
     </div>
+  );
+}
+
+/**
+ * A control over the bracket, off at the end it moves towards. Off is
+ * `aria-disabled`, not `disabled`: a button that disables itself under focus
+ * drops that focus to the page, and a keyboard or screen-reader user is lost.
+ */
+function ScrollButton({
+  label,
+  off,
+  onPress,
+  children,
+}: {
+  label: string;
+  off: boolean;
+  onPress: () => void;
+  children: ReactNode;
+}): ReactElement {
+  return (
+    <Button
+      size="icon"
+      variant="ghost"
+      aria-label={label}
+      aria-disabled={off}
+      onClick={() => {
+        if (!off) onPress();
+      }}
+      className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+    >
+      {children}
+    </Button>
   );
 }
 
@@ -356,7 +385,7 @@ const has = (n: number | null | undefined): n is number => n !== null && n !== u
  *
  * A two-legged tie shows its aggregate once both legs are in, the running
  * total until then, and the day of each leg; the legs' own scores are in the
- * tooltip. A single match or series shows its score and its day and time.
+ * popover. A single match or series shows its score and its day and time.
  */
 function TieRows({ match, teams }: { match: BracketMatch; teams: Map<string, Team> }) {
   const format = useMatchTime();
@@ -379,8 +408,19 @@ function TieRows({ match, teams }: { match: BracketMatch; teams: Map<string, Tea
   const name = (i: 0 | 1) => sides[i].team?.code ?? "TBD";
   const scored = has(sides[0].score) && has(sides[1].score);
 
-  const legDays = legs.map((l, i) => (l.date ? `L${i + 1} ${format.shortDay(l.date)}` : null)).filter(Boolean);
-  const when = legDays.length > 0 ? legDays.join(" · ") : match.date ? bracketWhen(match.date, format) : null;
+  const dated = legs.flatMap((l, i) => (l.date ? [{ leg: i + 1, day: format.shortDay(l.date) }] : []));
+  const when =
+    dated.length > 0
+      ? dated.map(({ leg, day }, i) => (
+          <Fragment key={leg}>
+            {i > 0 && " · "}
+            <span aria-hidden>L{leg}</span>
+            <span className="sr-only">Leg {leg}</span> {day}
+          </Fragment>
+        ))
+      : match.date
+        ? bracketWhen(match.date, format)
+        : null;
 
   return (
     <MatchHover
@@ -412,12 +452,12 @@ function TieRows({ match, teams }: { match: BracketMatch; teams: Map<string, Tea
       {sides.map((side, i) => {
         const won = decided && side.id === match.winnerTeamId;
         return (
-          <div key={i} className="flex items-center justify-between gap-2 text-xs">
+          <span key={i} className="flex items-center justify-between gap-2 text-xs">
             <BracketTeam team={side.team} muted={decided && !won} strong={won} />
             {has(side.score) && (
               <Mono className={cn(won ? "font-semibold" : "text-muted-foreground")}>{side.score}</Mono>
             )}
-          </div>
+          </span>
         );
       })}
       {when && <BracketDate>{when}</BracketDate>}

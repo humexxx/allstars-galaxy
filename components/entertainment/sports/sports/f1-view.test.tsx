@@ -54,11 +54,28 @@ describe("F1View", () => {
     expect(screen.getByRole("columnheader", { name: "Points" })).not.toHaveClass("hidden");
   });
 
+  it("keeps a dropped column's figure under the name, until the column shows", () => {
+    render(<F1View data={F1_DATA} />);
+    // Antonelli: 3 wins, 4 podiums. Russell: 1 win.
+    const antonelli = screen.getByText("A.K. Antonelli").closest("tr")!;
+    const figures = within(antonelli).getByText("4 podiums");
+    expect(figures).toHaveTextContent(/^3 wins · 4 podiums$/);
+    expect(figures).toHaveClass("@sm:hidden");
+    expect(within(figures).getByText("3 wins ·")).toHaveClass("@xs:hidden");
+    expect(screen.getByText("G. Russell").closest("tr")).toHaveTextContent("1 win · 2 podiums");
+
+    fireEvent.click(championship("Constructors"));
+    const mercedes = screen.getByText("Mercedes").closest("tr")!;
+    expect(within(mercedes).getByText("6 podiums")).toHaveTextContent(/^4 wins · 6 podiums$/);
+  });
+
   it("swaps the table between the championships, columns and badges included", () => {
     render(<F1View data={F1_DATA} />);
+    expect(screen.getByRole("table", { name: "Drivers' championship" })).toBeInTheDocument();
     fireEvent.click(championship("Constructors"));
 
     expect(championship("Constructors")).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("table", { name: "Constructors' championship" })).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Driver" })).toBeNull();
     expect(screen.getAllByRole("columnheader").map((th) => th.textContent)).toEqual([
       "#",

@@ -14,7 +14,9 @@ import type { Match, MatchStatus, SavedTeamFilter, Team } from "@/types/sports";
 
 import { MatchesByDate, openingDayIndex } from "./matches-by-date";
 import { SportShell } from "./sport-shell";
+import { StandingsTable } from "./standings-table";
 import { SavedTeamFilterProvider } from "./team-filter-context";
+import { TeamPicksProvider } from "./team-picks";
 import { SportsTodayProvider } from "./time-zone-context";
 
 const TODAY = "2026-10-18";
@@ -62,7 +64,12 @@ const LA_LIGA = { sportId: "football", competition: "la-liga" } as const;
  * The list on an Overview tab of a sport shell, as a sport's page sets it.
  * `saved` is what the page read for this list; without it nothing is saved.
  */
-function renderList(matches: Match[], saved: SavedTeamFilter | null = null): ReturnType<typeof render> {
+function renderList(
+  matches: Match[],
+  saved: SavedTeamFilter | null = null,
+  { table = false }: { table?: boolean } = {}
+): ReturnType<typeof render> {
+  const list = <MatchesByDate matches={matches} teams={teams} />;
   return render(
     <ReaderTimeZoneProvider timeZone={ZONE}>
       <SportsTodayProvider today={TODAY}>
@@ -78,7 +85,30 @@ function renderList(matches: Match[], saved: SavedTeamFilter | null = null): Ret
               }
             >
               <TabsContent value="overview">
-                <MatchesByDate matches={matches} teams={teams} />
+                {table ? (
+                  // As a sport's Overview sets it: the list and the table share one pick.
+                  <TeamPicksProvider>
+                    {list}
+                    <StandingsTable
+                      standings={[...teams.keys()].map((teamId, i) => ({
+                        teamId,
+                        position: i + 1,
+                        played: 9,
+                        won: 5,
+                        drawn: 2,
+                        lost: 2,
+                        goalsFor: 15,
+                        goalsAgainst: 10,
+                        points: 17,
+                      }))}
+                      teams={teams}
+                      competition="la-liga"
+                      label="La Liga"
+                    />
+                  </TeamPicksProvider>
+                ) : (
+                  list
+                )}
               </TabsContent>
               <TabsContent value="knockout">Bracket</TabsContent>
             </SportShell>
@@ -157,6 +187,12 @@ describe("openingDayIndex", () => {
   it("does not count a postponed match as a result", () => {
     const list = [match("off", "2026-10-16T20:00:00Z", "postponed"), ...season.slice(3)];
     expect(openingDayIndex(days(list), TODAY)).toBe(0);
+  });
+
+  it("goes back far enough for as many results as it is asked for, or to the first", () => {
+    expect(openingDayIndex(days(season), TODAY, 3)).toBe(0);
+    expect(openingDayIndex(days(season), TODAY, 2)).toBe(1);
+    expect(openingDayIndex(days(season.slice(1)), TODAY, 3)).toBe(0);
   });
 });
 
@@ -278,17 +314,50 @@ describe("MatchesByDate", () => {
     expect(teamFilter()).toBeNull();
   });
 
-  it("opens another team's fixtures on its freshest results again, named on the filter", () => {
+  it("opens a team's fixtures on its last three results and what is next, named on the filter", () => {
     Element.prototype.scrollIntoView = vi.fn();
-    const { container } = renderList(season);
-    fireEvent.click(earlierButton()!);
-    expect(shownDays(container)).toHaveLength(5);
+    const games = [match("oct-3", "2026-10-03T20:00:00Z", "ft", "atm", "bar"), ...season];
+    const { container } = renderList(games);
+    expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18", "2026-10-21"]);
 
     pickTeam(/Barcelona/);
 
-    expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18", "2026-10-21"]);
-    expect(earlierButton()).toHaveAccessibleName("Earlier: Show Oct 10 – Oct 14");
+    expect(shownDays(container)).toEqual(["2026-10-10", "2026-10-14", "2026-10-17", "2026-10-18", "2026-10-21"]);
+    expect(earlierButton()).toHaveAccessibleName("Earlier: Show Oct 3");
     expect(teamFilter()).toHaveAccessibleName("Filter by team: Barcelona");
+  });
+
+  it("narrows to a team tapped in a match card or the table, and back on a second tap", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const { container } = renderList(league, null, { table: true });
+    fireEvent.click(within(screen.getByRole("table", { name: "La Liga" })).getByRole("button", { name: "Filter matches: Atlético" }));
+    expect(shownDays(container)).toEqual(["2026-10-18"]);
+    expect(teamFilter()).toHaveAccessibleName("Filter by team: Atlético");
+    expect(within(screen.getByRole("table")).getByRole("button", { name: "Filter matches: Atlético" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+
+    // Sevilla, from the card it is in: one team at a time.
+    const list = container.querySelector<HTMLElement>("[data-day]")!;
+    fireEvent.click(within(list).getByRole("button", { name: "Filter matches: Sevilla" }));
+    expect(shownDays(container)).toEqual(["2026-10-18", "2026-10-21"]);
+    expect(teamFilter()).toHaveAccessibleName("Filter by team: Sevilla");
+
+    fireEvent.click(within(list).getByRole("button", { name: "Filter matches: Sevilla" }));
+    expect(teamFilter()).toHaveAccessibleName("Filter by team: All teams");
+    expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18", "2026-10-21"]);
+  });
+
+  it("saves a team tapped in the table, as a pick in the menu is", () => {
+    renderList(league, { list: LA_LIGA, teamIds: [] }, { table: true });
+    fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Filter matches: Barcelona" }));
+    expect(setSportTeamFilterAction).toHaveBeenCalledWith({ ...LA_LIGA, teamIds: ["bar"] });
+  });
+
+  it("leaves the names in a list with no view around it as plain text", () => {
+    renderList(league);
+    expect(screen.queryByRole("button", { name: /^Filter matches:/ })).toBeNull();
   });
 
   it("brings a team picked deep in the list back to its first day, under the bar", () => {

@@ -1,9 +1,8 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CalendarX, ChevronDown, History, ListFilter } from "lucide-react";
 
-import { setSportTeamFilterAction } from "@/app/actions/sports";
 import { useReaderTimeZone } from "@/components/reader-time-zone";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +16,6 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Eyebrow } from "@/components/ui/typography";
-import { runAction } from "@/lib/actions/run";
 import { matchDays, type MatchDay } from "@/lib/sports/match-days";
 import { cn } from "@/lib/utils";
 import type { Match, MatchStatus, Team } from "@/types/sports";
@@ -27,8 +25,7 @@ import { RevealPill } from "./reveal-pill";
 import { ScoreCard } from "./score-card";
 import { scrollParent } from "./scroll";
 import { TeamBadge } from "./team-badge";
-import { useSavedTeamFilter } from "./team-filter-context";
-import { rememberTeams } from "../seen-sports";
+import { useTeamPicks } from "./team-picks";
 import { useMatchTime, useSportsToday } from "./time-zone-context";
 
 const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "pen"]);
@@ -36,24 +33,37 @@ const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "p
 /** Days one tap of the clock brings in: a matchday, a week of the NFL, three NBA nights. */
 const EARLIER_STEP = 3;
 
+/** Results a team's own fixtures open on: one is a single day, too little to read its form by. */
+const TEAM_RESULTS = 3;
+
 /**
- * Where the list opens: the latest day up to today with a result in it, so
- * the freshest results lead and what is next follows. A season with no
- * result yet opens on its first day.
+ * Where the list opens: far enough back for `results` results up to today,
+ * so the freshest lead and what is next follows. The whole list needs one
+ * day's; a season with no result yet opens on its first day, and one with
+ * fewer than asked for on its first result.
  */
-export function openingDayIndex(days: MatchDay[], today: string): number {
+export function openingDayIndex(days: MatchDay[], today: string, results = 1): number {
+  let seen = 0;
+  let first = -1;
   for (let i = days.length - 1; i >= 0; i--) {
     const { day, matches } = days[i];
-    if (day <= today && matches.some((m) => FINISHED.has(m.status))) return i;
+    if (day > today) continue;
+    const played = matches.filter((m) => FINISHED.has(m.status)).length;
+    if (played === 0) continue;
+    seen += played;
+    first = i;
+    if (seen >= results) return i;
   }
-  return 0;
+  return Math.max(first, 0);
 }
 
 /**
  * Every match, one day at a time: oldest first, each day under its own
- * heading in the reader's zone. A team filter, at the end of the sport bar,
- * narrows it to some teams' fixtures and results. It opens on the teams last
- * picked in this list and remembers a new pick when its menu closes.
+ * heading in the reader's zone. A team filter, on the first day's heading,
+ * narrows it to some teams' fixtures and results, opening on their last three
+ * results. It opens on the teams last picked in this list and remembers a new
+ * pick when its menu closes. Inside a view that shares its picks
+ * (`TeamPicksProvider`), a tap on a team in the table or a card picks it too.
  *
  * The page is the only scroller. The list opens on its freshest results
  * rather than scrolling to them, with the days before behind a clock on the
@@ -81,19 +91,14 @@ export function MatchesByDate({
   const timeZone = useReaderTimeZone();
   const format = useMatchTime();
   const today = useSportsToday();
-  const saved = useSavedTeamFilter();
-  const [picks, setPicks] = useState<readonly string[]>(() => saved?.teamIds ?? []);
+  const { picks, setPicks, save } = useTeamPicks();
   // The filter's menu is the list's, not its pill's: the pill rides the first
   // day's heading, and a tick that changes which day comes first moves it to
   // another heading, while the menu stays open as it was, search and all.
   const [filterOpen, setFilterOpen] = useState(false);
   const pickedAtOpen = useRef("");
-  // How many days before the opening one are shown.
-  const [extra, setExtra] = useState(0);
-  const [, startSaving] = useTransition();
   const listRef = useRef<HTMLDivElement>(null);
   const reveal = useRef<{ tops: Map<string, number>; added: string[] } | null>(null);
-  const narrowed = useRef(false);
 
   const options = useMemo(() => {
     const ids = new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]));
@@ -120,7 +125,15 @@ export function MatchesByDate({
     .map((id) => options.find((t) => t.id === id))
     .filter((t): t is Team => Boolean(t));
 
-  const earlier = Math.max(0, openingDayIndex(days, today) - extra);
+  // How many days before the opening one are shown. Other teams, picked here
+  // or anywhere on the view, open on their own freshest results.
+  const pickKey = sameTeams(picked);
+  const [shownEarlier, setShownEarlier] = useState({ pickKey, extra: 0 });
+  const extra = shownEarlier.pickKey === pickKey ? shownEarlier.extra : 0;
+  const setExtra = (next: number): void => setShownEarlier({ pickKey, extra: next });
+
+  const opening = openingDayIndex(days, today, picked.length > 0 ? TEAM_RESULTS : 1);
+  const earlier = Math.max(0, opening - extra);
   const shown = days.slice(earlier);
   const step = Math.min(EARLIER_STEP, earlier);
 
@@ -137,16 +150,18 @@ export function MatchesByDate({
     slideIn(list, done.tops, done.added);
   }, [extra]);
 
-  // The filter rides the first day's heading, stuck under the bar while that
-  // day is read, so a pick can leave the new, shorter list starting above the
-  // screen. Put its first day back under the bar; a list already in view
-  // stays put.
+  // A pick can leave the new, shorter list starting above the screen: the
+  // filter rides the first day's heading, stuck under the bar while that day
+  // is read, and a team tapped in the table (under the list on a phone) is
+  // further down still. Put its first day back under the bar; a list already
+  // in view stays put.
+  const pickedKey = useRef(pickKey);
   useLayoutEffect(() => {
-    if (!narrowed.current) return;
-    narrowed.current = false;
+    if (pickedKey.current === pickKey) return;
+    pickedKey.current = pickKey;
     const first = listRef.current?.querySelector<HTMLElement>("[data-day]");
     if (first && hiddenUnderBar(first)) first.scrollIntoView({ block: "start" });
-  }, [picks]);
+  }, [pickKey]);
 
   const revealEarlier = (): void => {
     const list = listRef.current;
@@ -160,29 +175,11 @@ export function MatchesByDate({
     setExtra(extra + step);
   };
 
-  // Other teams open on their own freshest results, as the list did.
-  const pickTeams = (next: readonly string[]): void => {
-    narrowed.current = true;
-    setPicks(next);
-    setExtra(0);
-  };
-
   // Saved once, when the menu closes having changed: a run of ticks is one write.
   const openFilter = (open: boolean): void => {
-    if (open) pickedAtOpen.current = sameTeams(picked);
-    else if (sameTeams(picked) !== pickedAtOpen.current) saveTeams(picked);
+    if (open) pickedAtOpen.current = pickKey;
+    else if (pickKey !== pickedAtOpen.current) save(picked);
     setFilterOpen(open);
-  };
-
-  const saveTeams = (teamIds: readonly string[]): void => {
-    if (!saved) return;
-    startSaving(async () => {
-      const result = await runAction(
-        setSportTeamFilterAction({ ...saved.list, teamIds: [...teamIds] }),
-        { failure: "Couldn't save your teams" }
-      );
-      if (result.ok) rememberTeams(saved.list, teamIds);
-    });
   };
 
   // What a tap brings in, by its dates: "Show Oct 10 – Oct 14", or one day.
@@ -249,7 +246,7 @@ export function MatchesByDate({
               </div>
             ))}
           </div>
-          {filtering && <TeamFilterMenu options={options} picked={picked} onPick={pickTeams} />}
+          {filtering && <TeamFilterMenu options={options} picked={picked} onPick={setPicks} />}
         </Popover>
       )}
     </section>

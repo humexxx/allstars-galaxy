@@ -14,6 +14,7 @@ import { OverviewSplit } from "../shared/overview-split";
 import { SportShell } from "../shared/sport-shell";
 import { StandingsTable } from "../shared/standings-table";
 import { TableCard } from "../shared/table-primitives";
+import { TeamPicksProvider } from "../shared/team-picks";
 import { useSportsNavigation } from "../sports-navigation";
 import { WorldCupView } from "./world-cup-view";
 
@@ -114,23 +115,26 @@ function LeagueView({
         }
       >
         {/* Every match day by day, and the whole table beside them: a Table
-            tab of its own only repeated it with more columns. */}
+            tab of its own only repeated it with more columns. A club tapped
+            in either narrows the matches to its own. */}
         <TabsContent value="overview">
-          <OverviewSplit
-            matches={<MatchesByDate matches={league.matches} teams={teamsMap} />}
-            table={
-              league.standings.length > 0 && (
-                <TableCard>
-                  <StandingsTable
-                    standings={league.standings}
-                    teams={teamsMap}
-                    competition={leagueId}
-                    label={league.league.name}
-                  />
-                </TableCard>
-              )
-            }
-          />
+          <TeamPicksProvider>
+            <OverviewSplit
+              matches={<MatchesByDate matches={league.matches} teams={teamsMap} />}
+              table={
+                league.standings.length > 0 && (
+                  <TableCard>
+                    <StandingsTable
+                      standings={league.standings}
+                      teams={teamsMap}
+                      competition={leagueId}
+                      label={league.league.name}
+                    />
+                  </TableCard>
+                )
+              }
+            />
+          </TeamPicksProvider>
         </TabsContent>
 
         {league.league.hasKnockout && league.knockout && (

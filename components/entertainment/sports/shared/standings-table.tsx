@@ -15,6 +15,8 @@ import type { FootballLeagueId, Standing, StandingBand, Team } from "@/types/spo
 import { ShowMoreRows, useShownRows } from "./show-more";
 import { SportsTh, TableCellNum } from "./table-primitives";
 import { TeamBadge } from "./team-badge";
+import { usePickTeam } from "./team-filter-context";
+import { TeamPick } from "./team-pick";
 
 type Zone = NonNullable<StandingBand>;
 
@@ -74,6 +76,8 @@ export function StandingsTable({
   label,
 }: StandingsTableProps): React.ReactElement {
   const rows = useShownRows(standings);
+  // A team's name is what a tap picks, with its own hover: the row keeps still.
+  const pickable = usePickTeam() !== null;
   const zoneLabels = ZONE_LABELS[competition];
   const zones = [...new Set(rows.shown.map((row) => row.band))].filter(
     (band): band is Zone => !!band && !!zoneLabels[band]
@@ -106,7 +110,7 @@ export function StandingsTable({
             const goalDiff = row.goalsFor - row.goalsAgainst;
             const zoneLabel = row.band ? zoneLabels[row.band] : undefined;
             return (
-              <TableRow key={row.teamId} className="relative">
+              <TableRow key={row.teamId} className={cn("relative", pickable && "hover:bg-transparent")}>
                 <TableCell className="relative pl-3 text-sm tabular-nums text-muted-foreground">
                   {row.band && (
                     <span
@@ -119,10 +123,14 @@ export function StandingsTable({
                 </TableCell>
                 {/* The row's header, so a cell down the Pts column is read with its club. */}
                 <TableHead scope="row" className="h-auto py-2 font-normal text-foreground">
-                  <div className="flex items-center gap-2">
-                    {team && <TeamBadge team={team} size="sm" />}
-                    <span className="truncate">{team?.shortName ?? row.teamId}</span>
-                  </div>
+                  {team ? (
+                    <TeamPick team={team}>
+                      <TeamBadge team={team} size="sm" />
+                      <span className="truncate">{team.shortName}</span>
+                    </TeamPick>
+                  ) : (
+                    row.teamId
+                  )}
                 </TableHead>
                 <TableCellNum value={row.played} className={NUM_TD} />
                 <TableCellNum

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { Match, Team } from "@/types/sports";
 
 import { TeamBadge } from "./team-badge";
+import { TeamPick } from "./team-pick";
 import { useMatchTime } from "./time-zone-context";
 
 type ScoreCardProps = {
@@ -200,10 +201,12 @@ function TeamRow({
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <TeamBadge team={team} size="sm" />
-        <span className={cn("min-w-0 truncate", isWinner && "font-semibold")}>
-          {team.shortName}
-        </span>
+        <TeamPick team={team}>
+          <TeamBadge team={team} size="sm" />
+          <span className={cn("min-w-0 truncate", isWinner && "font-semibold")}>
+            {team.shortName}
+          </span>
+        </TeamPick>
         {redCard && (
           <span role="img" className="h-3 w-2 rounded-xs bg-destructive" aria-label="Red card" />
         )}

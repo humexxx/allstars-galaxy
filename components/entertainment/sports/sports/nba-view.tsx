@@ -26,6 +26,8 @@ import { SportShell } from "../shared/sport-shell";
 import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportsTh, TableCellNum } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
+import { TeamPicksProvider } from "../shared/team-picks";
+import { TeamPick } from "../shared/team-pick";
 import { useMatchTime } from "../shared/time-zone-context";
 
 type NbaViewProps = {
@@ -71,17 +73,20 @@ export function NbaView({ data, news = [], initialTab }: NbaViewProps) {
             conference table beside them. */}
         <TabsContent value="overview" className="flex flex-col gap-6">
           <SeasonNote data={data} teamsMap={teamsMap} hasStandings={hasStandings} />
-          <OverviewSplit
-            matches={
-              <MatchesByDate
-                matches={data.games}
-                teams={teamsMap}
-                emptyTitle="No games scheduled right now."
-              />
-            }
-            table={hasStandings && <NbaStandings data={data} teamsMap={teamsMap} />}
-            tableLabel="Standings"
-          />
+          {/* A team tapped in the table or a game narrows the games to its own. */}
+          <TeamPicksProvider>
+            <OverviewSplit
+              matches={
+                <MatchesByDate
+                  matches={data.games}
+                  teams={teamsMap}
+                  emptyTitle="No games scheduled right now."
+                />
+              }
+              table={hasStandings && <NbaStandings data={data} teamsMap={teamsMap} />}
+              tableLabel="Standings"
+            />
+          </TeamPicksProvider>
         </TabsContent>
 
         {hasPlayoffs && (
@@ -203,17 +208,19 @@ function NbaStandings({
               const team = teamsMap.get(row.teamId);
               const isLeader = row.position === 1;
               return (
-                <TableRow key={row.teamId}>
+                <TableRow key={row.teamId} className="hover:bg-transparent">
                   <TableCell className="text-sm tabular-nums text-muted-foreground">
                     {row.position}
                   </TableCell>
                   <TableHead scope="row" className="font-normal text-foreground">
-                    <div className="flex items-center gap-2">
-                      {team && <TeamBadge team={team} size="sm" />}
-                      <span className={cn("text-sm", isLeader && "font-semibold")}>
-                        {team?.shortName ?? row.teamId}
-                      </span>
-                    </div>
+                    {team ? (
+                      <TeamPick team={team}>
+                        <TeamBadge team={team} size="sm" />
+                        <span className={cn("text-sm", isLeader && "font-semibold")}>{team.shortName}</span>
+                      </TeamPick>
+                    ) : (
+                      row.teamId
+                    )}
                   </TableHead>
                   <TableCellNum value={row.won} />
                   <TableCellNum value={row.lost} />

@@ -16,8 +16,6 @@ import {
   SelectItem,
   SelectLabel,
   SelectSeparator,
-  SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Table,
@@ -42,6 +40,7 @@ import {
 } from "@/types/sports";
 
 import { ChampionCard } from "../shared/champion-card";
+import { CompetitionTrigger } from "../shared/competition-trigger";
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { Last5Form } from "../shared/last-5-form";
 import { SportShell } from "../shared/sport-shell";
@@ -149,9 +148,7 @@ export function LolView({ data }: LolViewProps): ReactElement {
         subtitle={split.name.includes(String(split.season)) ? split.name : `${split.name} · ${split.season}`}
         controls={
           <Select value={region} onValueChange={(v) => setRegion(v as LolRegion)}>
-            <SelectTrigger className="w-56" aria-label="Region">
-              <SelectValue placeholder="Region" />
-            </SelectTrigger>
+            <CompetitionTrigger label="Region" />
             {/* International events first: they are the ones that matter most. */}
             <SelectContent>
               {[

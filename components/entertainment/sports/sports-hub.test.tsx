@@ -45,7 +45,14 @@ beforeEach(() => {
   forgetSeenSports();
 });
 
-const strip = (): HTMLElement => screen.getByRole("navigation", { name: "Sports" });
+const picker = (): HTMLElement => screen.getByRole("button", { name: /change sport$/ });
+const favorites = (): HTMLElement => screen.getByRole("button", { name: "Manage favorites (2)" });
+
+/** Radix opens its menu on pointerdown, which jsdom's clicks lack; Enter opens it too. */
+function openPicker(): HTMLElement {
+  fireEvent.keyDown(picker(), { key: "Enter" });
+  return screen.getByRole("menu");
+}
 
 afterEach(() => {
   push.mockReset();
@@ -59,22 +66,68 @@ describe("SportsHub", () => {
     expect(screen.queryByRole("heading", { name: "Sports" })).toBeNull();
   });
 
-  it("leads the strip with the favourites, starred, and marks the sport on screen", () => {
+  it("has no strip of sports above the bar any more", () => {
     renderHub();
-    const [first, second, third] = within(strip()).getAllByRole("link");
-    // Favourites keep the registry's order among themselves (F1 before NBA).
-    expect(first).toHaveAccessibleName(/^F1.*\(favorite\)$/);
-    expect(second).toHaveAccessibleName(/^NBA.*\(favorite\)$/);
-    expect(third).toHaveAccessibleName("Football");
-    expect(within(strip()).getByRole("link", { current: "page" })).toHaveTextContent("NBA");
+    expect(screen.queryByRole("navigation", { name: "Sports" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Football/ })).toBeNull();
   });
 
-  it("ends the strip's row with the favourites button, the count on it", () => {
+  it("ends the name row with the favourites button, the count on it, then the sport picker", () => {
     renderHub();
-    const button = screen.getByRole("button", { name: "Manage favorites (2)" });
-    expect(button).toHaveTextContent("2");
-    expect(strip().contains(button)).toBe(false);
-    expect(strip().parentElement?.lastElementChild).toBe(button);
+    const controls = picker().parentElement;
+    expect(controls?.firstElementChild).toBe(favorites());
+    expect(controls?.lastElementChild).toBe(picker());
+    expect(favorites()).toHaveTextContent("2");
+
+    const nameRow = controls?.parentElement;
+    expect(nameRow).toContainElement(screen.getByRole("heading", { level: 1 }));
+    expect(nameRow?.lastElementChild).toBe(controls);
+    expect(nameRow).not.toContainElement(screen.getByRole("tablist"));
+  });
+
+  it("names the sport on screen on the picker", () => {
+    renderHub();
+    expect(picker()).toHaveAccessibleName(/^NBA\s*, change sport$/);
+    expect(picker()).toHaveAttribute("aria-haspopup", "menu");
+  });
+
+  it("names the sport by its short label, F1 for Formula 1", () => {
+    renderHub("f1", F1);
+    expect(picker()).toHaveAccessibleName(/^F1\s*, change sport$/);
+  });
+
+  it("lists every sport in its menu, the favourites first and starred, a line, then the rest", () => {
+    renderHub();
+    const menu = openPicker();
+    const items = within(menu).getAllByRole("menuitem");
+
+    // Favourites keep the registry's order among themselves (F1 before NBA),
+    // and so do the rest.
+    expect(items.map((item) => item.getAttribute("href"))).toEqual([
+      "?sport=f1",
+      "?sport=nba",
+      "?sport=football",
+      "?sport=padel",
+      "?sport=tennis",
+      "?sport=nfl",
+      "?sport=lol",
+    ]);
+    const [f1, nba, football, ...others] = items;
+    expect(f1).toHaveAccessibleName(/^F1.*\(favorite\)$/);
+    expect(nba).toHaveAccessibleName(/^NBA.*\(favorite\)$/);
+    expect(football).toHaveAccessibleName("Football");
+    for (const item of others) expect(item).not.toHaveAccessibleName(/\(favorite\)/);
+
+    const separator = within(menu).getByRole("separator");
+    expect(separator.previousElementSibling).toBe(nba);
+    expect(separator.nextElementSibling).toBe(football);
+  });
+
+  it("marks the sport on screen in the menu", () => {
+    renderHub();
+    const menu = openPicker();
+    expect(within(menu).getByRole("menuitem", { current: "page" })).toHaveAccessibleName(/^NBA/);
+    expect(within(menu).getAllByRole("menuitem", { current: false })).toHaveLength(6);
   });
 
   it("moves to a sport in its own transition, and leaves a modified click to the browser", () => {
@@ -82,12 +135,11 @@ describe("SportsHub", () => {
     const stayPut = (event: Event): void => event.preventDefault();
     document.addEventListener("click", stayPut);
     renderHub();
-    const football = within(strip()).getByRole("link", { name: /Football/ });
 
-    fireEvent.click(football, { metaKey: true });
+    fireEvent.click(within(openPicker()).getByRole("menuitem", { name: "Football" }), { metaKey: true });
     expect(push).not.toHaveBeenCalled();
 
-    fireEvent.click(football);
+    fireEvent.click(within(openPicker()).getByRole("menuitem", { name: "Football" }));
     expect(push).toHaveBeenCalledWith("?sport=football", { scroll: false });
     document.removeEventListener("click", stayPut);
   });
@@ -98,7 +150,7 @@ describe("SportsHub", () => {
       push.mockImplementation(() => new Promise(() => {}));
     });
     const go = (name: RegExp): void => {
-      fireEvent.click(within(strip()).getByRole("link", { name }));
+      fireEvent.click(within(openPicker()).getByRole("menuitem", { name }));
     };
 
     it("shows the copy last seen of it at once while the fresh one loads", async () => {
@@ -115,7 +167,20 @@ describe("SportsHub", () => {
       go(/^Football/);
 
       expect(await screen.findByRole("status")).toHaveTextContent("Loading Football…");
-      expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+      // Hidden ones too: an open menu would hide the page from the query.
+      expect(screen.queryByRole("heading", { level: 1, hidden: true })).toBeNull();
+    });
+
+    it("keeps the favourites and the picker, on the sport coming, usable over its skeleton", async () => {
+      renderHub();
+      go(/^Football/);
+
+      expect(await screen.findByRole("status")).toHaveTextContent("Loading Football…");
+      expect(picker()).toHaveAccessibleName(/^Football\s*, change sport$/);
+      expect(picker().parentElement?.firstElementChild).toBe(favorites());
+      expect(within(openPicker()).getByRole("menuitem", { current: "page" })).toHaveAccessibleName(
+        "Football"
+      );
     });
 
     it("never shows another account's copy", async () => {
@@ -124,7 +189,7 @@ describe("SportsHub", () => {
       go(/^F1/);
 
       expect(await screen.findByRole("status")).toHaveTextContent("Loading Formula 1…");
-      expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+      expect(screen.queryByRole("heading", { level: 1, hidden: true })).toBeNull();
     });
   });
 });

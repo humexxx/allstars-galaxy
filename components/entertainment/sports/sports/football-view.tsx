@@ -6,13 +6,12 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import type { FootballLeagueData, FootballLeagueId, NewsStory, Team } from "@/types/sports";
 
+import { CompetitionTrigger } from "../shared/competition-trigger";
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { MatchesByDate } from "../shared/matches-by-date";
 import { TeamNewsTab } from "../shared/news-list";
@@ -63,23 +62,19 @@ function LeaguePicker({
   // skeleton of it.
   const navigate = useSportsNavigation();
   return (
-    <div className="flex items-center gap-2">
-      <Select
-        value={leagueId}
-        onValueChange={(v) => navigate(`?sport=football&league=${v as FootballLeagueId}`)}
-      >
-        <SelectTrigger className="w-56" aria-label="League">
-          <SelectValue placeholder="League" />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((o) => (
-            <SelectItem key={o.id} value={o.id}>
-              {o.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <Select
+      value={leagueId}
+      onValueChange={(v) => navigate(`?sport=football&league=${v as FootballLeagueId}`)}
+    >
+      <CompetitionTrigger label="League" />
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem key={o.id} value={o.id}>
+            {o.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

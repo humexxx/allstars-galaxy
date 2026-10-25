@@ -21,6 +21,9 @@ function renderLeague(id: FootballLeagueId): void {
 const tabs = (): (string | null)[] => screen.getAllByRole("tab").map((t) => t.textContent);
 const openTab = (): string | null => screen.getByRole("tab", { selected: true }).textContent;
 const tableRows = (): number => within(screen.getByRole("table")).getAllByRole("row").length - 1;
+const teamFilter = (): HTMLElement | null => screen.queryByRole("button", { name: /^Filter by team/ });
+/** The sticky row the tablist sits in. */
+const tabsRow = (): HTMLElement => screen.getByRole("tablist").closest<HTMLElement>(".sticky")!;
 
 describe("FootballView", () => {
   it("has no Table tab: the whole table is on Overview, beside the matches", () => {
@@ -54,16 +57,37 @@ describe("FootballView", () => {
     expect(screen.queryByRole("table")).toBeNull();
   });
 
-  it("keeps the team filter in the sport bar, and only while Overview is open", () => {
+  it("keeps the League picker at the end of the tabs row, on every tab", () => {
     renderLeague("uefa-champions-league");
-    const filter = (): HTMLElement | null => screen.queryByRole("button", { name: /^Filter by team/ });
+    const league = (): HTMLElement => screen.getByRole("combobox", { name: "League" });
     expect(openTab()).toBe("Knockout");
-    expect(filter()).toBeNull();
+    expect(tabsRow()).toContainElement(league());
+    expect(tabsRow().lastElementChild).toContainElement(league());
+    expect(screen.getByRole("tabpanel")).not.toContainElement(league());
 
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Overview" }), { button: 0 });
 
-    expect(filter()!.closest(".sticky")).toContainElement(screen.getByRole("tablist"));
-    expect(screen.getByRole("tabpanel")).not.toContainElement(filter());
+    expect(tabsRow().lastElementChild).toContainElement(league());
+  });
+
+  it("puts the team filter on the first day's heading in Overview, and only there", () => {
+    renderLeague("uefa-champions-league");
+    expect(openTab()).toBe("Knockout");
+    expect(teamFilter()).toBeNull();
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Overview" }), { button: 0 });
+
+    const filter = teamFilter()!;
+    expect(filter).toHaveAccessibleName("Filter by team: All teams");
+    const panel = screen.getByRole("tabpanel");
+    expect(panel).toContainElement(filter);
+    expect(tabsRow()).not.toContainElement(filter);
+    const firstDay = panel.querySelector("[data-day]")!;
+    expect(firstDay.firstElementChild).toContainElement(filter);
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Knockout" }), { button: 0 });
+
+    expect(teamFilter()).toBeNull();
   });
 
   it("is headed by the competition's name", () => {

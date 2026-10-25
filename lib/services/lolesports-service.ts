@@ -33,9 +33,9 @@ const REVALIDATE_SECONDS = 300;
 type TargetLeague = { slug: string; region: LolRegion; international?: boolean };
 
 /**
- * The leagues on the strip. Worlds was not on it at all, so October showed
- * September's finals. Which one leads is `orderSplits`' call; this order only
- * breaks its ties.
+ * The leagues the region picker offers. Worlds was not among them at all,
+ * so October showed September's finals. Which one leads is `orderSplits`'
+ * call; this order only breaks its ties.
  */
 const TARGET_LEAGUES: TargetLeague[] = [
   { slug: "worlds", region: "worlds", international: true },

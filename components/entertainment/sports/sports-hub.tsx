@@ -1,29 +1,20 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-  type MouseEvent,
-} from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Info, Star } from "lucide-react";
+import { Info } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import { SPORTS } from "@/lib/data/sports/registry";
 import type { SportPayload } from "@/lib/sports/payload";
-import type { SavedTeamFilter, SportId, SportMeta } from "@/types/sports";
+import type { SavedTeamFilter, SportId } from "@/types/sports";
 
 import { ManageFavoritesSheet } from "./manage-favorites-sheet";
 import { recallSport, rememberSport, seenKey } from "./seen-sports";
+import { SportHubControls } from "./shared/sport-shell";
 import { SavedTeamFilterProvider } from "./shared/team-filter-context";
 import { SportsTodayProvider } from "./shared/time-zone-context";
+import { SportPicker } from "./sport-picker";
 import { SportSkeleton, SportsNavigationContext } from "./sports-navigation";
 import { F1View } from "./sports/f1-view";
 import { FootballView } from "./sports/football-view";
@@ -35,7 +26,7 @@ import { TennisView } from "./sports/tennis-view";
 
 type SportsHubProps = {
   activeSport: SportId;
-  /** Favourites surface as starred tabs and get pinned to the front of the strip. */
+  /** Favourites are starred and listed first in the sport picker. */
   favoriteSportIds?: SportId[];
   /** Exactly the sport being shown — the page fetches one, not all eight. */
   payload: SportPayload;
@@ -115,18 +106,21 @@ export function SportsHub({
 
   return (
     <SportsNavigationContext.Provider value={navigate}>
-      {/* No page header: the strip is the first row, and the sport's own bar
-          names the page (SportShell). */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-start gap-3">
-          <SportSelector
-            active={loading && target ? target : activeSport}
-            favSet={favSet}
-            sports={orderedSports}
-            onPick={(sport) => navigate(`?sport=${sport}`)}
-          />
-          <ManageFavoritesSheet favoriteSportIds={favoriteSportIds} trigger="icon" />
-        </div>
+      {/* No page header and no strip of sports: the sport's own name row is
+          the first row, with the favourites and the sport picker at its end. */}
+      <SportHubControls.Provider
+        value={
+          <>
+            <ManageFavoritesSheet favoriteSportIds={favoriteSportIds} trigger="icon" />
+            <SportPicker
+              active={loading && target ? target : activeSport}
+              sports={orderedSports}
+              favorites={favSet}
+              onPick={(sport) => navigate(`?sport=${sport}`)}
+            />
+          </>
+        }
+      >
         {/* The skeleton is aria-hidden; this is what a screen reader hears. */}
         <p role="status" className="sr-only">
           {loading ? `Loading ${loadingLabel ?? "sport"}…` : ""}
@@ -147,7 +141,7 @@ export function SportsHub({
             <SportSkeleton sport={target ?? activeSport} />
           )}
         </div>
-      </div>
+      </SportHubControls.Provider>
     </SportsNavigationContext.Provider>
   );
 }
@@ -171,81 +165,6 @@ function SampleDataNotice(): React.ReactElement {
         standings are made up.
       </AlertDescription>
     </Alert>
-  );
-}
-
-/**
- * The sport strip. Each sport is a link (`?sport=`), so it navigates like one:
- * middle-click opens it, Back returns, and the active one is `aria-current`.
- */
-function SportSelector({
-  active,
-  favSet,
-  sports,
-  onPick,
-}: {
-  active: SportId;
-  favSet: Set<SportId>;
-  sports: SportMeta[];
-  onPick: (sport: SportId) => void;
-}): React.ReactElement {
-  // A plain click goes through the hub's transition; a modified one (a new
-  // tab, a new window) stays the link it is.
-  const pick = (event: MouseEvent<HTMLAnchorElement>, sport: SportId): void => {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    event.preventDefault();
-    if (sport !== active) onPick(sport);
-  };
-  return (
-    // Scrolls sideways on its own when the chips outrun a phone; the
-    // favourites button beside it stays put. Bled to the left only: bled to
-    // the right too, the chips ran on under the button.
-    <nav aria-label="Sports" className="relative -ml-2 min-w-0 flex-1 overflow-x-auto pb-1 pl-2">
-      <ul className="flex gap-2">
-        {sports.map((sport) => {
-          const isActive = sport.id === active;
-          const link = (
-            <Link
-              href={`?sport=${sport.id}`}
-              scroll={false}
-              onClick={(event) => pick(event, sport.id)}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                isActive
-                  ? "border-foreground/15 bg-foreground/5 text-foreground shadow-xs"
-                  : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-            >
-              <span aria-hidden className="text-base leading-none">
-                {sport.emoji}
-              </span>
-              <span>{sport.shortLabel}</span>
-              {favSet.has(sport.id) && (
-                <>
-                  <Star aria-hidden className="size-3 fill-warning text-warning" strokeWidth={2} />
-                  <span className="sr-only">(favorite)</span>
-                </>
-              )}
-            </Link>
-          );
-          return (
-            <li key={sport.id} className="shrink-0">
-              {/* The strip shows the short label; the full name ("League of
-                  Legends") rides in a tooltip where the two differ. */}
-              {sport.label === sport.shortLabel ? (
-                link
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger asChild>{link}</TooltipTrigger>
-                  <TooltipContent>{sport.label}</TooltipContent>
-                </Tooltip>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
   );
 }
 

@@ -5,13 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { SportBarEnd, SportShell } from "./sport-shell";
+import { SportHubControls, SportShell } from "./sport-shell";
 
-function renderShell(
-  defaultValue = "overview",
-  overview: ReactNode = "Matches"
-): ReturnType<typeof render> {
-  return render(
+/** `hub`, when given, is what the sports hub sets at the end of the name row. */
+function renderShell(defaultValue = "overview", hub?: ReactNode): ReturnType<typeof render> {
+  const shell = (
     <Tabs defaultValue={defaultValue}>
       <SportShell
         emoji="⚽"
@@ -25,15 +23,28 @@ function renderShell(
           </TabsList>
         }
       >
-        <TabsContent value="overview">{overview}</TabsContent>
+        <TabsContent value="overview">Matches</TabsContent>
         <TabsContent value="knockout">Bracket</TabsContent>
       </SportShell>
     </Tabs>
+  );
+  return render(
+    hub ? <SportHubControls.Provider value={hub}>{shell}</SportHubControls.Provider> : shell
   );
 }
 
 /** The sticky row the tablist sits in (through its sideways scroller). */
 const tabsRow = (): HTMLElement => screen.getByRole("tablist").closest<HTMLElement>(".sticky")!;
+
+/** The row with the h1, which scrolls away above the tabs row. */
+const nameRow = (): HTMLElement => tabsRow().previousElementSibling as HTMLElement;
+
+const HUB = (
+  <>
+    <button type="button">Manage favorites (2)</button>
+    <button type="button">⚽ Football, change sport</button>
+  </>
+);
 
 const rect = (top: number, bottom: number): DOMRect =>
   ({ top, bottom, left: 0, right: 0, width: 0, height: bottom - top, x: 0, y: top }) as DOMRect;
@@ -95,33 +106,38 @@ describe("SportShell", () => {
     expect(scroller).toHaveClass("min-w-0", "overflow-x-auto", "overflow-y-hidden");
   });
 
-  it("puts a tab's own control at the end of the tabs row, and takes it away with the tab", () => {
-    renderShell(
-      "overview",
-      <>
-        <SportBarEnd>
-          <button type="button">Filter</button>
-        </SportBarEnd>
-        Matches
-      </>
-    );
-    const filter = screen.getByRole("button", { name: "Filter" });
-    expect(tabsRow()).toContainElement(filter);
-    expect(tabsRow().lastElementChild).toContainElement(filter);
-    expect(screen.getByRole("tabpanel")).not.toContainElement(filter);
-
-    pick("Knockout");
-
-    expect(screen.queryByRole("button", { name: "Filter" })).toBeNull();
-    expect(tabsRow().lastElementChild).toBeEmptyDOMElement();
+  it("puts the competition picker at the end of the sticky tabs row, not in the name row", () => {
+    renderShell();
+    const league = screen.getByRole("button", { name: "League" });
+    expect(nameRow()).toContainElement(screen.getByRole("heading", { level: 1 }));
+    expect(tabsRow().lastElementChild).toContainElement(league);
+    expect(nameRow()).not.toContainElement(league);
+    // Level with the tabs, after them.
+    const tablist = screen.getByRole("tablist");
+    expect(tablist.compareDocumentPosition(league) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("reads top to bottom: the name and its controls, then the tabs", () => {
+  it("sets the hub's favourites and sport picker at the end of the name row", () => {
+    renderShell("overview", HUB);
+    const favorites = screen.getByRole("button", { name: "Manage favorites (2)" });
+    const sport = screen.getByRole("button", { name: "⚽ Football, change sport" });
+    const end = nameRow().lastElementChild!;
+    expect(end).toContainElement(favorites);
+    expect(end).toContainElement(sport);
+    expect(end).not.toContainElement(screen.getByRole("heading", { level: 1 }));
+    // Favourites first, then the sport.
+    expect(favorites.compareDocumentPosition(sport) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // They scroll away with the name; the stuck bar keeps the league alone.
+    expect(tabsRow()).not.toContainElement(favorites);
+    expect(tabsRow()).not.toContainElement(sport);
+    expect(within(tabsRow()).getByRole("button", { name: "League" })).toBeInTheDocument();
+  });
+
+  it("leaves the name row to the name outside the hub", () => {
     renderShell();
-    const tablist = screen.getByRole("tablist");
-    const league = screen.getByRole("button", { name: "League" });
-    expect(league.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(tabsRow().contains(league)).toBe(false);
+    expect(nameRow().children).toHaveLength(1);
+    expect(within(nameRow()).queryAllByRole("button")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: /change sport/ })).toBeNull();
   });
 
   it("puts a small copy of the name in the tabs row once the name has scrolled away", () => {

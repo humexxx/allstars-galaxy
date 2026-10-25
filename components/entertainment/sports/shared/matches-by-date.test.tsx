@@ -59,7 +59,7 @@ const league = [
 const LA_LIGA = { sportId: "football", competition: "la-liga" } as const;
 
 /**
- * The list on an Overview tab of a sport shell, whose bar holds its filter.
+ * The list on an Overview tab of a sport shell, as a sport's page sets it.
  * `saved` is what the page read for this list; without it nothing is saved.
  */
 function renderList(matches: Match[], saved: SavedTeamFilter | null = null): ReturnType<typeof render> {
@@ -97,8 +97,9 @@ const earlierButton = (): HTMLElement | null =>
 
 const teamFilter = (): HTMLElement | null => screen.queryByRole("button", { name: /^Filter by team/ });
 
-/** The sticky row the tablist sits in (through its sideways scroller). */
-const sportBar = (): HTMLElement => screen.getByRole("tablist").closest<HTMLElement>(".sticky")!;
+/** The heading line over `day`'s matches. */
+const headingLine = (container: HTMLElement, day: string): HTMLElement =>
+  container.querySelector(`[data-day="${day}"]`)!.firstElementChild as HTMLElement;
 
 // jsdom has no scrollIntoView; cmdk scrolls its highlighted option with it.
 const { scrollIntoView } = Element.prototype;
@@ -170,11 +171,34 @@ describe("MatchesByDate", () => {
     expect(screen.getByText(/^Today · /)).toBeInTheDocument();
   });
 
-  it("puts Earlier on the first day's heading line, not on a row of its own", () => {
+  it("puts the team filter and Earlier on the first day's heading line, not on a row of their own", () => {
     const { container } = renderList(season);
-    const heading = container.querySelector('[data-day="2026-10-17"]')!.firstElementChild!;
-    expect(heading).toContainElement(earlierButton());
-    expect(heading).toHaveTextContent(/^Saturday, October 17, 2026Earlier$/);
+    const line = headingLine(container, "2026-10-17");
+    expect(line).toContainElement(teamFilter());
+    expect(line).toContainElement(earlierButton());
+    // The day, then the teams, then the days before: nothing else.
+    expect(line).toHaveTextContent(/^Saturday, October 17, 2026All teamsEarlier$/);
+    for (const day of ["2026-10-18", "2026-10-21"]) {
+      expect(within(headingLine(container, day)).queryByRole("button")).toBeNull();
+    }
+  });
+
+  it("takes the filter up to the new first day as Earlier brings days in", () => {
+    const { container } = renderList(season);
+
+    fireEvent.click(earlierButton()!);
+
+    // Nothing earlier is left, so the filter has the line to itself.
+    expect(headingLine(container, "2026-10-10")).toHaveTextContent(/^Saturday, October 10, 2026All teams$/);
+    expect(within(headingLine(container, "2026-10-17")).queryByRole("button")).toBeNull();
+    expect(screen.getAllByRole("button", { name: /^Filter by team/ })).toHaveLength(1);
+  });
+
+  it("shows no filter with a single team to pick", () => {
+    // A final whose other side is still to be decided.
+    const { container } = renderList([match("final", "2026-10-21T20:00:00Z", "scheduled", "rma", "tbd")]);
+    expect(teamFilter()).toBeNull();
+    expect(headingLine(container, "2026-10-21")).toHaveTextContent(/^Wednesday, October 21, 2026$/);
   });
 
   it("opens on a day heading: no label row above the first day", () => {
@@ -243,28 +267,18 @@ describe("MatchesByDate", () => {
     }
   });
 
-  it("puts the team filter at the end of the sport bar, out of the list", () => {
-    const { container } = renderList(season);
-    const filter = teamFilter()!;
-    expect(sportBar()).toContainElement(filter);
-    expect(screen.getByRole("tabpanel")).not.toContainElement(filter);
-    expect(filter.compareDocumentPosition(screen.getByRole("tablist")) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-    expect(filter).toHaveTextContent("All teams");
-    expect(container.querySelector("[data-day]")).not.toBeNull();
-  });
-
-  it("takes the filter away with its tab", () => {
+  it("keeps the team filter in its tab's list, not in the sport bar, and takes it away with the tab", () => {
     renderList(season);
-    expect(teamFilter()).not.toBeNull();
+    expect(screen.getByRole("tabpanel")).toContainElement(teamFilter());
+    expect(teamFilter()).toHaveTextContent("All teams");
 
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Knockout" }), { button: 0 });
 
     expect(screen.getByRole("tabpanel")).toHaveTextContent("Bracket");
     expect(teamFilter()).toBeNull();
-    expect(within(sportBar()).queryByRole("button")).toBeNull();
   });
 
-  it("opens another team's fixtures on its freshest results again, its crest in the bar", () => {
+  it("opens another team's fixtures on its freshest results again, named on the filter", () => {
     Element.prototype.scrollIntoView = vi.fn();
     const { container } = renderList(season);
     fireEvent.click(earlierButton()!);
@@ -390,9 +404,25 @@ describe("MatchesByDate", () => {
     renderList(league, { list: LA_LIGA, teamIds: [] });
 
     openFilter();
-    tick(/Sevilla/);
     tick(/Barcelona/);
+    tick(/Sevilla/);
     expect(setSportTeamFilterAction).not.toHaveBeenCalled();
+    closeFilter();
+
+    expect(setSportTeamFilterAction).toHaveBeenCalledOnce();
+    expect(setSportTeamFilterAction).toHaveBeenCalledWith({ ...LA_LIGA, teamIds: ["bar", "sev"] });
+  });
+
+  it("keeps the menu open and saves the pick when a tick moves the filter to another day", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    renderList(league, { list: LA_LIGA, teamIds: [] });
+
+    openFilter();
+    // Sevilla's first game is a day later: the list now opens on that day,
+    // and the filter goes with it.
+    tick(/Sevilla/);
+    expect(screen.getByRole("option", { name: /Barcelona/ })).toBeInTheDocument();
+    tick(/Barcelona/);
     closeFilter();
 
     expect(setSportTeamFilterAction).toHaveBeenCalledOnce();
@@ -401,11 +431,11 @@ describe("MatchesByDate", () => {
 
   it("saves nothing when the menu closes as it opened", () => {
     Element.prototype.scrollIntoView = vi.fn();
-    renderList(league, { list: LA_LIGA, teamIds: ["sev"] });
+    renderList(league, { list: LA_LIGA, teamIds: ["bar"] });
 
     openFilter();
-    tick(/Barcelona/);
-    tick(/Barcelona/);
+    tick(/Sevilla/);
+    tick(/Sevilla/);
     closeFilter();
 
     expect(setSportTeamFilterAction).not.toHaveBeenCalled();
@@ -421,15 +451,16 @@ describe("MatchesByDate", () => {
     expect(setSportTeamFilterAction).not.toHaveBeenCalled();
   });
 
-  it("has nowhere to put a filter outside a sport shell, and renders without one", () => {
-    render(
+  it("keeps its filter beside Earlier outside a sport shell", () => {
+    const { container } = render(
       <ReaderTimeZoneProvider timeZone={ZONE}>
         <SportsTodayProvider today={TODAY}>
           <MatchesByDate matches={season} teams={teams} />
         </SportsTodayProvider>
       </ReaderTimeZoneProvider>
     );
-    expect(teamFilter()).toBeNull();
-    expect(earlierButton()).not.toBeNull();
+    const line = headingLine(container, "2026-10-17");
+    expect(line).toContainElement(teamFilter());
+    expect(line).toContainElement(earlierButton());
   });
 });

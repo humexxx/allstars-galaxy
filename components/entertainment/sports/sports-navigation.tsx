@@ -7,6 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { SportId } from "@/types/sports";
 
+import { SportHubControls } from "./shared/sport-shell";
+
 /**
  * Moves the hub to another sport or league inside the hub's own transition,
  * so the hub can show what is coming (`SportSkeleton`) instead of a spinner
@@ -18,25 +20,11 @@ export function useSportsNavigation(): (href: string) => void {
   return useContext(SportsNavigationContext);
 }
 
-/**
- * The hub's first row while the route loads: the sport chips, then the
- * favourites button at the end (`loading.tsx`).
- */
-export function SportStripSkeleton(): React.ReactElement {
-  return (
-    <div className="flex items-start gap-2" aria-hidden="true">
-      <div className="flex min-w-0 flex-1 gap-2 overflow-hidden pb-1">
-        {Array.from({ length: 7 }).map((_, i) => (
-          <Skeleton key={i} className="h-8 w-24 shrink-0 rounded-full" />
-        ))}
-      </div>
-      <Skeleton className="size-8 shrink-0 rounded-full" />
-    </div>
-  );
-}
-
 /** What the left of a sport's Overview holds, for its skeleton. */
 type Shape = "matches" | "events";
+
+/** The sports with a competition picker at the end of their tabs row. */
+const PICKS_COMPETITION = new Set<SportId>(["football", "lol"]);
 
 /** F1, padel and tennis lead with one event, big, and the ones after it as tiles. */
 const SHAPES: Partial<Record<SportId, Shape>> = {
@@ -51,25 +39,39 @@ const SHAPES: Partial<Record<SportId, Shape>> = {
  * as the sport fills it (days of match cards; or, for F1, padel and tennis,
  * the event on now or next and the ones after it), each part under a line
  * set like a day heading, and beside it the table's label and card: its ten rows
- * and the "Show more" line under them, as every table in the hub. The
- * route's `loading.tsx` uses it too, under the strip, with no sport to go by.
+ * and the "Show more" line under them, as every table in the hub. Inside
+ * the hub the name row ends on the hub's own favourites and sport picker,
+ * usable while the sport loads; the route's `loading.tsx` has no hub, and no
+ * sport to go by, so it draws their places.
  */
 export function SportSkeleton({ sport }: { sport?: SportId } = {}): React.ReactElement {
   const shape = (sport && SHAPES[sport]) ?? "matches";
+  const hubControls = useContext(SportHubControls);
   return (
-    <div className="@container flex flex-col" aria-hidden="true">
-      <div className="flex items-center gap-3 pb-4">
-        <Skeleton className="size-10 shrink-0 rounded-lg" />
-        <div className="flex flex-col gap-1">
-          <Skeleton className="h-6 w-44" />
-          <Skeleton className="h-4 w-28" />
+    <div className="@container flex flex-col">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-4">
+        <div className="flex items-center gap-3" aria-hidden="true">
+          <Skeleton className="size-10 shrink-0 rounded-lg" />
+          <div className="flex flex-col gap-1">
+            <Skeleton className="h-6 w-44" />
+            <Skeleton className="h-4 w-28" />
+          </div>
         </div>
+        {hubControls ? (
+          <div className="flex items-center gap-2">{hubControls}</div>
+        ) : (
+          <div className="flex items-center gap-2" aria-hidden="true">
+            <Skeleton className="size-8 rounded-full" />
+            <Skeleton className="h-8 w-44 rounded-full" />
+          </div>
+        )}
       </div>
-      <div className="flex h-12 items-end gap-4 border-b pb-2">
+      <div className="flex h-12 items-end gap-4 border-b pb-2" aria-hidden="true">
         <Skeleton className="h-6 w-20" />
         <Skeleton className="h-6 w-20" />
+        {sport && PICKS_COMPETITION.has(sport) && <Skeleton className="mb-0.5 ml-auto h-8 w-44" />}
       </div>
-      <div className="grid items-start gap-6 pt-6 @4xl:grid-cols-[2fr_1fr]">
+      <div className="grid items-start gap-6 pt-6 @4xl:grid-cols-[2fr_1fr]" aria-hidden="true">
         <div className="flex min-w-0 flex-col gap-6">
           {shape === "events" ? <EventsSkeleton /> : <MatchesSkeleton />}
         </div>

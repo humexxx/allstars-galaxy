@@ -27,7 +27,6 @@ import { EASE, fadeIn, holdScrollStill, holdStill, SLIDE_MS } from "./reveal";
 import { RevealPill } from "./reveal-pill";
 import { ScoreCard } from "./score-card";
 import { scrollParent } from "./scroll";
-import { SportBarEnd } from "./sport-shell";
 import { TeamBadge } from "./team-badge";
 import { useSavedTeamFilter } from "./team-filter-context";
 import { rememberTeams } from "../seen-sports";
@@ -85,6 +84,11 @@ export function MatchesByDate({
   const today = useSportsToday();
   const saved = useSavedTeamFilter();
   const [picks, setPicks] = useState<readonly string[]>(() => saved?.teamIds ?? []);
+  // The filter's menu, kept here rather than in the filter: the filter rides
+  // the first day's heading, and a tick that changes which day comes first
+  // moves it to another heading, which must find its menu still open.
+  const [filterOpen, setFilterOpen] = useState(false);
+  const pickedAtOpen = useRef("");
   // How many days before the opening one are shown.
   const [extra, setExtra] = useState(0);
   const [, startSaving] = useTransition();
@@ -129,9 +133,10 @@ export function MatchesByDate({
     slideIn(list, done.tops, done.added);
   }, [extra]);
 
-  // The filter sits in the stuck bar, so a team can be picked deep in the
-  // list, which left the new, shorter list starting above the screen. Put
-  // its first day back under the bar; a list already in view stays put.
+  // The filter rides the first day's heading, stuck under the bar while that
+  // day is read, so a pick can leave the new, shorter list starting above the
+  // screen. Put its first day back under the bar; a list already in view
+  // stays put.
   useLayoutEffect(() => {
     if (!narrowed.current) return;
     narrowed.current = false;
@@ -156,6 +161,13 @@ export function MatchesByDate({
     narrowed.current = true;
     setPicks(next);
     setExtra(0);
+  };
+
+  // Saved once, when the menu closes having changed: a run of ticks is one write.
+  const openFilter = (open: boolean): void => {
+    if (open) pickedAtOpen.current = sameTeams(picked);
+    else if (sameTeams(picked) !== pickedAtOpen.current) saveTeams(picked);
+    setFilterOpen(open);
   };
 
   const saveTeams = (teamIds: readonly string[]): void => {
@@ -189,11 +201,6 @@ export function MatchesByDate({
     // Its own container, so the columns follow the list's width: beside a
     // table it is two-thirds of the row, alone it is all of it.
     <section className={cn("@container flex min-w-0 flex-col", className)}>
-      {options.length > 1 && (
-        <SportBarEnd>
-          <TeamFilter options={options} picked={picked} onPick={pickTeams} onSave={saveTeams} />
-        </SportBarEnd>
-      )}
       {days.length === 0 ? (
         <EmptyState icon={CalendarX} title={emptyTitle} />
       ) : (
@@ -216,14 +223,28 @@ export function MatchesByDate({
                 )}
               >
                 {heading(day)}
-                {i === 0 && earlier > 0 && (
-                  <RevealPill
-                    icon={History}
-                    label="Earlier"
-                    detail={earlierLabel}
-                    data-earlier
-                    onClick={revealEarlier}
-                  />
+                {/* On the first day's line: the teams, then the days before. */}
+                {i === 0 && (options.length > 1 || earlier > 0) && (
+                  <span className="flex items-center gap-1.5">
+                    {options.length > 1 && (
+                      <TeamFilter
+                        options={options}
+                        picked={picked}
+                        onPick={pickTeams}
+                        open={filterOpen}
+                        onOpenChange={openFilter}
+                      />
+                    )}
+                    {earlier > 0 && (
+                      <RevealPill
+                        icon={History}
+                        label="Earlier"
+                        detail={earlierLabel}
+                        data-earlier
+                        onClick={revealEarlier}
+                      />
+                    )}
+                  </span>
                 )}
               </Eyebrow>
               <div className="grid gap-2 @xl:grid-cols-2 @5xl:grid-cols-3">
@@ -237,6 +258,11 @@ export function MatchesByDate({
       )}
     </section>
   );
+}
+
+/** A pick as a key that ignores the order the teams were ticked in. */
+function sameTeams(ids: readonly string[]): string {
+  return [...ids].sort().join(",");
 }
 
 /**
@@ -272,28 +298,28 @@ function hiddenUnderBar(day: HTMLElement): boolean {
 }
 
 /**
- * The team filter, quiet in the sport bar: a filter icon or the picked teams'
- * crests, with what is picked and a chevron beside it once the bar has room.
- * On a phone it is the icons alone, so a stuck bar keeps room for the sport's
- * name and its tabs.
+ * The team filter, a pill on the first day's heading line beside "Earlier",
+ * set as that one is: a filter icon or the picked teams' crests, with what is
+ * picked and a chevron once the list has room; on a phone the icons alone,
+ * so the line keeps room for the day.
  *
  * The menu picks several teams, with a search for a twenty- or thirty-six-team
- * league. The list behind it follows each tick; the pick is saved once, when
- * the menu closes having changed.
+ * league. The list behind it follows each tick; whether it is open is the
+ * list's to keep (`open`), since a tick can move the filter to another day.
  */
 function TeamFilter({
   options,
   picked,
   onPick,
-  onSave,
+  open,
+  onOpenChange,
 }: {
   options: Team[];
   picked: readonly string[];
   onPick: (teamIds: readonly string[]) => void;
-  onSave: (teamIds: readonly string[]) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }): React.ReactElement {
-  const [open, setOpen] = useState(false);
-  const atOpen = useRef("");
   const chosen = new Set(picked);
   const crests = picked
     .map((id) => options.find((t) => t.id === id))
@@ -305,33 +331,24 @@ function TeamFilter({
         ? crests[0].shortName
         : `${crests.length} teams`;
 
-  const sameAs = (ids: readonly string[]): string => [...ids].sort().join(",");
-  const openChange = (next: boolean): void => {
-    if (next) atOpen.current = sameAs(picked);
-    else if (sameAs(picked) !== atOpen.current) onSave(picked);
-    setOpen(next);
-  };
   const toggle = (id: string): void =>
     onPick(chosen.has(id) ? picked.filter((p) => p !== id) : [...picked, id]);
 
   return (
-    <Popover open={open} onOpenChange={openChange}>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <Button
-          variant="ghost"
-          size="sm"
+          variant="outline"
+          size="xs"
           aria-label={`Filter by team: ${label}`}
-          className={cn(
-            "text-muted-foreground @max-md:px-2",
-            crests.length > 0 && "text-foreground"
-          )}
+          className="-my-1.5 rounded-full font-medium tracking-normal normal-case"
         >
           {crests.length === 0 ? (
             <ListFilter data-icon="inline-start" />
           ) : (
             <span className="flex -space-x-1.5">
               {crests.slice(0, 3).map((t) => (
-                <TeamBadge key={t.id} team={t} size="sm" className="size-5 ring-2 ring-background" />
+                <TeamBadge key={t.id} team={t} size="sm" className="size-4 ring-2 ring-background" />
               ))}
             </span>
           )}

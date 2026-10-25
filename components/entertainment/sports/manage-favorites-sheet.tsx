@@ -43,8 +43,8 @@ const COVERAGE: Record<SportId, string> = {
 type ManageFavoritesSheetProps = {
   favoriteSportIds: SportId[];
   /**
-   * `icon`: a round star button with the count on its corner, for the end of
-   * the hub's sport strip. `button` spells out "Manage favorites".
+   * `icon`: a round star button with the count on its corner, beside the
+   * hub's sport picker. `button` spells out "Manage favorites".
    */
   trigger?: "button" | "icon";
 };

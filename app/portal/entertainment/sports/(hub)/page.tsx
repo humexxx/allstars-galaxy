@@ -42,8 +42,8 @@ export default async function SportsPage({
     list ? getSportTeamFilter(ctx.effectiveUserId, list) : Promise.resolve([]),
   ]);
 
-  // No PageHeader: the sport bar names the page, and the favourites button
-  // sits at the end of the sport strip (SportsHub).
+  // No PageHeader: the sport's own name row names the page, with the
+  // favourites button and the sport picker at its end (SportsHub).
   return (
     <SportsHub
       activeSport={active}

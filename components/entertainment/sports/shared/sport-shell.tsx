@@ -9,37 +9,27 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
-
 import { cn } from "@/lib/utils";
 import { Heading, Text } from "@/components/ui/typography";
 
 import { scrollByFrom } from "./scroll";
 
-const BarEndContext = createContext<HTMLElement | null>(null);
-
 /**
- * Puts its children at the right end of the sticky tabs row: a control that
- * belongs to one tab (the Overview's team filter) rendered from inside that
- * tab's panel. Radix unmounts a panel that is not open, so the control comes
- * and goes with its tab. Nothing without a tabs row.
+ * What the hub sets at the end of every sport's name row: the favourites
+ * button and the sport picker. A context, so each view's shell carries them
+ * without every view passing them on.
  */
-export function SportBarEnd({ children }: { children: ReactNode }): React.ReactPortal | null {
-  const slot = useContext(BarEndContext);
-  return slot ? createPortal(children, slot) : null;
-}
+export const SportHubControls = createContext<ReactNode>(null);
 
 type SportShellProps = {
   /** Big emoji or logo shown at the top-left next to the title. */
   emoji?: string;
   title: string;
   subtitle?: string;
-  /** Optional pill controls (league/conference/region selector). */
+  /** The competition picker (football's league, LoL's region), at the right end of the tabs row. */
   controls?: ReactNode;
   /** Tab strip: the sticky row under the name. */
   tabs?: ReactNode;
-  /** Right-aligned tabs/sub-navigation. */
-  rightSlot?: ReactNode;
   children: ReactNode;
   className?: string;
 };
@@ -50,7 +40,8 @@ type SportShellProps = {
  * the `<h1>`.
  *
  * Two rows, at every width, the way a repository or a league page reads: the
- * name (with the controls on its right) scrolls away, and the tabs under it
+ * name (with the hub's favourites and sport picker on its right) scrolls
+ * away, and the tabs under it (with the competition picker on their right)
  * stick below the app header. Once the name has gone, a compact copy of it
  * slides into the tabs row so a stuck bar still says what it is about. The
  * name and the tabs used to share one row from `@4xl`, where a two-line title
@@ -62,15 +53,14 @@ export function SportShell({
   subtitle,
   controls,
   tabs,
-  rightSlot,
   children,
   className,
 }: SportShellProps): React.ReactElement {
+  const hubControls = useContext(SportHubControls);
   const titleRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [barEnd, setBarEnd] = useState<HTMLDivElement | null>(null);
   const hasTabs = Boolean(tabs);
   const titleGone = useScrolledAway(titleRef, hasTabs);
 
@@ -123,12 +113,7 @@ export function SportShell({
             )}
           </div>
         </div>
-        {(controls || rightSlot) && (
-          <div className="flex flex-wrap items-center gap-2">
-            {controls}
-            {rightSlot}
-          </div>
-        )}
+        {hubControls && <div className="flex items-center gap-2">{hubControls}</div>}
       </div>
       {tabs && (
         <div
@@ -156,12 +141,12 @@ export function SportShell({
           >
             {tabs}
           </div>
-          {/* `SportBarEnd`'s slot, level with the tab labels. */}
-          <div ref={setBarEnd} className="mb-1 flex shrink-0 items-center empty:hidden" />
+          {/* Level with the tab labels. */}
+          {controls && <div className="mb-1 flex shrink-0 items-center">{controls}</div>}
         </div>
       )}
       <div ref={contentRef} className="min-w-0 pt-6">
-        <BarEndContext.Provider value={barEnd}>{children}</BarEndContext.Provider>
+        {children}
       </div>
     </div>
   );

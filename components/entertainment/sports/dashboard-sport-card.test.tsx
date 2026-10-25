@@ -170,6 +170,59 @@ describe("DashboardSportCard", () => {
     expect(story).toHaveAttribute("target", "_blank");
   });
 
+  it("steps through the games in the lead box, and moves the table up and the news to the last row", async () => {
+    await renderCard({
+      ...card([]),
+      sportId: "nba",
+      label: "NBA",
+      following: [match("2", "upcoming", "NYK", "BOS"), match("3", "upcoming", "LAL", "GSW")],
+      tables: [{ id: "east", label: "East", rows: [{ position: 1, name: "76ers", value: "3–0" }] }],
+      news: [
+        {
+          id: "espn-1",
+          headline: "Giannis stays hot in a loss",
+          description: null,
+          href: "https://www.espn.com/nba/story/_/id/1",
+          external: true,
+          image: null,
+          at: "2026-10-24T04:36:05Z",
+          kind: "story",
+          about: [],
+        },
+      ],
+    });
+
+    // Named for its sport: three cards would otherwise be three "Games" landmarks.
+    const carousel = screen.getByRole("region", { name: "NBA games" });
+    expect(within(carousel).getAllByRole("group").map((slide) => slide.textContent)).toEqual([
+      expect.stringContaining("T1"),
+      expect.stringContaining("NYK"),
+      expect.stringContaining("LAL"),
+    ]);
+    expect(within(carousel).getAllByRole("button", { name: /^Show game/ })).toHaveLength(3);
+    // No list of the same games under it.
+    expect(screen.queryByText("Up next")).toBeNull();
+    // The card's rows: header, lead, then the table, then the news.
+    const rows = [...screen.getByRole("heading", { name: /NBA/ }).closest("[data-slot=card]")!.children];
+    expect(rows[2]).toHaveTextContent("76ers");
+    expect(rows[3]).toHaveTextContent("Latest news");
+  });
+
+  it("leaves no empty row: a card with nothing to list puts its table right under the lead", async () => {
+    await renderCard({
+      ...card([]),
+      sportId: "tennis",
+      label: "Tennis",
+      featured: undefined,
+      event: { name: "Paris Masters", detail: "Paris", status: "upcoming" },
+      tables: [{ id: "atp", label: "Rankings", rows: [{ position: 1, name: "J. Sinner", value: "11,500" }] }],
+    });
+    const rows = [...screen.getByRole("heading", { name: /Tennis/ }).closest("[data-slot=card]")!.children];
+    expect(rows).toHaveLength(4);
+    expect(rows[2]).toHaveTextContent("J. Sinner");
+    expect(rows[3]).toBeEmptyDOMElement();
+  });
+
   it("has no news rail for a sport without a wire", async () => {
     await renderCard(card([]));
     expect(screen.queryByText("Latest news")).toBeNull();

@@ -31,7 +31,8 @@ export function FeatureBox({
     <Link
       href={href}
       className={cn(
-        "flex h-full min-h-28 flex-col gap-2 rounded-lg border bg-card p-2.5 transition-colors hover:bg-muted/40",
+        // The focus ring inside the border: a carousel's track clips anything drawn outside it.
+        "flex h-full min-h-28 flex-col gap-2 rounded-lg border bg-card p-2.5 transition-colors outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
         className
       )}
     >

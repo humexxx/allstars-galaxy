@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { Fragment, type ReactElement } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
@@ -26,6 +26,7 @@ import { DashboardCompetitionPicker } from "./dashboard-competition-picker";
 import { DashboardSportTables } from "./dashboard-sport-tables";
 import { SPORT_CARD_HEADER, SPORT_CARD_ROWS, SPORT_CARD_SECTION } from "./shared/dashboard-card-rows";
 import { FeatureBox } from "./shared/feature-box";
+import { LeadCarousel } from "./shared/lead-carousel";
 import { matchTimeFormat, type MatchTimeFormat } from "./shared/match-time";
 import { NewsRail } from "./shared/news-rail";
 import { StatusPill } from "./shared/status-pill";
@@ -36,6 +37,10 @@ import { TeamBadge } from "./shared/team-badge";
  * now or next, what follows it, and the top of the table — for the
  * championship the reader set it to (`competition`, null for the card's own
  * pick), which the line under the title picks.
+ *
+ * Football, the NBA and the NFL step through their next games in the lead box
+ * (`following`) rather than listing them, so their table moves up a row and
+ * their news has the last row to itself.
  *
  * Half a row, like F1's: one sport among several. Each card sits in its own
  * Suspense boundary, so a slow provider only holds up its own sport.
@@ -57,6 +62,40 @@ export async function DashboardSportCard({
   const format = matchTimeFormat(timeZone);
   const href = hubHref(card);
   const groups = groupCardMatches(card.matches);
+
+  const list =
+    groups.length > 0 &&
+    groups.map((group) => (
+      <div key={group.label} className="flex flex-col gap-1.5">
+        <Eyebrow size="sm">{group.label}</Eyebrow>
+        <ul className="flex flex-col gap-1">
+          {group.matches.map((m) => (
+            <MatchLine key={m.id} match={m} format={format} />
+          ))}
+        </ul>
+      </div>
+    ));
+  const tables = (card.tables.length > 0 || card.note) && (
+    <>
+      {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
+      {card.note && (
+        <div className="flex flex-col gap-1">
+          <Eyebrow size="sm">{card.note.title}</Eyebrow>
+          {card.note.text && <span className="text-xs font-medium">{card.note.text}</span>}
+          {card.note.when && (
+            <Text variant="small" as="span">
+              {card.note.when.label} {format.weekdayDay(card.note.when.startsAt)}
+            </Text>
+          )}
+        </div>
+      )}
+    </>
+  );
+  const news = card.news && card.news.length > 0 && <NewsRail stories={card.news} format={format} />;
+  // The list, the tables and the news fill the two rows under the lead in that
+  // order, so a card with nothing to list leaves no empty row beside its
+  // neighbour's.
+  const [middle, ...rest] = [list, tables, news].filter(Boolean);
 
   return (
     <Card className={SPORT_CARD_ROWS}>
@@ -88,43 +127,30 @@ export async function DashboardSportCard({
         </CardAction>
       </CardHeader>
 
-      {/* Three rows, always all three: the lead, the matches, the tables. */}
+      {/* Three rows, always all three: a fourth would put this card's out of
+          line with the one beside it. */}
       <div className={SPORT_CARD_SECTION}>
-        {card.featured && <FeaturedMatch match={card.featured} format={format} href={href} />}
+        {card.featured &&
+          (card.following ? (
+            // Keyed by the game it leads with: another championship's games
+            // start from their own first one, not where the last were left.
+            <LeadCarousel key={card.featured.id} label={`${card.label} games`}>
+              {[card.featured, ...(card.following ?? [])].map((m) => (
+                // Room under the teams for the carousel's dots.
+                <FeaturedMatch key={m.id} match={m} format={format} href={href} className="pb-6" />
+              ))}
+            </LeadCarousel>
+          ) : (
+            <FeaturedMatch match={card.featured} format={format} href={href} />
+          ))}
         {card.event && <FeaturedEvent event={card.event} href={href} />}
       </div>
 
+      <div className={SPORT_CARD_SECTION}>{middle}</div>
       <div className={SPORT_CARD_SECTION}>
-        {groups.map((group) => (
-          <div key={group.label} className="flex flex-col gap-1.5">
-            <Eyebrow size="sm">{group.label}</Eyebrow>
-            <ul className="flex flex-col gap-1">
-              {group.matches.map((m) => (
-                <MatchLine key={m.id} match={m} format={format} />
-              ))}
-            </ul>
-          </div>
+        {rest.map((part, i) => (
+          <Fragment key={i}>{part}</Fragment>
         ))}
-      </div>
-
-      <div className={SPORT_CARD_SECTION}>
-        {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
-
-        {card.note && (
-          <div className="flex flex-col gap-1">
-            <Eyebrow size="sm">{card.note.title}</Eyebrow>
-            {card.note.text && <span className="text-xs font-medium">{card.note.text}</span>}
-            {card.note.when && (
-              <Text variant="small" as="span">
-                {card.note.when.label} {format.weekdayDay(card.note.when.startsAt)}
-              </Text>
-            )}
-          </div>
-        )}
-
-        {/* Under the table, in its row: a fourth row would put this card's
-            out of line with the one beside it. */}
-        {card.news && <NewsRail stories={card.news} format={format} />}
       </div>
     </Card>
   );
@@ -187,15 +213,18 @@ function FeaturedMatch({
   match,
   format,
   href,
+  className,
 }: {
   match: DashboardMatch;
   format: MatchTimeFormat;
   href: string;
-}) {
+  className?: string;
+}): React.ReactElement {
   const decided = match.status === "result";
   return (
     <FeatureBox
       href={href}
+      className={className}
       label={match.label ?? MATCH_LABEL[match.status]}
       status={<MatchStatus match={match} format={format} />}
     >

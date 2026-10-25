@@ -76,8 +76,14 @@ export type DashboardSportCard = {
   /** The line under the title: the competition, its stage. */
   context: string;
   featured?: DashboardMatch;
+  /**
+   * The games after the featured one, which its box steps through rather
+   * than listing them under it (football, the NBA, the NFL).
+   */
+  following?: DashboardMatch[];
   /** Racquet sports have tournaments rather than matches on the dashboard. */
   event?: { name: string; detail: string; status: "live" | "upcoming" | "completed" };
+  /** Listed under the lead (LoL: a day of an event is several series back to back). */
   matches: DashboardMatch[];
   /** More than one shows as a toggle (East / West, AFC / NFC). */
   tables: DashboardTable[];
@@ -89,7 +95,7 @@ export type DashboardSportCard = {
   note?: { title: string; text?: string; when?: { label: string; startsAt: string } };
   /** The championship picker, on a sport that has a choice (`SPORT_COMPETITIONS`). */
   competitions?: DashboardCompetitions;
-  /** The latest stories, for a sport with a wire (the NBA's, the NFL's — ESPN). */
+  /** The latest stories, for a sport with a wire (football's, the NBA's, the NFL's — ESPN). */
   news?: NewsStory[];
 };
 

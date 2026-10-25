@@ -189,8 +189,8 @@ export async function setSportTeamFilter(
 
 // ---------- Dashboard cards ----------
 
-/** Matches listed under a card's featured one. */
-const CARD_MATCHES = 2;
+/** Games the lead box steps through after its featured one. */
+const CARD_FOLLOWING = 4;
 /**
  * LoL lists more: a day of an event is several series back to back, and two
  * did not reach the end of one.
@@ -240,10 +240,14 @@ export async function getDashboardSportCard(
     case "football": {
       const id = oneOf(FOOTBALL_COMPETITION_IDS, competition) ?? DEFAULT_FOOTBALL;
       // The World Cup has a feed of its own: one call for its groups,
-      // fixtures and bracket.
-      const data = id === "world-cup" ? await getWorldCupData() : await getFootballLeagueData(id);
+      // fixtures and bracket. The news is ESPN's, and costs football-data nothing.
+      const [data, news] = await Promise.all([
+        id === "world-cup" ? getWorldCupData() : getFootballLeagueData(id),
+        getEspnNews(id),
+      ]);
       return {
         ...footballCard(base, data),
+        news: cardNews(news),
         competitions: {
           value: id,
           options: FOOTBALL_COMPETITIONS.map((c) => ({ id: c.id, label: c.name })),
@@ -311,12 +315,10 @@ export async function getF1DashboardHighlight(
 
 function footballCard(base: CardBase, data: FootballLeagueData): DashboardSportCard {
   const teams = teamsById(data.teams);
-  const { featured, matches } = featuredAndNext(data.matches, teams);
   return {
     ...base,
     context: data.league.name,
-    featured,
-    matches,
+    ...featuredAndFollowing(data.matches, teams),
     tables:
       data.standings.length > 0
         ? [
@@ -334,7 +336,6 @@ function footballCard(base: CardBase, data: FootballLeagueData): DashboardSportC
 
 function nbaCard(base: CardBase, data: NbaData): DashboardSportCard {
   const teams = teamsById(data.teams);
-  const { featured, matches } = featuredAndNext(data.games, teams);
   const conference = (id: NbaConference, label: string): DashboardTable => ({
     id,
     label,
@@ -348,8 +349,7 @@ function nbaCard(base: CardBase, data: NbaData): DashboardSportCard {
   return {
     ...base,
     context: `Season ${data.season}`,
-    featured,
-    matches,
+    ...featuredAndFollowing(data.games, teams),
     tables,
     note: tables.length === 0 ? nbaNote(data) : undefined,
   };
@@ -366,7 +366,6 @@ function nbaNote(data: NbaData): DashboardSportCard["note"] {
 
 function nflCard(base: CardBase, data: NflData): DashboardSportCard {
   const teams = teamsById(data.teams);
-  const { featured, matches } = featuredAndNext(data.games, teams);
   const conference = (id: NflConference, label: string): DashboardTable => ({
     id,
     label,
@@ -386,8 +385,7 @@ function nflCard(base: CardBase, data: NflData): DashboardSportCard {
   return {
     ...base,
     context: `Season ${data.season}`,
-    featured,
-    matches,
+    ...featuredAndFollowing(data.games, teams),
     tables: [conference("afc", "AFC"), conference("nfc", "NFC")].filter((t) => t.rows.length > 0),
   };
 }
@@ -621,15 +619,16 @@ function teamRow(position: number, team: Team | undefined, id: string, value: st
 const FINISHED = new Set<Match["status"]>(["ft", "aet", "pen"]);
 
 /**
- * The card's featured match and the ones listed under it: whatever else is
- * live, then the next fixtures — or, with nothing ahead, the latest results.
+ * The card's featured match and the games its box steps through after it:
+ * whatever else is live, then the next fixtures — or, with nothing ahead, the
+ * latest results.
  */
-function featuredAndNext(
+function featuredAndFollowing(
   all: Match[],
   teams: Map<string, Team>
-): { featured?: DashboardMatch; matches: DashboardMatch[] } {
+): Pick<DashboardSportCard, "featured" | "following" | "matches"> {
   const featured = pickFeaturedMatch(all);
-  if (!featured) return { matches: [] };
+  if (!featured) return { following: [], matches: [] };
   const others = all.filter((m) => m.id !== featured.id);
   const ahead = [
     ...others.filter((m) => m.status === "live"),
@@ -642,7 +641,8 @@ function featuredAndNext(
     .sort((a, b) => new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime());
   return {
     featured: cardMatch(featured, teams),
-    matches: (ahead.length > 0 ? ahead : behind).slice(0, CARD_MATCHES).map((m) => cardMatch(m, teams)),
+    following: (ahead.length > 0 ? ahead : behind).slice(0, CARD_FOLLOWING).map((m) => cardMatch(m, teams)),
+    matches: [],
   };
 }
 

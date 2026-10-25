@@ -363,13 +363,15 @@ describe("getDashboardSportCard", () => {
     expect(card).toMatchObject({ sportId: "football", label: "Football", emoji: "⚽" });
     expect(card.context).toMatch(/Champions League/);
     expect(card.featured).toBeDefined();
-    expect(card.matches.length).toBeLessThanOrEqual(2);
+    // Stepped through in the lead box rather than listed under it.
+    expect(card.following!.length).toBeLessThanOrEqual(4);
+    expect(card.matches).toEqual([]);
     expect(card.tables.map((t) => t.id)).toEqual(["table"]);
     expect(card.tables[0].rows).toHaveLength(5);
     expect(card.tables[0].rows[0]).toMatchObject({ position: 1, value: expect.stringMatching(/ pts$/) });
   });
 
-  it("gives the NBA and the NFL their latest ESPN news, and no clips", async () => {
+  it("gives football, the NBA and the NFL their latest ESPN news, and no clips", async () => {
     const article = (id: number, type: string, headline: string) => ({
       id,
       type,
@@ -397,7 +399,7 @@ describe("getDashboardSportCard", () => {
     );
     vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      for (const sport of ["nba", "nfl"] as const) {
+      for (const sport of ["football", "nba", "nfl"] as const) {
         const card = (await getDashboardSportCard(sport))!;
         expect(card.news?.map((n) => n.headline)).toEqual(["Lakers past Clippers", "Giannis stays hot"]);
       }
@@ -448,6 +450,38 @@ describe("getDashboardSportCard", () => {
   it("has no NBA note from the opener on", async () => {
     const card = await withNbaGames([nbaGame(1, "final", 110, 102)], () => getDashboardSportCard("nba"));
     expect(card?.note).toBeUndefined();
+  });
+
+  it("steps through the four games after the featured one, soonest first", async () => {
+    const at = (id: number, hour: number) => {
+      const datetime = `2026-10-22T0${hour}:00:00Z`;
+      return { ...nbaGame(id, "scheduled", 0, 0), date: "2026-10-22", datetime, status: datetime };
+    };
+    const games = [at(5, 5), at(1, 1), at(7, 7), at(3, 3), at(2, 2), at(6, 6), at(4, 4)];
+    const card = (await withNbaGames(games, () => getDashboardSportCard("nba")))!;
+
+    const hours = [card.featured!, ...card.following!].map((m) => new Date(m.startsAt).getUTCHours());
+    expect(hours).toEqual([1, 2, 3, 4, 5]);
+    expect(card.matches).toEqual([]);
+  });
+
+  it("puts another game being played before the fixtures, and the latest results when nothing is ahead", async () => {
+    const at = (id: number, state: string, hour: number) => {
+      const datetime = `2026-10-21T0${hour}:00:00Z`;
+      return { ...nbaGame(id, state, 50, 40), date: "2026-10-21", datetime, status: state === "final" ? "Final" : datetime };
+    };
+    const busy = (await withNbaGames(
+      [at(1, "scheduled", 9), at(2, "in", 1), at(3, "in", 2), at(4, "final", 0)],
+      () => getDashboardSportCard("nba")
+    ))!;
+    expect([busy.featured!, ...busy.following!].map((m) => m.status)).toEqual(["live", "live", "upcoming"]);
+
+    const over = (await withNbaGames(
+      [at(1, "final", 1), at(2, "final", 3), at(3, "final", 2)],
+      () => getDashboardSportCard("nba")
+    ))!;
+    const hours = [over.featured!, ...over.following!].map((m) => new Date(m.startsAt).getUTCHours());
+    expect(hours).toEqual([3, 2, 1]);
   });
 
   it("reads the NBA from the live feed, not the fixture", async () => {

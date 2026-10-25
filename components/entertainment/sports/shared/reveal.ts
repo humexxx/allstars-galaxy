@@ -5,7 +5,7 @@ import { scrollParent } from "./scroll";
  * races — without a jump: what moves slides, what is new fades in.
  */
 export const SLIDE_MS = 220;
-export const FADE_MS = 200;
+const FADE_MS = 200;
 export const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 
 /** A reader who asked for less motion. Read when the motion is about to start, never while rendering. */

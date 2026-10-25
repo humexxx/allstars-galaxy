@@ -275,16 +275,18 @@ export const FOOTBALL_COMPETITION_IDS = [
 
 export type FootballLeagueId = (typeof FOOTBALL_COMPETITION_IDS)[number];
 
+/** The sports whose page shows one match list, which the team filter keys by the sport's own id. */
+export const SINGLE_LIST_SPORTS = ["nba", "nfl", "mlb", "nhl"] as const satisfies readonly SportId[];
+
+export type SingleListSport = (typeof SINGLE_LIST_SPORTS)[number];
+
 /**
  * A match list the team filter remembers: one football league, or a sport
  * with a single list, keyed by its own id.
  */
 export type TeamFilterList =
   | { sportId: "football"; competition: FootballLeagueId }
-  | { sportId: "nba"; competition: "nba" }
-  | { sportId: "nfl"; competition: "nfl" }
-  | { sportId: "mlb"; competition: "mlb" }
-  | { sportId: "nhl"; competition: "nhl" };
+  | { [S in SingleListSport]: { sportId: S; competition: S } }[SingleListSport];
 
 /** The list on screen and the teams last picked in it ([] is every team). */
 export type SavedTeamFilter = { list: TeamFilterList; teamIds: string[] };

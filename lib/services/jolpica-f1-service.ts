@@ -900,5 +900,4 @@ export const __testing = {
   fastestLapsByRound,
   sprintWinnersByRound,
   deriveRaceStatus,
-  rateLimiter,
 };

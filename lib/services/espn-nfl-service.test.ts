@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { __testing } from "./espn-nfl-service";
 
-const { matchFrom, standingsFrom, roundFrom, statusFrom, teamFrom } = __testing;
+const { matchFrom, standingsFrom, roundFrom, teamFrom } = __testing;
 
 const team = (abbreviation: string, shortDisplayName = abbreviation) => ({
   abbreviation,
@@ -93,11 +93,18 @@ describe("matchFrom", () => {
   });
 });
 
-describe("statusFrom", () => {
-  it("reads postponements and cancellations by name", () => {
-    expect(statusFrom(status("STATUS_POSTPONED", "post"))).toBe("postponed");
-    expect(statusFrom(status("STATUS_CANCELED", "post"))).toBe("cancelled");
-    expect(statusFrom(status("STATUS_HALFTIME", "in"))).toBe("live");
+describe("a game's status", () => {
+  const withStatus = (name: string, state: "pre" | "in" | "post") => {
+    const game = event("9", "KC", "LAC", ["0", "0"], state);
+    game.competitions[0].status = status(name, state);
+    return matchFrom(game)!.match.status;
+  };
+
+  it("reads postponements, suspensions and cancellations by name", () => {
+    expect(withStatus("STATUS_POSTPONED", "post")).toBe("postponed");
+    expect(withStatus("STATUS_SUSPENDED", "post")).toBe("postponed");
+    expect(withStatus("STATUS_CANCELED", "post")).toBe("cancelled");
+    expect(withStatus("STATUS_HALFTIME", "in")).toBe("live");
   });
 });
 

@@ -42,7 +42,7 @@ const SHOWN = 8;
  * Gated on the favourite, like everything else on this dashboard. A motorsport
  * feed on the desk of somebody who does not follow it is noise.
  */
-export async function DashboardF1Card({ userId }: { userId: string }) {
+export async function DashboardF1Card({ userId }: { userId: string }): Promise<React.ReactElement | null> {
   const favorites = await listUserFavoriteSportIds(userId);
   if (!favorites.includes("f1")) return null;
 

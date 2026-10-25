@@ -27,9 +27,17 @@ import { RevealPill } from "./reveal-pill";
 /** Events played that a tap on "Earlier" brings in, and that show once the season is over. */
 const EARLIER_STEP = 3;
 
-/** A tile's frame; each list sets its own gap. */
-export const TILE =
-  "flex w-full flex-col rounded-lg border bg-card p-3 text-left transition-colors focus-visible:outline-hidden hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring";
+/** A tile's frame, for one that is not a link (a surf stop); each list sets its own gap. */
+export const TILE_FRAME =
+  "flex w-full flex-col rounded-lg border bg-card p-3 text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
+
+/** A tile that is a link: the frame, its border firming on hover. */
+export const TILE = `${TILE_FRAME} transition-colors hover:border-foreground/25`;
+
+/** What the "Earlier" pill brings in: "Show Shanghai – Paris", or one name. */
+export function showNames(list: readonly { name: string }[]): string {
+  return list.length > 1 ? `Show ${list[0].name} – ${list[list.length - 1].name}` : `Show ${list[0]?.name ?? ""}`;
+}
 
 /** The size, padding and gap of a day heading in `MatchesByDate`. */
 export function SectionHeading({ children }: { children: ReactNode }): React.ReactElement {

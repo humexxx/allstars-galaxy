@@ -15,7 +15,7 @@ import { TeamBadge } from "./shared/team-badge";
  * A client island inside a server card: which table is showing is the only
  * state, so that is all that ships.
  */
-export function DashboardSportTables({ tables }: { tables: DashboardTable[] }) {
+export function DashboardSportTables({ tables }: { tables: DashboardTable[] }): React.ReactElement | null {
   const [active, setActive] = useState(tables[0]?.id);
   const table = tables.find((t) => t.id === active) ?? tables[0];
   if (!table) return null;
@@ -62,7 +62,7 @@ export function DashboardSportTables({ tables }: { tables: DashboardTable[] }) {
 }
 
 /** A player's face, a team's crest, or what stands in for them. */
-function RowImage({ row }: { row: DashboardTableRow }) {
+function RowImage({ row }: { row: DashboardTableRow }): React.ReactElement {
   if (row.image?.kind === "photo") {
     return (
       <span className="relative size-6 shrink-0 overflow-hidden rounded-full bg-muted ring-1 ring-border">

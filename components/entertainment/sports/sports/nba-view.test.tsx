@@ -59,7 +59,7 @@ describe("NbaView", () => {
     const table = screen.getByRole("table", { name: "Western Conference standings" });
     expect(within(table).getAllByRole("rowheader")[0]).toHaveTextContent("Thunder");
     expect(within(table).getAllByRole("columnheader").map((th) => th.getAttribute("aria-label"))).toEqual([
-      null,
+      "Seed",
       null,
       "Wins",
       "Losses",

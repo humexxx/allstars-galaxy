@@ -25,7 +25,7 @@ const ICON_MAP: Record<FormResult, typeof Check> = {
   "-": Dot,
 };
 
-export function Last5Form({ results, className }: Last5FormProps) {
+export function Last5Form({ results, className }: Last5FormProps): React.ReactElement {
   return (
     // One image with one name: `aria-label` on role-less spans is ignored, so
     // the form was silent to screen readers.

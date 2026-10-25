@@ -67,7 +67,7 @@ function openingView(
   return { tab: initialTab === "news" && hasNews ? "news" : "overview", championship: "drivers" };
 }
 
-export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps) {
+export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps): React.ReactElement {
   const opening = openingView(initialTab, news.length > 0);
   const [championship, setChampionship] = useState<Championship>(opening.championship);
   const wire = useMemo(() => leadStory(fromF1Wire(news), f1Interest(data)), [news, data]);
@@ -75,7 +75,7 @@ export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps) {
   return (
     <Tabs defaultValue={opening.tab} className="gap-6">
       <SportShell
-        emoji="🏎️"
+        sportId="f1"
         title="Formula 1"
         subtitle={`${data.season} Season`}
         tabs={
@@ -133,7 +133,7 @@ function DriversTable({
 }: {
   drivers: F1Driver[];
   constructors: F1Constructor[];
-}) {
+}): React.ReactElement {
   // Faces come from ESPN. Without them the table keeps its flags, in a slot
   // only as wide as a flag, and the team's name under the driver's.
   const showsFaces = drivers.some((d) => d.imageUrl);
@@ -205,7 +205,7 @@ function DriversTable({
  * table is shorter. The face is ringed in the card's colour to sit apart from
  * it, and stacked above it although it comes first.
  */
-function DriverAndTeam({ driver, team }: { driver: F1Driver; team?: F1Constructor }) {
+function DriverAndTeam({ driver, team }: { driver: F1Driver; team?: F1Constructor }): React.ReactElement {
   return (
     <span className="flex shrink-0 items-center">
       <Portrait
@@ -242,7 +242,7 @@ function DroppedFigures({ wins, podiums }: { wins: number; podiums: number }): R
   );
 }
 
-function ConstructorsTable({ constructors }: { constructors: F1Constructor[] }) {
+function ConstructorsTable({ constructors }: { constructors: F1Constructor[] }): React.ReactElement {
   const rows = useShownRows(constructors);
   return (
     <>

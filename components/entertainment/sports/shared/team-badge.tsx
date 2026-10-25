@@ -55,7 +55,7 @@ export function readableInk(hex: string | undefined): string {
   return whiteContrast >= darkContrast ? "#fff" : "#111";
 }
 
-export function TeamBadge({ team, size = "md", className }: TeamBadgeProps) {
+export function TeamBadge({ team, size = "md", className }: TeamBadgeProps): React.ReactElement {
   const background = team.primaryColor ?? "#666";
   return (
     <span

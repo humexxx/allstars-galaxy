@@ -1,4 +1,4 @@
-import { Fragment, type ReactElement } from "react";
+import { Fragment, type ComponentProps, type ReactElement } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
@@ -182,7 +182,7 @@ export function groupCardMatches(matches: DashboardMatch[]): MatchGroup[] {
   return groups.filter((group) => group.matches.length > 0);
 }
 
-function badgeTeam(side: DashboardSide) {
+function badgeTeam(side: DashboardSide): ComponentProps<typeof TeamBadge>["team"] {
   return {
     name: side.name,
     shortName: side.name,
@@ -193,7 +193,7 @@ function badgeTeam(side: DashboardSide) {
 }
 
 /** The status column: live with its minute, the kickoff, or the final. */
-function MatchStatus({ match, format }: { match: DashboardMatch; format: MatchTimeFormat }) {
+function MatchStatus({ match, format }: { match: DashboardMatch; format: MatchTimeFormat }): React.ReactElement {
   if (match.status === "live") {
     return <StatusPill status="live" label={match.minute ? `Live ${match.minute}'` : undefined} />;
   }
@@ -277,7 +277,7 @@ function FeaturedEvent({
 }: {
   event: NonNullable<DashboardSportCardData["event"]>;
   href: string;
-}) {
+}): React.ReactElement {
   return (
     <FeatureBox href={href} label={EVENT_LABEL[event.status]} status={<StatusPill status={event.status} />}>
       <span className="truncate text-sm font-semibold">{event.name}</span>
@@ -289,7 +289,7 @@ function FeaturedEvent({
 }
 
 /** A fixture or result on one line, the score or the kickoff between the teams. */
-function MatchLine({ match, format }: { match: DashboardMatch; format: MatchTimeFormat }) {
+function MatchLine({ match, format }: { match: DashboardMatch; format: MatchTimeFormat }): React.ReactElement {
   const scored = match.status !== "upcoming" && match.home.score !== null && match.away.score !== null;
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 rounded-md px-1.5 py-1 text-xs odd:bg-muted/40">

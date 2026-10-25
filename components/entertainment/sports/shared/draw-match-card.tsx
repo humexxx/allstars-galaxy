@@ -56,7 +56,7 @@ export function DrawMatchCard({
   withFaces?: boolean;
   variant?: "player" | "pair";
   className?: string;
-}) {
+}): React.ReactElement {
   const format = useMatchTime();
   const home = match.homeTeamId ? (teams.get(match.homeTeamId) ?? null) : null;
   const away = match.awayTeamId ? (teams.get(match.awayTeamId) ?? null) : null;
@@ -135,7 +135,7 @@ type RowProps = {
   decided: boolean;
 };
 
-function SetScores({ scores, opponentScores }: Pick<RowProps, "scores" | "opponentScores">) {
+function SetScores({ scores, opponentScores }: Pick<RowProps, "scores" | "opponentScores">): React.ReactElement {
   return (
     <span className="flex shrink-0 items-center gap-0.5">
       {scores.map((score, i) => (
@@ -163,7 +163,7 @@ function SetScores({ scores, opponentScores }: Pick<RowProps, "scores" | "oppone
  * the name and the sets it read as a first set ("1 6 6" against "14 2 2").
  * The column is there for the unseeded too, so the names line up.
  */
-function Seed({ player }: { player: Team }) {
+function Seed({ player }: { player: Team }): React.ReactElement {
   const seed = player.code?.trim();
   return (
     <span className="w-4 shrink-0 text-right text-2xs tabular-nums text-muted-foreground">
@@ -185,7 +185,7 @@ function PlayerRow({
   decided,
   nobody,
   withFaces,
-}: RowProps & { withFaces: boolean }) {
+}: RowProps & { withFaces: boolean }): React.ReactElement {
   if (!player) {
     return (
       <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -239,7 +239,7 @@ function PairRow({
   decided,
   nobody,
   withFaces,
-}: RowProps & { withFaces: boolean }) {
+}: RowProps & { withFaces: boolean }): React.ReactElement {
   if (!player) {
     return (
       <span className="flex items-center gap-1.5 text-xs text-muted-foreground">

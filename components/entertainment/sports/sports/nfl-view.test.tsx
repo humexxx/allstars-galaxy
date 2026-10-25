@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
 
 import { NFL_DATA } from "@/lib/data/sports/nfl";
+import type { NflData } from "@/types/sports";
 
 import { NflView } from "./nfl-view";
 
@@ -39,4 +40,19 @@ describe("NflView", () => {
     fireEvent.click(screen.getByRole("radio", { name: "NFC" }));
     expect(screen.getByRole("table", { name: "NFC standings" })).toBeInTheDocument();
   });
+
+  it("keeps the Playoffs locked while the bracket has nobody in it, and opens on it once it has", () => {
+    const [home, away] = NFL_DATA.teams;
+    const round = (homeTeamId: string | null, awayTeamId: string | null): NflData["playoffs"] => [
+      { id: "final", label: "Super Bowl", matches: [{ id: "sb", homeTeamId, awayTeamId }] },
+    ];
+    const { unmount } = render(<NflView data={{ ...NFL_DATA, playoffs: round(null, null) }} />);
+    expect(screen.getByRole("tab", { name: "Playoffs" })).toBeDisabled();
+    unmount();
+
+    render(<NflView data={{ ...NFL_DATA, playoffs: round(home.id, away.id) }} />);
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("Playoffs");
+    expect(screen.getByText("Super Bowl")).toBeInTheDocument();
+  });
 });
+

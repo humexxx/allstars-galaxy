@@ -158,7 +158,7 @@ export function LolView({ data }: LolViewProps): ReactElement {
   return (
     <Tabs value={tab} onValueChange={setTab} className="gap-6">
       <SportShell
-        emoji="🎮"
+        sportId="lol"
         // The competition on screen names the page, as football's league
         // does; the sport goes under it. "Worlds 2026" already names its
         // year; "LEC Split 3" does not.

@@ -89,6 +89,24 @@ afterEach(() => {
 });
 
 describe("SportShell", () => {
+  it("leads with the sport's emoji from the registry, unless the view brings its own", () => {
+    const { unmount } = render(
+      <SportShell sportId="padel" title="Padel">
+        <div />
+      </SportShell>
+    );
+    expect(screen.getByText("🏓")).toBeInTheDocument();
+    unmount();
+
+    render(
+      <SportShell sportId="football" emoji="🏆" title="World Cup">
+        <div />
+      </SportShell>
+    );
+    expect(screen.getByText("🏆")).toBeInTheDocument();
+    expect(screen.queryByText("⚽")).toBeNull();
+  });
+
   it("names the page: the competition is the one h1", () => {
     renderShell();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);

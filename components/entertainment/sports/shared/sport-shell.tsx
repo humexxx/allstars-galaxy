@@ -17,8 +17,10 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
 import { Heading, Text } from "@/components/ui/typography";
+import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
+import { cn } from "@/lib/utils";
+import type { SportId } from "@/types/sports";
 
 import { revealInRow, scrollByFrom } from "./scroll";
 
@@ -30,7 +32,9 @@ import { revealInRow, scrollByFrom } from "./scroll";
 export const SportHubControls = createContext<ReactNode>(null);
 
 type SportShellProps = {
-  /** Big emoji or logo shown at the top-left next to the title. */
+  /** The sport, whose emoji (the sport picker's) leads the title. */
+  sportId?: SportId;
+  /** An emoji of the view's own instead of the sport's (the World Cup's trophy). */
   emoji?: string;
   title: string;
   subtitle?: string;
@@ -66,7 +70,8 @@ type SportShellProps = {
  * centred on the row and tabs sitting on its border never lined up.
  */
 export function SportShell({
-  emoji,
+  sportId,
+  emoji: ownEmoji,
   title,
   subtitle,
   titleMenu,
@@ -76,6 +81,7 @@ export function SportShell({
   className,
 }: SportShellProps): React.ReactElement {
   const hubControls = useContext(SportHubControls);
+  const emoji = ownEmoji ?? (sportId && SPORTS_BY_ID.get(sportId)?.emoji);
   const titleRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);

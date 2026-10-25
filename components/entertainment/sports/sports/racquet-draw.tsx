@@ -127,7 +127,7 @@ export function DrawBody({
   }
 }
 
-function NotDrawnYet() {
+function NotDrawnYet(): React.ReactElement {
   return (
     <EmptyState
       icon={CalendarClock}

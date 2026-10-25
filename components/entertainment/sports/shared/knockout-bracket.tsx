@@ -27,6 +27,7 @@ import {
   MatchHover,
   type BracketColumn,
   type BracketEdge,
+  type BracketItem,
 } from "./bracket-canvas";
 import { prefersReducedMotion } from "./reveal";
 import { useMatchTime } from "./time-zone-context";
@@ -147,7 +148,7 @@ export function KnockoutBracket({
   renderMatch,
   minColumnWidth,
   links,
-}: KnockoutBracketProps) {
+}: KnockoutBracketProps): React.ReactElement | null {
   const tree = useMemo(() => {
     const main = rounds.filter((r) => r.id !== "third-place");
     // Given branches mean the rounds do not halve: nothing to sort by them.
@@ -163,7 +164,7 @@ export function KnockoutBracket({
     const last = tree.rounds.length - 1;
     // A decided bracket opens on its final, but nothing in it is being played.
     const playing = tree.rounds[current]?.matches.some((m) => !m.winnerTeamId) ?? false;
-    const item = (match: BracketMatch, caption?: string) => ({
+    const item = (match: BracketMatch, caption?: string): BracketItem => ({
       key: match.id,
       caption,
       node: <TieBox match={match} teams={teams} renderMatch={renderMatch} />,
@@ -385,7 +386,7 @@ function TieBox({
   match: BracketMatch;
   teams: Map<string, Team>;
   renderMatch?: KnockoutBracketProps["renderMatch"];
-}) {
+}): React.ReactElement {
   if (renderMatch) return <>{renderMatch(match, teams)}</>;
   return (
     <div className="overflow-hidden rounded-lg border bg-card">
@@ -403,7 +404,7 @@ const has = (n: number | null | undefined): n is number => n !== null && n !== u
  * total until then, and the day of each leg; the legs' own scores are in the
  * popover. A single match or series shows its score and its day and time.
  */
-function TieRows({ match, teams }: { match: BracketMatch; teams: Map<string, Team> }) {
+function TieRows({ match, teams }: { match: BracketMatch; teams: Map<string, Team> }): React.ReactElement | null {
   const format = useMatchTime();
   const legs = match.legs ?? [];
   const decided = Boolean(match.winnerTeamId);
@@ -421,7 +422,7 @@ function TieRows({ match, teams }: { match: BracketMatch; teams: Map<string, Tea
     { id: match.homeTeamId, score: scoreOf("home") },
     { id: match.awayTeamId, score: scoreOf("away") },
   ].map((side) => ({ ...side, team: side.id ? teams.get(side.id) : undefined }));
-  const name = (i: 0 | 1) => sides[i].team?.code ?? "TBD";
+  const name = (i: 0 | 1): string => sides[i].team?.code ?? "TBD";
   const scored = has(sides[0].score) && has(sides[1].score);
 
   const dated = legs.flatMap((l, i) => (l.date ? [{ leg: i + 1, day: format.shortDay(l.date) }] : []));

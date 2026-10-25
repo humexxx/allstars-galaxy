@@ -35,7 +35,7 @@ export function TableCellNum({
 }: {
   value: number | string;
   className?: string;
-}) {
+}): React.ReactElement {
   return (
     <TableCell className={cn("text-center", className)}>
       <Mono className="text-sm tabular-nums">{value}</Mono>
@@ -59,7 +59,7 @@ export function TableCard({
   title?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
-}) {
+}): React.ReactElement {
   return (
     <Card className={cn("gap-0 py-0", className)}>
       {title && (

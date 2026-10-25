@@ -1408,8 +1408,9 @@ export const userSportsPreferences = pgTable(
  * The teams a reader narrowed a match list to, one row per competition, so
  * the sports page reopens on them. Not tied to favourites: any sport's list
  * can be filtered. `competition` is the football league id, or the sport id
- * itself for a sport with one list (NBA, NFL). No row, or an empty list, is
- * every team; the service deletes the row rather than keep an empty one.
+ * itself for a sport with one list (see `TeamFilterList` in types/sports.ts).
+ * No row, or an empty list, is every team; the service deletes the row rather
+ * than keep an empty one.
  */
 export const userSportsTeamFilters = pgTable(
   "user_sports_team_filters",

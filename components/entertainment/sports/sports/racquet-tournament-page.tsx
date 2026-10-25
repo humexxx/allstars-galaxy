@@ -62,7 +62,7 @@ export function RacquetTournamentPage({
     <SportPageControls sport={sport} favoriteSportIds={favoriteSportIds}>
       <Tabs defaultValue={initialTab === "overview" ? "overview" : "bracket"} className="gap-6">
         <SportShell
-          emoji={meta?.emoji}
+          sportId={sport}
           title={t.name}
           subtitle={tourLine(sport, season)}
           parent={{ label: meta?.label ?? sport, href: sportPath(sport) }}

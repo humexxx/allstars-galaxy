@@ -141,11 +141,11 @@ Every portal page opens with `PageHeader` (`components/portal/page-header.tsx`):
 `title`, `description`, `eyebrow`, `badge`, `meta`, `actions`, and `back`
 (`{ href, label }` or `{ onClick, label }`) — a ghost "‹ Label" button above
 the title, never an absolutely positioned arrow that overflows on a phone.
-A page two levels under a hub (a sports tournament or race) opens with
-[`SportsBreadcrumbs`](../components/entertainment/sports/shared/sports-breadcrumbs.tsx)
-above `PageHeader` instead of `back`: the trail names each level it sits under,
-links all but the last, and truncates the page's own name on a phone rather
-than wrapping.
+A page two levels under the sports hub (a tournament or a race) has no
+`PageHeader`: it renders inside
+[`SportShell`](../components/entertainment/sports/shared/sport-shell.tsx) with
+`parent={{ label, href }}`, and its title reads as a breadcrumb in the
+heading's type ("Padel › Kuwait Major 2026"), the sport a link back.
 `size="compact"` renders the title at `h3` (still an `<h1>`) for dense data
 surfaces — the plan editor and the portfolio. Its `loading.tsx` counterpart is
 `PageHeaderSkeleton` with the same props, so the swap does not shift the page.

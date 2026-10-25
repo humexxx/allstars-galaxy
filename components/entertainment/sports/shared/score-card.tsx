@@ -194,7 +194,7 @@ function TeamRow({
   redCard?: boolean;
   dim?: boolean;
   scheduled?: boolean;
-}) {
+}): React.ReactElement {
   return (
     <div
       className={cn(

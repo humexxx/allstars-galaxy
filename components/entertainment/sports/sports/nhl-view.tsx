@@ -1,35 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Lock } from "lucide-react";
+import { useState } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
-import { isBracketDrawn, roundInPlay } from "@/lib/sports/bracket";
+import { roundInPlay } from "@/lib/sports/bracket";
 import { splitSeasonLabel } from "@/lib/sports/season";
-import { cn } from "@/lib/utils";
 import type { NewsStory, NhlConference, NhlData, Team } from "@/types/sports";
 
-import { KnockoutBracket } from "../shared/knockout-bracket";
-import { MatchesByDate } from "../shared/matches-by-date";
-import { TeamNewsTab } from "../shared/news-list";
-import { OverviewSplit } from "../shared/overview-split";
-import { SportShell } from "../shared/sport-shell";
+import { LeagueView, StandingsTeamCell, useTeamsMap } from "../shared/league-view";
 import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportsTh, TableCellNum } from "../shared/table-primitives";
-import { TeamBadge } from "../shared/team-badge";
-import { TeamPicksProvider } from "../shared/team-picks";
-import { TeamPick } from "../shared/team-pick";
 
 type NhlViewProps = {
   data: NhlData;
@@ -53,76 +35,26 @@ const NUM_TH = "px-1 text-center";
 const NUM_TD = "px-1";
 
 export function NhlView({ data, news = [], initialTab }: NhlViewProps): React.ReactElement {
-  const teamsMap = useMemo(
-    () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
-    [data.teams],
-  );
-
-  const hasPlayoffs = isBracketDrawn(data.playoffs);
-  // The bracket leads while a series is on, and through the summer when there
-  // are no games; a finished one waits behind its tab once the season is back.
-  const bracketFirst = hasPlayoffs && (roundInPlay(data.playoffs) !== undefined || data.games.length === 0);
-  const opening = initialTab === "news" && news.length > 0 ? "news" : bracketFirst ? "playoffs" : "overview";
-
+  const teamsMap = useTeamsMap(data.teams);
   return (
-    <Tabs defaultValue={opening} className="gap-6">
-      <SportShell
-        emoji={SPORTS_BY_ID.get("nhl")?.emoji ?? "🏒"}
-        title="Ice Hockey · NHL"
-        subtitle={`Season ${splitSeasonLabel(data.season)}`}
-        tabs={
-          <TabsList variant="line">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            {/* Always there, locked until the first round: where the bracket
-                will be is worth knowing before it exists. */}
-            <TabsTrigger value="playoffs" disabled={!hasPlayoffs}>
-              {!hasPlayoffs && <Lock aria-hidden />}
-              Playoffs
-            </TabsTrigger>
-            {news.length > 0 && <TabsTrigger value="news">News</TabsTrigger>}
-          </TabsList>
-        }
-      >
-        {/* The days' games and the table on one tab; a team tapped in either
-            narrows the games to its own. */}
-        <TabsContent value="overview">
-          <TeamPicksProvider>
-            <OverviewSplit
-              matches={
-                <MatchesByDate
-                  matches={data.games}
-                  teams={teamsMap}
-                  emptyTitle="No games scheduled right now."
-                />
-              }
-              table={data.standings.length > 0 && <NhlStandings data={data} teamsMap={teamsMap} />}
-              tableLabel="Standings"
-            />
-          </TeamPicksProvider>
-        </TabsContent>
-
-        {hasPlayoffs && (
-          <TabsContent value="playoffs">
-            <Card size="sm">
-              <CardContent>
-                <KnockoutBracket rounds={data.playoffs} teams={teamsMap} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
-
-        {/* Led by the teams picked in the games and each conference's top two. */}
-        {news.length > 0 && (
-          <TabsContent value="news">
-            <TeamNewsTab
-              stories={news}
-              teams={teamsMap}
-              leaders={data.standings.filter((s) => s.position <= 2).map((s) => s.teamId)}
-            />
-          </TabsContent>
-        )}
-      </SportShell>
-    </Tabs>
+    <LeagueView
+      sportId="nhl"
+      title="Ice Hockey · NHL"
+      subtitle={`Season ${splitSeasonLabel(data.season)}`}
+      games={data.games}
+      teams={teamsMap}
+      standings={data.standings}
+      playoffs={data.playoffs}
+      bracketLabel="Playoffs"
+      // The bracket leads while a series is on, and through the summer when
+      // there are no games; a finished one waits behind its tab once the
+      // season is back.
+      opensOnBracket={roundInPlay(data.playoffs) !== undefined || data.games.length === 0}
+      news={news}
+      initialTab={initialTab}
+      emptyTitle="No games scheduled right now."
+      table={data.standings.length > 0 && <NhlStandings data={data} teamsMap={teamsMap} />}
+    />
   );
 }
 
@@ -184,16 +116,7 @@ function NhlStandings({
                   <TableCell className="text-sm tabular-nums text-muted-foreground">
                     {row.position}
                   </TableCell>
-                  <TableHead scope="row" className="w-full max-w-0 font-normal text-foreground">
-                    {team ? (
-                      <TeamPick team={team} className="max-w-full">
-                        <TeamBadge team={team} size="sm" />
-                        <span className={cn("truncate text-sm", isLeader && "font-semibold")}>{team.shortName}</span>
-                      </TeamPick>
-                    ) : (
-                      row.teamId
-                    )}
-                  </TableHead>
+                  <StandingsTeamCell team={team} teamId={row.teamId} isLeader={isLeader} />
                   <TableCellNum value={row.gamesPlayed} className={NUM_TD} />
                   <TableCellNum value={row.wins} className={NUM_TD} />
                   <TableCellNum value={row.losses} className={NUM_TD} />

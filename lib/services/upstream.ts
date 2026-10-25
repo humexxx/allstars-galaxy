@@ -18,6 +18,11 @@ export function upstreamSignal(): AbortSignal {
   return AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
 }
 
+/** A settled read's value, or null when it failed: for the reads a feed can do without. */
+export function settledOrNull<T>(result: PromiseSettledResult<T>): T | null {
+  return result.status === "fulfilled" ? result.value : null;
+}
+
 /**
  * A cached provider read that keeps its last good answer through a failed
  * refresh, and only falls back when there has never been one.

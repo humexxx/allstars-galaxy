@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /** Rows a table shows before "Show more": every table in the hub, the same. */
-export const ROWS_SHOWN = 10;
+const ROWS_SHOWN = 10;
 
 /**
  * The first `ROWS_SHOWN` of `rows`, and ten more a tap. Back to ten when

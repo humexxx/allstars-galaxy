@@ -24,7 +24,7 @@ const CARD_SPORTS = new Set<SportId>(["football", "nba", "nfl", "mlb", "nhl", "l
  * and one slow feed should only hold up its own card. The cards are grid
  * items of the dashboard itself — Suspense and the fragment add no wrapper.
  */
-export async function DashboardSportCards({ userId }: { userId: string }) {
+export async function DashboardSportCards({ userId }: { userId: string }): Promise<React.ReactElement> {
   const favorites = (await listUserFavoriteSports(userId)).filter((f) => CARD_SPORTS.has(f.sportId));
 
   if (favorites.length === 0) {

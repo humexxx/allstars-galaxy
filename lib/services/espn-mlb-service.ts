@@ -3,6 +3,7 @@ import "server-only";
 import { MLB_DATA } from "@/lib/data/sports/mlb";
 import { espnImage } from "@/lib/sports/espn-images";
 import { orderMatchesForDisplay } from "@/lib/sports/match-order";
+import { ordinal } from "@/lib/utils/format";
 import type {
   BracketRound,
   Match,
@@ -18,6 +19,7 @@ import {
   fetchHeaderDays,
   groupSeries,
   headerMatch,
+  headerNote,
   isoDay,
   seriesBracket,
   shiftDay,
@@ -27,7 +29,17 @@ import {
   type SeriesGame,
   type SeriesRound,
 } from "./espn-scoreboard";
-import { cachedFeed, upstreamSignal } from "./upstream";
+import {
+  fetchEspnJson,
+  standingStat,
+  standingValue,
+  teamColour,
+  teamsListFrom,
+  type EspnStandings,
+  type EspnTeam,
+  type EspnTeams,
+} from "./espn-site";
+import { cachedFeed, settledOrNull } from "./upstream";
 
 const LEAGUE: HeaderLeague = { sport: "baseball", league: "mlb" };
 /** All thirty clubs with their colours: the table carries none, a day's games only the teams playing. */
@@ -94,35 +106,8 @@ const GAME_NOTE = /^(.+?) - Game (\d+)(.*)$/;
 /** The two series whose short names fans do not use. */
 const ROUND_NAMES: Record<string, string> = { ALWC: "AL Wild Card", NLWC: "NL Wild Card" };
 
-type EspnTeam = {
-  abbreviation?: string;
-  displayName?: string;
-  shortDisplayName?: string;
-  color?: string;
-  /** The default logo first. */
-  logos?: Array<{ href?: string }>;
-};
-
-type EspnTeams = {
-  sports?: Array<{ leagues?: Array<{ teams?: Array<{ team?: EspnTeam }> }> }>;
-};
-
-type EspnStandingEntry = {
-  team?: EspnTeam;
-  stats?: Array<{ name?: string; displayValue?: string; value?: number | null }>;
-};
-
-type EspnStandingsGroup = {
-  abbreviation?: string;
-  standings?: { season?: number; entries?: EspnStandingEntry[] };
-  children?: EspnStandingsGroup[];
-};
-
-type EspnStandings = { children?: EspnStandingsGroup[] };
-
 function colourOf(code: string, color: string | undefined): string | undefined {
-  if (LOGO_ON_WHITE.has(code)) return "#FFFFFF";
-  return color ? `#${color.replace(/^#/, "")}` : undefined;
+  return teamColour(code, color, LOGO_ON_WHITE);
 }
 
 /** A club from the teams list or the table. */
@@ -140,21 +125,7 @@ function teamFrom(t: EspnTeam | undefined): Team | null {
 }
 
 function teamsFrom(json: EspnTeams): Team[] {
-  return (json.sports ?? [])
-    .flatMap((s) => s.leagues ?? [])
-    .flatMap((l) => l.teams ?? [])
-    .map((t) => teamFrom(t.team))
-    .filter((t): t is Team => t !== null);
-}
-
-function noteOf(event: HeaderEvent): string | undefined {
-  return event.notes?.[0]?.headline ?? event.note ?? undefined;
-}
-
-function ordinal(n: number): string {
-  const teen = n % 100 >= 11 && n % 100 <= 13;
-  const suffix = teen ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
-  return `${n}${suffix}`;
+  return teamsListFrom(json, teamFrom);
 }
 
 const HALF_INNINGS: Record<string, { short: string; spoken: string }> = {
@@ -200,7 +171,7 @@ function stageLabel(event: HeaderEvent): string | undefined {
   const seasonType = String(event.seasonType);
   if (seasonType === SPRING) return "Spring Training";
   if (seasonType !== POSTSEASON) return undefined;
-  const note = noteOf(event);
+  const note = headerNote(event);
   const m = note ? GAME_NOTE.exec(note) : null;
   if (!m) return note?.replaceAll(" - ", " · ");
   const [, round, game, rest] = m;
@@ -235,7 +206,7 @@ function gameFrom(event: HeaderEvent): MlbGame | null {
 
 /** Its round and which league's half of the draw, from the note ("ALDS - Game 5"), or the round alone from its type. */
 function roundOf(event: HeaderEvent): Pick<SeriesGame, "round" | "half"> | null {
-  const m = ROUND_NOTE.exec(noteOf(event) ?? "");
+  const m = ROUND_NOTE.exec(headerNote(event) ?? "");
   if (m) return m[1] ? { round: ROUND_BY_NOTE[m[2]], half: m[1] === "AL" ? 0 : 1 } : { round: 3, half: null };
   const round = ROUND_BY_TYPE[event.competitionType?.abbreviation ?? ""];
   return round === undefined ? null : { round, half: null };
@@ -267,17 +238,6 @@ function playoffsFrom(events: HeaderEvent[]): { rounds: BracketRound[]; teams: T
   return { rounds: seriesBracket(groupSeries(games), ROUNDS, "mlb"), teams };
 }
 
-function stat(entry: EspnStandingEntry, name: string): { value: number; display: string } | null {
-  const found = entry.stats?.find((s) => s.name === name);
-  if (!found) return null;
-  const display = found.displayValue ?? "";
-  // The leader's games behind reads "-": its value is the number.
-  const value = typeof found.value === "number" ? found.value : Number(display);
-  return { value: Number.isFinite(value) ? value : 0, display };
-}
-
-const statValue = (entry: EspnStandingEntry, name: string): number => stat(entry, name)?.value ?? 0;
-
 /**
  * Both leagues, each team at its league seed.
  *
@@ -302,17 +262,17 @@ function standingsFrom(json: EspnStandings): { standings: MlbStanding[]; teams: 
         if (!team) continue;
         teams.push(team);
         rows.push({
-          seed: statValue(entry, "playoffSeed"),
+          seed: standingValue(entry, "playoffSeed"),
           row: {
             position: 0,
             teamId: team.id,
             league: league as MlbLeague,
             division,
-            wins: statValue(entry, "wins"),
-            losses: statValue(entry, "losses"),
-            pct: statValue(entry, "winPercent"),
-            gamesBehind: (stat(entry, "divisionGamesBehind") ?? stat(entry, "gamesBehind"))?.value ?? 0,
-            streak: stat(entry, "streak")?.display || "—",
+            wins: standingValue(entry, "wins"),
+            losses: standingValue(entry, "losses"),
+            pct: standingValue(entry, "winPercent"),
+            gamesBehind: (standingStat(entry, "divisionGamesBehind") ?? standingStat(entry, "gamesBehind"))?.value ?? 0,
+            streak: standingStat(entry, "streak")?.display || "—",
           },
         });
       }
@@ -387,16 +347,6 @@ function mlbDataFrom(feeds: MlbFeeds, today: Date): MlbData {
   };
 }
 
-async function fetchEspn<T>(url: string): Promise<T> {
-  const res = await fetch(url, { signal: upstreamSignal() });
-  if (!res.ok) throw new Error(`espn mlb ${res.status} on ${url}`);
-  return (await res.json()) as T;
-}
-
-function settledValue<T>(result: PromiseSettledResult<T>): T | null {
-  return result.status === "fulfilled" ? result.value : null;
-}
-
 /**
  * The days around today, both leagues' tables and, from the Wild Card to
  * spring training, the postseason — from ESPN's public API, no key. The
@@ -409,8 +359,8 @@ async function fetchMlbFromApi(): Promise<MlbData> {
   const today = isoDay(now);
   const year = postseasonYear(now);
   const [teams, standings, days, postseason] = await Promise.allSettled([
-    fetchEspn<EspnTeams>(TEAMS_URL),
-    fetchEspn<EspnStandings>(STANDINGS_URL),
+    fetchEspnJson<EspnTeams>("espn mlb", TEAMS_URL),
+    fetchEspnJson<EspnStandings>("espn mlb", STANDINGS_URL),
     fetchHeaderDays(LEAGUE, shiftDay(today, -DAYS_BEHIND), shiftDay(today, DAYS_AHEAD)),
     year === null
       ? Promise.resolve([])
@@ -420,8 +370,8 @@ async function fetchMlbFromApi(): Promise<MlbData> {
   if (postseason.status === "rejected") throw postseason.reason;
   return mlbDataFrom(
     {
-      teams: settledValue(teams),
-      standings: settledValue(standings),
+      teams: settledOrNull(teams),
+      standings: settledOrNull(standings),
       days: days.value,
       postseason: postseason.value,
     },
@@ -443,6 +393,5 @@ export const __testing = {
   stageLabel,
   standingsFrom,
   statusText,
-  teamFrom,
   teamsFrom,
 };

@@ -87,7 +87,7 @@ function renderList(
               <TabsContent value="overview">
                 {table ? (
                   // As a sport's Overview sets it: the list and the table share one pick.
-                  <TeamPicksProvider>
+                  <TeamPicksProvider matches={matches}>
                     {list}
                     <StandingsTable
                       standings={[...teams.keys()].map((teamId, i) => ({
@@ -330,34 +330,63 @@ describe("MatchesByDate", () => {
   it("narrows to a team tapped in a match card or the table, and back on a second tap", () => {
     Element.prototype.scrollIntoView = vi.fn();
     const { container } = renderList(league, null, { table: true });
-    fireEvent.click(within(screen.getByRole("table", { name: "La Liga" })).getByRole("button", { name: "Filter matches: Atlético" }));
+    fireEvent.click(within(screen.getByRole("table", { name: "La Liga" })).getByRole("button", { name: "Atlético" }));
     expect(shownDays(container)).toEqual(["2026-10-18"]);
     expect(teamFilter()).toHaveAccessibleName("Filter by team: Atlético");
-    expect(within(screen.getByRole("table")).getByRole("button", { name: "Filter matches: Atlético" })).toHaveAttribute(
+    expect(within(screen.getByRole("table")).getByRole("button", { name: "Atlético" })).toHaveAttribute(
       "aria-pressed",
       "true"
     );
 
     // Sevilla, from the card it is in: one team at a time.
     const list = container.querySelector<HTMLElement>("[data-day]")!;
-    fireEvent.click(within(list).getByRole("button", { name: "Filter matches: Sevilla" }));
+    fireEvent.click(within(list).getByRole("button", { name: "Sevilla" }));
     expect(shownDays(container)).toEqual(["2026-10-18", "2026-10-21"]);
     expect(teamFilter()).toHaveAccessibleName("Filter by team: Sevilla");
 
-    fireEvent.click(within(list).getByRole("button", { name: "Filter matches: Sevilla" }));
+    fireEvent.click(within(list).getByRole("button", { name: "Sevilla" }));
     expect(teamFilter()).toHaveAccessibleName("Filter by team: All teams");
     expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18", "2026-10-21"]);
   });
 
   it("saves a team tapped in the table, as a pick in the menu is", () => {
     renderList(league, { list: LA_LIGA, teamIds: [] }, { table: true });
-    fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Filter matches: Barcelona" }));
+    fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Barcelona" }));
     expect(setSportTeamFilterAction).toHaveBeenCalledWith({ ...LA_LIGA, teamIds: ["bar"] });
   });
 
   it("leaves the names in a list with no view around it as plain text", () => {
     renderList(league);
-    expect(screen.queryByRole("button", { name: /^Filter matches:/ })).toBeNull();
+    expect(screen.queryByRole("button", { pressed: false })).toBeNull();
+    expect(screen.queryByRole("button", { pressed: true })).toBeNull();
+  });
+
+  it("names a team's button by what it shows, and says what a tap does as its description", () => {
+    renderList(league, null, { table: true });
+    const atletico = within(screen.getByRole("table")).getByRole("button", { name: "Atlético" });
+    expect(atletico).toHaveAccessibleDescription("Shows only this team's matches");
+  });
+
+  it("leaves a team with no game in the list inert in the table", () => {
+    // Only the Clásico's two sides play in `season`.
+    renderList(season, null, { table: true });
+    const table = screen.getByRole("table");
+    expect(within(table).getByRole("button", { name: "Barcelona" })).toBeInTheDocument();
+    expect(within(table).queryByRole("button", { name: "Atlético" })).toBeNull();
+    expect(within(table).queryByRole("button", { name: "Sevilla" })).toBeNull();
+    expect(within(table).getByText("Atlético")).toBeInTheDocument();
+  });
+
+  it("presses the one saved team the list still shows, and lets it go back to every team", () => {
+    renderList(league, { list: LA_LIGA, teamIds: ["gone", "bar"] }, { table: true });
+    expect(teamFilter()).toHaveAccessibleName("Filter by team: Barcelona");
+    const barcelona = within(screen.getByRole("table")).getByRole("button", { name: "Barcelona" });
+    expect(barcelona).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(barcelona);
+
+    expect(teamFilter()).toHaveAccessibleName("Filter by team: All teams");
+    expect(setSportTeamFilterAction).toHaveBeenLastCalledWith({ ...LA_LIGA, teamIds: [] });
   });
 
   it("brings a team picked deep in the list back to its first day, under the bar", () => {

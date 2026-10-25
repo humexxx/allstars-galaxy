@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { SINGLE_LIST_SPORTS } from "@/types/sports";
+
 import { teamFilterList } from "./team-filter";
 
 describe("teamFilterList", () => {
@@ -11,12 +13,11 @@ describe("teamFilterList", () => {
     });
   });
 
-  it("is the sport's one list for the NBA and the NFL, whatever the league says", () => {
-    expect(teamFilterList("nba", "premier-league")).toEqual({ sportId: "nba", competition: "nba" });
-    expect(teamFilterList("nfl", "premier-league")).toEqual({ sportId: "nfl", competition: "nfl" });
+  it.each(SINGLE_LIST_SPORTS)("is the sport's one list for %s, whatever the league says", (sport) => {
+    expect(teamFilterList(sport, "premier-league")).toEqual({ sportId: sport, competition: sport });
   });
 
-  it.each(["f1", "lol", "tennis", "padel"] as const)("is null for %s, which has no team filter", (sport) => {
+  it.each(["f1", "lol", "tennis", "padel", "surf"] as const)("is null for %s, which has no team filter", (sport) => {
     expect(teamFilterList(sport, "premier-league")).toBeNull();
   });
 });

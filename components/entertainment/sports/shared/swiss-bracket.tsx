@@ -60,7 +60,7 @@ export function SwissBracket({
   stage: SwissStage;
   teams: Map<string, Team>;
   className?: string;
-}) {
+}): React.ReactElement {
   const columns = useMemo((): BracketColumn[] => {
     const current = stage.rounds.findIndex((round) =>
       round.some((pool) => pool.matches.some((m) => m.status !== "ft"))
@@ -101,7 +101,7 @@ export function SwissBracket({
   );
 }
 
-function PoolBox({ pool, teams }: { pool: SwissPool; teams: Map<string, Team> }) {
+function PoolBox({ pool, teams }: { pool: SwissPool; teams: Map<string, Team> }): React.ReactElement {
   const bestOf = pool.matches.find((m) => m.bestOf)?.bestOf;
   return (
     <div role="group" className="relative overflow-hidden rounded-lg border bg-card" aria-label={spoken(pool)}>
@@ -139,7 +139,7 @@ export const STATUS_LABEL: Record<SwissMatch["status"], string> = {
  * Both teams of one match, with when it is in small print under them. The
  * format and the status are a click away.
  */
-function MatchRows({ match, teams }: { match: SwissMatch; teams: Map<string, Team> }) {
+function MatchRows({ match, teams }: { match: SwissMatch; teams: Map<string, Team> }): React.ReactElement {
   const format = useMatchTime();
   const decided = Boolean(match.winnerTeamId);
   const sides = [
@@ -147,7 +147,7 @@ function MatchRows({ match, teams }: { match: SwissMatch; teams: Map<string, Tea
     { id: match.awayTeamId, score: match.awayScore },
   ].map((side) => ({ ...side, team: side.id ? teams.get(side.id) : undefined }));
   const played = sides.every((side) => side.score !== null && side.score !== undefined);
-  const name = (side: (typeof sides)[number]) => side.team?.code ?? "TBD";
+  const name = (side: (typeof sides)[number]): string => side.team?.code ?? "TBD";
 
   return (
     <MatchHover
@@ -190,7 +190,7 @@ function MatchRows({ match, teams }: { match: SwissMatch; teams: Map<string, Tea
   );
 }
 
-function ExitBox({ exit, teams }: { exit: SwissExit; teams: Map<string, Team> }) {
+function ExitBox({ exit, teams }: { exit: SwissExit; teams: Map<string, Team> }): React.ReactElement {
   const slots = Array.from({ length: exit.slots }, (_, i) => exit.teamIds[i]);
   return (
     <div

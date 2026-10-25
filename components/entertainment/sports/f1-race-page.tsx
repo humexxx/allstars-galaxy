@@ -112,7 +112,7 @@ export function F1RacePage({
     <SportPageControls sport="f1" favoriteSportIds={favoriteSportIds}>
       <Tabs defaultValue={initialTab === "results" && hasTables ? "results" : "overview"} className="gap-6">
         <SportShell
-          emoji={F1?.emoji}
+          sportId="f1"
           title={race.name}
           subtitle={`Round ${race.round} · ${season} Season`}
           parent={{ label: F1?.label ?? "Formula 1", href: sportPath("f1") }}

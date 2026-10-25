@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
-import { CalendarDays, ChevronRight, Lock, MapPin, Trophy, type LucideIcon } from "lucide-react";
+import { useMemo, useState } from "react";
+import { CalendarDays, ChevronRight, Lock, MapPin, Trophy } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,19 +10,26 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
-import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { featuredEvent } from "@/lib/data/sports/surf";
 import { cn } from "@/lib/utils";
 import { formatDayRange } from "@/lib/utils/date";
 import type { SurfData, SurfDraw, SurfEvent, SurfHeat, SurfRanking, SurfSurfer } from "@/types/sports";
 
+import { FactList, TileWinner, VersusLine, type Fact } from "../shared/event-facts";
 import { OverviewSplit } from "../shared/overview-split";
 import { Portrait } from "../shared/portrait";
 import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportShell } from "../shared/sport-shell";
 import { StatusPill } from "../shared/status-pill";
 import { SportsTh, TableCard } from "../shared/table-primitives";
-import { EarlierPill, SectionHeading, TileSection, useRevealEarlier } from "../shared/tile-section";
+import {
+  EarlierPill,
+  SectionHeading,
+  showNames,
+  TILE_FRAME,
+  TileSection,
+  useRevealEarlier,
+} from "../shared/tile-section";
 
 type SurfViewProps = {
   data: SurfData;
@@ -50,7 +57,7 @@ export function SurfView({ data, initialTab }: SurfViewProps): React.ReactElemen
   return (
     <Tabs value={shownTab} onValueChange={setTab} className="gap-6">
       <SportShell
-        emoji={SPORTS_BY_ID.get("surf")?.emoji ?? "🏄"}
+        sportId="surf"
         title="Surfing"
         subtitle={`Championship Tour · Season ${data.season}`}
         tabs={
@@ -94,11 +101,6 @@ function sectionTitle(event: SurfEvent): string {
   if (event.status === "live") return "On now";
   if (event.status === "upcoming") return "Next up";
   return "Last event";
-}
-
-/** What the "Earlier" pill brings in: "Show Fiji Pro – Tahiti Pro", or one name. */
-function showNames(list: SurfEvent[]): string {
-  return list.length > 1 ? `Show ${list[0].name} – ${list[list.length - 1].name}` : `Show ${list[0]?.name ?? ""}`;
 }
 
 /**
@@ -181,23 +183,6 @@ function roundUnderWay(draw: SurfDraw): string | null {
   return next.heats.some((h) => h.status === "completed") ? `${next.label} under way` : `${next.label} next`;
 }
 
-function WinnerLine({ winner, runnerUp }: { winner: string; runnerUp?: string }): React.ReactElement {
-  return (
-    <>
-      <span className="font-medium">{winner}</span>
-      {runnerUp && (
-        <span className="text-muted-foreground">
-          {" "}
-          <span aria-hidden>d.</span>
-          <span className="sr-only">defeated</span> {runnerUp}
-        </span>
-      )}
-    </>
-  );
-}
-
-type Fact = { label: string; icon: LucideIcon; iconClassName?: string; value: ReactNode };
-
 /** The stop's facts, one a line behind its icon, as a tournament's are. */
 function EventFacts({ event }: { event: SurfEvent }): React.ReactElement {
   const facts: Fact[] = [
@@ -209,23 +194,11 @@ function EventFacts({ event }: { event: SurfEvent }): React.ReactElement {
       label: "Winner",
       icon: Trophy,
       iconClassName: "text-warning",
-      value: <WinnerLine winner={event.winner} runnerUp={event.runnerUp} />,
+      value: <VersusLine winner={event.winner} runnerUp={event.runnerUp} />,
     });
   }
 
-  return (
-    <dl className="flex flex-col gap-2">
-      {facts.map(({ label, icon: Icon, iconClassName, value }) => (
-        <div key={label} className="flex items-start gap-2 text-sm">
-          <dt className="flex h-6 shrink-0 items-center text-muted-foreground">
-            <Icon aria-hidden className={cn("size-4", iconClassName)} />
-            <span className="sr-only">{label}</span>
-          </dt>
-          <dd className="min-w-0 leading-6">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+  return <FactList facts={facts} />;
 }
 
 /**
@@ -282,7 +255,7 @@ function EventTile({ event }: { event: SurfEvent }): React.ReactElement {
     <div
       data-tournament={event.id}
       tabIndex={-1}
-      className="flex w-full flex-col gap-2 rounded-lg border bg-card p-3 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+      className={cn(TILE_FRAME, "gap-2")}
     >
       <div className="flex w-full items-start justify-between gap-2">
         <div className="flex min-w-0 flex-col leading-tight">
@@ -302,13 +275,9 @@ function EventTile({ event }: { event: SurfEvent }): React.ReactElement {
         <Mono className="text-xs text-muted-foreground">{formatDayRange(event.startDate, event.endDate)}</Mono>
       </div>
       {event.winner && (
-        <div className="flex items-start gap-2 border-t pt-2 text-xs">
-          <Trophy aria-hidden className="mt-0.5 size-3.5 shrink-0 text-warning" />
-          <span className="min-w-0">
-            <span className="sr-only">Winner: </span>
-            <WinnerLine winner={event.winner} runnerUp={event.runnerUp} />
-          </span>
-        </div>
+        <TileWinner label="Winner">
+          <VersusLine winner={event.winner} runnerUp={event.runnerUp} />
+        </TileWinner>
       )}
     </div>
   );

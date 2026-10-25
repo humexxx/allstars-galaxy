@@ -40,6 +40,11 @@ async function cleanFavoritesFor(email: string): Promise<void> {
       DELETE FROM user_sports_preferences
       WHERE user_id = (SELECT id FROM auth.users WHERE email = ${email})
     `;
+    // The teams a match list was narrowed to: a spec opens the hub unfiltered.
+    await sql`
+      DELETE FROM user_sports_team_filters
+      WHERE user_id = (SELECT id FROM auth.users WHERE email = ${email})
+    `;
   });
 }
 
@@ -96,6 +101,7 @@ async function resetUserDataFor(email: string): Promise<void> {
     await sql`DELETE FROM finance_plans WHERE user_id = ${userIdSubquery}`;
     await sql`DELETE FROM trips WHERE user_id = ${userIdSubquery}`;
     await sql`DELETE FROM user_sports_preferences WHERE user_id = ${userIdSubquery}`;
+    await sql`DELETE FROM user_sports_team_filters WHERE user_id = ${userIdSubquery}`;
   });
 }
 

@@ -1,33 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Lock } from "lucide-react";
+import { useState } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
-import { isBracketDrawn } from "@/lib/sports/bracket";
-import { cn } from "@/lib/utils";
 import type { MlbData, MlbDivision, MlbLeague, NewsStory, Team } from "@/types/sports";
 
-import { KnockoutBracket } from "../shared/knockout-bracket";
-import { MatchesByDate } from "../shared/matches-by-date";
-import { TeamNewsTab } from "../shared/news-list";
-import { OverviewSplit } from "../shared/overview-split";
-import { SportShell } from "../shared/sport-shell";
+import { LeagueView, StandingsTeamCell, useTeamsMap } from "../shared/league-view";
 import { SportsTh, TableCellNum } from "../shared/table-primitives";
-import { TeamBadge } from "../shared/team-badge";
-import { TeamPicksProvider } from "../shared/team-picks";
-import { TeamPick } from "../shared/team-pick";
 
 type MlbViewProps = {
   data: MlbData;
@@ -72,73 +53,22 @@ function formatGamesBehind(gamesBehind: number): string {
 }
 
 export function MlbView({ data, news = [], initialTab }: MlbViewProps): React.ReactElement {
-  const teamsMap = useMemo(
-    () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
-    [data.teams],
-  );
-
-  const hasPlayoffs = isBracketDrawn(data.playoffs);
-  const opening = initialTab === "news" && news.length > 0 ? "news" : hasPlayoffs ? "postseason" : "overview";
-
+  const teamsMap = useTeamsMap(data.teams);
   return (
-    <Tabs defaultValue={opening} className="gap-6">
-      <SportShell
-        emoji={SPORTS_BY_ID.get("mlb")?.emoji ?? "⚾"}
-        title="Baseball · MLB"
-        subtitle={`Season ${data.season}`}
-        tabs={
-          <TabsList variant="line">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            {/* Always there, locked until the Wild Card: where the bracket
-                will be is worth knowing before it exists. */}
-            <TabsTrigger value="postseason" disabled={!hasPlayoffs}>
-              {!hasPlayoffs && <Lock aria-hidden />}
-              Postseason
-            </TabsTrigger>
-            {news.length > 0 && <TabsTrigger value="news">News</TabsTrigger>}
-          </TabsList>
-        }
-      >
-        {/* The days' games and the table on one tab; a team tapped in either
-            narrows the games to its own. */}
-        <TabsContent value="overview">
-          <TeamPicksProvider>
-            <OverviewSplit
-              matches={
-                <MatchesByDate
-                  matches={data.games}
-                  teams={teamsMap}
-                  emptyTitle="No games scheduled right now."
-                />
-              }
-              table={data.standings.length > 0 && <MlbStandings data={data} teamsMap={teamsMap} />}
-              tableLabel="Standings"
-            />
-          </TeamPicksProvider>
-        </TabsContent>
-
-        {hasPlayoffs && (
-          <TabsContent value="postseason">
-            <Card size="sm">
-              <CardContent>
-                <KnockoutBracket rounds={data.playoffs} teams={teamsMap} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
-
-        {/* Led by the teams picked in the games and each league's top two. */}
-        {news.length > 0 && (
-          <TabsContent value="news">
-            <TeamNewsTab
-              stories={news}
-              teams={teamsMap}
-              leaders={data.standings.filter((s) => s.position <= 2).map((s) => s.teamId)}
-            />
-          </TabsContent>
-        )}
-      </SportShell>
-    </Tabs>
+    <LeagueView
+      sportId="mlb"
+      title="Baseball · MLB"
+      subtitle={`Season ${data.season}`}
+      games={data.games}
+      teams={teamsMap}
+      standings={data.standings}
+      playoffs={data.playoffs}
+      bracketLabel="Postseason"
+      news={news}
+      initialTab={initialTab}
+      emptyTitle="No games scheduled right now."
+      table={data.standings.length > 0 && <MlbStandings data={data} teamsMap={teamsMap} />}
+    />
   );
 }
 
@@ -213,23 +143,8 @@ function MlbStandings({
                 return (
                   <TableRow key={row.teamId} className="hover:bg-transparent">
                     <TableCell className="text-sm tabular-nums text-muted-foreground">{row.position}</TableCell>
-                    <TableHead scope="row" className="w-full max-w-0 font-normal text-foreground">
-                      {team ? (
-                        <TeamPick team={team} className="max-w-full">
-                          <TeamBadge team={team} size="sm" />
-                          {/* Too narrow for "Diamondbacks", the code, as the bracket has it. */}
-                          <span className={cn("text-sm @sm:hidden", isLeader && "font-semibold")}>{team.code}</span>
-                          <span
-                            title={team.name}
-                            className={cn("hidden truncate text-sm @sm:block", isLeader && "font-semibold")}
-                          >
-                            {team.shortName}
-                          </span>
-                        </TeamPick>
-                      ) : (
-                        row.teamId
-                      )}
-                    </TableHead>
+                    {/* Too narrow for "Diamondbacks", the code, as the bracket has it. */}
+                    <StandingsTeamCell team={team} teamId={row.teamId} isLeader={isLeader} codeWhenNarrow />
                     <TableCellNum value={row.wins} className={NUM_TD} />
                     <TableCellNum value={row.losses} className={NUM_TD} />
                     <TableCellNum value={formatPct(row.pct)} className={NUM_TD} />

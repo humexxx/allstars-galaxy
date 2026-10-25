@@ -177,7 +177,7 @@ export function placeOf(t: RacquetTournament): string | null {
 }
 
 /** "Starts today", "Starts tomorrow", "Starts in 5 days", by the reader's calendar day. */
-export function startsInDays(startDate: string, today: string): string {
+function startsInDays(startDate: string, today: string): string {
   const days = Math.round((Date.parse(startDate) - Date.parse(today)) / 86_400_000);
   if (days <= 0) return "Starts today";
   if (days === 1) return "Starts tomorrow";

@@ -9,30 +9,26 @@ import type {
   BracketRound,
   BracketRoundId,
   Match,
-  MatchStatus,
   NflConference,
   NflData,
   NflDivision,
   NflStanding,
   Team,
 } from "@/types/sports";
-import { cachedFeed, upstreamSignal } from "./upstream";
+import { headerStatus, sidesOf } from "./espn-scoreboard";
+import {
+  fetchEspnJson,
+  standingStat,
+  standingValue,
+  type EspnStandings,
+  type EspnTeam,
+} from "./espn-site";
+import { cachedFeed } from "./upstream";
 
 const SITE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl";
 /** `level=3` nests the table conference → division, which is the only place the division is named. */
 const STANDINGS_URL = "https://site.api.espn.com/apis/v2/sports/football/nfl/standings?level=3";
 const REVALIDATE_SECONDS = 300;
-
-type EspnTeam = {
-  abbreviation?: string;
-  displayName?: string;
-  shortDisplayName?: string;
-  color?: string;
-  /** The scoreboard's logo. */
-  logo?: string;
-  /** The standings' logos, the default first. */
-  logos?: Array<{ href?: string }>;
-};
 
 type EspnStatus = {
   type?: { name?: string; state?: "pre" | "in" | "post"; completed?: boolean };
@@ -66,19 +62,6 @@ type EspnScoreboard = {
   week?: { number?: number };
   events?: EspnEvent[];
 };
-
-type EspnStandingEntry = {
-  team?: EspnTeam;
-  stats?: Array<{ name?: string; displayValue?: string; value?: number | null }>;
-};
-
-type EspnStandingsGroup = {
-  abbreviation?: string;
-  standings?: { entries?: EspnStandingEntry[] };
-  children?: EspnStandingsGroup[];
-};
-
-type EspnStandings = { children?: EspnStandingsGroup[] };
 
 /** ESPN's season types. Only the postseason and the months after it carry a bracket. */
 const SEASON_TYPE = { preseason: 1, regular: 2, postseason: 3, offseason: 4 } as const;
@@ -160,15 +143,6 @@ function teamFrom(t: EspnTeam | undefined): Team | null {
   };
 }
 
-function statusFrom(status: EspnStatus | undefined): MatchStatus {
-  const type = status?.type;
-  if (type?.name === "STATUS_POSTPONED") return "postponed";
-  if (type?.name === "STATUS_CANCELED") return "cancelled";
-  if (type?.state === "in") return "live";
-  if (type?.state === "post") return "ft";
-  return "scheduled";
-}
-
 function scoreOf(c: EspnCompetitor | undefined): number | null {
   const n = Number(c?.score);
   return c?.score !== undefined && Number.isFinite(n) ? n : null;
@@ -187,21 +161,13 @@ function stageLabel(event: EspnEvent): string | undefined {
   }
 }
 
-function sides(event: EspnEvent) {
-  const competitors = event.competitions?.[0]?.competitors ?? [];
-  return {
-    home: competitors.find((c) => c.homeAway === "home"),
-    away: competitors.find((c) => c.homeAway === "away"),
-  };
-}
-
 function matchFrom(event: EspnEvent): { match: Match; teams: Team[] } | null {
-  const { home, away } = sides(event);
+  const { home, away } = sidesOf(event.competitions?.[0]?.competitors);
   const homeTeam = teamFrom(home?.team);
   const awayTeam = teamFrom(away?.team);
   if (!homeTeam || !awayTeam) return null;
   const competition = event.competitions?.[0];
-  const status = statusFrom(competition?.status ?? event.status);
+  const status = headerStatus(competition?.status ?? event.status);
   // ESPN sends "0" for a game that has not kicked off.
   const scored = status === "live" || status === "ft";
   const broadcasts = siteBroadcasts(competition);
@@ -219,13 +185,6 @@ function matchFrom(event: EspnEvent): { match: Match; teams: Team[] } | null {
     },
     teams: [homeTeam, awayTeam],
   };
-}
-
-function stat(entry: EspnStandingEntry, name: string): { value: number; display: string } {
-  const found = entry.stats?.find((s) => s.name === name);
-  const display = found?.displayValue ?? "";
-  const value = typeof found?.value === "number" ? found.value : Number(display);
-  return { value: Number.isFinite(value) ? value : 0, display };
 }
 
 /**
@@ -250,19 +209,19 @@ function standingsFrom(json: EspnStandings): { standings: NflStanding[]; teams: 
         if (!team) continue;
         teams.push(team);
         rows.push({
-          seed: stat(entry, "playoffSeed").value,
+          seed: standingValue(entry, "playoffSeed"),
           row: {
             position: 0,
             teamId: team.id,
             conference: conference as NflConference,
             division: division as NflDivision,
-            wins: stat(entry, "wins").value,
-            losses: stat(entry, "losses").value,
-            ties: stat(entry, "ties").value,
-            pct: stat(entry, "winPercent").value,
-            pointsFor: stat(entry, "pointsFor").value,
-            pointsAgainst: stat(entry, "pointsAgainst").value,
-            streak: stat(entry, "streak").display || "—",
+            wins: standingValue(entry, "wins"),
+            losses: standingValue(entry, "losses"),
+            ties: standingValue(entry, "ties"),
+            pct: standingValue(entry, "winPercent"),
+            pointsFor: standingValue(entry, "pointsFor"),
+            pointsAgainst: standingValue(entry, "pointsAgainst"),
+            streak: standingStat(entry, "streak")?.display || "—",
           },
         });
       }
@@ -291,10 +250,10 @@ function roundFrom(
     return conf(a) - conf(b) || (a.date ?? "").localeCompare(b.date ?? "");
   });
   const matches: BracketMatch[] = events.map((event) => {
-    const { home, away } = sides(event);
+    const { home, away } = sidesOf(event.competitions?.[0]?.competitors);
     const homeTeam = teamFrom(home?.team);
     const awayTeam = teamFrom(away?.team);
-    const played = statusFrom(event.competitions?.[0]?.status ?? event.status) === "ft";
+    const played = headerStatus(event.competitions?.[0]?.status ?? event.status) === "ft";
     return {
       id: event.id,
       homeTeamId: homeTeam?.id ?? null,
@@ -314,10 +273,8 @@ function roundFrom(
   return { id: round.id, label, matches };
 }
 
-async function fetchEspn<T>(url: string): Promise<T> {
-  const res = await fetch(url, { signal: upstreamSignal() });
-  if (!res.ok) throw new Error(`espn nfl ${res.status} on ${url}`);
-  return (await res.json()) as T;
+function fetchEspn<T>(url: string): Promise<T> {
+  return fetchEspnJson<T>("espn nfl", url);
 }
 
 async function fetchPlayoffs(year: number): Promise<BracketRound[]> {
@@ -405,4 +362,4 @@ export const getNflData = cachedFeed(
 );
 
 /** Pure mappers, exported for their tests — nothing here touches the network. */
-export const __testing = { matchFrom, standingsFrom, roundFrom, statusFrom, teamFrom, weeksAround };
+export const __testing = { matchFrom, standingsFrom, roundFrom, teamFrom, weeksAround };

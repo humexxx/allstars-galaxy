@@ -4,7 +4,7 @@ import type { SavedTeamFilter, TeamFilterList } from "@/types/sports";
 /** How old a copy may be and still be shown while the fresh one loads. */
 export const SEEN_MS = 30 * 60_000;
 
-export type SeenSport = {
+type SeenSport = {
   payload: SportPayload;
   teamFilter: SavedTeamFilter | null;
   today: string;

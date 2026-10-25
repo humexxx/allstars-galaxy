@@ -13,11 +13,10 @@ type TennisViewProps = {
   initialTab?: string;
 };
 
-export function TennisView({ data, news, initialTab }: TennisViewProps) {
+export function TennisView({ data, news, initialTab }: TennisViewProps): React.ReactElement {
   return (
     <RacquetView
       sport="tennis"
-      emoji="🎾"
       title="Tennis"
       subtitle={tourLine("tennis", data.atp.season)}
       data={data.atp}

@@ -215,10 +215,6 @@ function withFinals(events: WslEvent[], finals: Map<string, SurfFinal>): SurfEve
   });
 }
 
-function settled<T>(result: PromiseSettledResult<T>): T | undefined {
-  return result.status === "fulfilled" ? result.value : undefined;
-}
-
 /**
  * `promise`'s value, or undefined once `ms` have passed. The read carries on
  * and fills its cache for the next render; this one just stops waiting.
@@ -248,9 +244,9 @@ async function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined
  * Final, once surfed, comes off the draw already read.
  *
  * A cold render reads the schedule and then a dozen pages behind the queue,
- * so the whole render shares one upstream budget: whatever has not come back
- * by then is left out of this render. The rankings and the draw are asked
- * for first, so they take the first slots.
+ * so the whole render shares one upstream budget: each piece that has not
+ * come back by then is left out of this render, and only that piece. The
+ * rankings and the draw are asked for first, so they take the first slots.
  */
 export async function getSurfData(): Promise<SurfData> {
   const started = Date.now();
@@ -260,22 +256,19 @@ export async function getSurfData(): Promise<SurfData> {
   const featured = featuredEvent(events);
   const finished = events.filter((e) => e.status === "completed" && e.id !== featured?.id);
 
-  const pieces = Promise.allSettled([
-    getRankings(
-      season,
-      events.some((e) => e.status === "completed")
-    ),
-    featured ? drawFor(season, featured) : Promise.resolve(null),
-    Promise.allSettled(finished.map((e) => finalFor(season, e))),
+  const left = UPSTREAM_TIMEOUT_MS - (Date.now() - started);
+  const inBudget = <T>(read: Promise<T>): Promise<T | undefined> => within(read.catch(() => undefined), left);
+  const surfed = events.some((e) => e.status === "completed");
+  const [rankings, featuredDraw, results] = await Promise.all([
+    inBudget(getRankings(season, surfed)),
+    featured ? inBudget(drawFor(season, featured)) : null,
+    Promise.all(finished.map((e) => inBudget(finalFor(season, e)))),
   ]);
-  const [rankings, draw, results] = (await within(pieces, UPSTREAM_TIMEOUT_MS - (Date.now() - started))) ?? [];
 
   const finals = new Map<string, SurfFinal>();
-  ((results && settled(results)) ?? []).forEach((result, i) => {
-    const final = settled(result);
+  results.forEach((final, i) => {
     if (final) finals.set(finished[i].id, final);
   });
-  const featuredDraw = draw && settled(draw);
   const shown = featuredDraw && featuredDraw.rounds.length > 0 ? featuredDraw : undefined;
   const featuredFinal = shown && winnerOf(shown);
   if (featured && featuredFinal) finals.set(featured.id, featuredFinal);
@@ -284,18 +277,14 @@ export async function getSurfData(): Promise<SurfData> {
     season,
     events: withFinals(events, finals),
     ...(shown ? { draw: shown } : {}),
-    rankings: (rankings && settled(rankings)) ?? [],
+    rankings: rankings ?? [],
   };
 }
 
 /** Pure helpers and the uncached reads, exported for their tests. */
 export const __testing = {
-  USER_AGENT,
-  schedulePath,
-  rankingsPath,
   resultsPath,
   withFinals,
-  fetchSchedule,
   fetchRankings,
   fetchDraw,
   fetchFinal,

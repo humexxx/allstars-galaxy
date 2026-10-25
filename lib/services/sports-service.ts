@@ -45,12 +45,8 @@ import type {
   LolSplit,
   Match,
   MlbData,
-  MlbLeague,
-  NbaConference,
   NbaData,
-  NflConference,
   NflData,
-  NhlConference,
   NhlData,
   RacquetData,
   SportId,
@@ -349,18 +345,42 @@ function footballCard(base: CardBase, data: FootballLeagueData): DashboardSportC
   };
 }
 
+/**
+ * One table per group (a conference, a league), its first `CARD_ROWS` teams
+ * by position; a group with nobody in it is left out.
+ */
+function groupTables<S extends { position: number; teamId: string }, G extends string>(
+  standings: S[],
+  teams: Map<string, Team>,
+  groupOf: (s: S) => G,
+  groups: ReadonlyArray<{ id: NoInfer<G>; label: string }>,
+  record: (s: S) => string
+): DashboardTable[] {
+  return groups
+    .map(({ id, label }) => ({
+      id,
+      label,
+      rows: standings
+        .filter((s) => groupOf(s) === id)
+        .sort((a, b) => a.position - b.position)
+        .slice(0, CARD_ROWS)
+        .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, record(s))),
+    }))
+    .filter((t) => t.rows.length > 0);
+}
+
 function nbaCard(base: CardBase, data: NbaData): DashboardSportCard {
   const teams = teamsById(data.teams);
-  const conference = (id: NbaConference, label: string): DashboardTable => ({
-    id,
-    label,
-    rows: data.standings
-      .filter((s) => s.conference === id)
-      .sort((a, b) => a.position - b.position)
-      .slice(0, CARD_ROWS)
-      .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.won}–${s.lost}`)),
-  });
-  const tables = [conference("east", "East"), conference("west", "West")].filter((t) => t.rows.length > 0);
+  const tables = groupTables(
+    data.standings,
+    teams,
+    (s) => s.conference,
+    [
+      { id: "east", label: "East" },
+      { id: "west", label: "West" },
+    ],
+    (s) => `${s.won}–${s.lost}`
+  );
   return {
     ...base,
     context: `Season ${data.season}`,
@@ -381,66 +401,59 @@ function nbaNote(data: NbaData): DashboardSportCard["note"] {
 
 function nflCard(base: CardBase, data: NflData): DashboardSportCard {
   const teams = teamsById(data.teams);
-  const conference = (id: NflConference, label: string): DashboardTable => ({
-    id,
-    label,
-    rows: data.standings
-      .filter((s) => s.conference === id)
-      .sort((a, b) => a.position - b.position)
-      .slice(0, CARD_ROWS)
-      .map((s) =>
-        teamRow(
-          s.position,
-          teams.get(s.teamId),
-          s.teamId,
-          s.ties > 0 ? `${s.wins}–${s.losses}–${s.ties}` : `${s.wins}–${s.losses}`
-        )
-      ),
-  });
   return {
     ...base,
     context: `Season ${data.season}`,
     ...featuredAndFollowing(data.games, teams),
-    tables: [conference("afc", "AFC"), conference("nfc", "NFC")].filter((t) => t.rows.length > 0),
+    tables: groupTables(
+      data.standings,
+      teams,
+      (s) => s.conference,
+      [
+        { id: "afc", label: "AFC" },
+        { id: "nfc", label: "NFC" },
+      ],
+      (s) => (s.ties > 0 ? `${s.wins}–${s.losses}–${s.ties}` : `${s.wins}–${s.losses}`)
+    ),
   };
 }
 
 function mlbCard(base: CardBase, data: MlbData): DashboardSportCard {
   const teams = teamsById(data.teams);
-  const league = (id: MlbLeague, label: string): DashboardTable => ({
-    id,
-    label,
-    rows: data.standings
-      .filter((s) => s.league === id)
-      .sort((a, b) => a.position - b.position)
-      .slice(0, CARD_ROWS)
-      .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.wins}–${s.losses}`)),
-  });
   return {
     ...base,
     context: `Season ${data.season}`,
     ...featuredAndFollowing(data.games, teams),
-    tables: [league("al", "American League"), league("nl", "National League")].filter((t) => t.rows.length > 0),
+    tables: groupTables(
+      data.standings,
+      teams,
+      (s) => s.league,
+      [
+        { id: "al", label: "American League" },
+        { id: "nl", label: "National League" },
+      ],
+      (s) => `${s.wins}–${s.losses}`
+    ),
   };
 }
 
 /** Each conference by points, the hockey table's own order. */
 function nhlCard(base: CardBase, data: NhlData): DashboardSportCard {
   const teams = teamsById(data.teams);
-  const conference = (id: NhlConference, label: string): DashboardTable => ({
-    id,
-    label,
-    rows: data.standings
-      .filter((s) => s.conference === id)
-      .sort((a, b) => a.position - b.position)
-      .slice(0, CARD_ROWS)
-      .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.points} pts`)),
-  });
   return {
     ...base,
     context: `Season ${splitSeasonLabel(data.season)}`,
     ...featuredAndFollowing(data.games, teams),
-    tables: [conference("east", "Eastern"), conference("west", "Western")].filter((t) => t.rows.length > 0),
+    tables: groupTables(
+      data.standings,
+      teams,
+      (s) => s.conference,
+      [
+        { id: "east", label: "Eastern" },
+        { id: "west", label: "Western" },
+      ],
+      (s) => `${s.points} pts`
+    ),
   };
 }
 

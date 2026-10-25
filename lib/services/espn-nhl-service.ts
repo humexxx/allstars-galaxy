@@ -3,6 +3,7 @@ import "server-only";
 import { NHL_DATA } from "@/lib/data/sports/nhl";
 import { espnImage } from "@/lib/sports/espn-images";
 import { orderMatchesForDisplay } from "@/lib/sports/match-order";
+import { ordinal } from "@/lib/utils/format";
 import type {
   BracketMatch,
   BracketRound,
@@ -19,6 +20,7 @@ import {
   fetchHeaderDays,
   groupSeries,
   headerMatch,
+  headerNote,
   isoDay,
   seriesTie,
   shiftDay,
@@ -30,7 +32,17 @@ import {
   type SeriesGame,
   type SeriesRound,
 } from "./espn-scoreboard";
-import { cachedFeed, upstreamSignal } from "./upstream";
+import {
+  fetchEspnJson,
+  standingStat,
+  standingValue,
+  teamColour,
+  teamsListFrom,
+  type EspnStandings,
+  type EspnTeam,
+  type EspnTeams,
+} from "./espn-site";
+import { cachedFeed, settledOrNull } from "./upstream";
 
 const LEAGUE: HeaderLeague = { sport: "hockey", league: "nhl" };
 /** All 32 clubs with their colours: the table carries none, a day's games only the teams playing. */
@@ -142,34 +154,8 @@ type NhlEvent = Omit<HeaderEvent, "competitors" | "fullStatus" | "competitionTyp
   competitionType?: { abbreviation?: string; slug?: string };
 };
 
-type EspnTeam = {
-  abbreviation?: string;
-  displayName?: string;
-  shortDisplayName?: string;
-  color?: string;
-  logos?: Array<{ href?: string; rel?: string[] }>;
-};
-
-type EspnTeams = {
-  sports?: Array<{ leagues?: Array<{ teams?: Array<{ team?: EspnTeam }> }> }>;
-};
-
-type EspnStandingEntry = {
-  team?: EspnTeam;
-  stats?: Array<{ name?: string; displayValue?: string; value?: number | null }>;
-};
-
-type EspnStandingsGroup = {
-  abbreviation?: string;
-  standings?: { season?: number; entries?: EspnStandingEntry[] };
-  children?: EspnStandingsGroup[];
-};
-
-type EspnStandings = { children?: EspnStandingsGroup[] };
-
 function colourOf(code: string, color: string | undefined): string | undefined {
-  if (LOGO_ON_WHITE.has(code)) return "#FFFFFF";
-  return color ? `#${color.replace(/^#/, "")}` : undefined;
+  return teamColour(code, color, LOGO_ON_WHITE);
 }
 
 /**
@@ -198,15 +184,7 @@ function teamFrom(t: EspnTeam | undefined): Team | null {
 }
 
 function teamsFrom(json: EspnTeams): Team[] {
-  return (json.sports ?? [])
-    .flatMap((s) => s.leagues ?? [])
-    .flatMap((l) => l.teams ?? [])
-    .map((t) => teamFrom(t.team))
-    .filter((t): t is Team => t !== null);
-}
-
-function ordinal(n: number): string {
-  return `${n}${({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n] ?? "th"}`;
+  return teamsListFrom(json, teamFrom);
 }
 
 function nthWord(n: number): string {
@@ -321,10 +299,6 @@ function statusText(status: NhlStatus | undefined, state: MatchStatus, postseaso
   return undefined;
 }
 
-function noteOf(event: NhlEvent): string | undefined {
-  return event.notes?.[0]?.headline ?? event.note ?? undefined;
-}
-
 /**
  * "East 1st Round · Game 1" in the playoffs, "Game 7, if necessary" for one
  * that may not be played. The regular season's notes name its outdoor games
@@ -333,7 +307,7 @@ function noteOf(event: NhlEvent): string | undefined {
 function stageLabel(event: NhlEvent): string | undefined {
   const seasonType = String(event.seasonType);
   if (seasonType === PRESEASON) return "Preseason";
-  const note = noteOf(event)?.replace(/\s+/g, " ").trim();
+  const note = headerNote(event)?.replace(/\s+/g, " ").trim();
   if (!note) return undefined;
   if (seasonType !== POSTSEASON) return /^makeup\b/i.test(note) ? undefined : note;
   const m = GAME_NOTE.exec(note);
@@ -363,7 +337,7 @@ function gameFrom(event: NhlEvent): NhlGame | null {
 
 /** Its round, and which conference's half of the draw when the note says ("East 2nd Round - Game 4"). */
 function roundOf(event: NhlEvent): Pick<SeriesGame, "round" | "half"> | null {
-  const m = ROUND_NOTE.exec(noteOf(event)?.trim() ?? "");
+  const m = ROUND_NOTE.exec(headerNote(event)?.trim() ?? "");
   if (m) return m[1] ? { round: ROUND_BY_NOTE[m[2]], half: m[1] === "East" ? 0 : 1 } : { round: 3, half: null };
   const round = ROUND_BY_SLUG[event.competitionType?.slug ?? ""];
   return round === undefined ? null : { round, half: null };
@@ -527,16 +501,6 @@ function playoffsFrom(
   return { rounds, teams };
 }
 
-function stat(entry: EspnStandingEntry, name: string): { value: number; display: string } | null {
-  const found = entry.stats?.find((s) => s.name === name);
-  if (!found) return null;
-  const display = found.displayValue ?? "";
-  const value = typeof found.value === "number" ? found.value : Number(display);
-  return { value: Number.isFinite(value) ? value : 0, display };
-}
-
-const statValue = (entry: EspnStandingEntry, name: string): number => stat(entry, name)?.value ?? 0;
-
 /**
  * Both conferences, each team at its conference seed.
  *
@@ -563,20 +527,20 @@ function standingsFrom(json: EspnStandings): { standings: NhlStanding[]; teams: 
         if (!team) continue;
         teams.push(team);
         rows.push({
-          seed: statValue(entry, "playoffSeed"),
+          seed: standingValue(entry, "playoffSeed"),
           row: {
             position: 0,
             teamId: team.id,
             conference,
             division,
-            gamesPlayed: statValue(entry, "gamesPlayed"),
-            wins: statValue(entry, "wins"),
-            losses: statValue(entry, "losses"),
-            otLosses: statValue(entry, "otLosses"),
-            points: statValue(entry, "points"),
-            goalsFor: statValue(entry, "pointsFor"),
-            goalsAgainst: statValue(entry, "pointsAgainst"),
-            streak: stat(entry, "streak")?.display || "—",
+            gamesPlayed: standingValue(entry, "gamesPlayed"),
+            wins: standingValue(entry, "wins"),
+            losses: standingValue(entry, "losses"),
+            otLosses: standingValue(entry, "otLosses"),
+            points: standingValue(entry, "points"),
+            goalsFor: standingValue(entry, "pointsFor"),
+            goalsAgainst: standingValue(entry, "pointsAgainst"),
+            streak: standingStat(entry, "streak")?.display || "—",
           },
         });
       }
@@ -672,22 +636,12 @@ function nhlDataFrom(feeds: NhlFeeds, today: Date): NhlData {
   };
 }
 
-async function fetchEspn<T>(url: string): Promise<T> {
-  const res = await fetch(url, { signal: upstreamSignal() });
-  if (!res.ok) throw new Error(`espn nhl ${res.status} on ${url}`);
-  return (await res.json()) as T;
-}
-
 /** Both spans or neither: half a bracket would show a decided series as still to come. */
 async function fetchPostseason(year: number): Promise<HeaderEvent[]> {
   const spans = await Promise.all(
     POSTSEASON_SPANS.map((s) => fetchHeader(LEAGUE, `${year}-${s.from}`, `${year}-${s.to}`))
   );
   return spans.flat();
-}
-
-function settledValue<T>(result: PromiseSettledResult<T>): T | null {
-  return result.status === "fulfilled" ? result.value : null;
 }
 
 /**
@@ -702,8 +656,8 @@ async function fetchNhlFromApi(): Promise<NhlData> {
   const today = isoDay(now);
   const year = postseasonYear(now);
   const [teams, standings, days, postseason] = await Promise.allSettled([
-    fetchEspn<EspnTeams>(TEAMS_URL),
-    fetchEspn<EspnStandings>(STANDINGS_URL),
+    fetchEspnJson<EspnTeams>("espn nhl", TEAMS_URL),
+    fetchEspnJson<EspnStandings>("espn nhl", STANDINGS_URL),
     fetchHeaderDays(LEAGUE, shiftDay(today, -DAYS_BEHIND), shiftDay(today, DAYS_AHEAD)),
     year === null ? Promise.resolve([]) : fetchPostseason(year),
   ]);
@@ -711,8 +665,8 @@ async function fetchNhlFromApi(): Promise<NhlData> {
   if (postseason.status === "rejected") throw postseason.reason;
   return nhlDataFrom(
     {
-      teams: settledValue(teams),
-      standings: settledValue(standings),
+      teams: settledOrNull(teams),
+      standings: settledOrNull(standings),
       days: days.value,
       postseason: postseason.value,
     },

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
-import { Banknote, CalendarDays, MapPin, Shield, Trophy, type LucideIcon } from "lucide-react";
+import { Banknote, CalendarDays, MapPin, Shield, Trophy } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,11 +16,13 @@ import { formatDayRange } from "@/lib/utils/date";
 import type { DrawVariant, RacquetData, RacquetDraw, RacquetTournament, Team } from "@/types/sports";
 
 import { PairFaces } from "../shared/draw-match-card";
+import { FactList, TileWinner, VersusLine, type Fact } from "../shared/event-facts";
 import { Portrait } from "../shared/portrait";
 import { StatusPill } from "../shared/status-pill";
 import {
   EarlierPill,
   SectionHeading,
+  showNames,
   TILE,
   TileSection,
   useRevealEarlier,
@@ -56,8 +58,6 @@ function championLabel(variant: DrawVariant): string {
   return variant === "pair" ? "Champions" : "Champion";
 }
 
-type Fact = { label: string; icon: LucideIcon; iconClassName?: string; value: ReactNode };
-
 /** The facts a tournament has, one per line, each behind its icon. */
 export function TournamentFacts({
   tournament: t,
@@ -82,7 +82,7 @@ export function TournamentFacts({
       label: championLabel(variant),
       icon: Trophy,
       iconClassName: "text-warning",
-      value: <ChampionLine champion={t.champion} runnerUp={t.runnerUp} />,
+      value: <VersusLine winner={t.champion} runnerUp={t.runnerUp} />,
     });
   } else if (t.defendingChampion) {
     facts.push({
@@ -97,34 +97,7 @@ export function TournamentFacts({
     });
   }
 
-  return (
-    <dl className="flex flex-col gap-2">
-      {facts.map(({ label, icon: Icon, iconClassName, value }) => (
-        <div key={label} className="flex items-start gap-2 text-sm">
-          <dt className="flex h-6 shrink-0 items-center text-muted-foreground">
-            <Icon aria-hidden className={cn("size-4", iconClassName)} />
-            <span className="sr-only">{label}</span>
-          </dt>
-          <dd className="min-w-0 leading-6">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function ChampionLine({ champion, runnerUp }: { champion: string; runnerUp?: string }): React.ReactElement {
-  return (
-    <>
-      <span className="font-medium">{champion}</span>
-      {runnerUp && (
-        <span className="text-muted-foreground">
-          {" "}
-          <span aria-hidden>d.</span>
-          <span className="sr-only">defeated</span> {runnerUp}
-        </span>
-      )}
-    </>
-  );
+  return <FactList facts={facts} />;
 }
 
 /**
@@ -335,13 +308,9 @@ function TournamentTile({ tournament: t, href }: { tournament: RacquetTournament
         <Mono className="text-xs text-muted-foreground">{formatDayRange(t.startDate, t.endDate)}</Mono>
       </span>
       {t.status === "completed" && t.champion ? (
-        <span className="flex items-start gap-2 border-t pt-2 text-xs">
-          <Trophy aria-hidden className="mt-0.5 size-3.5 shrink-0 text-warning" />
-          <span className="min-w-0">
-            <span className="sr-only">Champion: </span>
-            <ChampionLine champion={t.champion} runnerUp={t.runnerUp} />
-          </span>
-        </span>
+        <TileWinner label="Champion">
+          <VersusLine winner={t.champion} runnerUp={t.runnerUp} />
+        </TileWinner>
       ) : t.defendingChampion ? (
         <span className="flex items-start gap-2 border-t pt-2 text-xs text-muted-foreground">
           <Shield aria-hidden className="mt-0.5 size-3.5 shrink-0" />
@@ -350,11 +319,6 @@ function TournamentTile({ tournament: t, href }: { tournament: RacquetTournament
       ) : null}
     </Link>
   );
-}
-
-/** What a tap brings in: "Show Shanghai – Paris", or one name. */
-function showNames(list: RacquetTournament[]): string {
-  return list.length > 1 ? `Show ${list[0].name} – ${list[list.length - 1].name}` : `Show ${list[0]?.name ?? ""}`;
 }
 
 /**

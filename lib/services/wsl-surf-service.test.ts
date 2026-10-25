@@ -34,7 +34,7 @@ const RANKINGS = fixture("wsl-rankings.html");
 const page = (body: string, status = 200): Response => new Response(body, { status });
 
 /** The site as saved on 2026-10-25, a page per address; anything else 404s. */
-function site(pages: Record<string, string | Response>): ReturnType<typeof vi.fn> {
+function site(pages: Record<string, string | Response | Promise<Response>>): ReturnType<typeof vi.fn> {
   const spy = vi.fn(async (url: string) => {
     const path = url.replace("https://www.worldsurfleague.com", "");
     const found = pages[path];
@@ -213,6 +213,27 @@ describe("getSurfData", () => {
     expect(data.rankings).toEqual([]);
 
     // Let the abandoned reads fail, as their own timeouts would, freeing the queue.
+    abort();
+    for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve));
+  });
+
+  it("leaves out only the piece still out when the budget is spent", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(new Date("2026-10-25T12:00:00Z"));
+    let abort = (): void => undefined;
+    const hung = new Promise<Response>((_, reject) => {
+      abort = () => reject(new Error("aborted"));
+    });
+    hung.catch(() => undefined);
+    site({ ...SAVED, "/events/2026/ct/436/rip-curl-pro-bells-beach/results?showAll=1&statEventId=5094": hung });
+    const pending = getSurfData();
+    await vi.advanceTimersByTimeAsync(8_000);
+    const data = await pending;
+    expect(data.rankings).toHaveLength(4);
+    expect(data.draw?.eventId).toBe("543");
+    expect(data.events.find((e) => e.id === "445")?.winner).toBe("Griffin Colapinto");
+    expect(data.events.find((e) => e.id === "436")?.winner).toBeUndefined();
+
     abort();
     for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve));
   });

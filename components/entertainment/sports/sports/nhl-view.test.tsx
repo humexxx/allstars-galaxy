@@ -138,7 +138,7 @@ describe("NhlView", () => {
     Element.prototype.scrollIntoView = vi.fn();
     const { container } = renderOn(REGULAR_SEASON);
     const table = screen.getByRole("table", { name: "Eastern Conference standings" });
-    const lightning = within(table).getByRole("button", { name: "Filter matches: Lightning" });
+    const lightning = within(table).getByRole("button", { name: "Lightning" });
 
     fireEvent.click(lightning);
     // Its last three results, the Vegas win, Colorado and the overtime in Utah.

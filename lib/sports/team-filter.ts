@@ -1,4 +1,14 @@
-import type { FootballLeagueId, SportId, TeamFilterList } from "@/types/sports";
+import {
+  SINGLE_LIST_SPORTS,
+  type FootballLeagueId,
+  type SingleListSport,
+  type SportId,
+  type TeamFilterList,
+} from "@/types/sports";
+
+function isSingleListSport(sport: SportId): sport is SingleListSport {
+  return (SINGLE_LIST_SPORTS as readonly SportId[]).includes(sport);
+}
 
 /**
  * The match list a sport's page shows, for the team filter to remember: the
@@ -6,18 +16,6 @@ import type { FootballLeagueId, SportId, TeamFilterList } from "@/types/sports";
  * with no team filter.
  */
 export function teamFilterList(sport: SportId, league: FootballLeagueId): TeamFilterList | null {
-  switch (sport) {
-    case "football":
-      return { sportId: "football", competition: league };
-    case "nba":
-      return { sportId: "nba", competition: "nba" };
-    case "nfl":
-      return { sportId: "nfl", competition: "nfl" };
-    case "mlb":
-      return { sportId: "mlb", competition: "mlb" };
-    case "nhl":
-      return { sportId: "nhl", competition: "nhl" };
-    default:
-      return null;
-  }
+  if (sport === "football") return { sportId: "football", competition: league };
+  return isSingleListSport(sport) ? ({ sportId: sport, competition: sport } as TeamFilterList) : null;
 }

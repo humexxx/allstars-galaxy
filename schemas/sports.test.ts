@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { setSportCompetitionSchema, setSportTeamFilterSchema } from "./sports";
+import type { TeamFilterList } from "@/types/sports";
+
+import { setSportCompetitionSchema, setSportTeamFilterSchema, type SetSportTeamFilterData } from "./sports";
 
 const valid = (sportId: string, competition: string | null): boolean =>
   setSportCompetitionSchema.safeParse({ sportId, competition }).success;
@@ -92,5 +94,12 @@ describe("setSportTeamFilterSchema", () => {
     expect(valid({ ...list, teamIds: ["x".repeat(65)] })).toBe(false);
     expect(valid({ ...list, teamIds: Array.from({ length: 65 }, (_, i) => `t${i}`) })).toBe(false);
     expect(valid(list)).toBe(false);
+  });
+});
+
+describe("setSportTeamFilterSchema's lists", () => {
+  it("are exactly TeamFilterList's, so a sport added to one cannot be missing from the other", () => {
+    type ListOf<T> = T extends unknown ? Omit<T, "teamIds"> : never;
+    expectTypeOf<ListOf<SetSportTeamFilterData>>().toEqualTypeOf<TeamFilterList>();
   });
 });

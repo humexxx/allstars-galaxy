@@ -55,7 +55,7 @@ export function Portrait({
   size?: keyof typeof SIZES;
   fallback?: ReactNode;
   className?: string;
-}) {
+}): React.ReactElement {
   const [failed, setFailed] = useState<string | null>(null);
   const { disc, flag, px } = SIZES[size];
   const logo = subject.logoUrl;

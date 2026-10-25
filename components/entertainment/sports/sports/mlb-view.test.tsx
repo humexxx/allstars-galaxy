@@ -117,12 +117,12 @@ describe("MlbView", () => {
         .map((group) =>
           within(group)
             .getAllByRole("rowheader")
-            .map((th) => (th.querySelector("button") ? within(th).getByRole("button").getAttribute("aria-label") : th.textContent) ?? "")
+            .map((th) => th.querySelector(".truncate")?.textContent ?? th.textContent ?? "")
         );
     expect(groups(al)).toEqual([
-      ["AL East", "Filter matches: Rays", "Filter matches: Yankees", "Filter matches: Red Sox"],
-      ["AL Central", "Filter matches: Guardians", "Filter matches: White Sox"],
-      ["AL West", "Filter matches: Astros"],
+      ["AL East", "Rays", "Yankees", "Red Sox"],
+      ["AL Central", "Guardians", "White Sox"],
+      ["AL West", "Astros"],
     ]);
     // Baseball's percentage, and a dash for a division leader.
     const rays = within(al).getAllByRole("row")[2];
@@ -134,7 +134,7 @@ describe("MlbView", () => {
     fireEvent.click(screen.getByRole("radio", { name: "National League" }));
     const nl = screen.getByRole("table", { name: "National League standings" });
     expect(groups(nl).map((g) => g[0])).toEqual(["NL East", "NL Central", "NL West"]);
-    expect(groups(nl)[1][1]).toBe("Filter matches: Brewers");
+    expect(groups(nl)[1][1]).toBe("Brewers");
   });
 
   it("gives a full name where the table is wide, and the club's code where it is narrow", () => {
@@ -173,7 +173,7 @@ describe("MlbView", () => {
     Element.prototype.scrollIntoView = vi.fn();
     const { container } = renderOn(REGULAR_SEASON);
     const table = screen.getByRole("table", { name: "American League standings" });
-    const guardians = within(table).getByRole("button", { name: "Filter matches: Guardians" });
+    const guardians = within(table).getByRole("button", { name: /Guardians/ });
 
     fireEvent.click(guardians);
     // Its last three results, the rainout's day before them behind the clock.
@@ -183,5 +183,23 @@ describe("MlbView", () => {
 
     fireEvent.click(guardians);
     expect(shownDays(container)).toEqual(["2026-10-25", "2026-10-27", "2026-10-28", "2026-10-29"]);
+  });
+
+  it("leaves a club with no game in the list as plain text, not a toggle that would filter nothing", () => {
+    renderOn(REGULAR_SEASON);
+    const playing = new Set(REGULAR_SEASON.games.flatMap((g) => [g.homeTeamId, g.awayTeamId]));
+    const idle = REGULAR_SEASON.standings.find((s) => s.league === "al" && !playing.has(s.teamId));
+    const active = REGULAR_SEASON.standings.find((s) => s.league === "al" && playing.has(s.teamId));
+    expect(idle).toBeDefined();
+    expect(active).toBeDefined();
+    const nameOf = (teamId: string): string => REGULAR_SEASON.teams.find((t) => t.id === teamId)!.shortName;
+    const table = screen.getByRole("table", { name: "American League standings" });
+    const header = (teamId: string): HTMLElement =>
+      within(table)
+        .getAllByRole("rowheader")
+        .find((th) => th.querySelector(".truncate")?.textContent === nameOf(teamId))!;
+
+    expect(within(header(idle!.teamId)).queryByRole("button")).toBeNull();
+    expect(within(header(active!.teamId)).getByRole("button")).toHaveAttribute("aria-pressed", "false");
   });
 });

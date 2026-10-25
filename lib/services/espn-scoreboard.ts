@@ -78,7 +78,7 @@ export type HeaderEvent = {
   broadcasts?: Array<{ name?: string; type?: string }>;
 };
 
-export type HeaderScoreboard = {
+type HeaderScoreboard = {
   sports?: Array<{ leagues?: Array<{ events?: HeaderEvent[] }> }>;
 };
 
@@ -105,7 +105,7 @@ export function headerUrl({ sport, league }: HeaderLeague, from: string, to: str
   return `${HEADER_URL}?sport=${sport}&league=${league}&dates=${dates}&limit=${HEADER_LIMIT}`;
 }
 
-export function headerEvents(json: HeaderScoreboard): HeaderEvent[] {
+function headerEvents(json: HeaderScoreboard): HeaderEvent[] {
   return (json.sports ?? []).flatMap((s) => s.leagues ?? []).flatMap((l) => l.events ?? []);
 }
 
@@ -173,21 +173,27 @@ export function headerTeam(c: HeaderCompetitor | undefined): Team | null {
   };
 }
 
-export function headerScore(c: HeaderCompetitor | undefined): number | null {
+/** The game's note, "ALCS - Game 4", "East 1st Round - Game 1", "Heritage Classic". */
+export function headerNote(event: Pick<HeaderEvent, "note" | "notes">): string | undefined {
+  return event.notes?.[0]?.headline ?? event.note ?? undefined;
+}
+
+function headerScore(c: HeaderCompetitor | undefined): number | null {
   if (!c?.score) return null;
   const n = Number(c.score);
   return Number.isFinite(n) ? n : null;
 }
 
-export function headerSides(event: HeaderEvent): { home?: HeaderCompetitor; away?: HeaderCompetitor } {
-  const competitors = event.competitors ?? [];
+/** The home and away sides of a game's competitors, wherever the feed nests them. */
+export function sidesOf<C extends { homeAway?: string }>(competitors: C[] | undefined): { home?: C; away?: C } {
+  const list = competitors ?? [];
   return {
-    home: competitors.find((c) => c.homeAway === "home"),
-    away: competitors.find((c) => c.homeAway === "away"),
+    home: list.find((c) => c.homeAway === "home"),
+    away: list.find((c) => c.homeAway === "away"),
   };
 }
 
-export type HeaderMatch = {
+type HeaderMatch = {
   match: Match;
   teams: [Team, Team];
   home: HeaderCompetitor;
@@ -206,7 +212,7 @@ export function headerMatch(
   event: HeaderEvent,
   { exclude = [] }: { exclude?: readonly string[] } = {}
 ): HeaderMatch | null {
-  const { home, away } = headerSides(event);
+  const { home, away } = sidesOf(event.competitors);
   const homeTeam = headerTeam(home);
   const awayTeam = headerTeam(away);
   if (!event.id || !home || !away || !homeTeam || !awayTeam) return null;

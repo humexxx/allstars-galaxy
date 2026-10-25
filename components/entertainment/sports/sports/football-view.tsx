@@ -1,13 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
-
 import { DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
-import type { FootballLeagueData, FootballLeagueId, NewsStory, Team } from "@/types/sports";
+import type { FootballLeagueData, FootballLeagueId, NewsStory } from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
+import { useTeamsMap } from "../shared/league-view";
 import { MatchesByDate } from "../shared/matches-by-date";
 import { TeamNewsTab } from "../shared/news-list";
 import { OverviewSplit } from "../shared/overview-split";
@@ -83,10 +82,7 @@ function LeagueView({
 }): React.ReactElement {
   const leagueId = league.league.id;
 
-  const teamsMap = useMemo(
-    () => new Map<string, Team>(league.teams.map((t) => [t.id, t])),
-    [league],
-  );
+  const teamsMap = useTeamsMap(league.teams);
 
   const hasKnockoutData = !!league.knockout && league.knockout.length > 0;
   const defaultTab: TabKey = openNews ? "news" : hasKnockoutData ? "knockout" : "overview";
@@ -98,7 +94,7 @@ function LeagueView({
     // tab. Remounting re-resolves defaultTab for the new league.
     <Tabs key={leagueId} defaultValue={defaultTab} className="gap-6">
       <SportShell
-        emoji="⚽"
+        sportId="football"
         title={league.league.name}
         subtitle={`${league.league.region} · Season ${league.league.season}`}
         titleMenu={leagues}
@@ -118,7 +114,7 @@ function LeagueView({
             tab of its own only repeated it with more columns. A club tapped
             in either narrows the matches to its own. */}
         <TabsContent value="overview">
-          <TeamPicksProvider>
+          <TeamPicksProvider matches={league.matches}>
             <OverviewSplit
               matches={<MatchesByDate matches={league.matches} teams={teamsMap} />}
               table={

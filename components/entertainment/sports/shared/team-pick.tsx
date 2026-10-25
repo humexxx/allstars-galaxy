@@ -11,7 +11,8 @@ import { usePickTeam } from "./team-filter-context";
  * A team's badge and name where a tap on them narrows the view's match list
  * to its fixtures (a table row, a match card): a toggle with its own hover,
  * pressed while the list shows that team alone. Where nothing on the view
- * would follow it, the same content, inert.
+ * would follow it, or the list has none of the team's games, the same
+ * content, inert.
  */
 export function TeamPick({
   team,
@@ -24,12 +25,14 @@ export function TeamPick({
 }): React.ReactElement {
   const picker = usePickTeam();
   const layout = cn("flex min-w-0 items-center gap-2", className);
-  if (!picker) return <span className={layout}>{children}</span>;
+  if (!picker || !picker.can(team.id)) return <span className={layout}>{children}</span>;
+  // Named by what it shows (the club's code in a narrow table), so a voice
+  // user can say what they see; what a tap does is its description.
   return (
     <button
       type="button"
       aria-pressed={picker.only(team.id)}
-      aria-label={`Filter matches: ${team.shortName}`}
+      aria-describedby={picker.hintId}
       onClick={() => picker.pick(team.id)}
       className={cn(
         layout,

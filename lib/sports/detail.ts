@@ -21,7 +21,7 @@ import type {
   RacquetTournament,
 } from "@/types/sports";
 
-export type RacquetTournamentDetail = {
+type RacquetTournamentDetail = {
   tournament: RacquetTournament;
   draw: DrawState;
   today: string;
@@ -61,7 +61,7 @@ export const loadRacquetTournament = cache(
   }
 );
 
-export type F1RaceDetail = {
+type F1RaceDetail = {
   data: F1Data;
   race: F1Race;
   /** The race on now or next. */

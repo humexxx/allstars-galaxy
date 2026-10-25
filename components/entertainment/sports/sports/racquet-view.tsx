@@ -31,7 +31,6 @@ import { RacquetOverview } from "./racquet-tournaments";
 type RacquetViewProps = {
   /** Which provider's draws the view asks for, and how a tie is drawn. */
   sport: RacquetSport;
-  emoji: string;
   title: string;
   subtitle: string;
   /** The men's tour: the hub follows no women's tour. */
@@ -98,7 +97,6 @@ function useRacquetDraws(sport: RacquetSport): {
  */
 export function RacquetView({
   sport,
-  emoji,
   title,
   subtitle,
   data,
@@ -134,7 +132,7 @@ export function RacquetView({
   return (
     <Tabs defaultValue={initialTab === "news" && hasNews ? "news" : "overview"} className="gap-6">
       <SportShell
-        emoji={emoji}
+        sportId={sport}
         title={title}
         subtitle={subtitle}
         tabs={
@@ -183,7 +181,7 @@ export function RacquetView({
   );
 }
 
-function RankingsTable({ data }: { data: RacquetData }) {
+function RankingsTable({ data }: { data: RacquetData }): React.ReactElement {
   // Padel's provider reports no week-on-week movement, so the column was a
   // stack of "— 0" down the whole table. A column that never says anything is
   // better left out than filled with a placeholder.
@@ -251,7 +249,7 @@ function RankingsTable({ data }: { data: RacquetData }) {
   );
 }
 
-function Movement({ movement }: { movement: number }) {
+function Movement({ movement }: { movement: number }): React.ReactElement {
   if (movement === 0) {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">

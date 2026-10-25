@@ -94,7 +94,7 @@ export function BracketCanvas({
   className?: string;
   /** The part that scrolls sideways, for controls that move it. Its columns carry `data-column`. */
   viewportRef?: Ref<HTMLDivElement>;
-}) {
+}): React.ReactElement {
   const canvasRef = useRef<HTMLDivElement>(null);
   const boxes = useRef(new Map<string, HTMLElement>());
   const [paths, setPaths] = useState<string[]>([]);
@@ -102,7 +102,7 @@ export function BracketCanvas({
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const measure = () => {
+    const measure = (): void => {
       const next: string[] = [];
       for (const edge of edges) {
         const fromBox = boxes.current.get(edge.from);
@@ -186,7 +186,7 @@ export function BracketTeam({
   team?: Team | null;
   muted?: boolean;
   strong?: boolean;
-}) {
+}): React.ReactElement {
   return (
     <span className={cn("flex min-w-0 items-center gap-1.5", muted && "text-muted-foreground")}>
       {team ? (
@@ -211,7 +211,7 @@ export function bracketWhen(date: string, format: MatchTimeFormat): string {
 }
 
 /** The small print under a match: when it is, in the reader's zone. */
-export function BracketDate({ children }: { children: ReactNode }) {
+export function BracketDate({ children }: { children: ReactNode }): React.ReactElement {
   return <Mono className="block truncate text-2xs text-muted-foreground">{children}</Mono>;
 }
 

@@ -147,7 +147,9 @@ export function SportShell({
     <div className={cn("@container flex flex-col", className)}>
       <div
         ref={titleRef}
-        className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-4"
+        // From `@5xl` the sports stay on the name's line and slide sideways
+        // rather than wrap under it into a row of their own.
+        className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-4 @5xl:flex-nowrap"
       >
         <div className="flex min-w-0 items-center gap-3">
           {emoji && (
@@ -184,7 +186,11 @@ export function SportShell({
             )}
           </div>
         </div>
-        {hubControls && <div className="flex max-w-full min-w-0 items-center gap-2">{hubControls}</div>}
+        {hubControls && (
+          <div className="flex max-w-full min-w-0 items-center gap-2">
+            {hubControls}
+          </div>
+        )}
       </div>
       {tabs && (
         // globals.css gives what follows `data-sport-tabs` a scroll margin, so

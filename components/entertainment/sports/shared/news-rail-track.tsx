@@ -58,7 +58,7 @@ export function NewsRailTrack({
       <div
         ref={track}
         aria-live={rotation.rotating ? "off" : "polite"}
-        className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1"
+        className="relative -mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1"
       >
         {children}
       </div>

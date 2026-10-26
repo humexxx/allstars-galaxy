@@ -51,7 +51,7 @@ export function SportPicker({
 
   return (
     // Padded inside its scroller and pulled back out, so a focus ring is not clipped.
-    <ButtonGroup ref={group} aria-label="Sports" className="no-scrollbar -m-1 max-w-full min-w-0 overflow-x-auto p-1">
+    <ButtonGroup ref={group} aria-label="Sports" className="no-scrollbar relative -m-1 max-w-full min-w-0 overflow-x-auto p-1">
       {sports.map((sport) => (
         <SportLink
           key={sport.id}

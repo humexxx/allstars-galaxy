@@ -95,7 +95,7 @@ export async function DashboardF1Card({ userId }: { userId: string }): Promise<R
       </div>
 
       <div className={SPORT_CARD_SECTION}>
-        <NewsRail stories={fromF1Wire(news)} format={format} />
+        <NewsRail sport="F1" stories={fromF1Wire(news)} format={format} />
       </div>
     </Card>
   );

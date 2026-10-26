@@ -95,7 +95,7 @@ export async function DashboardSportCard({
       )}
     </>
   );
-  const news = card.news && card.news.length > 0 && <NewsRail stories={card.news} format={format} />;
+  const news = card.news && card.news.length > 0 && <NewsRail sport={card.label} stories={card.news} format={format} />;
   // The list, the tables and the news fill the two rows under the lead in that
   // order, so a card with nothing to list leaves no empty row beside its
   // neighbour's.

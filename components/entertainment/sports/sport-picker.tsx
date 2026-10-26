@@ -14,10 +14,10 @@ import type { SportId, SportMeta } from "@/types/sports";
 import { revealInRow } from "./shared/scroll";
 
 /**
- * Every sport as a button group in two rows, each with its emoji and name, the
- * favourites first and the sport on screen shaded and underlined. On a phone
- * the group runs past the screen's edge and slides sideways, as the old strip
- * of sports did, rather than cutting the names. A sport whose name is
+ * Every sport as one button group, each with its emoji and name, the
+ * favourites first and the sport on screen shaded and underlined. Where the
+ * row has less room than eleven sports need (beside a long title, on a phone)
+ * it slides sideways rather than cutting the names or wrapping. A sport whose name is
  * shortened ("LoL") gives the full one in a tooltip. Each is a link to the
  * sport's page, so a modified click still opens it in a new tab and Back
  * returns; a plain one is the caller's (`onPick`): the hub's own transition,
@@ -37,11 +37,10 @@ export function SportPicker({
 }): React.ReactElement {
   const group = useRef<HTMLDivElement>(null);
 
-  // On a phone the sport on screen can sit past its row's edge.
+  // The sport on screen can sit past the row's edge.
   useEffect(() => {
-    const current = group.current?.querySelector<HTMLElement>('[aria-current="page"]');
-    const row = current?.closest<HTMLElement>("[data-slot='button-group']");
-    if (row) revealInRow(row, current ?? null);
+    const row = group.current;
+    if (row) revealInRow(row, row.querySelector('[aria-current="page"]'));
   }, [active]);
 
   const pick = (event: MouseEvent<HTMLAnchorElement>, sport: SportId): void => {
@@ -50,27 +49,19 @@ export function SportPicker({
     onPick(sport);
   };
 
-  // Two rows, so eleven sports keep a name row's width; each half in its order.
-  const half = Math.ceil(sports.length / 2);
-  const rows = [sports.slice(0, half), sports.slice(half)];
-
   return (
-    <div ref={group} role="group" aria-label="Sports" className="flex max-w-full min-w-0 flex-col items-end gap-1">
-      {rows.map((row, r) => (
-        // Padded inside its scroller and pulled back out, so a focus ring is not clipped.
-        <ButtonGroup key={r} role="none" className="no-scrollbar -m-1 max-w-full min-w-0 overflow-x-auto p-1">
-          {row.map((sport) => (
-            <SportLink
-              key={sport.id}
-              sport={sport}
-              current={sport.id === active}
-              favorite={favorites.has(sport.id)}
-              onClick={(event) => pick(event, sport.id)}
-            />
-          ))}
-        </ButtonGroup>
+    // Padded inside its scroller and pulled back out, so a focus ring is not clipped.
+    <ButtonGroup ref={group} aria-label="Sports" className="no-scrollbar -m-1 max-w-full min-w-0 overflow-x-auto p-1">
+      {sports.map((sport) => (
+        <SportLink
+          key={sport.id}
+          sport={sport}
+          current={sport.id === active}
+          favorite={favorites.has(sport.id)}
+          onClick={(event) => pick(event, sport.id)}
+        />
       ))}
-    </div>
+    </ButtonGroup>
   );
 }
 

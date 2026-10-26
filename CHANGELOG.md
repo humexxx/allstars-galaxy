@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.16.0](https://github.com/humexxx/allstars-galaxy/compare/v0.15.0...v0.16.0) (2026-10-26)
+
+
+### Features
+
+* **entertainment:** add an AI assistant to the sports pages ([af09b83](https://github.com/humexxx/allstars-galaxy/commit/af09b8334877d7f5e0589b6e920b5e2143b25dbc))
+* **entertainment:** give the LoL dashboard card the other cards' height ([cc97207](https://github.com/humexxx/allstars-galaxy/commit/cc97207b330cb83b207b630c3d53b167f9d52d8c))
+* **entertainment:** lead the cards with the latest results and the race just run ([207469e](https://github.com/humexxx/allstars-galaxy/commit/207469e8057572ac94c8cbe1a6bb24d663ffd73a))
+* **entertainment:** show skeletons while a card changes championship ([c2e4544](https://github.com/humexxx/allstars-galaxy/commit/c2e454401e6de592ae2bb3999c8d00c4c0a85335))
+* **entertainment:** sports assistant, fuller dashboard cards and layout fixes ([304e687](https://github.com/humexxx/allstars-galaxy/commit/304e6875bf4756f2b2653e6b0bc312a0cd83f68b))
+
+
+### Bug Fixes
+
+* **entertainment:** keep the favourites star in step with the server's list ([b0cdb99](https://github.com/humexxx/allstars-galaxy/commit/b0cdb99f3023c0344a021ac0a6750092bf4fb39f))
+* **entertainment:** open a card's tennis or padel tournament on its own page ([c551f61](https://github.com/humexxx/allstars-galaxy/commit/c551f61e094667bd27894486e22d8945e178278f))
+* **entertainment:** show the scores of games already played on the cards ([043d2b3](https://github.com/humexxx/allstars-galaxy/commit/043d2b3f576ae4e70702a993faafa21fb73603e0))
+* **ui:** stop horizontal scrollers widening the page on a phone ([d29f521](https://github.com/humexxx/allstars-galaxy/commit/d29f521c47aa155a55fbe67eb6b2b392a34517dd))
+
 ## [0.15.0](https://github.com/humexxx/allstars-galaxy/compare/v0.14.0...v0.15.0) (2026-10-26)
 
 

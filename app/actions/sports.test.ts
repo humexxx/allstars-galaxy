@@ -197,7 +197,7 @@ describe("setSportCompetitionAction", () => {
     // Men only: tennis and padel have no tour to pick.
     [{ sportId: "tennis", competition: "wta" }],
     [{ sportId: "padel", competition: "women" }],
-    [{ sportId: "football", competition: "bundesliga" }],
+    [{ sportId: "football", competition: "eredivisie" }],
     [{ sportId: "nba", competition: null }],
     [{ sportId: "cricket", competition: null }],
     [{ sportId: "padel" }],

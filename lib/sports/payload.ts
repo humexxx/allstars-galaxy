@@ -40,14 +40,14 @@ export type SportPayload = (
       /** The sessions run so far of the race on now or next. */
       weekend?: F1WeekendResults;
     }
-  | { sport: "lol"; data: LolData }
-  | { sport: "padel"; data: PadelData }
+  | { sport: "lol"; data: LolData; news?: NewsStory[] }
+  | { sport: "padel"; data: PadelData; news?: NewsStory[] }
   | { sport: "tennis"; data: TennisData; news?: NewsStory[] }
   | { sport: "nba"; data: NbaData; news?: NewsStory[] }
   | { sport: "nfl"; data: NflData; news?: NewsStory[] }
   | { sport: "mlb"; data: MlbData; news?: NewsStory[] }
   | { sport: "nhl"; data: NhlData; news?: NewsStory[] }
-  | { sport: "surf"; data: SurfData }
+  | { sport: "surf"; data: SurfData; news?: NewsStory[] }
 ) & {
   /**
    * The live feed has never answered, so the view is showing its fixture.

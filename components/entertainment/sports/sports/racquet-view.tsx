@@ -35,7 +35,7 @@ type RacquetViewProps = {
   subtitle: string;
   /** The men's tour: the hub follows no women's tour. */
   data: RacquetData;
-  /** The tour's news (tennis's, from ESPN); padel has none. */
+  /** The tour's news: tennis's from ESPN, padel's from Premier Padel. */
   news?: NewsStory[];
   /** `?tab=news` opens on the news. */
   initialTab?: string;

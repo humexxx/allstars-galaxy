@@ -137,6 +137,8 @@ describe("loadSport", () => {
       "la-liga",
       "premier-league",
       "serie-a",
+      "ligue-1",
+      "bundesliga",
       "world-cup",
     ]);
   });

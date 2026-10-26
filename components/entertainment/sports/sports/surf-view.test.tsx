@@ -190,4 +190,22 @@ describe("SurfView", () => {
     expect(screen.getByText("No events on the calendar for this tour.")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Draw" })).toBeDisabled();
   });
+
+  it("has a News tab with Stab's stories, opened by ?tab=news", () => {
+    const story = {
+      id: "stab-1",
+      headline: "Griff Is The King Of Peniche",
+      description: null,
+      href: "https://stabmag.com/news/griff/",
+      external: true,
+      image: null,
+      at: "2026-10-23T21:34:34Z",
+      kind: "story" as const,
+      about: [],
+    };
+    render(<SurfView data={SURF_DATA} news={[story]} initialTab="news" />);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Draw", "News"]);
+    expect(openTab()).toBe("News");
+    expect(screen.getByRole("heading", { name: "Griff Is The King Of Peniche" })).toBeInTheDocument();
+  });
 });

@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import type { SurfDraw } from "@/types/sports";
 
-import { decodeEntities, parseDateRange, parseDraw, parseRankings, parseSchedule, winnerOf } from "./wsl-parse";
+import { decodeEntities } from "@/lib/utils/html";
+
+import { parseDateRange, parseDraw, parseRankings, parseSchedule, winnerOf } from "./wsl-parse";
 
 // Trimmed from the WSL's own pages as saved on 2026-10-25: the schedule's
 // rows, Portugal's Round 1 heat 1 and Final (?showAll=1), the Philippines

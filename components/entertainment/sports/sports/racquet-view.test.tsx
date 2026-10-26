@@ -465,6 +465,32 @@ describe("RacquetView, tennis", () => {
     expect(baselCard.querySelector("img")!.parentElement).not.toContainElement(seeds);
   });
 
+  it("has a News tab with Premier Padel's news for padel", () => {
+    render(
+      <SportsTodayProvider today="2026-10-18">
+        <PadelView
+          data={PADEL}
+          initialTab="news"
+          news={[
+            {
+              id: "premierpadel-545",
+              headline: "Comebacks Shake Up Kuwait Major's Opening Day",
+              description: null,
+              href: "https://premierpadel.com/en/news/kuwait",
+              external: true,
+              image: null,
+              at: "2026-10-17T23:38:25.000Z",
+              kind: "story",
+              about: [],
+            },
+          ]}
+        />
+      </SportsTodayProvider>
+    );
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("News");
+    expect(screen.getByRole("heading", { name: "Comebacks Shake Up Kuwait Major's Opening Day" })).toBeInTheDocument();
+  });
+
   it("has a News tab with the ATP's news", () => {
     const story = (id: string, headline: string) => ({
       id,

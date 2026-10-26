@@ -414,17 +414,71 @@ function drawFrom(tournamentId: string, matches: PadelApiMatch[], category: Pade
   };
 }
 
-async function fetchPadel<T>(path: string): Promise<T> {
+/**
+ * Padel API allows ten requests a minute a key, and production and a local
+ * server share the key. A cold read used to burst past it (rankings, the
+ * calendar, then up to five draw pages), the calendar came back 429, and
+ * padel showed its sample season. So this instance counts its minute: what
+ * the page cannot do without (rankings, calendar) always goes, and a draw
+ * goes only while `DRAW_RESERVE` slots are left for them. A draw that does not
+ * fit is left out of this answer and asked for on the next.
+ */
+const MINUTE_LIMIT = 10;
+const MINUTE_MS = 60_000;
+const DRAW_RESERVE = 3;
+/** The longest a 429's Retry-After is waited out for a request the page needs. */
+const RETRY_AFTER_MAX_MS = 3_000;
+const starts: number[] = [];
+
+function takeSlot(reserve: number): boolean {
+  const now = Date.now();
+  while (starts.length > 0 && now - starts[0] >= MINUTE_MS) starts.shift();
+  if (starts.length >= MINUTE_LIMIT - reserve) return false;
+  starts.push(now);
+  return true;
+}
+
+/** A 429 says the minute is spent, whatever this instance counted: the rest of it is. */
+function spendMinute(): void {
+  const now = Date.now();
+  while (starts.length < MINUTE_LIMIT) starts.push(now);
+}
+
+async function fetchPadel<T>(path: string, { essential = false } = {}): Promise<T> {
   const token = process.env.PADEL_API_KEY;
   if (!token) throw new Error("PADEL_API_KEY not configured");
-  const res = await fetch(`${BASE_URL}${path}`, {
-    signal: upstreamSignal(),
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  if (!takeSlot(essential ? 0 : DRAW_RESERVE) && !essential) {
+    throw new Error(`padel-api: no request left this minute for ${path}`);
+  }
+  const request = (): Promise<Response> =>
+    fetch(`${BASE_URL}${path}`, { signal: upstreamSignal(), headers: { Authorization: `Bearer ${token}` } });
+  let res = await request();
+  if (res.status === 429) {
+    spendMinute();
+    const wait = Number(res.headers.get("retry-after")) * 1000;
+    if (essential && wait > 0 && wait <= RETRY_AFTER_MAX_MS) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      res = await request();
+    }
+  }
   if (!res.ok) {
     throw new Error(`padel-api ${res.status} on ${path}`);
   }
   return (await res.json()) as T;
+}
+
+/** One read at a time per key: two visits that miss the cache together share it. */
+function shared<A extends unknown[], R>(key: (...args: A) => string, run: (...args: A) => Promise<R>): (...args: A) => Promise<R> {
+  const pending = new Map<string, Promise<R>>();
+  return (...args: A) => {
+    const k = key(...args);
+    let read = pending.get(k);
+    if (!read) {
+      read = run(...args).finally(() => pending.delete(k));
+      pending.set(k, read);
+    }
+    return read;
+  };
 }
 
 /**
@@ -451,8 +505,12 @@ async function fetchPadelDraw(id: number): Promise<RacquetDraw> {
   const men = mainDraw(first.data, "men");
   const settled = men.length === 0 || roundIsSet(men, FIRST_BRACKET_ROUND);
   if (pages <= 1 || settled) return drawFrom(`padelapi-${id}`, first.data, "men");
-  const rest = await Promise.all(Array.from({ length: pages - 1 }, (_, i) => page(i + 2)));
-  return drawFrom(`padelapi-${id}`, [...first.data, ...rest.flatMap((r) => r.data)], "men");
+  // The first page holds the round of 16 to the final: a later page that
+  // fails (or does not fit the minute) leaves the earlier rounds short, not
+  // the whole draw missing.
+  const rest = await Promise.allSettled(Array.from({ length: pages - 1 }, (_, i) => page(i + 2)));
+  const more = rest.flatMap((r) => (r.status === "fulfilled" ? r.value.data : []));
+  return drawFrom(`padelapi-${id}`, [...first.data, ...more], "men");
 }
 
 /**
@@ -460,9 +518,11 @@ async function fetchPadelDraw(id: number): Promise<RacquetDraw> {
  * caches, so a finished draw costs one request a day however often it is
  * opened, and a live one is never more than five minutes behind.
  */
+const readDraw = shared((id: number) => String(id), fetchPadelDraw);
+
 const getLiveDraw = cachedFeed<[number], RacquetDraw | null>(
   "padel-api draw",
-  fetchPadelDraw,
+  readDraw,
   () => null,
   ["padel-api:draw:live"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:padel"] },
@@ -470,7 +530,7 @@ const getLiveDraw = cachedFeed<[number], RacquetDraw | null>(
 
 const getFinishedDraw = cachedFeed<[number], RacquetDraw | null>(
   "padel-api draw",
-  fetchPadelDraw,
+  readDraw,
   () => null,
   ["padel-api:draw:finished"],
   { revalidate: FINISHED_DRAW_SECONDS, tags: ["sports:padel"] },
@@ -511,10 +571,10 @@ async function fetchPadelFromApi(): Promise<PadelData> {
   // `per_page`, not `limit`: the API ignores `limit`, so the tournaments call
   // had been returning its default 15.
   const [rankings, tournamentsRes] = await Promise.all([
-    fetchPadel<PadelApiList<PadelApiPlayer>>(
-      `/rankings?category=men&per_page=${RANKING_LIMIT}`,
-    ),
-    fetchPadel<PadelApiList<PadelApiTournament>>(tournamentsPath(now)),
+    fetchPadel<PadelApiList<PadelApiPlayer>>(`/rankings?category=men&per_page=${RANKING_LIMIT}`, {
+      essential: true,
+    }),
+    fetchPadel<PadelApiList<PadelApiTournament>>(tournamentsPath(now), { essential: true }),
   ]);
 
   if (rankings.data.length === 0) throw new Error("padel-api returned no rankings");
@@ -546,7 +606,7 @@ async function fetchPadelFromApi(): Promise<PadelData> {
 
 const getPadelFeed = cachedFeed(
   "padel-api",
-  fetchPadelFromApi,
+  shared(() => "feed", fetchPadelFromApi),
   () => PADEL_DATA,
   ["padel-api:padel-data"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:padel"] },
@@ -664,4 +724,9 @@ export const __testing = {
   setScore,
   drawFrom,
   fetchPadelDraw,
+  fetchPadel,
+  /** A fresh minute: the count is the module's, and tests share the module. */
+  resetMinute: (): void => {
+    starts.length = 0;
+  },
 };

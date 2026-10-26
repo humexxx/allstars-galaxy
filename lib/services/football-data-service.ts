@@ -73,6 +73,22 @@ const COMPETITIONS: CompetitionConfig[] = [
     region: "ITA",
     hasKnockout: false,
   },
+  {
+    internalId: "ligue-1",
+    code: "FL1",
+    shortName: "Ligue 1",
+    name: "Ligue 1",
+    region: "FRA",
+    hasKnockout: false,
+  },
+  {
+    internalId: "bundesliga",
+    code: "BL1",
+    shortName: "Bundesliga",
+    name: "Bundesliga",
+    region: "GER",
+    hasKnockout: false,
+  },
 ];
 
 // Knockout fixtures whose participants are not decided yet (e.g. World Cup
@@ -187,6 +203,15 @@ type FdStandingsResponse = {
 
 type FdMatchesResponse = { matches: FdMatch[] };
 
+function eighteenClubLeague(pos: number, total: number): StandingBand {
+  if (pos <= 4) return "champions";
+  if (pos === 5) return "europa";
+  if (pos === 6) return "conference";
+  if (pos > total - 2) return "relegation";
+  if (pos === total - 2) return "playoff";
+  return null;
+}
+
 const ZONE_BAND_DEFAULTS: Record<FootballLeagueId, (pos: number, total: number) => StandingBand> = {
   "premier-league": (pos, total) => {
     if (pos <= 4) return "champions";
@@ -209,6 +234,9 @@ const ZONE_BAND_DEFAULTS: Record<FootballLeagueId, (pos: number, total: number) 
     if (pos > total - 3) return "relegation";
     return null;
   },
+  // Eighteen clubs: 16th plays a relegation play-off, the last two go down.
+  "ligue-1": eighteenClubLeague,
+  "bundesliga": eighteenClubLeague,
   "uefa-champions-league": (pos) => {
     if (pos <= 8) return "champions";
     if (pos <= 24) return "playoff";

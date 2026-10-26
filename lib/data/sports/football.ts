@@ -175,6 +175,18 @@ const LEAGUES: Record<FootballLeagueId, FootballLeagueData> = {
     matches: [],
     standings: [],
   },
+  "ligue-1": {
+    league: { id: "ligue-1", name: "Ligue 1", shortName: "Ligue 1", region: "FRA", hasKnockout: false, season: "2025–26" },
+    teams: TEAMS,
+    matches: [],
+    standings: [],
+  },
+  bundesliga: {
+    league: { id: "bundesliga", name: "Bundesliga", shortName: "Bundesliga", region: "GER", hasKnockout: false, season: "2025–26" },
+    teams: TEAMS,
+    matches: [],
+    standings: [],
+  },
   "world-cup": WORLD_CUP_DATA,
 };
 
@@ -185,6 +197,8 @@ export const FOOTBALL_LEAGUE_IDS: FootballLeagueId[] = [
   "la-liga",
   "premier-league",
   "serie-a",
+  "ligue-1",
+  "bundesliga",
 ];
 
 export function getFootballLeague(id: FootballLeagueId): FootballLeagueData {

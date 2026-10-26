@@ -63,7 +63,7 @@ export function LeagueView({
   /** Whether a drawn bracket leads; it never does before it is drawn. */
   opensOnBracket?: boolean;
   news: NewsStory[];
-  /** `?tab=news` opens on the news. */
+  /** `?tab=`: the tab to open on (`overview`, `bracket`, `news`), when there is one. */
   initialTab?: string;
   emptyTitle: string;
   /** The sport's standings, or nothing: the games then fill the row. */
@@ -74,7 +74,13 @@ export function LeagueView({
   const hasPlayoffs = isBracketDrawn(playoffs);
   const hasNews = news.length > 0;
   const opening =
-    initialTab === "news" && hasNews ? "news" : hasPlayoffs && opensOnBracket ? "bracket" : "overview";
+    initialTab === "news" && hasNews
+      ? "news"
+      : initialTab === "overview"
+        ? "overview"
+        : hasPlayoffs && (opensOnBracket || initialTab === "bracket")
+          ? "bracket"
+          : "overview";
 
   return (
     <Tabs defaultValue={opening} className="gap-6">

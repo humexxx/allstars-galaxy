@@ -591,7 +591,7 @@ export function ItemForm({
           Photos
         </FieldLegend>
         {shownPhotos.length > 0 && (
-          <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
+          <div className="relative -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
             {shownPhotos.map((photo, i) => (
               <div
                 key={photo.key}

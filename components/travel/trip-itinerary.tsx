@@ -414,7 +414,7 @@ function ItemRow({
           <ItemItinerary stops={item.stops} />
         )}
         {item.photos.length > 0 && (
-          <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 pt-1">
+          <div className="relative -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 pt-1">
             {item.photos.map((photo, i) => (
               <div
                 key={photo.id}

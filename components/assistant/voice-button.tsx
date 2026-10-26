@@ -30,6 +30,7 @@ const LANGUAGES = [
   { code: "es-419", label: "ES" },
   { code: "en-US", label: "EN" },
 ] as const;
+// Named when only Travel had dictation; kept so a choice made there carries over.
 const LANG_KEY = "travel-assistant-voice-lang";
 
 function storedLanguage(): string {
@@ -45,7 +46,7 @@ function storedLanguage(): string {
 const BARS = 5;
 
 /**
- * Dictation for the assistant: tap, speak, tap again.
+ * Dictation for an assistant: tap, speak, tap again.
  *
  * What is said lands in the message box as it is recognised, to read and fix
  * before sending — a misheard date is easier to see there than in a proposal.

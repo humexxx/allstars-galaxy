@@ -118,7 +118,7 @@ describe("WorldCupView", () => {
   });
 
   it("opens on the news when the address asks for it", () => {
-    renderView({ news: NEWS, openNews: true });
+    renderView({ news: NEWS, initialTab: "news" });
     expect(openTab()).toBe("News");
     expect(screen.getByText("France lift the trophy")).toBeInTheDocument();
   });

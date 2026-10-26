@@ -113,15 +113,18 @@ function shift(from: Date, days: number): Date {
  * worked out of season: from November its hundred games stopped at the first
  * fortnight of the season, and the "latest results" froze there with no
  * fixtures at all. In season the games are nightly, so a few days either side
- * is plenty. Between the finals (mid-June) and the first week of the new
- * season the nearest games are months apart, so that range starts at June 1 —
- * the finals, never a March night — and runs on to the opener.
+ * is plenty. Between the finals (mid-June) and the opener the nearest games
+ * are months apart, so that range starts at June 1 — the finals, never a
+ * March night — and runs on to the opener. It ends on October 20, the
+ * earliest opener of late: the long range runs to three pages once the season
+ * is on, and three pages beside production's own refreshes earned a 429 on
+ * the five a minute, which froze the cards on games already played.
  */
 function gameWindow(today: Date): { start: string; end: string } {
   const month = today.getMonth();
   const day = today.getDate();
   const offSeason =
-    (month === 5 && day >= 15) || month === 6 || month === 7 || month === 8 || (month === 9 && day < 28);
+    (month === 5 && day >= 15) || month === 6 || month === 7 || month === 8 || (month === 9 && day < 20);
   if (!offSeason) {
     return {
       start: iso(shift(today, -IN_SEASON_DAYS_BEHIND)),

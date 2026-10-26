@@ -24,7 +24,9 @@ export default async function PadelTournamentPage({ params, searchParams }: Prop
   ]);
   if (!detail) notFound();
   return (
+    // Keyed by tab: a link to another tab of this page opens it.
     <RacquetTournamentPage
+      key={tab ?? ""}
       sport="padel"
       tournament={detail.tournament}
       draw={detail.draw}

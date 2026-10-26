@@ -104,10 +104,28 @@ describe("DashboardSportCard", () => {
     expect(within(upNext).getByText("Oct 23")).toBeInTheDocument();
   });
 
+  it("opens a tournament on its own page, and the sport's when it has none", async () => {
+    const event = { name: "Kuwait Major", detail: "Kuwait City", status: "live" as const };
+    await renderCard({
+      ...card([]),
+      sportId: "padel",
+      label: "Padel",
+      event: { ...event, href: "/portal/entertainment/sports/padel/kuwait-major" },
+    });
+    expect(screen.getByRole("link", { name: /Kuwait Major/ })).toHaveAttribute(
+      "href",
+      "/portal/entertainment/sports/padel/kuwait-major"
+    );
+    cleanup();
+
+    await renderCard({ ...card([]), sportId: "surf", label: "Surfing", event: { ...event, name: "Tahiti Pro" } });
+    expect(screen.getByRole("link", { name: /Tahiti Pro/ }).getAttribute("href")).toContain("sport=surf");
+  });
+
   it("asks for the card on the championship it is set to", async () => {
     await renderCard(card([]), "lck");
 
-    expect(getDashboardSportCard).toHaveBeenCalledWith("lol", "lck");
+    expect(getDashboardSportCard).toHaveBeenCalledWith("lol", "lck", expect.any(String));
   });
 
   it("makes the line under the title the championship picker when the sport has a choice", async () => {
@@ -217,6 +235,7 @@ describe("DashboardSportCard", () => {
     const story = within(rail).getByRole("link", { name: /Giannis stays hot in a loss/ });
     expect(story).toHaveAttribute("href", "https://www.espn.com/nba/story/_/id/1");
     expect(story).toHaveAttribute("target", "_blank");
+    expect(story).toHaveAccessibleName(/\(opens espn\.com in a new tab\)$/);
     expect(screen.getByRole("heading", { level: 3, name: "Latest news" })).toBeInTheDocument();
   });
 
@@ -246,6 +265,26 @@ describe("DashboardSportCard", () => {
     const story = screen.getByRole("link", { name: /Giannis stays hot in a loss/ });
     expect(story).toHaveAccessibleName(/^Giannis stays hot in a loss/);
     expect(story).not.toHaveAccessibleName(/Getty Images/);
+  });
+
+  it("draws LoL's Swiss stage in the table's place, a row a record, each crest named", async () => {
+    await renderCard({
+      ...card([]),
+      sportId: "lol",
+      label: "League of Legends",
+      swiss: {
+        pools: [
+          { label: "Through", outcome: "through", teams: [{ name: "Gen.G", code: "GEN" }] },
+          { label: "2–1", teams: [{ name: "T1", code: "T1" }, { name: "G2 Esports", code: "G2" }] },
+          { label: "Out", outcome: "out", teams: [{ name: "Team Liquid", code: "TL" }] },
+        ],
+      },
+    });
+    const stage = screen.getByRole("heading", { level: 3, name: "Swiss stage" }).parentElement!;
+    const pools = within(stage).getAllByRole("list", { name: /./ });
+    expect(pools.map((p) => p.getAttribute("aria-label"))).toEqual(["Through", "2–1", "Out"]);
+    expect(within(pools[1]).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["T1T1", "G2G2 Esports"]);
+    expect(screen.queryByRole("heading", { name: "Up next" })).toBeNull();
   });
 
   it("steps through the games in the lead box, and moves the table up and the news to the last row", async () => {

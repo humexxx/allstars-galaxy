@@ -7,6 +7,7 @@ import type {
   BracketMatch,
   BracketRound,
   BracketRoundId,
+  EspnFootballLeagueId,
   FootballGroupStandings,
   FootballLeagueData,
   FootballLeagueId,
@@ -31,8 +32,11 @@ const MATCH_WINDOW_DAYS = 60;
 // fixtures need only about a month ahead.
 const MATCH_CAPS = { upcoming: 30, results: 80 } as const;
 
-type CompetitionConfig = {
-  internalId: FootballLeagueId;
+/** The leagues football-data.org serves: MLS and Costa Rica are ESPN's, the World Cup has a feed of its own. */
+export type FootballDataLeagueId = Exclude<FootballLeagueId, EspnFootballLeagueId | "world-cup">;
+
+type CompetitionConfig<Id extends FootballLeagueId = FootballDataLeagueId> = {
+  internalId: Id;
   code: string;
   shortName: string;
   name: string;
@@ -212,7 +216,8 @@ function eighteenClubLeague(pos: number, total: number): StandingBand {
   return null;
 }
 
-const ZONE_BAND_DEFAULTS: Record<FootballLeagueId, (pos: number, total: number) => StandingBand> = {
+/** Each competition's zones by position, for a table whose provider names none. */
+export const ZONE_BAND_DEFAULTS: Record<FootballLeagueId, (pos: number, total: number) => StandingBand> = {
   "premier-league": (pos, total) => {
     if (pos <= 4) return "champions";
     if (pos === 5) return "europa";
@@ -237,6 +242,14 @@ const ZONE_BAND_DEFAULTS: Record<FootballLeagueId, (pos: number, total: number) 
   // Eighteen clubs: 16th plays a relegation play-off, the last two go down.
   "ligue-1": eighteenClubLeague,
   "bundesliga": eighteenClubLeague,
+  // Each conference's top seven go straight into Round One; 8th and 9th play
+  // the wild-card match for the last place.
+  mls: (pos) => {
+    if (pos <= 7) return "champions";
+    if (pos <= 9) return "playoff";
+    return null;
+  },
+  "costa-rica": (pos) => (pos <= 4 ? "champions" : null),
   "uefa-champions-league": (pos) => {
     if (pos <= 8) return "champions";
     if (pos <= 24) return "playoff";
@@ -406,7 +419,7 @@ function windowDates(): { from: string; to: string } {
 }
 
 function mapStandings(
-  competition: CompetitionConfig,
+  competition: CompetitionConfig<FootballLeagueId>,
   rows: FdTableRow[],
 ): { standings: Standing[]; teams: Team[] } {
   const teamsMap = new Map<string, Team>();
@@ -744,7 +757,7 @@ function buildGroupStandings(
   return groups;
 }
 
-const WORLD_CUP: CompetitionConfig = {
+const WORLD_CUP: CompetitionConfig<"world-cup"> = {
   internalId: "world-cup",
   code: "WC",
   shortName: "World Cup",
@@ -858,21 +871,18 @@ async function fetchLeague(
   };
 }
 
-function competitionFor(id: FootballLeagueId): CompetitionConfig {
+function competitionFor(id: FootballDataLeagueId): CompetitionConfig {
   const competition = COMPETITIONS.find((c) => c.internalId === id);
   if (!competition) throw new Error(`football-data: no competition for ${id}`);
   return competition;
 }
 
-/**
- * What the league picker offers, in its order. Names only: nothing is fetched.
- * The World Cup comes last: a tournament every four years, not a season, and
- * read by `getWorldCupData` rather than `getFootballLeagueData`.
- */
-export const FOOTBALL_COMPETITIONS: ReadonlyArray<{ id: FootballLeagueId; name: string }> = [
-  ...COMPETITIONS,
-  WORLD_CUP,
-].map((c) => ({ id: c.internalId, name: c.name }));
+/** football-data's leagues for the picker, in its order. Names only: nothing is fetched. */
+export const FOOTBALL_DATA_LEAGUES: ReadonlyArray<{ id: FootballDataLeagueId; name: string }> = COMPETITIONS.map(
+  (c) => ({ id: c.internalId, name: c.name })
+);
+
+export const WORLD_CUP_LEAGUE: { id: "world-cup"; name: string } = { id: WORLD_CUP.internalId, name: WORLD_CUP.name };
 
 /**
  * One competition, cached on its own. The page and the dashboard each ask for
@@ -881,8 +891,8 @@ export const FOOTBALL_COMPETITIONS: ReadonlyArray<{ id: FootballLeagueId; name: 
  */
 export const getFootballLeagueData = cachedFeed(
   "football-data league",
-  (id: FootballLeagueId) => fetchLeague(competitionFor(id)),
-  (id: FootballLeagueId) => getFootballLeague(id),
+  (id: FootballDataLeagueId) => fetchLeague(competitionFor(id)),
+  (id: FootballDataLeagueId) => getFootballLeague(id),
   ["football-data:league"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:football"] },
 );

@@ -10,12 +10,7 @@ import { NHL_DATA } from "@/lib/data/sports/nhl";
 import { PADEL_DATA } from "@/lib/data/sports/padel";
 import { SURF_DATA } from "@/lib/data/sports/surf";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
-import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
-import {
-  FOOTBALL_COMPETITIONS,
-  getFootballLeagueData,
-  getWorldCupData,
-} from "@/lib/services/football-data-service";
+import { FOOTBALL_COMPETITIONS, getFootballCompetition } from "@/lib/services/football-service";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
 import { getEspnNews } from "@/lib/services/espn-news-service";
 import { getMlbData } from "@/lib/services/espn-mlb-service";
@@ -61,15 +56,11 @@ export async function loadSport(
   switch (sport) {
     case "football": {
       const id = footballLeagueFrom(params.league);
-      // The World Cup is one of football's competitions, with a feed of its
-      // own: one call covers its groups, fixtures and bracket.
-      // Each league's news beside it, from ESPN (key-less, cached a quarter
-      // of an hour): no football-data request is spent on it.
-      if (id === "world-cup") {
-        const [league, news] = await Promise.all([getWorldCupData(), getEspnNews(id)]);
-        return { sport, league, options: FOOTBALL_COMPETITIONS, news, sample: league === WORLD_CUP_DATA };
-      }
-      const [league, news] = await Promise.all([getFootballLeagueData(id), getEspnNews(id)]);
+      // Each competition from the feed that has it (`getFootballCompetition`),
+      // and its news beside it from ESPN (key-less, cached a quarter of an
+      // hour): no football-data request is spent on the news, nor on MLS or
+      // Costa Rica.
+      const [league, news] = await Promise.all([getFootballCompetition(id), getEspnNews(id)]);
       return {
         sport,
         league,

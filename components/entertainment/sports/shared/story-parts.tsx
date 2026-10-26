@@ -10,7 +10,7 @@ import type { NewsStory } from "@/types/sports";
 /**
  * A story's way in: our own page for F1's stored wire — shareable, with the
  * rest of the wire under it and the source one tap away — or the source
- * itself, in a new tab, for ESPN's.
+ * itself, in a new tab, for the rest.
  */
 export function StoryLink({
   story,
@@ -76,9 +76,18 @@ export function StoryFoot({ story, day }: { story: NewsStory; day: string }): Re
       {story.external && (
         <>
           <ExternalLink aria-hidden className="size-3" />
-          <span className="sr-only">(opens ESPN in a new tab)</span>
+          <span className="sr-only">(opens {sourceName(story.href)} in a new tab)</span>
         </>
       )}
     </span>
   );
+}
+
+/** "espn.com", "lolesports.com": the site a story leaves for. */
+function sourceName(href: string): string {
+  try {
+    return new URL(href).hostname.replace(/^www\./, "");
+  } catch {
+    return "the source";
+  }
 }

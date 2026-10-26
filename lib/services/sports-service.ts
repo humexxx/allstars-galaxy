@@ -30,8 +30,10 @@ import type {
   DashboardMatch,
   DashboardSide,
   DashboardSportCard,
+  DashboardSwiss,
   DashboardTable,
   DashboardTableRow,
+  DashboardTeam,
   F1DashboardHighlight,
   F1Data,
   FavoriteSport,
@@ -196,13 +198,6 @@ export async function setSportTeamFilter(
 
 /** Games the lead box steps through after its featured one. */
 const CARD_FOLLOWING = 4;
-/**
- * LoL lists more: a day of an event is several series back to back, and two
- * did not reach the end of one.
- */
-const LOL_CARD_MATCHES = 4;
-/** The same, on a LoL card with no table to show. */
-const LOL_CARD_MATCHES_ALONE = 6;
 /** Rows of a card's table. */
 const CARD_ROWS = 5;
 
@@ -497,17 +492,19 @@ function lolSplitCard(base: CardBase, data: LolData, split: LolSplit | undefined
     return lolOffSeasonCard(base, data, { ...split, champion: split.champion }, teams);
   }
   // Already in display order: live, then the nearest upcoming, then the
-  // latest results. So the cap keeps what is next and fills the rest with
-  // what just finished.
+  // latest results. The box steps through what is still to come or, with
+  // nothing ahead, what just finished — as football's does.
   const [first, ...rest] = split.matches.map((m) => lolCardMatch(m, teams));
-  const tables = lolTables(split, teams);
+  const ahead = rest.filter((m) => m.status !== "result");
+  const swiss = lolSwiss(split, teams);
   return {
     ...base,
     context: lolContext(split, first),
     featured: first,
-    // With no table to show, the matches take its room.
-    matches: rest.slice(0, tables.length > 0 ? LOL_CARD_MATCHES : LOL_CARD_MATCHES_ALONE),
-    tables,
+    following: (ahead.length > 0 ? ahead : rest).slice(0, CARD_FOLLOWING),
+    matches: [],
+    tables: swiss ? [] : lolTables(split, teams),
+    swiss,
   };
 }
 
@@ -517,34 +514,46 @@ function lolContext(split: LolSplit, featured: DashboardMatch | undefined): stri
 }
 
 function lolTables(split: LolSplit, teams: Map<string, Team>): DashboardTable[] {
-  if (split.standings.length > 0) {
-    return [
-      {
-        id: "standings",
-        label: "Standings",
-        rows: split.standings
-          .slice(0, CARD_ROWS)
-          .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.wins}–${s.losses}`)),
-      },
-    ];
+  if (split.standings.length === 0) return [];
+  return [
+    {
+      id: "standings",
+      label: "Standings",
+      rows: split.standings
+        .slice(0, CARD_ROWS)
+        .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.wins}–${s.losses}`)),
+    },
+  ];
+}
+
+/**
+ * Where the Swiss stage stands, only while it is played: through the
+ * knockouts it was a stale picture under "Finals". Those through and those
+ * out each take one row, whatever their record, so it never runs past four.
+ */
+function lolSwiss(split: LolSplit, teams: Map<string, Team>): DashboardSwiss | undefined {
+  const stage = split.swiss;
+  if (!stage || swissFinished(stage)) return undefined;
+  const records = swissRecords(stage);
+  if (records.length === 0) return undefined;
+  const team = (id: string): DashboardTeam => {
+    const { name, image, code, color } = teamRow(0, teams.get(id), id, "");
+    return { name, image, code, color };
+  };
+  const through = records.filter((r) => r.wins >= stage.winsToAdvance);
+  const out = records.filter((r) => r.losses >= stage.lossesToExit);
+  const playing = records.filter((r) => r.wins < stage.winsToAdvance && r.losses < stage.lossesToExit);
+  const byRecord = new Map<string, typeof playing>();
+  for (const r of playing) {
+    const key = `${r.wins}–${r.losses}`;
+    byRecord.set(key, [...(byRecord.get(key) ?? []), r]);
   }
-  // Only while the stage is being played: through the knockouts it was a
-  // stale table under "Finals".
-  if (split.swiss && !swissFinished(split.swiss)) {
-    const records = swissRecords(split.swiss);
-    if (records.length > 0) {
-      return [
-        {
-          id: "swiss",
-          label: "Swiss stage",
-          rows: records
-            .slice(0, CARD_ROWS)
-            .map((r, i) => teamRow(i + 1, teams.get(r.teamId), r.teamId, `${r.wins}–${r.losses}`)),
-        },
-      ];
-    }
-  }
-  return [];
+  const pools: DashboardSwiss["pools"] = [
+    ...(through.length > 0 ? [{ label: "Through", outcome: "through" as const, teams: through.map((r) => team(r.teamId)) }] : []),
+    ...[...byRecord].map(([label, rs]) => ({ label, teams: rs.map((r) => team(r.teamId)) })),
+    ...(out.length > 0 ? [{ label: "Out", outcome: "out" as const, teams: out.map((r) => team(r.teamId)) }] : []),
+  ];
+  return { pools };
 }
 
 /** Every record that ends the stage is full: nobody is left to play. */
@@ -572,9 +581,8 @@ function lolOffSeasonCard(
     ...base,
     context: lolContext(event, featured),
     featured,
-    matches: knockouts
-      .filter((m) => m !== featured)
-      .slice(0, champions ? LOL_CARD_MATCHES : LOL_CARD_MATCHES_ALONE),
+    following: knockouts.filter((m) => m !== featured).slice(0, CARD_FOLLOWING),
+    matches: [],
     tables: champions ? [champions] : [],
   };
 }
@@ -868,4 +876,4 @@ function matchTone(match: Match): DashboardMatch["status"] {
 }
 
 /** Pure helpers, exported for their tests. */
-export const __testing = { lolCard, racquetCard, surfCard, swissRecords, f1Highlight };
+export const __testing = { lolCard, lolSwiss, racquetCard, surfCard, swissRecords, f1Highlight };

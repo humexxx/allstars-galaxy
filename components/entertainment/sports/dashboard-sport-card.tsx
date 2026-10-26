@@ -24,6 +24,7 @@ import type {
 
 import { DashboardCompetitionPicker } from "./dashboard-competition-picker";
 import { DashboardSportTables } from "./dashboard-sport-tables";
+import { DashboardSwiss } from "./dashboard-swiss";
 import { SPORT_CARD_HEADER, SPORT_CARD_ROWS, SPORT_CARD_SECTION } from "./shared/dashboard-card-rows";
 import { FeatureBox } from "./shared/feature-box";
 import { LeadCarousel } from "./shared/lead-carousel";
@@ -38,9 +39,9 @@ import { TeamBadge } from "./shared/team-badge";
  * championship the reader set it to (`competition`, null for the card's own
  * pick), which the line under the title picks.
  *
- * Football, the NBA and the NFL step through their next games in the lead box
- * (`following`) rather than listing them, so their table moves up a row and
- * their news has the last row to itself.
+ * Football, the NBA, the NFL and LoL step through their next games in the lead
+ * box (`following`) rather than listing them, so their table (LoL's Swiss
+ * stage) moves up a row and their news has the last row to itself.
  *
  * Half a row, like F1's: one sport among several. Each card sits in its own
  * Suspense boundary, so a slow provider only holds up its own sport.
@@ -77,9 +78,10 @@ export async function DashboardSportCard({
         </ul>
       </div>
     ));
-  const tables = (card.tables.length > 0 || card.note) && (
+  const tables = (card.tables.length > 0 || card.swiss || card.note) && (
     <>
       {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
+      {card.swiss && <DashboardSwiss swiss={card.swiss} />}
       {card.note && (
         <div className="flex flex-col gap-1">
           <Eyebrow size="sm" asChild>

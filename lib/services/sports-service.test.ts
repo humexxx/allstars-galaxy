@@ -29,7 +29,7 @@ vi.mock("@/db", () => ({
 import { db } from "@/db";
 import { getFootballLeague } from "@/lib/data/sports/football";
 import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
-import type { BracketMatch, DashboardMatch, DashboardSportCard, LolRegion, LolSplit, RacquetData, RacquetTournament, SurfData, SurfEvent, Team } from "@/types/sports";
+import type { BracketMatch, DashboardMatch, DashboardSportCard, LolRegion, LolSplit, RacquetData, RacquetTournament, SurfData, SurfEvent, SwissMatch, SwissStage, Team } from "@/types/sports";
 
 import gamesOct18 from "./__fixtures__/balldontlie-nba-games-2026-10-18.json";
 import { fakeLolesports } from "./__fixtures__/lolesports";
@@ -612,36 +612,62 @@ describe("the LoL card across a season", () => {
   const table = (card: DashboardSportCard) =>
     card.tables.map((t) => ({ label: t.label, rows: t.rows.map((r) => `${r.name} ${r.value}`) }));
 
-  it("during the Swiss stage: the next match, four more and the records so far", async () => {
+  it("during the Swiss stage: the games still to come in the box, and the stage by record", async () => {
     const card = await lolCardOn("2026-10-23T23:00:00Z");
 
     expect(card.context).toBe("Worlds 2026 · Swiss");
     expect(line(card.featured!)).toBe("T1 v FLY upcoming");
-    // "Up next" first, the latest result filling the rest.
-    expect(card.matches.map(line)).toEqual([
-      "AL v HLE upcoming",
-      "TES v G2 upcoming",
-      "PSG v GEN upcoming",
-      "100T v BLG result",
+    expect(card.following!.map(line)).toEqual(["AL v HLE upcoming", "TES v G2 upcoming", "PSG v GEN upcoming"]);
+    expect(card.matches).toEqual([]);
+    expect(card.tables).toEqual([]);
+    // Best record first; the teams yet to play their first series are on 0–0.
+    expect(card.swiss!.pools.map((p) => [p.label, p.teams.map((t) => t.code)])).toEqual([
+      ["1–0", ["TSW", "CFO", "KT", "100T"]],
+      ["0–0", ["T1", "FLY", "AL", "HLE", "TES", "G2", "PSG", "GEN"]],
+      ["0–1", ["VKS", "FNC", "MKOI", "BLG"]],
     ]);
-    expect(card.tables.map((t) => t.id)).toEqual(["swiss"]);
-    expect(card.tables[0].rows.slice(0, 4).map((r) => r.value)).toEqual(["1–0", "1–0", "1–0", "1–0"]);
   });
 
-  it("through the knockouts: no stale Swiss table, and six matches in its room", async () => {
+  it("puts those through and those out on a row each, the rest by record", () => {
+    const played = (id: string, home: string, away: string, winner: string | null): SwissMatch => ({
+      id,
+      homeTeamId: home,
+      awayTeamId: away,
+      winnerTeamId: winner,
+      status: winner ? "ft" : "scheduled",
+    });
+    const stage: SwissStage = {
+      winsToAdvance: 2,
+      lossesToExit: 2,
+      rounds: [
+        [{ wins: 0, losses: 0, matches: [played("1", "A", "B", "A"), played("2", "C", "D", "C"), played("3", "E", "F", null)] }],
+        [
+          { wins: 1, losses: 0, matches: [played("4", "A", "C", "A")] },
+          { wins: 0, losses: 1, matches: [played("5", "B", "D", "B")] },
+        ],
+      ],
+      exits: [
+        { wins: 2, losses: 0, advanced: true, slots: 1, teamIds: ["A"] },
+        { wins: 0, losses: 2, advanced: false, slots: 1, teamIds: [] },
+      ],
+    };
+    const swiss = __testing.lolSwiss({ swiss: stage } as LolSplit, new Map());
+    expect(swiss!.pools.map((p) => [p.label, p.outcome, p.teams.map((t) => t.name)])).toEqual([
+      ["Through", "through", ["A"]],
+      ["1–1", undefined, ["B", "C"]],
+      ["0–0", undefined, ["E", "F"]],
+      ["Out", "out", ["D"]],
+    ]);
+  });
+
+  it("through the knockouts: no stale Swiss stage, the games still to come in the box", async () => {
     const card = await lolCardOn("2026-11-04T12:00:00Z");
 
     expect(card.context).toBe("Worlds 2026 · Quarterfinals");
     expect(card.tables).toEqual([]);
+    expect(card.swiss).toBeUndefined();
     expect(line(card.featured!)).toBe("AL v T1 upcoming");
-    expect(card.matches.map(line)).toEqual([
-      "HLE v CFO upcoming",
-      "G2 v GEN upcoming",
-      "KT v TES result",
-      "T1 v MKOI result",
-      "BLG v TES result",
-      "FLY v CFO result",
-    ]);
+    expect(card.following!.map(line)).toEqual(["HLE v CFO upcoming", "G2 v GEN upcoming"]);
   });
 
   for (const day of ["2026-11-20", "2026-12-10", "2027-01-05"]) {
@@ -656,7 +682,7 @@ describe("the LoL card across a season", () => {
         home: { code: "T1", score: 3, winner: true },
         away: { code: "GEN", score: 2, winner: false },
       });
-      expect(card.matches.map(line)).toEqual([
+      expect(card.following!.map(line)).toEqual([
         "HLE v GEN result",
         "KT v T1 result",
         "G2 v GEN result",
@@ -717,7 +743,8 @@ describe("the LoL card across a season", () => {
 
     expect(card.context).toBe("LCK Split 1 · Week 1");
     expect(line(card.featured!)).toBe("HLE v BFX upcoming");
-    expect(card.matches.map(line)).toEqual(["T1 v GEN result", "DK v KT result"]);
+    // Nothing else ahead this week: the box steps back through the results.
+    expect(card.following!.map(line)).toEqual(["T1 v GEN result", "DK v KT result"]);
     expect(table(card)).toEqual([{ label: "Standings", rows: ["DK 1–0", "KT 0–1"] }]);
   });
 });

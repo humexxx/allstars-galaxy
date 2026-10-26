@@ -46,11 +46,13 @@ export async function DashboardF1Card({ userId }: { userId: string }): Promise<R
   const favorites = await listUserFavoriteSportIds(userId);
   if (!favorites.includes("f1")) return null;
 
-  const [highlight, news, standings, timeZone] = await Promise.all([
-    getF1DashboardHighlight(),
+  // The reader's zone first, a cookie: the race just run stays until the day
+  // after it on their calendar.
+  const timeZone = await getRequestTimeZone();
+  const [highlight, news, standings] = await Promise.all([
+    getF1DashboardHighlight(undefined, timeZone),
     getF1News(SHOWN),
     getF1DashboardStandings(3),
-    getRequestTimeZone(),
   ]);
   // The reader's day, not the server's (UTC): a story from 22:00 in Costa
   // Rica belongs to that evening, not tomorrow.

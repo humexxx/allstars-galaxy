@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { TravelAssistant } from "@/components/travel/assistant/travel-assistant";
 import { getEffectiveContext } from "@/lib/services/impersonation";
-import { canUseTravelAssistant } from "@/lib/travel/assistant/access";
+import { canUseAssistant } from "@/lib/ai/assistant/access";
 
 /**
  * Every Travel Planner page, wrapped by the assistant when it is on: in the
@@ -15,5 +15,5 @@ export default async function TravelPlannerLayout({
   children: ReactNode;
 }): Promise<ReactNode> {
   const ctx = await getEffectiveContext();
-  return ctx && canUseTravelAssistant(ctx) ? <TravelAssistant>{children}</TravelAssistant> : children;
+  return ctx && canUseAssistant(ctx) ? <TravelAssistant>{children}</TravelAssistant> : children;
 }

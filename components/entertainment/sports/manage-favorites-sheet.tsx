@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { startTransition, useOptimistic, useState } from "react";
 import { Star } from "lucide-react";
 import { toast } from "sonner";
 
@@ -57,9 +57,15 @@ export function ManageFavoritesSheet({
   trigger = "button",
 }: ManageFavoritesSheetProps): React.ReactElement {
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<Set<SportId>>(
-    () => new Set(favoriteSportIds)
+  // The server's list, with the toggles still in flight laid over it. Not a
+  // copy kept in state: a copy missed every change made elsewhere — the
+  // assistant, another tab — and the star went on counting the old list.
+  const [optimisticIds, toggleOptimistic] = useOptimistic(
+    favoriteSportIds,
+    (ids: SportId[], { sportId, next }: { sportId: SportId; next: boolean }) =>
+      next ? [...new Set([...ids, sportId])] : ids.filter((id) => id !== sportId)
   );
+  const selected = new Set(optimisticIds);
   // One in-flight flag PER sport — a single slot meant toggling A then B
   // quickly let A's completion clear B's spinner (and re-enable B's switch)
   // while B's action was still running.
@@ -71,33 +77,25 @@ export function ManageFavoritesSheet({
     // A second toggle while the first is in flight is ignored rather than
     // blocked with `disabled`, which would drop keyboard focus off the switch.
     if (pending.has(sportId)) return;
-    // Optimistic — flip the chip immediately, revert if the action fails.
-    setSelected((prev) => {
-      const copy = new Set(prev);
-      if (next) copy.add(sportId);
-      else copy.delete(sportId);
-      return copy;
-    });
     setPending((prev) => new Set(prev).add(sportId));
-    // A rejection (network) must still clear the spinner and roll back.
-    const result = await setSportFavoriteAction({ sportId, isFavorite: next }).catch(
-      () => ({ success: false as const, error: "Failed to update favorites" })
+    // The chip flips at once; when the transition ends it shows the server's
+    // list again — the revalidated one on success, the unchanged one on failure.
+    await new Promise<void>((resolve) =>
+      startTransition(async () => {
+        toggleOptimistic({ sportId, next });
+        // A rejection (network) must still clear the spinner and roll back.
+        const result = await setSportFavoriteAction({ sportId, isFavorite: next }).catch(
+          () => ({ success: false as const, error: "Failed to update favorites" })
+        );
+        if (!result.success) toast.error(result.error);
+        resolve();
+      })
     );
     setPending((prev) => {
       const copy = new Set(prev);
       copy.delete(sportId);
       return copy;
     });
-    // No refresh on success: the action revalidates the hub and the dashboard.
-    if (!result.success) {
-      setSelected((prev) => {
-        const copy = new Set(prev);
-        if (next) copy.delete(sportId);
-        else copy.add(sportId);
-        return copy;
-      });
-      toast.error(result.error);
-    }
   }
 
   return (

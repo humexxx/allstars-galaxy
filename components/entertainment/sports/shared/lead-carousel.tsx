@@ -55,7 +55,7 @@ export function LeadCarousel({ label, children }: { label: string; children: Rea
       aria-label={label}
       className="relative h-full"
     >
-      <div ref={track} aria-live={rotation.rotating ? "off" : "polite"} className="no-scrollbar flex h-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain">
+      <div ref={track} aria-live={rotation.rotating ? "off" : "polite"} className="no-scrollbar relative flex h-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain">
         {slides.map((slide, i) => (
           <div
             key={i}

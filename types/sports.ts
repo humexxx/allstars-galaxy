@@ -59,6 +59,21 @@ export type DashboardTableRow = {
   value: string;
 };
 
+export type DashboardTeam = Pick<DashboardTableRow, "name" | "image" | "code" | "color">;
+
+/**
+ * Where a Swiss stage stands, one row a record: those through, each record
+ * still playing (best first), those out.
+ */
+export type DashboardSwiss = {
+  pools: {
+    /** "2–1", or the outcome for the records that end the stage. */
+    label: string;
+    outcome?: "through" | "out";
+    teams: DashboardTeam[];
+  }[];
+};
+
 export type DashboardTable = {
   id: string;
   label: string;
@@ -81,15 +96,23 @@ export type DashboardSportCard = {
   featured?: DashboardMatch;
   /**
    * The games after the featured one, which its box steps through rather
-   * than listing them under it (football, the NBA, the NFL).
+   * than listing them under it (football, the NBA, the NFL, LoL).
    */
   following?: DashboardMatch[];
   /** Racquet sports have tournaments rather than matches on the dashboard. */
-  event?: { name: string; detail: string; status: "live" | "upcoming" | "completed" };
+  event?: {
+    name: string;
+    detail: string;
+    status: "live" | "upcoming" | "completed";
+    /** Its own page (a padel or tennis tournament's); else the card's sport page. */
+    href?: string;
+  };
   /** Listed under the lead (LoL: a day of an event is several series back to back). */
   matches: DashboardMatch[];
   /** More than one shows as a toggle (East / West, AFC / NFC). */
   tables: DashboardTable[];
+  /** LoL's Swiss stage while it is played, in place of a table. */
+  swiss?: DashboardSwiss;
   /**
    * In place of a table the sport has none of yet: the NBA's last champion
    * before the opener. `when` is an instant the card prints in the reader's

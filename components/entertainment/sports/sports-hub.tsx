@@ -83,7 +83,8 @@ export function SportsHub({
   const returnTo = useRef<ReturnTo | null>(null);
 
   // Each sport is remembered as it arrives, by the address that asked for it.
-  const currentKey = seenKey(activeSport, useSearchParams().get("league"));
+  const league = useSearchParams().get("league");
+  const currentKey = seenKey(activeSport, league);
   useEffect(() => {
     rememberSport(viewerId, currentKey, { payload, teamFilter, today });
   }, [viewerId, currentKey, payload, teamFilter, today]);
@@ -165,7 +166,15 @@ export function SportsHub({
               <SavedTeamFilterProvider filter={shown.teamFilter}>
                 <div className="flex flex-col gap-6">
                   {shown.payload.sample && <SampleDataNotice />}
-                  <SportContent payload={shown.payload} initialTab={copy ? undefined : initialTab} />
+                  {/* Keyed by tab too: a link to another tab of the sport on
+                      screen (the assistant's) opens it, which a view's
+                      uncontrolled tabs would otherwise ignore. */}
+                  <SportContent
+                    key={copy ? "" : (initialTab ?? "")}
+                    payload={shown.payload}
+                    initialTab={copy ? undefined : initialTab}
+                    league={league}
+                  />
                 </div>
               </SavedTeamFilterProvider>
             </SportsTodayProvider>
@@ -203,9 +212,12 @@ function SampleDataNotice(): React.ReactElement {
 function SportContent({
   payload,
   initialTab,
+  league,
 }: {
   payload: SportPayload;
   initialTab?: string;
+  /** `?league=`: LoL's league or event; football's arrives as its payload. */
+  league: string | null;
 }): React.ReactElement {
   switch (payload.sport) {
     case "football":
@@ -236,6 +248,6 @@ function SportContent({
     case "surf":
       return <SurfView data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "lol":
-      return <LolView data={payload.data} news={payload.news} initialTab={initialTab} />;
+      return <LolView data={payload.data} news={payload.news} initialTab={initialTab} initialRegion={league} />;
   }
 }

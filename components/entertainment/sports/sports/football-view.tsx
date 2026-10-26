@@ -25,7 +25,7 @@ type FootballViewProps = {
   options: ReadonlyArray<{ id: FootballLeagueId; name: string }>;
   /** ESPN's news for the league; no News tab without any. */
   news?: NewsStory[];
-  /** `?tab=news` opens on the news. */
+  /** `?tab=`: the tab to open on, when the league has it. */
   initialTab?: string;
 };
 
@@ -41,11 +41,10 @@ type TabKey = "overview" | "knockout" | "news";
  */
 export function FootballView({ league, options, news = [], initialTab }: FootballViewProps): React.ReactElement {
   const leagues = <LeagueMenu leagueId={league.league.id} options={options} />;
-  const openNews = initialTab === "news" && news.length > 0;
   return league.league.id === "world-cup" ? (
-    <WorldCupView data={league} leagues={leagues} news={news} openNews={openNews} />
+    <WorldCupView data={league} leagues={leagues} news={news} initialTab={initialTab} />
   ) : (
-    <LeagueView league={league} leagues={leagues} news={news} openNews={openNews} />
+    <LeagueView league={league} leagues={leagues} news={news} initialTab={initialTab} />
   );
 }
 
@@ -76,12 +75,12 @@ function LeagueView({
   league,
   leagues,
   news,
-  openNews,
+  initialTab,
 }: {
   league: FootballLeagueData;
   leagues: React.ReactNode;
   news: NewsStory[];
-  openNews: boolean;
+  initialTab?: string;
 }): React.ReactElement {
   const leagueId = league.league.id;
 
@@ -91,7 +90,15 @@ function LeagueView({
   // A league played in conferences (MLS) shows one at a time; its
   // `standings` is the league-wide table, which leads the news.
   const conferences = league.groups && league.groups.length > 1 ? league.groups : null;
-  const defaultTab: TabKey = openNews ? "news" : hasKnockoutData ? "knockout" : "overview";
+  const asked: TabKey | null =
+    initialTab === "news" && news.length > 0
+      ? "news"
+      : initialTab === "knockout" && hasKnockoutData
+        ? "knockout"
+        : initialTab === "overview"
+          ? "overview"
+          : null;
+  const defaultTab: TabKey = asked ?? (hasKnockoutData ? "knockout" : "overview");
 
   return (
     // Keyed by league: leagues differ in which tabs exist (a knockout or not),

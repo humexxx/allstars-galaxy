@@ -131,7 +131,7 @@ export function BracketCanvas({
   };
 
   return (
-    <div ref={viewportRef} className={cn("-mx-1 overflow-x-auto px-1 pb-1", className)}>
+    <div ref={viewportRef} className={cn("relative -mx-1 overflow-x-auto px-1 pb-1", className)}>
       <div
         ref={canvasRef}
         className="relative grid w-max min-w-full gap-x-5"

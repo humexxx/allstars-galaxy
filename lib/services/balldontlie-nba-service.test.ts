@@ -240,11 +240,12 @@ describe("gameWindow", () => {
     });
   });
 
-  it("keeps the finals in view until the new season has a week of games", () => {
-    expect(gameWindow(new Date(2026, 9, 18, 12)).start).toBe("2026-06-01");
-    expect(gameWindow(new Date(2026, 9, 28, 12))).toEqual({
-      start: "2026-10-14",
-      end: "2026-11-04",
+  it("keeps the finals in view until the opener, then one page around today", () => {
+    expect(gameWindow(new Date(2026, 9, 19, 12)).start).toBe("2026-06-01");
+    // Five nights into the season: the long range was three pages by now.
+    expect(gameWindow(new Date(2026, 9, 25, 12))).toEqual({
+      start: "2026-10-11",
+      end: "2026-11-01",
     });
   });
 

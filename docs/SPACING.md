@@ -36,6 +36,13 @@ From `md` up the shell goes back to a fixed-height app frame with its own
 scrolling pane, which is what keeps the sidebar and header in place, and
 `overscroll-behavior: none` returns because the document edge is never reached.
 
+So on a phone nothing clips the page sideways, and **every horizontal scroller
+is `relative`**. An `sr-only` label is `position: absolute`: inside a scroller
+that is not positioned, its containing block is an ancestor outside it, so the
+labels of the cards scrolled out of view escape the scroller's clipping and
+widen the whole page (the dashboard's news rails made it 969px wide on a 375px
+phone). From `md` up the inner pane hid it.
+
 ## Dialogs on a phone
 
 - **Override `DialogContent`'s width from `sm:` up, never unprefixed.** The

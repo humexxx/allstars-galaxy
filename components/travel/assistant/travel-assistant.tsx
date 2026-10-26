@@ -1,34 +1,25 @@
 "use client";
 
-import {
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type KeyboardEvent,
-  type ReactNode,
-} from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { ArrowUp, Paperclip, RotateCcw, Sparkles, X } from "lucide-react";
-import { Dialog as DialogPrimitive } from "radix-ui";
+import { Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { applyTravelChangesAction, undoTravelChangesAction } from "@/app/actions/travel-assistant";
-import { Button } from "@/components/ui/button";
+import { AssistantButton, ChatHeader, ChatWindow } from "@/components/assistant/chat-window";
+import { Composer } from "@/components/assistant/composer";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  AssistantBubble,
+  AssistantError,
+  AssistantStatus,
+  Suggestions,
+  UserBubble,
+} from "@/components/assistant/messages";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
-import { Text } from "@/components/ui/typography";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { readEvents } from "@/lib/travel/assistant/stream";
+import { readEvents } from "@/lib/ai/assistant/stream";
 import { uploadTripPhoto, type UploadedPhoto } from "@/lib/travel/photo-upload";
-import { cn } from "@/lib/utils";
 import type {
   TravelAssistantEvent,
   TravelAssistantMessage,
@@ -42,7 +33,6 @@ import { TripPhoto } from "../trip-photo";
 import { PendingProposalProvider, type PendingProposal } from "./pending-preview";
 import { PendingReviewBar } from "./pending-review-bar";
 import { ProposalCard, type ProposalState } from "./proposal-card";
-import { VoiceButton } from "./voice-button";
 
 type Entry =
   | { kind: "user"; id: string; text: string; images: string[] }
@@ -106,8 +96,6 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
   const [attachments, setAttachments] = useState<UploadedPhoto[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  /** What was typed before dictation started; the transcript goes after it. */
-  const voiceBase = useRef("");
   const input = useRef<HTMLTextAreaElement>(null);
 
   const transcript = useRef<TravelAssistantMessage[]>([]);
@@ -193,7 +181,7 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
         throw new Error(body?.error ?? "The assistant did not answer");
       }
-      await readEvents(response.body, (event: TravelAssistantEvent) => {
+      await readEvents<TravelAssistantEvent>(response.body, (event) => {
         switch (event.type) {
           case "text":
             setStatus(null);
@@ -305,17 +293,6 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
     toldTripId.current = undefined;
   }
 
-  const onSubmit = (e: FormEvent): void => {
-    e.preventDefault();
-    void send(draft);
-  };
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      void send(draft);
-    }
-  };
-
   const waiting = entries.findLast(
     (e): e is ProposalEntry => e.kind === "proposal" && (e.state === "open" || e.state === "applying")
   );
@@ -347,121 +324,71 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
       {children}
       {/* With the chat open, its card decides; the bar is for when it is not. */}
       {waiting && !open && <PendingReviewBar proposal={pending!} onOpenChat={openChat} unread={unread} />}
-      <Button
-        size="icon-lg"
-        aria-label="Open the travel assistant"
-        onClick={openChat}
-        className={cn(
-          "fixed right-4 z-40 size-12 rounded-full shadow-lg",
-          // Clear of the dev-tools wrench, which only exists in development.
-          process.env.NODE_ENV === "development" ? "bottom-16" : "bottom-4",
-          // The review bar carries its own way back to the chat.
-          (open || waiting) && "hidden"
-        )}
-      >
-        <Sparkles />
-      </Button>
+      {/* The review bar carries its own way back to the chat. */}
+      <AssistantButton label="Open the travel assistant" onClick={openChat} hidden={open || Boolean(waiting)} />
 
-      <Sheet open={open} onOpenChange={setOpen} modal={phone}>
-        <ChatWindow
-          floating={!phone}
-          onOpenAutoFocus={(e) => {
-            e.preventDefault();
-            input.current?.focus();
-          }}
-        >
-          <SheetHeader className="border-b pr-12">
-            <div className="flex items-center justify-between gap-2">
-              <SheetTitle className="flex items-center gap-2">
-                <Sparkles aria-hidden className="size-4 text-primary" /> Travel assistant
-              </SheetTitle>
-              {entries.length > 0 && (
-                <Button size="sm" variant="ghost" onClick={reset} disabled={busy}>
-                  <RotateCcw />
-                  New chat
-                </Button>
-              )}
-            </div>
-            <SheetDescription>
-              Describe a trip or a change. Nothing is saved until you apply it.
-            </SheetDescription>
-          </SheetHeader>
+      <ChatWindow open={open} onOpenChange={setOpen} phone={phone} slot="travel-assistant-window" focus={input}>
+        <ChatHeader
+          title="Travel assistant"
+          description="Describe a trip or a change. Nothing is saved until you apply it."
+          onReset={entries.length > 0 ? reset : undefined}
+          busy={busy}
+        />
 
-          <div ref={scroller} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
-            {entries.length === 0 && (
-              <div className="flex flex-col gap-2">
-                <Text variant="muted">Try something like:</Text>
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setDraft(s)}
-                    className="rounded-lg border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
+        <div ref={scroller} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+          {entries.length === 0 && <Suggestions items={SUGGESTIONS} onPick={setDraft} />}
 
-            {entries.map((entry) => {
-              switch (entry.kind) {
-                case "user":
-                  return (
-                    <div key={entry.id} className="ml-8 flex flex-col items-end gap-1 self-end">
-                      {entry.images.length > 0 && (
-                        <div className="flex flex-wrap justify-end gap-1">
-                          {entry.images.map((url) => (
-                            <span key={url} className="relative block size-16 overflow-hidden rounded-lg bg-muted">
-                              <TripPhoto src={url} alt="Attached image" sizes="64px" />
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <p className="whitespace-pre-wrap rounded-xl bg-primary px-3 py-2 text-sm text-primary-foreground">
-                        {entry.text}
-                      </p>
-                    </div>
-                  );
-                case "assistant":
-                  return (
-                    <p key={entry.id} className="mr-8 whitespace-pre-wrap text-sm">
-                      {entry.text}
-                    </p>
-                  );
-                case "error":
-                  return (
-                    <Text key={entry.id} variant="small" className="text-destructive">
-                      {entry.message}
-                    </Text>
-                  );
-                case "proposal":
-                  return (
-                    <ProposalCard
-                      key={entry.id}
-                      proposal={entry.proposal}
-                      state={entry.state}
-                      applied={entry.applied}
-                      error={entry.error}
-                      canUndo={entry.id === lastApplied && Boolean(entry.undoToken)}
-                      onApply={() => void apply(entry)}
-                      onCancel={() => cancel(entry)}
-                      onUndo={() => void undo(entry)}
-                    />
-                  );
-              }
-            })}
+          {entries.map((entry) => {
+            switch (entry.kind) {
+              case "user":
+                return (
+                  <UserBubble key={entry.id} text={entry.text}>
+                    {entry.images.length > 0 && (
+                      <div className="flex flex-wrap justify-end gap-1">
+                        {entry.images.map((url) => (
+                          <span key={url} className="relative block size-16 overflow-hidden rounded-lg bg-muted">
+                            <TripPhoto src={url} alt="Attached image" sizes="64px" />
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </UserBubble>
+                );
+              case "assistant":
+                return <AssistantBubble key={entry.id} text={entry.text} />;
+              case "error":
+                return <AssistantError key={entry.id} message={entry.message} />;
+              case "proposal":
+                return (
+                  <ProposalCard
+                    key={entry.id}
+                    proposal={entry.proposal}
+                    state={entry.state}
+                    applied={entry.applied}
+                    error={entry.error}
+                    canUndo={entry.id === lastApplied && Boolean(entry.undoToken)}
+                    onApply={() => void apply(entry)}
+                    onCancel={() => cancel(entry)}
+                    onUndo={() => void undo(entry)}
+                  />
+                );
+            }
+          })}
 
-            {busy && (
-              <div role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Spinner />
-                {status ?? "Thinking"}
-              </div>
-            )}
-          </div>
+          {busy && <AssistantStatus label={status} />}
+        </div>
 
-          <form onSubmit={onSubmit} className="flex flex-col gap-2 border-t p-4">
-            {(attachments.length > 0 || uploading) && (
+        <Composer
+          draft={draft}
+          onDraftChange={setDraft}
+          onSend={() => void send(draft)}
+          busy={busy}
+          canSend={!busy && !uploading && (Boolean(draft.trim()) || attachments.length > 0)}
+          placeholder="Plan a trip, add a booking, change dates…"
+          label="Message the travel assistant"
+          inputRef={input}
+          above={
+            (attachments.length > 0 || uploading) && (
               <div className="flex flex-wrap gap-2">
                 {attachments.map((a) => (
                   <span key={a.storagePath} className="relative block size-14 overflow-hidden rounded-lg bg-muted">
@@ -482,8 +409,10 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
                   </span>
                 )}
               </div>
-            )}
-            <div className="flex items-end gap-1">
+            )
+          }
+          before={
+            <>
               <input
                 ref={fileInput}
                 type="file"
@@ -503,80 +432,10 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
               >
                 <Paperclip />
               </Button>
-              <Textarea
-                ref={input}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={onKeyDown}
-                placeholder="Plan a trip, add a booking, change dates…"
-                aria-label="Message the travel assistant"
-                rows={2}
-                className="min-w-0 flex-1 resize-none"
-              />
-              <VoiceButton
-                disabled={busy}
-                onStart={() => {
-                  voiceBase.current = draft.trim() ? `${draft.trim()} ` : "";
-                }}
-                onTranscript={(words) => setDraft(voiceBase.current + words)}
-              />
-              <Button
-                type="submit"
-                size="icon"
-                aria-label="Send"
-                disabled={busy || uploading || (!draft.trim() && attachments.length === 0)}
-              >
-                <ArrowUp />
-              </Button>
-            </div>
-          </form>
-        </ChatWindow>
-      </Sheet>
+            </>
+          }
+        />
+      </ChatWindow>
     </PendingProposalProvider>
-  );
-}
-
-/**
- * Where the chat sits. A phone gives it the whole screen. Anything wider gets
- * a window floating in the corner: no dimming, and the page behind it stays
- * in view and in reach. That matters once a proposal is drawn on that page.
- * Clicking the page leaves the window open; Escape or the close button shuts it.
- */
-function ChatWindow({
-  floating,
-  onOpenAutoFocus,
-  children,
-}: {
-  floating: boolean;
-  onOpenAutoFocus: (event: Event) => void;
-  children: ReactNode;
-}) {
-  if (!floating) {
-    return (
-      <SheetContent side="right" className="flex flex-col gap-0 data-[side=right]:w-full">
-        {children}
-      </SheetContent>
-    );
-  }
-  // Not portalled: the content's own presence plays the exit animation, which
-  // a wrapper inside the portal would cut short. The wrapper only places the
-  // window and lets clicks through to the page around it.
-  return (
-    <div className="pointer-events-none fixed inset-y-4 right-4 z-50 flex flex-col justify-end">
-      <DialogPrimitive.Content
-        data-slot="travel-assistant-window"
-        onOpenAutoFocus={onOpenAutoFocus}
-        onInteractOutside={(e) => e.preventDefault()}
-        className="pointer-events-auto relative flex h-160 max-h-full w-sm origin-bottom-right flex-col overflow-hidden rounded-2xl border bg-popover text-sm shadow-2xl duration-200 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-open:slide-in-from-bottom-4 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-closed:slide-out-to-bottom-4"
-      >
-        {children}
-        <DialogPrimitive.Close asChild>
-          <Button variant="ghost" size="icon-sm" className="absolute top-4 right-4">
-            <X />
-            <span className="sr-only">Close</span>
-          </Button>
-        </DialogPrimitive.Close>
-      </DialogPrimitive.Content>
-    </div>
   );
 }

@@ -26,6 +26,16 @@ const teamFilter = (): HTMLElement | null => screen.queryByRole("button", { name
 const tabsRow = (): HTMLElement => screen.getByRole("tablist").closest<HTMLElement>(".sticky")!;
 
 describe("FootballView", () => {
+  it("opens on the tab a link asks for, when the league has it", () => {
+    render(<FootballView league={getFootballLeague("uefa-champions-league")} options={OPTIONS} initialTab="overview" />);
+    expect(openTab()).toBe("Overview");
+  });
+
+  it("ignores a tab the league has not got", () => {
+    render(<FootballView league={getFootballLeague("la-liga")} options={OPTIONS} initialTab="knockout" />);
+    expect(openTab()).toBe("Overview");
+  });
+
   it("has no Table tab: the whole table is on Overview, beside the matches", () => {
     renderLeague("la-liga");
     const league = getFootballLeague("la-liga");

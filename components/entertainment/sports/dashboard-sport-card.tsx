@@ -24,6 +24,8 @@ import type {
 
 import { DashboardCompetitionPicker } from "./dashboard-competition-picker";
 import { DashboardSportTables } from "./dashboard-sport-tables";
+import { DashboardSwiss } from "./dashboard-swiss";
+import { CardPendingProvider, PendingArea } from "./shared/card-pending";
 import { SPORT_CARD_HEADER, SPORT_CARD_ROWS, SPORT_CARD_SECTION } from "./shared/dashboard-card-rows";
 import { FeatureBox } from "./shared/feature-box";
 import { LeadCarousel } from "./shared/lead-carousel";
@@ -38,9 +40,9 @@ import { TeamBadge } from "./shared/team-badge";
  * championship the reader set it to (`competition`, null for the card's own
  * pick), which the line under the title picks.
  *
- * Football, the NBA and the NFL step through their next games in the lead box
- * (`following`) rather than listing them, so their table moves up a row and
- * their news has the last row to itself.
+ * Football, the NBA, the NFL and LoL step through their next games in the lead
+ * box (`following`) rather than listing them, so their table (LoL's Swiss
+ * stage) moves up a row and their news has the last row to itself.
  *
  * Half a row, like F1's: one sport among several. Each card sits in its own
  * Suspense boundary, so a slow provider only holds up its own sport.
@@ -52,10 +54,9 @@ export async function DashboardSportCard({
   sportId: SportId;
   competition?: string | null;
 }): Promise<ReactElement | null> {
-  const [card, timeZone] = await Promise.all([
-    getDashboardSportCard(sportId, competition),
-    getRequestTimeZone(),
-  ]);
+  // The reader's zone first, a cookie: "yesterday" and "today" are theirs.
+  const timeZone = await getRequestTimeZone();
+  const card = await getDashboardSportCard(sportId, competition, timeZone);
   if (!card) return null;
   // The reader's zone, not the server's (UTC): an evening kickoff in Costa
   // Rica is that evening, not tomorrow.
@@ -77,9 +78,10 @@ export async function DashboardSportCard({
         </ul>
       </div>
     ));
-  const tables = (card.tables.length > 0 || card.note) && (
+  const tables = (card.tables.length > 0 || card.swiss || card.note) && (
     <>
       {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
+      {card.swiss && <DashboardSwiss swiss={card.swiss} />}
       {card.note && (
         <div className="flex flex-col gap-1">
           <Eyebrow size="sm" asChild>
@@ -98,64 +100,74 @@ export async function DashboardSportCard({
   const news = card.news && card.news.length > 0 && <NewsRail sport={card.label} stories={card.news} format={format} />;
   // The list, the tables and the news fill the two rows under the lead in that
   // order, so a card with nothing to list leaves no empty row beside its
-  // neighbour's.
-  const [middle, ...rest] = [list, tables, news].filter(Boolean);
+  // neighbour's. A championship change replaces all but the news, which
+  // stays while the rest stands in as skeletons.
+  const parts = [list, tables, news]
+    .filter(Boolean)
+    .map((part, i) =>
+      part === news ? (
+        <Fragment key={i}>{part}</Fragment>
+      ) : (
+        <PendingArea key={i} skeleton="list">
+          {part}
+        </PendingArea>
+      )
+    );
+  const [middle, ...rest] = parts;
 
   return (
     <Card className={SPORT_CARD_ROWS}>
-      <CardHeader className={SPORT_CARD_HEADER}>
-        {/* The hub's emoji: lucide has no ball for most of these sports. */}
-        <CardTitle as="h2" className="flex items-center gap-2">
-          <span aria-hidden className="text-lg leading-none">
-            {card.emoji}
-          </span>
-          {card.label}
-        </CardTitle>
-        {card.competitions ? (
-          <CardDescription className="min-w-0">
-            <DashboardCompetitionPicker
-              sportId={card.sportId}
-              label={card.context}
-              competitions={card.competitions}
-            />
-          </CardDescription>
-        ) : (
-          <CardDescription className="truncate">{card.context}</CardDescription>
-        )}
-        <CardAction>
-          <Button variant="outline" size="sm" asChild>
-            <Link href={href}>
-              Open <span className="sr-only">{card.label}</span> <ArrowRight />
-            </Link>
-          </Button>
-        </CardAction>
-      </CardHeader>
-
-      {/* Three rows, always all three: a fourth would put this card's out of
-          line with the one beside it. */}
-      <div className={SPORT_CARD_SECTION}>
-        {card.featured &&
-          (card.following ? (
-            // Keyed by the game it leads with: another championship's games
-            // start from their own first one, not where the last were left.
-            <LeadCarousel key={card.featured.id} label={`${card.label} games`}>
-              {[card.featured, ...(card.following ?? [])].map((m) => (
-                // Room under the teams for the carousel's dots.
-                <FeaturedMatch key={m.id} match={m} format={format} href={href} className="pb-6" />
-              ))}
-            </LeadCarousel>
+      <CardPendingProvider>
+        <CardHeader className={SPORT_CARD_HEADER}>
+          {/* The hub's emoji: lucide has no ball for most of these sports. */}
+          <CardTitle as="h2" className="flex items-center gap-2">
+            <span aria-hidden className="text-lg leading-none">
+              {card.emoji}
+            </span>
+            {card.label}
+          </CardTitle>
+          {card.competitions ? (
+            <CardDescription className="min-w-0">
+              <DashboardCompetitionPicker
+                sportId={card.sportId}
+                label={card.context}
+                competitions={card.competitions}
+              />
+            </CardDescription>
           ) : (
-            <FeaturedMatch match={card.featured} format={format} href={href} />
-          ))}
-        {card.event && <FeaturedEvent event={card.event} href={href} />}
-      </div>
+            <CardDescription className="truncate">{card.context}</CardDescription>
+          )}
+          <CardAction>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={href}>
+                Open <span className="sr-only">{card.label}</span> <ArrowRight />
+              </Link>
+            </Button>
+          </CardAction>
+        </CardHeader>
 
-      <div className={SPORT_CARD_SECTION}>{middle}</div>
-      <div className={SPORT_CARD_SECTION}>
-        {rest.map((part, i) => (
-          <Fragment key={i}>{part}</Fragment>
-        ))}
-      </div>
+        {/* Three rows, always all three: a fourth would put this card's out of
+            line with the one beside it. */}
+        <PendingArea skeleton="box" className={SPORT_CARD_SECTION} overlayClassName="inset-x-6">
+          {card.featured &&
+            (card.following ? (
+              // Keyed by the game it leads with: another championship's games
+              // start from their own first one, not where the last were left.
+              <LeadCarousel key={card.featured.id} label={`${card.label} games`}>
+                {[card.featured, ...(card.following ?? [])].map((m) => (
+                  // Room under the teams for the carousel's dots.
+                  <FeaturedMatch key={m.id} match={m} format={format} href={href} className="pb-6" />
+                ))}
+              </LeadCarousel>
+            ) : (
+              <FeaturedMatch match={card.featured} format={format} href={href} />
+            ))}
+          {card.event && <FeaturedEvent event={card.event} href={card.event.href ?? href} />}
+        </PendingArea>
+
+        <div className={SPORT_CARD_SECTION}>{middle}</div>
+        <div className={SPORT_CARD_SECTION}>{rest}</div>
+      </CardPendingProvider>
     </Card>
   );
 }
@@ -163,7 +175,7 @@ export async function DashboardSportCard({
 /** The sport in the hub, and for football the league the card is set to. */
 function hubHref(card: DashboardSportCardData): string {
   const league = card.sportId === "football" ? card.competitions?.value : null;
-  return league ? `${sportPath("football")}&league=${league}` : sportPath(card.sportId);
+  return league ? sportPath("football", { league }) : sportPath(card.sportId);
 }
 
 type MatchGroup = { label: string; matches: DashboardMatch[] };

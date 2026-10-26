@@ -28,7 +28,9 @@ export default async function F1RaceRoute({ params, searchParams }: Props): Prom
   ]);
   if (!detail) notFound();
   return (
+    // Keyed by tab: a link to another tab of this page opens it.
     <F1RacePage
+      key={tab ?? ""}
       race={detail.race}
       season={detail.data.season}
       drivers={detail.data.drivers}

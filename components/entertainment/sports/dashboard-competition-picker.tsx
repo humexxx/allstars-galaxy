@@ -1,6 +1,6 @@
 "use client";
 
-import { useOptimistic, useTransition, type ReactElement } from "react";
+import { useOptimistic, type ReactElement } from "react";
 
 import { setSportCompetitionAction } from "@/app/actions/sports";
 import {
@@ -14,6 +14,8 @@ import { runAction } from "@/lib/actions/run";
 import { cn } from "@/lib/utils";
 import type { DashboardCompetitions, SportId } from "@/types/sports";
 
+import { useCardTransition } from "./shared/card-pending";
+
 /** Radix reserves the empty string, so the card's own pick needs a value of its own. */
 const AUTOMATIC = "automatic";
 
@@ -23,7 +25,8 @@ const AUTOMATIC = "automatic";
  * with the stage for LoL — and the menu ticks how that was chosen.
  *
  * The choice shows at once; the card under it follows when the dashboard
- * comes back for it, and a refused change falls back to the line as it was.
+ * comes back for it — its changing parts as skeletons meanwhile (the card's
+ * `CardPendingProvider`) — and a refused change falls back to the line as it was.
  */
 export function DashboardCompetitionPicker({
   sportId,
@@ -36,7 +39,7 @@ export function DashboardCompetitionPicker({
   competitions: DashboardCompetitions;
 }): ReactElement {
   const { waiting } = competitions;
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useCardTransition();
   // What is stored, not what the card honoured: a waiting choice is ticked so
   // that the card's own pick is a change (Radix reports none for the ticked
   // item), and choosing it clears the old choice instead of keeping it.

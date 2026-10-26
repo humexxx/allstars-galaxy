@@ -217,7 +217,7 @@ export function SportShell({
               on the border instead of being clipped by the scroller. */}
           <div
             ref={scrollerRef}
-            className="-mb-0.5 flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-0.5"
+            className="relative -mb-0.5 flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-0.5"
           >
             {tabs}
           </div>

@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
+import { toolInputSchema } from "@/lib/ai/assistant/converse";
 import type { AiModel } from "@/lib/ai/models";
 import { idSchema } from "@/schemas/common";
 import { travelChangeSetSchema } from "@/schemas/travel-assistant";
@@ -42,13 +43,6 @@ How to reply
 
 export const getTripInputSchema = z.object({ tripId: idSchema });
 
-/** A Zod schema as the tool's JSON Schema — the shape the model is told to send. */
-function inputSchema(schema: z.ZodType): Anthropic.Beta.BetaTool.InputSchema {
-  const json = z.toJSONSchema(schema, { io: "input" }) as Record<string, unknown>;
-  delete json.$schema;
-  return json as Anthropic.Beta.BetaTool.InputSchema;
-}
-
 /** The app's own tools, then the model's web search variant. */
 export function travelAssistantTools(model: AiModel): Anthropic.Beta.BetaToolUnion[] {
   return [
@@ -68,19 +62,19 @@ export const TRAVEL_ASSISTANT_TOOLS: Anthropic.Beta.BetaTool[] = [
     name: "get_trip",
     description:
       "One trip in full: its fields, its members (id, name, email, fixed share), its photos (id, url, caption), its payments (id, who, amount, day) and every item with its id, dates, route, price and travellers.",
-    input_schema: inputSchema(getTripInputSchema),
+    input_schema: toolInputSchema(getTripInputSchema),
   },
   {
     name: "open_trip",
     description:
       "Open a trip's page for the user. Do it first whenever the conversation turns to a trip that is not the one they have open, so they see the trip you are talking about.",
-    input_schema: inputSchema(getTripInputSchema),
+    input_schema: toolInputSchema(getTripInputSchema),
   },
   {
     name: "propose_changes",
     description:
       "Propose creating, changing or deleting trips, items, members, photos and payments. The user sees the changes on the trip's page and applies or discards them; nothing is written until they apply. Changes run in order, so a create_trip can be followed by add_item, add_member, add_photo or add_payment entries that name its ref.",
-    input_schema: inputSchema(travelChangeSetSchema),
+    input_schema: toolInputSchema(travelChangeSetSchema),
     // A whole trip's plan is a large input; stream it as it is written.
     eager_input_streaming: true,
   },

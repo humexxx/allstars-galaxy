@@ -46,7 +46,7 @@ describe("setSportCompetitionSchema", () => {
   });
 
   it("refuses a championship nobody offers", () => {
-    expect(valid("football", "bundesliga")).toBe(false);
+    expect(valid("football", "eredivisie")).toBe(false);
     expect(valid("football", "")).toBe(false);
   });
 
@@ -79,7 +79,7 @@ describe("setSportTeamFilterSchema", () => {
 
   it.each([
     ["football", "nba"],
-    ["football", "bundesliga"],
+    ["football", "eredivisie"],
     ["nba", "nfl"],
     ["nfl", "premier-league"],
     ["f1", "f1"],

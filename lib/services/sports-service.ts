@@ -21,6 +21,7 @@ import {
   getWorldCupData,
 } from "@/lib/services/football-data-service";
 import { getF1Data, getF1SeasonWinners } from "@/lib/services/jolpica-f1-service";
+import { getLolNews } from "@/lib/services/lolesports-news-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
@@ -277,8 +278,10 @@ export async function getDashboardSportCard(
       const [data, news] = await Promise.all([getNhlData(), getEspnNews("nhl")]);
       return { ...nhlCard(base, data), news: cardNews(news) };
     }
-    case "lol":
-      return lolCard(base, await getLolData(), oneOf(LOL_REGIONS, competition));
+    case "lol": {
+      const [data, news] = await Promise.all([getLolData(), getLolNews()]);
+      return { ...lolCard(base, data, oneOf(LOL_REGIONS, competition)), news: cardNews(news) };
+    }
     case "tennis": {
       const [data, news] = await Promise.all([getTennisData(), getEspnNews("atp")]);
       return { ...racquetCard(base, data.atp, "ATP"), news: cardNews(news) };

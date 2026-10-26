@@ -236,6 +236,6 @@ function SportContent({
     case "surf":
       return <SurfView data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "lol":
-      return <LolView data={payload.data} />;
+      return <LolView data={payload.data} news={payload.news} initialTab={initialTab} />;
   }
 }

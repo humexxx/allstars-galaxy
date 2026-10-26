@@ -24,6 +24,7 @@ import { getNhlData } from "@/lib/services/espn-nhl-service";
 import { getF1Data } from "@/lib/services/jolpica-f1-service";
 import { getF1WeekendResults } from "@/lib/services/openf1-service";
 import { getF1News } from "@/lib/services/rapidapi-f1-news-service";
+import { getLolNews } from "@/lib/services/lolesports-news-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
@@ -92,8 +93,8 @@ export async function loadSport(
       return { sport, data, news, weekend, sample: data === F1_DATA };
     }
     case "lol": {
-      const data = await getLolData();
-      return { sport, data, sample: data === LOL_DATA };
+      const [data, news] = await Promise.all([getLolData(), getLolNews()]);
+      return { sport, data, news, sample: data === LOL_DATA };
     }
     case "padel": {
       const [data, news] = await Promise.all([getPadelData(), getPadelNews()]);

@@ -43,6 +43,7 @@ import {
   type LolData,
   type LolMatch,
   type LolRegion,
+  type NewsStory,
   type LolSplit,
   type LolUpcoming,
   type Team,
@@ -51,6 +52,7 @@ import {
 import { ChampionCard } from "../shared/champion-card";
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { Last5Form } from "../shared/last-5-form";
+import { NewsTab } from "../shared/news-list";
 import { SportShell } from "../shared/sport-shell";
 import { STATUS_LABEL, SwissBracket } from "../shared/swiss-bracket";
 import { ShowMoreRows, useShownRows } from "../shared/show-more";
@@ -60,6 +62,10 @@ import { useMatchTime } from "../shared/time-zone-context";
 
 type LolViewProps = {
   data: LolData;
+  /** lolesports.com's news; no News tab without any. */
+  news?: NewsStory[];
+  /** `?tab=news` opens on the news. */
+  initialTab?: string;
 };
 
 type SplitState =
@@ -94,7 +100,7 @@ function useLeagueSplits(): {
   return { states, load };
 }
 
-export function LolView({ data }: LolViewProps): ReactElement {
+export function LolView({ data, news = [], initialTab }: LolViewProps): ReactElement {
   const [region, setRegion] = useState<LolRegion>(data.splits[0]?.region ?? "lec");
   const latest = useMemo(
     () => data.splits.find((s) => s.region === region) ?? data.splits[0],
@@ -148,7 +154,8 @@ export function LolView({ data }: LolViewProps): ReactElement {
   // body). Reset here, not by keying the Tabs: that remounted the shell too,
   // and the title menu or split pill just used lost the focus to <body>.
   const viewKey = `${region}-${split.tournamentId ?? ""}`;
-  const [tab, setTab] = useState(opening);
+  const hasNews = news.length > 0;
+  const [tab, setTab] = useState(initialTab === "news" && hasNews ? "news" : opening);
   const [tabFor, setTabFor] = useState(viewKey);
   if (tabFor !== viewKey) {
     setTabFor(viewKey);
@@ -200,6 +207,7 @@ export function LolView({ data }: LolViewProps): ReactElement {
                 Playoffs
               </TabsTrigger>
             )}
+            {hasNews && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }
       >
@@ -299,6 +307,22 @@ export function LolView({ data }: LolViewProps): ReactElement {
             </Fragment>
           )}
         </div>
+
+        {/* Riot's own news, led by the split's top four and the event on. */}
+        {hasNews && (
+          <TabsContent value="news">
+            <NewsTab
+              stories={news}
+              interest={{
+                names: split.standings.slice(0, 4).flatMap((s) => {
+                  const team = teamsMap.get(s.teamId);
+                  return team ? [team.name, team.code] : [];
+                }),
+                places: [split.name],
+              }}
+            />
+          </TabsContent>
+        )}
       </SportShell>
     </Tabs>
   );

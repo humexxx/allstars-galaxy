@@ -30,7 +30,7 @@ export function ShellHeadSkeleton({ title = "w-44" }: { title?: "w-44" | "w-72" 
   const hubControls = useContext(SportHubControls);
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-4 @5xl:flex-nowrap">
         <div className="flex min-w-0 items-center gap-3" aria-hidden="true">
           <Skeleton className="size-10 shrink-0 rounded-lg" />
           <div className="flex min-w-0 flex-col gap-1">

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.1](https://github.com/humexxx/allstars-galaxy/compare/v0.12.0...v0.12.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **entertainment:** keep the sports picker on one line beside the title ([6195615](https://github.com/humexxx/allstars-galaxy/commit/6195615cfb9137728c4d999588cc79beadc022fe))
+* **entertainment:** keep the sports picker on one line beside the title ([d2a6c89](https://github.com/humexxx/allstars-galaxy/commit/d2a6c89413b3d16bf3c1f5a5bfe9a7ebf17d425e))
+
 ## [0.12.0](https://github.com/humexxx/allstars-galaxy/compare/v0.11.0...v0.12.0) (2026-10-25)
 
 

@@ -896,6 +896,15 @@ describe("racquetCard", () => {
     const off = tour([tournament("Paris Masters", "upcoming")]);
     expect(__testing.racquetCard(base, off, "ATP").event).toMatchObject({ name: "Paris Masters", status: "upcoming" });
   });
+
+  it("links the tournament to its own page, not the sport's", () => {
+    const week = tour([tournament("vienna-2026", "live")]);
+    expect(__testing.racquetCard(base, week, "ATP").event?.href).toBe("/portal/entertainment/sports/tennis/vienna-2026");
+    const padel = { ...base, sportId: "padel", label: "Padel" } as const;
+    expect(__testing.racquetCard(padel, week, "Premier Padel").event?.href).toBe(
+      "/portal/entertainment/sports/padel/vienna-2026"
+    );
+  });
 });
 
 describe("surfCard", () => {

@@ -22,6 +22,7 @@ import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
 import { leadRace, startsIn, weekendNow } from "@/lib/sports/f1-weekend";
+import { tournamentPath } from "@/lib/sports/paths";
 import { splitSeasonLabel } from "@/lib/sports/season";
 import { calendarDayInTimeZone, formatDayRange } from "@/lib/utils/date";
 import type {
@@ -51,6 +52,7 @@ import type {
   NflData,
   NhlData,
   RacquetData,
+  RacquetSport,
   SurfData,
   SportId,
   Standing,
@@ -286,11 +288,11 @@ export async function getDashboardSportCard(
     }
     case "tennis": {
       const [data, news] = await Promise.all([getTennisData(), getEspnNews("atp")]);
-      return { ...racquetCard(base, data.atp, "ATP"), news: cardNews(news) };
+      return { ...racquetCard({ ...base, sportId: "tennis" }, data.atp, "ATP"), news: cardNews(news) };
     }
     case "padel": {
       const [data, news] = await Promise.all([getPadelData(), getPadelNews()]);
-      return { ...racquetCard(base, data.men, "Premier Padel"), news: cardNews(news) };
+      return { ...racquetCard({ ...base, sportId: "padel" }, data.men, "Premier Padel"), news: cardNews(news) };
     }
     case "surf": {
       const [data, news] = await Promise.all([getSurfData(), getSurfNews()]);
@@ -663,7 +665,11 @@ function swissRecords(stage: SwissStage): { teamId: string; wins: number; losses
 }
 
 /** The men's tour only, so no championship to pick: the hub follows no women's tour. */
-function racquetCard(base: CardBase, data: RacquetData, context: string): DashboardSportCard {
+function racquetCard(
+  base: CardBase & { sportId: RacquetSport },
+  data: RacquetData,
+  context: string
+): DashboardSportCard {
   const tournaments = data.tournaments;
   const event =
     tournaments.find((t) => t.status === "live") ??
@@ -680,6 +686,7 @@ function racquetCard(base: CardBase, data: RacquetData, context: string): Dashbo
             .filter(Boolean)
             .join(" · "),
           status: event.status,
+          href: tournamentPath(base.sportId, event.id),
         }
       : undefined,
     matches: [],

@@ -100,7 +100,13 @@ export type DashboardSportCard = {
    */
   following?: DashboardMatch[];
   /** Racquet sports have tournaments rather than matches on the dashboard. */
-  event?: { name: string; detail: string; status: "live" | "upcoming" | "completed" };
+  event?: {
+    name: string;
+    detail: string;
+    status: "live" | "upcoming" | "completed";
+    /** Its own page (a padel or tennis tournament's); else the card's sport page. */
+    href?: string;
+  };
   /** Listed under the lead (LoL: a day of an event is several series back to back). */
   matches: DashboardMatch[];
   /** More than one shows as a toggle (East / West, AFC / NFC). */

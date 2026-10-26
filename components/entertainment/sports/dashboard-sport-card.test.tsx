@@ -104,6 +104,24 @@ describe("DashboardSportCard", () => {
     expect(within(upNext).getByText("Oct 23")).toBeInTheDocument();
   });
 
+  it("opens a tournament on its own page, and the sport's when it has none", async () => {
+    const event = { name: "Kuwait Major", detail: "Kuwait City", status: "live" as const };
+    await renderCard({
+      ...card([]),
+      sportId: "padel",
+      label: "Padel",
+      event: { ...event, href: "/portal/entertainment/sports/padel/kuwait-major" },
+    });
+    expect(screen.getByRole("link", { name: /Kuwait Major/ })).toHaveAttribute(
+      "href",
+      "/portal/entertainment/sports/padel/kuwait-major"
+    );
+    cleanup();
+
+    await renderCard({ ...card([]), sportId: "surf", label: "Surfing", event: { ...event, name: "Tahiti Pro" } });
+    expect(screen.getByRole("link", { name: /Tahiti Pro/ }).getAttribute("href")).toContain("sport=surf");
+  });
+
   it("asks for the card on the championship it is set to", async () => {
     await renderCard(card([]), "lck");
 

@@ -162,7 +162,7 @@ export async function DashboardSportCard({
             ) : (
               <FeaturedMatch match={card.featured} format={format} href={href} />
             ))}
-          {card.event && <FeaturedEvent event={card.event} href={href} />}
+          {card.event && <FeaturedEvent event={card.event} href={card.event.href ?? href} />}
         </PendingArea>
 
         <div className={SPORT_CARD_SECTION}>{middle}</div>

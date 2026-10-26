@@ -107,7 +107,7 @@ describe("DashboardSportCard", () => {
   it("asks for the card on the championship it is set to", async () => {
     await renderCard(card([]), "lck");
 
-    expect(getDashboardSportCard).toHaveBeenCalledWith("lol", "lck");
+    expect(getDashboardSportCard).toHaveBeenCalledWith("lol", "lck", expect.any(String));
   });
 
   it("makes the line under the title the championship picker when the sport has a choice", async () => {

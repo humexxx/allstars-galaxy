@@ -73,11 +73,14 @@ export default async function PortalLayout({
                 sidebar's width instead of scrolling inside its own card. */}
               <SidebarInset className="min-w-0">
                 {/* No container here: each route renders its own
-                  `PortalPageContainer`. */}
+                  `PortalPageContainer`. `relative`: an absolutely placed
+                  descendant with nothing positioned nearer (every `sr-only`
+                  label) otherwise sits outside this scroller, unclipped, and
+                  lengthened the document into a second scroll. */}
                 <main
                   id="main-content"
                   tabIndex={-1}
-                  className="flex min-h-0 min-w-0 flex-1 flex-col outline-none md:overflow-auto"
+                  className="relative flex min-h-0 min-w-0 flex-1 flex-col outline-none md:overflow-auto"
                 >
                   {children}
                 </main>

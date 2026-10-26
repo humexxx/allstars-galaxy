@@ -23,7 +23,7 @@ import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
 import { leadRace, startsIn, weekendNow } from "@/lib/sports/f1-weekend";
 import { splitSeasonLabel } from "@/lib/sports/season";
-import { formatDayRange } from "@/lib/utils/date";
+import { calendarDayInTimeZone, formatDayRange } from "@/lib/utils/date";
 import type {
   BracketMatch,
   DashboardCompetitions,
@@ -196,8 +196,12 @@ export async function setSportTeamFilter(
 
 // ---------- Dashboard cards ----------
 
-/** Games the lead box steps through after its featured one. */
-const CARD_FOLLOWING = 4;
+/** Games in a card's lead box, played and to come. */
+const CARD_SLIDES = 5;
+/** Of them, the most of yesterday's and today's results… */
+const CARD_RECENT = 3;
+/** …and the fewest still to come, when there are some. */
+const CARD_UPCOMING = 2;
 /** Rows of a card's table. */
 const CARD_ROWS = 5;
 
@@ -217,6 +221,13 @@ const LOL_AUTOMATIC = "Follow what's on";
 
 type CardBase = Pick<DashboardSportCard, "sportId" | "label" | "emoji">;
 
+/** The reader's zone and the moment, for "yesterday" and "today" on their calendar. */
+type CardClock = { timeZone: string; now: number };
+
+function utcClock(): CardClock {
+  return { timeZone: "UTC", now: Date.now() };
+}
+
 /**
  * One favourite sport's dashboard card, read from the same cached feed as its
  * view, for the championship it is set to (`competition`, null for the
@@ -230,11 +241,13 @@ type CardBase = Pick<DashboardSportCard, "sportId" | "label" | "emoji">;
  */
 export async function getDashboardSportCard(
   sportId: SportId,
-  competition: string | null = null
+  competition: string | null = null,
+  timeZone = "UTC"
 ): Promise<DashboardSportCard | null> {
   const meta = SPORTS_BY_ID.get(sportId);
   if (!meta) return null;
   const base: CardBase = { sportId, label: meta.label, emoji: meta.emoji };
+  const clock: CardClock = { timeZone, now: Date.now() };
 
   switch (sportId) {
     case "football": {
@@ -243,7 +256,7 @@ export async function getDashboardSportCard(
       // costs football-data nothing.
       const [data, news] = await Promise.all([getFootballCompetition(id), getEspnNews(id)]);
       return {
-        ...footballCard(base, data),
+        ...footballCard(base, data, clock),
         news: cardNews(news),
         competitions: {
           value: id,
@@ -253,23 +266,23 @@ export async function getDashboardSportCard(
     }
     case "nba": {
       const [data, news] = await Promise.all([getNbaData(), getEspnNews("nba")]);
-      return { ...nbaCard(base, data), news: cardNews(news) };
+      return { ...nbaCard(base, data, clock), news: cardNews(news) };
     }
     case "nfl": {
       const [data, news] = await Promise.all([getNflData(), getEspnNews("nfl")]);
-      return { ...nflCard(base, data), news: cardNews(news) };
+      return { ...nflCard(base, data, clock), news: cardNews(news) };
     }
     case "mlb": {
       const [data, news] = await Promise.all([getMlbData(), getEspnNews("mlb")]);
-      return { ...mlbCard(base, data), news: cardNews(news) };
+      return { ...mlbCard(base, data, clock), news: cardNews(news) };
     }
     case "nhl": {
       const [data, news] = await Promise.all([getNhlData(), getEspnNews("nhl")]);
-      return { ...nhlCard(base, data), news: cardNews(news) };
+      return { ...nhlCard(base, data, clock), news: cardNews(news) };
     }
     case "lol": {
       const [data, news] = await Promise.all([getLolData(), getLolNews()]);
-      return { ...lolCard(base, data, oneOf(LOL_REGIONS, competition)), news: cardNews(news) };
+      return { ...lolCard(base, data, oneOf(LOL_REGIONS, competition), clock), news: cardNews(news) };
     }
     case "tennis": {
       const [data, news] = await Promise.all([getTennisData(), getEspnNews("atp")]);
@@ -311,14 +324,16 @@ function oneOf<T extends string>(choices: readonly T[], value: string | null): T
  * in its cache.
  */
 export async function getF1DashboardHighlight(
-  now: number = Date.now()
+  now?: number,
+  timeZone = "UTC"
 ): Promise<F1DashboardHighlight | null> {
+  now ??= Date.now();
   // A season is a calendar year, so last season's winners can be asked for
   // alongside the feed rather than after it, which held the card for a
   // second timeout on a cold cache.
   const lastSeason = new Date(now).getUTCFullYear() - 1;
   const [data, winners] = await Promise.all([getF1Data(now), getF1SeasonWinners(lastSeason)]);
-  const highlight = f1Highlight(data, now);
+  const highlight = f1Highlight(data, now, timeZone);
   // The sample is not a season anybody raced, so nobody won there last year.
   if (!highlight || highlight.race.status === "completed" || data === F1_DATA) return highlight;
   // Only around the new year can the feed's season and the calendar's differ.
@@ -333,7 +348,7 @@ export async function getF1DashboardHighlight(
  * as a toggle. A World Cup group is not a conference: twelve of them would be
  * a dozen toggles, so its card has none.
  */
-function footballCard(base: CardBase, data: FootballLeagueData): DashboardSportCard {
+function footballCard(base: CardBase, data: FootballLeagueData, clock: CardClock = utcClock()): DashboardSportCard {
   const teams = teamsById(data.teams);
   const table = (id: string, label: string, standings: Standing[]): DashboardTable => ({
     id,
@@ -352,7 +367,7 @@ function footballCard(base: CardBase, data: FootballLeagueData): DashboardSportC
   return {
     ...base,
     context: data.league.name,
-    ...featuredAndFollowing(data.matches, teams),
+    ...featuredAndFollowing(data.matches, teams, clock),
     tables,
   };
 }
@@ -381,7 +396,7 @@ function groupTables<S extends { position: number; teamId: string }, G extends s
     .filter((t) => t.rows.length > 0);
 }
 
-function nbaCard(base: CardBase, data: NbaData): DashboardSportCard {
+function nbaCard(base: CardBase, data: NbaData, clock: CardClock = utcClock()): DashboardSportCard {
   const teams = teamsById(data.teams);
   const tables = groupTables(
     data.standings,
@@ -396,7 +411,7 @@ function nbaCard(base: CardBase, data: NbaData): DashboardSportCard {
   return {
     ...base,
     context: `Season ${data.season}`,
-    ...featuredAndFollowing(data.games, teams),
+    ...featuredAndFollowing(data.games, teams, clock),
     tables,
     note: tables.length === 0 ? nbaNote(data) : undefined,
   };
@@ -411,12 +426,12 @@ function nbaNote(data: NbaData): DashboardSportCard["note"] {
     : { title: "Standings start with the opener", when };
 }
 
-function nflCard(base: CardBase, data: NflData): DashboardSportCard {
+function nflCard(base: CardBase, data: NflData, clock: CardClock = utcClock()): DashboardSportCard {
   const teams = teamsById(data.teams);
   return {
     ...base,
     context: `Season ${data.season}`,
-    ...featuredAndFollowing(data.games, teams),
+    ...featuredAndFollowing(data.games, teams, clock),
     tables: groupTables(
       data.standings,
       teams,
@@ -430,12 +445,12 @@ function nflCard(base: CardBase, data: NflData): DashboardSportCard {
   };
 }
 
-function mlbCard(base: CardBase, data: MlbData): DashboardSportCard {
+function mlbCard(base: CardBase, data: MlbData, clock: CardClock = utcClock()): DashboardSportCard {
   const teams = teamsById(data.teams);
   return {
     ...base,
     context: `Season ${data.season}`,
-    ...featuredAndFollowing(data.games, teams),
+    ...featuredAndFollowing(data.games, teams, clock),
     tables: groupTables(
       data.standings,
       teams,
@@ -450,12 +465,12 @@ function mlbCard(base: CardBase, data: MlbData): DashboardSportCard {
 }
 
 /** Each conference by points, the hockey table's own order. */
-function nhlCard(base: CardBase, data: NhlData): DashboardSportCard {
+function nhlCard(base: CardBase, data: NhlData, clock: CardClock = utcClock()): DashboardSportCard {
   const teams = teamsById(data.teams);
   return {
     ...base,
     context: `Season ${splitSeasonLabel(data.season)}`,
-    ...featuredAndFollowing(data.games, teams),
+    ...featuredAndFollowing(data.games, teams, clock),
     tables: groupTables(
       data.standings,
       teams,
@@ -474,7 +489,12 @@ function nhlCard(base: CardBase, data: NhlData): DashboardSportCard {
  * feed) the first the feed lists: the international event while it leads,
  * else the split on now.
  */
-function lolCard(base: CardBase, data: LolData, region: LolRegion | null = null): DashboardSportCard {
+function lolCard(
+  base: CardBase,
+  data: LolData,
+  region: LolRegion | null = null,
+  clock: CardClock = utcClock()
+): DashboardSportCard {
   const chosen = region ? data.splits.find((s) => s.region === region) : undefined;
   const competitions: DashboardCompetitions = {
     value: chosen ? chosen.region : null,
@@ -482,33 +502,36 @@ function lolCard(base: CardBase, data: LolData, region: LolRegion | null = null)
     options: data.splits.map((s) => ({ id: s.region, label: s.name })),
     waiting: region && !chosen ? { id: region, label: LOL_LEAGUE[region] } : undefined,
   };
-  return { ...lolSplitCard(base, data, chosen ?? data.splits[0]), competitions };
+  return { ...lolSplitCard(base, data, chosen ?? data.splits[0], clock), competitions };
 }
 
-function lolSplitCard(base: CardBase, data: LolData, split: LolSplit | undefined): DashboardSportCard {
+function lolSplitCard(base: CardBase, data: LolData, split: LolSplit | undefined, clock: CardClock): DashboardSportCard {
   if (!split) return { ...base, context: "No event on", matches: [], tables: [] };
   const teams = teamsById(split.teams);
   if (split.international && split.champion) {
     return lolOffSeasonCard(base, data, { ...split, champion: split.champion }, teams);
   }
-  // Already in display order: live, then the nearest upcoming, then the
-  // latest results. The box steps through what is still to come or, with
-  // nothing ahead, what just finished — as football's does.
-  const [first, ...rest] = split.matches.map((m) => lolCardMatch(m, teams));
-  const ahead = rest.filter((m) => m.status !== "result");
+  const lead = leadGames(
+    split.matches.filter((m) => m.status !== "postponed" && m.status !== "cancelled").map((m) => lolCardMatch(m, teams)),
+    clock
+  );
   const swiss = lolSwiss(split, teams);
   return {
     ...base,
-    context: lolContext(split, first),
-    featured: first,
-    following: (ahead.length > 0 ? ahead : rest).slice(0, CARD_FOLLOWING),
+    context: lolContext(split, focusOf([lead.featured, ...(lead.following ?? [])].filter((m) => m !== undefined))),
+    ...lead,
     matches: [],
     tables: swiss ? [] : lolTables(split, teams),
     swiss,
   };
 }
 
-/** "Worlds 2026 · Swiss": the split and the stage its featured match is in. */
+/** The game that says where an event stands: what is live, else what is next, else the latest. */
+function focusOf(games: DashboardMatch[]): DashboardMatch | undefined {
+  return games.find((g) => g.status === "live") ?? games.find((g) => g.status === "upcoming") ?? games.at(-1);
+}
+
+/** "Worlds 2026 · Swiss": the split and the stage its focus is in. */
 function lolContext(split: LolSplit, featured: DashboardMatch | undefined): string {
   return featured?.label ? `${split.name} · ${featured.label.split(" · ")[0]}` : split.name;
 }
@@ -581,7 +604,7 @@ function lolOffSeasonCard(
     ...base,
     context: lolContext(event, featured),
     featured,
-    following: knockouts.filter((m) => m !== featured).slice(0, CARD_FOLLOWING),
+    following: knockouts.filter((m) => m !== featured).slice(0, CARD_SLIDES - 1),
     matches: [],
     tables: champions ? [champions] : [],
   };
@@ -711,8 +734,18 @@ function surfCard(base: CardBase, data: SurfData): DashboardSportCard {
   };
 }
 
-function f1Highlight(data: F1Data, now: number): F1DashboardHighlight | null {
-  const race = leadRace(data.races);
+/**
+ * The race the card leads with. One just run stays on the day it was run and
+ * the next, on the reader's calendar, with its winner — a Sunday race until
+ * Tuesday — and then the next one takes over; one on track comes first.
+ */
+function f1Highlight(data: F1Data, now: number, timeZone = "UTC"): F1DashboardHighlight | null {
+  const dayOf = (instant: number): number => calendarDayInTimeZone(new Date(instant), timeZone).getTime();
+  const yesterday = dayOf(now) - 86_400_000;
+  const justRun = data.races.findLast(
+    (r) => r.status === "completed" && dayOf(Date.parse(r.startsAt ?? `${r.date}T12:00:00Z`)) >= yesterday
+  );
+  const race = data.races.find((r) => r.status === "live") ?? justRun ?? leadRace(data.races);
   if (!race) return null;
   const { live, next } = race.status === "completed" ? {} : weekendNow(race, now);
   return {
@@ -744,31 +777,49 @@ function teamRow(position: number, team: Team | undefined, id: string, value: st
 const FINISHED = new Set<Match["status"]>(["ft", "aet", "pen"]);
 
 /**
- * The card's featured match and the games its box steps through after it:
- * whatever else is live, then the next fixtures — or, with nothing ahead, the
- * latest results.
+ * A football-style card's lead games, from its feed's matches. A postponed or
+ * cancelled game has no score to show and is no one's next game: left out.
  */
 function featuredAndFollowing(
   all: Match[],
-  teams: Map<string, Team>
+  teams: Map<string, Team>,
+  clock: CardClock
 ): Pick<DashboardSportCard, "featured" | "following" | "matches"> {
-  const featured = pickFeaturedMatch(all);
-  if (!featured) return { following: [], matches: [] };
-  const others = all.filter((m) => m.id !== featured.id);
-  const ahead = [
-    ...others.filter((m) => m.status === "live"),
-    ...others
-      .filter((m) => m.status === "scheduled")
-      .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime()),
-  ];
-  const behind = others
-    .filter((m) => FINISHED.has(m.status))
-    .sort((a, b) => new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime());
-  return {
-    featured: cardMatch(featured, teams),
-    following: (ahead.length > 0 ? ahead : behind).slice(0, CARD_FOLLOWING).map((m) => cardMatch(m, teams)),
-    matches: [],
-  };
+  const games = all.filter((m) => m.status !== "postponed" && m.status !== "cancelled").map((m) => cardMatch(m, teams));
+  return { ...leadGames(games, clock), matches: [] };
+}
+
+/**
+ * The games a card's lead box steps through, in the order they are played:
+ * yesterday's and today's results on the reader's calendar (the latest
+ * `CARD_RECENT`), whatever is live, then the next ones — `CARD_SLIDES` in all,
+ * at least `CARD_UPCOMING` of them still to come when there are some. With
+ * nothing played lately and nothing ahead, the latest results.
+ */
+function leadGames(games: DashboardMatch[], clock: CardClock): Pick<DashboardSportCard, "featured" | "following"> {
+  const byStart = [...games].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+  const dayOf = (instant: string | number): string =>
+    calendarDayInTimeZone(new Date(instant), clock.timeZone).toISOString().slice(0, 10);
+  // UTC midnight of the reader's today, a day back: calendar arithmetic, no DST.
+  const yesterday = new Date(calendarDayInTimeZone(new Date(clock.now), clock.timeZone).getTime() - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const results = byStart.filter((g) => g.status === "result");
+  const recent = results.filter((g) => dayOf(g.startsAt) >= yesterday);
+  const live = byStart.filter((g) => g.status === "live");
+  const ahead = byStart.filter((g) => g.status === "upcoming");
+
+  let picked: DashboardMatch[];
+  if (recent.length + live.length + ahead.length === 0) {
+    picked = results.slice(-CARD_SLIDES);
+  } else {
+    const keptRecent = Math.min(recent.length, CARD_RECENT);
+    const upcoming = ahead.slice(0, Math.max(CARD_UPCOMING, CARD_SLIDES - live.length - keptRecent));
+    const room = Math.min(keptRecent, Math.max(0, CARD_SLIDES - live.length - upcoming.length));
+    picked = [...recent.slice(recent.length - room), ...live, ...upcoming];
+  }
+  const [featured, ...following] = picked;
+  return featured ? { featured, following } : { following: [] };
 }
 
 function side(team: Team | undefined, id: string, score: number | null, winner: boolean): DashboardSide {
@@ -852,23 +903,6 @@ function lolBracketCardMatch(
   };
 }
 
-/**
- * Pick the most "interesting" match to surface: live > next scheduled > most
- * recent finished. Returns null when the list is empty.
- */
-function pickFeaturedMatch(matches: Match[]): Match | null {
-  const live = matches.find((m) => m.status === "live");
-  if (live) return live;
-  const upcoming = matches
-    .filter((m) => m.status === "scheduled")
-    .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime());
-  if (upcoming[0]) return upcoming[0];
-  const finished = matches
-    .filter((m) => FINISHED.has(m.status))
-    .sort((a, b) => new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime());
-  return finished[0] ?? matches[0] ?? null;
-}
-
 function matchTone(match: Match): DashboardMatch["status"] {
   if (match.status === "live") return "live";
   if (match.status === "scheduled") return "upcoming";
@@ -876,4 +910,4 @@ function matchTone(match: Match): DashboardMatch["status"] {
 }
 
 /** Pure helpers, exported for their tests. */
-export const __testing = { lolCard, lolSwiss, racquetCard, surfCard, swissRecords, f1Highlight };
+export const __testing = { leadGames, lolCard, lolSwiss, racquetCard, surfCard, swissRecords, f1Highlight };

@@ -456,7 +456,7 @@ describe("getDashboardSportCard", () => {
     expect(card.matches).toEqual([]);
   });
 
-  it("puts another game being played before the fixtures, and the latest results when nothing is ahead", async () => {
+  it("steps through the day's games in the order they are played, the results first", async () => {
     const at = (id: number, state: string, hour: number) => {
       const datetime = `2026-10-21T0${hour}:00:00Z`;
       return { ...nbaGame(id, state, 50, 40), date: "2026-10-21", datetime, status: state === "final" ? "Final" : datetime };
@@ -465,14 +465,14 @@ describe("getDashboardSportCard", () => {
       [at(1, "scheduled", 9), at(2, "in", 1), at(3, "in", 2), at(4, "final", 0)],
       () => getDashboardSportCard("nba")
     ))!;
-    expect([busy.featured!, ...busy.following!].map((m) => m.status)).toEqual(["live", "live", "upcoming"]);
+    expect([busy.featured!, ...busy.following!].map((m) => m.status)).toEqual(["result", "live", "live", "upcoming"]);
 
     const over = (await withNbaGames(
       [at(1, "final", 1), at(2, "final", 3), at(3, "final", 2)],
       () => getDashboardSportCard("nba")
     ))!;
     const hours = [over.featured!, ...over.following!].map((m) => new Date(m.startsAt).getUTCHours());
-    expect(hours).toEqual([3, 2, 1]);
+    expect(hours).toEqual([1, 2, 3]);
   });
 
   it("reads the NBA from the live feed, not the fixture", async () => {
@@ -612,12 +612,18 @@ describe("the LoL card across a season", () => {
   const table = (card: DashboardSportCard) =>
     card.tables.map((t) => ({ label: t.label, rows: t.rows.map((r) => `${r.name} ${r.value}`) }));
 
-  it("during the Swiss stage: the games still to come in the box, and the stage by record", async () => {
+  it("during the Swiss stage: yesterday's results and the next games in the box, and the stage by record", async () => {
     const card = await lolCardOn("2026-10-23T23:00:00Z");
 
     expect(card.context).toBe("Worlds 2026 · Swiss");
-    expect(line(card.featured!)).toBe("T1 v FLY upcoming");
-    expect(card.following!.map(line)).toEqual(["AL v HLE upcoming", "TES v G2 upcoming", "PSG v GEN upcoming"]);
+    // The latest three of yesterday's and today's, then two still to come, in the order played.
+    expect([card.featured!, ...card.following!].map(line)).toEqual([
+      "FNC v CFO result",
+      "MKOI v KT result",
+      "100T v BLG result",
+      "T1 v FLY upcoming",
+      "AL v HLE upcoming",
+    ]);
     expect(card.matches).toEqual([]);
     expect(card.tables).toEqual([]);
     // Best record first; the teams yet to play their first series are on 0–0.
@@ -660,14 +666,18 @@ describe("the LoL card across a season", () => {
     ]);
   });
 
-  it("through the knockouts: no stale Swiss stage, the games still to come in the box", async () => {
+  it("through the knockouts: no stale Swiss stage, the latest result and the games still to come", async () => {
     const card = await lolCardOn("2026-11-04T12:00:00Z");
 
     expect(card.context).toBe("Worlds 2026 · Quarterfinals");
     expect(card.tables).toEqual([]);
     expect(card.swiss).toBeUndefined();
-    expect(line(card.featured!)).toBe("AL v T1 upcoming");
-    expect(card.following!.map(line)).toEqual(["HLE v CFO upcoming", "G2 v GEN upcoming"]);
+    expect([card.featured!, ...card.following!].map(line)).toEqual([
+      "KT v TES result",
+      "AL v T1 upcoming",
+      "HLE v CFO upcoming",
+      "G2 v GEN upcoming",
+    ]);
   });
 
   for (const day of ["2026-11-20", "2026-12-10", "2027-01-05"]) {
@@ -742,9 +752,12 @@ describe("the LoL card across a season", () => {
     const card = await lolCardOn("2027-01-14T12:00:00Z");
 
     expect(card.context).toBe("LCK Split 1 · Week 1");
-    expect(line(card.featured!)).toBe("HLE v BFX upcoming");
-    // Nothing else ahead this week: the box steps back through the results.
-    expect(card.following!.map(line)).toEqual(["T1 v GEN result", "DK v KT result"]);
+    // Yesterday's and today's results, then tomorrow's game.
+    expect([card.featured!, ...card.following!].map(line)).toEqual([
+      "DK v KT result",
+      "T1 v GEN result",
+      "HLE v BFX upcoming",
+    ]);
     expect(table(card)).toEqual([{ label: "Standings", rows: ["DK 1–0", "KT 0–1"] }]);
   });
 });
@@ -912,3 +925,59 @@ describe("surfCard", () => {
     expect(off.event).toMatchObject({ name: "Philippines", status: "upcoming" });
   });
 });
+
+describe("leadGames", () => {
+  const game = (id: string, status: DashboardMatch["status"], startsAt: string): DashboardMatch => ({
+    id,
+    status,
+    startsAt,
+    home: { name: "H", code: "H", score: status === "upcoming" ? null : 1, winner: false },
+    away: { name: "A", code: "A", score: status === "upcoming" ? null : 0, winner: false },
+  });
+  const ids = (lead: Pick<DashboardSportCard, "featured" | "following">): string[] =>
+    [lead.featured, ...(lead.following ?? [])].filter((m) => m !== undefined).map((m) => m.id);
+  // Sunday Oct 25, 9:30pm in Costa Rica.
+  const clock = { timeZone: "America/Costa_Rica", now: Date.parse("2026-10-26T03:30:00Z") };
+
+  it("takes yesterday and today on the reader's calendar, not UTC's", () => {
+    const lead = __testing.leadGames(
+      [
+        // Friday evening in Costa Rica, though Saturday in UTC: two days back.
+        game("fri", "result", "2026-10-24T02:00:00Z"),
+        game("sat", "result", "2026-10-24T20:00:00Z"),
+        game("sun", "result", "2026-10-25T20:00:00Z"),
+        game("mon", "upcoming", "2026-10-26T20:00:00Z"),
+      ],
+      clock
+    );
+    expect(ids(lead)).toEqual(["sat", "sun", "mon"]);
+  });
+
+  it("keeps the latest three results and at least two games to come, five in all", () => {
+    const results = ["r1", "r2", "r3", "r4"].map((id, i) => game(id, "result", `2026-10-25T1${i}:00:00Z`));
+    const ahead = ["u1", "u2", "u3", "u4"].map((id, i) => game(id, "upcoming", `2026-10-27T1${i}:00:00Z`));
+    expect(ids(__testing.leadGames([...ahead, ...results], clock))).toEqual(["r2", "r3", "r4", "u1", "u2"]);
+    // Nothing played lately: the games to come fill the box.
+    expect(ids(__testing.leadGames(ahead, clock))).toEqual(["u1", "u2", "u3", "u4"]);
+  });
+
+  it("puts what is live between the results and the games to come", () => {
+    const lead = __testing.leadGames(
+      [
+        game("u1", "upcoming", "2026-10-26T20:00:00Z"),
+        game("live", "live", "2026-10-26T02:00:00Z"),
+        game("r1", "result", "2026-10-25T18:00:00Z"),
+        game("u2", "upcoming", "2026-10-27T20:00:00Z"),
+      ],
+      clock
+    );
+    expect(ids(lead)).toEqual(["r1", "live", "u1", "u2"]);
+  });
+
+  it("shows the latest results when nothing is recent or ahead, and nothing at all with no games", () => {
+    const old = ["a", "b"].map((id, i) => game(id, "result", `2026-09-0${i + 1}T20:00:00Z`));
+    expect(ids(__testing.leadGames(old, clock))).toEqual(["a", "b"]);
+    expect(__testing.leadGames([], clock)).toEqual({ following: [] });
+  });
+});
+

@@ -54,10 +54,9 @@ export async function DashboardSportCard({
   sportId: SportId;
   competition?: string | null;
 }): Promise<ReactElement | null> {
-  const [card, timeZone] = await Promise.all([
-    getDashboardSportCard(sportId, competition),
-    getRequestTimeZone(),
-  ]);
+  // The reader's zone first, a cookie: "yesterday" and "today" are theirs.
+  const timeZone = await getRequestTimeZone();
+  const card = await getDashboardSportCard(sportId, competition, timeZone);
   if (!card) return null;
   // The reader's zone, not the server's (UTC): an evening kickoff in Costa
   // Rica is that evening, not tomorrow.

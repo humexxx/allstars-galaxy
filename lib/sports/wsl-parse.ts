@@ -1,3 +1,4 @@
+import { decodeEntities, htmlText } from "@/lib/utils/html";
 import type { SurfDraw, SurfEvent, SurfFinal, SurfHeat, SurfRanking, SurfRound, SurfStatus, SurfSurfer } from "@/types/sports";
 
 /**
@@ -12,59 +13,6 @@ import type { SurfDraw, SurfEvent, SurfFinal, SurfHeat, SurfRanking, SurfRound, 
 
 // ---------- Text ----------
 
-const NAMED_ENTITIES: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  apos: "'",
-  nbsp: " ",
-  ndash: "–",
-  mdash: "—",
-  lsquo: "‘",
-  rsquo: "’",
-  ldquo: "“",
-  rdquo: "”",
-  hellip: "…",
-  szlig: "ß",
-  oslash: "ø",
-  Oslash: "Ø",
-  aelig: "æ",
-  AElig: "Æ",
-};
-
-/** The diacritic each accented-letter entity puts on its letter: `&eacute;` is e + ◌́. */
-const COMBINING: Record<string, string> = {
-  acute: "́",
-  grave: "̀",
-  circ: "̂",
-  tilde: "̃",
-  uml: "̈",
-  ring: "̊",
-  cedil: "̧",
-};
-
-export function decodeEntities(text: string): string {
-  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, body: string) => {
-    if (body.startsWith("#")) {
-      const hex = body[1] === "x" || body[1] === "X";
-      const code = Number.parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
-      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
-    }
-    const named = NAMED_ENTITIES[body] ?? NAMED_ENTITIES[body.toLowerCase()];
-    if (named) return named;
-    const accented = /^([a-z])(acute|grave|circ|tilde|uml|ring|cedil)$/i.exec(body);
-    return accented ? `${accented[1]}${COMBINING[accented[2].toLowerCase()]}`.normalize("NFC") : whole;
-  });
-}
-
-/** An element's words: tags dropped, entities decoded, spaces collapsed. */
-function textOf(html: string): string {
-  return decodeEntities(html.replace(/<[^>]*>/g, " "))
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function attrOf(tag: string, name: string): string | undefined {
   const value = new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
   return value === undefined ? undefined : decodeEntities(value);
@@ -75,7 +23,7 @@ function textIn(html: string, className: string, closing = "div"): string | unde
   const pattern = new RegExp(`class="(?:[^"]*\\s)?${className}(?:\\s[^"]*)?"[^>]*>([\\s\\S]*?)</${closing}>`);
   const inner = pattern.exec(html)?.[1];
   if (inner === undefined) return undefined;
-  const text = textOf(inner);
+  const text = htmlText(inner);
   return text || undefined;
 }
 
@@ -162,14 +110,14 @@ export function parseSchedule(html: string, year: number): WslEvent[] {
     const anchor = /<a\s[^>]*class="event-schedule-details__event-name"[^>]*>([\s\S]*?)<\/a>/.exec(cells);
     const link = anchor && /\/events\/(\d{4})\/ct\/(\d+)\/([^/?#"]+)/.exec(anchor[0]);
     const dateText = /class="event-date-range[^"]*"[^>]*>([\s\S]*?)<\/td>/.exec(cells)?.[1];
-    const dates = dateText ? parseDateRange(textOf(dateText), year) : null;
+    const dates = dateText ? parseDateRange(htmlText(dateText), year) : null;
     if (!anchor || !link || Number(link[1]) !== year || !dates) continue;
     const modifier = /\bevent-status--([a-z-]+)/.exec(cells)?.[1];
     if (!modifier) throw new Error(`wsl: no status read for event ${link[2]}`);
     const status = eventStatus(modifier);
     if (status === "canceled") continue;
 
-    const name = textOf(anchor[1].split(/<span[^>]*event-schedule-details__sponsor/)[0])
+    const name = htmlText(anchor[1].split(/<span[^>]*event-schedule-details__sponsor/)[0])
       .replace(/\s+Presented By\b.*$/i, "")
       .trim();
     const stop = Number(/Event\s+(\d+)/.exec(textIn(cells, "event-tour-details__secondary") ?? "")?.[1]);
@@ -295,7 +243,7 @@ export function parseDraw(html: string, eventId: string): SurfDraw {
     const header = /^\s*<div class="post-event-watch-heat-grid__round-header">([\s\S]*?)<\/div>/.exec(
       html.slice(m.index + m[0].length)
     )?.[1];
-    return { at: m.index, roundId: m[1], label: header ? textOf(header) : undefined };
+    return { at: m.index, roundId: m[1], label: header ? htmlText(header) : undefined };
   });
 
   const heats = sections(html, /<div\s+class="post-event-watch-heat-grid__heat\s[^"]*"[^>]*>/).map(({ match, body }) =>

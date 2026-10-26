@@ -24,10 +24,13 @@ import { getNhlData } from "@/lib/services/espn-nhl-service";
 import { getF1Data } from "@/lib/services/jolpica-f1-service";
 import { getF1WeekendResults } from "@/lib/services/openf1-service";
 import { getF1News } from "@/lib/services/rapidapi-f1-news-service";
+import { getLolNews } from "@/lib/services/lolesports-news-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
 import { getSurfData } from "@/lib/services/wsl-surf-service";
+import { getPadelNews } from "@/lib/services/premier-padel-news-service";
+import { getSurfNews } from "@/lib/services/stab-surf-news-service";
 import { racesTabGroups, weekendWindow } from "@/lib/sports/f1-weekend";
 import { type SportPayload } from "@/lib/sports/payload";
 import type { FootballLeagueId, SportId } from "@/types/sports";
@@ -90,12 +93,12 @@ export async function loadSport(
       return { sport, data, news, weekend, sample: data === F1_DATA };
     }
     case "lol": {
-      const data = await getLolData();
-      return { sport, data, sample: data === LOL_DATA };
+      const [data, news] = await Promise.all([getLolData(), getLolNews()]);
+      return { sport, data, news, sample: data === LOL_DATA };
     }
     case "padel": {
-      const data = await getPadelData();
-      return { sport, data, sample: data === PADEL_DATA };
+      const [data, news] = await Promise.all([getPadelData(), getPadelNews()]);
+      return { sport, data, news, sample: data === PADEL_DATA };
     }
     case "tennis": {
       const [data, news] = await Promise.all([getTennisData(), getEspnNews("atp")]);
@@ -118,8 +121,8 @@ export async function loadSport(
       return { sport, data, news, sample: data === NHL_DATA };
     }
     case "surf": {
-      const data = await getSurfData();
-      return { sport, data, sample: data === SURF_DATA };
+      const [data, news] = await Promise.all([getSurfData(), getSurfNews()]);
+      return { sport, data, news, sample: data === SURF_DATA };
     }
   }
 }

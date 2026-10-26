@@ -29,16 +29,7 @@ vi.mock("@/db", () => ({
 import { db } from "@/db";
 import { getFootballLeague } from "@/lib/data/sports/football";
 import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
-import type {
-  BracketMatch,
-  DashboardMatch,
-  DashboardSportCard,
-  LolRegion,
-  LolSplit,
-  RacquetData,
-  RacquetTournament,
-  Team,
-} from "@/types/sports";
+import type { BracketMatch, DashboardMatch, DashboardSportCard, LolRegion, LolSplit, RacquetData, RacquetTournament, SurfData, SurfEvent, Team } from "@/types/sports";
 
 import gamesOct18 from "./__fixtures__/balldontlie-nba-games-2026-10-18.json";
 import { fakeLolesports } from "./__fixtures__/lolesports";
@@ -524,6 +515,8 @@ describe("getDashboardSportCard", () => {
         { id: "la-liga", label: "LaLiga" },
         { id: "premier-league", label: "Premier League" },
         { id: "serie-a", label: "Serie A" },
+        { id: "ligue-1", label: "Ligue 1" },
+        { id: "bundesliga", label: "Bundesliga" },
         { id: "world-cup", label: "FIFA World Cup 2026" },
       ],
     });
@@ -546,7 +539,7 @@ describe("getDashboardSportCard", () => {
   });
 
   it("falls back to the Champions League for a league football no longer offers", async () => {
-    const card = (await getDashboardSportCard("football", "bundesliga"))!;
+    const card = (await getDashboardSportCard("football", "eredivisie"))!;
 
     expect(card.context).toMatch(/Champions League/);
     expect(card.competitions?.value).toBe("uefa-champions-league");
@@ -843,5 +836,33 @@ describe("racquetCard", () => {
     expect(__testing.racquetCard(base, week, "ATP").event).toMatchObject({ name: "Vienna", status: "live" });
     const off = tour([tournament("Paris Masters", "upcoming")]);
     expect(__testing.racquetCard(base, off, "ATP").event).toMatchObject({ name: "Paris Masters", status: "upcoming" });
+  });
+});
+
+describe("surfCard", () => {
+  const stop = (id: string, status: SurfEvent["status"], startDate: string): SurfEvent => ({
+    id,
+    slug: id,
+    name: id,
+    location: "Supertubos, Peniche, Portugal",
+    startDate,
+    endDate: startDate,
+    status,
+    stop: 1,
+  });
+  const base = { sportId: "surf", label: "Surfing", emoji: "🏄" } as const;
+  const data = (events: SurfEvent[]): SurfData => ({
+    season: 2026,
+    events,
+    rankings: [{ position: 1, athleteId: "3994", name: "Yago Dora", country: "Brazil", points: 48865 }],
+  });
+
+  it("leads with the stop on now, else the next, beside the tour's rankings", () => {
+    const on = __testing.surfCard(base, data([stop("Pipe", "upcoming", "2026-12-08"), stop("Portugal", "live", "2026-10-16")]));
+    expect(on.event).toMatchObject({ name: "Portugal", status: "live" });
+    expect(on.tables[0]).toMatchObject({ label: "Rankings", rows: [{ position: 1, name: "Yago Dora", value: "48,865" }] });
+
+    const off = __testing.surfCard(base, data([stop("Pipe", "upcoming", "2026-12-08"), stop("Philippines", "upcoming", "2026-10-31")]));
+    expect(off.event).toMatchObject({ name: "Philippines", status: "upcoming" });
   });
 });

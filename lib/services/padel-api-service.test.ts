@@ -402,6 +402,7 @@ describe("the feed and the draws on demand", () => {
     vi.useFakeTimers({ now: new Date("2026-10-18T12:00:00Z"), toFake: ["Date"] });
     vi.stubEnv("PADEL_API_KEY", "test-key");
     vi.stubGlobal("fetch", fetchMock);
+    __testing.resetMinute();
   });
 
   afterEach(() => {
@@ -475,5 +476,39 @@ describe("the feed and the draws on demand", () => {
   it("asks for no tournament this season's calendar does not list", async () => {
     expect(await getPadelDraw("padelapi-999")).toBeNull();
     expect(drawCalls().some((url) => url.includes("/999/"))).toBe(false);
+  });
+});
+
+describe("the minute's ten requests", () => {
+  const { fetchPadel, resetMinute } = __testing;
+  const ok = (): Response => ({ ok: true, status: 200, json: async () => ({ data: [] }), headers: new Headers() }) as Response;
+
+  beforeEach(() => {
+    vi.stubEnv("PADEL_API_KEY", "test-key");
+    resetMinute();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the last three for what the page cannot do without", async () => {
+    const fetchMock = vi.fn(async () => ok());
+    vi.stubGlobal("fetch", fetchMock);
+    for (let i = 0; i < 7; i++) await fetchPadel(`/tournaments/${i}/matches`);
+    await expect(fetchPadel("/tournaments/8/matches")).rejects.toThrow(/no request left/);
+    await expect(fetchPadel("/rankings", { essential: true })).resolves.toEqual({ data: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+  });
+
+  it("takes a 429 as the minute spent, and waits out a short Retry-After for what it needs", async () => {
+    const limited = { ok: false, status: 429, headers: new Headers({ "retry-after": "0.01" }) } as Response;
+    const fetchMock = vi.fn().mockResolvedValueOnce(limited).mockResolvedValue(ok());
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchPadel("/rankings", { essential: true })).resolves.toEqual({ data: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Nothing is left this minute for a draw.
+    await expect(fetchPadel("/tournaments/1/matches")).rejects.toThrow(/no request left/);
   });
 });

@@ -13,9 +13,10 @@ import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 import { featuredEvent } from "@/lib/data/sports/surf";
 import { cn } from "@/lib/utils";
 import { formatDayRange } from "@/lib/utils/date";
-import type { SurfData, SurfDraw, SurfEvent, SurfHeat, SurfRanking, SurfSurfer } from "@/types/sports";
+import type { NewsStory, SurfData, SurfDraw, SurfEvent, SurfHeat, SurfRanking, SurfSurfer } from "@/types/sports";
 
 import { FactList, TileWinner, VersusLine, type Fact } from "../shared/event-facts";
+import { NewsTab } from "../shared/news-list";
 import { OverviewSplit } from "../shared/overview-split";
 import { Portrait } from "../shared/portrait";
 import { ShowMoreRows, useShownRows } from "../shared/show-more";
@@ -33,26 +34,34 @@ import {
 
 type SurfViewProps = {
   data: SurfData;
-  /** `?tab=draw` or `?tab=overview`; otherwise the stop on now opens on its draw. */
+  /** Stab Magazine's WSL stories; no News tab without any. */
+  news?: NewsStory[];
+  /** `?tab=draw`, `?tab=news` or `?tab=overview`; otherwise the stop on now opens on its draw. */
   initialTab?: string;
 };
 
-type SurfTab = "overview" | "draw";
+type SurfTab = "overview" | "draw" | "news";
 
 /**
  * The men's Championship Tour, laid out as padel's and tennis's tours:
  * Overview (the stop on now, else next, else the last surfed, the season
  * around it and the rankings beside them) and Draw (the featured stop's heats,
- * round by round). Draw stays on the strip, locked, until a draw exists.
+ * round by round), and with news, News. Draw stays on the strip, locked,
+ * until a draw exists.
  */
-export function SurfView({ data, initialTab }: SurfViewProps): React.ReactElement {
+export function SurfView({ data, news = [], initialTab }: SurfViewProps): React.ReactElement {
   const featured = data.events.find((e) => e.id === data.draw?.eventId) ?? featuredEvent(data.events);
   const draw = data.draw && data.draw.rounds.length > 0 ? data.draw : undefined;
+  const hasNews = news.length > 0;
   const opening: SurfTab =
-    draw && (initialTab === "draw" || (initialTab !== "overview" && featured?.status === "live")) ? "draw" : "overview";
+    initialTab === "news" && hasNews
+      ? "news"
+      : draw && (initialTab === "draw" || (initialTab !== "overview" && featured?.status === "live"))
+        ? "draw"
+        : "overview";
   const [tab, setTab] = useState<string>(opening);
-  // A refresh can take the draw away while it is open.
-  const shownTab = tab === "draw" && !draw ? "overview" : tab;
+  // A refresh can take the draw or the news away while it is open.
+  const shownTab = (tab === "draw" && !draw) || (tab === "news" && !hasNews) ? "overview" : tab;
 
   return (
     <Tabs value={shownTab} onValueChange={setTab} className="gap-6">
@@ -67,6 +76,7 @@ export function SurfView({ data, initialTab }: SurfViewProps): React.ReactElemen
               {!draw && <Lock aria-hidden />}
               Draw
             </TabsTrigger>
+            {hasNews && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }
       >
@@ -88,6 +98,19 @@ export function SurfView({ data, initialTab }: SurfViewProps): React.ReactElemen
         {draw && (
           <TabsContent value="draw">
             <DrawTab draw={draw} event={featured} />
+          </TabsContent>
+        )}
+
+        {/* Led by the tour's top five and the stop featured. */}
+        {hasNews && (
+          <TabsContent value="news">
+            <NewsTab
+              stories={news}
+              interest={{
+                names: data.rankings.slice(0, 5).map((r) => r.name.split(" ").slice(-1)[0] ?? ""),
+                places: featured ? [featured.name, featured.location] : [],
+              }}
+            />
           </TabsContent>
         )}
       </SportShell>

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.0](https://github.com/humexxx/allstars-galaxy/compare/v0.14.0...v0.15.0) (2026-10-26)
+
+
+### Features
+
+* **entertainment:** move the dashboard carousels on by themselves ([a87496c](https://github.com/humexxx/allstars-galaxy/commit/a87496c477bbced2f09a492f9bc2da4b28eafc78))
+* **entertainment:** move the dashboard carousels on by themselves ([c5cb802](https://github.com/humexxx/allstars-galaxy/commit/c5cb8020e7e1e1b8fd606718bf395c4544016d37))
+
 ## [0.14.0](https://github.com/humexxx/allstars-galaxy/compare/v0.13.0...v0.14.0) (2026-10-26)
 
 

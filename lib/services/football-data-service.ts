@@ -17,6 +17,7 @@ import type {
   StandingBand,
   Team,
 } from "@/types/sports";
+import { withLateScores } from "./football-late-scores";
 import { cachedFeed, upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://api.football-data.org/v4";
@@ -779,7 +780,7 @@ async function fetchWorldCupFromApi(): Promise<FootballLeagueData> {
   const groups = buildGroupStandings(matchesRes.matches, teamsMap);
   const knockout = buildKnockoutBracket(matchesRes.matches, teamsMap);
   const matches = orderMatchesForDisplay(
-    mapMatches(matchesRes.matches, teamsMap),
+    await withLateScores(WORLD_CUP.internalId, mapMatches(matchesRes.matches, teamsMap), teamsMap),
     (m) => m.kickoff,
     (m) => m.status,
     MATCH_CAPS,
@@ -849,7 +850,7 @@ async function fetchLeague(
     ? buildKnockoutBracket(matchesRes.matches, teamsMap)
     : undefined;
   const matches = orderMatchesForDisplay(
-    mapMatches(matchesRes.matches, teamsMap),
+    await withLateScores(competition.internalId, mapMatches(matchesRes.matches, teamsMap), teamsMap),
     (m) => m.kickoff,
     (m) => m.status,
     MATCH_CAPS

@@ -100,7 +100,7 @@ type EspnFootballLeague = {
   phase: (event: FootballEvent) => Phase;
 };
 
-type FootballCompetitor = HeaderCompetitor & {
+export type FootballCompetitor = HeaderCompetitor & {
   /** A shoot-out's kicks scored, beside the score the match ended on. */
   shootoutScore?: number | null;
   aggregateScore?: number | null;
@@ -243,7 +243,7 @@ function distinctNames(teams: Team[]): Team[] {
  * at the break. Stoppage time keeps its own words; the minute alone is what
  * the dashboard shows.
  */
-function liveClock(status: HeaderEvent["fullStatus"]): Pick<Match, "minute" | "statusText"> {
+export function liveClock(status: HeaderEvent["fullStatus"]): Pick<Match, "minute" | "statusText"> {
   const name = status?.type?.name;
   const shown = status?.type?.shortDetail ?? status?.displayClock ?? "";
   if (name === "STATUS_HALFTIME" || /^HT$/i.test(shown)) return { statusText: { short: "HT", spoken: "Half-time" } };
@@ -256,7 +256,7 @@ function liveClock(status: HeaderEvent["fullStatus"]): Pick<Match, "minute" | "s
 }
 
 /** A final past 90 minutes says how it was settled: the scores bar's own status reads plain "post". */
-function finalStatus(status: HeaderEvent["fullStatus"]): MatchStatus {
+export function finalStatus(status: HeaderEvent["fullStatus"]): MatchStatus {
   const type = status?.type;
   if (type?.name === "STATUS_FINAL_PEN" || /pen/i.test(type?.shortDetail ?? "")) return "pen";
   if (type?.name === "STATUS_FINAL_AET" || /^AET$/i.test(type?.shortDetail ?? "")) return "aet";
@@ -272,7 +272,7 @@ type Game = {
   phase: Phase;
 };
 
-function shootout(home: FootballCompetitor, away: FootballCompetitor): Match["penalties"] {
+export function shootout(home: FootballCompetitor, away: FootballCompetitor): Match["penalties"] {
   const h = home.shootoutScore;
   const a = away.shootoutScore;
   return typeof h === "number" && typeof a === "number" ? { home: h, away: a } : undefined;

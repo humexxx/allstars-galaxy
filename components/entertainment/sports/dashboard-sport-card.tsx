@@ -25,6 +25,7 @@ import type {
 import { DashboardCompetitionPicker } from "./dashboard-competition-picker";
 import { DashboardSportTables } from "./dashboard-sport-tables";
 import { DashboardSwiss } from "./dashboard-swiss";
+import { CardPendingProvider, PendingArea } from "./shared/card-pending";
 import { SPORT_CARD_HEADER, SPORT_CARD_ROWS, SPORT_CARD_SECTION } from "./shared/dashboard-card-rows";
 import { FeatureBox } from "./shared/feature-box";
 import { LeadCarousel } from "./shared/lead-carousel";
@@ -100,64 +101,74 @@ export async function DashboardSportCard({
   const news = card.news && card.news.length > 0 && <NewsRail sport={card.label} stories={card.news} format={format} />;
   // The list, the tables and the news fill the two rows under the lead in that
   // order, so a card with nothing to list leaves no empty row beside its
-  // neighbour's.
-  const [middle, ...rest] = [list, tables, news].filter(Boolean);
+  // neighbour's. A championship change replaces all but the news, which
+  // stays while the rest stands in as skeletons.
+  const parts = [list, tables, news]
+    .filter(Boolean)
+    .map((part, i) =>
+      part === news ? (
+        <Fragment key={i}>{part}</Fragment>
+      ) : (
+        <PendingArea key={i} skeleton="list">
+          {part}
+        </PendingArea>
+      )
+    );
+  const [middle, ...rest] = parts;
 
   return (
     <Card className={SPORT_CARD_ROWS}>
-      <CardHeader className={SPORT_CARD_HEADER}>
-        {/* The hub's emoji: lucide has no ball for most of these sports. */}
-        <CardTitle as="h2" className="flex items-center gap-2">
-          <span aria-hidden className="text-lg leading-none">
-            {card.emoji}
-          </span>
-          {card.label}
-        </CardTitle>
-        {card.competitions ? (
-          <CardDescription className="min-w-0">
-            <DashboardCompetitionPicker
-              sportId={card.sportId}
-              label={card.context}
-              competitions={card.competitions}
-            />
-          </CardDescription>
-        ) : (
-          <CardDescription className="truncate">{card.context}</CardDescription>
-        )}
-        <CardAction>
-          <Button variant="outline" size="sm" asChild>
-            <Link href={href}>
-              Open <span className="sr-only">{card.label}</span> <ArrowRight />
-            </Link>
-          </Button>
-        </CardAction>
-      </CardHeader>
-
-      {/* Three rows, always all three: a fourth would put this card's out of
-          line with the one beside it. */}
-      <div className={SPORT_CARD_SECTION}>
-        {card.featured &&
-          (card.following ? (
-            // Keyed by the game it leads with: another championship's games
-            // start from their own first one, not where the last were left.
-            <LeadCarousel key={card.featured.id} label={`${card.label} games`}>
-              {[card.featured, ...(card.following ?? [])].map((m) => (
-                // Room under the teams for the carousel's dots.
-                <FeaturedMatch key={m.id} match={m} format={format} href={href} className="pb-6" />
-              ))}
-            </LeadCarousel>
+      <CardPendingProvider>
+        <CardHeader className={SPORT_CARD_HEADER}>
+          {/* The hub's emoji: lucide has no ball for most of these sports. */}
+          <CardTitle as="h2" className="flex items-center gap-2">
+            <span aria-hidden className="text-lg leading-none">
+              {card.emoji}
+            </span>
+            {card.label}
+          </CardTitle>
+          {card.competitions ? (
+            <CardDescription className="min-w-0">
+              <DashboardCompetitionPicker
+                sportId={card.sportId}
+                label={card.context}
+                competitions={card.competitions}
+              />
+            </CardDescription>
           ) : (
-            <FeaturedMatch match={card.featured} format={format} href={href} />
-          ))}
-        {card.event && <FeaturedEvent event={card.event} href={href} />}
-      </div>
+            <CardDescription className="truncate">{card.context}</CardDescription>
+          )}
+          <CardAction>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={href}>
+                Open <span className="sr-only">{card.label}</span> <ArrowRight />
+              </Link>
+            </Button>
+          </CardAction>
+        </CardHeader>
 
-      <div className={SPORT_CARD_SECTION}>{middle}</div>
-      <div className={SPORT_CARD_SECTION}>
-        {rest.map((part, i) => (
-          <Fragment key={i}>{part}</Fragment>
-        ))}
-      </div>
+        {/* Three rows, always all three: a fourth would put this card's out of
+            line with the one beside it. */}
+        <PendingArea skeleton="box" className={SPORT_CARD_SECTION} overlayClassName="inset-x-6">
+          {card.featured &&
+            (card.following ? (
+              // Keyed by the game it leads with: another championship's games
+              // start from their own first one, not where the last were left.
+              <LeadCarousel key={card.featured.id} label={`${card.label} games`}>
+                {[card.featured, ...(card.following ?? [])].map((m) => (
+                  // Room under the teams for the carousel's dots.
+                  <FeaturedMatch key={m.id} match={m} format={format} href={href} className="pb-6" />
+                ))}
+              </LeadCarousel>
+            ) : (
+              <FeaturedMatch match={card.featured} format={format} href={href} />
+            ))}
+          {card.event && <FeaturedEvent event={card.event} href={href} />}
+        </PendingArea>
+
+        <div className={SPORT_CARD_SECTION}>{middle}</div>
+        <div className={SPORT_CARD_SECTION}>{rest}</div>
+      </CardPendingProvider>
     </Card>
   );
 }

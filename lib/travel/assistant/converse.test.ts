@@ -21,7 +21,7 @@ import {
 import { aiModel } from "@/lib/ai/models";
 import type { TravelAssistantEvent, TravelAssistantMessage } from "@/types/travel-assistant";
 
-import { converse, echoable } from "./converse";
+import { converse } from "./converse";
 
 const TRIP = "22222222-2222-4222-8222-222222222222";
 const USER = "user-1";
@@ -200,23 +200,5 @@ describe("converse and web search", () => {
     // The paused turn goes back as it was, and the model carries on from it.
     expect(stream).toHaveBeenCalledTimes(2);
     expect(added.map((m) => m.role)).toEqual(["assistant", "assistant"]);
-  });
-});
-
-describe("echoable", () => {
-  it("drops what the declining model began before a fallback, text aside", () => {
-    const content = [
-      { type: "thinking", thinking: "", signature: "s" },
-      text("Partial"),
-      toolUse("get_trip", { tripId: TRIP }),
-      { type: "fallback", from: {}, to: {}, trigger: {} },
-      text("Done"),
-    ] as unknown as Block[];
-    expect(echoable(content).map((b) => b.type)).toEqual(["text", "fallback", "text"]);
-  });
-
-  it("leaves an ordinary answer alone", () => {
-    const content = [text("a"), toolUse("list_trips", {})];
-    expect(echoable(content)).toBe(content);
   });
 });

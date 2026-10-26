@@ -80,10 +80,10 @@ const lck: LolSplit = {
   matches: [],
 };
 
-function renderView(data: LolData): void {
+function renderView(data: LolData, link: { initialTab?: string; initialRegion?: string } = {}): void {
   render(
     <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
-      <LolView data={data} />
+      <LolView data={data} {...link} />
     </ReaderTimeZoneProvider>
   );
 }
@@ -92,6 +92,19 @@ const openTab = () => screen.getByRole("tab", { selected: true }).textContent;
 const title = (): HTMLElement => screen.getByRole("heading", { level: 1 });
 const titleButton = (): HTMLElement => within(title()).getByRole("button");
 const announced = (): string[] => screen.queryAllByRole("status").map((s) => s.textContent ?? "");
+
+describe("LolView from a link", () => {
+  it("opens on the league and the tab the address names", () => {
+    renderView({ splits: [worlds, lck] }, { initialRegion: "lck", initialTab: "standings" });
+    expect(title()).toHaveTextContent("LCK Split 3");
+    expect(openTab()).toBe("Standings");
+  });
+
+  it("falls back to the event on, and its own tab, for what the feed has not got", () => {
+    renderView({ splits: [worlds, lck] }, { initialRegion: "msi", initialTab: "swiss" });
+    expect(title()).toHaveTextContent(worlds.name);
+  });
+});
 
 describe("LolView's title menu", () => {
   it("names each group of the menu by its label", async () => {

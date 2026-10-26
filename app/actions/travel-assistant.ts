@@ -9,7 +9,7 @@ import {
   TravelChangeError,
   undoTravelChanges,
 } from "@/lib/services/travel-assistant-service";
-import { canUseTravelAssistant } from "@/lib/travel/assistant/access";
+import { canUseAssistant } from "@/lib/ai/assistant/access";
 import {
   travelChangeSetSchema,
   travelUndoTokenSchema,
@@ -32,7 +32,7 @@ export async function applyTravelChangesAction(
 ): Promise<ActionResult<AppliedTravelChanges>> {
   return safe("travel-assistant", async () => {
     const ctx = await requireEffectiveContext();
-    if (!canUseTravelAssistant(ctx)) return { success: false, error: UNAVAILABLE };
+    if (!canUseAssistant(ctx)) return { success: false, error: UNAVAILABLE };
 
     const parsed = travelChangeSetSchema.safeParse(input);
     if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -56,7 +56,7 @@ export async function applyTravelChangesAction(
 export async function undoTravelChangesAction(token: string): Promise<ActionResult> {
   return safe("travel-assistant", async () => {
     const ctx = await requireEffectiveContext();
-    if (!canUseTravelAssistant(ctx)) return { success: false, error: UNAVAILABLE };
+    if (!canUseAssistant(ctx)) return { success: false, error: UNAVAILABLE };
     if (!travelUndoTokenSchema.safeParse(token).success) {
       return { success: false, error: "This change can no longer be undone" };
     }

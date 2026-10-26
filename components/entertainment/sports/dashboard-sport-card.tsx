@@ -175,7 +175,7 @@ export async function DashboardSportCard({
 /** The sport in the hub, and for football the league the card is set to. */
 function hubHref(card: DashboardSportCardData): string {
   const league = card.sportId === "football" ? card.competitions?.value : null;
-  return league ? `${sportPath("football")}&league=${league}` : sportPath(card.sportId);
+  return league ? sportPath("football", { league }) : sportPath(card.sportId);
 }
 
 type MatchGroup = { label: string; matches: DashboardMatch[] };

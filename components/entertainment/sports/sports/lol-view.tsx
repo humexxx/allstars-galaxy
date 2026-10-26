@@ -64,8 +64,10 @@ type LolViewProps = {
   data: LolData;
   /** lolesports.com's news; no News tab without any. */
   news?: NewsStory[];
-  /** `?tab=news` opens on the news. */
+  /** `?tab=`: the tab to open on, when the competition has it. */
   initialTab?: string;
+  /** `?league=`: the league or event to open on, when the feed has it. */
+  initialRegion?: string | null;
 };
 
 type SplitState =
@@ -100,8 +102,10 @@ function useLeagueSplits(): {
   return { states, load };
 }
 
-export function LolView({ data, news = [], initialTab }: LolViewProps): ReactElement {
-  const [region, setRegion] = useState<LolRegion>(data.splits[0]?.region ?? "lec");
+export function LolView({ data, news = [], initialTab, initialRegion }: LolViewProps): ReactElement {
+  const [region, setRegion] = useState<LolRegion>(
+    data.splits.find((s) => s.region === initialRegion)?.region ?? data.splits[0]?.region ?? "lec"
+  );
   const latest = useMemo(
     () => data.splits.find((s) => s.region === region) ?? data.splits[0],
     [data.splits, region],
@@ -155,7 +159,17 @@ export function LolView({ data, news = [], initialTab }: LolViewProps): ReactEle
   // and the title menu or split pill just used lost the focus to <body>.
   const viewKey = `${region}-${split.tournamentId ?? ""}`;
   const hasNews = news.length > 0;
-  const [tab, setTab] = useState(initialTab === "news" && hasNews ? "news" : opening);
+  const tabs = new Set(
+    [
+      !stages && "matches",
+      stages && playIns && "play-ins",
+      split.standings.length > 0 && "standings",
+      swiss && "swiss",
+      playoffs && !(stages && !playoffsDrawn) && "playoffs",
+      hasNews && "news",
+    ].filter(Boolean)
+  );
+  const [tab, setTab] = useState(initialTab && tabs.has(initialTab) ? initialTab : opening);
   const [tabFor, setTabFor] = useState(viewKey);
   if (tabFor !== viewKey) {
     setTabFor(viewKey);

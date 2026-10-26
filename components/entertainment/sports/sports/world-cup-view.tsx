@@ -21,15 +21,15 @@ type WorldCupViewProps = {
   leagues?: ReactNode;
   /** ESPN's World Cup news; no News tab without any. */
   news?: NewsStory[];
-  /** `?tab=news` asked for it. */
-  openNews?: boolean;
+  /** `?tab=`: the tab to open on, when the tournament has it. */
+  initialTab?: string;
 };
 
 export function WorldCupView({
   data,
   leagues,
   news = [],
-  openNews = false,
+  initialTab,
 }: WorldCupViewProps): React.ReactElement {
   const teamsMap = useMemo(
     () => new Map<string, Team>(data.teams.map((t) => [t.id, t])),
@@ -40,7 +40,13 @@ export function WorldCupView({
   const hasGroups = !!data.groups && data.groups.length > 0;
   // The groups, then the knockout, in the order they are played — and the
   // knockout to open on: it is what is decided last.
-  const defaultTab = openNews ? "news" : hasKnockout ? "knockout" : "groups";
+  const asked =
+    (initialTab === "news" && news.length > 0) ||
+    (initialTab === "knockout" && hasKnockout) ||
+    (initialTab === "groups" && hasGroups)
+      ? initialTab
+      : null;
+  const defaultTab = asked ?? (hasKnockout ? "knockout" : "groups");
   const final = data.knockout?.find((r) => r.id === "final")?.matches.at(-1);
 
   return (

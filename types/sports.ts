@@ -272,10 +272,17 @@ export const FOOTBALL_COMPETITION_IDS = [
   "serie-a",
   "ligue-1",
   "bundesliga",
+  "mls",
+  "costa-rica",
   "world-cup",
 ] as const;
 
 export type FootballLeagueId = (typeof FOOTBALL_COMPETITION_IDS)[number];
+
+/** The competitions read from ESPN's key-less feeds rather than football-data.org. */
+export const ESPN_FOOTBALL_LEAGUE_IDS = ["mls", "costa-rica"] as const satisfies readonly FootballLeagueId[];
+
+export type EspnFootballLeagueId = (typeof ESPN_FOOTBALL_LEAGUE_IDS)[number];
 
 /** The sports whose page shows one match list, which the team filter keys by the sport's own id. */
 export const SINGLE_LIST_SPORTS = ["nba", "nfl", "mlb", "nhl"] as const satisfies readonly SportId[];

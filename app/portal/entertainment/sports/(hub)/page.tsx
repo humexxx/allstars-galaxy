@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { SportsHub } from "@/components/entertainment/sports/sports-hub";
 import { DEFAULT_SPORT, SPORTS_BY_ID } from "@/lib/data/sports/registry";
-import { FOOTBALL_COMPETITIONS } from "@/lib/services/football-data-service";
+import { FOOTBALL_COMPETITIONS } from "@/lib/services/football-service";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { getSportTeamFilter, listUserFavoriteSportIds } from "@/lib/services/sports-service";
 import { footballLeagueFrom, loadSport } from "@/lib/sports/load";

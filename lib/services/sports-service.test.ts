@@ -517,6 +517,8 @@ describe("getDashboardSportCard", () => {
         { id: "serie-a", label: "Serie A" },
         { id: "ligue-1", label: "Ligue 1" },
         { id: "bundesliga", label: "Bundesliga" },
+        { id: "mls", label: "Major League Soccer" },
+        { id: "costa-rica", label: "Primera División de Costa Rica" },
         { id: "world-cup", label: "FIFA World Cup 2026" },
       ],
     });
@@ -528,6 +530,23 @@ describe("getDashboardSportCard", () => {
     expect(card.context).toBe(getFootballLeague("la-liga").league.name);
     expect(card.competitions?.value).toBe("la-liga");
     expect(card.tables[0].rows).toHaveLength(5);
+  });
+
+  it("gives MLS a table a conference, East and West", async () => {
+    const card = (await getDashboardSportCard("football", "mls"))!;
+
+    expect(card.context).toBe("Major League Soccer");
+    expect(card.competitions?.value).toBe("mls");
+    expect(card.tables.map((t) => t.label)).toEqual(["East", "West"]);
+    expect(card.tables[0].rows[0]).toMatchObject({ position: 1, name: "Nashville", value: "70 pts" });
+    expect(card.tables[1].rows).toHaveLength(5);
+  });
+
+  it("reads Costa Rica's one table", async () => {
+    const card = (await getDashboardSportCard("football", "costa-rica"))!;
+
+    expect(card.tables.map((t) => t.label)).toEqual(["Table"]);
+    expect(card.tables[0].rows[0]).toMatchObject({ position: 1, name: "Saprissa" });
   });
 
   it("reads the World Cup from its own feed", async () => {

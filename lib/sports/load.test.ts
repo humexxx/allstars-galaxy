@@ -139,8 +139,63 @@ describe("loadSport", () => {
       "serie-a",
       "ligue-1",
       "bundesliga",
+      "mls",
+      "costa-rica",
       "world-cup",
     ]);
+  });
+
+  it.each([
+    ["mls", "usa.1", "https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/news?limit=24"],
+    ["costa-rica", "crc.1", "https://site.api.espn.com/apis/site/v2/sports/soccer/crc.1/news?limit=24&lang=es&region=cr"],
+  ])("reads %s from ESPN alone, spending no football-data request", async (league, slug, newsUrl) => {
+    vi.stubEnv("FOOTBALL_DATA_API_KEY", "test-key");
+    const event = {
+      id: "761904",
+      date: "2026-10-26T01:00:00Z",
+      season: 2026,
+      seasonType: "1",
+      fullStatus: { type: { name: "STATUS_SCHEDULED", state: "pre", shortDetail: "Scheduled" } },
+      competitors: [
+        { homeAway: "home", abbreviation: "LAFC", displayName: "LAFC", name: "LAFC", score: "" },
+        { homeAway: "away", abbreviation: "LA", displayName: "LA Galaxy", name: "LA Galaxy", score: "" },
+      ],
+    };
+    const fetchSpy = vi.fn((url: string) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url.includes("/scoreboard/header")
+              ? { sports: [{ leagues: [{ events: [event] }] }] }
+              : url.includes("/standings")
+                ? { children: [] }
+                : url.includes("/teams")
+                  ? { sports: [] }
+                  : { articles: [] }
+          ),
+          { status: 200 }
+        )
+      )
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const payload = await loadSport("football", { league });
+
+    const urls: string[] = fetchSpy.mock.calls.map(([url]) => url);
+    expect(urls.filter((url) => url.includes("football-data.org"))).toEqual([]);
+    expect(urls.filter((url) => url.includes("/scoreboard/header")).every((url) => url.includes(`league=${slug}`))).toBe(true);
+    expect(urls).toContain(newsUrl);
+    if (payload.sport !== "football") throw new Error("not football");
+    expect(payload.sample).toBe(false);
+    expect(payload.league.league.id).toBe(league);
+    expect(payload.league.matches.map((m) => m.id)).toEqual(["761904"]);
+  });
+
+  it("flags MLS when ESPN does not answer, showing its fixture", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const payload = await loadSport("football", { league: "mls" });
+    expect(payload.sample).toBe(true);
+    expect(payload.sport === "football" && payload.league).toBe(getFootballLeague("mls"));
   });
 
   it("reads the World Cup from its own feed when football picks it", async () => {

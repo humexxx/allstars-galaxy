@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { __testing, getEspnNews } from "./espn-news-service";
 
-const { storyFrom } = __testing;
+const { newsUrl, storyFrom } = __testing;
 
 // ESPN's /news, trimmed to what the mapper reads (NBA, 2026-10-24).
 const article = (over: Record<string, unknown> = {}) => ({
@@ -57,6 +57,15 @@ describe("storyFrom", () => {
   it("leaves out what a reader could not open: ESPN+, or nothing to link to", () => {
     expect(storyFrom(article({ premium: true }))).toBeNull();
     expect(storyFrom(article({ links: {} }))).toBeNull();
+  });
+});
+
+describe("newsUrl", () => {
+  it("asks for a feed's own edition where espn.com's has gone quiet", () => {
+    expect(newsUrl("mls")).toBe("https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/news?limit=24");
+    expect(newsUrl("costa-rica")).toBe(
+      "https://site.api.espn.com/apis/site/v2/sports/soccer/crc.1/news?limit=24&lang=es&region=cr"
+    );
   });
 });
 

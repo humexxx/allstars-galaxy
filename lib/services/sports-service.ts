@@ -15,11 +15,7 @@ import { getSurfNews } from "@/lib/services/stab-surf-news-service";
 import { getSurfData } from "@/lib/services/wsl-surf-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
 import { getNhlData } from "@/lib/services/espn-nhl-service";
-import {
-  FOOTBALL_COMPETITIONS,
-  getFootballLeagueData,
-  getWorldCupData,
-} from "@/lib/services/football-data-service";
+import { FOOTBALL_COMPETITIONS, getFootballCompetition } from "@/lib/services/football-service";
 import { getF1Data, getF1SeasonWinners } from "@/lib/services/jolpica-f1-service";
 import { getLolNews } from "@/lib/services/lolesports-news-service";
 import { getLolData } from "@/lib/services/lolesports-service";
@@ -55,6 +51,7 @@ import type {
   RacquetData,
   SurfData,
   SportId,
+  Standing,
   SwissStage,
   Team,
   TeamFilterList,
@@ -247,12 +244,9 @@ export async function getDashboardSportCard(
   switch (sportId) {
     case "football": {
       const id = oneOf(FOOTBALL_COMPETITION_IDS, competition) ?? DEFAULT_FOOTBALL;
-      // The World Cup has a feed of its own: one call for its groups,
-      // fixtures and bracket. The news is ESPN's, and costs football-data nothing.
-      const [data, news] = await Promise.all([
-        id === "world-cup" ? getWorldCupData() : getFootballLeagueData(id),
-        getEspnNews(id),
-      ]);
+      // Each competition from the feed that has it; the news is ESPN's, and
+      // costs football-data nothing.
+      const [data, news] = await Promise.all([getFootballCompetition(id), getEspnNews(id)]);
       return {
         ...footballCard(base, data),
         news: cardNews(news),
@@ -339,24 +333,32 @@ export async function getF1DashboardHighlight(
   return lastYear ? { ...highlight, race: { ...highlight.race, lastYear } } : highlight;
 }
 
+/**
+ * A league's top five, or each conference's for one played in two (MLS),
+ * as a toggle. A World Cup group is not a conference: twelve of them would be
+ * a dozen toggles, so its card has none.
+ */
 function footballCard(base: CardBase, data: FootballLeagueData): DashboardSportCard {
   const teams = teamsById(data.teams);
+  const table = (id: string, label: string, standings: Standing[]): DashboardTable => ({
+    id,
+    label,
+    rows: standings
+      .slice(0, CARD_ROWS)
+      .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.points} pts`)),
+  });
+  const conferences = data.league.id === "world-cup" ? [] : (data.groups ?? []);
+  const tables =
+    conferences.length > 1
+      ? conferences.map((g) => table(g.label.toLowerCase(), g.label, g.standings))
+      : data.standings.length > 0
+        ? [table("table", "Table", data.standings)]
+        : [];
   return {
     ...base,
     context: data.league.name,
     ...featuredAndFollowing(data.matches, teams),
-    tables:
-      data.standings.length > 0
-        ? [
-            {
-              id: "table",
-              label: "Table",
-              rows: data.standings
-                .slice(0, CARD_ROWS)
-                .map((s) => teamRow(s.position, teams.get(s.teamId), s.teamId, `${s.points} pts`)),
-            },
-          ]
-        : [],
+    tables,
   };
 }
 

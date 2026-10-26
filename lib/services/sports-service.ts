@@ -10,6 +10,9 @@ import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { getNbaData } from "@/lib/services/balldontlie-nba-service";
 import { getMlbData } from "@/lib/services/espn-mlb-service";
 import { getEspnNews } from "@/lib/services/espn-news-service";
+import { getPadelNews } from "@/lib/services/premier-padel-news-service";
+import { getSurfNews } from "@/lib/services/stab-surf-news-service";
+import { getSurfData } from "@/lib/services/wsl-surf-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
 import { getNhlData } from "@/lib/services/espn-nhl-service";
 import {
@@ -49,6 +52,7 @@ import type {
   NflData,
   NhlData,
   RacquetData,
+  SurfData,
   SportId,
   SwissStage,
   Team,
@@ -275,10 +279,18 @@ export async function getDashboardSportCard(
     }
     case "lol":
       return lolCard(base, await getLolData(), oneOf(LOL_REGIONS, competition));
-    case "tennis":
-      return racquetCard(base, (await getTennisData()).atp, "ATP");
-    case "padel":
-      return racquetCard(base, (await getPadelData()).men, "Premier Padel");
+    case "tennis": {
+      const [data, news] = await Promise.all([getTennisData(), getEspnNews("atp")]);
+      return { ...racquetCard(base, data.atp, "ATP"), news: cardNews(news) };
+    }
+    case "padel": {
+      const [data, news] = await Promise.all([getPadelData(), getPadelNews()]);
+      return { ...racquetCard(base, data.men, "Premier Padel"), news: cardNews(news) };
+    }
+    case "surf": {
+      const [data, news] = await Promise.all([getSurfData(), getSurfNews()]);
+      return { ...surfCard(base, data), news: cardNews(news) };
+    }
     default:
       return null;
   }
@@ -653,6 +665,39 @@ function racquetCard(base: CardBase, data: RacquetData, context: string): Dashbo
   };
 }
 
+/** The stop on now, else next, and the tour's rankings: the racquet card's shape. */
+function surfCard(base: CardBase, data: SurfData): DashboardSportCard {
+  const stop =
+    data.events.find((e) => e.status === "live") ??
+    data.events.filter((e) => e.status === "upcoming").sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+  return {
+    ...base,
+    context: "Championship Tour",
+    event: stop
+      ? {
+          name: stop.name,
+          detail: [stop.location, formatDayRange(stop.startDate, stop.endDate)].join(" · "),
+          status: stop.status,
+        }
+      : undefined,
+    matches: [],
+    tables: [
+      {
+        id: "wsl",
+        label: "Rankings",
+        rows: data.rankings.slice(0, CARD_ROWS).map(
+          (r): DashboardTableRow => ({
+            position: r.position,
+            name: r.name,
+            image: r.imageUrl ? { url: r.imageUrl, kind: "photo" } : undefined,
+            value: r.points.toLocaleString("en-US"),
+          })
+        ),
+      },
+    ].filter((t) => t.rows.length > 0),
+  };
+}
+
 function f1Highlight(data: F1Data, now: number): F1DashboardHighlight | null {
   const race = leadRace(data.races);
   if (!race) return null;
@@ -818,4 +863,4 @@ function matchTone(match: Match): DashboardMatch["status"] {
 }
 
 /** Pure helpers, exported for their tests. */
-export const __testing = { lolCard, racquetCard, swissRecords, f1Highlight };
+export const __testing = { lolCard, racquetCard, surfCard, swissRecords, f1Highlight };

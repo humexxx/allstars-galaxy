@@ -213,7 +213,7 @@ describe("DashboardSportCard", () => {
         },
       ],
     });
-    const rail = screen.getByText("Latest news").parentElement!;
+    const rail = screen.getByRole("region", { name: "NBA news" });
     const story = within(rail).getByRole("link", { name: /Giannis stays hot in a loss/ });
     expect(story).toHaveAttribute("href", "https://www.espn.com/nba/story/_/id/1");
     expect(story).toHaveAttribute("target", "_blank");

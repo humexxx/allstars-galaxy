@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.13.0](https://github.com/humexxx/allstars-galaxy/compare/v0.12.1...v0.13.0) (2026-10-26)
+
+
+### Features
+
+* **entertainment:** add League of Legends news, on its page and its card ([a362b33](https://github.com/humexxx/allstars-galaxy/commit/a362b33b7b7c88c94a1564a008c6de018a0c5762))
+* **entertainment:** add Ligue 1 and the Bundesliga to football ([5573c07](https://github.com/humexxx/allstars-galaxy/commit/5573c07e278457bb93719394dd5e443d8c3cb9e0))
+* **entertainment:** add news for padel and surfing ([904d19d](https://github.com/humexxx/allstars-galaxy/commit/904d19dfd5417b1e336623a99c32c6c85de850d5))
+* **entertainment:** news for every sport, Ligue 1 and Bundesliga, padel kept live ([0a7ed0a](https://github.com/humexxx/allstars-galaxy/commit/0a7ed0a94ccdd7fc45b44f265a9b242772233196))
+
+
+### Bug Fixes
+
+* **entertainment:** keep padel live under its rate limit; news on racquet and surf cards ([f02b46d](https://github.com/humexxx/allstars-galaxy/commit/f02b46dbefea82cc0fb944ee9c119d8b64854e93))
+
 ## [0.12.1](https://github.com/humexxx/allstars-galaxy/compare/v0.12.0...v0.12.1) (2026-10-26)
 
 

@@ -22,6 +22,8 @@ const PATHS: Record<NewsFeed, string> = {
   "premier-league": "soccer/eng.1",
   "la-liga": "soccer/esp.1",
   "serie-a": "soccer/ita.1",
+  "ligue-1": "soccer/fra.1",
+  bundesliga: "soccer/ger.1",
   "uefa-champions-league": "soccer/uefa.champions",
   "world-cup": "soccer/fifa.world",
 };

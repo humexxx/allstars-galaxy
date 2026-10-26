@@ -515,6 +515,8 @@ describe("getDashboardSportCard", () => {
         { id: "la-liga", label: "LaLiga" },
         { id: "premier-league", label: "Premier League" },
         { id: "serie-a", label: "Serie A" },
+        { id: "ligue-1", label: "Ligue 1" },
+        { id: "bundesliga", label: "Bundesliga" },
         { id: "world-cup", label: "FIFA World Cup 2026" },
       ],
     });
@@ -537,7 +539,7 @@ describe("getDashboardSportCard", () => {
   });
 
   it("falls back to the Champions League for a league football no longer offers", async () => {
-    const card = (await getDashboardSportCard("football", "bundesliga"))!;
+    const card = (await getDashboardSportCard("football", "eredivisie"))!;
 
     expect(card.context).toMatch(/Champions League/);
     expect(card.competitions?.value).toBe("uefa-champions-league");

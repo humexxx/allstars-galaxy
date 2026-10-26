@@ -270,6 +270,8 @@ export const FOOTBALL_COMPETITION_IDS = [
   "la-liga",
   "premier-league",
   "serie-a",
+  "ligue-1",
+  "bundesliga",
   "world-cup",
 ] as const;
 

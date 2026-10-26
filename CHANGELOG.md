@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.0](https://github.com/humexxx/allstars-galaxy/compare/v0.13.0...v0.14.0) (2026-10-26)
+
+
+### Features
+
+* **entertainment:** add MLS and Costa Rica's Primera División from ESPN ([7b5bbe4](https://github.com/humexxx/allstars-galaxy/commit/7b5bbe408f5c75cbb6a870587b907fd288b37869))
+* **entertainment:** add MLS and Costa Rica's Primera División from ESPN ([722e97f](https://github.com/humexxx/allstars-galaxy/commit/722e97f9d5d9ddd488f7c5abf82bd3c3272b9243))
+
 ## [0.13.0](https://github.com/humexxx/allstars-galaxy/compare/v0.12.1...v0.13.0) (2026-10-26)
 
 

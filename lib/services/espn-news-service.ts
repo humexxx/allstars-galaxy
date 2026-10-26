@@ -13,20 +13,33 @@ const LIMIT = 24;
 /** Every wire a News tab reads, by the hub's own names. */
 type NewsFeed = "nba" | "nfl" | "mlb" | "nhl" | "atp" | FootballLeagueId;
 
-const PATHS: Record<NewsFeed, string> = {
-  nba: "basketball/nba",
-  nfl: "football/nfl",
-  mlb: "baseball/mlb",
-  nhl: "hockey/nhl",
-  atp: "tennis/atp",
-  "premier-league": "soccer/eng.1",
-  "la-liga": "soccer/esp.1",
-  "serie-a": "soccer/ita.1",
-  "ligue-1": "soccer/fra.1",
-  bundesliga: "soccer/ger.1",
-  "uefa-champions-league": "soccer/uefa.champions",
-  "world-cup": "soccer/fifa.world",
+/** A wire's league, and the edition to ask for when it is not espn.com's own. */
+type FeedSource = { path: string; params?: Record<string, string> };
+
+const FEEDS: Record<NewsFeed, FeedSource> = {
+  nba: { path: "basketball/nba" },
+  nfl: { path: "football/nfl" },
+  mlb: { path: "baseball/mlb" },
+  nhl: { path: "hockey/nhl" },
+  atp: { path: "tennis/atp" },
+  "premier-league": { path: "soccer/eng.1" },
+  "la-liga": { path: "soccer/esp.1" },
+  "serie-a": { path: "soccer/ita.1" },
+  "ligue-1": { path: "soccer/fra.1" },
+  bundesliga: { path: "soccer/ger.1" },
+  mls: { path: "soccer/usa.1" },
+  // espn.com's English wire for the league stopped in 2023 (seen October
+  // 2026); ESPN's Costa Rican edition, in Spanish, still writes about it.
+  "costa-rica": { path: "soccer/crc.1", params: { lang: "es", region: "cr" } },
+  "uefa-champions-league": { path: "soccer/uefa.champions" },
+  "world-cup": { path: "soccer/fifa.world" },
 };
+
+function newsUrl(feed: NewsFeed): string {
+  const { path, params } = FEEDS[feed];
+  const query = new URLSearchParams({ limit: String(LIMIT), ...params });
+  return `${BASE_URL}/${path}/news?${query}`;
+}
 
 type EspnImage = { type?: string; url?: string; width?: number; height?: number; alt?: string; caption?: string };
 
@@ -84,7 +97,7 @@ function storyFrom(article: EspnArticle): NewsStory | null {
 
 /** A league's or a tour's latest news, newest first. */
 async function fetchNews(feed: NewsFeed): Promise<NewsStory[]> {
-  const res = await fetch(`${BASE_URL}/${PATHS[feed]}/news?limit=${LIMIT}`, { signal: upstreamSignal() });
+  const res = await fetch(newsUrl(feed), { signal: upstreamSignal() });
   if (!res.ok) throw new Error(`espn news ${res.status} for ${feed}`);
   const json = (await res.json()) as { articles?: EspnArticle[] };
   const byId = new Map<string, NewsStory>();
@@ -108,4 +121,4 @@ export const getEspnNews = cachedFeed(
 );
 
 /** The mappers, exported for their tests — nothing here touches the network. */
-export const __testing = { storyFrom };
+export const __testing = { newsUrl, storyFrom };

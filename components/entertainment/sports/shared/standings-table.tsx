@@ -46,14 +46,17 @@ const DOMESTIC_ZONES: Partial<Record<Zone, string>> = {
   relegation: "Relegation",
 };
 
-// "champions" is the Champions League from a league, but the next round from
-// the UCL's league phase or a World Cup group (`ZONE_BAND_DEFAULTS`).
+// "champions" is the Champions League from a European league, but the next
+// round from the UCL's league phase, a World Cup group or a league that ends
+// in play-offs (MLS, Costa Rica) — see `ZONE_BAND_DEFAULTS`.
 const ZONE_LABELS: Record<FootballLeagueId, Partial<Record<Zone, string>>> = {
   "premier-league": DOMESTIC_ZONES,
   "la-liga": DOMESTIC_ZONES,
   "serie-a": DOMESTIC_ZONES,
   "ligue-1": { ...DOMESTIC_ZONES, playoff: "Relegation play-off" },
   "bundesliga": { ...DOMESTIC_ZONES, playoff: "Relegation play-off" },
+  mls: { champions: "Round One", playoff: "Wild card" },
+  "costa-rica": { champions: "Semi-finals" },
   "uefa-champions-league": { champions: "Round of 16", playoff: "Knockout play-off" },
   "world-cup": { champions: "Round of 32", playoff: "Best third places" },
 };

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
 
 import { getFootballLeague } from "@/lib/data/sports/football";
-import type { FootballLeagueId } from "@/types/sports";
+import type { BracketRound, FootballLeagueId } from "@/types/sports";
 
 import { FootballView } from "./football-view";
 
@@ -132,5 +132,62 @@ describe("FootballView", () => {
     expect(tabs()).toEqual(["Overview", "News"]);
     expect(openTab()).toBe("News");
     expect(screen.getByRole("heading", { name: "El Clásico is served" })).toBeInTheDocument();
+  });
+
+  it("shows MLS one conference at a time, East first, with its play-off zones", () => {
+    renderLeague("mls");
+    const toggle = screen.getByRole("group", { name: "Conference" });
+    expect(within(toggle).getAllByRole("radio").map((r) => r.textContent)).toEqual(["East", "West"]);
+    const east = screen.getByRole("table", { name: "Major League Soccer, East" });
+    expect(within(east).getAllByRole("rowheader")[0]).toHaveTextContent("Nashville");
+    const key = screen.getByRole("list", { name: "Key" });
+    expect(within(key).getAllByRole("listitem").map((i) => i.textContent)).toEqual(["Round One", "Wild card"]);
+
+    fireEvent.click(screen.getByRole("radio", { name: "West" }));
+
+    expect(screen.queryByRole("table", { name: "Major League Soccer, East" })).toBeNull();
+    const west = screen.getByRole("table", { name: "Major League Soccer, West" });
+    expect(within(west).getAllByRole("rowheader")[0]).toHaveTextContent("Vancouver");
+  });
+
+  it("keeps the Knockout tab locked until the play-offs are drawn", () => {
+    renderLeague("mls");
+    expect(tabs()).toEqual(["Overview", "Knockout"]);
+    expect(openTab()).toBe("Overview");
+    expect(screen.getByRole("tab", { name: "Knockout" })).toBeDisabled();
+  });
+
+  it("opens on the play-offs once they are drawn", () => {
+    const league = getFootballLeague("mls");
+    const knockout: BracketRound[] = [
+      {
+        id: "semi-final",
+        label: "Conference finals",
+        matches: [
+          { id: "mls-sf-0", homeTeamId: "nsh", awayTeamId: "mia", homeScore: 2, awayScore: 1, winnerTeamId: "nsh" },
+          { id: "mls-sf-1", homeTeamId: "van", awayTeamId: "lafc", homeScore: 1, awayScore: 1, penalties: { home: 4, away: 3 }, winnerTeamId: "van" },
+        ],
+      },
+      {
+        id: "final",
+        label: "MLS Cup",
+        matches: [{ id: "mls-final", homeTeamId: "nsh", awayTeamId: "van", homeScore: null, awayScore: null, winnerTeamId: null }],
+      },
+    ];
+    render(<FootballView league={{ ...league, knockout }} options={OPTIONS} />);
+    expect(openTab()).toBe("Knockout");
+    const panel = screen.getByRole("tabpanel");
+    expect(within(panel).getByText("MLS Cup")).toBeInTheDocument();
+    // A side each: the East's conference final on the left, the West's on the right.
+    expect(within(panel).getAllByText("Conference finals")).toHaveLength(2);
+  });
+
+  it("gives Costa Rica one table, its top four into the semi-finals", () => {
+    renderLeague("costa-rica");
+    expect(screen.queryByRole("group", { name: "Conference" })).toBeNull();
+    const { league, standings } = getFootballLeague("costa-rica");
+    const table = screen.getByRole("table", { name: league.name });
+    expect(within(table).getAllByRole("rowheader")).toHaveLength(standings.length);
+    expect(within(screen.getByRole("list", { name: "Key" })).getByText("Semi-finals")).toBeInTheDocument();
   });
 });

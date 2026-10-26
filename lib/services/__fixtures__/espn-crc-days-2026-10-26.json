@@ -1,0 +1,632 @@
+[
+ {
+  "id": "401876833",
+  "date": "2026-10-26T00:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "85'",
+   "type": {
+    "name": "STATUS_SECOND_HALF",
+    "state": "in",
+    "completed": false,
+    "detail": "85'",
+    "shortDetail": "85'"
+   }
+  },
+  "competitors": [
+   {
+    "id": "7234",
+    "homeAway": "away",
+    "abbreviation": "ZEL",
+    "displayName": "Pérez Zeledón",
+    "name": "Pérez Zeledón",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/7234.png",
+    "score": "0",
+    "winner": false
+   },
+   {
+    "id": "2057",
+    "homeAway": "home",
+    "abbreviation": "ALA",
+    "displayName": "Alajuelense",
+    "name": "Alajuelense",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/2057.png",
+    "score": "0",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "401876835",
+  "date": "2026-10-25T22:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+4'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "858",
+    "homeAway": "away",
+    "abbreviation": "SAP",
+    "displayName": "Saprissa",
+    "name": "Saprissa",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/858.png",
+    "score": "1",
+    "winner": false
+   },
+   {
+    "id": "859",
+    "homeAway": "home",
+    "abbreviation": "ADSC",
+    "displayName": "AD San Carlos",
+    "name": "San Carlos",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/859.png",
+    "score": "2",
+    "winner": true
+   }
+  ]
+ },
+ {
+  "id": "401876839",
+  "date": "2026-10-18T17:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+5'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "858",
+    "homeAway": "away",
+    "abbreviation": "SAP",
+    "displayName": "Saprissa",
+    "name": "Saprissa",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/858.png",
+    "score": "0",
+    "winner": false
+   },
+   {
+    "id": "7239",
+    "homeAway": "home",
+    "abbreviation": "CAR",
+    "displayName": "Cartaginés",
+    "name": "Cartaginés",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/7239.png",
+    "score": "1",
+    "winner": true
+   }
+  ]
+ },
+ {
+  "id": "401876837",
+  "date": "2026-10-18T22:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+3'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "862",
+    "homeAway": "away",
+    "abbreviation": "HER",
+    "displayName": "Herediano",
+    "name": "Herediano",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/862.png",
+    "score": "3",
+    "winner": true
+   },
+   {
+    "id": "7234",
+    "homeAway": "home",
+    "abbreviation": "ZEL",
+    "displayName": "Pérez Zeledón",
+    "name": "Pérez Zeledón",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/7234.png",
+    "score": "0",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "401876836",
+  "date": "2026-10-20T00:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+6'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "859",
+    "homeAway": "away",
+    "abbreviation": "ADSC",
+    "displayName": "AD San Carlos",
+    "name": "San Carlos",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/859.png",
+    "score": "3",
+    "winner": false
+   },
+   {
+    "id": "20705",
+    "homeAway": "home",
+    "abbreviation": "SSJ",
+    "displayName": "Sporting San José",
+    "name": "Spr. San José",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20705.png",
+    "score": "3",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "401876838",
+  "date": "2026-10-20T02:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+5'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "7237",
+    "homeAway": "away",
+    "abbreviation": "PUN",
+    "displayName": "Puntarenas FC",
+    "name": "Puntarenas",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/7237.png",
+    "score": "2",
+    "winner": true
+   },
+   {
+    "id": "132447",
+    "homeAway": "home",
+    "abbreviation": "BEL",
+    "displayName": "Escorpiones Belén",
+    "name": "Belén",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/132447.png",
+    "score": "1",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "401876832",
+  "date": "2026-10-24T02:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+7'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "20705",
+    "homeAway": "away",
+    "abbreviation": "SSJ",
+    "displayName": "Sporting San José",
+    "name": "Spr. San José",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20705.png",
+    "score": "4",
+    "winner": true
+   },
+   {
+    "id": "132447",
+    "homeAway": "home",
+    "abbreviation": "BEL",
+    "displayName": "Escorpiones Belén",
+    "name": "Belén",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/132447.png",
+    "score": "2",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "401876891",
+  "date": "2026-10-25T00:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+4'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "131790",
+    "homeAway": "away",
+    "abbreviation": "ISC",
+    "displayName": "Inter de San Carlos",
+    "name": "San Carlos",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/131790.png",
+    "score": "1",
+    "winner": false
+   },
+   {
+    "id": "7237",
+    "homeAway": "home",
+    "abbreviation": "PUN",
+    "displayName": "Puntarenas FC",
+    "name": "Puntarenas",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/7237.png",
+    "score": "3",
+    "winner": true
+   }
+  ]
+ },
+ {
+  "id": "401876834",
+  "date": "2026-10-25T02:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+7'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "7239",
+    "homeAway": "away",
+    "abbreviation": "CAR",
+    "displayName": "Cartaginés",
+    "name": "Cartaginés",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/7239.png",
+    "score": "1",
+    "winner": false
+   },
+   {
+    "id": "862",
+    "homeAway": "home",
+    "abbreviation": "HER",
+    "displayName": "Herediano",
+    "name": "Herediano",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/862.png",
+    "score": "3",
+    "winner": true
+   }
+  ]
+ },
+ {
+  "id": "401876890",
+  "date": "2026-10-31T00:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 0,
+   "displayClock": "0'",
+   "type": {
+    "name": "STATUS_SCHEDULED",
+    "state": "pre",
+    "completed": false,
+    "detail": "Fri, October 30th at 8:00 PM EDT",
+    "shortDetail": "Scheduled"
+   }
+  },
+  "competitors": [
+   {
+    "id": "132447",
+    "homeAway": "away",
+    "abbreviation": "BEL",
+    "displayName": "Escorpiones Belén",
+    "name": "Belén",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/132447.png",
+    "score": "",
+    "winner": false
+   },
+   {
+    "id": "131790",
+    "homeAway": "home",
+    "abbreviation": "ISC",
+    "displayName": "Inter de San Carlos",
+    "name": "San Carlos",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/131790.png",
+    "score": "",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "401876829",
+  "date": "2026-10-31T02:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 0,
+   "displayClock": "0'",
+   "type": {
+    "name": "STATUS_SCHEDULED",
+    "state": "pre",
+    "completed": false,
+    "detail": "Fri, October 30th at 10:00 PM EDT",
+    "shortDetail": "Scheduled"
+   }
+  },
+  "competitors": [
+   {
+    "id": "7237",
+    "homeAway": "away",
+    "abbreviation": "PUN",
+    "displayName": "Puntarenas FC",
+    "name": "Puntarenas",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/7237.png",
+    "score": "",
+    "winner": false
+   },
+   {
+    "id": "7234",
+    "homeAway": "home",
+    "abbreviation": "ZEL",
+    "displayName": "Pérez Zeledón",
+    "name": "Pérez Zeledón",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/7234.png",
+    "score": "",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "401876828",
+  "date": "2026-11-01T02:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 0,
+   "displayClock": "0'",
+   "type": {
+    "name": "STATUS_SCHEDULED",
+    "state": "pre",
+    "completed": false,
+    "detail": "Sat, October 31st at 10:00 PM EDT",
+    "shortDetail": "Scheduled"
+   }
+  },
+  "competitors": [
+   {
+    "id": "862",
+    "homeAway": "away",
+    "abbreviation": "HER",
+    "displayName": "Herediano",
+    "name": "Herediano",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/862.png",
+    "score": "",
+    "winner": false
+   },
+   {
+    "id": "20705",
+    "homeAway": "home",
+    "abbreviation": "SSJ",
+    "displayName": "Sporting San José",
+    "name": "Spr. San José",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20705.png",
+    "score": "",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "401876831",
+  "date": "2026-11-01T17:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 0,
+   "displayClock": "0'",
+   "type": {
+    "name": "STATUS_SCHEDULED",
+    "state": "pre",
+    "completed": false,
+    "detail": "Sun, November 1st at 12:00 PM EST",
+    "shortDetail": "Scheduled"
+   }
+  },
+  "competitors": [
+   {
+    "id": "859",
+    "homeAway": "away",
+    "abbreviation": "ADSC",
+    "displayName": "AD San Carlos",
+    "name": "San Carlos",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/859.png",
+    "score": "",
+    "winner": false
+   },
+   {
+    "id": "7239",
+    "homeAway": "home",
+    "abbreviation": "CAR",
+    "displayName": "Cartaginés",
+    "name": "Cartaginés",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/7239.png",
+    "score": "",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "401876830",
+  "date": "2026-11-01T22:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "group": {
+   "name": "Apertura",
+   "abbreviation": "Apertura"
+  },
+  "fullStatus": {
+   "period": 0,
+   "displayClock": "0'",
+   "type": {
+    "name": "STATUS_SCHEDULED",
+    "state": "pre",
+    "completed": false,
+    "detail": "Sun, November 1st at 5:00 PM EST",
+    "shortDetail": "Scheduled"
+   }
+  },
+  "competitors": [
+   {
+    "id": "2057",
+    "homeAway": "away",
+    "abbreviation": "ALA",
+    "displayName": "Alajuelense",
+    "name": "Alajuelense",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/2057.png",
+    "score": "",
+    "winner": false
+   },
+   {
+    "id": "858",
+    "homeAway": "home",
+    "abbreviation": "SAP",
+    "displayName": "Saprissa",
+    "name": "Saprissa",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/858.png",
+    "score": "",
+    "winner": false
+   }
+  ]
+ }
+]

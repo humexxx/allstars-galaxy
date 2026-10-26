@@ -226,7 +226,7 @@ function SportContent({
     case "tennis":
       return <TennisView data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "padel":
-      return <PadelView data={payload.data} />;
+      return <PadelView data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "nfl":
       return <NflView data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "mlb":
@@ -234,7 +234,7 @@ function SportContent({
     case "nhl":
       return <NhlView data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "surf":
-      return <SurfView data={payload.data} initialTab={initialTab} />;
+      return <SurfView data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "lol":
       return <LolView data={payload.data} />;
   }

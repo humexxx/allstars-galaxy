@@ -28,6 +28,8 @@ import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData } from "@/lib/services/padel-api-service";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
 import { getSurfData } from "@/lib/services/wsl-surf-service";
+import { getPadelNews } from "@/lib/services/premier-padel-news-service";
+import { getSurfNews } from "@/lib/services/stab-surf-news-service";
 import { racesTabGroups, weekendWindow } from "@/lib/sports/f1-weekend";
 import { type SportPayload } from "@/lib/sports/payload";
 import type { FootballLeagueId, SportId } from "@/types/sports";
@@ -94,8 +96,8 @@ export async function loadSport(
       return { sport, data, sample: data === LOL_DATA };
     }
     case "padel": {
-      const data = await getPadelData();
-      return { sport, data, sample: data === PADEL_DATA };
+      const [data, news] = await Promise.all([getPadelData(), getPadelNews()]);
+      return { sport, data, news, sample: data === PADEL_DATA };
     }
     case "tennis": {
       const [data, news] = await Promise.all([getTennisData(), getEspnNews("atp")]);
@@ -118,8 +120,8 @@ export async function loadSport(
       return { sport, data, news, sample: data === NHL_DATA };
     }
     case "surf": {
-      const data = await getSurfData();
-      return { sport, data, sample: data === SURF_DATA };
+      const [data, news] = await Promise.all([getSurfData(), getSurfNews()]);
+      return { sport, data, news, sample: data === SURF_DATA };
     }
   }
 }

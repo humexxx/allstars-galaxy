@@ -155,7 +155,10 @@ back to its fixture only when its feed has never answered.
 - `components/travel/trip-calendar.tsx` — the month view behind the List /
   Calendar tabs; bars laid over the day grid by `lib/travel/calendar.ts`.
   `TripCalendar` (planner, editable) and `SharedTripCalendar` (share links,
-  read-only) wrap the same month grid
+  read-only) wrap the same month grid. On a phone (under `sm`) a month the
+  trip is in keeps to its weeks: a week outside the trip with nothing on it
+  is hidden, and "Show all of <month>" brings them back; a month reached
+  with the arrows is shown whole
 - `components/travel/unit-arithmetic.tsx` — the "$120 / night × 3" line under
   a figure; the planner and the share page both print it from here
 - `components/travel/trip-payments.tsx` — the payment log, per traveller

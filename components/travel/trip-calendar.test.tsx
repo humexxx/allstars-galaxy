@@ -51,6 +51,30 @@ describe("TripCalendar", () => {
     expect(days).toHaveLength(6 * 7);
   });
 
+  it("keeps a phone to the trip's own weeks, with the whole month a tap away", () => {
+    const { container } = render(<TripCalendar trip={trip([CRUISE])} />);
+    const weeks = () =>
+      [...container.querySelectorAll("div.grid.grid-cols-7")]
+        .filter((grid) => grid.querySelector(":scope > div.flex-col"))
+        .map((grid) => grid.parentElement!);
+    const offOnAPhone = () => weeks().filter((week) => week.classList.contains("hidden")).length;
+
+    // Jan 15–24: of January's six weeks, the first two and the last touch it nowhere.
+    expect(weeks()).toHaveLength(6);
+    expect(offOnAPhone()).toBe(3);
+    fireEvent.click(screen.getByRole("button", { name: "Show all of January 2027" }));
+    expect(offOnAPhone()).toBe(0);
+    expect(screen.queryByRole("button", { name: /Show all of/ })).toBeNull();
+  });
+
+  it("shows a month reached with the arrows whole", () => {
+    const { container } = render(<TripCalendar trip={trip([CRUISE])} />);
+    fireEvent.click(screen.getByLabelText("Previous month"));
+    expect(screen.getByText("December 2026")).toBeInTheDocument();
+    expect(container.querySelectorAll("div.relative.hidden")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: /Show all of/ })).toBeNull();
+  });
+
   it("moves between months and offers the way back", () => {
     render(<TripCalendar trip={trip([CRUISE])} />);
 

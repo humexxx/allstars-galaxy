@@ -29,11 +29,13 @@ type RoadPathDetailProps = {
   timeZone?: string;
 };
 
+// Two abreast from a phone up: each card is a label and one figure, and
+// stacked they pushed the habit's calendar off the first screen.
 const GRID_COLUMNS: Record<number, string> = {
   1: "",
-  2: "@xl:grid-cols-2",
-  3: "@xl:grid-cols-3",
-  4: "@xl:grid-cols-2 @4xl:grid-cols-4",
+  2: "grid-cols-2",
+  3: "grid-cols-2 @xl:grid-cols-3",
+  4: "grid-cols-2 @4xl:grid-cols-4",
 };
 
 /**

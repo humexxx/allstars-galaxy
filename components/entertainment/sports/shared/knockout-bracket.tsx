@@ -426,7 +426,7 @@ export function KnockoutBracket({
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
           className={cn(
-            "[--bracket-column:max(var(--bracket-min),72cqw)] @xl:[--bracket-column:var(--bracket-min)]",
+            "[--bracket-column:max(var(--bracket-min),min(72cqw,18rem))] @xl:[--bracket-column:var(--bracket-min)]",
             focus.moved > 0 && "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-8",
             focus.moved < 0 && "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-left-8"
           )}

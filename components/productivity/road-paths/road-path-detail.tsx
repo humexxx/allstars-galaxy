@@ -151,7 +151,7 @@ export function RoadPathDetail({ detail, today, timeZone }: RoadPathDetailProps)
   const often = frequencyLabel(habit.scheduleDays);
 
   return (
-    // Sized by the room the page actually has, not the viewport: from `md`
+    // Sized by the room the page actually has, not the viewport: from `lg`
     // the sidebar takes 192px, and viewport breakpoints split what was left
     // into three stat cards and two narrow panels — a progress note wrapped
     // one letter per line.

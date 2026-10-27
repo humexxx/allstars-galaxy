@@ -88,10 +88,10 @@ export function AppHeader({
           : "bg-background/95 supports-[backdrop-filter]:bg-background/60 backdrop-blur"
       )}
     >
-      {/* Trigger only on mobile — it opens the sidebar sheet. On desktop the
-          sidebar is always visible (like the shadcn docs), so no collapse
-          control is shown. */}
-      <SidebarTrigger className="size-9 shrink-0 md:hidden" />
+      {/* Trigger only under `lg` — phones and tablets — where it opens the
+          sidebar sheet. From `lg` the sidebar is always visible (like the
+          shadcn docs), so no collapse control is shown. */}
+      <SidebarTrigger className="size-9 shrink-0 lg:hidden" />
 
       {/* Brand: compact mark + wordmark, the first inline element of one flat
           strip (no separators, no "zone" wrapper) — matches shadcn's header. */}

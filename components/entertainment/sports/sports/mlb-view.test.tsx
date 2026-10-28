@@ -53,7 +53,7 @@ describe("MlbView", () => {
     // The World Series opened at Milwaukee: by its home side, the NL took the AL's side.
     const { container } = renderOn(MLB_DATA);
     const leagueOf = new Map(MLB_DATA.standings.map((s) => [MLB_DATA.teams.find((t) => t.id === s.teamId)!.code, s.league]));
-    const columns = [...container.querySelectorAll<HTMLElement>("[data-column]")];
+    const columns = [...container.querySelectorAll<HTMLElement>('[data-layout="whole"] [data-column]')];
     const leagues = columns.map((column) => [
       column.firstElementChild?.textContent,
       [...new Set([...leagueOf].filter(([code]) => column.textContent?.includes(code)).map(([, league]) => league))],

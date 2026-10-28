@@ -33,8 +33,16 @@ into the back-swipe), vertical left alone below `md` — `none` *or* `contain`
 on the viewport is what disables pull-to-refresh.
 
 From `md` up the shell goes back to a fixed-height app frame with its own
-scrolling pane, which is what keeps the sidebar and header in place, and
-`overscroll-behavior: none` returns because the document edge is never reached.
+scrolling pane, which is what keeps the header (and, from `lg`, the sidebar) in
+place, and `overscroll-behavior: none` returns because the document edge is
+never reached.
+
+**The sidebar shows from `lg` (1024px), not `md`.** Below it — phones and
+tablets — it is a sheet opened from the header's button (`SidebarTrigger`,
+`lg:hidden`); `useIsBelowLg()` in `hooks/use-mobile.ts` decides, apart from
+`useIsMobile()` (768px), which still picks bottom sheets over dialogs. A fixed
+192px sidebar left a 768px tablet 576px of page. Anything sized against "the
+sidebar showing" reads `lg:`; the scroll model above stays at `md`.
 
 So on a phone nothing clips the page sideways, and **every horizontal scroller
 is `relative`**. An `sr-only` label is `position: absolute`: inside a scroller

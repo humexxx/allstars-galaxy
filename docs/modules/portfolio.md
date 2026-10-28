@@ -295,8 +295,8 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
   transactions, not split rows; "Owed now" is "Balance now".
 - **Tables become lists in narrow containers.** Transactions, investor
   summary, per-person positions and the admin queue switch on CSS container
-  queries (`@container` + `@3xl:`/`@2xl:`/`@xl:`), not the viewport — at 768 and
-  1024 the sidebar leaves far less than the viewport suggests. The KPI grids
+  queries (`@container` + `@3xl:`/`@2xl:`/`@xl:`), not the viewport — from
+  `lg` the sidebar leaves far less than the viewport suggests. The KPI grids
   do the same (`@md:grid-cols-2 @4xl:grid-cols-4`); four cards at 1024 clipped
   every figure.
 - **Price freshness (2026-10-19).** Owners only — an investor's value is a fixed

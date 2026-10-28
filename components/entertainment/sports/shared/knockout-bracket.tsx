@@ -2,18 +2,17 @@
 
 import {
   Fragment,
-  useCallback,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type ReactElement,
   type ReactNode,
+  type TouchEvent,
 } from "react";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Trophy } from "lucide-react";
+import { Trophy } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Mono } from "@/components/ui/typography";
 import { isBracketDrawn } from "@/lib/sports/bracket";
 import { cn } from "@/lib/utils";
@@ -41,22 +40,51 @@ type KnockoutBracketProps = {
    * tennis passes its own, because a draw wants seeds, flags and set scores.
    */
   renderMatch?: (match: BracketMatch, teams: Map<string, Team>) => ReactNode;
-  /** Passed to the canvas: a column never narrows past this. */
+  /** A column never narrows past this. */
   minColumnWidth?: string;
   /**
    * A bracket that is not a plain knockout (a double elimination) brings its
-   * own branches, each winner to its next match. It is drawn one-sided, its
-   * rounds in the order played, the lower bracket's ties under the upper's.
+   * own branches, each winner to its next match. Its rounds come in the order
+   * played, the lower bracket's ties under the upper's.
    */
   links?: BracketLink[];
 };
 
-/** Index of the CURRENT round: first with an undecided tie; a fully decided
- *  bracket lands on the final instead of opening on the oldest round. */
-function currentRoundIndex(rounds: BracketRound[]): number {
-  const idx = rounds.findIndex((r) => r.matches.some((m) => !m.winnerTeamId));
-  return idx === -1 ? rounds.length - 1 : idx;
+/** Index of the round being played: the first with an undecided tie, or -1. */
+function playingRoundIndex(rounds: BracketRound[]): number {
+  return rounds.findIndex((r) => r.matches.some((m) => !m.winnerTeamId));
 }
+
+/**
+ * The round a bracket opens on: the one being played, or for a decided one
+ * the last eight — the quarter-finals, semis and final, rather than a lone
+ * final or the 64 ties of a first round.
+ */
+function openingRound(rounds: BracketRound[]): number {
+  const playing = playingRoundIndex(rounds);
+  return playing === -1 ? Math.max(0, rounds.length - 3) : playing;
+}
+
+/**
+ * The most ties a round in focus shows at once. A bigger round — a Grand
+ * Slam's first, 64 ties — comes in sections of this many, each with its own
+ * way to the final, the way a printed draw is read a section at a time.
+ */
+const SECTION_TIES = 8;
+
+/** A section's ties in round `offset` after the round in focus: the ones its ties feed. */
+function sectionRange(section: number, offset: number, length: number): [number, number] {
+  const span = SECTION_TIES / 2 ** offset;
+  const from = Math.min(Math.floor(section * span), length - 1);
+  return [from, Math.min(length, Math.max(from + 1, Math.ceil((section + 1) * span)))];
+}
+
+/**
+ * The most ties a half of the draw may have for the whole bracket to be drawn
+ * at once, two-sided: four, about 400px — a playoff (the NBA's, MLB's) or a
+ * Champions League from its last 16. A tennis or padel draw has more.
+ */
+const HALF_TIES = 4;
 
 /** A round's ties by the half of the draw they are in: the top half, then the bottom. */
 function halves<T>(list: T[]): [T[], T[]] {
@@ -64,13 +92,14 @@ function halves<T>(list: T[]): [T[], T[]] {
   return [list.slice(0, mid), list.slice(mid)];
 }
 
-/**
- * Each column's left edge within the scrolled content, from layout offsets
- * (the canvas is their offset parent): they are what `scrollLeft` counts in,
- * and a transform on an ancestor does not skew them.
- */
-function columnLefts(viewport: HTMLElement): number[] {
-  return [...viewport.querySelectorAll<HTMLElement>("[data-column]")].map((column) => column.offsetLeft);
+/** "R16", "QF": a round's name short enough for a tab on a phone, where one is. */
+export function shortRoundLabel(label: string): string {
+  const numbered = /^Round (?:of )?(\d+)$/i.exec(label);
+  if (numbered) return `R${numbered[1]}`;
+  if (/^first round$/i.test(label)) return "R1";
+  if (/^quarter-?finals?$/i.test(label)) return "QF";
+  if (/^semi-?finals?$/i.test(label)) return "SF";
+  return label;
 }
 
 /**
@@ -131,22 +160,42 @@ function treeOrder(rounds: BracketRound[]): { rounds: BracketRound[]; paired: bo
 }
 
 /**
- * A knockout as a tree, drawn as a printed bracket is: the top half of the
- * draw on the left running in, the bottom half mirrored on the right, and
- * the final between them — the third-place match under it, with no branch
- * into it, as it is fed by the semi-finals' losers. A box per tie, branches
- * joining each pair of ties to the one they feed.
+ * Whether a touch started inside something that scrolls sideways: there a
+ * horizontal swipe scrolls, it does not change the round.
+ */
+function inSideScroller(target: EventTarget | null, root: HTMLElement): boolean {
+  for (let el = target as HTMLElement | null; el && el !== root; el = el.parentElement) {
+    const { overflowX } = getComputedStyle(el);
+    if ((overflowX === "auto" || overflowX === "scroll") && el.scrollWidth > el.clientWidth + 1) return true;
+  }
+  return false;
+}
+
+/**
+ * A knockout one round at a time, the way a phone's sports results show one.
  *
- * Wider than its card, it scrolls sideways (swipe, or the buttons over it: a
- * column a tap, or straight to either end, the other half of the draw). It
- * opens on the round being played, its top half centred.
+ * The round in focus is a plain list, one tie under the other; each later
+ * round sits beside it with every tie halfway between the two that feed it,
+ * joined by branches, and the rounds before it are put away. So the bracket is
+ * as tall as the round in focus, not as its first round: a Grand Slam's
+ * quarter-finals are four ties tall, where the whole draw drawn at once was 32.
+ *
+ * It opens on the round being played. The tabs over it move the focus; on a
+ * phone, where the round in focus fills most of the width and the next one
+ * shows at the edge, so does a swipe across it.
+ *
+ * A small knockout on a wide screen — a playoff, whose halves are its
+ * conferences or leagues — is drawn whole instead, as a printed bracket is:
+ * the top half on the left running in, the bottom half mirrored on the right,
+ * the final between them. Both are rendered and the bracket's own width picks
+ * one, so a phone never paints the wide one first.
  */
 export function KnockoutBracket({
   rounds,
   teams,
   className,
   renderMatch,
-  minColumnWidth,
+  minColumnWidth = "8rem",
   links,
 }: KnockoutBracketProps): React.ReactElement | null {
   const tree = useMemo(() => {
@@ -156,70 +205,39 @@ export function KnockoutBracket({
   }, [rounds, links]);
   const thirdPlace = rounds.find((r) => r.id === "third-place");
   const drawn = rounds.length > 0 && isBracketDrawn(rounds);
-  const viewport = useRef<HTMLDivElement>(null);
-  const [ends, setEnds] = useState({ overflow: false, atStart: true, atEnd: true });
+  const root = useRef<HTMLDivElement>(null);
+  const wholeViewport = useRef<HTMLDivElement>(null);
+  const tabRow = useRef<HTMLDivElement>(null);
+  const swipe = useRef<{ x: number; y: number; ignore: boolean } | null>(null);
 
-  const { columns, edges, opening, finalAt } = useMemo(() => {
-    const current = currentRoundIndex(tree.rounds);
+  // Back to the opening round when the bracket is another one (a new
+  // tournament or league), never on a revalidation of the same rounds.
+  const shape = tree.rounds.map((r) => r.id).join();
+  const [focus, setFocus] = useState({ shape, round: openingRound(tree.rounds), section: 0, moved: 0 });
+  if (focus.shape !== shape) setFocus({ shape, round: openingRound(tree.rounds), section: 0, moved: 0 });
+
+  const { columns, edges, whole } = useMemo(() => {
+    const playing = playingRoundIndex(tree.rounds);
     const last = tree.rounds.length - 1;
-    // A decided bracket opens on its final, but nothing in it is being played.
-    const playing = tree.rounds[current]?.matches.some((m) => !m.winnerTeamId) ?? false;
     const item = (match: BracketMatch, caption?: string): BracketItem => ({
       key: match.id,
       caption,
       node: <TieBox match={match} teams={teams} renderMatch={renderMatch} />,
     });
-    const column = (
-      round: BracketRound,
-      i: number,
-      side: "top" | "bottom" | "all",
-      matches: BracketMatch[]
-    ): BracketColumn => ({
-      key: `${round.id}-${side}`,
+    const columns = tree.rounds.map((round, i) => ({
+      key: round.id,
       label: round.label,
-      current: playing && i === current,
-      half: side === "all" ? undefined : side,
-      items: matches.map((m) => item(m)),
-    });
-    const before = tree.rounds.slice(0, last);
-    const final = tree.rounds[last];
-    const finalColumn: BracketColumn = {
-      key: `${final?.id ?? "final"}-centre`,
-      label: final?.label ?? "",
-      current: playing && last === current,
-      items: [
-        ...(final?.matches ?? []).map((m) => item(m)),
-        ...(thirdPlace?.matches ?? []).map((m) => item(m, thirdPlace?.label)),
-      ],
-    };
-    // Two halves only for a knockout: every round before the final splits
-    // evenly, and from the second on each feeds the next (the NFL's wild-card
-    // round of six does not halve into four, but the rest does). A double
-    // elimination (MSI's, a league's) has no halves.
-    const twoSided =
-      !links &&
-      last > 0 &&
-      final?.matches.length === 1 &&
-      before.every((r, i) => r.matches.length % 2 === 0 && (i === 0 || tree.paired[i]));
-    const columns: BracketColumn[] = twoSided
-      ? [
-          ...before.map((round, i) => column(round, i, "top", halves(round.matches)[0])),
-          finalColumn,
-          ...before.map((round, i) => column(round, i, "bottom", halves(round.matches)[1])).reverse(),
-        ]
-      : [
-          ...before.map((round, i) => ({
-            ...column(round, i, "all", round.matches),
-            // The lower bracket's first tie in each round says so.
-            items: round.matches.map((m, k) =>
-              item(m, m.side === "lower" && round.matches[k - 1]?.side !== "lower" ? "Lower bracket" : undefined)
-            ),
-          })),
-          finalColumn,
-        ];
+      current: i === playing,
+      // A double elimination's lower bracket says so on its first tie in each round.
+      items: round.matches.map((m, k) =>
+        item(m, m.side === "lower" && round.matches[k - 1]?.side !== "lower" ? "Lower bracket" : undefined)
+      ),
+      // Under the final, with no branch into it: the semi-finals' losers play it.
+      after: i === last ? (thirdPlace?.matches ?? []).map((m) => item(m, thirdPlace?.label)) : [],
+    }));
     const edges: BracketEdge[] =
       links ??
-      before.flatMap((round, i) => {
+      tree.rounds.slice(0, last).flatMap((round, i) => {
         if (!tree.paired[i]) return [];
         return tree.rounds[i + 1].matches.flatMap((target, k) =>
           [round.matches[k * 2], round.matches[k * 2 + 1]]
@@ -227,65 +245,79 @@ export function KnockoutBracket({
             .map((feeder) => ({ from: feeder.id, to: target.id }))
         );
       });
-    // The round being played (its top half's column, two-sided); the final's
-    // own once only the final is left.
-    // The final's column: the middle of a two-sided draw, the last of a one-sided one.
-    return { columns, edges, opening: Math.min(current, last), finalAt: twoSided ? before.length : columns.length - 1 };
+    // Two halves only for a knockout: every round before the final splits
+    // evenly, and from the second on each feeds the next (the NFL's wild-card
+    // round of six does not halve into four, but the rest does).
+    const before = columns.slice(0, last);
+    const halvesFit =
+      !links &&
+      last > 0 &&
+      tree.rounds[last].matches.length === 1 &&
+      before.every((c, i) => c.items.length % 2 === 0 && (i === 0 || tree.paired[i])) &&
+      before.every((c) => c.items.length / 2 <= HALF_TIES);
+    const half = (column: (typeof columns)[number], side: "top" | "bottom"): BracketColumn => ({
+      key: `${column.key}-${side}`,
+      label: column.label,
+      current: column.current,
+      half: side,
+      items: halves(column.items)[side === "top" ? 0 : 1],
+    });
+    const whole: BracketColumn[] | null = halvesFit
+      ? [
+          ...before.map((column) => half(column, "top")),
+          { ...columns[last], key: `${columns[last].key}-centre`, items: [...columns[last].items, ...columns[last].after] },
+          ...before.map((column) => half(column, "bottom")).reverse(),
+        ]
+      : null;
+    return { columns, edges, whole };
   }, [tree, thirdPlace, teams, renderMatch, links]);
 
-  const readEnds = useCallback(() => {
-    const el = viewport.current;
-    if (!el) return;
-    const max = el.scrollWidth - el.clientWidth;
-    const next = { overflow: max > 1, atStart: el.scrollLeft <= 1, atEnd: el.scrollLeft >= max - 1 };
-    setEnds((prev) =>
-      prev.overflow === next.overflow && prev.atStart === next.atStart && prev.atEnd === next.atEnd
-        ? prev
-        : next
-    );
-  }, []);
+  // Sections only where every round from the focus on halves into the next:
+  // only there does a section have a way of its own to the final.
+  const sectionsAt = (round: number): number =>
+    !links && tree.paired.slice(round, -1).every(Boolean) && columns[round].items.length > SECTION_TIES
+      ? Math.ceil(columns[round].items.length / SECTION_TIES)
+      : 1;
+  const sections = sectionsAt(focus.round);
+  const section = Math.min(focus.section, sections - 1);
 
-  /** Where the viewport sits with column `index` in its middle. */
-  const centredOn = useCallback((index: number): number | null => {
-    const el = viewport.current;
-    const target = el?.querySelector<HTMLElement>(`[data-column="${index}"]`);
-    if (!el || !target) return null;
-    return Math.max(0, (columnLefts(el)[index] ?? 0) - (el.clientWidth - target.offsetWidth) / 2);
-  }, []);
-
-  // On the round being played, before the first paint; again for new rounds
-  // (another league, a revalidation), never on the reader's own scrolling.
-  useLayoutEffect(() => {
-    const left = centredOn(opening);
-    if (viewport.current && left !== null) viewport.current.scrollLeft = left;
-    readEnds();
-  }, [rounds, opening, readEnds, centredOn]);
-
-  useLayoutEffect(() => {
-    const el = viewport.current;
-    if (!el) return;
-    const observer = new ResizeObserver(readEnds);
-    observer.observe(el);
-    el.addEventListener("scroll", readEnds, { passive: true });
-    return () => {
-      observer.disconnect();
-      el.removeEventListener("scroll", readEnds);
-    };
-  }, [readEnds, drawn]);
-
-  const scrollTo = (left: number): void => {
-    viewport.current?.scrollTo({ left, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  const go = (round: number): void => {
+    if (round < 0 || round >= columns.length || round === focus.round) return;
+    // The same part of the draw: on, the section its ties feed; back, its first.
+    const shift = round - focus.round;
+    const next = shift > 0 ? Math.floor(section / 2 ** shift) : section * 2 ** -shift;
+    setFocus({ shape, round, section: Math.min(next, sectionsAt(round) - 1), moved: shift > 0 ? 1 : -1 });
   };
-  /** To the next column's left edge that way, or the end. */
-  const step = (direction: 1 | -1): void => {
-    const el = viewport.current;
-    if (!el) return;
-    const at = el.scrollLeft;
-    const lefts = columnLefts(el);
-    const next =
-      direction > 0 ? lefts.find((x) => x > at + 1) : [...lefts].reverse().find((x) => x < at - 1);
-    scrollTo(next ?? (direction > 0 ? el.scrollWidth : 0));
-  };
+
+  const shown: BracketColumn[] = columns.slice(focus.round).map((column, offset) => {
+    const [from, to] = sections > 1 ? sectionRange(section, offset, column.items.length) : [0, column.items.length];
+    return { ...column, items: [...column.items.slice(from, to), ...column.after] };
+  });
+
+  // Drawn whole and a little wider than its card, it opens with the final in
+  // the middle: both ends cut alike say there is more either way.
+  useLayoutEffect(() => {
+    const el = wholeViewport.current;
+    if (!el || el.offsetParent === null) return;
+    el.scrollLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
+  }, [whole]);
+
+  // The round in focus keeps its tab in view: a playoff's names ("Championship
+  // Series") put the last rounds past the edge of a phone.
+  useLayoutEffect(() => {
+    const row = tabRow.current;
+    const tab = row?.querySelector<HTMLElement>('[data-state="on"]');
+    if (!row || !tab || row.scrollWidth <= row.clientWidth) return;
+    row.scrollLeft = Math.max(0, tab.offsetLeft - (row.clientWidth - tab.offsetWidth) / 2);
+  }, [focus.round, columns.length]);
+
+  // A round further on is shorter: if the reader was down in a long one, the
+  // bracket's top comes back into view instead of the page ending above them.
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el || focus.moved === 0 || el.getBoundingClientRect().top >= 0) return;
+    el.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  }, [focus]);
 
   if (!drawn) {
     return (
@@ -298,82 +330,116 @@ export function KnockoutBracket({
     );
   }
 
+  const onTouchStart = (event: TouchEvent<HTMLDivElement>): void => {
+    const touch = event.touches[0];
+    swipe.current = { x: touch.clientX, y: touch.clientY, ignore: inSideScroller(event.target, event.currentTarget) };
+  };
+  const onTouchEnd = (event: TouchEvent<HTMLDivElement>): void => {
+    const start = swipe.current;
+    swipe.current = null;
+    if (!start || start.ignore) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    // Sideways, and clearly so: a scroll down the page that drifts is not a swipe.
+    if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    go(focus.round + (dx < 0 ? 1 : -1));
+  };
+
   return (
-    <div className={cn("flex flex-col gap-3", className)}>
-      {ends.overflow && (
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center">
-            <ScrollButton label="Left end of the bracket" off={ends.atStart} onPress={() => scrollTo(0)}>
-              <ChevronsLeft />
-            </ScrollButton>
-            <ScrollButton label="Scroll left" off={ends.atStart} onPress={() => step(-1)}>
-              <ChevronLeft />
-            </ScrollButton>
-          </div>
-          {/* Back to the middle of it all: the final, in the centre. */}
-          <ScrollButton
-            label="Centre on the final"
-            off={false}
-            onPress={() => {
-              const left = centredOn(finalAt);
-              if (left !== null) scrollTo(left);
-            }}
-          >
-            <Trophy />
-          </ScrollButton>
-          <div className="flex items-center">
-            <ScrollButton label="Scroll right" off={ends.atEnd} onPress={() => step(1)}>
-              <ChevronRight />
-            </ScrollButton>
-            <ScrollButton
-              label="Right end of the bracket"
-              off={ends.atEnd}
-              onPress={() => scrollTo(viewport.current?.scrollWidth ?? 0)}
-            >
-              <ChevronsRight />
-            </ScrollButton>
-          </div>
+    <div
+      ref={root}
+      // Its own width decides the layout, not the window: a phone, or a
+      // narrow card on a desktop.
+      className={cn("@container scroll-mt-26 md:scroll-mt-12", className)}
+      style={{ "--bracket-min": minColumnWidth } as React.CSSProperties}
+    >
+      {whole && (
+        <div data-layout="whole" className="hidden @4xl:block">
+          <BracketCanvas
+            columns={whole}
+            edges={edges}
+            minColumnWidth="var(--bracket-min)"
+            viewportRef={wholeViewport}
+          />
         </div>
       )}
-      <BracketCanvas
-        columns={columns}
-        edges={edges}
-        minColumnWidth={minColumnWidth}
-        viewportRef={viewport}
-      />
+      <div data-layout="rounds" className={cn("flex flex-col gap-3", whole && "@4xl:hidden")}>
+        {columns.length > 1 && (
+          // The tabs scroll on their own when a draw has more rounds than fit.
+          <div ref={tabRow} className="relative -mx-1 overflow-x-auto px-1">
+            <ToggleGroup
+              type="single"
+              size="sm"
+              aria-label="Round"
+              value={String(focus.round)}
+              onValueChange={(value) => {
+                if (value) go(Number(value));
+              }}
+            >
+              {columns.map((column, i) => (
+                <ToggleGroupItem
+                  key={column.key}
+                  value={String(i)}
+                  aria-label={column.current ? `${column.label}, being played` : column.label}
+                  className="gap-1.5 px-3"
+                >
+                  <span className="@xl:hidden">{shortRoundLabel(column.label)}</span>
+                  <span className="hidden @xl:inline">{column.label}</span>
+                  {column.current && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary" />}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </div>
+        )}
+        {sections > 1 && (
+          <div className="-mx-1 overflow-x-auto px-1">
+            <ToggleGroup
+              type="single"
+              size="sm"
+              variant="outline"
+              aria-label="Section of the draw"
+              value={String(section)}
+              onValueChange={(value) => {
+                if (value) setFocus({ ...focus, section: Number(value), moved: 0 });
+              }}
+            >
+              {Array.from({ length: sections }, (_, i) => (
+                <ToggleGroupItem
+                  key={i}
+                  value={String(i)}
+                  aria-label={sections === 2 ? undefined : `Section ${i + 1} of ${sections}`}
+                  className="px-3"
+                >
+                  {sections === 2 ? (i === 0 ? "Top half" : "Bottom half") : i + 1}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </div>
+        )}
+        <div
+          // A new focus slides in from the side it came from. Under `@xl` the
+          // round in focus takes most of the width and the next one shows at
+          // the edge; from `@xl` the rounds left fit side by side, scrolling
+          // only when they cannot.
+          key={`${focus.round}-${section}`}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+          className={cn(
+            "[--bracket-column:max(var(--bracket-min),min(72cqw,18rem))] @xl:[--bracket-column:var(--bracket-min)]",
+            focus.moved > 0 && "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-8",
+            focus.moved < 0 && "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-left-8"
+          )}
+        >
+          <BracketCanvas
+            columns={shown}
+            edges={edges}
+            minColumnWidth="var(--bracket-column)"
+            className="overflow-x-hidden @xl:overflow-x-auto"
+          />
+        </div>
+      </div>
     </div>
-  );
-}
-
-/**
- * A control over the bracket, off at the end it moves towards. Off is
- * `aria-disabled`, not `disabled`: a button that disables itself under focus
- * drops that focus to the page, and a keyboard or screen-reader user is lost.
- */
-function ScrollButton({
-  label,
-  off,
-  onPress,
-  children,
-}: {
-  label: string;
-  off: boolean;
-  onPress: () => void;
-  children: ReactNode;
-}): ReactElement {
-  return (
-    <Button
-      size="icon"
-      variant="ghost"
-      aria-label={label}
-      aria-disabled={off}
-      onClick={() => {
-        if (!off) onPress();
-      }}
-      className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
-    >
-      {children}
-    </Button>
   );
 }
 

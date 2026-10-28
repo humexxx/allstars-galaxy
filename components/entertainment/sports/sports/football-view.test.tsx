@@ -186,10 +186,10 @@ describe("FootballView", () => {
     ];
     render(<FootballView league={{ ...league, knockout }} options={OPTIONS} />);
     expect(openTab()).toBe("Knockout");
-    const panel = screen.getByRole("tabpanel");
-    expect(within(panel).getByText("MLS Cup")).toBeInTheDocument();
+    const whole = screen.getByRole("tabpanel").querySelector<HTMLElement>('[data-layout="whole"]')!;
+    expect(within(whole).getByText("MLS Cup")).toBeInTheDocument();
     // A side each: the East's conference final on the left, the West's on the right.
-    expect(within(panel).getAllByText("Conference finals")).toHaveLength(2);
+    expect(within(whole).getAllByText("Conference finals")).toHaveLength(2);
   });
 
   it("gives Costa Rica one table, its top four into the semi-finals", () => {

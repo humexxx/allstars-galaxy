@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
 import type { BracketLink, BracketMatch, BracketRound, Team } from "@/types/sports";
 
-import { KnockoutBracket } from "./knockout-bracket";
+import { KnockoutBracket, shortRoundLabel } from "./knockout-bracket";
 
 /** A Major's draw on day one: 64 to the final, nothing played. */
 const SIZES = [32, 16, 8, 4, 2, 1];
@@ -44,72 +44,94 @@ const columns = (container: HTMLElement): HTMLElement[] => [
   ...container.querySelectorAll<HTMLElement>("[data-column]"),
 ];
 const heading = (column: HTMLElement): string | null => column.firstElementChild?.textContent ?? null;
+const ties = (column: HTMLElement): number => within(column).getAllByRole("listitem").length;
 
-/**
- * jsdom lays nothing out: give the scroller and its columns a width, as a
- * card 400px wide around eleven 200px columns would.
- */
-function layOut(container: HTMLElement): { viewport: HTMLElement; scrollTo: ReturnType<typeof vi.fn> } {
-  const all = columns(container);
-  const viewport = all[0].closest<HTMLElement>(".overflow-x-auto")!;
-  const width = all.length * 200;
-  Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 400 });
-  Object.defineProperty(viewport, "scrollWidth", { configurable: true, value: width });
-  all.forEach((column, i) => {
-    Object.defineProperty(column, "offsetLeft", { configurable: true, value: i * 200 });
-  });
-  const scrollTo = vi.fn(({ left }: ScrollToOptions) => {
-    viewport.scrollLeft = Math.max(0, Math.min(left ?? 0, width - 400));
-    fireEvent.scroll(viewport);
-  });
-  viewport.scrollTo = scrollTo as unknown as HTMLElement["scrollTo"];
-  fireEvent.scroll(viewport);
-  return { viewport, scrollTo };
+/** A sideways swipe across the bracket, as a finger on a phone makes it. */
+function swipe(container: HTMLElement, dx: number, dy = 0): void {
+  const surface = columns(container)[0].closest<HTMLElement>("[class*=bracket-column]")!;
+  fireEvent.touchStart(surface, { touches: [{ clientX: 200, clientY: 100 }] });
+  fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 200 + dx, clientY: 100 + dy }] });
 }
 
 describe("KnockoutBracket", () => {
-  it("draws the top half on the left, the final between, the bottom half mirrored on the right", () => {
+  it("opens on the round being played, one-sided, with the rounds after it", () => {
     const container = renderBracket();
-    const all = columns(container);
-    expect(all.map(heading)).toEqual([
+    expect(columns(container).map(heading)).toEqual([
       "Round of 64",
       "Round of 32",
       "Round of 16",
       "Quarter-finals",
       "Semi-finals",
       "Final",
-      "Semi-finals",
-      "Quarter-finals",
-      "Round of 16",
-      "Round of 32",
-      "Round of 64",
     ]);
-    // Each half holds half of each round: the first column the draw's top 16 ties.
-    expect(all[0].textContent).toContain("T0");
-    expect(all[0].textContent).not.toContain("T32");
-    expect(all[10].textContent).toContain("T32");
-    expect(all[10].textContent).not.toContain("T0");
   });
 
-  it("names each column's round, its half, and the round being played, its ties a list", () => {
+  it("names each column's round and the round being played, its ties a list", () => {
     const container = renderBracket();
-    const groups = screen.getAllByRole("group");
-    expect(groups.map((group) => group.getAttribute("aria-label"))).toEqual([
-      "Round of 64, top half, being played",
-      "Round of 32, top half",
-      "Round of 16, top half",
-      "Quarter-finals, top half",
-      "Semi-finals, top half",
+    expect(columns(container).map((column) => column.getAttribute("aria-label"))).toEqual([
+      "Round of 64, being played",
+      "Round of 32",
+      "Round of 16",
+      "Quarter-finals",
+      "Semi-finals",
       "Final",
-      "Semi-finals, bottom half",
-      "Quarter-finals, bottom half",
-      "Round of 16, bottom half",
-      "Round of 32, bottom half",
-      "Round of 64, bottom half, being played",
     ]);
     // The group names the round, so the label on screen is not read twice.
     expect(columns(container)[0].firstElementChild).toHaveAttribute("aria-hidden", "true");
-    expect(within(groups[0]).getAllByRole("listitem")).toHaveLength(16);
+    expect(screen.getByRole("radio", { name: "Round of 64, being played" })).toHaveAttribute("data-state", "on");
+  });
+
+  it("moves the focus with the round tabs, putting the rounds before it away", () => {
+    const container = renderBracket();
+    fireEvent.click(screen.getByRole("radio", { name: "Quarter-finals" }));
+    const all = columns(container);
+    expect(all.map(heading)).toEqual(["Quarter-finals", "Semi-finals", "Final"]);
+    expect(all.map(ties)).toEqual([4, 2, 1]);
+  });
+
+  it("shows a round of more than eight ties a section at a time, each with its way to the final", () => {
+    const container = renderBracket();
+    // 32 ties: four sections of eight, and each section's share of every round after.
+    expect(within(screen.getByRole("group", { name: "Section of the draw" })).getAllByRole("radio")).toHaveLength(4);
+    expect(columns(container).map(ties)).toEqual([8, 4, 2, 1, 1, 1]);
+    expect(columns(container)[0].textContent).toContain("T0");
+    expect(columns(container)[0].textContent).not.toContain("T16");
+
+    fireEvent.click(screen.getByRole("radio", { name: "Section 4 of 4" }));
+    expect(columns(container)[0].textContent).toContain("T48");
+    expect(columns(container)[0].textContent).not.toContain("T0");
+    expect(columns(container).map(ties)).toEqual([8, 4, 2, 1, 1, 1]);
+  });
+
+  it("keeps the same part of the draw when the focus moves on a round", () => {
+    renderBracket();
+    fireEvent.click(screen.getByRole("radio", { name: "Section 4 of 4" }));
+    // The last quarter of the round of 64 feeds the bottom half of the round of 32.
+    fireEvent.click(screen.getByRole("radio", { name: "Round of 32" }));
+    expect(screen.getByRole("radio", { name: "Bottom half" })).toHaveAttribute("data-state", "on");
+  });
+
+  it("goes on a round with a swipe to the left and back with one to the right, not with a scroll down", () => {
+    const container = renderBracket();
+    swipe(container, -120);
+    expect(heading(columns(container)[0])).toBe("Round of 32");
+    swipe(container, 120);
+    expect(heading(columns(container)[0])).toBe("Round of 64");
+    // Too short, or more down than across: the page scrolling, not a swipe.
+    swipe(container, -30);
+    swipe(container, -80, 200);
+    expect(heading(columns(container)[0])).toBe("Round of 64");
+    // Nothing before the first round.
+    swipe(container, 120);
+    expect(heading(columns(container)[0])).toBe("Round of 64");
+  });
+
+  it("opens a decided bracket on its last eight", () => {
+    const decided = rounds.map((round) => ({
+      ...round,
+      matches: round.matches.map((m) => ({ ...m, homeTeamId: "t0", awayTeamId: "t1", winnerTeamId: "t0" })),
+    }));
+    expect(columns(renderBracket(decided)).map(heading)).toEqual(["Quarter-finals", "Semi-finals", "Final"]);
   });
 
   it("says no round is being played once every tie is decided", () => {
@@ -174,11 +196,13 @@ describe("KnockoutBracket", () => {
       { id: "third-place", label: "Third place", matches: [{ id: "tp", homeTeamId: "t1", awayTeamId: "t2" }] },
     ];
     const all = columns(renderBracket(withThird));
-    expect(all).toHaveLength(11);
+    expect(all).toHaveLength(6);
     expect(all[5].textContent).toContain("Third place");
+    // Not a round of its own to move to.
+    expect(screen.queryByRole("radio", { name: "Third place" })).toBeNull();
   });
 
-  it("draws a double elimination one-sided, its own branches, the lower bracket captioned", () => {
+  it("draws a double elimination with its own branches, the lower bracket captioned", () => {
     const m = (id: string, home: string, away: string, side: "upper" | "lower"): BracketMatch => ({
       id,
       homeTeamId: home,
@@ -186,7 +210,7 @@ describe("KnockoutBracket", () => {
       winnerTeamId: home,
       side,
     });
-    // Four rounds of even sizes that do not halve: no halves to split.
+    // Four rounds of even sizes that do not halve: no sections to cut.
     const doubleElimination: BracketRound[] = [
       { id: "round-1", label: "Round 1", matches: [m("a", "t0", "t1", "upper"), m("b", "t2", "t3", "upper")] },
       { id: "round-2", label: "Round 2", matches: [m("c", "t0", "t2", "upper"), m("d", "t1", "t3", "lower")] },
@@ -200,10 +224,12 @@ describe("KnockoutBracket", () => {
       { from: "c", to: "f" },
       { from: "e", to: "f" },
     ]);
+    fireEvent.click(screen.getByRole("radio", { name: "Round 1" }));
     const all = columns(container);
     expect(all.map(heading)).toEqual(["Round 1", "Round 2", "Round 3", "Final"]);
     expect(all[1].textContent).toContain("Lower bracket");
     expect(all[0].textContent).not.toContain("Lower bracket");
+    expect(screen.queryByRole("group", { name: "Section of the draw" })).toBeNull();
   });
 
   it("splits no even-sized rounds that do not halve past the first, given no branches", () => {
@@ -222,65 +248,7 @@ describe("KnockoutBracket", () => {
     expect(columns(renderBracket(even)).map(heading)).toEqual(["Round 1", "Upper final", "Lower final", "Final"]);
   });
 
-  it("has no buttons while the whole bracket fits", () => {
-    renderBracket();
-    expect(screen.queryByRole("button", { name: "Right end of the bracket" })).toBeNull();
-  });
-
-  it("goes straight to either end, and a column at a time", () => {
-    const container = renderBracket();
-    const { viewport, scrollTo } = layOut(container);
-    const button = (name: string): HTMLElement => screen.getByRole("button", { name });
-
-    // Day one opens on the first round: the left end.
-    expect(button("Left end of the bracket")).toHaveAttribute("aria-disabled", "true");
-    expect(button("Scroll left")).toHaveAttribute("aria-disabled", "true");
-
-    fireEvent.click(button("Right end of the bracket"));
-    expect(viewport.scrollLeft).toBe(1800);
-    expect(button("Right end of the bracket")).toHaveAttribute("aria-disabled", "true");
-    expect(button("Scroll right")).toHaveAttribute("aria-disabled", "true");
-
-    fireEvent.click(button("Scroll left"));
-    expect(viewport.scrollLeft).toBe(1600);
-
-    fireEvent.click(button("Left end of the bracket"));
-    expect(viewport.scrollLeft).toBe(0);
-    fireEvent.click(button("Scroll right"));
-    expect(viewport.scrollLeft).toBe(200);
-    expect(scrollTo).toHaveBeenCalledTimes(4);
-  });
-
-  it("comes back to the final, in the middle of the view, from anywhere", () => {
-    const container = renderBracket();
-    const { viewport } = layOut(container);
-    const final = screen.getByRole("button", { name: "Centre on the final" });
-
-    fireEvent.click(final);
-    // The final is the sixth of eleven columns, 200px apart, in a view 400px wide.
-    expect(viewport.scrollLeft).toBe(1000 - (400 - columns(container)[5].offsetWidth) / 2);
-
-    fireEvent.click(screen.getByRole("button", { name: "Right end of the bracket" }));
-    fireEvent.click(final);
-    expect(viewport.scrollLeft).toBe(1000 - (400 - columns(container)[5].offsetWidth) / 2);
-  });
-
-  it("keeps the focus on a button that reaches its end, and does nothing more from there", () => {
-    const { scrollTo } = layOut(renderBracket());
-    const end = screen.getByRole("button", { name: "Right end of the bracket" });
-    end.focus();
-    fireEvent.click(end);
-    // Disabled under focus, a button drops that focus to the page.
-    expect(end).not.toBeDisabled();
-    expect(end).toHaveFocus();
-    expect(end).toHaveAttribute("aria-disabled", "true");
-
-    fireEvent.click(end);
-    fireEvent.click(screen.getByRole("button", { name: "Scroll right" }));
-    expect(scrollTo).toHaveBeenCalledTimes(1);
-  });
-
-  it("follows the reader's scrolling once a bracket that opened undrawn is drawn", () => {
+  it("opens on the round being played once a bracket that opened undrawn is drawn", () => {
     const undrawn = rounds.map((round) => ({
       ...round,
       matches: round.matches.map((m) => ({ ...m, homeTeamId: null, awayTeamId: null })),
@@ -289,13 +257,16 @@ describe("KnockoutBracket", () => {
     expect(screen.getByText("The bracket is not drawn yet")).toBeInTheDocument();
 
     rerender(bracket(rounds));
-    const { viewport } = layOut(container);
-    const button = (name: string): HTMLElement => screen.getByRole("button", { name });
-    expect(button("Right end of the bracket")).toHaveAttribute("aria-disabled", "false");
+    expect(heading(columns(container)[0])).toBe("Round of 64");
+  });
+});
 
-    viewport.scrollLeft = 1800;
-    fireEvent.scroll(viewport);
-    expect(button("Right end of the bracket")).toHaveAttribute("aria-disabled", "true");
-    expect(button("Left end of the bracket")).toHaveAttribute("aria-disabled", "false");
+describe("shortRoundLabel", () => {
+  it("shortens the rounds every sport names alike, and leaves the rest", () => {
+    expect(
+      ["Round 1", "Round of 16", "First Round", "Quarter-finals", "Quarterfinals", "Semi-finals", "Final", "Wild Card"].map(
+        shortRoundLabel
+      )
+    ).toEqual(["R1", "R16", "R1", "QF", "QF", "SF", "Final", "Wild Card"]);
   });
 });

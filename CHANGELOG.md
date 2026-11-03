@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.17.0](https://github.com/humexxx/allstars-galaxy/compare/v0.16.0...v0.17.0) (2026-11-03)
+
+
+### Features
+
+* **entertainment:** show a knockout one round at a time ([c8fb241](https://github.com/humexxx/allstars-galaxy/commit/c8fb24195f26516ae16312a59f1063841e304cca))
+* **portal:** open the sidebar from a button on a tablet ([cf5e266](https://github.com/humexxx/allstars-galaxy/commit/cf5e266d807197a8af68912f41bef505fe717e18))
+* small-screen review and one-round-at-a-time brackets ([2a1bcb1](https://github.com/humexxx/allstars-galaxy/commit/2a1bcb1f27e9da20953a0fb6a345ca9bbd37d1c2))
+
+
+### Bug Fixes
+
+* **ui:** apply the pre-merge review ([84ebeed](https://github.com/humexxx/allstars-galaxy/commit/84ebeed7d5fd9b6a2c8ac8fd09fd2b400edce99d))
+* **ui:** fix what a deep touch-screen audit of every page found ([1d0d38b](https://github.com/humexxx/allstars-galaxy/commit/1d0d38b194740250312bfe2a785e5066584d1ad7))
+* **ui:** fix what a second phone-width review of every page found ([9084af6](https://github.com/humexxx/allstars-galaxy/commit/9084af68b1327f77b18efb664d660e4d515af845))
+* **ui:** tighten the phone layouts the small-screen review found ([833c7fb](https://github.com/humexxx/allstars-galaxy/commit/833c7fbbae1cbd21feefb67c3c596150eec1d580))
+
 ## [0.16.0](https://github.com/humexxx/allstars-galaxy/compare/v0.15.0...v0.16.0) (2026-10-26)
 
 

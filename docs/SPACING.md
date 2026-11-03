@@ -33,8 +33,16 @@ into the back-swipe), vertical left alone below `md` — `none` *or* `contain`
 on the viewport is what disables pull-to-refresh.
 
 From `md` up the shell goes back to a fixed-height app frame with its own
-scrolling pane, which is what keeps the sidebar and header in place, and
-`overscroll-behavior: none` returns because the document edge is never reached.
+scrolling pane, which is what keeps the header (and, from `lg`, the sidebar) in
+place, and `overscroll-behavior: none` returns because the document edge is
+never reached.
+
+**The sidebar shows from `lg` (1024px), not `md`.** Below it — phones and
+tablets — it is a sheet opened from the header's button (`SidebarTrigger`,
+`lg:hidden`); `useIsBelowLg()` in `hooks/use-mobile.ts` decides, apart from
+`useIsMobile()` (768px), which still picks bottom sheets over dialogs. A fixed
+192px sidebar left a 768px tablet 576px of page. Anything sized against "the
+sidebar showing" reads `lg:`; the scroll model above stays at `md`.
 
 So on a phone nothing clips the page sideways, and **every horizontal scroller
 is `relative`**. An `sr-only` label is `position: absolute`: inside a scroller
@@ -207,10 +215,44 @@ to another offset.
 - **Control height is 40px** (`h-10`) for `Button`, `Input`, `SelectTrigger`
   and `InputGroup` alike, so a field and the button beside it line up. `sm`
   (32px) is for toolbars and table rows. Skeletons for a form row are `h-10`.
+- **`sm` is a desktop density; a phone steps it up for a thumb.** Below `sm`
+  (640px) `Button size="sm"` / `"icon-sm"` and `SelectTrigger size="sm"` are
+  36px, and a `size="sm"` `ToggleGroup` gets the default 40px track, whose
+  26px segments a thumb kept missing. `xs` / `icon-xs` keep their 24px look —
+  they sit inside a line of text — and on a touch screen (`pointer-coarse`)
+  reach 36px through an invisible `::after` hit area, as `Switch` does. So
+  write `size="sm"` once and let the kit step it; never pin a small control to
+  `h-8` at every width. The step is `max-sm:`, never a desktop `sm:` value:
+  a caller's own height (`h-6`, `size-9`) holds from `sm` up exactly as it
+  did, and a `sm:` value in the kit outranked it on every desktop. A caller
+  that must keep its height on a phone too says so with `max-sm:`. A row that must keep its height on a phone (a pinned
+  toolbar) is the exception and says why. `TooltipContent` takes no pointer
+  events on a touch screen: a tap focuses the trigger, which opens the
+  tooltip mid-tap over the top of that hit area, and the click went nowhere.
+- **A touch screen never hovers.** A tooltip on something that is not a
+  control (a column heading's definition, the focusable `span` that explains
+  a disabled button) opens on a tap there, through `TooltipTrigger`; a
+  button's tooltip only names it, so its tap just acts. Nothing a phone needs
+  may live only in a tooltip on a control, in `title`, or behind
+  `group-hover`. Text fields stay 16px on a touch screen at every width
+  (`md:pointer-fine:text-sm` in `Input`, `Textarea` and `CommandInput`): under
+  16px iOS zooms the page on focus, and a phone on its side is wider than `md`.
+- **The hardware's edges.** The root layout sets `viewportFit: "cover"`, so
+  the page paints under the home indicator and, on its side, the notch.
+  `html` pads itself clear of the notch (not `body`, whose padding a dialog's
+  scroll lock zeroes); anything pinned to an edge clears its
+  inset with `pb-safe-N` / `pl-safe-N` / `pr-safe-N` / `bottom-safe-N`
+  (`globals.css`): the larger of step N and the inset, `-0` for the bare inset
+  under a container whose children already pad. `DialogContent`'s phone sheet,
+  `SheetContent` and `Toaster` already do; a new floating button or bar does
+  the same instead of `bottom-4`.
+- **A popover fits the screen.** `PopoverContent` caps itself at the room
+  Radix measures on its side and scrolls past it; a `Command` inside gives
+  way in its list. A month calendar is taller than a phone held sideways.
 - **Segmented controls are one component.** A switch between views of the
   same thing (range, unit, list/calendar) is `ToggleGroup` — its default
   variant is the same grey track and white chip as `TabsList`, `h-10`
-  (`size="sm"` → `h-8`). `Tabs` only when each option owns a `TabsContent`
+  (`size="sm"` → `h-8` from `sm`). `Tabs` only when each option owns a `TabsContent`
   panel; a `TabsList` with no panels points `aria-controls` at nothing. Chip
   filters are `ToggleGroup type="multiple" variant="outline"`.
 - **Empty and status surfaces.** "Nothing here yet" inside a card or list is
@@ -227,14 +269,18 @@ to another offset.
   Nothing to opt into — but do not fight it with `top-*` overrides, and do not
   add `max-h-[..vh] overflow-y-auto`: `DialogContent` already caps its height
   and scrolls.
-- **System colours.** `--primary` is system blue, `--destructive` system red,
+- **System colours.** `--primary` is system blue (a step deeper, so white
+  labels on it reach 4.5:1), `--destructive` system red,
   `--success` system green (the on-state of `Switch`), `--warning` system
   orange. Status text and tints use these tokens (`text-success`,
   `bg-destructive/10`, `border-warning/30`), never raw `emerald-*` / `rose-*` /
   `amber-*` steps — the tokens already carry their dark-mode value. The light
   steps sit deeper than Apple's swatches on purpose: they are read as small
   text on white far more than as fills, and systemGreen itself is 2.3:1 there. The chart
-  palette is separate and validated; it does not follow these. Tints are
+  palette is separate and validated; it does not follow these. A solid fill
+  under a `primary-foreground` label is `bg-primary-fill`, not `bg-primary`:
+  in dark mode #0A84FF reads well as text on a card but carries a white label
+  at 3.1:1, so the fill takes the deeper blue. Tints are
   always `/10` fills and `/30` borders (`dark:bg-X/20`), which is what the
   `success` / `warning` / `info` `Badge` and `Alert` variants use.
 

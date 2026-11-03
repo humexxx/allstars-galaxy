@@ -1,7 +1,7 @@
 # Productivity
 
 > **Status:** Active
-> **Last reviewed:** 2026-10-19
+> **Last reviewed:** 2026-10-26
 
 ## Overview
 Two surfaces: a *daily* kanban board — each day its own, with what was left

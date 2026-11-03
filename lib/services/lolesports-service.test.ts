@@ -41,6 +41,12 @@ describe("toTeam", () => {
       .toMatchObject({ primaryColor: "#222" });
   });
 
+  it("asks for a logo the feed lists as http:// over https", () => {
+    expect(toTeam({ name: "KC", code: "KC", image: "http://static.lolesports.com/teams/kc.png" }).logoUrl).toBe(
+      "https://static.lolesports.com/teams/kc.png"
+    );
+  });
+
   it("keeps the team's colour for a badge drawn as its initials", () => {
     expect(toTeam({ name: "T1", code: "T1" })).toMatchObject({ logoUrl: undefined, primaryColor: "#E2012D" });
     expect(toTeam({ name: "Unknown", code: "UNK" }).primaryColor).toBe("#222");

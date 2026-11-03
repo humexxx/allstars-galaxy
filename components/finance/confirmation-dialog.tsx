@@ -113,7 +113,19 @@ export function ConfirmationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent
+        className="sm:max-w-2xl"
+        // This dialog opens by itself, before anyone has read it. On a touch
+        // screen, focusing its first field threw the keyboard over half the
+        // sheet — and over all of a phone on its side, which is wider than
+        // `sm`; there the dialog takes the focus, and a tap picks the field.
+        onOpenAutoFocus={(e) => {
+          if (window.matchMedia("(pointer: coarse)").matches) {
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).focus();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ClipboardCheck className="size-5 shrink-0" aria-hidden="true" />

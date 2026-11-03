@@ -64,11 +64,14 @@ export function DashboardCompetitionPicker({
 
   return (
     <Select value={value ?? AUTOMATIC} onValueChange={choose}>
+      {/* Text height, at every width: it reads as part of the card's subtitle.
+          A finger gets the kit's 36px through an invisible hit area instead
+          of the taller box `size="sm"` steps up to on a phone. */}
       <SelectTrigger
         size="sm"
         aria-label="Championship"
         aria-busy={pending}
-        className="-mx-1.5 max-w-full cursor-pointer gap-1 border-transparent bg-transparent px-1.5 py-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[size=sm]:h-auto data-[state=open]:bg-muted data-[state=open]:text-foreground dark:bg-transparent dark:hover:bg-muted/50 dark:data-[state=open]:bg-muted/50 [&_svg]:size-3.5"
+        className="relative -mx-1.5 max-w-full cursor-pointer gap-1 border-transparent bg-transparent px-1.5 py-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[size=sm]:h-auto max-sm:data-[size=sm]:h-auto pointer-coarse:after:absolute pointer-coarse:after:-inset-y-2 data-[state=open]:bg-muted data-[state=open]:text-foreground dark:bg-transparent dark:hover:bg-muted/50 dark:data-[state=open]:bg-muted/50 [&_svg]:size-3.5"
       >
         <SelectValue className="min-w-0">
           <span className={cn("truncate", pending && "motion-safe:animate-pulse")}>{shown}</span>

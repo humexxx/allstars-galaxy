@@ -488,7 +488,8 @@ export function BoardView({
     <div
       // The viewport-escape trick: width:100vw + negative margin centers a wider
       // element than its parent's max-width allows. Combined with closing the
-      // sidebar, the board really fills the screen.
+      // sidebar, the board really fills the screen. 100vw assumes no notch
+      // inset on <html>, which holds where it is offered: from `lg`, no phone.
       className={cn(
         "flex min-h-0 flex-1 flex-col gap-6",
         isExpanded && "w-screen -ml-[calc(50vw-50%)]"
@@ -510,11 +511,12 @@ export function BoardView({
             <Tooltip>
               <TooltipTrigger asChild>
                 {/* Expanding collapses the sidebar, which only exists from
-                    `md`: on a phone the button did nothing visible. */}
+                    `lg` (below it the sidebar is a sheet): on a phone or a
+                    tablet the button did nothing visible. */}
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="hidden md:inline-flex"
+                  className="hidden lg:inline-flex"
                   onClick={toggleExpanded}
                   aria-label={isExpanded ? "Collapse board" : "Expand board"}
                 >

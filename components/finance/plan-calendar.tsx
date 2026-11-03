@@ -1586,7 +1586,7 @@ const CalendarCell = memo(function CalendarCell({
 
 function dayNumberClass(isCurrent: boolean): string {
   return isCurrent
-    ? "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 font-mono text-2xs font-semibold text-primary-foreground"
+    ? "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-fill px-1 font-mono text-2xs font-semibold text-primary-foreground"
     : "px-1 py-0.5 font-mono text-2xs";
 }
 

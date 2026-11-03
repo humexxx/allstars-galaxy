@@ -68,10 +68,10 @@ export function PlanColorPicker({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         aria-label={`Colour for ${plan.name}`}
-        // -m-2 p-2 keeps the dot visually 12px while giving it a 28px tap
-        // target. The ring lives on the inner span so it hugs the dot rather
-        // than the padded hit area.
-        className="group -m-2 shrink-0 rounded-full p-2 disabled:opacity-50"
+        // The negative margin cancels the padding, so the dot stays 12px while
+        // the tap target is 36px on a phone and 28px from `sm`. The ring lives
+        // on the inner span so it hugs the dot rather than the padded hit area.
+        className="group -m-3 shrink-0 rounded-full p-3 disabled:opacity-50 sm:-m-2 sm:p-2"
         disabled={isSaving}
       >
         {/* The hover scale has to live on the INNER span. Radix anchors the
@@ -104,7 +104,7 @@ export function PlanColorPicker({
                 onClick={() => save(preset)}
                 aria-label={`Colour ${i + 1}`}
                 aria-pressed={colour === preset}
-                className="flex size-7 items-center justify-center rounded-full transition-transform hover:scale-110"
+                className="flex size-9 items-center justify-center rounded-full transition-transform hover:scale-110 sm:size-7"
                 style={{ backgroundColor: preset }}
               >
                 {colour === preset && (
@@ -122,7 +122,7 @@ export function PlanColorPicker({
               // what the schema accepts — no parsing needed.
               value={HEX.test(colour) ? colour : "#3b82f6"}
               onChange={(e) => save(e.target.value)}
-              className="size-7 cursor-pointer rounded-full border-0 bg-transparent p-0"
+              className="size-9 cursor-pointer rounded-full border-0 bg-transparent p-0 sm:size-7"
             />
             <Text variant="small">Custom…</Text>
           </label>

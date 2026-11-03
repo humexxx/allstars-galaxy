@@ -235,13 +235,12 @@ function TripCard({
     // one whose title ran to two lines.
     <Link href={tripPath(trip.id)} className="group block h-full">
       <Card
-        className={cn(
-          "h-full overflow-hidden pt-0 transition-shadow hover:shadow-md hover:ring-foreground/15",
-          dimmed && "opacity-70"
-        )}
+        className="h-full overflow-hidden pt-0 transition-shadow hover:shadow-md hover:ring-foreground/15"
       >
         <div
-          className="relative aspect-video w-full bg-muted"
+          // A past trip greys its photo, not the card: dimming the whole card
+          // took its grey details under 3:1.
+          className={cn("relative aspect-video w-full bg-muted", dimmed && "grayscale")}
           // The trip colour under the photo too: it is what shows if the
           // cover link has died.
           style={{ backgroundColor: trip.color }}
@@ -455,7 +454,7 @@ function DayCell({ day, month, today }: { day: string; month: string; today: str
         <span
           className={cn(
             "inline-flex size-5 items-center justify-center rounded-full text-2xs tabular-nums",
-            isToday && "bg-primary font-semibold text-primary-foreground"
+            isToday && "bg-primary-fill font-semibold text-primary-foreground"
           )}
         >
           {Number(day.slice(-2))}

@@ -18,7 +18,7 @@ export default function BoardLoading() {
         title="Task board"
         actions={
           <>
-            <Button variant="ghost" size="icon" className="hidden md:inline-flex" disabled tabIndex={-1} aria-label="Expand board">
+            <Button variant="ghost" size="icon" className="hidden lg:inline-flex" disabled tabIndex={-1} aria-label="Expand board">
               <Maximize2 />
             </Button>
             <Button disabled tabIndex={-1}>

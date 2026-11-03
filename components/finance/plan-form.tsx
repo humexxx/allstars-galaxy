@@ -274,6 +274,7 @@ export function PlanForm({
                 <Input
                   id="plan-months"
                   type="number"
+                  inputMode="numeric"
                   min={12}
                   max={120}
                   step={1}
@@ -339,7 +340,7 @@ export function PlanForm({
                       key={c}
                       value={c}
                       aria-label={`Colour ${i + 1}`}
-                      className="size-7 min-w-0 flex-none rounded-full border-2 border-transparent p-0 shadow-none data-[state=on]:border-foreground"
+                      className="size-9 min-w-0 flex-none rounded-full border-2 border-transparent p-0 shadow-none data-[state=on]:border-foreground sm:size-7"
                       style={{ backgroundColor: c }}
                     />
                   ))}
@@ -372,6 +373,7 @@ export function PlanForm({
                 <Input
                   id="plan-confirmation-day"
                   type="number"
+                  inputMode="numeric"
                   min={0}
                   max={28}
                   step={1}
@@ -554,10 +556,14 @@ export function PlanForm({
                 <SelectContent>
                   {investmentMethods.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
-                      <span className="flex items-center gap-2">
-                        {m.name} · {m.monthlyRoi}%/mo
+                      {/* The name gives way, not the badge: in a phone's
+                          trigger the badge was cut to "Disa". */}
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate">
+                          {m.name} · {m.monthlyRoi}%/mo
+                        </span>
                         {!m.enabled && (
-                          <Badge variant="outline" className="text-2xs">
+                          <Badge variant="outline" className="shrink-0 text-2xs">
                             Disabled in portfolio
                           </Badge>
                         )}

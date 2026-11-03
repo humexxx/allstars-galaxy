@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
@@ -232,6 +232,19 @@ function MonthCalendar({
   const tripEnd = endDate ?? startDate;
   const inTrip = (day: string) => day >= startDate && day <= tripEnd;
 
+  // A phone keeps to the trip's own weeks: a five-day trip used to bring
+  // four empty rows with it. Only on a month the trip is in — one reached
+  // with the arrows is shown whole, it was asked for — and never a week with
+  // something on it, in the trip or not.
+  const [wholeMonth, setWholeMonth] = useState(false);
+  const monthHeading = useRef<HTMLDivElement>(null);
+  const quiet = (week: string[], segments: unknown[]) =>
+    segments.length === 0 && (week[6] < startDate || week[0] > tripEnd);
+  const trimmed =
+    !wholeMonth &&
+    laidOut.some(({ week }) => week[6] >= startDate && week[0] <= tripEnd) &&
+    laidOut.some(({ week, segments }) => quiet(week, segments));
+
   return (
     <Card>
       <CardHeader>
@@ -239,7 +252,10 @@ function MonthCalendar({
             phone, where the month arrows already own the other end of the
             row. */}
         <CardTitle
+          ref={monthHeading}
           as="h2"
+          // Where "Show all" hands the focus when it goes away.
+          tabIndex={-1}
           className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2"
         >
           <span>{formatMonthLong(`${month}-01`)}</span>
@@ -301,7 +317,7 @@ function MonthCalendar({
           return (
             <div
               key={week[0]}
-              className="relative"
+              className={cn("relative", trimmed && quiet(week, segments) && "hidden sm:block")}
               onDragOver={(e) => {
                 if (readOnly || !e.dataTransfer.types.includes(DND_MIME)) return;
                 // Without preventDefault the drop never fires at all.
@@ -506,6 +522,20 @@ function MonthCalendar({
             </div>
           );
         })}
+        {trimmed && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="self-center sm:hidden"
+            onClick={() => {
+              // The button leaves with the click; the focus would go with it.
+              monthHeading.current?.focus();
+              setWholeMonth(true);
+            }}
+          >
+            Show all of {formatMonthLong(`${month}-01`)}
+          </Button>
+        )}
       </CardContent>
 
       {children}

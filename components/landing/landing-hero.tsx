@@ -88,11 +88,13 @@ export function LandingHero({ signupsOpen }: { signupsOpen: boolean }) {
         <div className="relative overflow-hidden rounded-xl border bg-card p-1 shadow-2xl shadow-primary/10">
           <div className="rounded-lg border bg-muted p-6 sm:p-8">
             <div className="mb-6 flex items-center justify-between border-b pb-4">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="h-2 w-2 rounded-full bg-destructive" />
-                <span className="h-2 w-2 rounded-full bg-warning" />
-                <span className="h-2 w-2 rounded-full bg-success" />
-                <Mono className="ml-3 text-muted-foreground">
+              <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-destructive" />
+                <span className="h-2 w-2 shrink-0 rounded-full bg-warning" />
+                <span className="h-2 w-2 shrink-0 rounded-full bg-success" />
+                {/* One line, like a real address bar: on a phone it broke at
+                    the hyphen. */}
+                <Mono className="ml-3 truncate text-muted-foreground">
                   allstars-galaxy.app/portfolio
                 </Mono>
               </div>

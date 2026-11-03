@@ -338,7 +338,7 @@ function ItemRow({
                 className={cn(
                   "block whitespace-nowrap text-xs font-medium",
                   (moved("price") || moved("priceMax") || moved("priceUnit")) &&
-                    "rounded bg-primary px-1 text-primary-foreground"
+                    "rounded bg-primary-fill px-1 text-primary-foreground"
                 )}
               >
                 {moneyRange(mine.low, mine.high, currency)}

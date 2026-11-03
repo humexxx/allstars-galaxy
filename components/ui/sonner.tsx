@@ -17,6 +17,18 @@ export function Toaster(props: ToasterProps) {
       className="toaster group"
       richColors
       closeButton
+      // Sonner's own 24px / 16px margins, kept clear of the home indicator and,
+      // with the phone on its side, of the notch.
+      offset={{
+        bottom: "max(24px, env(safe-area-inset-bottom))",
+        left: "max(24px, env(safe-area-inset-left))",
+        right: "max(24px, env(safe-area-inset-right))",
+      }}
+      mobileOffset={{
+        bottom: "max(16px, env(safe-area-inset-bottom))",
+        left: "max(16px, env(safe-area-inset-left))",
+        right: "max(16px, env(safe-area-inset-right))",
+      }}
       toastOptions={{
         classNames: {
           toast: "font-sans rounded-2xl! shadow-lg!",

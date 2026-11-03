@@ -43,7 +43,9 @@ function renderBracket(list: BracketRound[] = rounds, links?: BracketLink[]): HT
 const columns = (container: HTMLElement): HTMLElement[] => [
   ...container.querySelectorAll<HTMLElement>("[data-column]"),
 ];
-const heading = (column: HTMLElement): string | null => column.firstElementChild?.textContent ?? null;
+// The full name: a column after the focus also carries its short one, which
+// only a phone shows, ahead of it.
+const heading = (column: HTMLElement): string | null => column.firstElementChild?.lastChild?.textContent ?? null;
 const ties = (column: HTMLElement): number => within(column).getAllByRole("listitem").length;
 
 /** A sideways swipe across the bracket, as a finger on a phone makes it. */
@@ -64,6 +66,14 @@ describe("KnockoutBracket", () => {
       "Semi-finals",
       "Final",
     ]);
+  });
+
+  it("heads the rounds after the focus with their short names too, for the edge a phone shows", () => {
+    const container = renderBracket();
+    const [focus, next] = columns(container);
+    expect(focus.firstElementChild?.textContent).toBe("Round of 64");
+    // "Round of 32" cut at the card's edge read as a different round.
+    expect(next.firstElementChild?.textContent).toBe(`${shortRoundLabel("Round of 32")}Round of 32`);
   });
 
   it("names each column's round and the round being played, its ties a list", () => {

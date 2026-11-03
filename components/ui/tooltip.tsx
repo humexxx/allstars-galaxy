@@ -18,20 +18,65 @@ function TooltipProvider({
   )
 }
 
+const ShowContext = React.createContext<(() => void) | null>(null)
+
 function Tooltip({
+  open: openProp,
+  defaultOpen = false,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
+  const [openState, setOpenState] = React.useState(defaultOpen)
+  const open = openProp ?? openState
+  const setOpen = React.useCallback(
+    (next: boolean) => {
+      if (openProp === undefined) setOpenState(next)
+      onOpenChange?.(next)
+    },
+    [openProp, onOpenChange]
+  )
+  const show = React.useCallback(() => setOpen(true), [setOpen])
   return (
     <TooltipProvider>
-      <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+      <ShowContext.Provider value={show}>
+        <TooltipPrimitive.Root data-slot="tooltip" open={open} onOpenChange={setOpen} {...props} />
+      </ShowContext.Provider>
     </TooltipProvider>
   )
 }
 
+/**
+ * A touch screen never hovers, so a tooltip on something that is not a
+ * control — a column heading's definition, the reason a disabled button is
+ * disabled — could not be read at all. There a tap opens it, and a tap
+ * anywhere else closes it. A button's tooltip only names what the tap is about
+ * to do, so a tap on one just acts.
+ */
 function TooltipTrigger({
+  onClick,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+  const show = React.useContext(ShowContext)
+  return (
+    <TooltipPrimitive.Trigger
+      data-slot="tooltip-trigger"
+      onClick={(event) => {
+        onClick?.(event)
+        const el = event.currentTarget
+        if (
+          !show ||
+          event.defaultPrevented ||
+          el.matches("button, a[href], [role=button], [role=link]") ||
+          !window.matchMedia("(pointer: coarse)").matches
+        )
+          return
+        // Radix closes a tooltip on a click of its trigger unless told not to.
+        event.preventDefault()
+        show()
+      }}
+      {...props}
+    />
+  )
 }
 
 function TooltipContent({

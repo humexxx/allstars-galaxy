@@ -458,7 +458,7 @@ export function TripDetail({
                   <Mono
                     className={cn(
                       (tripFields.includes("startDate") || tripFields.includes("endDate")) &&
-                        "rounded bg-primary px-1 text-primary-foreground"
+                        "rounded bg-primary-fill px-1 text-primary-foreground"
                     )}
                   >
                     {formatDateRange(trip.startDate, trip.endDate)}

@@ -70,8 +70,10 @@ export function TeamBadge({ team, size = "md", className }: TeamBadgeProps): Rea
       title={team.name}
     >
       {team.logoUrl ? (
+        // Lazy: a standings table or a week of fixtures is dozens of logos, most
+        // of them below the fold, and some feeds publish a 16px logo at 3500px.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={team.logoUrl} alt="" className="size-full object-contain" />
+        <img src={team.logoUrl} alt="" loading="lazy" decoding="async" className="size-full object-contain" />
       ) : (
         team.code.slice(0, 3)
       )}

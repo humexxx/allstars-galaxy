@@ -274,6 +274,7 @@ export function PlanForm({
                 <Input
                   id="plan-months"
                   type="number"
+                  inputMode="numeric"
                   min={12}
                   max={120}
                   step={1}
@@ -372,6 +373,7 @@ export function PlanForm({
                 <Input
                   id="plan-confirmation-day"
                   type="number"
+                  inputMode="numeric"
                   min={0}
                   max={28}
                   step={1}

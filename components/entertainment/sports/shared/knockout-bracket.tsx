@@ -305,7 +305,16 @@ export function KnockoutBracket({
 
   const shown: BracketColumn[] = columns.slice(focus.round).map((column, offset) => {
     const [from, to] = sections > 1 ? sectionRange(section, offset, column.items.length) : [0, column.items.length];
-    return { ...column, items: [...column.items.slice(from, to), ...column.after] };
+    // The next round shows only its edge on a phone, and "Championship
+    // Series" cut there read "CHAMPION".
+    const heading =
+      offset > 0 ? (
+        <>
+          <span className="@xl:hidden">{shortRoundLabel(column.label)}</span>
+          <span className="hidden @xl:inline">{column.label}</span>
+        </>
+      ) : undefined;
+    return { ...column, heading, items: [...column.items.slice(from, to), ...column.after] };
   });
 
   // Drawn whole and a little wider than its card, it opens with the final in
@@ -449,7 +458,10 @@ export function KnockoutBracket({
             columns={shown}
             edges={edges}
             minColumnWidth="var(--bracket-column)"
-            className="overflow-x-hidden @xl:overflow-x-auto"
+            // `clip`, not `hidden`: a hidden overflow still scrolls when
+            // something in it takes focus, so tapping a box of the round at
+            // the edge slid the draw sideways under the round tabs.
+            className="overflow-x-clip @xl:overflow-x-auto"
           />
         </div>
       </div>

@@ -122,7 +122,7 @@ export function PlanColorPicker({
               // what the schema accepts — no parsing needed.
               value={HEX.test(colour) ? colour : "#3b82f6"}
               onChange={(e) => save(e.target.value)}
-              className="size-7 cursor-pointer rounded-full border-0 bg-transparent p-0"
+              className="size-9 cursor-pointer rounded-full border-0 bg-transparent p-0 sm:size-7"
             />
             <Text variant="small">Custom…</Text>
           </label>

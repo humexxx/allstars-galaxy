@@ -149,7 +149,7 @@ function LineIcon({ line }: { line: TravelChangeLine }) {
         className={cn(
           "absolute -right-1 -bottom-1 grid size-4 place-items-center rounded-full ring-2 ring-card",
           line.action === "add" && "bg-success text-white",
-          line.action === "change" && "bg-primary text-primary-foreground",
+          line.action === "change" && "bg-primary-fill text-primary-foreground",
           line.action === "remove" && "bg-destructive text-white"
         )}
       >

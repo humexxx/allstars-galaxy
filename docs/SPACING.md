@@ -226,6 +226,26 @@ to another offset.
   toolbar) is the exception and says why. `TooltipContent` takes no pointer
   events on a touch screen: a tap focuses the trigger, which opens the
   tooltip mid-tap over the top of that hit area, and the click went nowhere.
+- **A touch screen never hovers.** A tooltip on something that is not a
+  control (a column heading's definition, the focusable `span` that explains
+  a disabled button) opens on a tap there, through `TooltipTrigger`; a
+  button's tooltip only names it, so its tap just acts. Nothing a phone needs
+  may live only in a tooltip on a control, in `title`, or behind
+  `group-hover`. Text fields stay 16px on a touch screen at every width
+  (`md:pointer-fine:text-sm` in `Input`, `Textarea` and `CommandInput`): under
+  16px iOS zooms the page on focus, and a phone on its side is wider than `md`.
+- **The hardware's edges.** The root layout sets `viewportFit: "cover"`, so
+  the page paints under the home indicator and, on its side, the notch.
+  `html` pads itself clear of the notch (not `body`, whose padding a dialog's
+  scroll lock zeroes); anything pinned to an edge clears its
+  inset with `pb-safe-N` / `pl-safe-N` / `pr-safe-N` / `bottom-safe-N`
+  (`globals.css`): the larger of step N and the inset, `-0` for the bare inset
+  under a container whose children already pad. `DialogContent`'s phone sheet,
+  `SheetContent` and `Toaster` already do; a new floating button or bar does
+  the same instead of `bottom-4`.
+- **A popover fits the screen.** `PopoverContent` caps itself at the room
+  Radix measures on its side and scrolls past it; a `Command` inside gives
+  way in its list. A month calendar is taller than a phone held sideways.
 - **Segmented controls are one component.** A switch between views of the
   same thing (range, unit, list/calendar) is `ToggleGroup` — its default
   variant is the same grey track and white chip as `TabsList`, `h-10`
@@ -246,14 +266,18 @@ to another offset.
   Nothing to opt into — but do not fight it with `top-*` overrides, and do not
   add `max-h-[..vh] overflow-y-auto`: `DialogContent` already caps its height
   and scrolls.
-- **System colours.** `--primary` is system blue, `--destructive` system red,
+- **System colours.** `--primary` is system blue (a step deeper, so white
+  labels on it reach 4.5:1), `--destructive` system red,
   `--success` system green (the on-state of `Switch`), `--warning` system
   orange. Status text and tints use these tokens (`text-success`,
   `bg-destructive/10`, `border-warning/30`), never raw `emerald-*` / `rose-*` /
   `amber-*` steps — the tokens already carry their dark-mode value. The light
   steps sit deeper than Apple's swatches on purpose: they are read as small
   text on white far more than as fills, and systemGreen itself is 2.3:1 there. The chart
-  palette is separate and validated; it does not follow these. Tints are
+  palette is separate and validated; it does not follow these. A solid fill
+  under a `primary-foreground` label is `bg-primary-fill`, not `bg-primary`:
+  in dark mode #0A84FF reads well as text on a card but carries a white label
+  at 3.1:1, so the fill takes the deeper blue. Tints are
   always `/10` fills and `/30` borders (`dark:bg-X/20`), which is what the
   `success` / `warning` / `info` `Badge` and `Alert` variants use.
 

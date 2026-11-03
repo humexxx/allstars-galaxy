@@ -205,8 +205,11 @@ function RankingsTable({ data }: { data: RacquetData }): React.ReactElement {
               <SportsTh className="text-right">
                 Points
               </SportsTh>
+              {/* Left out on the narrowest phones (320px), where it pushed the
+                  table 23px past its card for the one column that matters
+                  least. */}
               {showsMovement ? (
-                <SportsTh className="text-center">
+                <SportsTh className="text-center max-[359px]:hidden">
                   Move
                 </SportsTh>
               ) : null}
@@ -236,7 +239,7 @@ function RankingsTable({ data }: { data: RacquetData }): React.ReactElement {
                   <Mono className="text-sm font-semibold">{p.points.toLocaleString("en-US")}</Mono>
                 </TableCell>
                 {showsMovement ? (
-                  <TableCell className="text-center">
+                  <TableCell className="text-center max-[359px]:hidden">
                     <Movement movement={p.movement} />
                   </TableCell>
                 ) : null}

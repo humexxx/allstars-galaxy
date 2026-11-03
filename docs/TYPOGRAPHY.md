@@ -289,6 +289,9 @@ size.
   already 700.
 - ❌ Don't use `text-base` for body copy in the portal — the default is
   `text-sm` (14px). `text-base` is reserved for `body-lg` / marketing pages.
+  The exception is a text field on a touch screen, which stays 16px at
+  every width (`md:pointer-fine:text-sm`): under 16px iOS zooms the page on
+  focus. Never pass a field `text-sm` or `text-xs` — it undoes that.
 
 ---
 

@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode, t
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Eyebrow, Mono } from "@/components/ui/typography";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { isCalendarDay } from "@/lib/utils/date";
 import type { Team } from "@/types/sports";
@@ -21,6 +22,8 @@ export type BracketItem = {
 export type BracketColumn = {
   key: string;
   label: string;
+  /** What the heading shows, where it is not the label; the label still names the group. */
+  heading?: ReactNode;
   /** The round being played: its heading is lit. */
   current?: boolean;
   /** Which half of a two-sided draw the column is, whose round name the other half repeats. */
@@ -156,7 +159,7 @@ export function BracketCanvas({
             className="flex flex-col gap-2"
           >
             <Eyebrow as="div" size="sm" aria-hidden className={cn(column.current && "text-foreground")}>
-              {column.label}
+              {column.heading ?? column.label}
             </Eyebrow>
             <ul role="list" className="flex flex-1 flex-col justify-around gap-4">
               {column.items.map((item) => (
@@ -232,6 +235,7 @@ export function MatchHover({
   className?: string;
 }): ReactElement {
   const [open, setOpen] = useState(false);
+  const phone = useIsMobile();
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -247,7 +251,10 @@ export function MatchHover({
       </PopoverTrigger>
       <PopoverContent
         aria-label="Match details"
-        side="right"
+        // Beside the box on a wide screen, so it hides no other tie. A phone
+        // has no room beside a box that is most of its width: the details
+        // were squeezed into the last few pixels and cut off.
+        side={phone ? "bottom" : "right"}
         sideOffset={6}
         className="w-auto max-w-xs p-3 text-xs"
         // The popover sits at the end of <body>: Tab out of it would leave the

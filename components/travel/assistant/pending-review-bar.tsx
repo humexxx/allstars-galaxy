@@ -32,7 +32,7 @@ export function PendingReviewBar({
     <div
       role="region"
       aria-label="Changes to review"
-      className="fixed inset-x-4 bottom-4 z-40 mx-auto max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-300"
+      className="fixed inset-x-4 bottom-safe-4 z-40 mx-auto max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-300"
     >
       <div className="flex items-center gap-3 rounded-2xl border bg-popover/95 p-3 shadow-lg backdrop-blur-md">
         <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">

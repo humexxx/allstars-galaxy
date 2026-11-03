@@ -35,7 +35,9 @@ export function EmptyState({
       <div
         data-slot="empty-state"
         className={cn(
-          "flex flex-1 items-center justify-center p-4 pt-8 md:pt-16 lg:pt-24",
+          // No side padding: the page already has its gutter, and a second
+          // one set the card 16px in from every other card's edge on a phone.
+          "flex flex-1 items-center justify-center py-4 pt-8 md:pt-16 lg:pt-24",
           className
         )}
       >

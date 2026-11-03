@@ -57,7 +57,9 @@ export function LandingHero({ signupsOpen }: { signupsOpen: boolean }) {
           people who compound.
         </Text>
 
-        <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        {/* Stacked on a phone, the two buttons are one width — sized to
+            their words they read as a big and a small button. */}
+        <div className="mx-auto mt-10 flex max-w-xs flex-col gap-3 sm:max-w-none sm:flex-row sm:items-center sm:justify-center">
           <Link
             href={signupsOpen ? "/signup" : "/login"}
             className="inline-flex h-11 items-center justify-center rounded-full bg-foreground px-6 text-sm font-medium text-background transition hover:bg-foreground/90"

@@ -113,7 +113,18 @@ export function ConfirmationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent
+        className="sm:max-w-2xl"
+        // This dialog opens by itself, before anyone has read it. On a phone,
+        // focusing its first field threw the keyboard over half the sheet;
+        // there the sheet takes the focus, and a tap picks the field.
+        onOpenAutoFocus={(e) => {
+          if (window.matchMedia("(max-width: 639px)").matches) {
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).focus();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ClipboardCheck className="size-5 shrink-0" aria-hidden="true" />

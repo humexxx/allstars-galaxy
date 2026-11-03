@@ -68,9 +68,11 @@ const inputGroupButtonVariants = cva(
   {
     variants: {
       size: {
-        xs: "h-6 gap-1 rounded-[calc(var(--radius)-5px)] px-1.5 [&>svg:not([class*='size-'])]:size-3.5",
+        // On a touch screen the 24px button reaches the field's full height
+        // through an invisible hit area, as `Button size="xs"` does.
+        xs: "relative h-6 gap-1 rounded-[calc(var(--radius)-5px)] px-1.5 [&>svg:not([class*='size-'])]:size-3.5 pointer-coarse:after:absolute pointer-coarse:after:-inset-y-2 pointer-coarse:after:-inset-x-1",
         sm: "",
-        "icon-xs": "size-6 rounded-[calc(var(--radius)-5px)] p-0 has-[>svg]:p-0",
+        "icon-xs": "relative size-6 rounded-[calc(var(--radius)-5px)] p-0 has-[>svg]:p-0 pointer-coarse:after:absolute pointer-coarse:after:-inset-2",
         "icon-sm": "size-8 p-0 has-[>svg]:p-0",
       },
     },

@@ -144,7 +144,10 @@ When you only need to measure one component's spacing/sizes:
 - [ ] Interactive controls are ≥36px on phones (`size-9`); where a control is
       denser on desktop, step it *up* for mobile (`size-9 sm:size-8`), never
       down. Icon-only links need padding — a bare `size-5` mark is a 20px tap
-      target.
+      target. The kit already does this for `Button` `sm`/`icon-sm`/`xs`,
+      `SelectTrigger size="sm"` and `ToggleGroup size="sm"` (see
+      [`docs/SPACING.md`](../../../docs/SPACING.md)), so only hand-rolled
+      controls (swatches, dots, text buttons) need it written out.
 - [ ] Checked the page at 375px wide and `document.scrollWidth === 375`.
 - [ ] Measured the result in the browser; threw away the test route.
 - [ ] If the type scale itself changed, update `docs/TYPOGRAPHY.md` in the same commit.

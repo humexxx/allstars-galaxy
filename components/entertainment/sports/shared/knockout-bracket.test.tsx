@@ -264,9 +264,27 @@ describe("KnockoutBracket", () => {
 describe("shortRoundLabel", () => {
   it("shortens the rounds every sport names alike, and leaves the rest", () => {
     expect(
-      ["Round 1", "Round of 16", "First Round", "Quarter-finals", "Quarterfinals", "Semi-finals", "Final", "Wild Card"].map(
+      ["Round 1", "Round of 16", "First Round", "Quarter-finals", "Quarterfinals", "Semi-finals", "Final", "MLS Cup"].map(
         shortRoundLabel
       )
-    ).toEqual(["R1", "R16", "R1", "QF", "QF", "SF", "Final", "Wild Card"]);
+    ).toEqual(["R1", "R16", "R1", "QF", "QF", "SF", "Final", "MLS Cup"]);
+  });
+
+  it("shortens the North American playoff rounds the way their broadcasts do", () => {
+    expect(
+      ["Wild Card", "Division Series", "Championship Series", "World Series"].map(shortRoundLabel)
+    ).toEqual(["WC", "DS", "LCS", "WS"]);
+    expect(["Wild Card", "Divisional", "Conference", "Super Bowl"].map(shortRoundLabel)).toEqual([
+      "WC",
+      "Div",
+      "Conf",
+      "SB",
+    ]);
+    expect(
+      ["First Round", "Conference Semifinals", "Conference Finals", "NBA Finals"].map(shortRoundLabel)
+    ).toEqual(["R1", "Conf Semis", "Conf Finals", "Finals"]);
+    expect(
+      ["First Round", "Second Round", "Conference Final", "Stanley Cup Final"].map(shortRoundLabel)
+    ).toEqual(["R1", "R2", "Conf Final", "Finals"]);
   });
 });

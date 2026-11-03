@@ -843,7 +843,7 @@ function MonthPicker({
                 variant={isSelected ? "default" : "ghost"}
                 aria-pressed={isSelected}
                 aria-current={isCurrent ? "date" : undefined}
-                className={cn("h-9", !isSelected && isCurrent && "border border-border")}
+                className={cn("h-9 sm:h-9", !isSelected && isCurrent && "border border-border")}
                 onClick={() => {
                   // ISO "YYYY-MM-01" — day is meaningless for this control
                   // but the DB column is a date, so we pin to day 1.

@@ -96,9 +96,23 @@ function halves<T>(list: T[]): [T[], T[]] {
 export function shortRoundLabel(label: string): string {
   const numbered = /^Round (?:of )?(\d+)$/i.exec(label);
   if (numbered) return `R${numbered[1]}`;
-  if (/^first round$/i.test(label)) return "R1";
+  if (/^(first round|round one)$/i.test(label)) return "R1";
+  if (/^second round$/i.test(label)) return "R2";
   if (/^quarter-?finals?$/i.test(label)) return "QF";
   if (/^semi-?finals?$/i.test(label)) return "SF";
+  // The North American playoffs, as their own broadcasts shorten them: four
+  // full names ("Championship Series" alone is 143px) ran a phone's tab row
+  // off the screen.
+  if (/^wild card$/i.test(label)) return "WC";
+  if (/^division series$/i.test(label)) return "DS";
+  if (/^championship series$/i.test(label)) return "LCS";
+  if (/^world series$/i.test(label)) return "WS";
+  if (/^divisional$/i.test(label)) return "Div";
+  if (/^conference$/i.test(label)) return "Conf";
+  if (/^super bowl$/i.test(label)) return "SB";
+  if (/^conference semi-?finals?$/i.test(label)) return "Conf Semis";
+  if (/^conference finals?$/i.test(label)) return label.replace(/^conference/i, "Conf");
+  if (/^(nba finals|stanley cup final)$/i.test(label)) return "Finals";
   return label;
 }
 

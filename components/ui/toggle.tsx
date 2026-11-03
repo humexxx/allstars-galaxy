@@ -18,7 +18,8 @@ const toggleVariants = cva(
       },
       size: {
         default: "h-8 min-w-8 px-2.5",
-        sm: "h-7 min-w-7 px-2 text-xs",
+        // Desktop density; a phone gets 32px chips.
+        sm: "h-8 min-w-8 px-2 text-xs sm:h-7 sm:min-w-7",
         lg: "h-10 min-w-10 px-3",
       },
     },

@@ -377,7 +377,7 @@ function SeasonSplits({
             key={s.id}
             value={s.id}
             aria-label={s.name}
-            className="h-6 rounded-full px-2.5 data-[state=on]:border-primary data-[state=on]:text-foreground"
+            className="rounded-full px-2.5 data-[state=on]:border-primary data-[state=on]:text-foreground sm:h-6"
           >
             {/* "LCK Split 2" under the league's own name: "Split 2". */}
             {s.name.replace(/^\S+\s/, "")}

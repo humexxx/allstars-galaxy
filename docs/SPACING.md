@@ -222,7 +222,10 @@ to another offset.
   they sit inside a line of text — and on a touch screen (`pointer-coarse`)
   reach 36px through an invisible `::after` hit area, as `Switch` does. So
   write `size="sm"` once and let the kit step it; never pin a small control to
-  `h-8` at every width. A row that must keep its height on a phone (a pinned
+  `h-8` at every width. The step is `max-sm:`, never a desktop `sm:` value:
+  a caller's own height (`h-6`, `size-9`) holds from `sm` up exactly as it
+  did, and a `sm:` value in the kit outranked it on every desktop. A caller
+  that must keep its height on a phone too says so with `max-sm:`. A row that must keep its height on a phone (a pinned
   toolbar) is the exception and says why. `TooltipContent` takes no pointer
   events on a touch screen: a tap focuses the trigger, which opens the
   tooltip mid-tap over the top of that hit area, and the click went nowhere.

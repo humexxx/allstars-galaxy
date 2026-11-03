@@ -24,6 +24,7 @@ export type BracketColumn = {
   label: string;
   /** What the heading shows, where it is not the label; the label still names the group. */
   heading?: ReactNode;
+  className?: string;
   /** The round being played: its heading is lit. */
   current?: boolean;
   /** Which half of a two-sided draw the column is, whose round name the other half repeats. */
@@ -156,7 +157,7 @@ export function BracketCanvas({
             aria-label={[column.label, column.half && `${column.half} half`, column.current && "being played"]
               .filter(Boolean)
               .join(", ")}
-            className="flex flex-col gap-2"
+            className={cn("flex flex-col gap-2", column.className)}
           >
             <Eyebrow as="div" size="sm" aria-hidden className={cn(column.current && "text-foreground")}>
               {column.heading ?? column.label}

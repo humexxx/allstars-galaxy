@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
@@ -237,6 +237,7 @@ function MonthCalendar({
   // with the arrows is shown whole, it was asked for — and never a week with
   // something on it, in the trip or not.
   const [wholeMonth, setWholeMonth] = useState(false);
+  const monthHeading = useRef<HTMLDivElement>(null);
   const quiet = (week: string[], segments: unknown[]) =>
     segments.length === 0 && (week[6] < startDate || week[0] > tripEnd);
   const trimmed =
@@ -251,7 +252,10 @@ function MonthCalendar({
             phone, where the month arrows already own the other end of the
             row. */}
         <CardTitle
+          ref={monthHeading}
           as="h2"
+          // Where "Show all" hands the focus when it goes away.
+          tabIndex={-1}
           className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2"
         >
           <span>{formatMonthLong(`${month}-01`)}</span>
@@ -523,7 +527,11 @@ function MonthCalendar({
             variant="ghost"
             size="sm"
             className="self-center sm:hidden"
-            onClick={() => setWholeMonth(true)}
+            onClick={() => {
+              // The button leaves with the click; the focus would go with it.
+              monthHeading.current?.focus();
+              setWholeMonth(true);
+            }}
           >
             Show all of {formatMonthLong(`${month}-01`)}
           </Button>

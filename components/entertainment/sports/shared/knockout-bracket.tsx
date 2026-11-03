@@ -72,6 +72,16 @@ function openingRound(rounds: BracketRound[]): number {
  */
 const SECTION_TIES = 8;
 
+/**
+ * A round tab's accessible name. Under `@xl` the tab shows the short name, and
+ * a name must hold the words on screen (WCAG 2.5.3), so it leads with them.
+ */
+function roundTabName(label: string, current: boolean | undefined): string {
+  const short = shortRoundLabel(label);
+  const name = short === label ? label : `${short}, ${label}`;
+  return current ? `${name}, being played` : name;
+}
+
 /** A section's ties in round `offset` after the round in focus: the ones its ties feed. */
 function sectionRange(section: number, offset: number, length: number): [number, number] {
   const span = SECTION_TIES / 2 ** offset;
@@ -227,8 +237,13 @@ export function KnockoutBracket({
   // Back to the opening round when the bracket is another one (a new
   // tournament or league), never on a revalidation of the same rounds.
   const shape = tree.rounds.map((r) => r.id).join();
-  const [focus, setFocus] = useState({ shape, round: openingRound(tree.rounds), section: 0, moved: 0 });
-  if (focus.shape !== shape) setFocus({ shape, round: openingRound(tree.rounds), section: 0, moved: 0 });
+  const opening = { shape, round: openingRound(tree.rounds), section: 0, moved: 0 };
+  const [focusState, setFocus] = useState(opening);
+  if (focusState.shape !== shape) setFocus(opening);
+  // This render already draws the new bracket, so it reads the new one's
+  // opening focus rather than wait for the state: the old round could lie past
+  // the new bracket's end.
+  const focus = focusState.shape === shape ? focusState : opening;
 
   const { columns, edges, whole } = useMemo(() => {
     const playing = playingRoundIndex(tree.rounds);
@@ -289,7 +304,7 @@ export function KnockoutBracket({
   // Sections only where every round from the focus on halves into the next:
   // only there does a section have a way of its own to the final.
   const sectionsAt = (round: number): number =>
-    !links && tree.paired.slice(round, -1).every(Boolean) && columns[round].items.length > SECTION_TIES
+    !links && tree.paired.slice(round, -1).every(Boolean) && (columns[round]?.items.length ?? 0) > SECTION_TIES
       ? Math.ceil(columns[round].items.length / SECTION_TIES)
       : 1;
   const sections = sectionsAt(focus.round);
@@ -314,7 +329,10 @@ export function KnockoutBracket({
           <span className="hidden @xl:inline">{column.label}</span>
         </>
       ) : undefined;
-    return { ...column, heading, items: [...column.items.slice(from, to), ...column.after] };
+    // Under `@xl` a round two past the focus lies wholly past the clipped
+    // edge, and its boxes took the keyboard's focus where nobody could see it.
+    const className = offset > 1 ? "@max-xl:invisible" : undefined;
+    return { ...column, heading, className, items: [...column.items.slice(from, to), ...column.after] };
   });
 
   // Drawn whole and a little wider than its card, it opens with the final in
@@ -354,10 +372,16 @@ export function KnockoutBracket({
   }
 
   const onTouchStart = (event: TouchEvent<HTMLDivElement>): void => {
+    // A second finger makes the gesture a pinch, not a swipe, to its end.
+    if (event.touches.length > 1) {
+      swipe.current = { x: 0, y: 0, ignore: true };
+      return;
+    }
     const touch = event.touches[0];
     swipe.current = { x: touch.clientX, y: touch.clientY, ignore: inSideScroller(event.target, event.currentTarget) };
   };
   const onTouchEnd = (event: TouchEvent<HTMLDivElement>): void => {
+    if (event.touches.length > 0) return;
     const start = swipe.current;
     swipe.current = null;
     if (!start || start.ignore) return;
@@ -404,7 +428,7 @@ export function KnockoutBracket({
                 <ToggleGroupItem
                   key={column.key}
                   value={String(i)}
-                  aria-label={column.current ? `${column.label}, being played` : column.label}
+                  aria-label={roundTabName(column.label, column.current)}
                   className="gap-1.5 px-3"
                 >
                   <span className="@xl:hidden">{shortRoundLabel(column.label)}</span>
@@ -448,6 +472,9 @@ export function KnockoutBracket({
           key={`${focus.round}-${section}`}
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
+          onTouchCancel={() => {
+            swipe.current = null;
+          }}
           className={cn(
             "[--bracket-column:max(var(--bracket-min),min(72cqw,18rem))] @xl:[--bracket-column:var(--bracket-min)]",
             focus.moved > 0 && "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-8",

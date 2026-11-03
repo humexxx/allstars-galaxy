@@ -88,12 +88,12 @@ describe("KnockoutBracket", () => {
     ]);
     // The group names the round, so the label on screen is not read twice.
     expect(columns(container)[0].firstElementChild).toHaveAttribute("aria-hidden", "true");
-    expect(screen.getByRole("radio", { name: "Round of 64, being played" })).toHaveAttribute("data-state", "on");
+    expect(screen.getByRole("radio", { name: "R64, Round of 64, being played" })).toHaveAttribute("data-state", "on");
   });
 
   it("moves the focus with the round tabs, putting the rounds before it away", () => {
     const container = renderBracket();
-    fireEvent.click(screen.getByRole("radio", { name: "Quarter-finals" }));
+    fireEvent.click(screen.getByRole("radio", { name: "QF, Quarter-finals" }));
     const all = columns(container);
     expect(all.map(heading)).toEqual(["Quarter-finals", "Semi-finals", "Final"]);
     expect(all.map(ties)).toEqual([4, 2, 1]);
@@ -117,7 +117,7 @@ describe("KnockoutBracket", () => {
     renderBracket();
     fireEvent.click(screen.getByRole("radio", { name: "Section 4 of 4" }));
     // The last quarter of the round of 64 feeds the bottom half of the round of 32.
-    fireEvent.click(screen.getByRole("radio", { name: "Round of 32" }));
+    fireEvent.click(screen.getByRole("radio", { name: "R32, Round of 32" }));
     expect(screen.getByRole("radio", { name: "Bottom half" })).toHaveAttribute("data-state", "on");
   });
 
@@ -134,6 +134,45 @@ describe("KnockoutBracket", () => {
     // Nothing before the first round.
     swipe(container, 120);
     expect(heading(columns(container)[0])).toBe("Round of 64");
+  });
+
+  it("takes two fingers for a pinch, not a swipe", () => {
+    const container = renderBracket();
+    const surface = columns(container)[0].closest<HTMLElement>("[class*=bracket-column]")!;
+    fireEvent.touchStart(surface, { touches: [{ clientX: 200, clientY: 100 }] });
+    fireEvent.touchStart(surface, { touches: [{ clientX: 200, clientY: 100 }, { clientX: 260, clientY: 140 }] });
+    // The fingers part, one well to the left of where the first came down.
+    fireEvent.touchEnd(surface, { touches: [{ clientX: 300, clientY: 140 }], changedTouches: [{ clientX: 80, clientY: 100 }] });
+    fireEvent.touchEnd(surface, { touches: [], changedTouches: [{ clientX: 300, clientY: 140 }] });
+    expect(heading(columns(container)[0])).toBe("Round of 64");
+  });
+
+  it("keeps the rounds wholly past a phone's clipped edge out of the keyboard's reach", () => {
+    const [focus, next, ...rest] = columns(renderBracket());
+    expect(focus).not.toHaveClass("@max-xl:invisible");
+    expect(next).not.toHaveClass("@max-xl:invisible");
+    for (const column of rest) expect(column).toHaveClass("@max-xl:invisible");
+  });
+
+  it("draws a bracket that changes under it from that bracket's opening round", () => {
+    const { container, rerender } = render(bracket(rounds));
+    fireEvent.click(screen.getByRole("radio", { name: "Final" }));
+    // Another tournament, two rounds long: the old focus (the sixth round) is
+    // past its end, and the render that brought it in read it.
+    const short: BracketRound[] = [
+      {
+        id: "semi-final",
+        label: "Semi-finals",
+        matches: [
+          { id: "ns-0", homeTeamId: "t0", awayTeamId: "t1" },
+          { id: "ns-1", homeTeamId: "t2", awayTeamId: "t3" },
+        ],
+      },
+      { id: "final", label: "Final", matches: [{ id: "nf-0", homeTeamId: null, awayTeamId: null }] },
+    ];
+    rerender(bracket(short));
+    const byRound = container.querySelector<HTMLElement>('[data-layout="rounds"]')!;
+    expect(columns(byRound).map(heading)).toEqual(["Semi-finals", "Final"]);
   });
 
   it("opens a decided bracket on its last eight", () => {
@@ -234,7 +273,7 @@ describe("KnockoutBracket", () => {
       { from: "c", to: "f" },
       { from: "e", to: "f" },
     ]);
-    fireEvent.click(screen.getByRole("radio", { name: "Round 1" }));
+    fireEvent.click(screen.getByRole("radio", { name: "R1, Round 1" }));
     const all = columns(container);
     expect(all.map(heading)).toEqual(["Round 1", "Round 2", "Round 3", "Final"]);
     expect(all[1].textContent).toContain("Lower bracket");

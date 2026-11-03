@@ -269,7 +269,7 @@ function LineForm({
             id={nameInputId}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder={variant === "income" ? "Trabajo principal" : "Renta"}
+            placeholder={variant === "income" ? "Main job" : "Rent"}
           />
         </Field>
 

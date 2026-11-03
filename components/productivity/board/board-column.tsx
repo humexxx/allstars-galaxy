@@ -126,7 +126,8 @@ export function BoardColumn({
                   <button
                     type="button"
                     onClick={startRename}
-                    className="block max-w-full cursor-pointer truncate rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    // 24px tall, not the 20px line: the smallest a tap target goes.
+                    className="block max-w-full cursor-pointer truncate rounded-sm py-0.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   >
                     {column.name}
                   </button>

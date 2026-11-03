@@ -124,9 +124,10 @@ describe("RacquetTournamentPage", () => {
     renderPage(MILANO, ready());
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Overview", "Bracket"]);
     expect(openTab()).toBe("Bracket");
-    const panel = screen.getByRole("tabpanel");
-    expect(within(panel).getByText("Final")).toBeInTheDocument();
-    expect(within(panel).getAllByText("Semi-finals")).toHaveLength(2);
+    // A draw this small is drawn whole on a wide screen, a half each side of the final.
+    const whole = screen.getByRole("tabpanel").querySelector<HTMLElement>('[data-layout="whole"]')!;
+    expect(within(whole).getByText("Final")).toBeInTheDocument();
+    expect(within(whole).getAllByText("Semi-finals")).toHaveLength(2);
   });
 
   it("opens on the Overview when the address asks for it", () => {

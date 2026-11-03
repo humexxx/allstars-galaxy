@@ -68,7 +68,7 @@ export default async function PortalLayout({
                 isImpersonating={ctx.isImpersonating}
               />
               {/* `min-w-0`: a flex child never shrinks below its content's
-                min-content width by default, so from `md` (sidebar showing) a
+                min-content width by default, so from `lg` (sidebar showing) a
                 wide board or table pushed the whole page sideways by the
                 sidebar's width instead of scrolling inside its own card. */}
               <SidebarInset className="min-w-0">

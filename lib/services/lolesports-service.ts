@@ -184,7 +184,9 @@ function toTeam(ref: { name: string; code: string; image?: string }): Team {
     name: ref.name,
     shortName: ref.name,
     code: ref.code,
-    logoUrl: ref.image,
+    // The feed publishes logos as http://, which costs a redirect each and is
+    // mixed content on the https site.
+    logoUrl: ref.image?.replace(/^http:\/\//, "https://"),
     primaryColor: ref.image
       ? LOGO_DISC
       : (FALLBACK_COLOR_BY_CODE[ref.code.toUpperCase()] ?? LOGO_DISC),

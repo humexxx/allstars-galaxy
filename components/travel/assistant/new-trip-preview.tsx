@@ -23,6 +23,8 @@ export function NewTripPreview() {
       <EmptyState
         variant="card"
         icon={Sparkles}
+        // The whole page when there is nothing to show, so it carries the h1.
+        titleAs="h1"
         title="Nothing to preview"
         description="A new trip the assistant proposes shows up here until you apply or discard it."
         action={

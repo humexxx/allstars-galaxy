@@ -398,10 +398,11 @@ function ShareRow({
           readOnly
           value={url}
           aria-label="Share link"
-          // Both steps pinned: `Input` sets `md:text-sm`, which outranked a
-          // bare size from `md` up and printed the link larger on a desktop
-          // than on a phone.
-          className="font-mono text-xs md:text-xs"
+          // Both steps pinned: `Input` sets `md:pointer-fine:text-sm`, which
+          // outranks a bare size from `md` up and printed the link larger on
+          // a desktop than on a phone. Read-only, so iOS has nothing to zoom
+          // in on.
+          className="font-mono text-xs md:pointer-fine:text-xs"
         />
         <InputGroupAddon align="inline-end">
           {/* A phone cannot be handed a URL. The code is the way this link

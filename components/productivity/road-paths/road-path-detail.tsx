@@ -29,11 +29,13 @@ type RoadPathDetailProps = {
   timeZone?: string;
 };
 
+// Two abreast from a phone up: each card is a label and one figure, and
+// stacked they pushed the habit's calendar off the first screen.
 const GRID_COLUMNS: Record<number, string> = {
   1: "",
-  2: "@xl:grid-cols-2",
-  3: "@xl:grid-cols-3",
-  4: "@xl:grid-cols-2 @4xl:grid-cols-4",
+  2: "grid-cols-2",
+  3: "grid-cols-2 @xl:grid-cols-3",
+  4: "grid-cols-2 @4xl:grid-cols-4",
 };
 
 /**
@@ -149,7 +151,7 @@ export function RoadPathDetail({ detail, today, timeZone }: RoadPathDetailProps)
   const often = frequencyLabel(habit.scheduleDays);
 
   return (
-    // Sized by the room the page actually has, not the viewport: from `md`
+    // Sized by the room the page actually has, not the viewport: from `lg`
     // the sidebar takes 192px, and viewport breakpoints split what was left
     // into three stat cards and two narrow panels — a progress note wrapped
     // one letter per line.

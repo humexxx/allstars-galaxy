@@ -131,7 +131,12 @@ export function F1RacePage({
             <div className="grid gap-6 @4xl:grid-cols-2 @4xl:items-start">
               <Card>
                 <CardContent className="flex flex-col items-center gap-4 text-center">
-                  <F1CircuitOutline circuitId={race.circuitId} className="h-auto w-full max-w-72 text-foreground" />
+                  {/* Capped in height on a phone: a tall circuit filled the
+                      first screen and pushed the weekend's times under it. */}
+                  <F1CircuitOutline
+                    circuitId={race.circuitId}
+                    className="h-auto max-h-44 w-full max-w-72 text-foreground sm:max-h-none"
+                  />
                   <div className="flex flex-col items-center gap-2">
                     <Text variant="muted">{racePlace(race)}</Text>
                     <div className="flex flex-wrap items-center justify-center gap-2">

@@ -47,6 +47,7 @@ describe("AlertDialogAction", () => {
 
     const button = screen.getByRole("button", { name: "Delete" });
     expect(button.className).toContain("bg-destructive");
-    expect(button.className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
+    // The default fill is `bg-primary-fill` (the deeper blue under a label).
+    expect(button.className).not.toMatch(/(^|\s)bg-primary(-fill)?(\s|$)/);
   });
 });

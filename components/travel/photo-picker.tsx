@@ -180,9 +180,11 @@ export function PhotoPicker({
       )}
 
       <Tabs defaultValue="upload" className="flex flex-col gap-3">
-        {/* The list's own height is set on \`group-data-horizontal/tabs\`, so a
-            plain \`h-8\` loses to it; override it on the same selector. */}
-        <TabsList className="group-data-horizontal/tabs:h-8">
+        {/* The list's own height is set on `group-data-horizontal/tabs`, so a
+            plain `h-8` loses to it; override it on the same selector. Only
+            from `sm`: a phone keeps the 40px list, as `ToggleGroup size="sm"`
+            does, since its 25px tabs were hard to hit. */}
+        <TabsList className="sm:group-data-horizontal/tabs:h-8">
           <TabsTrigger value="upload" className="text-xs">Upload</TabsTrigger>
           <TabsTrigger value="url" className="text-xs">Paste URL</TabsTrigger>
         </TabsList>

@@ -12,7 +12,7 @@ type RoadPathsViewProps = {
 /** The grid of road paths. Each card links to its own `?path=` detail. */
 export function RoadPathsView({ roadPaths, today, timeZone }: RoadPathsViewProps) {
   return (
-    // Columns by the room the grid has: from `md` the sidebar takes 192px,
+    // Columns by the room the grid has: from `lg` the sidebar takes 192px,
     // and viewport breakpoints made two narrow cards with their titles three
     // words to a line.
     <div className="@container">

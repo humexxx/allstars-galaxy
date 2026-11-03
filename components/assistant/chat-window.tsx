@@ -26,7 +26,7 @@ export function AssistantButton({
       className={cn(
         "fixed right-4 z-40 size-12 rounded-full shadow-lg",
         // Clear of the dev-tools wrench, which only exists in development.
-        process.env.NODE_ENV === "development" ? "bottom-16" : "bottom-4",
+        process.env.NODE_ENV === "development" ? "bottom-safe-16" : "bottom-safe-4",
         hidden && "hidden"
       )}
     >

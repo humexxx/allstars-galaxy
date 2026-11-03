@@ -1414,8 +1414,12 @@ function ProjectionPanel({
   // the card header so the number reads as the headline, Polymarket-style.
   const forecastHeader = (
     <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-1">
-        <div>
+      {/* On a phone today's figure leads on its own line with the next and
+          the end figures side by side under it: in a wrapping row the end
+          figure dropped under today's and the three read as two rows of
+          unrelated numbers. */}
+      <div className="grid w-full grid-cols-2 items-end gap-x-4 gap-y-2 sm:flex sm:w-auto sm:flex-wrap sm:gap-x-6 sm:gap-y-1">
+        <div className="col-span-2">
           <Eyebrow size="sm" as="p">
             {todayCaption}
           </Eyebrow>
@@ -1468,7 +1472,8 @@ function ProjectionPanel({
           )}
         </div>
       </div>
-      {/* Every control here is h-8, so the cluster wraps as one row height. */}
+      {/* Every control here is h-8 from `sm` (h-9 to h-10 on a phone, where
+          they step up for a thumb), so the cluster wraps as one row height. */}
       <div className="flex flex-wrap items-center gap-2">
         {/* View first — it decides what the rest of this cluster even applies
             to (Portfolio and the horizon presets only shape the Graph). */}
@@ -1483,7 +1488,7 @@ function ProjectionPanel({
         {/* Chart toggles: portfolio series (persists to the plan) and the
             scenario ghost line (view-only). Sit beside the horizon presets so
             everything that shapes the chart lives in one cluster. */}
-        <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 text-xs font-medium text-muted-foreground">
+        <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 text-xs font-medium text-muted-foreground sm:h-8">
           <Switch
             checked={portfolioEnabled}
             onCheckedChange={handlePortfolioSwitch}
@@ -1502,12 +1507,16 @@ function ProjectionPanel({
             vs base
           </Toggle>
         )}
+        {/* On a phone the range is its own full-width row right over the
+            chart, as a phone's stock chart has it, instead of whichever
+            scrap of a line the controls before it left. */}
         <ToggleGroup
           type="single"
           size="sm"
           value={String(horizonMonths)}
           onValueChange={(v) => v && setHorizonMonths(Number(v))}
           aria-label="Projection horizon"
+          className="order-last w-full sm:order-none sm:w-fit"
         >
           {HORIZON_PRESETS.map((preset) => (
             <ToggleGroupItem

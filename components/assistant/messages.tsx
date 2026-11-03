@@ -33,7 +33,7 @@ export function UserBubble({ text, children }: { text: string; children?: ReactN
   return (
     <div className="ml-8 flex flex-col items-end gap-1 self-end">
       {children}
-      <p className="whitespace-pre-wrap rounded-xl bg-primary px-3 py-2 text-sm text-primary-foreground">{text}</p>
+      <p className="whitespace-pre-wrap rounded-xl bg-primary-fill px-3 py-2 text-sm text-primary-foreground">{text}</p>
     </div>
   );
 }

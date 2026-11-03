@@ -246,7 +246,7 @@ export function TripForm({
                   key={c}
                   value={c}
                   aria-label={`Color ${i + 1}`}
-                  className="size-7 min-w-0 flex-none rounded-full border-2 border-transparent p-0 shadow-none data-[state=on]:border-foreground"
+                  className="size-9 min-w-0 flex-none rounded-full border-2 border-transparent p-0 shadow-none data-[state=on]:border-foreground sm:size-7"
                   // The swatch IS the value; a token class per slot would
                   // have to be kept in step with TRIP_COLORS by hand.
                   style={{ backgroundColor: c }}

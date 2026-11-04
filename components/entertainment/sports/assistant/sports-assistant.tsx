@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AssistantButton, ChatHeader, ChatWindow } from "@/components/assistant/chat-window";
@@ -13,22 +13,14 @@ import {
   UserBubble,
 } from "@/components/assistant/messages";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { readEvents } from "@/lib/ai/assistant/stream";
-import type { SportsAssistantEvent, SportsAssistantMessage } from "@/types/sports-assistant";
-
-type Entry =
-  | { kind: "user"; id: string; text: string }
-  | { kind: "assistant"; id: string; text: string }
-  | { kind: "error"; id: string; message: string };
+import { useAssistantChat } from "@/components/assistant/use-assistant-chat";
+import type { SportsAssistantEvent } from "@/types/sports-assistant";
 
 const SUGGESTIONS = [
   "When does Real Madrid play next?",
   "Add the NBA to my favourites",
   "Open the Champions League bracket",
 ];
-
-let nextId = 0;
-const newId = (): string => `sports-entry-${++nextId}`;
 
 /** The address on screen, query included: the hub keeps its sport, league and tab there. */
 function currentPath(): string {
@@ -48,101 +40,32 @@ function currentPath(): string {
 export function SportsAssistant(): React.ReactElement {
   const router = useRouter();
   const phone = useIsMobile();
-
   const [open, setOpen] = useState(false);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const input = useRef<HTMLTextAreaElement>(null);
-  const scroller = useRef<HTMLDivElement>(null);
 
-  const transcript = useRef<SportsAssistantMessage[]>([]);
-  /** The page the model was last told about; null before the first message. */
-  const toldPath = useRef<string | null>(null);
-
-  useEffect(() => {
-    const el = scroller.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [entries, status]);
-
-  const appendText = (assistantId: string, text: string): void =>
-    setEntries((all) => {
-      const at = all.findIndex((e) => e.id === assistantId);
-      if (at === -1) return [...all, { kind: "assistant", id: assistantId, text }];
-      const entry = all[at];
-      if (entry.kind !== "assistant") return all;
-      const next = [...all];
-      next[at] = { ...entry, text: entry.text + text };
-      return next;
-    });
-
-  async function send(text: string): Promise<void> {
-    const message = text.trim();
-    if (!message || busy) return;
-    setDraft("");
-    setBusy(true);
-    setEntries((all) => [...all, { kind: "user", id: newId(), text: message }]);
-
-    const history: SportsAssistantMessage[] = [
-      ...transcript.current,
-      { role: "user", content: [{ type: "text", text: message }] },
-    ];
-    transcript.current = history;
-    const path = currentPath();
-    const context = toldPath.current === path ? undefined : { path };
-    toldPath.current = path;
-
-    const assistantId = newId();
-    try {
-      const response = await fetch("/api/sports/assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, context }),
-      });
-      if (!response.ok || !response.body) {
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error ?? "The assistant did not answer");
+  const chat = useAssistantChat<SportsAssistantEvent>({
+    endpoint: "/api/sports/assistant",
+    context: () => {
+      const path = currentPath();
+      return { key: path, value: { path } };
+    },
+    onEvent: (event, chat) => {
+      switch (event.type) {
+        case "navigate":
+          if (event.href !== currentPath()) router.push(event.href);
+          // The model was told where it sent the user.
+          chat.markTold(event.href);
+          return true;
+        case "refresh":
+          router.refresh();
+          return true;
+        default:
+          return false;
       }
-      await readEvents<SportsAssistantEvent>(response.body, (event) => {
-        switch (event.type) {
-          case "text":
-            setStatus(null);
-            appendText(assistantId, event.text);
-            break;
-          case "status":
-            setStatus(event.label);
-            break;
-          case "navigate":
-            if (event.href !== currentPath()) router.push(event.href);
-            // The model was told where it sent the user.
-            toldPath.current = event.href;
-            break;
-          case "refresh":
-            router.refresh();
-            break;
-          case "turn":
-            transcript.current = [...history, ...event.messages];
-            break;
-          case "error":
-            setEntries((all) => [...all, { kind: "error", id: newId(), message: event.message }]);
-            break;
-        }
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "The assistant did not answer";
-      setEntries((all) => [...all, { kind: "error", id: newId(), message }]);
-    } finally {
-      setStatus(null);
-      setBusy(false);
-    }
-  }
-
-  function reset(): void {
-    setEntries([]);
-    transcript.current = [];
-    toldPath.current = null;
-  }
+    },
+  });
+  const { entries, draft, setDraft, busy, status, input, scroller } = chat;
+  const send = chat.send;
+  const reset = chat.reset;
 
   return (
     <>

@@ -54,7 +54,7 @@ export function DashboardCardSkeleton({
  * The same grid as `DashboardFinanceCard`'s body — figures in a 15rem column,
  * the chart beside it from `@2xl` — with each bar the height of the line box
  * it stands in for (net worth's 36→40px figure, then a 14px eyebrow over a
- * 24→28px figure per part), so the card swaps in without moving the chart.
+ * 20→24px figure per part), so the card swaps in without moving the chart.
  */
 function RailBody({ figures }: { figures: number }) {
   return (
@@ -72,7 +72,7 @@ function RailBody({ figures }: { figures: number }) {
             {Array.from({ length: figures - 1 }).map((_, i) => (
               <div key={i} className="flex flex-col gap-1">
                 <Skeleton className="h-3.5 w-20" />
-                <Skeleton className="h-6 w-28 sm:h-7" />
+                <Skeleton className="h-5 w-24 sm:h-6" />
               </div>
             ))}
           </div>

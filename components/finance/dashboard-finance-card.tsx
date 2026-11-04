@@ -21,7 +21,9 @@ import { statToneClass } from "@/components/ui/stat-card";
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
+import { CountUpCurrency } from "./count-up";
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
+import { drawDelay } from "./dashboard-motion";
 import {
   dashboardSeries,
   visibleSeriesKeys,
@@ -154,21 +156,21 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     {
       series: dashboardSeries("investments"),
       label: "Portfolio",
-      value: formatCurrency(fig.investments),
+      amount: fig.investments,
       note: managedNote(managed),
       href: "/portal/portfolio",
     },
     {
       series: dashboardSeries("savings"),
       label: "Cash",
-      value: formatCurrency(fig.savings),
+      amount: fig.savings,
     },
     ...(visible.has("receivables")
       ? [
           {
             series: dashboardSeries("receivables"),
             label: "Owed to you",
-            value: formatCurrency(fig.receivables),
+            amount: fig.receivables,
           },
         ]
       : []),
@@ -177,7 +179,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
           {
             series: dashboardSeries("debt"),
             label: "Debt",
-            value: formatCurrency(fig.debt),
+            amount: fig.debt,
             // The goal while there is debt: when it is gone.
             note:
               goal?.kind === "debt-free" ? (
@@ -236,7 +238,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
                     statToneClass(moneySign(fig.netWorth) >= 0 ? "positive" : "negative")
                   )}
                 >
-                  {formatCurrency(fig.netWorth)}
+                  <CountUpCurrency value={fig.netWorth} delay={drawDelay("netWorth")} />
                 </Mono>
                 {lastClose && sinceClose !== null && (
                   <DeltaChip delta={sinceClose} since={lastClose} />
@@ -269,7 +271,8 @@ type Figure = {
   /** The chart series this figure is a reading of; its swatch is the legend. */
   series: DashboardSeries;
   label: string;
-  value: string;
+  /** Counts up from $0 on load, in its series' turn of the chart's draw-in. */
+  amount: number;
   tone?: "positive" | "negative";
   /** Change since the last close, as a chip beside the value. */
   change?: React.ReactNode;
@@ -331,7 +334,7 @@ function managedNote(managed: ManagedAssets | null): React.ReactNode {
  * worth leads the rail and carries the sign colour, which is emphasis enough.
  */
 function FigureItem({ figure }: { figure: Figure }) {
-  const { series, label, value, tone, change, note, href } = figure;
+  const { series, label, amount, tone, change, note, href } = figure;
   return (
     <div
       className={cn(
@@ -365,8 +368,8 @@ function FigureItem({ figure }: { figure: Figure }) {
       </Eyebrow>
       <dd>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Mono className={cn("text-base font-semibold sm:text-lg", statToneClass(tone))}>
-            {value}
+          <Mono className={cn("text-sm font-semibold sm:text-base", statToneClass(tone))}>
+            <CountUpCurrency value={amount} delay={drawDelay(series.key)} />
           </Mono>
           {change}
         </div>

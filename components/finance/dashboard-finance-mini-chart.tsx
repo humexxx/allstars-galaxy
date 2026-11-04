@@ -1,6 +1,5 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
 import {
   Area,
   CartesianGrid,
@@ -18,7 +17,10 @@ import { niceTicks, yAxisWidth } from "@/lib/utils/chart-axis";
 import { formatCurrency, formatCurrencyCompact, moneySign } from "@/lib/utils/format";
 import type { ChartConfig } from "@/types/chart";
 
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
+
 import { DASHBOARD_SERIES, dashboardSeries, visibleSeriesKeys } from "./dashboard-finance-series";
+import { DRAW_ORDER, drawDelay, easeOut, splitEasedStroke, SWEEP_MS } from "./dashboard-motion";
 
 const chartConfig: ChartConfig = Object.fromEntries(
   DASHBOARD_SERIES.map((s) => [s.key, { label: s.label, color: s.color }])
@@ -66,38 +68,19 @@ export function toRows(data: DashboardPoint[], pastCount: number): Row[] {
   });
 }
 
-/**
- * The draw-in: each series sweeps in left to right, starting slow and
- * finishing fast, one after another — the
- * small parts first, the totals last — and net worth closes it with a glow.
- * Areas sweep the chart's full width (recharts clips from the first point),
- * so a series' past and projected halves read as one stroke.
- */
-const SWEEP_MS = 900;
-const STAGGER_MS = 280;
-const DRAW_ORDER: Record<string, number> = {
-  savingsAbove: 0,
-  savingsBelow: 0,
-  investments: 1,
-  debtBelow: 2,
-  receivables: 3,
-  netWorth: 4,
+/** Which part each plotted area is, for its place in the draw-in. */
+const AREA_PART: Record<string, keyof typeof DRAW_ORDER> = {
+  savingsAbove: "savings",
+  savingsBelow: "savings",
+  investments: "investments",
+  debtBelow: "debt",
+  receivables: "receivables",
 };
 
-const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
-
-/** No draw-in for people who asked for less motion. */
-function usePrefersReducedMotion(): boolean {
-  return useSyncExternalStore(
-    (onChange) => {
-      const query = window.matchMedia(REDUCED_MOTION);
-      query.addEventListener("change", onChange);
-      return () => query.removeEventListener("change", onChange);
-    },
-    () => window.matchMedia(REDUCED_MOTION).matches,
-    () => false
-  );
-}
+// recharts types `animationEasing` as the named curves only, but its
+// animator (react-smooth) takes any t → progress function.
+type Easing = "ease-out";
+const asEasing = (fn: (t: number) => number): Easing => fn as unknown as Easing;
 
 /** Same rhythm as the plan page's projected line. */
 const PROJECTED_DASH = "6 4";
@@ -207,9 +190,11 @@ export function DashboardFinanceMiniChart({
       strokeDasharray={ahead ? PROJECTED_DASH : undefined}
       activeDot={false}
       isAnimationActive={!reducedMotion}
-      animationBegin={DRAW_ORDER[key] * STAGGER_MS}
+      // The card's clock (see dashboard-motion): each area sweeps in on
+      // easeOut, in its turn.
+      animationBegin={drawDelay(AREA_PART[key])}
       animationDuration={SWEEP_MS}
-      animationEasing="ease-in"
+      animationEasing={asEasing(easeOut)}
     />
   );
   const halves = [false, true].flatMap((ahead) => [
@@ -219,13 +204,14 @@ export function DashboardFinanceMiniChart({
     area("savingsBelow", "debts", savings, ahead),
     area("debtBelow", "debts", debt, ahead),
   ]);
-  // Net worth draws last, past first and then the projection, as one stroke:
-  // a line animates along its own length, so each half gets its share of the
-  // sweep by the span it covers. recharts keeps the projection's dashes.
+  // Net worth draws last, past first and then the projection, as one eased
+  // stroke: each half animates along its own length, so `splitEasedStroke`
+  // gives each its slice of the time and of the curve. recharts keeps the
+  // projection's dashes while it draws.
   const first = data[0].time;
   const span = Math.max(1, data[data.length - 1].time - first);
-  const pastShare = Math.min(1, Math.max(0, (data[pastCount].time - first) / span));
-  const lineBegin = DRAW_ORDER.netWorth * STAGGER_MS;
+  const stroke = splitEasedStroke((data[pastCount].time - first) / span, SWEEP_MS);
+  const lineBegin = drawDelay("netWorth");
   const netWorth = (ahead: boolean, glow: boolean) => (
     <Line
       key={`netWorth-${ahead ? "ahead" : "past"}${glow ? "-glow" : ""}`}
@@ -241,11 +227,9 @@ export function DashboardFinanceMiniChart({
       dot={false}
       activeDot={glow ? false : { r: 3 }}
       isAnimationActive={!reducedMotion}
-      // Slow start, fast finish across the whole stroke: the past half eases
-      // in, and the projection carries on at the speed it reached.
-      animationEasing={ahead ? "linear" : "ease-in"}
-      animationBegin={lineBegin + (ahead ? Math.round(SWEEP_MS * pastShare) : 0)}
-      animationDuration={Math.max(1, Math.round(SWEEP_MS * (ahead ? 1 - pastShare : pastShare)))}
+      animationEasing={asEasing(ahead ? stroke.second.easing : stroke.first.easing)}
+      animationBegin={lineBegin + (ahead ? stroke.second.delay : 0)}
+      animationDuration={ahead ? stroke.second.duration : stroke.first.duration}
     />
   );
   return (

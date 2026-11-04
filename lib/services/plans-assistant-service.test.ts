@@ -6,6 +6,8 @@ const PLAN = "00000000-0000-4000-8000-0000000000a1";
 const INCOME = "00000000-0000-4000-8000-0000000000b1";
 const DEBT = "00000000-0000-4000-8000-0000000000c1";
 const USER = "00000000-0000-4000-8000-0000000000aa";
+const COPY = "00000000-0000-4000-8000-0000000000d1";
+const COPIED_INCOME = "00000000-0000-4000-8000-0000000000d2";
 const U = (y: number, m: number, d = 1): Date => new Date(Date.UTC(y, m - 1, d));
 
 function storedPlan(): FinancePlanWithLines {
@@ -80,7 +82,14 @@ function storedPlan(): FinancePlanWithLines {
   } as unknown as FinancePlanWithLines;
 }
 
-vi.mock("./finance-plan-service", () => ({ listUserPlansWithLines: vi.fn() }));
+vi.mock("./finance-plan-service", () => ({
+  listUserPlansWithLines: vi.fn(),
+  getPlanWithLines: vi.fn(async (id: string) => ({
+    ...storedPlan(),
+    id,
+    incomes: storedPlan().incomes.map((l) => ({ ...l, id: COPIED_INCOME, planId: id })),
+  })),
+}));
 vi.mock("./investment-method-service", () => ({ listInvestmentMethods: vi.fn(async () => []) }));
 vi.mock("./finance-snapshot-service", async () => {
   const { projectPlan, projectStateAt } = await import("@/lib/finance/projection");
@@ -100,6 +109,10 @@ vi.mock("./finance-plan-operations", () => {
   return {
     PlanOperationError,
     createPlanOperation: vi.fn(async (_c, input: { name: string }) => ({ ...storedPlan(), id: "new-plan-id", name: input.name })),
+    copyPlanOperation: vi.fn(async (_c, input: { name: string }) => ({
+      plan: { ...storedPlan(), id: COPY, name: input.name, isMain: false },
+      lineIds: new Map([[`income:${INCOME}`, COPIED_INCOME]]),
+    })),
     updatePlanOperation: vi.fn(async () => storedPlan()),
     setMainPlanOperation: vi.fn(),
     deletePlanOperation: vi.fn(),
@@ -118,10 +131,13 @@ vi.mock("./finance-plan-operations", () => {
 import { listUserPlansWithLines } from "./finance-plan-service";
 import {
   addDebtOperation,
+  addExpenseOperation,
   addIncomeOperation,
+  copyPlanOperation,
   createPlanOperation,
   PlanOperationError,
   updateDebtOperation,
+  updateIncomeOperation,
   updatePlanOperation,
 } from "./finance-plan-operations";
 import { applyPlanChanges, PlanChangeError, previewPlanChanges } from "./plans-assistant-service";
@@ -172,6 +188,41 @@ describe("previewPlanChanges", () => {
     const lean = effects.find((e) => e.isNew)!;
     expect(lean.before).toBeNull();
     expect(lean.after.cashToday).toBeGreaterThanOrEqual(1000);
+  });
+
+  it("copies a plan and changes the copy's lines by the source's ids, leaving the source alone", async () => {
+    const { lines, effects } = await previewPlanChanges(c, {
+      summary: "Without the salary",
+      changes: [
+        { op: "copy_plan", ref: "lean", fromPlanId: PLAN, name: "Main without salary", asScenario: true },
+        { op: "update_income", planRef: "lean", incomeId: INCOME, changes: { endDate: "2026-11-30" } },
+      ],
+    });
+
+    expect(lines.map((l) => `${l.action} ${l.subject} ${l.planName}: ${l.title}`)).toEqual([
+      "create plan Main without salary: Main without salary",
+      "update income Main without salary: Salary",
+    ]);
+    expect(lines[0].details).toEqual(["Copy of Main"]);
+    expect(effects).toHaveLength(1);
+    const [copy] = effects;
+    expect(copy).toMatchObject({ isNew: true, planId: null, before: null });
+
+    const { effects: unchanged } = await previewPlanChanges(c, {
+      summary: "Same copy",
+      changes: [{ op: "copy_plan", ref: "same", fromPlanId: PLAN, name: "Same" }],
+    });
+    expect(copy.after.netWorthIn12Months).toBeLessThan(unchanged[0].after.netWorthIn12Months);
+    expect(copyPlanOperation).not.toHaveBeenCalled();
+  });
+
+  it("refuses a line change that names no plan", async () => {
+    await expect(
+      previewPlanChanges(c, {
+        summary: "Nowhere",
+        changes: [{ op: "remove_income", incomeId: INCOME }],
+      })
+    ).rejects.toThrow(/exactly one of them/);
   });
 
   it("refuses a change the plan forms would refuse, saying which one", async () => {
@@ -243,6 +294,29 @@ describe("applyPlanChanges", () => {
     expect(createPlanOperation).toHaveBeenCalledWith(c, expect.objectContaining({ name: "Plan B", monthsAhead: 120 }));
     expect(addDebtOperation).toHaveBeenCalledWith(c, "new-plan-id", expect.objectContaining({ name: "Car" }));
     expect(result.createdPlans).toEqual([{ ref: "b", id: "new-plan-id", name: "Plan B" }]);
+  });
+
+  it("lends money on the source, then copies it and stops an income on the copy", async () => {
+    const result = await applyPlanChanges(c, {
+      summary: "Loan, then a plan without the salary",
+      changes: [
+        { op: "add_expense", planId: PLAN, expense: { name: "Loan to my sister", monthlyAmount: 1000, kind: "one_time", date: "2026-11-04" } },
+        { op: "add_income", planId: PLAN, income: { name: "My sister pays back", monthlyAmount: 1000, kind: "one_time", date: "2026-12-15", owedToMe: true } },
+        { op: "copy_plan", ref: "lean", fromPlanId: PLAN, name: "Without salary", asScenario: true },
+        { op: "update_income", planRef: "lean", incomeId: INCOME, changes: { endDate: "2026-11-30" } },
+      ],
+    });
+
+    expect(addExpenseOperation).toHaveBeenCalledWith(c, PLAN, expect.objectContaining({ kind: "one_time", date: "2026-11-04" }));
+    expect(addIncomeOperation).toHaveBeenCalledWith(c, PLAN, expect.objectContaining({ owedToMe: true }));
+    expect(copyPlanOperation).toHaveBeenCalledWith(c, { planId: PLAN, name: "Without salary", asScenario: true });
+    // The source's income id, mapped onto the copy's line.
+    expect(updateIncomeOperation).toHaveBeenCalledWith(
+      c,
+      COPY,
+      expect.objectContaining({ id: COPIED_INCOME, name: "Salary", endDate: "2026-11-30" })
+    );
+    expect(result.createdPlans).toEqual([{ ref: "lean", id: COPY, name: "Without salary" }]);
   });
 
   it("writes nothing when any change would be refused", async () => {

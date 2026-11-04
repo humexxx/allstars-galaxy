@@ -435,6 +435,20 @@ export async function clonePlan(
   newName: string,
   options: { asScenario?: boolean } = {}
 ): Promise<FinancePlan> {
+  return (await clonePlanWithLineIds(userId, sourcePlanId, newName, options)).plan;
+}
+
+/**
+ * `clonePlan`, also returning where each line went: `"income:<old id>"` →
+ * the copy's line id (likewise `expense:` and `debt:`), so a caller can change
+ * the copy's lines by the source's ids.
+ */
+export async function clonePlanWithLineIds(
+  userId: string,
+  sourcePlanId: string,
+  newName: string,
+  options: { asScenario?: boolean } = {}
+): Promise<{ plan: FinancePlan; lineIds: ReadonlyMap<string, string> }> {
   const source = await getPlanWithLines(sourcePlanId, userId);
   if (!source) throw new Error("Plan not found");
 
@@ -559,7 +573,7 @@ export async function clonePlan(
       await tx.insert(financePlanLineOverrides).values(overrides);
     }
 
-    return plan;
+    return { plan, lineIds: idMap };
   });
 }
 

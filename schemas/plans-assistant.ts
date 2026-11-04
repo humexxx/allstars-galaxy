@@ -120,14 +120,26 @@ const debtFields = {
   ...recurrence,
 };
 
-const linePlan = idSchema.describe("The plan's id");
-const lineId = (side: string) => idSchema.describe(`The ${side}'s id, from get_plan`);
+const lineId = (side: string) =>
+  idSchema.describe(
+    `The ${side}'s id, from get_plan. On a plan copied in this proposal (planRef), the id of the same line in the plan it was copied from`
+  );
 
 export const planChangeSchema = z.discriminatedUnion("op", [
   z.object({
     op: z.literal("create_plan"),
     ref,
     settings: z.object(planSettings).extend({ name: z.string().trim().min(1).max(120) }),
+  }),
+  z.object({
+    op: z.literal("copy_plan"),
+    ref,
+    fromPlanId: idSchema.describe("The plan to copy, from list_plans: its settings, balances and every line"),
+    name: z.string().trim().min(1).max(120),
+    asScenario: z
+      .boolean()
+      .optional()
+      .describe("A what-if of the plan it copies: the copy's chart overlays the source's line. Usually true"),
   }),
   z.object({ op: z.literal("update_plan"), ...planTarget, settings: z.object(planSettings) }),
   z.object({ op: z.literal("set_main_plan"), ...planTarget }),
@@ -138,24 +150,24 @@ export const planChangeSchema = z.discriminatedUnion("op", [
     ...planTarget,
     income: z.object(incomeFields).extend({ name: z.string().trim().min(1).max(120), monthlyAmount: money }),
   }),
-  z.object({ op: z.literal("update_income"), planId: linePlan, incomeId: lineId("income"), changes: z.object(incomeFields) }),
-  z.object({ op: z.literal("remove_income"), planId: linePlan, incomeId: lineId("income") }),
+  z.object({ op: z.literal("update_income"), ...planTarget, incomeId: lineId("income"), changes: z.object(incomeFields) }),
+  z.object({ op: z.literal("remove_income"), ...planTarget, incomeId: lineId("income") }),
 
   z.object({
     op: z.literal("add_expense"),
     ...planTarget,
     expense: z.object(lineFields).extend({ name: z.string().trim().min(1).max(120), monthlyAmount: money }),
   }),
-  z.object({ op: z.literal("update_expense"), planId: linePlan, expenseId: lineId("expense"), changes: z.object(lineFields) }),
-  z.object({ op: z.literal("remove_expense"), planId: linePlan, expenseId: lineId("expense") }),
+  z.object({ op: z.literal("update_expense"), ...planTarget, expenseId: lineId("expense"), changes: z.object(lineFields) }),
+  z.object({ op: z.literal("remove_expense"), ...planTarget, expenseId: lineId("expense") }),
 
   z.object({
     op: z.literal("add_debt"),
     ...planTarget,
     debt: z.object(debtFields).extend({ name: z.string().trim().min(1).max(120), initialBalance: money }),
   }),
-  z.object({ op: z.literal("update_debt"), planId: linePlan, debtId: lineId("debt"), changes: z.object(debtFields) }),
-  z.object({ op: z.literal("remove_debt"), planId: linePlan, debtId: lineId("debt") }),
+  z.object({ op: z.literal("update_debt"), ...planTarget, debtId: lineId("debt"), changes: z.object(debtFields) }),
+  z.object({ op: z.literal("remove_debt"), ...planTarget, debtId: lineId("debt") }),
 ]);
 
 export type PlanChangeData = z.output<typeof planChangeSchema>;
@@ -169,18 +181,17 @@ export const planChangeSetSchema = z
   .superRefine((set, ctx) => {
     const refs = new Set<string>();
     set.changes.forEach((change, i) => {
-      if (change.op === "create_plan") {
+      if (change.op === "create_plan" || change.op === "copy_plan") {
         if (refs.has(change.ref)) {
           ctx.addIssue({ code: "custom", path: ["changes", i, "ref"], message: "Each new plan needs its own ref" });
         }
         refs.add(change.ref);
         return;
       }
-      if (!("planRef" in change) && !("planId" in change)) return;
       const target = change as { planId?: string; planRef?: string };
       const named = Number(target.planId !== undefined) + Number(target.planRef !== undefined);
       if (named !== 1) {
-        ctx.addIssue({ code: "custom", path: ["changes", i], message: "Name the plan with planId or planRef, not both" });
+        ctx.addIssue({ code: "custom", path: ["changes", i], message: "Name the plan with planId or planRef: exactly one of them" });
       } else if (target.planRef !== undefined && !refs.has(target.planRef)) {
         ctx.addIssue({
           code: "custom",

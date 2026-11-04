@@ -73,7 +73,7 @@ const plansTools = toolbox<PlanOperationContext, PlansAssistantEvent>(
     defineTool({
       name: "propose_plan_changes",
       description:
-        "Propose creating, changing or deleting plans and their incomes, expenses and debts, the main plan, and plan settings. The user sees each change and each plan's outlook before and after, and applies or discards it; nothing is written until they apply. Changes run in order, so a create_plan can be followed by add_* changes that name its ref.",
+        "Propose creating, changing or deleting plans and their incomes, expenses and debts, the main plan, and plan settings. The user sees each change and each plan's outlook before and after, and applies or discards it; nothing is written until they apply. Changes run in order, so a create_plan or copy_plan can be followed by changes that name its ref.",
       input: planChangeSetSchema,
       // A whole plan with its lines is a large input; stream it as it is written.
       eagerInput: true,

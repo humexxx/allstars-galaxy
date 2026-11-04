@@ -6,6 +6,7 @@ import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { todayInTimeZone } from "@/lib/utils/date";
 import { idSchema } from "@/schemas/common";
 import {
+  cloneFinancePlanSchema,
   createFinancePlanSchema,
   FIXED_DEBT_NEEDS_PAYMENT,
   MONTHLY_RATE_TOO_HIGH,
@@ -29,6 +30,7 @@ import {
   addDebt,
   addExpense,
   addIncome,
+  clonePlanWithLineIds,
   createPlan,
   deleteDebt,
   deleteExpense,
@@ -125,6 +127,22 @@ export async function createPlanOperation(c: PlanOperationContext, input: unknow
     after: plan,
   });
   return plan;
+}
+
+/** A copy of a plan, lines and overrides included; a scenario keeps a link to its source. */
+export async function copyPlanOperation(
+  c: PlanOperationContext,
+  input: { planId: unknown; name: unknown; asScenario?: boolean }
+): Promise<{ plan: FinancePlan; lineIds: ReadonlyMap<string, string> }> {
+  const data = parse(cloneFinancePlanSchema, { planId: input.planId, name: input.name });
+  const copy = await clonePlanWithLineIds(c.userId, data.planId, data.name, { asScenario: input.asScenario });
+  await logImpersonatedMutation({
+    action: input.asScenario ? "financePlan.createScenario" : "financePlan.clone",
+    entityTable: "finance_plans",
+    entityId: copy.plan.id,
+    metadata: { sourcePlanId: data.planId },
+  });
+  return copy;
 }
 
 export async function updatePlanOperation(c: PlanOperationContext, input: unknown): Promise<FinancePlan> {

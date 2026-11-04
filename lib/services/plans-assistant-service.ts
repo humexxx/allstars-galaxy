@@ -30,11 +30,12 @@ import type {
   PlanOutlook,
 } from "@/types/plans-assistant";
 
-import { listUserPlansWithLines } from "./finance-plan-service";
+import { getPlanWithLines, listUserPlansWithLines } from "./finance-plan-service";
 import {
   addDebtOperation,
   addExpenseOperation,
   addIncomeOperation,
+  copyPlanOperation,
   createPlanOperation,
   deleteDebtOperation,
   deleteExpenseOperation,
@@ -214,9 +215,15 @@ function lineOf(l: FinancePlanIncome | FinancePlanExpense): Record<string, unkno
 
 type Working = {
   plans: Map<string, FinancePlanWithLines>;
-  /** Plans created by this proposal: ref → in-memory id. */
+  /** Plans created or copied by this proposal: ref → in-memory id. */
   refs: Map<string, string>;
   created: Set<string>;
+  /**
+   * Copies made by this proposal. In memory a copy keeps its source's line
+   * ids, so a change to one of its lines names the source's id — the same id
+   * Apply maps onto the stored copy.
+   */
+  copied: Set<string>;
   deleted: Set<string>;
   touched: Set<string>;
   lines: PlanChangeLine[];
@@ -304,6 +311,7 @@ async function playProposal(c: PlanOperationContext, input: unknown): Promise<{ 
     plans: new Map(stored.map((p) => [p.id, structuredClone(p)])),
     refs: new Map(),
     created: new Set(),
+    copied: new Set(),
     deleted: new Set(),
     touched: new Set(),
     lines: [],
@@ -363,6 +371,29 @@ async function playChange(c: PlanOperationContext, w: Working, change: PlanChang
       w.created.add(id);
       w.touched.add(id);
       w.lines.push({ action: "create", subject: "plan", planName: plan.name, title: plan.name, details: [] });
+      return;
+    }
+
+    case "copy_plan": {
+      const source = w.plans.get(targetId(w, { planId: change.fromPlanId }))!;
+      const name = checked(createFinancePlanSchema.shape.name, change.name, where);
+      const id = randomUUID();
+      const now = new Date();
+      const copy = structuredClone(source);
+      Object.assign(copy, {
+        id,
+        name,
+        isMain: false,
+        basedOnPlanId: change.asScenario ? source.id : null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      for (const l of [...copy.incomes, ...copy.expenses, ...copy.debts, ...copy.overrides]) l.planId = id;
+      w.plans.set(id, copy);
+      w.refs.set(change.ref, id);
+      w.copied.add(id);
+      w.touched.add(id);
+      w.lines.push({ action: "create", subject: "plan", planName: name, title: name, details: [`Copy of ${source.name}`] });
       return;
     }
 
@@ -572,10 +603,11 @@ async function effectsOf(c: PlanOperationContext, w: Working): Promise<PlanEffec
       .map(async (id) => {
         const after = w.plans.get(id)!;
         const before = stored.get(id);
+        const isNew = w.created.has(id) || w.copied.has(id);
         return {
-          planId: w.created.has(id) ? null : id,
+          planId: isNew ? null : id,
           planName: after.name,
-          isNew: w.created.has(id),
+          isNew,
           before: before ? await outlookOf(before, c) : null,
           after: await outlookOf(after, c),
         };
@@ -610,10 +642,15 @@ export async function applyPlanChanges(
   const real = (change: { planId?: string; planRef?: string }): string =>
     change.planRef !== undefined ? created.get(change.planRef)! : change.planId!;
   const createdPlans: { ref: string; id: string; name: string }[] = [];
+  const copies = new Map<string, ReadonlyMap<string, string>>();
+  // A copy's lines are named by the source's ids (see `Working.copied`).
+  const line = (planId: string, side: "income" | "expense" | "debt", id: string): string =>
+    copies.get(planId)?.get(`${side}:${id}`) ?? id;
+  const at: Applying = { c, real, line, stored, created, createdPlans, copies };
 
   for (const [i, change] of set.changes.entries()) {
     try {
-      await applyChange(c, change, real, stored, created, createdPlans);
+      await applyChange(at, change);
     } catch (err) {
       if (err instanceof PlanOperationError) {
         throw new PlanChangeError(
@@ -628,13 +665,21 @@ export async function applyPlanChanges(
   return { lines: w.lines, createdPlans };
 }
 
+type Applying = {
+  c: PlanOperationContext;
+  /** The stored id of the plan a change names. */
+  real: (change: { planId?: string; planRef?: string }) => string;
+  /** The stored id of the line a change names on that plan. */
+  line: (planId: string, side: "income" | "expense" | "debt", id: string) => string;
+  stored: Map<string, FinancePlanWithLines>;
+  created: Map<string, string>;
+  createdPlans: { ref: string; id: string; name: string }[];
+  copies: Map<string, ReadonlyMap<string, string>>;
+};
+
 async function applyChange(
-  c: PlanOperationContext,
-  change: PlanChangeData,
-  real: (change: { planId?: string; planRef?: string }) => string,
-  stored: Map<string, FinancePlanWithLines>,
-  created: Map<string, string>,
-  createdPlans: { ref: string; id: string; name: string }[]
+  { c, real, line, stored, created, createdPlans, copies }: Applying,
+  change: PlanChangeData
 ): Promise<void> {
   const current = (id: string): FinancePlanWithLines => {
     const plan = stored.get(id);
@@ -653,6 +698,19 @@ async function applyChange(
       createdPlans.push({ ref: change.ref, id: plan.id, name: plan.name });
       return;
     }
+    case "copy_plan": {
+      const { plan, lineIds } = await copyPlanOperation(c, {
+        planId: change.fromPlanId,
+        name: change.name,
+        asScenario: change.asScenario,
+      });
+      created.set(change.ref, plan.id);
+      copies.set(plan.id, lineIds);
+      const copy = await getPlanWithLines(plan.id, c.userId);
+      if (copy) stored.set(plan.id, copy);
+      createdPlans.push({ ref: change.ref, id: plan.id, name: plan.name });
+      return;
+    }
     case "update_plan": {
       const id = real(change);
       const plan = await updatePlanOperation(c, { ...planForm(current(id)), ...formSettings(change.settings) });
@@ -668,33 +726,45 @@ async function applyChange(
       await addIncomeOperation(c, real(change), change.income);
       return;
     case "update_income": {
-      const line = current(change.planId).incomes.find((l) => l.id === change.incomeId);
-      await updateIncomeOperation(c, change.planId, { ...line, ...change.changes, id: change.incomeId });
+      const planId = real(change);
+      const id = line(planId, "income", change.incomeId);
+      const row = current(planId).incomes.find((l) => l.id === id);
+      await updateIncomeOperation(c, planId, { ...row, ...change.changes, id });
       return;
     }
-    case "remove_income":
-      return deleteIncomeOperation(c, change.planId, change.incomeId);
+    case "remove_income": {
+      const planId = real(change);
+      return deleteIncomeOperation(c, planId, line(planId, "income", change.incomeId));
+    }
 
     case "add_expense":
       await addExpenseOperation(c, real(change), change.expense);
       return;
     case "update_expense": {
-      const line = current(change.planId).expenses.find((l) => l.id === change.expenseId);
-      await updateExpenseOperation(c, change.planId, { ...line, ...change.changes, id: change.expenseId });
+      const planId = real(change);
+      const id = line(planId, "expense", change.expenseId);
+      const row = current(planId).expenses.find((l) => l.id === id);
+      await updateExpenseOperation(c, planId, { ...row, ...change.changes, id });
       return;
     }
-    case "remove_expense":
-      return deleteExpenseOperation(c, change.planId, change.expenseId);
+    case "remove_expense": {
+      const planId = real(change);
+      return deleteExpenseOperation(c, planId, line(planId, "expense", change.expenseId));
+    }
 
     case "add_debt":
       await addDebtOperation(c, real(change), change.debt);
       return;
     case "update_debt": {
-      const debt = current(change.planId).debts.find((d) => d.id === change.debtId);
-      await updateDebtOperation(c, change.planId, { ...debt, ...change.changes, id: change.debtId });
+      const planId = real(change);
+      const id = line(planId, "debt", change.debtId);
+      const debt = current(planId).debts.find((d) => d.id === id);
+      await updateDebtOperation(c, planId, { ...debt, ...change.changes, id });
       return;
     }
-    case "remove_debt":
-      return deleteDebtOperation(c, change.planId, change.debtId);
+    case "remove_debt": {
+      const planId = real(change);
+      return deleteDebtOperation(c, planId, line(planId, "debt", change.debtId));
+    }
   }
 }

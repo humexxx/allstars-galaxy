@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { statToneClass } from "@/components/ui/stat-card";
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ import {
 } from "./dashboard-finance-series";
 import {
   formatCurrency,
+  formatPercent,
   formatSignedCurrency,
   formatSignedPercent,
   moneySign,
@@ -147,6 +149,12 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   const lastClose =
     points.slice(0, fig.pastCount).findLast((p) => p.kind === "close") ?? null;
   const sinceClose = lastClose ? fig.netWorth - lastClose.netWorth : null;
+  // How much of the plan's debt is gone: against the debts it was set up
+  // with (the raw plan, not the calibrated one, whose openings move with each
+  // confirmation). New debt beyond that reads as 0% rather than below it.
+  const startDebt = full.debts.reduce((sum, d) => sum + parseFloat(d.initialBalance), 0);
+  const debtPaid = Math.max(0, startDebt - fig.debt);
+  const debtPaidPct = startDebt > 0 ? Math.min(100, (debtPaid / startDebt) * 100) : null;
   // Net worth, Portfolio and Cash always show; Owed to you and Debt when the
   // chart's range has any — a $0.00 debt tile on a plan with none is noise.
   const visible = visibleSeriesKeys(points);
@@ -217,6 +225,24 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
             )}
           </div>
         </div>
+        {debtPaidPct !== null && (
+          <div className="col-span-2 flex w-full flex-col gap-1.5 pt-3 sm:col-span-1 sm:col-start-2 sm:row-start-3 sm:w-56 sm:self-end sm:justify-self-end">
+            <div className="flex items-baseline justify-between gap-3">
+              <Eyebrow size="sm" as="span">
+                Debt paid
+              </Eyebrow>
+              <Mono className="text-sm font-semibold">{formatPercent(debtPaidPct, 0)}</Mono>
+            </div>
+            <Progress
+              value={debtPaidPct}
+              aria-label="Debt paid"
+              className="h-2 *:data-[slot=progress-indicator]:bg-success"
+            />
+            <Mono className="text-2xs text-muted-foreground">
+              {formatCurrency(debtPaid)} of {formatCurrency(startDebt)}
+            </Mono>
+          </div>
+        )}
         <CardAction>
           <Button variant="outline" size="sm" asChild>
             <Link href={`/portal/plans/${featured.id}`}>

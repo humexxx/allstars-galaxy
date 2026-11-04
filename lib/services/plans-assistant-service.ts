@@ -286,9 +286,17 @@ function targetId(w: Working, change: { planId?: string; planRef?: string }): st
 const money = (v: string | number | null | undefined): string => formatCurrency(Number(v ?? 0));
 
 /** What a line is, in a few words for the card. */
-function describeLine(l: { monthlyAmount: string; kind: string; dayOfMonth?: number | null; date?: string | null }): string {
+function describeLine(l: {
+  monthlyAmount: string;
+  kind: string;
+  dayOfMonth?: number | null;
+  date?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+}): string {
   if (l.kind === "one_time") return `${money(l.monthlyAmount)} on ${l.date}`;
-  return `${money(l.monthlyAmount)} a month${l.dayOfMonth ? ` on day ${l.dayOfMonth}` : ""}`;
+  const window = [l.startDate ? `from ${l.startDate}` : "", l.endDate ? `until ${l.endDate}` : ""].filter(Boolean);
+  return [`${money(l.monthlyAmount)} a month${l.dayOfMonth ? ` on day ${l.dayOfMonth}` : ""}`, ...window].join(", ");
 }
 
 /** Old → new for the fields a patch changes. */

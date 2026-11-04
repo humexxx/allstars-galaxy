@@ -181,7 +181,7 @@ describe("previewPlanChanges", () => {
       summary: "A lean plan",
       changes: [
         { op: "create_plan", ref: "lean", settings: { name: "Lean", savingsToday: 1000 } },
-        { op: "add_income", planRef: "lean", income: { name: "Salary", monthlyAmount: 4000, dayOfMonth: 1 } },
+        { op: "add_income", planRef: "lean", income: { name: "Salary", monthlyAmount: 4000, dayOfMonth: 1, startDate: "2026-11-01" } },
         { op: "add_expense", planRef: "lean", expense: { name: "Rent", monthlyAmount: 1200, dayOfMonth: 2 } },
       ],
     });
@@ -191,6 +191,7 @@ describe("previewPlanChanges", () => {
       "add income Salary",
       "add expense Rent",
     ]);
+    expect(lines[1].details).toEqual(["$4,000.00 a month on day 1, from 2026-11-01"]);
     const lean = effects.find((e) => e.isNew)!;
     expect(lean.before).toBeNull();
     expect(lean.after.cashToday).toBeGreaterThanOrEqual(1000);

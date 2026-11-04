@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active (page redesigned to mirror plan-editor layout)
-> **Last reviewed:** 2026-10-19
+> **Last reviewed:** 2026-11-03
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -32,7 +32,7 @@ Every action returns `ActionResult<X>` (see `app/actions/AGENTS.md`).
 - `margin-service.ts` — margin maths over derived positions (never stored); its shapes live in `types/margin.ts`
 - `investment-method-service.ts` — `listAllInvestmentMethods`, `isMethodOwner`, `ownsAnyMethod`, `isAssetOnlyInOwnMethods`, `updateInvestmentMethod` (owner-scoped WHERE, one transaction returning `{ before, after }`) — the queries `allocations.ts` and the portfolio page used to run against `db` directly
 - `allocation-service.ts` — policy CRUD, `backfillTransactionAllocations`, `backfillAllOwners`, `getDerivedHoldings`
-- `margin-service.ts` also exports the pure builders `buildHistoryInput` and `buildInvestors` (unit-tested without a DB)
+- `margin-service.ts` also exports the pure builders `buildHistoryInput`, `buildInvestors` and `summarizeManagedAssets` (unit-tested without a DB), and `getManagedAssets` (request-cached `ManagedAssets` for the finance plan)
 
 ## Schemas — `/schemas/`
 - `transaction.ts` — `CreateTransactionData`; `amount` is `moneySchema`
@@ -43,7 +43,7 @@ Every action returns `ActionResult<X>` (see `app/actions/AGENTS.md`).
 - `portfolio.ts` — incl. `AssetOption`, `TransactionAllocationView`, `TransactionTableRow`, `PriceFreshnessData`
 - `transaction.ts` — `Transaction` (`$inferSelect`), `TransactionStatus` / `TransactionType` (defined once)
 - `chart.ts` — `ChartDataPoint`, `TimeRange`
-- `margin.ts` — `MarginOverview`, `InvestorBreakdown`, `MarginHistoryInput`, `MethodAllocationSummary`, `ManagedOverview`
+- `margin.ts` — `MarginOverview`, `InvestorBreakdown`, `MarginHistoryInput`, `MethodAllocationSummary`, `ManagedOverview`, `ManagedAssets`
 
 Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `lib/finance/managed-capital.ts`, `allocation-chart.tsx`, `portfolio-assets-table.tsx`, and the unused service functions `getTransactionCurrentValue`, `getManagedContributions`, `getManagedPerformanceSeries`, `getMarginOverview`, `getMarginHistory`, `getInvestorBreakdown`, `getMethodAllocations`, `backfillHistoricalQuotes`.
 
@@ -82,10 +82,12 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
   methods, mirroring `getPortfolioAssets` maths exactly so the owner sees the
   same figure the investor sees. Surfaced as an **Investors** tab that only
   appears for users who own methods.
-- **Third-party capital never touches net worth.** It is a read-only aggregate,
-  computed on the fly, deliberately outside the KPI grid — folding it in would
-  inflate the owner's patrimony with money that isn't theirs. Same reason the
-  planned chart toggle keeps it on its own series (see the design memo).
+- **Third-party capital stays out of the portfolio KPIs, but its assets count
+  in the finance plan.** It is a read-only aggregate, computed on the fly,
+  outside the KPI grid. Since 2026-11-03 (owner's decision) a plan that
+  includes the portfolio adds the market value of the positions investors'
+  money bought (`getManagedAssets`, held flat), not the margin; the liability
+  is not subtracted there.
 - **Investment Methods lives inside Portfolio** (Methods tab), not its own
   route. `/portal/investment-methods` is a permanent redirect — kept for
   bookmarks; the landing covers Methods inside its Portfolio card — and the

@@ -66,6 +66,9 @@ export type ProjectOptions = {
   /** Monthly growth (decimal) compounded onto the portfolio each period —
    *  the value-weighted ROI of the holdings. 0 holds it flat. */
   portfolioMonthlyGrowthRate?: number;
+  /** The part of `portfolioValue` held flat: assets the user runs with other
+   *  people's money. Their market value has no promised rate to grow at. */
+  portfolioHeldValue?: number;
   /** Monthly ROI (decimal) of the auto-invest method. */
   autoInvestRate?: number;
   /** Per-month overrides for recurring lines. */
@@ -179,6 +182,7 @@ function runEngine(
 ): EngineResult {
   const portfolioValue = Math.max(0, options.portfolioValue ?? 0);
   const growth = Math.max(0, options.portfolioMonthlyGrowthRate ?? 0);
+  const held = Math.min(portfolioValue, Math.max(0, options.portfolioHeldValue ?? 0));
   const autoInvestRate = Math.max(0, options.autoInvestRate ?? 0);
   const savingsRate = Math.max(0, num(plan.monthlySavingsRate));
   const surplusPercent = Math.max(0, Math.min(1, num(plan.surplusToDebtsPercent)));
@@ -436,7 +440,7 @@ function runEngine(
     const investmentsInterest = state.investments * autoInvestRate * fraction;
     state.savings = round2(state.savings + savingsContribution + savingsInterest);
     state.investments = round2(state.investments + investmentsContribution + investmentsInterest);
-    state.portfolio = round2(state.portfolio * (1 + growth * fraction));
+    state.portfolio = round2(state.portfolio + (state.portfolio - held) * growth * fraction);
     totalInvestmentsInterest += investmentsInterest;
     totalInterest += interestTotal;
 

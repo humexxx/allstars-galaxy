@@ -23,7 +23,12 @@ import { cn } from "@/lib/utils";
 
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
 import { dashboardSeries, type DashboardSeries } from "./dashboard-finance-series";
-import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
+import {
+  formatCurrency,
+  formatSignedCurrency,
+  formatSignedPercent,
+  moneySign,
+} from "@/lib/utils/format";
 import {
   getMainPlan,
   getPlanWithLines,
@@ -34,7 +39,14 @@ import {
   loadCalibratedView,
 } from "@/lib/services/finance-snapshot-service";
 import { buildPlanTimeline } from "@/lib/finance/chart-series";
-import { buildDashboardFigures, DASHBOARD_PAST_MONTHS } from "@/lib/finance/dashboard";
+import {
+  buildDashboardFigures,
+  dashboardGoal,
+  DASHBOARD_PAST_MONTHS,
+} from "@/lib/finance/dashboard";
+import { getManagedAssets } from "@/lib/services/margin-service";
+import { getUserPreferences } from "@/lib/services/user-preferences-service";
+import type { ManagedAssets } from "@/types/margin";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { todayInTimeZone } from "@/lib/utils/date";
 
@@ -81,7 +93,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   // included), with "now" as the day-aware position in the reader's zone.
   const timeZone = await getRequestTimeZone();
   const now = todayInTimeZone(timeZone);
-  const [view, history] = await Promise.all([
+  const [view, history, preferences, managed] = await Promise.all([
     loadCalibratedView(full, userId, now, { timeZone }),
     // One month more than the chart shows: a period's close is recorded by the
     // snapshots taken in the period after it.
@@ -92,6 +104,9 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       now,
       full.confirmationDayOfMonth
     ),
+    getUserPreferences(userId),
+    // Same request-cached read the projection already made for net worth.
+    full.includePortfolio ? getManagedAssets(userId) : Promise.resolve(null),
   ]);
   // The months before today come off the plan page's own timeline: recorded
   // snapshots, or the plan's forecast while it has none.
@@ -105,18 +120,18 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   const fig = buildDashboardFigures(
     view.projection,
     view.today,
-    timeline.points.slice(0, timeline.todayIndex)
+    timeline.points.slice(0, timeline.todayIndex),
+    full.confirmationDayOfMonth
+  );
+  const goal = dashboardGoal(
+    view.projection,
+    view.today,
+    preferences.financeMilestones,
+    full.confirmationDayOfMonth,
+    now
   );
   const points = fig.points;
   const delta = fig.delta;
-  // The reader's calendar day, not the server's: this renders on the server
-  // (UTC), which dated an evening edit in Costa Rica "tomorrow".
-  const updated = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone,
-  }).format(featured.updatedAt);
 
   // Only net worth is coloured by its sign. Each part wore its own colour
   // (blue investments, red debt), which clashed with the chart's series
@@ -129,14 +144,10 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   };
   const breakdown: Figure[] = [
     {
-      series: dashboardSeries("savings"),
-      label: fig.status === "before-start" ? "Savings at start" : "Savings now",
-      value: formatCurrency(fig.savings),
-    },
-    {
       series: dashboardSeries("investments"),
-      label: "Investments",
+      label: "Portfolio",
       value: formatCurrency(fig.investments),
+      note: managedNote(managed),
     },
     {
       series: dashboardSeries("receivables"),
@@ -148,6 +159,17 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       label: "Debt now",
       value: formatCurrency(fig.debt),
     },
+    // Cash is what this period has taken in and not paid out yet; with every
+    // surplus going to debts it is usually zero, and a $0 tile is noise.
+    ...(moneySign(fig.savings) === 0
+      ? []
+      : [
+          {
+            series: dashboardSeries("savings"),
+            label: fig.status === "before-start" ? "Cash at start" : "Cash now",
+            value: formatCurrency(fig.savings),
+          },
+        ]),
   ];
   // A plan with no periods has no line to draw, and a rail beside nothing is
   // a column of figures with a hole on its left.
@@ -163,10 +185,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
         {/* The delta rides the description line, not the action slot: beside
             the button it squeezed the plan name to a few characters on phones. */}
         <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 tabular-nums">
-          <span>
-            12-month projection ·{" "}
-            <span className="whitespace-nowrap">updated {updated}</span>
-          </span>
+          <span>{goal ?? "12-month projection"}</span>
           <Badge variant={moneySign(delta) >= 0 ? "success" : "destructive"} className="font-mono tabular-nums">
             {moneySign(delta) >= 0 ? <TrendingUp /> : <TrendingDown />}
             {formatSignedCurrency(delta)} · {fig.deltaPeriods} mo
@@ -223,7 +242,28 @@ type Figure = {
   label: string;
   value: string;
   tone?: "positive" | "negative";
+  /** Small print under the value. */
+  note?: React.ReactNode;
 };
+
+/**
+ * The managed book's margin as a share of what is owed, this month and to
+ * date — beside the assets' value, which is what counts toward net worth.
+ */
+function managedNote(managed: ManagedAssets | null): React.ReactNode {
+  if (!managed || managed.value <= 0 || managed.allTimeMarginPercent === null) return undefined;
+  const part = (pct: number, label: string) => (
+    <span className={statToneClass(pct >= 0 ? "positive" : "negative")}>
+      {formatSignedPercent(pct, 1)} {label}
+    </span>
+  );
+  return (
+    <>
+      ({managed.monthMarginPercent !== null && <>{part(managed.monthMarginPercent, "mo")} · </>}
+      {part(managed.allTimeMarginPercent, "all")}) margin
+    </>
+  );
+}
 
 /**
  * The StatCard figure (Eyebrow label, Mono value, `statToneClass`) as one
@@ -231,7 +271,7 @@ type Figure = {
  * worth leads the rail and carries the sign colour, which is emphasis enough.
  */
 function FigureItem({ figure }: { figure: Figure }) {
-  const { series, label, value, tone } = figure;
+  const { series, label, value, tone, note } = figure;
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <Eyebrow size="sm" asChild>
@@ -251,6 +291,7 @@ function FigureItem({ figure }: { figure: Figure }) {
         <Mono className={cn("text-lg font-semibold sm:text-xl", statToneClass(tone))}>
           {value}
         </Mono>
+        {note && <Mono className="block text-2xs text-muted-foreground">{note}</Mono>}
       </dd>
     </div>
   );

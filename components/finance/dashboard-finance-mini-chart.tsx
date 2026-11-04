@@ -27,8 +27,11 @@ const chartConfig: ChartConfig = Object.fromEntries(
  * Assets stack up from zero and debts down from it, each in its own stack:
  * a stack that mixes signs draws its layers across each other. Savings is
  * split for the same reason — an overdraft is owed, so it sits with the debt.
+ *
+ * Owed to you is the bottom layer. On top of cash it rode every rise in cash,
+ * so a band that was shrinking read as growing with net worth.
  */
-const PLOTTED = ["savingsAbove", "investments", "receivables", "savingsBelow", "debtBelow", "netWorth"] as const;
+const PLOTTED = ["receivables", "investments", "savingsAbove", "savingsBelow", "debtBelow", "netWorth"] as const;
 type Plotted = (typeof PLOTTED)[number];
 
 /**
@@ -161,9 +164,9 @@ export function DashboardFinanceMiniChart({
     />
   );
   const halves = [false, true].flatMap((ahead) => [
-    area("savingsAbove", "assets", savings, ahead),
-    area("investments", "assets", dashboardSeries("investments").color, ahead),
     area("receivables", "assets", dashboardSeries("receivables").color, ahead),
+    area("investments", "assets", dashboardSeries("investments").color, ahead),
+    area("savingsAbove", "assets", savings, ahead),
     area("savingsBelow", "debts", savings, ahead),
     area("debtBelow", "debts", debt, ahead),
   ]);

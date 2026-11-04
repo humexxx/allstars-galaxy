@@ -1,7 +1,7 @@
 # Finance
 
 > **Status:** Active
-> **Last reviewed:** 2026-11-02
+> **Last reviewed:** 2026-11-03
 
 ## Overview
 Personal financial planning: users build *plans* (scenarios) with incomes,
@@ -20,7 +20,7 @@ calibrated. Health scoring and scenario comparison are part of this module.
 - `dev-tools.ts` — `runDailySnapshotsAction` (admin-only): runs the daily finance + portfolio snapshot job on demand, surfaced via the dev drawer
 
 ## Services — `/lib/services/`
-- `finance-plan-service.ts` — `listUserPlansWithLines` (every plan with its lines in five queries, for the list and compare pages); `updateIncome` / `updateExpense` / `updateDebt` / `updatePlan` throw a not-found error when no row on the caller's plan matched; `clonePlan` runs in one transaction and copies the per-month overrides re-pointed at the new lines (`cloneOverrides`; confirmations are not copied) and `balancesAsOf`. `createPlan(userId, data, today)` sets `balancesAsOf`; `updatePlan` / `addDebt` / `updateDebt` take an optional `PlanRestatement` and then write the whole restated set (plan balances, every debt's opening balance, `balancesAsOf`, and a same-day confirmation) in one transaction. `projectionOptionsFor(plan, userId, prefetched?)` is the ONE place projection options are assembled (portfolio value + weighted growth when included, auto-invest ROI, overrides, `asOf`); `projectPlanWithPortfolio` uses it. `getAutoInvestRates` (many methods' ROIs in one query) feeds its `prefetched.autoInvestRate`. `upsertLineOverride` refuses a line that isn't on the plan (checked in its transaction). Re-exports the engine (`projectPlan`, `projectStateAt`, `compareDebtStrategies`, `deriveFinanceMood`) from `lib/finance/projection.ts`, and `setPlanColor` (colour-only update for the rail swatch)
+- `finance-plan-service.ts` — `listUserPlansWithLines` (every plan with its lines in five queries, for the list and compare pages); `updateIncome` / `updateExpense` / `updateDebt` / `updatePlan` throw a not-found error when no row on the caller's plan matched; `clonePlan` runs in one transaction and copies the per-month overrides re-pointed at the new lines (`cloneOverrides`; confirmations are not copied) and `balancesAsOf`. `createPlan(userId, data, today)` sets `balancesAsOf`; `updatePlan` / `addDebt` / `updateDebt` take an optional `PlanRestatement` and then write the whole restated set (plan balances, every debt's opening balance, `balancesAsOf`, and a same-day confirmation) in one transaction. `projectionOptionsFor(plan, userId, prefetched?)` is the ONE place projection options are assembled (portfolio value + weighted growth when included — the portfolio includes the market value of assets the user runs for other people (`getManagedAssets`), passed as `portfolioHeldValue` so it is held flat; auto-invest ROI, overrides, `asOf`); `projectPlanWithPortfolio` uses it. `getAutoInvestRates` (many methods' ROIs in one query) feeds its `prefetched.autoInvestRate`. `upsertLineOverride` refuses a line that isn't on the plan (checked in its transaction). Re-exports the engine (`projectPlan`, `projectStateAt`, `compareDebtStrategies`, `deriveFinanceMood`) from `lib/finance/projection.ts`, and `setPlanColor` (colour-only update for the rail swatch)
 - `finance-confirmation-service.ts` — confirmations, `getLatestConfirmations` (every plan's latest in two queries) + `autoConfirmSkippedPeriods` (cron baseline roll-forward). A confirmation is matched to the period that CONTAINS its day, never by exact key (see *Calculation semantics*)
 - `finance-snapshot-service.ts` — `calibratePlan` (pure) / `buildCalibratedPlan`, `loadCalibratedView` (calibrate + project + today in one call), `loadPlanOverviews` (list/compare: every plan calibrated, projected and put on a timeline, with confirmations, auto-invest rates and history batched), snapshots, `restateOpeningBalances` (the restated opening set for an edit, or null when nothing changed), `getProjectedStateOnDay` (confirmation pre-fill), and `getFinanceMood` (request-cached; the main plan's calibrated outcome as a mascot pose)
 - `interest-service.ts` — interest/ROI math (shared with [Portfolio](./portfolio.md))
@@ -33,7 +33,7 @@ calibrated. Health scoring and scenario comparison are part of this module.
 - `period.ts` — accounting-period helpers (unchanged)
 - `chart-series.ts` — `buildPlanTimeline` / `buildChartSeries` (real past as period closes + projection), `alignTodayPoint`, `buildCompareRows` (compare chart, joined by calendar month), `calendarTicks` (axis ticks on calendar months), `forecastKpiPoints` (the "Next" KPI; a plan that has not started yet gets its first close, no today marker and no Confirm), `milestoneCrossings`, and the one debt-free definition (`debtFreeMonthsFromNow`, `describeDebtFree`, `formatDebtFree`, `summaryDebtFree`)
 - `scenario.ts` — `compareScenario` (scenario vs base at a shared period; payoff compared as dates)
-- `dashboard.ts` — `buildDashboardFigures` for the dashboard card: the last three closed periods (`DASHBOARD_PAST_MONTHS`), today and the next 12 closes as net worth's parts (savings, investments with the portfolio folded in, owed to you, debt); `pastCount` says where today sits
+- `dashboard.ts` — `buildDashboardFigures` for the dashboard card: the last three closed periods (`DASHBOARD_PAST_MONTHS`), today and the next 12 closes as net worth's parts (savings, investments with the portfolio folded in, owed to you, debt), each point named after the month its period CLOSES in (`anchorDay`); `pastCount` says where today sits. `dashboardGoal` — the header: debt-free date while there is debt, then the next net-worth milestone the projection reaches
 - `debt-payments.ts` — `projectedDebtPayments` / `debtChipAmount`: the calendar's debt chips read the payments the projection made
 - `table-rows.ts` — `densify` (first 12 rows + real Decembers)
 - `amount-input.ts` — parses typed or pasted amounts ("$1,234.50") the way the server schema will, so the confirmation dialog shows per-field errors instead of a bare "Invalid input" toast
@@ -66,7 +66,12 @@ The dashboard card is [`dashboard-finance-card.tsx`](../../components/finance/da
 with its stacked chart in `dashboard-finance-mini-chart.tsx`; both read the
 series list in `dashboard-finance-series.ts`. Its past comes off the plan page's
 own timeline (`getRecentMonthlySnapshots` + `buildPlanTimeline`) and is drawn
-solid up to "Now"; the projection after it is dashed and fainter.
+solid up to "Now"; the projection after it is dashed and fainter. The rail
+reads Net worth, **Portfolio** (investments + portfolio, with the managed
+book's margin as a share of what is owed — this month and to date — in small
+print), Owed to you, Debt, and **Cash** only when it is not zero (what the
+period has taken in and not yet paid out). Owed to you is the bottom layer of
+the asset stack: stacked on cash it rose with every rise in cash.
 
 `/portal/plans` renders the workspace for **any** number of plans (a lone plan
 still gets its projection curve). Rail rows drive the chart:

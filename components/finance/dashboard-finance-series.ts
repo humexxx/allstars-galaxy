@@ -10,7 +10,8 @@ export type DashboardSeries = {
 
 /**
  * The dashboard chart's series, in the order the card's figure rail lists
- * them. The rail draws its swatches from here, which makes it the chart's
+ * them. Cash comes last: it is what this period has not paid out yet, and the
+ * rail shows it only when it is not zero. The rail draws its swatches from here, which makes it the chart's
  * legend. Outside the chart's "use client" module because the card is a
  * server component and would only get a client reference to it.
  *
@@ -19,10 +20,10 @@ export type DashboardSeries = {
  */
 export const DASHBOARD_SERIES: readonly DashboardSeries[] = [
   { key: "netWorth", label: "Net worth", color: "var(--foreground)", mark: "line" },
-  { key: "savings", label: "Savings", color: "var(--chart-1)", mark: "area" },
-  { key: "investments", label: "Investments", color: "var(--chart-2)", mark: "area" },
+  { key: "investments", label: "Portfolio", color: "var(--chart-2)", mark: "area" },
   { key: "receivables", label: "Owed to you", color: "var(--chart-3)", mark: "area" },
   { key: "debt", label: "Debt", color: "var(--chart-4)", mark: "area" },
+  { key: "savings", label: "Cash", color: "var(--chart-1)", mark: "area" },
 ];
 
 export function dashboardSeries(key: keyof DashboardParts): DashboardSeries {

@@ -1,16 +1,29 @@
 import type { Projection, ProjectionMonth, TodayState } from "@/types/finance";
-import type { ChartPoint } from "@/lib/finance/chart-series";
-import { roundCents } from "@/lib/utils/format";
+import { formatCurrencyCompact, moneySign, roundCents } from "@/lib/utils/format";
+import { describeDebtFree, formatDebtFree, type ChartPoint } from "./chart-series";
+import { nextPeriodStart } from "./period";
 
 /** Closed periods the chart shows before today, drawn solid. */
 export const DASHBOARD_PAST_MONTHS = 3;
 
 const MONTH_FMT = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
-const MONTH_YEAR_FMT = new Intl.DateTimeFormat("en-US", {
+const CLOSE_FMT = new Intl.DateTimeFormat("en-US", {
   month: "short",
+  day: "numeric",
   year: "numeric",
   timeZone: "UTC",
 });
+
+/**
+ * The last day of the period that starts on `start`. Points are named after
+ * it: a period anchored on the 5th runs Oct 5 – Nov 4, and calling its close
+ * "Oct" put "Now" (Nov 3) where October belonged and skipped November.
+ */
+function periodClose(start: Date, anchorDay: number): Date {
+  return new Date(nextPeriodStart(start, anchorDay > 0 ? anchorDay : 1).getTime() - DAY_MS);
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** What net worth is made of, at one point. */
 export type DashboardParts = {
@@ -30,7 +43,7 @@ export type DashboardParts = {
 export type DashboardPoint = DashboardParts & {
   /** Axis tick: "Now" for today's position, else the month ("Oct"). */
   month: string;
-  /** Tooltip title: "Today", else month and year — the 12 closes run into
+  /** Tooltip title: "Today", else the close's date — the 12 closes run into
    *  the same month a year on, so the bare month is ambiguous. */
   label: string;
 };
@@ -90,6 +103,11 @@ function partsOfPoint(p: ChartPoint): DashboardParts {
   };
 }
 
+function closeLabels(start: Date, anchorDay: number): { month: string; label: string } {
+  const close = periodClose(start, anchorDay);
+  return { month: MONTH_FMT.format(close), label: CLOSE_FMT.format(close) };
+}
+
 function inCents(p: DashboardParts): DashboardParts {
   return {
     savings: roundCents(p.savings),
@@ -113,7 +131,8 @@ function inCents(p: DashboardParts): DashboardParts {
 export function buildDashboardFigures(
   projection: Projection,
   today: TodayState | null,
-  past: readonly ChartPoint[] = []
+  past: readonly ChartPoint[] = [],
+  anchorDay = 1
 ): DashboardFigures {
   const months = projection.months;
   if (!today || months.length === 0) {
@@ -142,8 +161,7 @@ export function buildDashboardFigures(
   const now = partsOf(today);
   const points: DashboardPoint[] = [
     ...behind.map((p) => ({
-      month: MONTH_FMT.format(p.date),
-      label: MONTH_YEAR_FMT.format(p.date),
+      ...closeLabels(p.date, anchorDay),
       ...inCents(partsOfPoint(p)),
     })),
     {
@@ -152,8 +170,7 @@ export function buildDashboardFigures(
       ...inCents(now),
     },
     ...ahead.map((m) => ({
-      month: MONTH_FMT.format(m.date),
-      label: MONTH_YEAR_FMT.format(m.date),
+      ...closeLabels(m.date, anchorDay),
       ...inCents(partsOf(m)),
     })),
   ];
@@ -166,4 +183,38 @@ export function buildDashboardFigures(
     deltaPeriods: ahead.length,
     status: today.status,
   };
+}
+
+const MILESTONE_MONTH = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/**
+ * The card's headline goal: while there is debt, when it is gone; after that,
+ * the next net-worth milestone the projection reaches. Null when neither is
+ * within the plan's horizon.
+ */
+export function dashboardGoal(
+  projection: Projection,
+  today: TodayState | null,
+  milestones: readonly number[],
+  anchorDay: number,
+  now: Date
+): string | null {
+  if (!today) return null;
+  if (projection.hadDebt && moneySign(today.totalDebt) > 0) {
+    const status = describeDebtFree(projection, anchorDay, now);
+    return status.kind === "beyond-horizon" ? null : formatDebtFree(status);
+  }
+  const next = [...milestones].sort((a, b) => a - b).find((m) => m > today.netWorth);
+  if (next === undefined) return null;
+  const firstAfter =
+    today.status === "before-start" ? 0 : Math.min(today.periodIndex + 1, projection.months.length);
+  const reached = projection.months.slice(firstAfter).find((m) => m.netWorth >= next);
+  if (!reached) return null;
+  return `${formatCurrencyCompact(next)} net worth · ${MILESTONE_MONTH.format(
+    periodClose(reached.date, anchorDay)
+  )}`;
 }

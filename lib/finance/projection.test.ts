@@ -356,6 +356,15 @@ describe("F7 / F28: strategy comparison", () => {
     expect(chart.endingNetWorth).toBeCloseTo(62486.72, 2);
     expect(cmp.avalanche.endingNetWorth).toBeCloseTo(chart.endingNetWorth, 6);
   });
+
+  it("grows only the user's own part of the portfolio; managed assets stay flat", () => {
+    // 10,000 of the user's own at 1%/month, plus 2,663.05 of other people's
+    // money held at market value: the 2,663.05 has no promised rate.
+    const p = plan({ monthsAhead: 12, includePortfolio: true });
+    const opts = { portfolioValue: 12663.05, portfolioHeldValue: 2663.05, portfolioMonthlyGrowthRate: 0.01 };
+    const last = projectPlan(p, [], [], [], opts).months.at(-1)!;
+    expect(last.portfolioValue).toBeCloseTo(2663.05 + 10000 * 1.01 ** 12, 0);
+  });
 });
 
 describe("payments record", () => {

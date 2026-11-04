@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -20,9 +21,14 @@ import {
   type MarginHolding,
 } from "@/lib/finance/margin";
 import { netPositions } from "@/lib/finance/allocation";
-import { buildMarginHistory, withdrawnLiability } from "@/lib/finance/margin-history";
+import {
+  buildMarginHistory,
+  withdrawnLiability,
+  type MarginPoint,
+} from "@/lib/finance/margin-history";
 import type {
   InvestorBreakdown,
+  ManagedAssets,
   ManagedOverview,
   MarginHistoryInput,
   MarginOverview,
@@ -166,6 +172,36 @@ export async function getManagedOverview(ownerUserId: string): Promise<ManagedOv
           percent: parseFloat(p.percent),
         })),
     })),
+  };
+}
+
+/**
+ * The assets the owner runs for other people, for the finance plan. Request-
+ * cached: every plan projected in one request asks for it.
+ */
+export const getManagedAssets = cache(async function getManagedAssets(
+  ownerUserId: string
+): Promise<ManagedAssets> {
+  const managed = await getManagedOverview(ownerUserId);
+  return summarizeManagedAssets(managed.investors, managed.history);
+});
+
+/** Pure half of `getManagedAssets`; the percentages match the owner's Margin card. */
+export function summarizeManagedAssets(
+  investors: InvestorBreakdown[],
+  history: MarginPoint[]
+): ManagedAssets {
+  const value = investors
+    .filter((i) => !i.isOwn)
+    .reduce((sum, i) => sum + i.positionValue, 0);
+  const last = history.at(-1);
+  const prev = history.at(-2);
+  const owed = last?.liability ?? 0;
+  return {
+    value,
+    monthMarginPercent:
+      last && prev && owed > 0 ? ((last.margin - prev.margin) / owed) * 100 : null,
+    allTimeMarginPercent: last && owed > 0 ? (last.margin / owed) * 100 : null,
   };
 }
 

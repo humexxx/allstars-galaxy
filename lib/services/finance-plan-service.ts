@@ -41,6 +41,7 @@ import type { OpeningRestatement } from "@/lib/finance/opening-balances";
 import { isoDay } from "@/lib/finance/schedule";
 
 import { getUserPortfolio, getPortfolioStats, getPortfolioAssets } from "./portfolio-service";
+import { getManagedAssets } from "./margin-service";
 import { ensureOwnedRow } from "./ownership";
 
 // ---------- helpers ----------
@@ -1052,13 +1053,19 @@ export async function projectionOptionsFor(
   userId: string,
   prefetched: { autoInvestRate?: number } = {}
 ): Promise<ProjectOptions> {
-  const [portfolioValue, portfolioMonthlyGrowthRate, autoInvestRate] = await Promise.all([
+  const [ownValue, portfolioMonthlyGrowthRate, managed, autoInvestRate] = await Promise.all([
     plan.includePortfolio ? getPortfolioValueForUser(userId) : Promise.resolve(0),
     plan.includePortfolio ? getPortfolioWeightedMonthlyRoi(userId) : Promise.resolve(0),
+    // What the user holds with other people's money counts at market value,
+    // held flat: it has no promised rate of its own. The owner decided
+    // (2026-11-03) that net worth carries the assets, not the margin.
+    plan.includePortfolio ? getManagedAssets(userId) : Promise.resolve(null),
     prefetched.autoInvestRate ?? getAutoInvestRate(plan),
   ]);
+  const managedValue = managed?.value ?? 0;
   return {
-    portfolioValue,
+    portfolioValue: ownValue + managedValue,
+    portfolioHeldValue: managedValue,
     portfolioMonthlyGrowthRate,
     autoInvestRate,
     overrides: plan.overrides,

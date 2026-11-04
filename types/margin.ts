@@ -79,3 +79,17 @@ export type ManagedOverview = {
   investors: InvestorBreakdown[];
   allocations: MethodAllocationSummary[];
 };
+
+/**
+ * What the owner holds with other people's money, for the finance plan: the
+ * assets' market value (it counts toward net worth) and the margin on the
+ * book as a share of what is owed, this month and to date.
+ */
+export type ManagedAssets = {
+  /** Market value of the positions investors' money bought. */
+  value: number;
+  /** Change in margin over the last month, as a share of what is owed. */
+  monthMarginPercent: number | null;
+  /** Margin today, as a share of what is owed. */
+  allTimeMarginPercent: number | null;
+};

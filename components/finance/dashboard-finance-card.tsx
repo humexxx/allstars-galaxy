@@ -232,7 +232,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <Mono
                   className={cn(
-                    "text-2xl font-semibold sm:text-3xl",
+                    "text-3xl font-semibold sm:text-4xl",
                     statToneClass(moneySign(fig.netWorth) >= 0 ? "positive" : "negative")
                   )}
                 >

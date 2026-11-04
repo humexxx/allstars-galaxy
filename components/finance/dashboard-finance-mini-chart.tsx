@@ -66,8 +66,22 @@ export function toRows(data: DashboardPoint[], pastCount: number): Row[] {
   });
 }
 
-/** How long the net-worth line takes to draw in, end to end. */
-const DRAW_MS = 1200;
+/**
+ * The draw-in: each series sweeps in left to right, one after another — the
+ * small parts first, the totals last — and net worth closes it with a glow.
+ * Areas sweep the chart's full width (recharts clips from the first point),
+ * so a series' past and projected halves read as one stroke.
+ */
+const SWEEP_MS = 900;
+const STAGGER_MS = 280;
+const DRAW_ORDER: Record<string, number> = {
+  savingsAbove: 0,
+  savingsBelow: 0,
+  investments: 1,
+  debtBelow: 2,
+  receivables: 3,
+  netWorth: 4,
+};
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 
@@ -191,9 +205,10 @@ export function DashboardFinanceMiniChart({
       strokeWidth={1.5}
       strokeDasharray={ahead ? PROJECTED_DASH : undefined}
       activeDot={false}
-      // Like every other finance chart: no 1.5s draw-in, which read as a
-      // series ending months before its own axis in the first second.
-      isAnimationActive={false}
+      isAnimationActive={!reducedMotion}
+      animationBegin={DRAW_ORDER[key] * STAGGER_MS}
+      animationDuration={SWEEP_MS}
+      animationEasing="ease-in-out"
     />
   );
   const halves = [false, true].flatMap((ahead) => [
@@ -203,39 +218,35 @@ export function DashboardFinanceMiniChart({
     area("savingsBelow", "debts", savings, ahead),
     area("debtBelow", "debts", debt, ahead),
   ]);
-  // The net-worth line draws itself in, past first and then the projection,
-  // as one stroke: each half gets its share of the time by the span it
-  // covers. recharts keeps the projection's dashes while it draws.
+  // Net worth draws last, past first and then the projection, as one stroke:
+  // a line animates along its own length, so each half gets its share of the
+  // sweep by the span it covers. recharts keeps the projection's dashes.
   const first = data[0].time;
   const span = Math.max(1, data[data.length - 1].time - first);
   const pastShare = Math.min(1, Math.max(0, (data[pastCount].time - first) / span));
-  const netWorth = (ahead: boolean) => (
+  const lineBegin = DRAW_ORDER.netWorth * STAGGER_MS;
+  const netWorth = (ahead: boolean, glow: boolean) => (
     <Line
-      key={`netWorth-${ahead ? "ahead" : "past"}`}
+      key={`netWorth-${ahead ? "ahead" : "past"}${glow ? "-glow" : ""}`}
       dataKey={ahead ? "netWorthAhead" : "netWorthPast"}
       type="monotone"
       stroke={dashboardSeries("netWorth").color}
-      strokeWidth={2}
-      strokeDasharray={ahead ? PROJECTED_DASH : undefined}
+      // A wide, faint copy under the line: the highlight that makes net
+      // worth the series the eye lands on.
+      strokeWidth={glow ? 8 : 2.5}
+      strokeOpacity={glow ? 0.18 : 1}
+      strokeLinecap="round"
+      strokeDasharray={ahead && !glow ? PROJECTED_DASH : undefined}
       dot={false}
-      activeDot={{ r: 3 }}
+      activeDot={glow ? false : { r: 3 }}
       isAnimationActive={!reducedMotion}
       animationEasing="linear"
-      animationBegin={ahead ? Math.round(DRAW_MS * pastShare) : 0}
-      animationDuration={Math.max(1, Math.round(DRAW_MS * (ahead ? 1 - pastShare : pastShare)))}
+      animationBegin={lineBegin + (ahead ? Math.round(SWEEP_MS * pastShare) : 0)}
+      animationDuration={Math.max(1, Math.round(SWEEP_MS * (ahead ? 1 - pastShare : pastShare)))}
     />
   );
   return (
-    // Fades and rises in once on load (skipped under reduced motion). Not
-    // recharts' own draw-in: it sweeps left to right, which read as a series
-    // ending months short of its axis, and it breaks the dashed projection.
-    <ChartContainer
-      config={chartConfig}
-      className={cn(
-        "aspect-auto h-48 w-full motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-4 motion-safe:duration-700 motion-safe:ease-out",
-        className
-      )}
-    >
+    <ChartContainer config={chartConfig} className={cn("aspect-auto h-48 w-full", className)}>
       {/* The right margin is half the last month's label, which every
           interval now draws on the chart's very edge. */}
       <ComposedChart data={rows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
@@ -271,8 +282,10 @@ export function DashboardFinanceMiniChart({
         {owesAnything && (
           <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.5} />
         )}
-        {netWorth(false)}
-        {netWorth(true)}
+        {netWorth(false, true)}
+        {netWorth(true, true)}
+        {netWorth(false, false)}
+        {netWorth(true, false)}
       </ComposedChart>
     </ChartContainer>
   );

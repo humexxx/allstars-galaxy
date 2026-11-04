@@ -104,19 +104,45 @@ function override(o: Partial<FinancePlanLineOverride>): FinancePlanLineOverride 
 }
 
 describe("today's position (projectStateAt)", () => {
-  it("F1: the period-end extra payment is not in today's debt (−$7,000, not −$4,200)", () => {
+  it("F1: the surplus goes to debt as soon as it lands, and net worth stays −$7,000", () => {
+    // Paid on the 1st, the period's surplus (2,800) used to sit as cash until
+    // the close and then drop into debt. It now leaves cash the day it lands.
     const p = plan({ startMonth: U(2026, 9), monthsAhead: 12, surplusToDebtsPercent: "1" });
     const incomes = [inc({ monthlyAmount: "3000", dayOfMonth: 1 })];
     const debts = [debt({ initialBalance: "10000", monthlyPayment: "200", dayOfMonth: 5 })];
     const today = projectStateAt(p, incomes, [], debts, {}, U(2026, 9, 10))!;
     expect(today.status).toBe("in-range");
-    expect(today.savings).toBe(2800);
-    expect(today.totalDebt).toBe(9800);
+    expect(today.savings).toBe(0);
+    expect(today.totalDebt).toBe(7000);
     expect(today.netWorth).toBe(-7000);
     // …and the period close agrees: nothing "drops" between today and the close.
     const close = projectPlan(p, incomes, [], debts).months[0];
     expect(close.netWorth).toBe(-7000);
     expect(close.totalDebt).toBe(7000);
+  });
+
+  it("keeps back what the rest of the period still has to pay before routing the surplus", () => {
+    // 3,000 lands on the 1st; rent of 1,000 is due on the 20th. On the 10th
+    // only 1,800 can go to the debt — 200 scheduled already left on the 5th.
+    const p = plan({ startMonth: U(2026, 9), monthsAhead: 12, surplusToDebtsPercent: "1" });
+    const incomes = [inc({ monthlyAmount: "3000", dayOfMonth: 1 })];
+    const expenses = [exp({ monthlyAmount: "1000", dayOfMonth: 20 })];
+    const debts = [debt({ initialBalance: "10000", monthlyPayment: "200", dayOfMonth: 5 })];
+    const today = projectStateAt(p, incomes, expenses, debts, {}, U(2026, 9, 10))!;
+    expect(today.savings).toBe(1000);
+    expect(today.totalDebt).toBe(8000);
+    const close = projectPlan(p, incomes, expenses, debts).months[0];
+    expect(close.totalDebt).toBe(8000);
+    expect(close.savings).toBe(0);
+  });
+
+  it("routes nothing before the money has landed", () => {
+    const p = plan({ startMonth: U(2026, 9), monthsAhead: 12, surplusToDebtsPercent: "1" });
+    const incomes = [inc({ monthlyAmount: "3000", dayOfMonth: 25 })];
+    const debts = [debt({ initialBalance: "10000", monthlyPayment: "200", dayOfMonth: 5 })];
+    const today = projectStateAt(p, incomes, [], debts, {}, U(2026, 9, 10))!;
+    // Only the scheduled 200 has left; the 2,800 extra waits for the 25th.
+    expect(today.totalDebt).toBe(9800);
   });
 
   it("accrues debt interest up to today (balance 10,000 at 2%, no payment yet on day 15 of 30)", () => {

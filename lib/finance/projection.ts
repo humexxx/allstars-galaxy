@@ -602,7 +602,54 @@ export function projectStateAt(
     };
   }
 
-  return runEngine(plan, incomes, expenses, debts, options, day).partial;
+  const partial = runEngine(plan, incomes, expenses, debts, options, day).partial;
+  if (!partial) return null;
+  const close = runEngine(plan, incomes, expenses, debts, options, null).projection.months[
+    partial.periodIndex
+  ];
+  return close ? routeLandedCash(partial, close) : partial;
+}
+
+/**
+ * The period's routing, applied as soon as the cash for it is on hand.
+ *
+ * The engine routes the surplus at period end, so in the days between a
+ * paycheque and the close (a plan anchored on the 5th is paid on the 1st) the
+ * money sat in Cash and then vanished into debt. People pay the card when the
+ * money lands, so today's figure moves what the close will send to debts and
+ * investments out of cash already — never more than is on hand once the rest
+ * of the period's bills are reserved. The close itself is unchanged, and net
+ * worth with it: cash becomes less debt or more investments, one for one.
+ */
+export function routeLandedCash(today: TodayState, close: ProjectionMonth): TodayState {
+  const planned = close.extraDebtPayments + close.investmentsContribution;
+  if (planned <= 0) return today;
+  // Cash the rest of the period adds (or takes) before the close routes it.
+  const beforeRouting = close.savings - close.savingsInterest + planned;
+  const stillToCome = beforeRouting - today.savings;
+  const available = today.savings + Math.min(0, stillToCome);
+  let earmark = Math.max(0, Math.min(planned, available));
+  if (earmark <= 0) return today;
+
+  const total = earmark;
+  const extraByDebt = new Map(close.debts.map((d) => [d.debtId, d.extraPayment]));
+  const debts = today.debts.map((d) => {
+    const pay = Math.min(earmark, extraByDebt.get(d.debtId) ?? 0, d.balance);
+    earmark -= pay;
+    return { ...d, balance: round2(d.balance - pay) };
+  });
+  const toInvest = Math.min(earmark, close.investmentsContribution);
+  const totalDebt = debts.reduce((sum, d) => sum + d.balance, 0);
+  const savings = round2(today.savings - (total - (earmark - toInvest)));
+  const investments = round2(today.investments + toInvest);
+  return {
+    ...today,
+    savings,
+    investments,
+    debts,
+    totalDebt,
+    netWorth: savings + investments + today.portfolioValue + today.receivables - totalDebt,
+  };
 }
 
 /**

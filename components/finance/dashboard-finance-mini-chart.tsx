@@ -49,20 +49,34 @@ export type Row = DashboardPoint & {
   projected: boolean;
 } & Record<`${Plotted}${"Past" | "Ahead"}`, number | null>;
 
+/** Parts that stop being drawn while they are $0: once a debt is paid off its outline ran along zero to the end. */
+const ENDS_AT_ZERO: ReadonlySet<Plotted> = new Set(["debtBelow", "receivables"]);
+
 export function toRows(data: DashboardPoint[], pastCount: number): Row[] {
+  const valuesOf = (p: DashboardPoint): Record<Plotted, number> => ({
+    savingsAbove: Math.max(0, p.savings),
+    investments: p.investments,
+    receivables: p.receivables,
+    savingsBelow: Math.min(0, p.savings),
+    // `0 - debt`, not `-debt`: a paid-off debt is 0, not -0.
+    debtBelow: 0 - p.debt,
+    netWorth: p.netWorth,
+  });
+  const all = data.map(valuesOf);
+  // A $0 point is drawn only beside a point that is not: the area comes down
+  // to zero where the debt is paid off (or rises from it), then ends.
+  const drawn = (key: Plotted, i: number): boolean =>
+    !ENDS_AT_ZERO.has(key) ||
+    moneySign(all[i][key]) !== 0 ||
+    (i > 0 && moneySign(all[i - 1][key]) !== 0) ||
+    (i < all.length - 1 && moneySign(all[i + 1][key]) !== 0);
   return data.map((p, i) => {
-    const values: Record<Plotted, number> = {
-      savingsAbove: Math.max(0, p.savings),
-      investments: p.investments,
-      receivables: p.receivables,
-      savingsBelow: Math.min(0, p.savings),
-      debtBelow: -p.debt,
-      netWorth: p.netWorth,
-    };
+    const values = all[i];
     const row = { ...p, projected: i > pastCount } as Row;
     for (const key of PLOTTED) {
-      row[`${key}Past`] = i <= pastCount ? values[key] : null;
-      row[`${key}Ahead`] = i >= pastCount ? values[key] : null;
+      const value = drawn(key, i) ? values[key] : null;
+      row[`${key}Past`] = i <= pastCount ? value : null;
+      row[`${key}Ahead`] = i >= pastCount ? value : null;
     }
     return row;
   });

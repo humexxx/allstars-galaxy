@@ -130,6 +130,8 @@ import type {
   StrategyComparison,
   TodayState,
 } from "@/types/finance";
+import { CountUpCurrency } from "./count-up";
+import { STAGGER_MS } from "./dashboard-motion";
 
 /** Figures for one accounting period, previewed in the sidebar while hovering
  *  a chart point. Health/surplus derive from these, so they're not stored. */
@@ -1427,7 +1429,7 @@ function ProjectionPanel({
             as="p"
             className={cn("text-xl font-semibold tabular-nums sm:text-2xl", signTone(today))}
           >
-            {formatCurrency(today)}
+            <CountUpCurrency value={today} />
           </Mono>
           {todayState && todayState.receivables > 0 && (
             <Text variant="small" as="p" className="text-2xs">
@@ -1444,7 +1446,7 @@ function ProjectionPanel({
               as="p"
               className={cn("text-sm font-semibold", signTone(next))}
             >
-              {formatCurrency(next)}
+              <CountUpCurrency value={next} delay={STAGGER_MS} />
             </Mono>
           </div>
         )}
@@ -1456,7 +1458,7 @@ function ProjectionPanel({
             as="p"
             className={cn("text-sm font-semibold", signTone(future))}
           >
-            {formatCurrency(future)}
+            <CountUpCurrency value={future} delay={STAGGER_MS * 2} />
           </Mono>
           {endDelta !== null && (
             <Text
@@ -1594,7 +1596,6 @@ function ProjectionPanel({
                     <ProjectionChart
                       points={chartSeries.points}
                       pastCount={chartSeries.pastCount}
-                      color={projection.plan.color}
                       heightClass="h-72 sm:h-80 xl:h-full"
                       onHoverIndex={handleHoverIndex}
                       onSelectIndex={handleSelectIndex}

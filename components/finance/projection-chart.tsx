@@ -41,6 +41,23 @@ import type { FinancePlan } from "@/types/finance";
 
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
+import { dashboardSeries } from "./dashboard-finance-series";
+import { splitEasedStroke, STAGGER_MS, sweepEasing, SWEEP_MS } from "./dashboard-motion";
+
+/**
+ * The parts wear the dashboard card's colours here too, so a colour means the
+ * same thing on every finance chart: net worth green, the portfolio cyan,
+ * debt red.
+ */
+const NET_WORTH = dashboardSeries("netWorth").color;
+const PORTFOLIO = dashboardSeries("investments").color;
+const DEBT = dashboardSeries("debt").color;
+
+// recharts types `animationEasing` as the named curves only, but its
+// animator (react-smooth) takes any t → progress function.
+type Easing = "ease-out";
+const asEasing = (fn: (t: number) => number): Easing => fn as unknown as Easing;
+
 // Format projection dates in UTC — the projection generates months at UTC
 // midnight, so any local timezone with a negative offset would shift the
 // formatted month back a day and show e.g. "Apr" for a "May 2026" bucket.
@@ -228,28 +245,17 @@ function PointTooltip(props: {
           value={formatMoneyFull(row.rawValue)}
           valueClass={row.rawValue < 0 ? "text-destructive" : "text-success"}
         />
-        {debt > 0 && (
+        {/* The investments bucket and the live portfolio read as one
+            Portfolio, as on the dashboard card. */}
+        {investments + (portfolio ?? 0) > 0 && (
           <TooltipRow
-            swatch="var(--destructive)"
-            label="Debt"
-            value={formatMoneyFull(debt)}
-            valueClass="text-destructive"
-          />
-        )}
-        {investments > 0 && (
-          <TooltipRow
-            swatch="var(--success)"
-            label="Investments"
-            value={formatMoneyFull(investments)}
-            valueClass="text-success"
-          />
-        )}
-        {portfolio != null && portfolio > 0 && (
-          <TooltipRow
-            swatch="var(--chart-4)"
+            swatch={PORTFOLIO}
             label="Portfolio"
-            value={formatMoneyFull(portfolio)}
+            value={formatMoneyFull(investments + (portfolio ?? 0))}
           />
+        )}
+        {debt > 0 && (
+          <TooltipRow swatch={DEBT} label="Debt" value={formatMoneyFull(debt)} valueClass="text-destructive" />
         )}
         {ghost != null && delta != null && (
           <TooltipRow
@@ -341,7 +347,7 @@ type ProjectionChartProps = {
   ghostValues?: (number | null)[];
   /** Tooltip label for the ghost series (the base plan's name). */
   ghostLabel?: string;
-  /** Portfolio value aligned per point (own series in var(--chart-4)). Nulls
+  /** Portfolio value aligned per point (its own cyan series). Nulls
    *  skip the point. Omit to render no portfolio series. */
   portfolioValues?: (number | null)[];
   /** Net-worth milestones to annotate, from the user's global preference.
@@ -384,10 +390,10 @@ export const ProjectionChart = memo(function ProjectionChart({
     lastHoverRef.current = idx;
     onHoverIndex?.(idx);
   };
-  // Line color follows the plan's chosen colour token so users can tell their
-  // plans apart at a glance. Falls back to the chart-1 token when the plan
-  // doesn't have one set yet.
-  const lineColor = color || "var(--chart-1)";
+  // Net worth is green on a plan's own page, as on the dashboard; a plan's
+  // colour (its identity among plans) is for the list and compare charts.
+  const lineColor = color || NET_WORTH;
+  const reducedMotion = usePrefersReducedMotion();
 
   // Build the per-point split between past (solid) and future (dashed). We use
   // a numeric x-axis (each row's `idx` is its x coordinate) so milestone
@@ -499,6 +505,23 @@ export const ProjectionChart = memo(function ProjectionChart({
   const last = data.at(-1);
   const today = data[pastCount];
 
+  // The draw-in, on the dashboard card's clock: the portfolio sweeps in, then
+  // net worth draws as one stroke — solid past, dashed projection — each half
+  // taking its slice of time and curve (see `splitEasedStroke`).
+  const stroke = splitEasedStroke(data.length > 1 ? pastCount / (data.length - 1) : 1, SWEEP_MS);
+  const lineBegin = STAGGER_MS * 2;
+  const draw = (half: "past" | "future" | "whole", begin: number) =>
+    reducedMotion
+      ? { isAnimationActive: false }
+      : half === "whole"
+        ? { isAnimationActive: true, animationBegin: begin, animationDuration: SWEEP_MS, animationEasing: asEasing(sweepEasing) }
+        : {
+            isAnimationActive: true,
+            animationBegin: begin + (half === "future" ? stroke.second.delay : 0),
+            animationDuration: half === "future" ? stroke.second.duration : stroke.first.duration,
+            animationEasing: asEasing(half === "future" ? stroke.second.easing : stroke.first.easing),
+          };
+
   return (
     <div ref={containerRef} className="min-w-0">
       {/* The line in words, for anyone who can't see it. */}
@@ -605,7 +628,7 @@ export const ProjectionChart = memo(function ProjectionChart({
               strokeOpacity={0.5}
               strokeWidth={1.5}
               strokeDasharray="3 3"
-              isAnimationActive={false}
+              {...draw("whole", lineBegin)}
               connectNulls
               dot={false}
               activeDot={false}
@@ -620,9 +643,9 @@ export const ProjectionChart = memo(function ProjectionChart({
               dataKey="portfolioPast"
               name="Portfolio"
               type="monotone"
-              stroke="var(--chart-4)"
+              stroke={PORTFOLIO}
               strokeWidth={1.5}
-              isAnimationActive={false}
+              {...draw("past", 0)}
               connectNulls
               dot={false}
               activeDot={{ r: 4 }}
@@ -633,10 +656,10 @@ export const ProjectionChart = memo(function ProjectionChart({
               dataKey="portfolioFuture"
               name="Portfolio"
               type="monotone"
-              stroke="var(--chart-4)"
+              stroke={PORTFOLIO}
               strokeWidth={1.5}
               strokeDasharray="6 4"
-              isAnimationActive={false}
+              {...draw("future", 0)}
               connectNulls
               dot={false}
               activeDot={{ r: 4 }}
@@ -652,7 +675,7 @@ export const ProjectionChart = memo(function ProjectionChart({
             type="monotone"
             stroke={lineColor}
             strokeWidth={2}
-            isAnimationActive={false}
+            {...draw("past", lineBegin)}
             connectNulls={false}
             dot={renderDot(false)}
             activeDot={{ r: 6 }}
@@ -667,7 +690,7 @@ export const ProjectionChart = memo(function ProjectionChart({
             stroke={lineColor}
             strokeWidth={2}
             strokeDasharray="6 4"
-            isAnimationActive={false}
+            {...draw("future", lineBegin)}
             connectNulls={false}
             dot={renderDot(true)}
             activeDot={{ r: 6 }}

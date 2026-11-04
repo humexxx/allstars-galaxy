@@ -88,6 +88,8 @@ is cyan (slot 1), Owed to you violet (slot 3), Cash white (`--foreground`), Debt
 stack and always drawn, so at $0 it is a flat line on zero instead of a trace
 along the top of the stack.
 
+A plan's own page (`ProjectionChart`) wears the dashboard's colours — net worth green, portfolio cyan (the investments bucket and the live portfolio as one Portfolio in the tooltip), debt red — rather than the plan's identity colour, which stays on the list and compare charts. It draws in on the same clock (portfolio, then net worth as one eased stroke) and the Today / Next / End figures count up (`CountUpCurrency`, which counts from the figure shown when a value changes, e.g. a new horizon).
+
 `/portal/plans` renders the workspace for **any** number of plans (a lone plan
 still gets its projection curve). Rail rows drive the chart:
 

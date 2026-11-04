@@ -18,14 +18,15 @@ export type DashboardSeries = {
  * server component and would only get a client reference to it.
  *
  * Categorical slots in order (see "Chart colours" in CLAUDE.md). Net worth is
- * the total drawn over the parts, not one of them, so it takes the foreground.
+ * the total drawn over the parts, not one of them, so it is a line.
  */
 export const DASHBOARD_SERIES: readonly DashboardSeries[] = [
-  { key: "netWorth", label: "Net worth", color: "var(--foreground)", mark: "line" },
+  { key: "netWorth", label: "Net worth", color: "var(--success)", mark: "line" },
   { key: "investments", label: "Portfolio", color: "var(--chart-1)", mark: "area" },
-  // Cash is neutral, not a hue: the orange slot sat next to Debt and read as
-  // money lost. Debt takes the destructive red — a sign, not an identity.
-  { key: "savings", label: "Cash", color: "var(--muted-foreground)", mark: "area" },
+  // Each part reads as what it is: net worth green, cash white (the neutral
+  // foreground), debt the destructive red. The orange slot beside Debt read
+  // as money lost, and a grey cash matched nothing.
+  { key: "savings", label: "Cash", color: "var(--foreground)", mark: "area" },
   { key: "receivables", label: "Owed to you", color: "var(--chart-3)", mark: "area" },
   { key: "debt", label: "Debt", color: "var(--destructive)", mark: "area" },
 ];

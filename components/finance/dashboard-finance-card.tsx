@@ -140,12 +140,10 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   // Only net worth is coloured by its sign. Each part wore its own colour
   // (blue investments, red debt), which clashed with the chart's series
   // colours that the swatches beside these labels now carry.
-  const netWorth: Figure = {
-    series: dashboardSeries("netWorth"),
-    label: "Net worth",
-    value: formatCurrency(fig.netWorth),
-    tone: moneySign(fig.netWorth) >= 0 ? "positive" : "negative",
-  };
+  // Net worth leads the card under its title, against the last closed
+  // period: the number the whole card is about, and whether it moved.
+  const lastClose = fig.pastCount > 0 ? points[fig.pastCount - 1] : null;
+  const sinceClose = lastClose ? fig.netWorth - lastClose.netWorth : null;
   // Net worth, Portfolio and Cash always show; Owed to you and Debt when the
   // chart's range has any — a $0.00 debt tile on a plan with none is noise.
   const visible = visibleSeriesKeys(points);
@@ -200,6 +198,37 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
             {formatSignedCurrency(delta)} · {fig.deltaPeriods} mo
           </Badge>
         </CardDescription>
+        <div className="flex flex-col gap-1 pt-3">
+          <Eyebrow size="sm" as="div" className="flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="h-0.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: dashboardSeries("netWorth").color }}
+            />
+            Net worth
+          </Eyebrow>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <Mono
+              className={cn(
+                "text-2xl font-semibold sm:text-3xl",
+                statToneClass(moneySign(fig.netWorth) >= 0 ? "positive" : "negative")
+              )}
+            >
+              {formatCurrency(fig.netWorth)}
+            </Mono>
+            {lastClose && sinceClose !== null && (
+              <Mono
+                className={cn(
+                  "text-sm",
+                  statToneClass(moneySign(sinceClose) >= 0 ? "positive" : "negative")
+                )}
+              >
+                {moneySign(sinceClose) >= 0 ? "↑" : "↓"} {formatSignedCurrency(sinceClose)}{" "}
+                <span className="text-muted-foreground">vs {lastClose.label} close</span>
+              </Mono>
+            )}
+          </div>
+        </div>
         <CardAction>
           <Button variant="outline" size="sm" asChild>
             <Link href={`/portal/plans/${featured.id}`}>
@@ -211,28 +240,24 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       </CardHeader>
       {/* Laid out on the card's width, not the viewport's: from `lg` the
           sidebar takes 192px, so this card is narrower at 1050px than at 1000px.
-          Wide, the chart fills the left and the figures stack in a rail on the
-          right; narrow, net worth heads the chart it plots and the breakdown
-          follows. */}
+          Wide, the chart fills the left and the parts stack in a rail on the
+          right; narrow, the parts follow the chart. */}
       <CardContent className="@container">
         <div
           className={cn(
             "grid grid-cols-1 gap-4",
-            rail && "@xl:grid-cols-[minmax(0,1fr)_14rem] @xl:grid-rows-[auto_1fr] @xl:gap-x-8"
+            rail && "@xl:grid-cols-[minmax(0,1fr)_14rem] @xl:gap-x-8"
           )}
         >
-          <dl className={cn(rail && "@xl:col-start-2")}>
-            <FigureItem figure={netWorth} />
-          </dl>
           <DashboardFinanceMiniChart
             data={points}
             pastCount={fig.pastCount}
-            className="h-48 sm:h-56 @xl:col-start-1 @xl:row-span-2 @xl:row-start-1 @xl:h-auto @xl:min-h-72"
+            className="h-48 sm:h-56 @xl:h-auto @xl:min-h-72"
           />
           <dl
             className={cn(
               "grid grid-cols-2 gap-x-4 gap-y-3",
-              rail && "@xl:col-start-2 @xl:grid-cols-1 @xl:self-end"
+              rail && "@xl:grid-cols-1 @xl:self-center"
             )}
           >
             {breakdown.map((f) => (

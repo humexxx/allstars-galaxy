@@ -229,9 +229,12 @@ const MILESTONE_MONTH = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
+/** The card's goal, and which figure it belongs under. */
+export type DashboardGoal = { kind: "debt-free" | "milestone"; text: string };
+
 /**
- * The card's headline goal: while there is debt, when it is gone; after that,
- * the next net-worth milestone the projection reaches. Null when neither is
+ * The card's goal: while there is debt, when it is gone; after that, the
+ * next net-worth milestone the projection reaches. Null when neither is
  * within the plan's horizon.
  */
 export function dashboardGoal(
@@ -240,11 +243,13 @@ export function dashboardGoal(
   milestones: readonly number[],
   anchorDay: number,
   now: Date
-): string | null {
+): DashboardGoal | null {
   if (!today) return null;
   if (projection.hadDebt && moneySign(today.totalDebt) > 0) {
     const status = describeDebtFree(projection, anchorDay, now);
-    return status.kind === "beyond-horizon" ? null : formatDebtFree(status);
+    return status.kind === "beyond-horizon"
+      ? null
+      : { kind: "debt-free", text: formatDebtFree(status) };
   }
   const next = [...milestones].sort((a, b) => a - b).find((m) => m > today.netWorth);
   if (next === undefined) return null;
@@ -252,7 +257,10 @@ export function dashboardGoal(
     today.status === "before-start" ? 0 : Math.min(today.periodIndex + 1, projection.months.length);
   const reached = projection.months.slice(firstAfter).find((m) => m.netWorth >= next);
   if (!reached) return null;
-  return `${formatCurrencyCompact(next)} net worth · ${MILESTONE_MONTH.format(
-    periodClose(reached.date, anchorDay)
-  )}`;
+  return {
+    kind: "milestone",
+    text: `${formatCurrencyCompact(next)} net worth · ${MILESTONE_MONTH.format(
+      periodClose(reached.date, anchorDay)
+    )}`,
+  };
 }

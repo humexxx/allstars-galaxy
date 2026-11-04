@@ -203,14 +203,17 @@ describe("dashboard card: period names and the headline goal", () => {
   it("heads with the debt-free date while there is debt", () => {
     const projection = projectPlan(plan, incomes, [], debts, {});
     const today = projectStateAt(plan, incomes, [], debts, {}, now);
-    expect(dashboardGoal(projection, today, [0, 10_000], 5, now)).toMatch(/^Debt-free in \d+ mo · /);
+    expect(dashboardGoal(projection, today, [0, 10_000], 5, now)).toMatchObject({
+      kind: "debt-free",
+      text: expect.stringMatching(/^Debt-free in \d+ mo · /),
+    });
   });
 
   it("heads with the next net-worth milestone once the debt is gone", () => {
     const projection = projectPlan(plan, incomes, [], [], {});
     const today = projectStateAt(plan, incomes, [], [], {}, now);
     const goal = dashboardGoal(projection, today, [0, 50_000, 10_000], 5, now);
-    expect(goal).toMatch(/^\$50k net worth · /);
+    expect(goal).toMatchObject({ kind: "milestone", text: expect.stringMatching(/^\$50k net worth · /) });
   });
 
   it("says nothing when no milestone is reached within the horizon", () => {

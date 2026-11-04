@@ -17,9 +17,8 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { statToneClass } from "@/components/ui/stat-card";
-import { Eyebrow, Mono } from "@/components/ui/typography";
+import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
@@ -30,7 +29,6 @@ import {
 } from "./dashboard-finance-series";
 import {
   formatCurrency,
-  formatPercent,
   formatSignedCurrency,
   formatSignedPercent,
   moneySign,
@@ -149,12 +147,6 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   const lastClose =
     points.slice(0, fig.pastCount).findLast((p) => p.kind === "close") ?? null;
   const sinceClose = lastClose ? fig.netWorth - lastClose.netWorth : null;
-  // How much of the plan's debt is gone: against the debts it was set up
-  // with (the raw plan, not the calibrated one, whose openings move with each
-  // confirmation). New debt beyond that reads as 0% rather than below it.
-  const startDebt = full.debts.reduce((sum, d) => sum + parseFloat(d.initialBalance), 0);
-  const debtPaid = Math.max(0, startDebt - fig.debt);
-  const debtPaidPct = startDebt > 0 ? Math.min(100, (debtPaid / startDebt) * 100) : null;
   // Net worth, Portfolio and Cash always show; Owed to you and Debt when the
   // chart's range has any — a $0.00 debt tile on a plan with none is noise.
   const visible = visibleSeriesKeys(points);
@@ -186,6 +178,13 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
             series: dashboardSeries("debt"),
             label: "Debt",
             value: formatCurrency(fig.debt),
+            // The goal while there is debt: when it is gone.
+            note:
+              goal?.kind === "debt-free" ? (
+                <Text variant="small" as="span" className="block">
+                  {goal.text}
+                </Text>
+              ) : undefined,
           },
         ]
       : []),
@@ -201,7 +200,6 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
           <Wallet className="size-5 shrink-0" aria-hidden="true" />
           <span className="truncate">{featured.name}</span>
         </CardTitle>
-        <CardDescription>{goal ?? "12-month projection"}</CardDescription>
         <div className="flex flex-col gap-1 pt-3">
           <Eyebrow size="sm" as="div" className="flex items-center gap-1.5">
             <span
@@ -224,25 +222,12 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
               <DeltaChip delta={sinceClose} since={lastClose} />
             )}
           </div>
+          {goal?.kind === "milestone" && (
+            <Text variant="small" as="span">
+              {goal.text}
+            </Text>
+          )}
         </div>
-        {debtPaidPct !== null && (
-          <div className="col-span-2 flex w-full flex-col gap-1.5 pt-3 sm:col-span-1 sm:col-start-2 sm:row-start-3 sm:w-56 sm:self-end sm:justify-self-end">
-            <div className="flex items-baseline justify-between gap-3">
-              <Eyebrow size="sm" as="span">
-                Debt paid
-              </Eyebrow>
-              <Mono className="text-sm font-semibold">{formatPercent(debtPaidPct, 0)}</Mono>
-            </div>
-            <Progress
-              value={debtPaidPct}
-              aria-label="Debt paid"
-              className="h-2 *:data-[slot=progress-indicator]:bg-success"
-            />
-            <Mono className="text-2xs text-muted-foreground">
-              {formatCurrency(debtPaid)} of {formatCurrency(startDebt)}
-            </Mono>
-          </div>
-        )}
         <CardAction>
           <Button variant="outline" size="sm" asChild>
             <Link href={`/portal/plans/${featured.id}`}>
@@ -337,10 +322,10 @@ function managedNote(managed: ManagedAssets | null): React.ReactNode {
     </span>
   );
   return (
-    <>
+    <Mono className="block text-2xs text-muted-foreground">
       ({managed.monthMarginPercent !== null && <>{part(managed.monthMarginPercent, "mo")} · </>}
       {part(managed.allTimeMarginPercent, "all")}) margin
-    </>
+    </Mono>
   );
 }
 
@@ -389,7 +374,7 @@ function FigureItem({ figure }: { figure: Figure }) {
           </Mono>
           {change}
         </div>
-        {note && <Mono className="block text-2xs text-muted-foreground">{note}</Mono>}
+        {note}
       </dd>
     </div>
   );

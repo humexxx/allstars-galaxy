@@ -29,10 +29,12 @@ const chartConfig: ChartConfig = Object.fromEntries(
  * a stack that mixes signs draws its layers across each other. Savings is
  * split for the same reason — an overdraft is owed, so it sits with the debt.
  *
- * Owed to you is the bottom layer. On top of cash it rode every rise in cash,
- * so a band that was shrinking read as growing with net worth.
+ * Cash is the bottom layer, so at $0 its outline is a flat line on zero
+ * rather than a trace along the top of the stack. Cash is usually $0 now
+ * that the surplus is routed the day it lands, so Owed to you above it no
+ * longer rides its swings.
  */
-const PLOTTED = ["receivables", "investments", "savingsAbove", "savingsBelow", "debtBelow", "netWorth"] as const;
+const PLOTTED = ["savingsAbove", "receivables", "investments", "savingsBelow", "debtBelow", "netWorth"] as const;
 type Plotted = (typeof PLOTTED)[number];
 
 /**
@@ -171,10 +173,11 @@ export function DashboardFinanceMiniChart({
   const debt = dashboardSeries("debt").color;
   // A projected month is the same series, dashed and fainter: the plan's
   // guess, not a balance anyone has seen.
-  // A part that is $0 at every point draws nothing — its outline lay along
-  // the top of the stack. Cash has no outline at all: where it is $0 between
-  // other months it traced the stack's top as a second white dashed line.
-  const present = (key: Plotted): boolean => rows.some((r) => moneySign(r[`${key}Past`] ?? r[`${key}Ahead`] ?? 0) !== 0);
+  // A part that is $0 at every point draws nothing — its outline would lie
+  // along the stack — except cash, which always shows, flat on zero.
+  const present = (key: Plotted): boolean =>
+    key === "savingsAbove" ||
+    rows.some((r) => moneySign(r[`${key}Past`] ?? r[`${key}Ahead`] ?? 0) !== 0);
   const area = (key: Plotted, stack: "assets" | "debts", color: string, ahead: boolean) =>
     present(key) && (
     <Area
@@ -184,7 +187,7 @@ export function DashboardFinanceMiniChart({
       type="monotone"
       fill={color}
       fillOpacity={ahead ? 0.2 : 0.35}
-      stroke={key.startsWith("savings") ? "none" : color}
+      stroke={color}
       strokeWidth={1.5}
       strokeDasharray={ahead ? PROJECTED_DASH : undefined}
       activeDot={false}
@@ -194,9 +197,9 @@ export function DashboardFinanceMiniChart({
     />
   );
   const halves = [false, true].flatMap((ahead) => [
+    area("savingsAbove", "assets", savings, ahead),
     area("receivables", "assets", dashboardSeries("receivables").color, ahead),
     area("investments", "assets", dashboardSeries("investments").color, ahead),
-    area("savingsAbove", "assets", savings, ahead),
     area("savingsBelow", "debts", savings, ahead),
     area("debtBelow", "debts", debt, ahead),
   ]);

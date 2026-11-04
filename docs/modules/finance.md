@@ -72,7 +72,7 @@ reads Net worth, **Portfolio** (investments + portfolio, with the managed
 book's margin as a share of what is owed — this month and to date — in small
 print) and **Cash** (what the period has taken in and not yet paid out; in the tooltip too, even at $0)
 always; **Owed to you** and **Debt** when any point in the chart's range has some — then at every point, $0 included, in the rail and the tooltip (`visibleSeriesKeys`). Portfolio
-is cyan (slot 1), Owed to you violet (slot 3), Cash white (`--foreground`), Debt red (`--destructive`) and the net-worth line green (`--success`). Net worth leads the header in large type with a chip for its change against the last closed period (the 12-month delta badge was dropped); each part in the rail carries the same chip (`DeltaChip`; green when it moved the right way — down, for debt). Owed to you is the bottom layer of
+is cyan (slot 1), Owed to you violet (slot 3), Cash white (`--foreground`), Debt red (`--destructive`) and the net-worth line green (`--success`). Net worth leads the header in large type with a chip for its change against the last closed period (the 12-month delta badge was dropped); Debt in the rail carries the same chip (`DeltaChip`, green when it went down); the other parts carry none. Owed to you is the bottom layer of
 the asset stack: stacked on cash it rose with every rise in cash.
 
 `/portal/plans` renders the workspace for **any** number of plans (a lone plan

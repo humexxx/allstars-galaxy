@@ -143,15 +143,11 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   // period: the number the whole card is about, and whether it moved.
   const lastClose = fig.pastCount > 0 ? points[fig.pastCount - 1] : null;
   const sinceClose = lastClose ? fig.netWorth - lastClose.netWorth : null;
-  // Each part's change since the same close. Debt going down is the good news.
-  const change = (key: "investments" | "savings" | "receivables" | "debt") =>
-    lastClose ? (
-      <DeltaChip
-        delta={fig[key] - lastClose[key]}
-        since={lastClose}
-        goodWhen={key === "debt" ? "down" : "up"}
-      />
-    ) : undefined;
+  // Debt's change since the same close; going down is the good news. Only
+  // debt carries one: on the other parts it was noise.
+  const debtChange = lastClose ? (
+    <DeltaChip delta={fig.debt - lastClose.debt} since={lastClose} goodWhen="down" />
+  ) : undefined;
   // Net worth, Portfolio and Cash always show; Owed to you and Debt when the
   // chart's range has any — a $0.00 debt tile on a plan with none is noise.
   const visible = visibleSeriesKeys(points);
@@ -160,14 +156,12 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       series: dashboardSeries("investments"),
       label: "Portfolio",
       value: formatCurrency(fig.investments),
-      change: change("investments"),
       note: managedNote(managed),
     },
     {
       series: dashboardSeries("savings"),
       label: "Cash",
       value: formatCurrency(fig.savings),
-      change: change("savings"),
     },
     ...(visible.has("receivables")
       ? [
@@ -175,7 +169,6 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
             series: dashboardSeries("receivables"),
             label: "Owed to you",
             value: formatCurrency(fig.receivables),
-            change: change("receivables"),
           },
         ]
       : []),
@@ -185,7 +178,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
             series: dashboardSeries("debt"),
             label: "Debt",
             value: formatCurrency(fig.debt),
-            change: change("debt"),
+            change: debtChange,
           },
         ]
       : []),

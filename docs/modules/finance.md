@@ -70,8 +70,9 @@ own timeline (`getRecentMonthlySnapshots` + `buildPlanTimeline`) and is drawn
 solid up to "Now"; the projection after it is dashed and fainter. The rail
 reads Net worth, **Portfolio** (investments + portfolio, with the managed
 book's margin as a share of what is owed — this month and to date — in small
-print), Owed to you, Debt, and **Cash** only when it is not zero (what the
-period has taken in and not yet paid out). Owed to you is the bottom layer of
+print) and **Cash** (what the period has taken in and not yet paid out)
+always; **Owed to you** and **Debt** only when they are not zero. Portfolio
+has the first slot (cyan), Cash the second. Owed to you is the bottom layer of
 the asset stack: stacked on cash it rose with every rise in cash.
 
 `/portal/plans` renders the workspace for **any** number of plans (a lone plan

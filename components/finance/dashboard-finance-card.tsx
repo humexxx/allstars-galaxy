@@ -142,6 +142,8 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     value: formatCurrency(fig.netWorth),
     tone: moneySign(fig.netWorth) >= 0 ? "positive" : "negative",
   };
+  // Net worth, Portfolio and Cash always show; Owed to you and Debt only when
+  // there is something owed — a $0.00 debt tile reads like a debt.
   const breakdown: Figure[] = [
     {
       series: dashboardSeries("investments"),
@@ -150,26 +152,28 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       note: managedNote(managed),
     },
     {
-      series: dashboardSeries("receivables"),
-      label: "Owed to you",
-      value: formatCurrency(fig.receivables),
+      series: dashboardSeries("savings"),
+      label: fig.status === "before-start" ? "Cash at start" : "Cash now",
+      value: formatCurrency(fig.savings),
     },
-    {
-      series: dashboardSeries("debt"),
-      label: "Debt now",
-      value: formatCurrency(fig.debt),
-    },
-    // Cash is what this period has taken in and not paid out yet; with every
-    // surplus going to debts it is usually zero, and a $0 tile is noise.
-    ...(moneySign(fig.savings) === 0
-      ? []
-      : [
+    ...(moneySign(fig.receivables) > 0
+      ? [
           {
-            series: dashboardSeries("savings"),
-            label: fig.status === "before-start" ? "Cash at start" : "Cash now",
-            value: formatCurrency(fig.savings),
+            series: dashboardSeries("receivables"),
+            label: "Owed to you",
+            value: formatCurrency(fig.receivables),
           },
-        ]),
+        ]
+      : []),
+    ...(moneySign(fig.debt) > 0
+      ? [
+          {
+            series: dashboardSeries("debt"),
+            label: "Debt now",
+            value: formatCurrency(fig.debt),
+          },
+        ]
+      : []),
   ];
   // A plan with no periods has no line to draw, and a rail beside nothing is
   // a column of figures with a hole on its left.

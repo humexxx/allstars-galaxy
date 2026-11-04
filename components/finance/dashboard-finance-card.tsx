@@ -143,6 +143,15 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   // period: the number the whole card is about, and whether it moved.
   const lastClose = fig.pastCount > 0 ? points[fig.pastCount - 1] : null;
   const sinceClose = lastClose ? fig.netWorth - lastClose.netWorth : null;
+  // Each part's change since the same close. Debt going down is the good news.
+  const change = (key: "investments" | "savings" | "receivables" | "debt") =>
+    lastClose ? (
+      <DeltaChip
+        delta={fig[key] - lastClose[key]}
+        since={lastClose}
+        goodWhen={key === "debt" ? "down" : "up"}
+      />
+    ) : undefined;
   // Net worth, Portfolio and Cash always show; Owed to you and Debt when the
   // chart's range has any — a $0.00 debt tile on a plan with none is noise.
   const visible = visibleSeriesKeys(points);
@@ -151,12 +160,14 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       series: dashboardSeries("investments"),
       label: "Portfolio",
       value: formatCurrency(fig.investments),
+      change: change("investments"),
       note: managedNote(managed),
     },
     {
       series: dashboardSeries("savings"),
       label: "Cash",
       value: formatCurrency(fig.savings),
+      change: change("savings"),
     },
     ...(visible.has("receivables")
       ? [
@@ -164,6 +175,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
             series: dashboardSeries("receivables"),
             label: "Owed to you",
             value: formatCurrency(fig.receivables),
+            change: change("receivables"),
           },
         ]
       : []),
@@ -173,6 +185,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
             series: dashboardSeries("debt"),
             label: "Debt",
             value: formatCurrency(fig.debt),
+            change: change("debt"),
           },
         ]
       : []),
@@ -208,14 +221,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
               {formatCurrency(fig.netWorth)}
             </Mono>
             {lastClose && sinceClose !== null && (
-              <Badge
-                variant={moneySign(sinceClose) >= 0 ? "success" : "destructive"}
-                className="font-mono tabular-nums"
-                title={`Against the close of ${lastClose.label}`}
-              >
-                {moneySign(sinceClose) >= 0 ? <TrendingUp /> : <TrendingDown />}
-                {formatSignedCurrency(sinceClose)} · vs {lastClose.month}
-              </Badge>
+              <DeltaChip delta={sinceClose} since={lastClose} />
             )}
           </div>
         </div>
@@ -266,9 +272,38 @@ type Figure = {
   label: string;
   value: string;
   tone?: "positive" | "negative";
+  /** Change since the last close, as a chip beside the value. */
+  change?: React.ReactNode;
   /** Small print under the value. */
   note?: React.ReactNode;
 };
+
+/**
+ * A figure's change since the last closed period: green when it moved the
+ * right way (up, or down for debt), red when not, neutral when it held.
+ */
+function DeltaChip({
+  delta,
+  since,
+  goodWhen = "up",
+}: {
+  delta: number;
+  since: { month: string; label: string };
+  goodWhen?: "up" | "down";
+}) {
+  const sign = moneySign(delta);
+  const good = goodWhen === "up" ? sign > 0 : sign < 0;
+  return (
+    <Badge
+      variant={sign === 0 ? "secondary" : good ? "success" : "destructive"}
+      className="font-mono tabular-nums"
+      title={`Against the close of ${since.label}`}
+    >
+      {sign > 0 ? <TrendingUp /> : sign < 0 ? <TrendingDown /> : null}
+      {sign === 0 ? formatCurrency(0) : formatSignedCurrency(delta)} · vs {since.month}
+    </Badge>
+  );
+}
 
 /**
  * The managed book's margin as a share of what is owed, this month and to
@@ -295,7 +330,7 @@ function managedNote(managed: ManagedAssets | null): React.ReactNode {
  * worth leads the rail and carries the sign colour, which is emphasis enough.
  */
 function FigureItem({ figure }: { figure: Figure }) {
-  const { series, label, value, tone, note } = figure;
+  const { series, label, value, tone, change, note } = figure;
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <Eyebrow size="sm" asChild>
@@ -312,9 +347,12 @@ function FigureItem({ figure }: { figure: Figure }) {
         </dt>
       </Eyebrow>
       <dd>
-        <Mono className={cn("text-lg font-semibold sm:text-xl", statToneClass(tone))}>
-          {value}
-        </Mono>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Mono className={cn("text-lg font-semibold sm:text-xl", statToneClass(tone))}>
+            {value}
+          </Mono>
+          {change}
+        </div>
         {note && <Mono className="block text-2xs text-muted-foreground">{note}</Mono>}
       </dd>
     </div>

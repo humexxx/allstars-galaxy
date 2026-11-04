@@ -47,6 +47,7 @@ calibrated. Health scoring and scenario comparison are part of this module.
   `style` attribute and an SVG `stroke`)
 - `finance.ts`: `initialSavings` may be negative (a restated overdraft); on `updateFinancePlanSchema` both opening balances are optional and never defaulted (omitted = not edited); `lineOverrideSchema` accepts a reschedule date in another month, up to `RESCHEDULE_MARGIN_MONTHS` (2) either side of the override's `monthYear`
 - `finance.ts` also exports `recurrenceTypeSchema`, `planNameSchema`, `cloneFinancePlanSchema` / `CloneFinancePlanData`. Types are `…Data`; `…Input` (`z.input`) only for the schemas with defaults (create/update plan, income, expense, debt)
+- `finance.ts`: plans take `autoInvestCustomRate` (a monthly rate, nullable; null = the method's ROI)
 - `finance.ts`: income lines take `owedToMe` (default `false`); a recurring one needs an `endDate`, or the amount owed would never stop
 - `finance-snapshot.ts` — `financeSnapshotSourceSchema`
 - `finance-confirmations.ts` — `confirmationSchema` / `ConfirmationData` (monthly actuals payload; shared by the action and `finance-confirmation-service`)
@@ -134,7 +135,7 @@ and posed by `getFinanceMood`, so it reads as a status glyph
 gated on the `showContextAvatar` preference — see [Settings](./settings.md).
 
 ## DB tables — `db/schema.ts`
-- `finance_plans` — user's financial scenarios. `balances_as_of` (date, nullable; migration `0052_faithful_hiroim`) is the calendar day the opening balances were last set on; the same migration dropped `finance_plans_initial_savings_chk` so a restated overdraft can be stored
+- `finance_plans` — user's financial scenarios. `balances_as_of` (date, nullable; migration `0052_faithful_hiroim`) is the calendar day the opening balances were last set on; the same migration dropped `finance_plans_initial_savings_chk` so a restated overdraft can be stored. `auto_invest_custom_rate` (numeric 9,6, nullable, `>= 0`; migration `0059_parallel_timeslip`) is a monthly return the user sets for the auto-invest bucket: set, it wins over `auto_invest_method_id`'s ROI (`getAutoInvestRate`, and `loadPlanOverviews` for the list); the Settings form offers *Portfolio method* or *Custom return* (typed as %/mo, stored as a decimal)
 - `finance_plan_incomes` — income line items. `owed_to_me` (boolean, default false; migration `0054_superb_smasher`) marks someone paying back money they owe the user
 - `finance_plan_expenses` — expense line items
 - `finance_plan_debts` — tracked debts within a plan

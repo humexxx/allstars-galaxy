@@ -40,6 +40,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from "@/components/ui/input-group";
 import { Mono, Text } from "@/components/ui/typography";
 
 import { createPlanAction, updatePlanAction } from "@/app/actions/finance-plans";
@@ -140,6 +146,20 @@ export function PlanForm({
   const [investMethodId, setInvestMethodId] = useState<string>(
     plan?.autoInvestMethodId ?? investmentMethods[0]?.id ?? ""
   );
+  // Where the invested remainder grows: a portfolio method's ROI, or a
+  // monthly return the user sets (typed as a percentage, stored as a decimal).
+  const [investTarget, setInvestTarget] = useState<"method" | "custom">(
+    plan?.autoInvestCustomRate != null ? "custom" : "method"
+  );
+  const [customRatePct, setCustomRatePct] = useState<string>(
+    plan?.autoInvestCustomRate != null
+      ? String(Math.round(parseFloat(plan.autoInvestCustomRate) * 1_000_000) / 10_000)
+      : ""
+  );
+  const customRate = Number(customRatePct);
+  const customRateValid =
+    customRatePct.trim() !== "" && Number.isFinite(customRate) && customRate >= 0 && customRate <= 100;
+  const investReady = investTarget === "custom" ? customRateValid : !!investMethodId;
 
   // An existing plan's balance fields hold where it stands TODAY. Frozen at
   // mount, like the form's own defaults: a figure is an edit when it differs
@@ -175,7 +195,12 @@ export function PlanForm({
 
   const onSubmit = async (data: CreateFinancePlanData): Promise<void> => {
     const surplusValue = accelerate ? (surplusPct / 100).toFixed(4) : "0";
-    const investValue = autoInvest && investMethodId ? (investPct / 100).toFixed(4) : "0";
+    if (autoInvest && investTarget === "custom" && !customRateValid) {
+      toast.error("Enter a monthly return between 0 and 100%.");
+      return;
+    }
+    const investing = autoInvest && investReady;
+    const investValue = investing ? (investPct / 100).toFixed(4) : "0";
     const payload = {
       ...data,
       name: data.name.trim(),
@@ -184,7 +209,9 @@ export function PlanForm({
       surplusToDebtsPercent: surplusValue,
       debtStrategy: strategy,
       autoInvestPercent: investValue,
-      autoInvestMethodId: autoInvest && investMethodId ? investMethodId : null,
+      autoInvestMethodId: investing && investTarget === "method" ? investMethodId : null,
+      autoInvestCustomRate:
+        investing && investTarget === "custom" ? (customRate / 100).toFixed(6) : null,
       color,
     };
 
@@ -500,8 +527,9 @@ export function PlanForm({
           <CardTitle as="h2">Auto-invest</CardTitle>
           <CardDescription>
             After surplus → debts runs, route part of what&apos;s left into a compounding
-            investments bucket modelled against an investment method&apos;s monthly ROI.
-            The investments balance grows every month and counts toward your net worth.
+            investments bucket — at a portfolio method&apos;s monthly ROI, or at a return
+            you set for any other investment. It grows every month and counts toward
+            your net worth (on the dashboard, inside Portfolio).
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
@@ -547,6 +575,59 @@ export function PlanForm({
               </div>
             </div>
 
+            <FieldSet className="gap-3">
+              <FieldLegend variant="label" className="mb-3">
+                Invest into
+              </FieldLegend>
+              <RadioGroup
+                value={investTarget}
+                onValueChange={(v) => setInvestTarget(v as "method" | "custom")}
+                className="grid gap-2 sm:grid-cols-2"
+              >
+                <label
+                  htmlFor="invest-target-method"
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
+                >
+                  <RadioGroupItem id="invest-target-method" value="method" className="mt-0.5" />
+                  <div>
+                    <Text variant="body" weight="medium">Portfolio method</Text>
+                    <Text variant="small">Grows at the method&apos;s monthly ROI.</Text>
+                  </div>
+                </label>
+                <label
+                  htmlFor="invest-target-custom"
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
+                >
+                  <RadioGroupItem id="invest-target-custom" value="custom" className="mt-0.5" />
+                  <div>
+                    <Text variant="body" weight="medium">Custom return</Text>
+                    <Text variant="small">Any other investment, at a monthly return you set.</Text>
+                  </div>
+                </label>
+              </RadioGroup>
+            </FieldSet>
+
+            {investTarget === "custom" ? (
+              <Field className="gap-2" data-invalid={(autoInvest && !customRateValid) || undefined}>
+                <FieldLabel htmlFor="plan-invest-custom-rate">Monthly return</FieldLabel>
+                <InputGroup>
+                  <InputGroupInput
+                    id="plan-invest-custom-rate"
+                    inputMode="decimal"
+                    placeholder="1"
+                    value={customRatePct}
+                    onChange={(e) => setCustomRatePct(e.target.value)}
+                    aria-invalid={(autoInvest && !customRateValid) || undefined}
+                  />
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupText>%/mo</InputGroupText>
+                  </InputGroupAddon>
+                </InputGroup>
+                <FieldDescription>
+                  1 means 1% a month (about 12.7% a year), compounded on the bucket.
+                </FieldDescription>
+              </Field>
+            ) : (
             <Field className="gap-2">
               <FieldLabel htmlFor="plan-invest-method">Investment method</FieldLabel>
               <Select value={investMethodId} onValueChange={setInvestMethodId}>
@@ -577,6 +658,7 @@ export function PlanForm({
                 hidden from your real portfolio.
               </FieldDescription>
             </Field>
+            )}
 
             <Field
               className="gap-2"

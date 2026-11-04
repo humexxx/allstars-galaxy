@@ -196,6 +196,7 @@ export async function createPlan(
         debtStrategy: data.debtStrategy,
         autoInvestPercent: data.autoInvestPercent,
         autoInvestMethodId: data.autoInvestMethodId ?? null,
+        autoInvestCustomRate: data.autoInvestCustomRate ?? null,
         initialInvestments: data.initialInvestments,
         confirmationDayOfMonth: data.confirmationDayOfMonth,
         color: data.color,
@@ -310,6 +311,7 @@ export async function updatePlan(
         debtStrategy: data.debtStrategy,
         autoInvestPercent: data.autoInvestPercent,
         autoInvestMethodId: data.autoInvestMethodId ?? null,
+        autoInvestCustomRate: data.autoInvestCustomRate ?? null,
         confirmationDayOfMonth: data.confirmationDayOfMonth,
         color: data.color,
         // undefined leaves the link untouched; null explicitly detaches.
@@ -454,6 +456,7 @@ export async function clonePlan(
         debtStrategy: source.debtStrategy,
         autoInvestPercent: source.autoInvestPercent,
         autoInvestMethodId: source.autoInvestMethodId,
+        autoInvestCustomRate: source.autoInvestCustomRate,
         initialInvestments: source.initialInvestments,
         // Keep the accounting-period anchor: without it the clone falls back to
         // day 1 and its periods drift out of alignment with the source plan.
@@ -1012,6 +1015,7 @@ export const getPortfolioWeightedMonthlyRoi = cache(async function getPortfolioW
  * 0 if none is linked. Used to compound the investments bucket during projection.
  */
 export async function getAutoInvestRate(plan: FinancePlan): Promise<number> {
+  if (plan.autoInvestCustomRate != null) return num(plan.autoInvestCustomRate);
   if (!plan.autoInvestMethodId) return 0;
   const [row] = await db
     .select({ monthlyRoi: investmentMethods.monthlyRoi })

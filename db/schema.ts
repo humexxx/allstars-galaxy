@@ -506,6 +506,9 @@ export const financePlans = pgTable(
       () => investmentMethods.id,
       { onDelete: "set null" }
     ),
+    // A monthly return (decimal) of the user's own choosing for the auto-invest
+    // bucket. Set, it wins over the method; null means "use the method's ROI".
+    autoInvestCustomRate: numeric("auto_invest_custom_rate", { precision: 9, scale: 6 }),
     initialInvestments: numeric("initial_investments", { precision: 20, scale: 2 })
       .notNull()
       .default("0"),
@@ -551,6 +554,7 @@ export const financePlans = pgTable(
     check("finance_plans_savings_rate_chk", sql`${t.monthlySavingsRate} >= 0`),
     check("finance_plans_surplus_chk", sql`${t.surplusToDebtsPercent} >= 0 AND ${t.surplusToDebtsPercent} <= 1`),
     check("finance_plans_auto_invest_chk", sql`${t.autoInvestPercent} >= 0 AND ${t.autoInvestPercent} <= 1`),
+    check("finance_plans_auto_invest_custom_rate_chk", sql`${t.autoInvestCustomRate} IS NULL OR ${t.autoInvestCustomRate} >= 0`),
     check("finance_plans_confirmation_day_chk", sql`${t.confirmationDayOfMonth} >= 0 AND ${t.confirmationDayOfMonth} <= 28`),
   ]
 ).enableRLS();

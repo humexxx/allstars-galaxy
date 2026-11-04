@@ -807,9 +807,12 @@ export async function loadPlanOverviews(
         timeZone,
         asOfFallback,
       });
-      const autoInvestRate = plan.autoInvestMethodId
-        ? rateByMethod.get(plan.autoInvestMethodId) ?? 0
-        : 0;
+      const autoInvestRate =
+        plan.autoInvestCustomRate != null
+          ? parseFloat(plan.autoInvestCustomRate)
+          : plan.autoInvestMethodId
+            ? rateByMethod.get(plan.autoInvestMethodId) ?? 0
+            : 0;
       const view = viewOf(
         baseline,
         await projectionOptionsFor(baseline, userId, { autoInvestRate }),

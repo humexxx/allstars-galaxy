@@ -107,3 +107,30 @@ describe("PlanForm (Settings): opening balances", () => {
     expect(payload).not.toHaveProperty("initialInvestments");
   });
 });
+
+describe("PlanForm (Settings): where the invested remainder grows", () => {
+  it("saves a custom monthly return as a decimal and no method", async () => {
+    const { container } = render(
+      <PlanForm
+        plan={{ ...plan, autoInvestPercent: "1", autoInvestCustomRate: "0.012" } as FinancePlan}
+        investmentMethods={[]}
+        current={{ savings: 5000, investments: 0 }}
+      />
+    );
+    // Typed as a percentage: 0.012 shows as 1.2 (%/mo).
+    expect(input(container, "plan-invest-custom-rate").value).toBe("1.2");
+    fireEvent.change(input(container, "plan-invest-custom-rate"), { target: { value: "0.8" } });
+
+    const payload = await submitted(container);
+
+    expect(payload.autoInvestPercent).toBe("1.0000");
+    expect(payload.autoInvestCustomRate).toBe("0.008000");
+    expect(payload.autoInvestMethodId).toBeNull();
+  });
+
+  it("keeps the custom return empty for a plan that uses a method", async () => {
+    const container = renderForm();
+    const payload = await submitted(container);
+    expect(payload.autoInvestCustomRate).toBeNull();
+  });
+});

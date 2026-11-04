@@ -209,50 +209,57 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       </CardHeader>
       {/* Laid out on the card's width, not the viewport's: from `lg` the
           sidebar takes 192px, so this card is narrower at 1050px than at 1000px.
-          Net worth and its parts share the top row once there is room (the
-          parts used to be a rail beside the chart, which left the corner above
-          them empty); the chart takes the card's full width below. */}
-      <CardContent className="@container flex flex-col gap-6">
-        <div className="flex flex-col gap-4 @5xl:flex-row @5xl:items-end @5xl:justify-between @5xl:gap-8">
-          <div className="flex min-w-0 flex-col gap-1">
-            <Eyebrow size="sm" as="div" className="flex items-center gap-1.5">
-              <span
-                aria-hidden="true"
-                className="h-0.5 w-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: dashboardSeries("netWorth").color }}
-              />
-              Net worth
-            </Eyebrow>
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <Mono
-                className={cn(
-                  "text-2xl font-semibold sm:text-3xl",
-                  statToneClass(moneySign(fig.netWorth) >= 0 ? "positive" : "negative")
+          Wide, net worth and its parts stack in a column on the left and the
+          chart takes the rest, as tall as that column; narrow, the figures
+          come first and the chart follows. */}
+      <CardContent className="@container">
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-6",
+            rail && "@2xl:grid-cols-[15rem_minmax(0,1fr)] @2xl:gap-x-8"
+          )}
+        >
+          <div className="flex flex-col gap-6">
+            <div className="flex min-w-0 flex-col gap-1">
+              <Eyebrow size="sm" as="div" className="flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className="h-0.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: dashboardSeries("netWorth").color }}
+                />
+                Net worth
+              </Eyebrow>
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <Mono
+                  className={cn(
+                    "text-2xl font-semibold sm:text-3xl",
+                    statToneClass(moneySign(fig.netWorth) >= 0 ? "positive" : "negative")
+                  )}
+                >
+                  {formatCurrency(fig.netWorth)}
+                </Mono>
+                {lastClose && sinceClose !== null && (
+                  <DeltaChip delta={sinceClose} since={lastClose} />
                 )}
-              >
-                {formatCurrency(fig.netWorth)}
-              </Mono>
-              {lastClose && sinceClose !== null && (
-                <DeltaChip delta={sinceClose} since={lastClose} />
+              </div>
+              {goal?.kind === "milestone" && (
+                <Mono className="block text-2xs text-muted-foreground">{goal.text}</Mono>
               )}
             </div>
-            {goal?.kind === "milestone" && (
-              <Mono className="block text-2xs text-muted-foreground">{goal.text}</Mono>
+            {rail && (
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-4 @2xl:grid-cols-1">
+                {breakdown.map((f) => (
+                  <FigureItem key={f.label} figure={f} />
+                ))}
+              </dl>
             )}
           </div>
-          {rail && (
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 @2xl:grid-cols-4 @5xl:shrink-0">
-              {breakdown.map((f) => (
-                <FigureItem key={f.label} figure={f} />
-              ))}
-            </dl>
-          )}
+          <DashboardFinanceMiniChart
+            data={points}
+            pastCount={fig.pastCount}
+            className="h-64 sm:h-72 @2xl:h-auto @2xl:min-h-96"
+          />
         </div>
-        <DashboardFinanceMiniChart
-          data={points}
-          pastCount={fig.pastCount}
-          className="h-56 sm:h-64 @5xl:h-72"
-        />
       </CardContent>
     </Card>
   );

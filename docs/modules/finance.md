@@ -68,9 +68,9 @@ with its stacked chart in `dashboard-finance-mini-chart.tsx`; both read the
 series list in `dashboard-finance-series.ts`. Its past comes off the plan page's
 own timeline (`getRecentMonthlySnapshots` + `buildPlanTimeline`) and is drawn
 solid up to "Now"; the projection after it is dashed and fainter. Layout:
-the plan's name heads the card; net worth and its parts share the top row
-from `@5xl` (the parts were a rail beside the chart, which left the corner
-above them empty), and the chart takes the full width below. It
+the plan's name heads the card; from `@2xl` net worth and its parts stack in
+a 15rem column on the left and the chart takes the rest, stretched to that
+column's height (min 24rem); narrower, the figures come first. It
 reads Net worth, **Portfolio** (investments + portfolio, with the managed
 book's margin as a share of what is owed — this month and to date — in small
 print) and **Cash** (what the period has taken in and not yet paid out; in the tooltip too, even at $0)

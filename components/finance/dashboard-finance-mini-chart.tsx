@@ -67,7 +67,8 @@ export function toRows(data: DashboardPoint[], pastCount: number): Row[] {
 }
 
 /**
- * The draw-in: each series sweeps in left to right, one after another — the
+ * The draw-in: each series sweeps in left to right, starting slow and
+ * finishing fast, one after another — the
  * small parts first, the totals last — and net worth closes it with a glow.
  * Areas sweep the chart's full width (recharts clips from the first point),
  * so a series' past and projected halves read as one stroke.
@@ -208,7 +209,7 @@ export function DashboardFinanceMiniChart({
       isAnimationActive={!reducedMotion}
       animationBegin={DRAW_ORDER[key] * STAGGER_MS}
       animationDuration={SWEEP_MS}
-      animationEasing="ease-in-out"
+      animationEasing="ease-in"
     />
   );
   const halves = [false, true].flatMap((ahead) => [
@@ -240,7 +241,9 @@ export function DashboardFinanceMiniChart({
       dot={false}
       activeDot={glow ? false : { r: 3 }}
       isAnimationActive={!reducedMotion}
-      animationEasing="linear"
+      // Slow start, fast finish across the whole stroke: the past half eases
+      // in, and the projection carries on at the speed it reached.
+      animationEasing={ahead ? "linear" : "ease-in"}
       animationBegin={lineBegin + (ahead ? Math.round(SWEEP_MS * pastShare) : 0)}
       animationDuration={Math.max(1, Math.round(SWEEP_MS * (ahead ? 1 - pastShare : pastShare)))}
     />

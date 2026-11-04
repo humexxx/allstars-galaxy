@@ -365,7 +365,7 @@ function FigureItem({ figure }: { figure: Figure }) {
       </Eyebrow>
       <dd>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Mono className={cn("text-lg font-semibold sm:text-xl", statToneClass(tone))}>
+          <Mono className={cn("text-base font-semibold sm:text-lg", statToneClass(tone))}>
             {value}
           </Mono>
           {change}

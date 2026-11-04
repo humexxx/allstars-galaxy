@@ -1,8 +1,3 @@
-import type Anthropic from "@anthropic-ai/sdk";
-
-import { toolInputSchema } from "@/lib/ai/assistant/converse";
-import { getSportInputSchema, navigateInputSchema, setFavoriteInputSchema } from "@/schemas/sports-assistant";
-
 /**
  * Fixed text, so the prompt cache holds across every turn: today's date, the
  * open page and the favourites arrive as system notes in the conversation.
@@ -29,34 +24,3 @@ How to work
 How to reply
 - In the language the user writes in.
 - Short and plain: a sentence or two, or a few lines starting with "-". No headings, tables or bold text.`;
-
-export const SPORTS_ASSISTANT_TOOLS: Anthropic.Beta.BetaTool[] = [
-  {
-    name: "list_sports",
-    description:
-      "Every sport: id, label, whether it is one of the user's favourites, its competitions (football leagues, LoL leagues and events) with ids, and the tabs of its page.",
-    input_schema: { type: "object", properties: {} },
-  },
-  {
-    name: "get_sport",
-    description:
-      "One sport as its page shows it: yesterday's and today's results, live games and the next ones (kickoff on the user's clock), the standings, a bracket being played, the tournaments or races with their ids, rankings, and the latest headlines with links.",
-    input_schema: toolInputSchema(getSportInputSchema),
-  },
-  {
-    name: "list_pages",
-    description: "The other parts of the app the user can open, with ids for navigate.",
-    input_schema: { type: "object", properties: {} },
-  },
-  {
-    name: "navigate",
-    description:
-      "Open a page for the user: a sport (optionally a competition and a tab), a padel or tennis tournament, an F1 race, or another part of the app.",
-    input_schema: toolInputSchema(navigateInputSchema),
-  },
-  {
-    name: "set_favorite",
-    description: "Add a sport to the user's favourites, or remove it.",
-    input_schema: toolInputSchema(setFavoriteInputSchema),
-  },
-];

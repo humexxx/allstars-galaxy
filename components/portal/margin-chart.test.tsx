@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { MarginHistoryInput } from "@/types/margin";
 
@@ -20,6 +20,11 @@ vi.mock("@/components/ui/chart", () => ({
   ChartTooltip: () => null,
   ChartTooltipContent: () => null,
 }));
+
+// cmdk scrolls the active option into view; jsdom has no layout to scroll.
+beforeAll(() => {
+  Element.prototype.scrollIntoView = vi.fn();
+});
 
 const INPUT: MarginHistoryInput = {
   contributions: [
@@ -51,7 +56,7 @@ describe("MarginChart", () => {
     render(<MarginChart input={INPUT} />);
 
     expect(screen.getByRole("group", { name: "Date range" })).toBeInTheDocument();
-    for (const label of ["3M", "6M", "1Y", "All"]) {
+    for (const label of ["3M", "6M", "1Y", "5Y", "All"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     expect(screen.getByText("Filters")).toBeInTheDocument();
@@ -71,6 +76,36 @@ describe("MarginChart", () => {
 
     expect(container.textContent).not.toContain("$800.00");
     expect(container.textContent).toMatch(/•{3,}/);
+  });
+
+  it("filters by several investors, picked by typing, shown as chips", () => {
+    render(<MarginChart input={INPUT} />);
+    fireEvent.click(screen.getByRole("button", { name: /^filters/i }));
+
+    // Nothing picked: everybody.
+    expect(screen.getByText("All investors")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Add investor" }), {
+      target: { value: "yal" },
+    });
+    // Only the match is offered; Jason is filtered out by the search.
+    expect(screen.queryByRole("option", { name: /jason/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: "Yalena" }));
+
+    const chips = within(screen.getByRole("list", { name: "Selected investors" }));
+    expect(chips.getByText("Yalena")).toBeInTheDocument();
+    // Yalena alone: 1000 ADA at 0.40 = 400 deployed against her 900.
+    expect(screen.getByText("-$500.00")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^filters/i })).toHaveTextContent("1");
+
+    // A second pick adds a chip rather than replacing the first.
+    fireEvent.click(screen.getByRole("option", { name: "Jason (you)" }));
+    expect(chips.getAllByRole("listitem")).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Yalena" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove Jason (you)" }));
+    expect(screen.getByText("All investors")).toBeInTheDocument();
+    expect(screen.getByText("-$100.00")).toBeInTheDocument();
   });
 
   it("says so when a filter leaves nothing to plot", () => {

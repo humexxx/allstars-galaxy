@@ -70,9 +70,9 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
 ## Notes
 - **Logic audit (2026-09-11).** Monthly interest is idempotent per calendar month: the cron consults `last_interest_run` on every day (the 1st included), a failure writes `last_interest_error` instead, and the admin's manual "apply interest" goes through the same month claim (see 2026-10-16). Approve/reject only move a `pending` row (re-approval used to reset accrued value). `PortfolioStats.totalWithdrawn` and `getPortfolioAssets` add approved withdrawals back into profit. `getDerivedHoldings` keeps `closed` buys' units; `backfillTransactionAllocations` and `setMethodAllocations` require a policy that totals 100%. The performance chart no longer fabricates a $0 origin. Daily snapshots skip a portfolio already snapshotted today; `COUNT(*)` is cast to int. The investor summary joins on `investorId`; the admin filter ignores a non-UUID user id; the CSV signs withdrawals.
 - **Review fixes (2026-10-16).** `applyMonthlyInterest` claims the month with a conditional upsert of `app_state.last_interest_run` (only a UTC month later than the one on record) inside the compounding transaction, so concurrent runs, a failed record write, or cron + manual snapshot can never compound a month twice; months up to the record count as done, and the manual path claims the snapshot's month (refused if taken or in the future). The manual-snapshot dialog sends "now" for today and the end of the local day for a past day — local midnight dropped that day's transactions. `backfillTransactionAllocations` prices `closed` buys too (same statuses as `getDerivedHoldings`). `isAssetOnlyInOwnMethods` also refuses when another owner's methods hold units of the asset in `transaction_allocations`.
-- **Owner-only panels load on demand.** `MarginChart` and `InvestorBreakdown`
-  are `next/dynamic` in `portfolio-client.tsx`, so an investor's bundle does not
-  carry the owner dashboard. `getUserPortfolio` / `getPortfolioStats` /
+- **The owner-only chart loads on demand.** `MarginChart` is `next/dynamic`
+  in `portfolio-client.tsx`, so an investor's bundle does not carry the owner
+  dashboard. `getUserPortfolio` / `getPortfolioStats` /
   `getPortfolioAssets` are request-cached — every plan projection asks for them.
 - **Methods have an owner.** `investment_methods.owner_user_id` (nullable, FK
   SET NULL) is the admin who runs the method; other users invest through them.
@@ -105,6 +105,8 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
   make the reader compute it. Filtering by investor or method re-derives the
   series in the browser from the raw contributions — no round trip — which is
   why `getManagedOverview` ships `historyInput` alongside the computed series.
+  Both filters are multi-selects (type to find, each pick a removable chip,
+  none picked = all); ranges are 3M / 6M / 1Y / 5Y / All, at the card's top.
 - **The Managed tab holds the detail**: per-method allocation policy and the
   per-person breakdown. No chart there — there is one chart in the module.
 - **Removed with this**: `ManagedCapitalCard` (its split view was the second
@@ -123,10 +125,13 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
   req/min ceiling.
 - **A month with no quote carries the last known price forward.** Valuing it at
   zero would draw a cliff that never happened.
-- **`InvestorBreakdown` is not a pro-rata slice.** Each investor's positions
-  come from their own contributions priced on their own dates, so it is what
-  their money actually bought. Its `profitLoss` is the OWNER's number: the
-  investor's return is fixed and never varies.
+- **The `InvestorBreakdown` data is not a pro-rata slice.** Each investor's
+  positions come from their own contributions priced on their own dates, so it
+  is what their money actually bought. Its `profitLoss` is the OWNER's number:
+  the investor's return is fixed and never varies. Its "By person" panel under
+  the chart was removed (2026-10-19): the chart's investor filter shows a
+  person's margin, and their movements open in the Transactions tab; the data
+  still feeds the Investors summary there.
 - **Three tabs: Overview, Transactions, Methods.** Managed was folded away once
   its parts had better homes — the headline figures and the chart are the
   Overview for an owner, capital per method is on the method cards, and the
@@ -145,12 +150,18 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
   somebody else's movements into a personal log makes the running totals of
   both meaningless. The owner's own rows are excluded from the second table
   because they already appear in the first.
-- **Transactions default to approved only, and the Status column is hidden.**
-  A column reading "approved" on every line is a column of noise. Pending and
-  rejected rows matter, but they are the exception you go looking for, not the
-  default reading of a history — a count of what is hidden sits above the
-  table so nothing disappears silently. **Detailed view** (top right) brings
-  back both the other statuses and the column.
+- **Transactions hide rejected rows, and the Status column shows only when
+  needed.** A rejected row moved no money (the admin queue keeps it); a column
+  reading "approved" on every line is noise, so it appears only when a row is
+  pending or closed. The **Detailed view** toggle was removed (2026-10-19):
+  the owner reads the default view, and the investors' detail now lives in
+  their rows.
+- **Each investor opens to their movements** (chevron on the name): the
+  summary row expands into that person's `TransactionsTable`, rejected rows
+  left out, so the movement count matches what opens. A name filter sits to
+  the right of the Investors heading (case- and accent-insensitive: "maria"
+  finds "María"). **Export CSV** stays enabled for an owner with no movements
+  of their own, since the file carries the investors' rows.
 - **Every transaction row shows the position it created** — units at that
   day's price (`Bought`), what they are worth now, and the P/L. A contribution
   is otherwise just an amount, and the whole point of the model is that the

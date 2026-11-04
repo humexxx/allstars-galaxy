@@ -2,9 +2,18 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, Legend, ReferenceLine, XAxis, YAxis } from "recharts";
-import { ChartLine, SlidersHorizontal } from "lucide-react";
+import { ChartLine, SlidersHorizontal, X } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Popover,
@@ -19,6 +28,7 @@ import { formatCurrency, formatCurrencyCompact } from "@/lib/utils/format";
 import { formatMonthLong } from "@/lib/utils/date";
 import { buildMarginHistory, type MarginPoint } from "@/lib/finance/margin-history";
 import { cn } from "@/lib/utils";
+import { foldForSearch } from "@/lib/utils/text";
 import type { MarginHistoryInput } from "@/types/margin";
 
 /** Range options, months back from today; "all" keeps the whole history. */
@@ -26,6 +36,7 @@ const RANGES = [
   ["3", "3M"],
   ["6", "6M"],
   ["12", "1Y"],
+  ["60", "5Y"],
   ["all", "All"],
 ] as const;
 type RangeValue = (typeof RANGES)[number][0];
@@ -56,8 +67,9 @@ export function MarginChart({
   /** Rendered in the chart's bottom-right corner — the price freshness. */
   status?: ReactNode;
 }) {
-  const [investorId, setInvestorId] = useState<string | null>(null);
-  const [methodId, setMethodId] = useState<string | null>(null);
+  // Empty means everybody / every method.
+  const [investorIds, setInvestorIds] = useState<string[]>([]);
+  const [methodIds, setMethodIds] = useState<string[]>([]);
   // Months back from today, or null for everything. Trimming the range is a
   // different question from filtering who is in it, so it gets its own control
   // rather than hiding inside the popover.
@@ -68,8 +80,8 @@ export function MarginChart({
     const keep = <T extends { investorId: string; methodId: string }>(rows: T[]) =>
       rows.filter(
         (r) =>
-          (investorId === null || r.investorId === investorId) &&
-          (methodId === null || r.methodId === methodId)
+          (investorIds.length === 0 || investorIds.includes(r.investorId)) &&
+          (methodIds.length === 0 || methodIds.includes(r.methodId))
       );
 
     const series = buildMarginHistory({
@@ -84,12 +96,13 @@ export function MarginChart({
     // contribution, or a window that starts mid-history would forget the units
     // bought before it and draw a position that never existed.
     return months === null ? series : series.slice(-months);
-  }, [input, investorId, methodId, months]);
+  }, [input, investorIds, methodIds, months]);
 
-  const filtered = investorId !== null || methodId !== null;
+  const filterCount = investorIds.length + methodIds.length;
+  const filtered = filterCount > 0;
   const clearFilters = (): void => {
-    setInvestorId(null);
-    setMethodId(null);
+    setInvestorIds([]);
+    setMethodIds([]);
   };
 
   if (data.length < 2) {
@@ -118,7 +131,7 @@ export function MarginChart({
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <Eyebrow as="div">
             Margin {filtered && <span className="normal-case tracking-normal">(filtered)</span>}
@@ -156,24 +169,30 @@ export function MarginChart({
               <Button variant="outline" size="sm">
                 <SlidersHorizontal />
                 Filters
-                {filtered && <span className="text-2xs">on</span>}
+                {filtered && (
+                  <Badge variant="secondary" className="font-mono tabular-nums">
+                    {filterCount}
+                  </Badge>
+                )}
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="flex w-64 flex-col gap-4">
-            <FilterGroup
-              label="Investor"
+            <PopoverContent align="end" className="flex w-72 flex-col gap-4">
+            <MultiSelectFilter
+              label="Investors"
+              noun="investor"
               options={input.investors.map((i) => ({
                 id: i.id,
                 label: i.isOwn ? `${i.name} (you)` : i.name,
               }))}
-              value={investorId}
-              onChange={setInvestorId}
+              value={investorIds}
+              onChange={setInvestorIds}
             />
-            <FilterGroup
-              label="Method"
+            <MultiSelectFilter
+              label="Methods"
+              noun="method"
               options={input.methods.map((m) => ({ id: m.id, label: m.name }))}
-              value={methodId}
-              onChange={setMethodId}
+              value={methodIds}
+              onChange={setMethodIds}
             />
             {filtered && (
               <Button variant="ghost" size="sm" className="w-full" onClick={clearFilters}>
@@ -282,45 +301,91 @@ export function MarginChart({
   );
 }
 
-const ALL = "__all__";
-
-/** One-of-many chip row with an "All" chip; picking the active chip again
- *  falls back to All, which is how the filter is cleared from the row. */
-function FilterGroup({
+/**
+ * Pick any number of options by typing; each pick becomes a chip with its own
+ * remove button. Nothing picked means no filter.
+ */
+function MultiSelectFilter({
   label,
+  noun,
   options,
   value,
   onChange,
 }: {
   label: string;
+  /** Singular, for the input and the empty message ("investor"). */
+  noun: string;
   options: { id: string; label: string }[];
-  value: string | null;
-  onChange: (v: string | null) => void;
+  value: string[];
+  onChange: (ids: string[]) => void;
 }) {
+  const [search, setSearch] = useState("");
+  const selected = options.filter((o) => value.includes(o.id));
+  const remaining = options.filter((o) => !value.includes(o.id));
+
   return (
     <div className="flex flex-col gap-2">
       <Eyebrow as="div" size="sm">
         {label}
       </Eyebrow>
-      <ToggleGroup
-        type="single"
-        variant="outline"
-        size="sm"
-        aria-label={label}
-        value={value ?? ALL}
-        onValueChange={(v) => onChange(!v || v === ALL ? null : v)}
-      >
-        {/* Content-sized chips that wrap; the group's default `flex-1` crushed
-            long names into one row inside the popover. */}
-        <ToggleGroupItem value={ALL} className="flex-none">
-          All
-        </ToggleGroupItem>
-        {options.map((o) => (
-          <ToggleGroupItem key={o.id} value={o.id} className="max-w-full flex-none">
-            <span className="truncate">{o.label}</span>
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+
+      {selected.length === 0 ? (
+        <Text variant="small">All {label.toLowerCase()}</Text>
+      ) : (
+        <ul className="flex flex-wrap gap-1.5" aria-label={`Selected ${label.toLowerCase()}`}>
+          {selected.map((o) => (
+            <li key={o.id} className="max-w-full">
+              <Badge variant="secondary" className="max-w-full gap-1 pr-0.5">
+                <span className="truncate">{o.label}</span>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="size-4 rounded-full"
+                  aria-label={`Remove ${o.label}`}
+                  onClick={() => onChange(value.filter((id) => id !== o.id))}
+                >
+                  <X />
+                </Button>
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {remaining.length > 0 && (
+        <Command
+          // cmdk names its input after this label (aria-labelledby), which
+          // wins over an aria-label on the input itself.
+          label={`Add ${noun}`}
+          className="rounded-lg! border p-0"
+          // By label, ignoring case and accents; cmdk's default scores the
+          // item's value, which is an id here.
+          filter={(_value, search, keywords) =>
+            foldForSearch(keywords?.join(" ") ?? "").includes(foldForSearch(search)) ? 1 : 0
+          }
+        >
+          <CommandInput placeholder={`Add ${noun}…`} value={search} onValueChange={setSearch} />
+          <CommandList className="max-h-40">
+            <CommandEmpty className="py-3 text-xs">No {noun} matches</CommandEmpty>
+            <CommandGroup>
+              {remaining.map((o) => (
+                <CommandItem
+                  key={o.id}
+                  value={o.id}
+                  keywords={[o.label]}
+                  onSelect={() => {
+                    onChange([...value, o.id]);
+                    // Ready for the next name.
+                    setSearch("");
+                  }}
+                >
+                  <span className="truncate">{o.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      )}
     </div>
   );
 }

@@ -75,9 +75,8 @@ export function TransactionsTable({
   rows: TransactionTableRow[];
   /** Adds the Investor column — only meaningful for other people's rows. */
   showInvestor?: boolean;
-  /** Off by default: the list is filtered to approved rows, so a column
-   *  reading "approved" on every line is a column of noise. It comes back
-   *  with the detailed view, where the other statuses do too. */
+  /** Off by default: a column reading "approved" on every line is noise.
+   *  Callers turn it on when some row is pending or closed. */
   showStatus?: boolean;
   /** What each contribution bought (Bought / Worth now / P/L). Only for
    *  someone who runs the methods: for a client those columns would either

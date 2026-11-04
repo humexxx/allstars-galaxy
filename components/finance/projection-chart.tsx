@@ -212,7 +212,7 @@ type ChartRow = {
   portfolioPast: number | null;
   portfolioFuture: number | null;
   portfolioRaw: number | null;
-  /** Debt drawn below zero (`0 - totalDebt`), split past/future. */
+  /** Debt still owed, split past/future: it falls to zero as it is paid. */
   debtPast: number | null;
   debtFuture: number | null;
 };
@@ -321,7 +321,7 @@ function TodayPulseDot({
 type ChartPoint = {
   date: Date;
   netWorth: number;
-  /** Drawn below zero, as on the dashboard card, when any debt is in range. */
+  /** Drawn as its own falling line when any debt is in range. */
   totalDebt?: number;
   /** Carried for the hover tooltip only. */
   investments?: number;
@@ -407,10 +407,10 @@ export const ProjectionChart = memo(function ProjectionChart({
   // collapsing onto the same month when both cross between the same pair of
   // points.
   const { data, crossings, yTicks, hasDebt } = useMemo(() => {
-    // Debt hangs below zero, a mirror of what it takes off net worth. A paid-off
+    // Debt is what is still owed, so it falls to zero as it is paid. A paid-off
     // debt draws its last $0 beside the payment that cleared it, then stops: a
     // line along zero for years would read as debt still there.
-    const debts = points.map((p) => 0 - (p.totalDebt ?? 0));
+    const debts = points.map((p) => p.totalDebt ?? 0);
     const debtDrawn = (i: number): boolean =>
       moneySign(debts[i]) !== 0 ||
       (i > 0 && moneySign(debts[i - 1]) !== 0) ||
@@ -691,8 +691,8 @@ export const ProjectionChart = memo(function ProjectionChart({
             />
           )}
 
-          {/* Debt — below zero, red, solid past and dashed projection, so the
-              climb back to zero is the payoff. */}
+          {/* Debt — red, solid past and dashed projection, so the fall to
+              zero is the payoff. */}
           {hasDebt && (
             <Line
               dataKey="debtPast"

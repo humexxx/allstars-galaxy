@@ -88,7 +88,7 @@ is cyan (slot 1), Owed to you violet (slot 3), Cash white (`--foreground`), Debt
 stack and always drawn, so at $0 it is a flat line on zero instead of a trace
 along the top of the stack. Debt and Owed to you are drawn down to zero where they end and not after (`toRows`): a paid-off debt's outline used to run along zero to the end.
 
-A plan's own page (`ProjectionChart`) wears the dashboard's colours — net worth green, portfolio cyan (the investments bucket and the live portfolio as one Portfolio in the tooltip), debt red — rather than the plan's identity colour, which stays on the list and compare charts. Debt is plotted below zero (`0 - totalDebt`, solid past / dashed projection), as on the dashboard card, whenever the range holds any; a paid-off debt draws its last $0 beside the payment that cleared it and stops, and it counts toward the y-axis ticks. Before, debt rode along for the tooltip only and no line showed. It draws in on the same clock (portfolio, debt, then net worth as one eased stroke) and the Today / Next / End figures count up (`CountUpCurrency`, which counts from the figure shown when a value changes, e.g. a new horizon).
+A plan's own page (`ProjectionChart`) wears the dashboard's colours — net worth green, portfolio cyan (the investments bucket and the live portfolio as one Portfolio in the tooltip), debt red — rather than the plan's identity colour, which stays on the list and compare charts. Debt is plotted as the balance still owed, falling to zero as it is paid (solid past / dashed projection), whenever the range holds any; a paid-off debt draws its last $0 beside the payment that cleared it and stops, and it counts toward the y-axis ticks. (The dashboard card stacks it below zero instead, as a share taken off net worth.) It draws in on the same clock (portfolio, debt, then net worth as one eased stroke) and the Today / Next / End figures count up (`CountUpCurrency`, which counts from the figure shown when a value changes, e.g. a new horizon).
 
 `/portal/plans` renders the workspace for **any** number of plans (a lone plan
 still gets its projection curve). Rail rows drive the chart:
@@ -102,9 +102,9 @@ still gets its projection curve). Rail rows drive the chart:
   `setPlanColorAction`.
 
 The metric tabs are **Net worth / Total debt** (Savings was dropped from both
-the index and `compare/`). The horizon `Select` above the chart picks how many
-periods are plotted
-(default 24, of which `PAST_MONTHS` = 3 sit before today). Periods up to today
+the index and `compare/`). The horizon `Select` above the chart picks how far
+ahead of today it plots — 3 months, 6 months, 12 months (the default), 5 years
+or 10 years — on top of today's period and the `PAST_MONTHS` = 3 before it. Periods up to today
 draw solid and everything after draws dashed — each plan is two `Line`s sharing
 the boundary row, mirroring the single-plan chart in the same file. Today's row
 gets the shared `TodayPulseDot`, rendered on the past series only (the future

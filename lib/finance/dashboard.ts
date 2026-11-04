@@ -46,6 +46,8 @@ export type DashboardPoint = DashboardParts & {
   time: number;
   /** Whether the axis labels this point. */
   tick: boolean;
+  /** A period's close, a day money moved, or today's position. */
+  kind: "close" | "movement" | "today";
   /** Axis tick: "Now" for today's position, else the month ("Oct"). */
   month: string;
   /** Tooltip title: "Today", else the close's date — the 12 closes run into
@@ -173,6 +175,7 @@ export function buildDashboardFigures(
   const todayStart = new Date(today.date);
   todayStart.setUTCHours(0, 0, 0, 0);
   const closes = behind.map((p) => ({
+    kind: "close" as const,
     ...closeLabels(p.date, anchorDay),
     ...inCents(partsOfPoint(p)),
   }));
@@ -183,6 +186,7 @@ export function buildDashboardFigures(
       : movements
           .filter((p) => p.date.getTime() > since && p.date.getTime() < todayStart.getTime())
           .map((p) => ({
+            kind: "movement" as const,
             time: p.date.getTime(),
             month: MONTH_FMT.format(p.date),
             label: CLOSE_FMT.format(p.date),
@@ -194,6 +198,7 @@ export function buildDashboardFigures(
   const points: DashboardPoint[] = [
     ...pastPoints,
     {
+      kind: "today",
       time: today.date.getTime(),
       tick: true,
       month: today.status === "before-start" ? "Start" : "Now",
@@ -201,6 +206,7 @@ export function buildDashboardFigures(
       ...inCents(now),
     },
     ...ahead.map((m, i) => ({
+      kind: "close" as const,
       ...closeLabels(m.date, anchorDay),
       tick: (i + 1) % 3 === 0,
       ...inCents(partsOf(m)),

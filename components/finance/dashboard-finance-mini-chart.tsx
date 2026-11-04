@@ -189,7 +189,16 @@ export function DashboardFinanceMiniChart({
     />
   );
   return (
-    <ChartContainer config={chartConfig} className={cn("aspect-auto h-48 w-full", className)}>
+    // Fades and rises in once on load (skipped under reduced motion). Not
+    // recharts' own draw-in: it sweeps left to right, which read as a series
+    // ending months short of its axis, and it breaks the dashed projection.
+    <ChartContainer
+      config={chartConfig}
+      className={cn(
+        "aspect-auto h-48 w-full motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-4 motion-safe:duration-700 motion-safe:ease-out",
+        className
+      )}
+    >
       {/* The right margin is half the last month's label, which every
           interval now draws on the chart's very edge. */}
       <ComposedChart data={rows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>

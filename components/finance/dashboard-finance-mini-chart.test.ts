@@ -8,6 +8,7 @@ import { visibleSeriesKeys } from "./dashboard-finance-series";
 const point = (month: string, netWorth: number): DashboardPoint => ({
   time: netWorth,
   tick: true,
+  kind: "close",
   month,
   label: month,
   savings: -50,

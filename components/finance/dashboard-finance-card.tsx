@@ -144,13 +144,9 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   // colours that the swatches beside these labels now carry.
   // Net worth leads the card under its title, against the last closed
   // period: the number the whole card is about, and whether it moved.
-  const lastClose = fig.pastCount > 0 ? points[fig.pastCount - 1] : null;
+  const lastClose =
+    points.slice(0, fig.pastCount).findLast((p) => p.kind === "close") ?? null;
   const sinceClose = lastClose ? fig.netWorth - lastClose.netWorth : null;
-  // Debt's change since the same close; going down is the good news. Only
-  // debt carries one: on the other parts it was noise.
-  const debtChange = lastClose ? (
-    <DeltaChip delta={fig.debt - lastClose.debt} since={lastClose} goodWhen="down" />
-  ) : undefined;
   // Net worth, Portfolio and Cash always show; Owed to you and Debt when the
   // chart's range has any — a $0.00 debt tile on a plan with none is noise.
   const visible = visibleSeriesKeys(points);
@@ -160,6 +156,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       label: "Portfolio",
       value: formatCurrency(fig.investments),
       note: managedNote(managed),
+      href: "/portal/portfolio",
     },
     {
       series: dashboardSeries("savings"),
@@ -181,7 +178,6 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
             series: dashboardSeries("debt"),
             label: "Debt",
             value: formatCurrency(fig.debt),
-            change: debtChange,
           },
         ]
       : []),
@@ -270,6 +266,8 @@ type Figure = {
   tone?: "positive" | "negative";
   /** Change since the last close, as a chip beside the value. */
   change?: React.ReactNode;
+  /** Makes the whole figure a link; it looks like a button only on hover. */
+  href?: string;
   /** Small print under the value. */
   note?: React.ReactNode;
 };
@@ -326,9 +324,17 @@ function managedNote(managed: ManagedAssets | null): React.ReactNode {
  * worth leads the rail and carries the sign colour, which is emphasis enough.
  */
 function FigureItem({ figure }: { figure: Figure }) {
-  const { series, label, value, tone, change, note } = figure;
+  const { series, label, value, tone, change, note, href } = figure;
   return (
-    <div className="flex min-w-0 flex-col gap-1">
+    <div
+      className={cn(
+        "flex min-w-0 flex-col gap-1",
+        // The negative margin cancels the padding, so the figure sits where
+        // it did; only the hover surface reaches past it.
+        href &&
+          "relative -m-2 rounded-lg p-2 transition-colors hover:bg-muted has-focus-visible:ring-2 has-focus-visible:ring-ring/50"
+      )}
+    >
       <Eyebrow size="sm" asChild>
         <dt className="flex items-center gap-1.5">
           <span
@@ -339,7 +345,15 @@ function FigureItem({ figure }: { figure: Figure }) {
             )}
             style={{ backgroundColor: series.color }}
           />
-          {label}
+          {href ? (
+            // A stretched link: the whole figure is the target, and the
+            // description list keeps its dt/dd structure.
+            <Link href={href} className="outline-none after:absolute after:inset-0 after:rounded-lg">
+              {label}
+            </Link>
+          ) : (
+            label
+          )}
         </dt>
       </Eyebrow>
       <dd>

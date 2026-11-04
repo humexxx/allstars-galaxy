@@ -1,5 +1,6 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import {
   Area,
   CartesianGrid,
@@ -61,6 +62,24 @@ export function toRows(data: DashboardPoint[], pastCount: number): Row[] {
     }
     return row;
   });
+}
+
+/** How long the net-worth line takes to draw in, end to end. */
+const DRAW_MS = 1200;
+
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+
+/** No draw-in for people who asked for less motion. */
+function usePrefersReducedMotion(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia(REDUCED_MOTION);
+      query.addEventListener("change", onChange);
+      return () => query.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(REDUCED_MOTION).matches,
+    () => false
+  );
 }
 
 /** Same rhythm as the plan page's projected line. */
@@ -134,6 +153,7 @@ export function DashboardFinanceMiniChart({
   pastCount?: number;
   className?: string;
 }) {
+  const reducedMotion = usePrefersReducedMotion();
   if (data.length === 0) return null;
   const rows = toRows(data, pastCount);
   const tickTimes = data.filter((p) => p.tick).map((p) => p.time);
@@ -151,7 +171,12 @@ export function DashboardFinanceMiniChart({
   const debt = dashboardSeries("debt").color;
   // A projected month is the same series, dashed and fainter: the plan's
   // guess, not a balance anyone has seen.
-  const area = (key: Plotted, stack: "assets" | "debts", color: string, ahead: boolean) => (
+  // A part that is $0 at every point draws nothing — its outline lay along
+  // the top of the stack. Cash has no outline at all: where it is $0 between
+  // other months it traced the stack's top as a second white dashed line.
+  const present = (key: Plotted): boolean => rows.some((r) => moneySign(r[`${key}Past`] ?? r[`${key}Ahead`] ?? 0) !== 0);
+  const area = (key: Plotted, stack: "assets" | "debts", color: string, ahead: boolean) =>
+    present(key) && (
     <Area
       key={`${key}-${ahead ? "ahead" : "past"}`}
       dataKey={`${key}${ahead ? "Ahead" : "Past"}`}
@@ -159,7 +184,7 @@ export function DashboardFinanceMiniChart({
       type="monotone"
       fill={color}
       fillOpacity={ahead ? 0.2 : 0.35}
-      stroke={color}
+      stroke={key.startsWith("savings") ? "none" : color}
       strokeWidth={1.5}
       strokeDasharray={ahead ? PROJECTED_DASH : undefined}
       activeDot={false}
@@ -175,6 +200,12 @@ export function DashboardFinanceMiniChart({
     area("savingsBelow", "debts", savings, ahead),
     area("debtBelow", "debts", debt, ahead),
   ]);
+  // The net-worth line draws itself in, past first and then the projection,
+  // as one stroke: each half gets its share of the time by the span it
+  // covers. recharts keeps the projection's dashes while it draws.
+  const first = data[0].time;
+  const span = Math.max(1, data[data.length - 1].time - first);
+  const pastShare = Math.min(1, Math.max(0, (data[pastCount].time - first) / span));
   const netWorth = (ahead: boolean) => (
     <Line
       key={`netWorth-${ahead ? "ahead" : "past"}`}
@@ -185,7 +216,10 @@ export function DashboardFinanceMiniChart({
       strokeDasharray={ahead ? PROJECTED_DASH : undefined}
       dot={false}
       activeDot={{ r: 3 }}
-      isAnimationActive={false}
+      isAnimationActive={!reducedMotion}
+      animationEasing="linear"
+      animationBegin={ahead ? Math.round(DRAW_MS * pastShare) : 0}
+      animationDuration={Math.max(1, Math.round(DRAW_MS * (ahead ? 1 - pastShare : pastShare)))}
     />
   );
   return (

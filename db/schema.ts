@@ -18,7 +18,9 @@ export const roadPathFrequencyEnum = pgEnum("road_path_frequency", ["daily", "ev
 export const taskPriorityEnum = pgEnum("task_priority", ["low", "medium", "high"]);
 export const debtPaymentTypeEnum = pgEnum("debt_payment_type", ["fixed", "percent_of_balance"]);
 export const debtStrategyEnum = pgEnum("debt_strategy", ["avalanche", "snowball", "none"]);
-export const financeSnapshotSourceEnum = pgEnum("finance_snapshot_source", ["system_cron", "confirmation", "manual"]);
+// "movement": the plan's position on a day something moved (a paycheque, a
+// payment, an edit). Period history ignores them; the dashboard draws them.
+export const financeSnapshotSourceEnum = pgEnum("finance_snapshot_source", ["system_cron", "confirmation", "manual", "movement"]);
 // "user" = the human confirmed their real numbers. "auto" = the cron rolled the
 // baseline forward through a period the user left unconfirmed (best-estimate,
 // still re-promptable). Lets the UI flag auto rows and keeps the chart honest.

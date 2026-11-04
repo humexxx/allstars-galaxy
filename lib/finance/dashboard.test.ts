@@ -219,3 +219,50 @@ describe("dashboard card: period names and the headline goal", () => {
     expect(dashboardGoal(projection, today, [10_000_000], 5, now)).toBeNull();
   });
 });
+
+describe("dashboard card: movement days between the closes", () => {
+  const plan = {
+    id: "p",
+    startMonth: U(2026, 7),
+    monthsAhead: 24,
+    confirmationDayOfMonth: 5,
+    initialSavings: "0",
+    monthlySavingsRate: "0",
+    surplusToDebtsPercent: "1",
+    debtStrategy: "avalanche",
+    autoInvestPercent: "0",
+    initialInvestments: "0",
+    includePortfolio: false,
+  } as unknown as FinancePlan;
+  const incomes = [
+    { id: "i", name: "Pay", monthlyAmount: "5000", kind: "recurring", dayOfMonth: 1, recurrenceType: "monthly_day" },
+  ] as unknown as FinancePlanIncome[];
+  const now = U(2026, 11, 3);
+  const close = (m: number, netWorth: number): ChartPoint => ({ date: U(2026, m, 5), netWorth, savings: 0, totalDebt: 0, receivables: 0 });
+  const moved = (m: number, d: number, netWorth: number): ChartPoint => ({ date: U(2026, m, d), netWorth, savings: netWorth, totalDebt: 0, receivables: 0 });
+
+  it("draws movement days at their own dates, between the closes, before today", () => {
+    const projection = projectPlan(plan, incomes, [], [], {});
+    const today = projectStateAt(plan, incomes, [], [], {}, now);
+    const fig = buildDashboardFigures(
+      projection,
+      today,
+      [close(7, 100), close(8, 200), close(9, 300)],
+      5,
+      [moved(6, 1, 1), moved(10, 1, 250), moved(11, 1, 350), moved(11, 3, 400)]
+    );
+    const past = fig.points.slice(0, fig.pastCount);
+    // The June movement is older than the first close shown; today's own day
+    // is the Today point.
+    expect(past.map((p) => p.label)).toEqual([
+      "Aug 4, 2026",
+      "Sep 4, 2026",
+      "Oct 1, 2026",
+      "Oct 4, 2026",
+      "Nov 1, 2026",
+    ]);
+    expect(past.every((p, i) => i === 0 || p.time > past[i - 1].time)).toBe(true);
+    expect(fig.points[fig.pastCount]).toMatchObject({ label: "Today", tick: true });
+    expect(past.filter((p) => p.tick)).toHaveLength(1);
+  });
+});

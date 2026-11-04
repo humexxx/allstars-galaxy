@@ -14,6 +14,7 @@ vi.mock("@/lib/services/snapshot-service", () => ({
   createDailySnapshots: vi.fn(async () => ({ snapshotsCreated: 0 })),
 }));
 vi.mock("@/lib/services/finance-snapshot-service", () => ({
+  createMovementSnapshots: vi.fn(async () => ({ snapshotsCreated: 0, errors: [] })),
   createDailyFinanceSnapshots: vi.fn(async () => ({
     totalPlans: 0,
     snapshotsCreated: 0,

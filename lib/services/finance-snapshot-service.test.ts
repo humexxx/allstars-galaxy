@@ -73,6 +73,7 @@ import {
   loadCalibratedView,
   loadPlanOverviews,
   restateOpeningBalances,
+  movesOn,
 } from "./finance-snapshot-service";
 import { alignTimelineToday, buildPlanTimeline, debtFreeMonthsFromNow } from "@/lib/finance/chart-series";
 import type {
@@ -1372,5 +1373,22 @@ describe("loadPlanOverviews: batched, same figures as the per-plan path", () => 
     expect(selectImpl).not.toHaveBeenCalled();
     expect(getLatestConfirmationsMock).not.toHaveBeenCalled();
     expect(getAutoInvestRatesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("movesOn", () => {
+  const plan = {
+    startMonth: new Date(Date.UTC(2026, 0, 1)),
+    incomes: [
+      { id: "i", name: "Pay", monthlyAmount: "3000", kind: "recurring", dayOfMonth: 1, recurrenceType: "monthly_day" },
+    ],
+    expenses: [],
+    debts: [],
+    overrides: [],
+  } as unknown as Parameters<typeof movesOn>[0];
+
+  it("is true on a day money lands and false on a quiet one", () => {
+    expect(movesOn(plan, new Date(Date.UTC(2026, 10, 1)))).toBe(true);
+    expect(movesOn(plan, new Date(Date.UTC(2026, 10, 2)))).toBe(false);
   });
 });

@@ -28,9 +28,12 @@ import {
   upsertLineOverride,
   type PlanRestatement,
 } from "@/lib/services/finance-plan-service";
-import { restateOpeningBalances } from "@/lib/services/finance-snapshot-service";
+import {
+  recordMovementSnapshot,
+  restateOpeningBalances,
+} from "@/lib/services/finance-snapshot-service";
 import type { OpeningBalanceEdits } from "@/lib/finance/opening-balances";
-import { getRequestTimeZone } from "@/lib/utils/request-today";
+import { getRequestTimeZone, getRequestToday } from "@/lib/utils/request-today";
 import { todayInTimeZone } from "@/lib/utils/date";
 import { idSchema } from "@/schemas/common";
 import {
@@ -78,6 +81,18 @@ const PLAN_PATH = "/portal/plans";
 function revalidatePlans(): void {
   revalidatePath(PLAN_PATH, "layout");
   revalidatePath("/portal");
+}
+
+/**
+ * Record where the plan stands after an edit, as a movement snapshot the
+ * dashboard draws. Best effort: a failed snapshot must not fail the edit.
+ */
+async function recordMovement(planId: string, userId: string): Promise<void> {
+  try {
+    await recordMovementSnapshot(planId, userId, await getRequestToday(), await getRequestTimeZone());
+  } catch (error) {
+    console.error(`[finance-plans] movement snapshot for ${planId} failed:`, error);
+  }
 }
 
 // Validation messages worth showing verbatim: they say how to fix the input.
@@ -159,6 +174,7 @@ export async function updatePlanAction(
       entityId: plan.id,
       after: plan,
     });
+    await recordMovement(plan.id, ctx.effectiveUserId);
     revalidatePlans();
     return { success: true, data: plan };
   });
@@ -278,6 +294,7 @@ export async function addPlanIncomeAction(
       entityTable: "finance_plan_incomes",
       entityId: row.id,
     });
+    await recordMovement(idParsed.data, ctx.effectiveUserId);
     revalidatePlans();
     return { success: true, data: row };
   });
@@ -300,6 +317,7 @@ export async function updatePlanIncomeAction(
       entityTable: "finance_plan_incomes",
       entityId: row.id,
     });
+    await recordMovement(idParsed.data, ctx.effectiveUserId);
     revalidatePlans();
     return { success: true, data: row };
   });
@@ -322,6 +340,7 @@ export async function deletePlanIncomeAction(
       entityTable: "finance_plan_incomes",
       entityId: incomeIdParsed.data,
     });
+    await recordMovement(planIdParsed.data, ctx.effectiveUserId);
     revalidatePlans();
     return { success: true };
   });
@@ -346,6 +365,7 @@ export async function addPlanExpenseAction(
       entityTable: "finance_plan_expenses",
       entityId: row.id,
     });
+    await recordMovement(idParsed.data, ctx.effectiveUserId);
     revalidatePlans();
     return { success: true, data: row };
   });
@@ -368,6 +388,7 @@ export async function updatePlanExpenseAction(
       entityTable: "finance_plan_expenses",
       entityId: row.id,
     });
+    await recordMovement(idParsed.data, ctx.effectiveUserId);
     revalidatePlans();
     return { success: true, data: row };
   });
@@ -390,6 +411,7 @@ export async function deletePlanExpenseAction(
       entityTable: "finance_plan_expenses",
       entityId: expenseIdParsed.data,
     });
+    await recordMovement(planIdParsed.data, ctx.effectiveUserId);
     revalidatePlans();
     return { success: true };
   });
@@ -418,6 +440,7 @@ export async function addPlanDebtAction(
       entityTable: "finance_plan_debts",
       entityId: row.id,
     });
+    await recordMovement(idParsed.data, ctx.effectiveUserId);
     revalidatePlans();
     return { success: true, data: row };
   });
@@ -444,6 +467,7 @@ export async function updatePlanDebtAction(
       entityTable: "finance_plan_debts",
       entityId: row.id,
     });
+    await recordMovement(idParsed.data, ctx.effectiveUserId);
     revalidatePlans();
     return { success: true, data: row };
   });
@@ -466,6 +490,7 @@ export async function deletePlanDebtAction(
       entityTable: "finance_plan_debts",
       entityId: debtIdParsed.data,
     });
+    await recordMovement(planIdParsed.data, ctx.effectiveUserId);
     revalidatePlans();
     return { success: true };
   });
@@ -490,6 +515,7 @@ export async function upsertLineOverrideAction(
       entityTable: "finance_plan_line_overrides",
       entityId: parsed.data.parentId,
     });
+    await recordMovement(idParsed.data, ctx.effectiveUserId);
     revalidatePlans();
     return { success: true };
   });
@@ -512,6 +538,7 @@ export async function deleteLineOverrideAction(
       entityTable: "finance_plan_line_overrides",
       entityId: parsed.data.parentId,
     });
+    await recordMovement(idParsed.data, ctx.effectiveUserId);
     revalidatePlans();
     return { success: true };
   });

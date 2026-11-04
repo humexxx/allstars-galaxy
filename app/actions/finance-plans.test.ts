@@ -11,10 +11,12 @@ vi.mock("@/lib/services/impersonation", () => ({
 
 vi.mock("@/lib/services/finance-snapshot-service", () => ({
   restateOpeningBalances: vi.fn(async () => null),
+  recordMovementSnapshot: vi.fn(async () => ({ created: true })),
 }));
 
 vi.mock("@/lib/utils/request-today", () => ({
   getRequestTimeZone: vi.fn(async () => "UTC"),
+  getRequestToday: vi.fn(async () => new Date(Date.UTC(2026, 10, 3))),
 }));
 
 vi.mock("@/lib/services/finance-plan-service", () => ({
@@ -37,7 +39,10 @@ vi.mock("@/lib/services/finance-plan-service", () => ({
 }));
 
 import { revalidatePath } from "next/cache";
-import { restateOpeningBalances } from "@/lib/services/finance-snapshot-service";
+import {
+  recordMovementSnapshot,
+  restateOpeningBalances,
+} from "@/lib/services/finance-snapshot-service";
 import {
   logImpersonatedMutation,
   requireEffectiveContext,
@@ -451,6 +456,29 @@ describe("addPlanIncomeAction", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
     expect(revalidatePath).toHaveBeenCalledWith("/portal");
     expect(revalidatePath).toHaveBeenCalledTimes(2);
+    // The dashboard draws the day the plan changed.
+    expect(recordMovementSnapshot).toHaveBeenCalledWith(
+      PLAN_ID,
+      USER_ID,
+      new Date(Date.UTC(2026, 10, 3)),
+      "UTC"
+    );
+  });
+
+  it("still succeeds when the movement snapshot fails", async () => {
+    vi.mocked(addIncome).mockResolvedValueOnce({ id: ROW_ID } as never);
+    vi.mocked(recordMovementSnapshot).mockRejectedValueOnce(new Error("db down"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await addPlanIncomeAction(PLAN_ID, {
+      name: "Salary",
+      monthlyAmount: "5000",
+      kind: "recurring",
+      dayOfMonth: 15,
+      recurrenceType: "monthly_day",
+    } as never);
+
+    expect(result).toMatchObject({ success: true });
   });
 });
 

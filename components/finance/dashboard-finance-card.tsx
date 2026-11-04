@@ -40,6 +40,7 @@ import {
 } from "@/lib/services/finance-plan-service";
 import {
   getRecentMonthlySnapshots,
+  getRecentMovementSnapshots,
   loadCalibratedView,
 } from "@/lib/services/finance-snapshot-service";
 import { buildPlanTimeline } from "@/lib/finance/chart-series";
@@ -97,7 +98,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   // included), with "now" as the day-aware position in the reader's zone.
   const timeZone = await getRequestTimeZone();
   const now = todayInTimeZone(timeZone);
-  const [view, history, preferences, managed] = await Promise.all([
+  const [view, history, preferences, managed, movements] = await Promise.all([
     loadCalibratedView(full, userId, now, { timeZone }),
     // One month more than the chart shows: a period's close is recorded by the
     // snapshots taken in the period after it.
@@ -111,6 +112,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     getUserPreferences(userId),
     // Same request-cached read the projection already made for net worth.
     full.includePortfolio ? getManagedAssets(userId) : Promise.resolve(null),
+    getRecentMovementSnapshots(full.id, userId, DASHBOARD_PAST_MONTHS, now),
   ]);
   // The months before today come off the plan page's own timeline: recorded
   // snapshots, or the plan's forecast while it has none.
@@ -125,7 +127,8 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     view.projection,
     view.today,
     timeline.points.slice(0, timeline.todayIndex),
-    full.confirmationDayOfMonth
+    full.confirmationDayOfMonth,
+    movements
   );
   const goal = dashboardGoal(
     view.projection,

@@ -41,6 +41,11 @@ export type DashboardParts = {
 /** One mini-chart point, at cent precision: the tooltip printed "-1,467"
  *  beside a "-$1,467.28" tile for the same point. */
 export type DashboardPoint = DashboardParts & {
+  /** Where the point sits on the time axis (epoch ms): a close's last day,
+   *  a movement's day, today. */
+  time: number;
+  /** Whether the axis labels this point. */
+  tick: boolean;
   /** Axis tick: "Now" for today's position, else the month ("Oct"). */
   month: string;
   /** Tooltip title: "Today", else the close's date — the 12 closes run into
@@ -103,9 +108,12 @@ function partsOfPoint(p: ChartPoint): DashboardParts {
   };
 }
 
-function closeLabels(start: Date, anchorDay: number): { month: string; label: string } {
+function closeLabels(
+  start: Date,
+  anchorDay: number
+): { time: number; month: string; label: string } {
   const close = periodClose(start, anchorDay);
-  return { month: MONTH_FMT.format(close), label: CLOSE_FMT.format(close) };
+  return { time: close.getTime(), month: MONTH_FMT.format(close), label: CLOSE_FMT.format(close) };
 }
 
 function inCents(p: DashboardParts): DashboardParts {
@@ -132,7 +140,10 @@ export function buildDashboardFigures(
   projection: Projection,
   today: TodayState | null,
   past: readonly ChartPoint[] = [],
-  anchorDay = 1
+  anchorDay = 1,
+  /** Days money moved (movement snapshots), oldest first: drawn between the
+   *  closes, at their own dates. */
+  movements: readonly ChartPoint[] = []
 ): DashboardFigures {
   const months = projection.months;
   if (!today || months.length === 0) {
@@ -159,18 +170,39 @@ export function buildDashboardFigures(
   const behind =
     today.status === "before-start" ? [] : past.slice(-DASHBOARD_PAST_MONTHS);
   const now = partsOf(today);
+  const todayStart = new Date(today.date);
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const closes = behind.map((p) => ({
+    ...closeLabels(p.date, anchorDay),
+    ...inCents(partsOfPoint(p)),
+  }));
+  const since = closes[0]?.time ?? -Infinity;
+  const moved =
+    today.status === "before-start"
+      ? []
+      : movements
+          .filter((p) => p.date.getTime() > since && p.date.getTime() < todayStart.getTime())
+          .map((p) => ({
+            time: p.date.getTime(),
+            month: MONTH_FMT.format(p.date),
+            label: CLOSE_FMT.format(p.date),
+            ...inCents(partsOfPoint(p)),
+          }));
+  const pastPoints = [...closes, ...moved]
+    .sort((a, b) => a.time - b.time)
+    .map((p, i) => ({ ...p, tick: i === 0 }));
   const points: DashboardPoint[] = [
-    ...behind.map((p) => ({
-      ...closeLabels(p.date, anchorDay),
-      ...inCents(partsOfPoint(p)),
-    })),
+    ...pastPoints,
     {
+      time: today.date.getTime(),
+      tick: true,
       month: today.status === "before-start" ? "Start" : "Now",
       label: today.status === "before-start" ? "At the start" : "Today",
       ...inCents(now),
     },
-    ...ahead.map((m) => ({
+    ...ahead.map((m, i) => ({
       ...closeLabels(m.date, anchorDay),
+      tick: (i + 1) % 3 === 0,
       ...inCents(partsOf(m)),
     })),
   ];
@@ -178,7 +210,7 @@ export function buildDashboardFigures(
   return {
     ...now,
     points,
-    pastCount: behind.length,
+    pastCount: pastPoints.length,
     delta: end - today.netWorth,
     deltaPeriods: ahead.length,
     status: today.status,

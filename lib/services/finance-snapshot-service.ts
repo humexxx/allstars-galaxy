@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -43,7 +43,7 @@ import {
   type ProjectOptions,
 } from "@/lib/finance/projection";
 import { owedAfter, owedRepayments, type OwedRepayment } from "@/lib/finance/receivables";
-import { isoDay, monthKeyOf, parseIsoDay } from "@/lib/finance/schedule";
+import { isoDay, monthKeyOf, parseIsoDay, planOccurrences } from "@/lib/finance/schedule";
 import { calendarDayInTimeZone, earliestCalendarDay } from "@/lib/utils/date";
 import {
   alignTimelineToday,
@@ -544,6 +544,151 @@ async function createSnapshotForPlan(
 }
 
 /**
+ * Movement snapshots are a day's position, not a period's opening: the
+ * period history (plan page, list, compare) must never read them.
+ */
+const MOVEMENT = "movement" as const;
+
+/**
+ * Where the plan stands on `day`, recorded as a movement snapshot: the same
+ * day-aware position the dashboard shows as "Today". Written on days money
+ * moves (by the daily cron) and when the plan is edited (by its actions); a
+ * second one on the same day replaces the first, so the day keeps its last.
+ */
+export async function recordMovementSnapshot(
+  planId: string,
+  userId: string,
+  day: Date,
+  timeZone?: string
+): Promise<{ created: boolean }> {
+  const plan = await getPlanWithLines(planId, userId);
+  if (!plan || plan.confirmationDayOfMonth === 0) return { created: false };
+  const { today } = await loadCalibratedView(plan, userId, day, timeZone ? { timeZone } : {});
+  if (!today || today.status !== "in-range") return { created: false };
+
+  const dayStart = new Date(day);
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const dayEnd = new Date(day);
+  dayEnd.setUTCHours(23, 59, 59, 999);
+  await db.transaction(async (tx) => {
+    // Snapshot debts go with their snapshot (ON DELETE CASCADE).
+    await tx
+      .delete(financePlanSnapshots)
+      .where(
+        and(
+          eq(financePlanSnapshots.planId, planId),
+          eq(financePlanSnapshots.source, MOVEMENT),
+          gte(financePlanSnapshots.date, dayStart),
+          lte(financePlanSnapshots.date, dayEnd)
+        )
+      );
+    const [row] = await tx
+      .insert(financePlanSnapshots)
+      .values({
+        planId,
+        date: dayStart,
+        savings: today.savings.toFixed(2),
+        investments: today.investments.toFixed(2),
+        totalDebt: today.totalDebt.toFixed(2),
+        // Without receivables, like every snapshot (see createSnapshotForPlan).
+        netWorth: (today.netWorth - today.receivables).toFixed(2),
+        source: MOVEMENT,
+      })
+      .returning({ id: financePlanSnapshots.id });
+    if (today.debts.length > 0) {
+      await tx.insert(financePlanSnapshotDebts).values(
+        today.debts.map((d) => ({ snapshotId: row.id, debtId: d.debtId, balance: d.balance.toFixed(2) }))
+      );
+    }
+  });
+  return { created: true };
+}
+
+/** True when any income, expense or debt payment of the plan lands on `day`. */
+export function movesOn(plan: FinancePlanWithLines, day: Date): boolean {
+  const from = new Date(day);
+  from.setUTCHours(0, 0, 0, 0);
+  const to = new Date(day);
+  to.setUTCHours(23, 59, 59, 999);
+  return (
+    planOccurrences(
+      {
+        startMonth: new Date(plan.startMonth),
+        incomes: plan.incomes,
+        expenses: plan.expenses,
+        debts: plan.debts,
+        overrides: plan.overrides,
+      },
+      from,
+      to
+    ).length > 0
+  );
+}
+
+/**
+ * The cron's half: a movement snapshot for every plan with money moving on
+ * the cron's day (the earliest calendar day on Earth, as for the period
+ * snapshots). Edits record their own from the actions.
+ */
+export async function createMovementSnapshots(now: Date = new Date()): Promise<{
+  snapshotsCreated: number;
+  errors: string[];
+}> {
+  const day = earliestCalendarDay(now);
+  const plans = await db.select().from(financePlans);
+  let snapshotsCreated = 0;
+  const errors: string[] = [];
+  for (const row of plans) {
+    try {
+      const plan = await getPlanWithLines(row.id, row.userId);
+      if (!plan || !movesOn(plan, day)) continue;
+      const result = await recordMovementSnapshot(row.id, row.userId, day);
+      if (result.created) snapshotsCreated += 1;
+    } catch (err) {
+      errors.push(`${row.id}: ${err instanceof Error ? err.message : "Unknown error"}`);
+      console.error(`createMovementSnapshots plan=${row.id}:`, err);
+    }
+  }
+  return { snapshotsCreated, errors };
+}
+
+/**
+ * The movement snapshots of the last `monthsBack` months, oldest first, with
+ * what was still owed to the user added back — the dashboard's past.
+ */
+export async function getRecentMovementSnapshots(
+  planId: string,
+  userId: string,
+  monthsBack: number,
+  today: Date
+): Promise<HistoryPoint[]> {
+  const plan = await getPlanWithLines(planId, userId);
+  if (!plan) return [];
+  const rows = await db
+    .select(HISTORY_COLUMNS)
+    .from(financePlanSnapshots)
+    .where(
+      and(
+        eq(financePlanSnapshots.planId, planId),
+        eq(financePlanSnapshots.source, MOVEMENT),
+        gte(financePlanSnapshots.date, historyCutoff(today, monthsBack))
+      )
+    )
+    .orderBy(asc(financePlanSnapshots.date));
+  return withReceivables(
+    rows.map((r) => ({
+      date: r.date,
+      savings: parseFloat(r.savings),
+      investments: parseFloat(r.investments),
+      totalDebt: parseFloat(r.totalDebt),
+      receivables: 0,
+      netWorth: parseFloat(r.netWorth),
+    })),
+    plan
+  );
+}
+
+/**
  * One snapshot per accounting PERIOD for the last `monthsBack` months, taking
  * the most recent snapshot of each period as the representative. Used by the
  * chart to plot the recent past alongside the projected future on the same
@@ -575,6 +720,7 @@ export async function getRecentMonthlySnapshots(
     .where(
       and(
         eq(financePlanSnapshots.planId, planId),
+        ne(financePlanSnapshots.source, MOVEMENT),
         gte(financePlanSnapshots.date, historyCutoff(today, monthsBack))
       )
     )
@@ -679,6 +825,7 @@ async function recentSnapshotsForPlans(
           financePlanSnapshots.planId,
           plans.map((p) => p.id)
         ),
+        ne(financePlanSnapshots.source, MOVEMENT),
         gte(financePlanSnapshots.date, historyCutoff(today, monthsBack))
       )
     )

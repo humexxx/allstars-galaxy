@@ -136,6 +136,8 @@ export function DashboardFinanceMiniChart({
 }) {
   if (data.length === 0) return null;
   const rows = toRows(data, pastCount);
+  const tickTimes = data.filter((p) => p.tick).map((p) => p.time);
+  const monthByTime = new Map(data.map((p) => [p.time, p.month]));
   const visible = visibleSeriesKeys(data);
   const ticks = niceTicks(
     data.flatMap((p) => [
@@ -195,14 +197,20 @@ export function DashboardFinanceMiniChart({
         {/* Every third month counted from today, so "Now" — where the solid
             line turns dashed — always has its label. Left to `minTickGap`,
             the axis skipped it as soon as the past pushed it off the edge. */}
+        {/* A time axis, not one slot per point: the past mixes period
+            closes with the days money moved, and equal slots would stretch a
+            busy week as wide as a quiet month. Labels on the oldest point,
+            "Now", and every third close after it. */}
         <XAxis
-          dataKey="month"
+          dataKey="time"
+          type="number"
+          scale="time"
+          domain={["dataMin", "dataMax"]}
+          ticks={tickTimes}
           tickLine={false}
           axisLine={false}
           interval={0}
-          tickFormatter={(month: string, index: number) =>
-            (index - pastCount) % 3 === 0 ? month : ""
-          }
+          tickFormatter={(time: number) => monthByTime.get(time) ?? ""}
         />
         <YAxis
           tickLine={false}

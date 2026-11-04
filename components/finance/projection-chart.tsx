@@ -35,6 +35,7 @@ import {
   formatCurrency,
   formatCurrencyCompact,
   formatSignedCurrency,
+  moneySign,
 } from "@/lib/utils/format";
 import type { ChartConfig } from "@/types/chart";
 import type { FinancePlan } from "@/types/finance";
@@ -211,13 +212,16 @@ type ChartRow = {
   portfolioPast: number | null;
   portfolioFuture: number | null;
   portfolioRaw: number | null;
+  /** Debt drawn below zero (`0 - totalDebt`), split past/future. */
+  debtPast: number | null;
+  debtFuture: number | null;
 };
 
 // Custom tooltip. The past (solid) and future (dashed) series OVERLAP at the
 // boundary index (today) to keep the line continuous, so that point would show
 // "Net worth" twice with the default content. We instead read the underlying
 // data row ONCE and render: Net worth always, Debt only when > 0, Investments
-// only when > 0. Debt/investments ride along on the row but are NOT plotted.
+// only when > 0. The bucket of investments rides along unplotted.
 function PointTooltip(props: {
   active?: boolean;
   payload?: Array<{ value: number | null; payload: ChartRow }>;
@@ -317,8 +321,9 @@ function TodayPulseDot({
 type ChartPoint = {
   date: Date;
   netWorth: number;
-  /** Carried for the hover tooltip only — NOT plotted as lines. */
+  /** Drawn below zero, as on the dashboard card, when any debt is in range. */
   totalDebt?: number;
+  /** Carried for the hover tooltip only. */
   investments?: number;
 };
 
@@ -401,7 +406,15 @@ export const ProjectionChart = memo(function ProjectionChart({
   // instead of snapping to the nearest data point. That avoids two milestones
   // collapsing onto the same month when both cross between the same pair of
   // points.
-  const { data, crossings, yTicks } = useMemo(() => {
+  const { data, crossings, yTicks, hasDebt } = useMemo(() => {
+    // Debt hangs below zero, a mirror of what it takes off net worth. A paid-off
+    // debt draws its last $0 beside the payment that cleared it, then stops: a
+    // line along zero for years would read as debt still there.
+    const debts = points.map((p) => 0 - (p.totalDebt ?? 0));
+    const debtDrawn = (i: number): boolean =>
+      moneySign(debts[i]) !== 0 ||
+      (i > 0 && moneySign(debts[i - 1]) !== 0) ||
+      (i < debts.length - 1 && moneySign(debts[i + 1]) !== 0);
     const rows: ChartRow[] = points.map((p, i) => {
       const value = Number(p.netWorth.toFixed(2));
       const isPast = i < pastCount;
@@ -411,6 +424,7 @@ export const ProjectionChart = memo(function ProjectionChart({
       // the same boundary overlap so the series stays continuous.
       const portfolio = portfolioValues?.[i] ?? null;
       const monthLabel = MONTH_FORMATTER.format(p.date);
+      const debt = debtDrawn(i) ? debts[i] : null;
       return {
         idx: i,
         monthLabel,
@@ -421,7 +435,6 @@ export const ProjectionChart = memo(function ProjectionChart({
         pastValue: isPast || isBoundary ? value : null,
         futureValue: isFuture || isBoundary ? value : null,
         rawValue: value,
-        // Tooltip-only extras (never plotted).
         totalDebt: p.totalDebt,
         investments: p.investments,
         ghostValue: ghostValues?.[i] ?? null,
@@ -429,6 +442,8 @@ export const ProjectionChart = memo(function ProjectionChart({
         portfolioFuture:
           portfolio != null && (isFuture || isBoundary) ? portfolio : null,
         portfolioRaw: portfolio,
+        debtPast: isPast || isBoundary ? debt : null,
+        debtFuture: isFuture || isBoundary ? debt : null,
       };
     });
 
@@ -446,10 +461,20 @@ export const ProjectionChart = memo(function ProjectionChart({
     }));
 
     // Every plotted series counts toward the axis, as it does for recharts.
-    const plotted = rows.flatMap((r) => [r.rawValue, r.ghostValue, r.portfolioRaw]);
+    const plotted = rows.flatMap((r) => [
+      r.rawValue,
+      r.ghostValue,
+      r.portfolioRaw,
+      r.debtPast ?? r.debtFuture,
+    ]);
     const ticks = niceTicks(plotted.filter((v): v is number => v !== null));
 
-    return { data: rows, crossings: cross, yTicks: ticks };
+    return {
+      data: rows,
+      crossings: cross,
+      yTicks: ticks,
+      hasDebt: debts.some((d) => moneySign(d) !== 0),
+    };
   }, [points, pastCount, ghostValues, portfolioValues, milestones, todayLabel]);
 
   const xMax = Math.max(0, data.length - 1);
@@ -505,8 +530,8 @@ export const ProjectionChart = memo(function ProjectionChart({
   const last = data.at(-1);
   const today = data[pastCount];
 
-  // The draw-in, on the dashboard card's clock: the portfolio sweeps in, then
-  // net worth draws as one stroke — solid past, dashed projection — each half
+  // The draw-in, on the dashboard card's clock: the portfolio sweeps in, debt
+  // after it, then net worth draws as one stroke — solid past, dashed projection — each half
   // taking its slice of time and curve (see `splitEasedStroke`).
   const stroke = splitEasedStroke(data.length > 1 ? pastCount / (data.length - 1) : 1, SWEEP_MS);
   const lineBegin = STAGGER_MS * 2;
@@ -661,6 +686,36 @@ export const ProjectionChart = memo(function ProjectionChart({
               strokeDasharray="6 4"
               {...draw("future", 0)}
               connectNulls
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          )}
+
+          {/* Debt — below zero, red, solid past and dashed projection, so the
+              climb back to zero is the payoff. */}
+          {hasDebt && (
+            <Line
+              dataKey="debtPast"
+              name="Debt"
+              type="monotone"
+              stroke={DEBT}
+              strokeWidth={1.5}
+              {...draw("past", STAGGER_MS)}
+              connectNulls={false}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          )}
+          {hasDebt && (
+            <Line
+              dataKey="debtFuture"
+              name="Debt"
+              type="monotone"
+              stroke={DEBT}
+              strokeWidth={1.5}
+              strokeDasharray="6 4"
+              {...draw("future", STAGGER_MS)}
+              connectNulls={false}
               dot={false}
               activeDot={{ r: 4 }}
             />

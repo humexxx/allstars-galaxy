@@ -9,7 +9,7 @@ import { getFinanceMood } from "@/lib/services/finance-snapshot-service";
 import { getUserPreferences } from "@/lib/services/user-preferences-service";
 
 /**
- * Appends the finance mascot (a bean mining gold) after the content of every
+ * Appends the finance mascot (a bean mining a gold cube) after the content of every
  * plans page, and the plans assistant's corner button when it is on. Rendered from the layout so list/detail/compare all get it
  * without each page opting in. Hidden via the `showContextAvatar` preference.
  *

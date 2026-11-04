@@ -136,6 +136,18 @@ describe("today's position (projectStateAt)", () => {
     expect(close.savings).toBe(0);
   });
 
+  it("pays a card due later in the period as soon as the money lands", () => {
+    // Paid on the 1st, the card's 200 is due on the 20th: on the 10th it is
+    // already paid with the extra, and nothing is left in cash.
+    const p = plan({ startMonth: U(2026, 9), monthsAhead: 12, surplusToDebtsPercent: "1" });
+    const incomes = [inc({ monthlyAmount: "3000", dayOfMonth: 1 })];
+    const debts = [debt({ initialBalance: "10000", monthlyPayment: "200", dayOfMonth: 20 })];
+    const today = projectStateAt(p, incomes, [], debts, {}, U(2026, 9, 10))!;
+    expect(today.savings).toBe(0);
+    expect(today.totalDebt).toBe(7000);
+    expect(today.netWorth).toBe(-7000);
+  });
+
   it("routes nothing before the money has landed", () => {
     const p = plan({ startMonth: U(2026, 9), monthsAhead: 12, surplusToDebtsPercent: "1" });
     const incomes = [inc({ monthlyAmount: "3000", dayOfMonth: 25 })];

@@ -611,36 +611,57 @@ export function projectStateAt(
 }
 
 /**
- * The period's routing, applied as soon as the cash for it is on hand.
+ * The period's money, sent where it goes as soon as it is on hand.
  *
- * The engine routes the surplus at period end, so in the days between a
- * paycheque and the close (a plan anchored on the 5th is paid on the 1st) the
- * money sat in Cash and then vanished into debt. People pay the card when the
- * money lands, so today's figure moves what the close will send to debts and
- * investments out of cash already — never more than is on hand once the rest
- * of the period's bills are reserved. The close itself is unchanged, and net
- * worth with it: cash becomes less debt or more investments, one for one.
+ * The engine pays each debt on its date and routes the surplus at period
+ * end, so between a paycheque and those days (a plan anchored on the 5th is
+ * paid on the 1st, its cards on the 4th) the money sat in Cash and then
+ * dropped into debt. People pay when the money lands, so today's figure
+ * already pays the rest of the period's scheduled debt payments, then what the
+ * close sends to debts and investments — never more than is on hand once the
+ * period's remaining bills (everything that is not a debt payment) are kept
+ * back. The close itself is unchanged, and net worth with it: cash becomes
+ * less debt or more investments, one for one.
  */
 export function routeLandedCash(today: TodayState, close: ProjectionMonth): TodayState {
-  const planned = close.extraDebtPayments + close.investmentsContribution;
-  if (planned <= 0) return today;
-  // Cash the rest of the period adds (or takes) before the close routes it.
-  const beforeRouting = close.savings - close.savingsInterest + planned;
-  const stillToCome = beforeRouting - today.savings;
-  const available = today.savings + Math.min(0, stillToCome);
-  let earmark = Math.max(0, Math.min(planned, available));
-  if (earmark <= 0) return today;
+  const after = today.date.getTime();
+  const laterScheduled = new Map(
+    close.debts.map((d) => [
+      d.debtId,
+      d.payments
+        .filter((p) => p.applied && p.date.getTime() > after)
+        .reduce((sum, p) => sum + p.amount, 0),
+    ])
+  );
+  const scheduledLeft = [...laterScheduled.values()].reduce((sum, v) => sum + v, 0);
+  const routed = close.extraDebtPayments + close.investmentsContribution;
+  if (scheduledLeft + routed <= 0) return today;
 
-  const total = earmark;
+  // Cash the rest of the period adds (or takes) before the close routes it,
+  // without the debt payments this pays now.
+  const beforeRouting = close.savings - close.savingsInterest + routed;
+  const otherStillToCome = beforeRouting - today.savings + scheduledLeft;
+  let left = Math.max(
+    0,
+    Math.min(scheduledLeft + routed, today.savings + Math.min(0, otherStillToCome))
+  );
+  if (left <= 0) return today;
+  const total = left;
+
   const extraByDebt = new Map(close.debts.map((d) => [d.debtId, d.extraPayment]));
-  const debts = today.debts.map((d) => {
-    const pay = Math.min(earmark, extraByDebt.get(d.debtId) ?? 0, d.balance);
-    earmark -= pay;
-    return { ...d, balance: round2(d.balance - pay) };
-  });
-  const toInvest = Math.min(earmark, close.investmentsContribution);
+  const pay = (balance: number, due: number): number => {
+    const paid = Math.min(left, due, balance);
+    left -= paid;
+    return paid;
+  };
+  // Scheduled payments first, then the extra, as the close would.
+  const debts = today.debts
+    .map((d) => ({ ...d, balance: d.balance - pay(d.balance, laterScheduled.get(d.debtId) ?? 0) }))
+    .map((d) => ({ ...d, balance: round2(d.balance - pay(d.balance, extraByDebt.get(d.debtId) ?? 0)) }));
+  const toInvest = Math.min(left, close.investmentsContribution);
+  left -= toInvest;
   const totalDebt = debts.reduce((sum, d) => sum + d.balance, 0);
-  const savings = round2(today.savings - (total - (earmark - toInvest)));
+  const savings = round2(today.savings - (total - left));
   const investments = round2(today.investments + toInvest);
   return {
     ...today,

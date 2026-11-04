@@ -20,7 +20,7 @@ import type { ChartConfig } from "@/types/chart";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 import { DASHBOARD_SERIES, dashboardSeries, visibleSeriesKeys } from "./dashboard-finance-series";
-import { DRAW_ORDER, drawDelay, easeOut, splitEasedStroke, SWEEP_MS } from "./dashboard-motion";
+import { DRAW_ORDER, drawDelay, splitEasedStroke, sweepEasing, SWEEP_MS } from "./dashboard-motion";
 
 const chartConfig: ChartConfig = Object.fromEntries(
   DASHBOARD_SERIES.map((s) => [s.key, { label: s.label, color: s.color }])
@@ -191,10 +191,10 @@ export function DashboardFinanceMiniChart({
       activeDot={false}
       isAnimationActive={!reducedMotion}
       // The card's clock (see dashboard-motion): each area sweeps in on
-      // easeOut, in its turn.
+      // the standard curve, in its turn.
       animationBegin={drawDelay(AREA_PART[key])}
       animationDuration={SWEEP_MS}
-      animationEasing={asEasing(easeOut)}
+      animationEasing={asEasing(sweepEasing)}
     />
   );
   const halves = [false, true].flatMap((ahead) => [

@@ -5,18 +5,18 @@ import { useEffect, useState } from "react";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { formatCurrency } from "@/lib/utils/format";
 
-import { easeOut, SWEEP_MS } from "./dashboard-motion";
+import { COUNT_MS, countEasing } from "./dashboard-motion";
 
 /**
  * A currency figure that counts up from $0 to `value` on mount, after
- * `delay` ms, on the card's easeOut. The final figure sits invisibly under it
+ * `delay` ms, on the card's count-up curve. The final figure sits invisibly under it
  * and holds the width, so the row never reflows while the digits grow; under
  * reduced motion it is simply the figure.
  */
 export function CountUpCurrency({
   value,
   delay = 0,
-  duration = SWEEP_MS,
+  duration = COUNT_MS,
 }: {
   value: number;
   delay?: number;
@@ -32,7 +32,7 @@ export function CountUpCurrency({
     const tick = (now: number): void => {
       start ??= now + delay;
       const t = Math.min(1, Math.max(0, (now - start) / duration));
-      setShown(value * easeOut(t));
+      setShown(value * countEasing(t));
       if (t < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);

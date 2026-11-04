@@ -22,7 +22,11 @@ import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
-import { dashboardSeries, type DashboardSeries } from "./dashboard-finance-series";
+import {
+  dashboardSeries,
+  visibleSeriesKeys,
+  type DashboardSeries,
+} from "./dashboard-finance-series";
 import {
   formatCurrency,
   formatSignedCurrency,
@@ -142,8 +146,9 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     value: formatCurrency(fig.netWorth),
     tone: moneySign(fig.netWorth) >= 0 ? "positive" : "negative",
   };
-  // Net worth, Portfolio and Cash always show; Owed to you and Debt only when
-  // there is something owed — a $0.00 debt tile reads like a debt.
+  // Net worth, Portfolio and Cash always show; Owed to you and Debt when the
+  // chart's range has any — a $0.00 debt tile on a plan with none is noise.
+  const visible = visibleSeriesKeys(points);
   const breakdown: Figure[] = [
     {
       series: dashboardSeries("investments"),
@@ -156,7 +161,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       label: "Cash",
       value: formatCurrency(fig.savings),
     },
-    ...(moneySign(fig.receivables) > 0
+    ...(visible.has("receivables")
       ? [
           {
             series: dashboardSeries("receivables"),
@@ -165,7 +170,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
           },
         ]
       : []),
-    ...(moneySign(fig.debt) > 0
+    ...(visible.has("debt")
       ? [
           {
             series: dashboardSeries("debt"),

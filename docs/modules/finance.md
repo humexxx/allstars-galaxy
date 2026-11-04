@@ -71,7 +71,7 @@ solid up to "Now"; the projection after it is dashed and fainter. The rail
 reads Net worth, **Portfolio** (investments + portfolio, with the managed
 book's margin as a share of what is owed — this month and to date — in small
 print) and **Cash** (what the period has taken in and not yet paid out; in the tooltip too, even at $0)
-always; **Owed to you** and **Debt** only when they are not zero. Portfolio
+always; **Owed to you** and **Debt** when any point in the chart's range has some — then at every point, $0 included, in the rail and the tooltip (`visibleSeriesKeys`). Portfolio
 has the first slot (cyan), Cash the second. Owed to you is the bottom layer of
 the asset stack: stacked on cash it rose with every rise in cash.
 

@@ -17,7 +17,7 @@ import { niceTicks, yAxisWidth } from "@/lib/utils/chart-axis";
 import { formatCurrency, formatCurrencyCompact, moneySign } from "@/lib/utils/format";
 import type { ChartConfig } from "@/types/chart";
 
-import { DASHBOARD_SERIES, dashboardSeries } from "./dashboard-finance-series";
+import { DASHBOARD_SERIES, dashboardSeries, visibleSeriesKeys } from "./dashboard-finance-series";
 
 const chartConfig: ChartConfig = Object.fromEntries(
   DASHBOARD_SERIES.map((s) => [s.key, { label: s.label, color: s.color }])
@@ -67,16 +67,18 @@ export function toRows(data: DashboardPoint[], pastCount: number): Row[] {
 const PROJECTED_DASH = "6 4";
 
 /**
- * Net worth and cash, then the other parts that are not zero at this point, each with the
+ * The series this range shows (`visibleSeriesKeys`), each with the
  * swatch of the area it reads. Only net worth carries a sign colour, as in
  * the card's figure rail.
  */
 function MiniTooltip({
   active,
   payload,
+  visible,
 }: {
   active?: boolean;
   payload?: Array<{ payload: Row }>;
+  visible: ReadonlySet<string>;
 }) {
   const point = active ? payload?.[0]?.payload : undefined;
   if (!point) return null;
@@ -90,8 +92,7 @@ function MiniTooltip({
         {DASHBOARD_SERIES.map((s) => {
           const value = point[s.key];
           const isTotal = s.key === "netWorth";
-          // Net worth and cash always read; the other parts only when not zero.
-          if (!isTotal && s.key !== "savings" && moneySign(value) === 0) return null;
+          if (!visible.has(s.key)) return null;
           return (
             <div key={s.key} className="flex items-center justify-between gap-4">
               <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -135,6 +136,7 @@ export function DashboardFinanceMiniChart({
 }) {
   if (data.length === 0) return null;
   const rows = toRows(data, pastCount);
+  const visible = visibleSeriesKeys(data);
   const ticks = niceTicks(
     data.flatMap((p) => [
       Math.max(0, p.savings) + p.investments + p.receivables,
@@ -210,7 +212,7 @@ export function DashboardFinanceMiniChart({
           domain={[ticks[0], ticks[ticks.length - 1]]}
           tickFormatter={formatCurrencyCompact}
         />
-        <ChartTooltip content={<MiniTooltip />} />
+        <ChartTooltip content={<MiniTooltip visible={visible} />} />
         {halves}
         {owesAnything && (
           <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.5} />

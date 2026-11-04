@@ -8,50 +8,36 @@ import {
   requireEffectiveContext,
 } from "@/lib/services/impersonation";
 import {
-  addDebt,
-  addExpense,
-  addIncome,
   clonePlan,
-  createPlan,
-  deleteDebt,
-  deleteExpense,
-  deleteIncome,
   deleteLineOverride,
-  deletePlan,
-  getPlanWithLines,
-  setMainPlan,
   setPlanColor,
-  updateDebt,
-  updateExpense,
-  updateIncome,
-  updatePlan,
   upsertLineOverride,
-  type PlanRestatement,
 } from "@/lib/services/finance-plan-service";
 import {
-  recordMovementSnapshot,
-  restateOpeningBalances,
-} from "@/lib/services/finance-snapshot-service";
-import type { OpeningBalanceEdits } from "@/lib/finance/opening-balances";
-import { getRequestTimeZone, getRequestToday } from "@/lib/utils/request-today";
-import { todayInTimeZone } from "@/lib/utils/date";
+  addDebtOperation,
+  addExpenseOperation,
+  addIncomeOperation,
+  createPlanOperation,
+  deleteDebtOperation,
+  deleteExpenseOperation,
+  deleteIncomeOperation,
+  deletePlanOperation,
+  planOperationContext,
+  PlanOperationError,
+  setMainPlanOperation,
+  updateDebtOperation,
+  updateExpenseOperation,
+  updateIncomeOperation,
+  updatePlanOperation,
+  recordPlanMovement,
+  type PlanOperationContext,
+} from "@/lib/services/finance-plan-operations";
 import { idSchema } from "@/schemas/common";
 import {
   cloneFinancePlanSchema,
-  createFinancePlanSchema,
-  FIXED_DEBT_NEEDS_PAYMENT,
-  MONTHLY_RATE_TOO_HIGH,
-  SHARE_TOO_HIGH,
   deleteLineOverrideSchema,
   lineOverrideSchema,
-  planDebtSchema,
-  planExpenseSchema,
   planColorSchema,
-  planIncomeSchema,
-  updateFinancePlanSchema,
-  updatePlanDebtSchema,
-  updatePlanExpenseSchema,
-  updatePlanIncomeSchema,
   type CreateFinancePlanInput,
   type DeleteLineOverrideData,
   type LineOverrideData,
@@ -84,45 +70,24 @@ function revalidatePlans(): void {
 }
 
 /**
- * Record where the plan stands after an edit, as a movement snapshot the
- * dashboard draws. Best effort: a failed snapshot must not fail the edit.
+ * A plan change through its operation (`lib/services/finance-plan-operations`):
+ * the auth gate, the reader's calendar, an expected refusal as the action's
+ * error, and the plan pages revalidated once it is written.
  */
-async function recordMovement(planId: string, userId: string): Promise<void> {
-  try {
-    await recordMovementSnapshot(planId, userId, await getRequestToday(), await getRequestTimeZone());
-  } catch (error) {
-    console.error(`[finance-plans] movement snapshot for ${planId} failed:`, error);
-  }
-}
-
-// Validation messages worth showing verbatim: they say how to fix the input.
-const EXPLAINED_ERRORS = [FIXED_DEBT_NEEDS_PAYMENT, MONTHLY_RATE_TOO_HIGH, SHARE_TOO_HIGH];
-
-/** An explained validation error (never-payable debt, absurd rate), else the generic one. */
-function explainedError(issues: { message: string }[]): string {
-  return issues.find((i) => EXPLAINED_ERRORS.includes(i.message))?.message ?? "Invalid input";
-}
-
-/** A debt the projection could never pay off gets its own message. */
-function debtError(issues: { message: string }[]): string {
-  return explainedError(issues);
-}
-
-/**
- * The restatement an edit of opening balances implies (null when it changes
- * none): the whole set is re-dated to the reader's today. See
- * `lib/finance/opening-balances.ts`. A plan that isn't the caller's yields
- * null here; the service's own ownership check then refuses the write.
- */
-async function restatementFor(
-  userId: string,
-  planId: string,
-  edits: OpeningBalanceEdits
-): Promise<PlanRestatement | null> {
-  const plan = await getPlanWithLines(planId, userId);
-  if (!plan) return null;
-  const timeZone = await getRequestTimeZone();
-  return restateOpeningBalances(plan, userId, todayInTimeZone(timeZone), edits, timeZone);
+async function planAction<T>(
+  run: (c: PlanOperationContext) => Promise<ActionResult<T>>
+): Promise<ActionResult<T>> {
+  return safe<T>("finance-plans", async () => {
+    const ctx = await requireEffectiveContext();
+    try {
+      const result = await run(await planOperationContext(ctx.effectiveUserId));
+      if (result.success) revalidatePlans();
+      return result;
+    } catch (err) {
+      if (err instanceof PlanOperationError) return { success: false, error: err.message };
+      throw err;
+    }
+  });
 }
 
 // ---------- plans ----------
@@ -130,84 +95,25 @@ async function restatementFor(
 export async function createPlanAction(
   input: CreateFinancePlanInput
 ): Promise<ActionResult<FinancePlan>> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const parsed = createFinancePlanSchema.safeParse(input);
-    if (!parsed.success) {
-      return { success: false, error: explainedError(parsed.error.issues) };
-    }
-    // The balances typed into the form are as of the reader's today.
-    const timeZone = await getRequestTimeZone();
-    const plan = await createPlan(ctx.effectiveUserId, parsed.data, todayInTimeZone(timeZone));
-    await logImpersonatedMutation({
-      action: "financePlan.create",
-      entityTable: "finance_plans",
-      entityId: plan.id,
-      after: plan,
-    });
-    revalidatePlans();
-    return { success: true, data: plan };
-  });
+  return planAction(async (c) => ({ success: true, data: await createPlanOperation(c, input) }));
 }
 
 export async function updatePlanAction(
   input: UpdateFinancePlanInput
 ): Promise<ActionResult<FinancePlan>> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const parsed = updateFinancePlanSchema.safeParse(input);
-    if (!parsed.success) {
-      return { success: false, error: explainedError(parsed.error.issues) };
-    }
-    // Only the balances the form sent are edits — it sends one only when the
-    // user changed it. Passing both made an untouched, stale figure an edit
-    // and re-dated it past the latest confirmation.
-    const { initialSavings, initialInvestments } = parsed.data;
-    const restatement = await restatementFor(ctx.effectiveUserId, parsed.data.id, {
-      ...(initialSavings !== undefined ? { savings: initialSavings } : {}),
-      ...(initialInvestments !== undefined ? { investments: initialInvestments } : {}),
-    });
-    const plan = await updatePlan(ctx.effectiveUserId, parsed.data, restatement);
-    await logImpersonatedMutation({
-      action: "financePlan.update",
-      entityTable: "finance_plans",
-      entityId: plan.id,
-      after: plan,
-    });
-    await recordMovement(plan.id, ctx.effectiveUserId);
-    revalidatePlans();
-    return { success: true, data: plan };
-  });
+  return planAction(async (c) => ({ success: true, data: await updatePlanOperation(c, input) }));
 }
 
 export async function deletePlanAction(planId: string): Promise<ActionResult> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const parsed = idSchema.safeParse(planId);
-    if (!parsed.success) return { success: false, error: "Invalid id" };
-    await deletePlan(ctx.effectiveUserId, parsed.data);
-    await logImpersonatedMutation({
-      action: "financePlan.delete",
-      entityTable: "finance_plans",
-      entityId: parsed.data,
-    });
-    revalidatePlans();
+  return planAction(async (c) => {
+    await deletePlanOperation(c, planId);
     return { success: true };
   });
 }
 
 export async function setMainPlanAction(planId: string): Promise<ActionResult> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const parsed = idSchema.safeParse(planId);
-    if (!parsed.success) return { success: false, error: "Invalid id" };
-    await setMainPlan(ctx.effectiveUserId, parsed.data);
-    await logImpersonatedMutation({
-      action: "financePlan.setMain",
-      entityTable: "finance_plans",
-      entityId: parsed.data,
-    });
-    revalidatePlans();
+  return planAction(async (c) => {
+    await setMainPlanOperation(c, planId);
     return { success: true };
   });
 }
@@ -281,67 +187,22 @@ export async function addPlanIncomeAction(
   planId: string,
   input: PlanIncomeInput
 ): Promise<ActionResult<FinancePlanIncome>> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const idParsed = idSchema.safeParse(planId);
-    const parsed = planIncomeSchema.safeParse(input);
-    if (!idParsed.success || !parsed.success) {
-      return { success: false, error: "Invalid input" };
-    }
-    const row = await addIncome(ctx.effectiveUserId, idParsed.data, parsed.data);
-    await logImpersonatedMutation({
-      action: "financePlanIncome.create",
-      entityTable: "finance_plan_incomes",
-      entityId: row.id,
-    });
-    await recordMovement(idParsed.data, ctx.effectiveUserId);
-    revalidatePlans();
-    return { success: true, data: row };
-  });
+  return planAction(async (c) => ({ success: true, data: await addIncomeOperation(c, planId, input) }));
 }
 
 export async function updatePlanIncomeAction(
   planId: string,
   input: UpdatePlanIncomeInput
 ): Promise<ActionResult<FinancePlanIncome>> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const idParsed = idSchema.safeParse(planId);
-    const parsed = updatePlanIncomeSchema.safeParse(input);
-    if (!idParsed.success || !parsed.success) {
-      return { success: false, error: "Invalid input" };
-    }
-    const row = await updateIncome(ctx.effectiveUserId, idParsed.data, parsed.data);
-    await logImpersonatedMutation({
-      action: "financePlanIncome.update",
-      entityTable: "finance_plan_incomes",
-      entityId: row.id,
-    });
-    await recordMovement(idParsed.data, ctx.effectiveUserId);
-    revalidatePlans();
-    return { success: true, data: row };
-  });
+  return planAction(async (c) => ({ success: true, data: await updateIncomeOperation(c, planId, input) }));
 }
 
 export async function deletePlanIncomeAction(
   planId: string,
   incomeId: string
 ): Promise<ActionResult> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const planIdParsed = idSchema.safeParse(planId);
-    const incomeIdParsed = idSchema.safeParse(incomeId);
-    if (!planIdParsed.success || !incomeIdParsed.success) {
-      return { success: false, error: "Invalid id" };
-    }
-    await deleteIncome(ctx.effectiveUserId, planIdParsed.data, incomeIdParsed.data);
-    await logImpersonatedMutation({
-      action: "financePlanIncome.delete",
-      entityTable: "finance_plan_incomes",
-      entityId: incomeIdParsed.data,
-    });
-    await recordMovement(planIdParsed.data, ctx.effectiveUserId);
-    revalidatePlans();
+  return planAction(async (c) => {
+    await deleteIncomeOperation(c, planId, incomeId);
     return { success: true };
   });
 }
@@ -352,67 +213,22 @@ export async function addPlanExpenseAction(
   planId: string,
   input: PlanExpenseInput
 ): Promise<ActionResult<FinancePlanExpense>> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const idParsed = idSchema.safeParse(planId);
-    const parsed = planExpenseSchema.safeParse(input);
-    if (!idParsed.success || !parsed.success) {
-      return { success: false, error: "Invalid input" };
-    }
-    const row = await addExpense(ctx.effectiveUserId, idParsed.data, parsed.data);
-    await logImpersonatedMutation({
-      action: "financePlanExpense.create",
-      entityTable: "finance_plan_expenses",
-      entityId: row.id,
-    });
-    await recordMovement(idParsed.data, ctx.effectiveUserId);
-    revalidatePlans();
-    return { success: true, data: row };
-  });
+  return planAction(async (c) => ({ success: true, data: await addExpenseOperation(c, planId, input) }));
 }
 
 export async function updatePlanExpenseAction(
   planId: string,
   input: UpdatePlanExpenseInput
 ): Promise<ActionResult<FinancePlanExpense>> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const idParsed = idSchema.safeParse(planId);
-    const parsed = updatePlanExpenseSchema.safeParse(input);
-    if (!idParsed.success || !parsed.success) {
-      return { success: false, error: "Invalid input" };
-    }
-    const row = await updateExpense(ctx.effectiveUserId, idParsed.data, parsed.data);
-    await logImpersonatedMutation({
-      action: "financePlanExpense.update",
-      entityTable: "finance_plan_expenses",
-      entityId: row.id,
-    });
-    await recordMovement(idParsed.data, ctx.effectiveUserId);
-    revalidatePlans();
-    return { success: true, data: row };
-  });
+  return planAction(async (c) => ({ success: true, data: await updateExpenseOperation(c, planId, input) }));
 }
 
 export async function deletePlanExpenseAction(
   planId: string,
   expenseId: string
 ): Promise<ActionResult> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const planIdParsed = idSchema.safeParse(planId);
-    const expenseIdParsed = idSchema.safeParse(expenseId);
-    if (!planIdParsed.success || !expenseIdParsed.success) {
-      return { success: false, error: "Invalid id" };
-    }
-    await deleteExpense(ctx.effectiveUserId, planIdParsed.data, expenseIdParsed.data);
-    await logImpersonatedMutation({
-      action: "financePlanExpense.delete",
-      entityTable: "finance_plan_expenses",
-      entityId: expenseIdParsed.data,
-    });
-    await recordMovement(planIdParsed.data, ctx.effectiveUserId);
-    revalidatePlans();
+  return planAction(async (c) => {
+    await deleteExpenseOperation(c, planId, expenseId);
     return { success: true };
   });
 }
@@ -423,75 +239,22 @@ export async function addPlanDebtAction(
   planId: string,
   input: PlanDebtInput
 ): Promise<ActionResult<FinancePlanDebt>> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const idParsed = idSchema.safeParse(planId);
-    const parsed = planDebtSchema.safeParse(input);
-    if (!idParsed.success) return { success: false, error: "Invalid input" };
-    if (!parsed.success) {
-      return { success: false, error: debtError(parsed.error.issues) };
-    }
-    const restatement = await restatementFor(ctx.effectiveUserId, idParsed.data, {
-      addedDebtBalance: parsed.data.initialBalance,
-    });
-    const row = await addDebt(ctx.effectiveUserId, idParsed.data, parsed.data, restatement);
-    await logImpersonatedMutation({
-      action: "financePlanDebt.create",
-      entityTable: "finance_plan_debts",
-      entityId: row.id,
-    });
-    await recordMovement(idParsed.data, ctx.effectiveUserId);
-    revalidatePlans();
-    return { success: true, data: row };
-  });
+  return planAction(async (c) => ({ success: true, data: await addDebtOperation(c, planId, input) }));
 }
 
 export async function updatePlanDebtAction(
   planId: string,
   input: UpdatePlanDebtInput
 ): Promise<ActionResult<FinancePlanDebt>> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const idParsed = idSchema.safeParse(planId);
-    const parsed = updatePlanDebtSchema.safeParse(input);
-    if (!idParsed.success) return { success: false, error: "Invalid input" };
-    if (!parsed.success) {
-      return { success: false, error: debtError(parsed.error.issues) };
-    }
-    const restatement = await restatementFor(ctx.effectiveUserId, idParsed.data, {
-      debts: { [parsed.data.id]: parsed.data.initialBalance },
-    });
-    const row = await updateDebt(ctx.effectiveUserId, idParsed.data, parsed.data, restatement);
-    await logImpersonatedMutation({
-      action: "financePlanDebt.update",
-      entityTable: "finance_plan_debts",
-      entityId: row.id,
-    });
-    await recordMovement(idParsed.data, ctx.effectiveUserId);
-    revalidatePlans();
-    return { success: true, data: row };
-  });
+  return planAction(async (c) => ({ success: true, data: await updateDebtOperation(c, planId, input) }));
 }
 
 export async function deletePlanDebtAction(
   planId: string,
   debtId: string
 ): Promise<ActionResult> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const planIdParsed = idSchema.safeParse(planId);
-    const debtIdParsed = idSchema.safeParse(debtId);
-    if (!planIdParsed.success || !debtIdParsed.success) {
-      return { success: false, error: "Invalid id" };
-    }
-    await deleteDebt(ctx.effectiveUserId, planIdParsed.data, debtIdParsed.data);
-    await logImpersonatedMutation({
-      action: "financePlanDebt.delete",
-      entityTable: "finance_plan_debts",
-      entityId: debtIdParsed.data,
-    });
-    await recordMovement(planIdParsed.data, ctx.effectiveUserId);
-    revalidatePlans();
+  return planAction(async (c) => {
+    await deleteDebtOperation(c, planId, debtId);
     return { success: true };
   });
 }
@@ -515,7 +278,7 @@ export async function upsertLineOverrideAction(
       entityTable: "finance_plan_line_overrides",
       entityId: parsed.data.parentId,
     });
-    await recordMovement(idParsed.data, ctx.effectiveUserId);
+    await recordPlanMovement(await planOperationContext(ctx.effectiveUserId), idParsed.data);
     revalidatePlans();
     return { success: true };
   });
@@ -538,7 +301,7 @@ export async function deleteLineOverrideAction(
       entityTable: "finance_plan_line_overrides",
       entityId: parsed.data.parentId,
     });
-    await recordMovement(idParsed.data, ctx.effectiveUserId);
+    await recordPlanMovement(await planOperationContext(ctx.effectiveUserId), idParsed.data);
     revalidatePlans();
     return { success: true };
   });

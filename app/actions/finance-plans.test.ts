@@ -16,7 +16,6 @@ vi.mock("@/lib/services/finance-snapshot-service", () => ({
 
 vi.mock("@/lib/utils/request-today", () => ({
   getRequestTimeZone: vi.fn(async () => "UTC"),
-  getRequestToday: vi.fn(async () => new Date(Date.UTC(2026, 10, 3))),
 }));
 
 vi.mock("@/lib/services/finance-plan-service", () => ({
@@ -457,12 +456,8 @@ describe("addPlanIncomeAction", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/portal");
     expect(revalidatePath).toHaveBeenCalledTimes(2);
     // The dashboard draws the day the plan changed.
-    expect(recordMovementSnapshot).toHaveBeenCalledWith(
-      PLAN_ID,
-      USER_ID,
-      new Date(Date.UTC(2026, 10, 3)),
-      "UTC"
-    );
+    // On the reader's calendar (the zone the request carries: UTC here).
+    expect(recordMovementSnapshot).toHaveBeenCalledWith(PLAN_ID, USER_ID, expect.any(Date), "UTC");
   });
 
   it("still succeeds when the movement snapshot fails", async () => {

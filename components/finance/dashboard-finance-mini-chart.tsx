@@ -67,7 +67,7 @@ export function toRows(data: DashboardPoint[], pastCount: number): Row[] {
 const PROJECTED_DASH = "6 4";
 
 /**
- * Net worth, then the parts that are not zero at this point, each with the
+ * Net worth and cash, then the other parts that are not zero at this point, each with the
  * swatch of the area it reads. Only net worth carries a sign colour, as in
  * the card's figure rail.
  */
@@ -90,7 +90,8 @@ function MiniTooltip({
         {DASHBOARD_SERIES.map((s) => {
           const value = point[s.key];
           const isTotal = s.key === "netWorth";
-          if (!isTotal && moneySign(value) === 0) return null;
+          // Net worth and cash always read; the other parts only when not zero.
+          if (!isTotal && s.key !== "savings" && moneySign(value) === 0) return null;
           return (
             <div key={s.key} className="flex items-center justify-between gap-4">
               <span className="flex items-center gap-1.5 text-muted-foreground">

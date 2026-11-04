@@ -153,7 +153,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     },
     {
       series: dashboardSeries("savings"),
-      label: fig.status === "before-start" ? "Cash at start" : "Cash now",
+      label: "Cash",
       value: formatCurrency(fig.savings),
     },
     ...(moneySign(fig.receivables) > 0

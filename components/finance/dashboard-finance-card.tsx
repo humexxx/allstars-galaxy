@@ -135,7 +135,6 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     now
   );
   const points = fig.points;
-  const delta = fig.delta;
 
   // Only net worth is coloured by its sign. Each part wore its own colour
   // (blue investments, red debt), which clashed with the chart's series
@@ -189,15 +188,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
           <Wallet className="size-5 shrink-0" aria-hidden="true" />
           <span className="truncate">{featured.name}</span>
         </CardTitle>
-        {/* The delta rides the description line, not the action slot: beside
-            the button it squeezed the plan name to a few characters on phones. */}
-        <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 tabular-nums">
-          <span>{goal ?? "12-month projection"}</span>
-          <Badge variant={moneySign(delta) >= 0 ? "success" : "destructive"} className="font-mono tabular-nums">
-            {moneySign(delta) >= 0 ? <TrendingUp /> : <TrendingDown />}
-            {formatSignedCurrency(delta)} · {fig.deltaPeriods} mo
-          </Badge>
-        </CardDescription>
+        <CardDescription>{goal ?? "12-month projection"}</CardDescription>
         <div className="flex flex-col gap-1 pt-3">
           <Eyebrow size="sm" as="div" className="flex items-center gap-1.5">
             <span
@@ -217,15 +208,14 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
               {formatCurrency(fig.netWorth)}
             </Mono>
             {lastClose && sinceClose !== null && (
-              <Mono
-                className={cn(
-                  "text-sm",
-                  statToneClass(moneySign(sinceClose) >= 0 ? "positive" : "negative")
-                )}
+              <Badge
+                variant={moneySign(sinceClose) >= 0 ? "success" : "destructive"}
+                className="font-mono tabular-nums"
+                title={`Against the close of ${lastClose.label}`}
               >
-                {moneySign(sinceClose) >= 0 ? "↑" : "↓"} {formatSignedCurrency(sinceClose)}{" "}
-                <span className="text-muted-foreground">vs {lastClose.label} close</span>
-              </Mono>
+                {moneySign(sinceClose) >= 0 ? <TrendingUp /> : <TrendingDown />}
+                {formatSignedCurrency(sinceClose)} · vs {lastClose.month}
+              </Badge>
             )}
           </div>
         </div>

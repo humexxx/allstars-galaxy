@@ -13,9 +13,12 @@ calibrated. Health scoring and scenario comparison are part of this module.
 - `/portal/plans/new` — create plan
 - `/portal/plans/[id]` — plan detail + editor
 - `/portal/plans/compare` — side-by-side scenario comparison
+- `/api/plans/assistant` — the plans assistant's chat, `POST`, streamed as NDJSON (`PlansAssistantEvent` per line); admins with `ANTHROPIC_API_KEY` only (`canUseAssistant`)
 
 ## Server actions — `/app/actions/`
 - `finance-plans.ts` — CRUD + lifecycle for finance plans (create, update, delete, clone, set-as-main, `setPlanColorAction`) and projection calculations. `createPlanAction` stamps `balances_as_of` with the reader's today; `updatePlanAction`, `addPlanDebtAction` and `updatePlanDebtAction` ask `restateOpeningBalances` for a restatement when the edit changes an opening balance (see *Opening balances are dated*); `updatePlanAction` takes as edits only the balances the payload carries. Every action returns `ActionResult<X>`; every mutation calls `revalidatePlans()` (the `/portal/plans` layout **and** `/portal`, whose dashboard card shows the main plan)
+- `finance-plans.ts`: every plan / line mutation is a thin `planAction` around its operation in `finance-plan-operations.ts` (auth gate, reader's calendar, `PlanOperationError` → the action's error, revalidation)
+- `plans-assistant.ts` — `applyPlanChangesAction`: re-checks a proposal the user approved and writes it through the plan operations (`applyPlanChanges`)
 - `finance-confirmations.ts` — save monthly confirmation snapshots and per-debt balance confirmations
 - `dev-tools.ts` — `runDailySnapshotsAction` (admin-only): runs the daily finance + portfolio snapshot job on demand, surfaced via the dev drawer
 
@@ -23,6 +26,8 @@ calibrated. Health scoring and scenario comparison are part of this module.
 - `finance-plan-service.ts` — `listUserPlansWithLines` (every plan with its lines in five queries, for the list and compare pages); `updateIncome` / `updateExpense` / `updateDebt` / `updatePlan` throw a not-found error when no row on the caller's plan matched; `clonePlan` runs in one transaction and copies the per-month overrides re-pointed at the new lines (`cloneOverrides`; confirmations are not copied) and `balancesAsOf`. `createPlan(userId, data, today)` sets `balancesAsOf`; `updatePlan` / `addDebt` / `updateDebt` take an optional `PlanRestatement` and then write the whole restated set (plan balances, every debt's opening balance, `balancesAsOf`, and a same-day confirmation) in one transaction. `projectionOptionsFor(plan, userId, prefetched?)` is the ONE place projection options are assembled (portfolio value + weighted growth when included — the portfolio includes the market value of assets the user runs for other people (`getManagedAssets`), passed as `portfolioHeldValue` so it is held flat; auto-invest ROI, overrides, `asOf`); `projectPlanWithPortfolio` uses it. `getAutoInvestRates` (many methods' ROIs in one query) feeds its `prefetched.autoInvestRate`. `upsertLineOverride` refuses a line that isn't on the plan (checked in its transaction). Re-exports the engine (`projectPlan`, `projectStateAt`, `compareDebtStrategies`, `deriveFinanceMood`) from `lib/finance/projection.ts`, and `setPlanColor` (colour-only update for the rail swatch)
 - `finance-confirmation-service.ts` — confirmations, `getLatestConfirmations` (every plan's latest in two queries) + `autoConfirmSkippedPeriods` (cron baseline roll-forward). A confirmation is matched to the period that CONTAINS its day, never by exact key (see *Calculation semantics*)
 - `finance-snapshot-service.ts` — `calibratePlan` (pure) / `buildCalibratedPlan`, `loadCalibratedView` (calibrate + project + today in one call), `loadPlanOverviews` (list/compare: every plan calibrated, projected and put on a timeline, with confirmations, auto-invest rates and history batched), snapshots, `restateOpeningBalances` (the restated opening set for an edit, or null when nothing changed), `getProjectedStateOnDay` (confirmation pre-fill), and `getFinanceMood` (request-cached; the main plan's calibrated outcome as a mascot pose)
+- `finance-plan-operations.ts` — one function per plan change (`createPlanOperation`, `updatePlanOperation`, `deletePlanOperation`, `setMainPlanOperation`, `add/update/delete{Income,Expense,Debt}Operation`, `recordPlanMovement`): validate, restate the opening balances the change moves, write, log under impersonation, record the movement snapshot. The actions and the plans assistant both run them; `PlanOperationError` is an expected refusal
+- `plans-assistant-service.ts` — the plans assistant's reads (`listAssistantPlans`, `getAssistantPlan`, `compareAssistantStrategies`, each with a `PlanOutlook`), `previewPlanChanges` (plays a proposal on a copy of the plans: patches merged over stored rows, checked by the form schemas, balances restated as a save would, outlook before/after) and `applyPlanChanges` (plays it again, then runs each change through its operation in order; `PlanChangeError` says where it stopped)
 - `interest-service.ts` — interest/ROI math (shared with [Portfolio](./portfolio.md))
 
 ## Pure finance maths — `/lib/finance/`
@@ -50,15 +55,19 @@ calibrated. Health scoring and scenario comparison are part of this module.
 - `finance.ts`: plans take `autoInvestCustomRate` (a monthly rate, nullable; null = the method's ROI)
 - `finance.ts`: income lines take `owedToMe` (default `false`); a recurring one needs an `endDate`, or the amount owed would never stop
 - `finance-snapshot.ts` — `financeSnapshotSourceSchema` (`system_cron`, `confirmation`, `manual`, `movement`)
+- `plans-assistant.ts` — `planChangeSetSchema` (`summary` + 1–40 `changes`: `create_plan` with a `ref`, `update_plan` (settings patch), `set_main_plan`, `delete_plan`, `add/update/remove_{income,expense,debt}`; a plan is named by `planId` or a `planRef` created earlier). Fields are patches; rates are decimals (a number or a string); the descriptions are the model's documentation. `planIdInputSchema`
 - `finance-confirmations.ts` — `confirmationSchema` / `ConfirmationData` (monthly actuals payload; shared by the action and `finance-confirmation-service`)
 
 ## Types — `/types/`
+- `plans-assistant.ts` — `PlanChangeLine`, `PlanOutlook`, `PlanEffect`, `PlanProposal`, `AppliedPlanChanges`, `PlansAssistantMessage`, `PlansAssistantEvent`
 - `finance.ts` — includes `PlanSummary` (per-plan outcome shown on the rail),
   `FinanceMood` (mascot pose), `InvestmentMethodOption`, and the constant
   lists the unions derive from (`RECURRENCE_TYPES`, `DEBT_STRATEGIES`,
   `DEBT_PAYMENT_TYPES`, `OVERRIDE_SIDES`, `OVERRIDE_ACTIONS`)
 
 ## Components
+`components/finance/assistant/` — `PlansAssistant` (corner button + chat on every Plans page, mounted by `app/portal/plans/layout.tsx` behind `canUseAssistant` in its own Suspense so the layout awaits nothing) and `PlanProposalCard` (each change in words, each plan's outlook before → after — debt-free, net worth in 12 months and at the end, interest still to pay — with Apply / Discard; the receipt links to the plans).
+
 `components/finance/` — plan editors, projection charts, confirmation dialogs,
 strategy comparisons, the plans workspace
 ([`plans-workspace.tsx`](../../components/finance/plans-workspace.tsx)), and the
@@ -150,6 +159,7 @@ gated on the `showContextAvatar` preference — see [Settings](./settings.md).
 - `finance_plan_debt_confirmations` — per-debt balance confirmations
 
 ## Notes
+- **The plans assistant proposes; the user applies** (2026-11-03). Same gate, model and loop as Travel's and Sports' (`lib/ai/assistant/`), spend booked as `plans-assistant`, no web search. Its tools live in `lib/plans/assistant/converse.ts` on the shared toolbox: `list_plans`, `get_plan`, `compare_strategies`, `open_plan`, `propose_plan_changes`. A proposal is played in memory with the app's own projection (nothing written) and drawn as a card; Apply re-validates it from scratch and writes through `finance-plan-operations` — the forms' exact path, restatements, impersonation log and movement snapshots included. The proposal is checked whole before any write; the operations are not one transaction, so a write that still fails part-way keeps the changes before it and says so. No undo yet (Travel has one).
 - Conventional Commits scope: `finance`
 - **Today's figure routes the surplus as soon as the cash lands** (`routeLandedCash`, 2026-11-03). The engine still routes at period end, but `projectStateAt` already pays the rest of the period's scheduled debt payments and then what the close sends to debts and investments — capped at the cash on hand once the period's remaining non-debt bills are kept back. A plan anchored on the 5th is paid on the 1st–3rd; the money used to show as Cash for those days and then drop into debt. Net worth and the close are unchanged; the confirmation dialog's pre-fill (also `projectStateAt`) now shows debts already paid down.
 - **Money owed to you counts in net worth before it lands.** An income marked *Owed to you* is a receivable: every repayment still to come is added to `netWorth` (`receivables` on `ProjectionMonth` / `TodayState`), and when one lands it becomes cash while the receivable drops by the same amount, so net worth does not move. Snapshots store net worth WITHOUT receivables and `getRecentMonthlySnapshots` adds them back from the plan's current lines (and returns them as each point's `receivables`), so history and forecast always count them the same way, including snapshots taken before the flag existed.

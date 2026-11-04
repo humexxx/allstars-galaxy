@@ -49,7 +49,7 @@ import {
   updatePlanOperation,
   type PlanOperationContext,
 } from "./finance-plan-operations";
-import { loadCalibratedView, restateOpeningBalances } from "./finance-snapshot-service";
+import { loadCalibratedView, openingBalancesToday, restateOpeningBalances } from "./finance-snapshot-service";
 import { listInvestmentMethods } from "./investment-method-service";
 
 /**
@@ -379,15 +379,21 @@ async function playChange(c: PlanOperationContext, w: Working, change: PlanChang
       const name = checked(createFinancePlanSchema.shape.name, change.name, where);
       const id = randomUUID();
       const now = new Date();
+      // It opens where the source stands today, as Apply's copy will.
+      const opening = await openingBalancesToday(source, c.userId, c.today, c.timeZone);
       const copy = structuredClone(source);
       Object.assign(copy, {
         id,
         name,
         isMain: false,
         basedOnPlanId: change.asScenario ? source.id : null,
+        initialSavings: opening.initialSavings,
+        initialInvestments: opening.initialInvestments,
+        balancesAsOf: opening.balancesAsOf,
         createdAt: now,
         updatedAt: now,
       });
+      for (const d of copy.debts) d.initialBalance = opening.debtBalances[d.id] ?? d.initialBalance;
       for (const l of [...copy.incomes, ...copy.expenses, ...copy.debts, ...copy.overrides]) l.planId = id;
       w.plans.set(id, copy);
       w.refs.set(change.ref, id);

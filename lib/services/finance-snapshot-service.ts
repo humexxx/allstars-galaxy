@@ -23,6 +23,7 @@ import {
   effectiveEdits,
   restateOpeningSet,
   type OpeningBalanceEdits,
+  type OpeningRestatement,
 } from "@/lib/finance/opening-balances";
 import {
   autoConfirmSkippedPeriods,
@@ -1009,6 +1010,38 @@ export async function restateOpeningBalances(
   timeZone?: string | null
 ): Promise<PlanRestatement | null> {
   if (!changesOpeningBalances(plan, edits)) return null;
+  const { latest, state } = await calibratedToday(plan, userId, today, timeZone);
+  const changed = effectiveEdits(plan, state, edits);
+  if (!changed) return null;
+  const set = restateOpeningSet(plan, state, changed, today);
+  const syncConfirmationId =
+    latest && isoDay(confirmationDay(latest)) === set.balancesAsOf ? latest.id : null;
+  return { ...set, syncConfirmationId };
+}
+
+/**
+ * The plan's opening balances moved to where it stands today, nothing edited.
+ * A copy opens on these: confirmations stay with the plan they were made on,
+ * so a copy given the stored opening balances would re-project every period
+ * since and part from its source on day one.
+ */
+export async function openingBalancesToday(
+  plan: FinancePlanWithLines,
+  userId: string,
+  today: Date,
+  timeZone?: string | null
+): Promise<OpeningRestatement> {
+  const { state } = await calibratedToday(plan, userId, today, timeZone);
+  return restateOpeningSet(plan, state, {}, today);
+}
+
+/** Where the plan, calibrated by its latest confirmation, stands on `today`. */
+async function calibratedToday(
+  plan: FinancePlanWithLines,
+  userId: string,
+  today: Date,
+  timeZone?: string | null
+): Promise<{ latest: Awaited<ReturnType<typeof getLatestConfirmation>>; state: TodayState }> {
   const latest = await getLatestConfirmation(plan.id);
   const baseline = calibratePlan(plan, latest, { timeZone });
   const options = await projectionOptionsFor(baseline, userId);
@@ -1036,10 +1069,5 @@ export async function restateOpeningBalances(
       balance: parseFloat(d.initialBalance),
     })),
   };
-  const changed = effectiveEdits(plan, state, edits);
-  if (!changed) return null;
-  const set = restateOpeningSet(plan, state, changed, today);
-  const syncConfirmationId =
-    latest && isoDay(confirmationDay(latest)) === set.balancesAsOf ? latest.id : null;
-  return { ...set, syncConfirmationId };
+  return { latest, state };
 }

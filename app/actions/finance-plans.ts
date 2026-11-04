@@ -8,7 +8,6 @@ import {
   requireEffectiveContext,
 } from "@/lib/services/impersonation";
 import {
-  clonePlan,
   deleteLineOverride,
   setPlanColor,
   upsertLineOverride,
@@ -17,6 +16,7 @@ import {
   addDebtOperation,
   addExpenseOperation,
   addIncomeOperation,
+  copyPlanOperation,
   createPlanOperation,
   deleteDebtOperation,
   deleteExpenseOperation,
@@ -34,7 +34,6 @@ import {
 } from "@/lib/services/finance-plan-operations";
 import { idSchema } from "@/schemas/common";
 import {
-  cloneFinancePlanSchema,
   deleteLineOverrideSchema,
   lineOverrideSchema,
   planColorSchema,
@@ -141,20 +140,10 @@ export async function clonePlanAction(
   planId: string,
   newName: string
 ): Promise<ActionResult<FinancePlan>> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const parsed = cloneFinancePlanSchema.safeParse({ planId, name: newName });
-    if (!parsed.success) return { success: false, error: "Invalid input" };
-    const plan = await clonePlan(ctx.effectiveUserId, parsed.data.planId, parsed.data.name);
-    await logImpersonatedMutation({
-      action: "financePlan.clone",
-      entityTable: "finance_plans",
-      entityId: plan.id,
-      metadata: { sourcePlanId: parsed.data.planId },
-    });
-    revalidatePlans();
-    return { success: true, data: plan };
-  });
+  return planAction(async (c) => ({
+    success: true,
+    data: (await copyPlanOperation(c, { planId, name: newName })).plan,
+  }));
 }
 
 /** Clone + link: the new plan keeps a basedOnPlanId reference to the source,
@@ -163,22 +152,10 @@ export async function createScenarioAction(
   planId: string,
   newName: string
 ): Promise<ActionResult<FinancePlan>> {
-  return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
-    const parsed = cloneFinancePlanSchema.safeParse({ planId, name: newName });
-    if (!parsed.success) return { success: false, error: "Invalid input" };
-    const plan = await clonePlan(ctx.effectiveUserId, parsed.data.planId, parsed.data.name, {
-      asScenario: true,
-    });
-    await logImpersonatedMutation({
-      action: "financePlan.createScenario",
-      entityTable: "finance_plans",
-      entityId: plan.id,
-      metadata: { sourcePlanId: parsed.data.planId },
-    });
-    revalidatePlans();
-    return { success: true, data: plan };
-  });
+  return planAction(async (c) => ({
+    success: true,
+    data: (await copyPlanOperation(c, { planId, name: newName, asScenario: true })).plan,
+  }));
 }
 
 // ---------- incomes ----------

@@ -429,11 +429,17 @@ export const getMainPlan = cache(async function getMainPlan(
   return plan ?? null;
 });
 
+type CloneOptions = {
+  asScenario?: boolean;
+  /** Opening balances for the copy, instead of the source's stored ones. */
+  opening?: OpeningRestatement;
+};
+
 export async function clonePlan(
   userId: string,
   sourcePlanId: string,
   newName: string,
-  options: { asScenario?: boolean } = {}
+  options: CloneOptions = {}
 ): Promise<FinancePlan> {
   return (await clonePlanWithLineIds(userId, sourcePlanId, newName, options)).plan;
 }
@@ -447,7 +453,7 @@ export async function clonePlanWithLineIds(
   userId: string,
   sourcePlanId: string,
   newName: string,
-  options: { asScenario?: boolean } = {}
+  options: CloneOptions = {}
 ): Promise<{ plan: FinancePlan; lineIds: ReadonlyMap<string, string> }> {
   const source = await getPlanWithLines(sourcePlanId, userId);
   if (!source) throw new Error("Plan not found");
@@ -463,7 +469,7 @@ export async function clonePlanWithLineIds(
         description: source.description,
         startMonth: source.startMonth,
         monthsAhead: source.monthsAhead,
-        initialSavings: source.initialSavings,
+        initialSavings: options.opening?.initialSavings ?? source.initialSavings,
         monthlySavingsRate: source.monthlySavingsRate,
         includePortfolio: source.includePortfolio,
         surplusToDebtsPercent: source.surplusToDebtsPercent,
@@ -471,14 +477,14 @@ export async function clonePlanWithLineIds(
         autoInvestPercent: source.autoInvestPercent,
         autoInvestMethodId: source.autoInvestMethodId,
         autoInvestCustomRate: source.autoInvestCustomRate,
-        initialInvestments: source.initialInvestments,
+        initialInvestments: options.opening?.initialInvestments ?? source.initialInvestments,
         // Keep the accounting-period anchor: without it the clone falls back to
         // day 1 and its periods drift out of alignment with the source plan.
         confirmationDayOfMonth: source.confirmationDayOfMonth,
         color: source.color,
         // Same balances, stated on the same day — the clone opens exactly
         // where its source does.
-        balancesAsOf: source.balancesAsOf,
+        balancesAsOf: options.opening?.balancesAsOf ?? source.balancesAsOf,
         basedOnPlanId: options.asScenario ? source.id : null,
       })
       .returning();
@@ -549,7 +555,7 @@ export async function clonePlanWithLineIds(
           source.debts.map((d) => ({
             planId: plan.id,
             name: d.name,
-            initialBalance: d.initialBalance,
+            initialBalance: options.opening?.debtBalances[d.id] ?? d.initialBalance,
             monthlyInterestRate: d.monthlyInterestRate,
             monthlyPayment: d.monthlyPayment,
             paymentType: d.paymentType,

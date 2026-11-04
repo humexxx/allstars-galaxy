@@ -11,6 +11,7 @@ vi.mock("@/lib/services/impersonation", () => ({
 
 vi.mock("@/lib/services/finance-snapshot-service", () => ({
   restateOpeningBalances: vi.fn(async () => null),
+  openingBalancesToday: vi.fn(async () => OPENING),
   recordMovementSnapshot: vi.fn(async () => ({ created: true })),
 }));
 
@@ -23,7 +24,7 @@ vi.mock("@/lib/services/finance-plan-service", () => ({
   createPlan: vi.fn(),
   updatePlan: vi.fn(),
   deletePlan: vi.fn(),
-  clonePlan: vi.fn(),
+  clonePlanWithLineIds: vi.fn(),
   addIncome: vi.fn(),
   updateIncome: vi.fn(),
   deleteIncome: vi.fn(),
@@ -49,7 +50,7 @@ import {
 import {
   addDebt,
   addIncome,
-  clonePlan,
+  clonePlanWithLineIds,
   createPlan,
   deleteIncome,
   getPlanWithLines,
@@ -77,6 +78,12 @@ const USER_ID = "00000000-0000-4000-8000-000000000001";
 const PLAN_ID = "11111111-1111-4111-8111-111111111111";
 const ROW_ID = "22222222-2222-4222-8222-222222222222";
 const SECONDARY_ID = "33333333-3333-4333-8333-333333333333";
+const OPENING = vi.hoisted(() => ({
+  initialSavings: "1200.00",
+  initialInvestments: "0.00",
+  debtBalances: {},
+  balancesAsOf: "2026-11-03",
+}));
 
 beforeEach(() => {
   vi.mocked(requireEffectiveContext).mockResolvedValue({
@@ -267,14 +274,18 @@ describe("deletePlanAction", () => {
 // ---------- clonePlanAction ----------
 
 describe("clonePlanAction", () => {
-  it("clones when id and name are valid", async () => {
+  it("clones when id and name are valid, opening where the source stands today", async () => {
     const plan = { id: SECONDARY_ID, name: "Clone" };
-    vi.mocked(clonePlan).mockResolvedValueOnce(plan as never);
+    vi.mocked(getPlanWithLines).mockResolvedValueOnce({ id: PLAN_ID } as never);
+    vi.mocked(clonePlanWithLineIds).mockResolvedValueOnce({ plan, lineIds: new Map() } as never);
 
     const result = await clonePlanAction(PLAN_ID, "Clone");
 
     expect(result).toEqual({ success: true, data: plan });
-    expect(clonePlan).toHaveBeenCalledWith(USER_ID, PLAN_ID, "Clone");
+    expect(clonePlanWithLineIds).toHaveBeenCalledWith(USER_ID, PLAN_ID, "Clone", {
+      asScenario: undefined,
+      opening: OPENING,
+    });
     expect(logImpersonatedMutation).toHaveBeenCalled();
     expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });
@@ -283,7 +294,7 @@ describe("clonePlanAction", () => {
     const result = await clonePlanAction("bad-id", "Clone");
 
     expect(result).toEqual({ success: false, error: "Invalid input" });
-    expect(clonePlan).not.toHaveBeenCalled();
+    expect(clonePlanWithLineIds).not.toHaveBeenCalled();
   });
 
   it("rejects too-long names (>120 chars)", async () => {
@@ -291,7 +302,7 @@ describe("clonePlanAction", () => {
     const result = await clonePlanAction(PLAN_ID, longName);
 
     expect(result).toEqual({ success: false, error: "Invalid input" });
-    expect(clonePlan).not.toHaveBeenCalled();
+    expect(clonePlanWithLineIds).not.toHaveBeenCalled();
   });
 });
 

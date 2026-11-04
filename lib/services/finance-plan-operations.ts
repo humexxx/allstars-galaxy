@@ -44,7 +44,11 @@ import {
   updatePlan,
   type PlanRestatement,
 } from "./finance-plan-service";
-import { recordMovementSnapshot, restateOpeningBalances } from "./finance-snapshot-service";
+import {
+  openingBalancesToday,
+  recordMovementSnapshot,
+  restateOpeningBalances,
+} from "./finance-snapshot-service";
 
 /**
  * Every change a finance plan can take, as one function each: validate the
@@ -129,13 +133,23 @@ export async function createPlanOperation(c: PlanOperationContext, input: unknow
   return plan;
 }
 
-/** A copy of a plan, lines and overrides included; a scenario keeps a link to its source. */
+/**
+ * A copy of a plan, lines and overrides included; a scenario keeps a link to
+ * its source. It opens where the source stands today (`openingBalancesToday`),
+ * since the source's confirmations stay with the source.
+ */
 export async function copyPlanOperation(
   c: PlanOperationContext,
   input: { planId: unknown; name: unknown; asScenario?: boolean }
 ): Promise<{ plan: FinancePlan; lineIds: ReadonlyMap<string, string> }> {
   const data = parse(cloneFinancePlanSchema, { planId: input.planId, name: input.name });
-  const copy = await clonePlanWithLineIds(c.userId, data.planId, data.name, { asScenario: input.asScenario });
+  const source = await getPlanWithLines(data.planId, c.userId);
+  if (!source) throw new PlanOperationError("Plan not found");
+  const opening = await openingBalancesToday(source, c.userId, c.today, c.timeZone);
+  const copy = await clonePlanWithLineIds(c.userId, data.planId, data.name, {
+    asScenario: input.asScenario,
+    opening,
+  });
   await logImpersonatedMutation({
     action: input.asScenario ? "financePlan.createScenario" : "financePlan.clone",
     entityTable: "finance_plans",

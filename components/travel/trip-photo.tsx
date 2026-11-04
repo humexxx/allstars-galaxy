@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
  * bug rather than as a dead link. A muted tile with an icon reads as what it
  * is, and the alt text stays available to a screen reader.
  *
- * `unoptimized` because covers and gallery photos may be external URLs (see
+ * `unoptimized` because covers and banner photos may be external URLs (see
  * `tripPhotoSourceEnum`): it sidesteps `images.remotePatterns` so a link from
  * any host still renders.
  */

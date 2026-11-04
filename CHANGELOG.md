@@ -1,5 +1,250 @@
 # Changelog
 
+## [0.17.0](https://github.com/humexxx/allstars-galaxy/compare/v0.16.0...v0.17.0) (2026-11-03)
+
+
+### Features
+
+* **entertainment:** show a knockout one round at a time ([c8fb241](https://github.com/humexxx/allstars-galaxy/commit/c8fb24195f26516ae16312a59f1063841e304cca))
+* **portal:** open the sidebar from a button on a tablet ([cf5e266](https://github.com/humexxx/allstars-galaxy/commit/cf5e266d807197a8af68912f41bef505fe717e18))
+* small-screen review and one-round-at-a-time brackets ([2a1bcb1](https://github.com/humexxx/allstars-galaxy/commit/2a1bcb1f27e9da20953a0fb6a345ca9bbd37d1c2))
+
+
+### Bug Fixes
+
+* **ui:** apply the pre-merge review ([84ebeed](https://github.com/humexxx/allstars-galaxy/commit/84ebeed7d5fd9b6a2c8ac8fd09fd2b400edce99d))
+* **ui:** fix what a deep touch-screen audit of every page found ([1d0d38b](https://github.com/humexxx/allstars-galaxy/commit/1d0d38b194740250312bfe2a785e5066584d1ad7))
+* **ui:** fix what a second phone-width review of every page found ([9084af6](https://github.com/humexxx/allstars-galaxy/commit/9084af68b1327f77b18efb664d660e4d515af845))
+* **ui:** tighten the phone layouts the small-screen review found ([833c7fb](https://github.com/humexxx/allstars-galaxy/commit/833c7fbbae1cbd21feefb67c3c596150eec1d580))
+
+## [0.16.0](https://github.com/humexxx/allstars-galaxy/compare/v0.15.0...v0.16.0) (2026-10-26)
+
+
+### Features
+
+* **entertainment:** add an AI assistant to the sports pages ([af09b83](https://github.com/humexxx/allstars-galaxy/commit/af09b8334877d7f5e0589b6e920b5e2143b25dbc))
+* **entertainment:** give the LoL dashboard card the other cards' height ([cc97207](https://github.com/humexxx/allstars-galaxy/commit/cc97207b330cb83b207b630c3d53b167f9d52d8c))
+* **entertainment:** lead the cards with the latest results and the race just run ([207469e](https://github.com/humexxx/allstars-galaxy/commit/207469e8057572ac94c8cbe1a6bb24d663ffd73a))
+* **entertainment:** show skeletons while a card changes championship ([c2e4544](https://github.com/humexxx/allstars-galaxy/commit/c2e454401e6de592ae2bb3999c8d00c4c0a85335))
+* **entertainment:** sports assistant, fuller dashboard cards and layout fixes ([304e687](https://github.com/humexxx/allstars-galaxy/commit/304e6875bf4756f2b2653e6b0bc312a0cd83f68b))
+
+
+### Bug Fixes
+
+* **entertainment:** keep the favourites star in step with the server's list ([b0cdb99](https://github.com/humexxx/allstars-galaxy/commit/b0cdb99f3023c0344a021ac0a6750092bf4fb39f))
+* **entertainment:** open a card's tennis or padel tournament on its own page ([c551f61](https://github.com/humexxx/allstars-galaxy/commit/c551f61e094667bd27894486e22d8945e178278f))
+* **entertainment:** show the scores of games already played on the cards ([043d2b3](https://github.com/humexxx/allstars-galaxy/commit/043d2b3f576ae4e70702a993faafa21fb73603e0))
+* **ui:** stop horizontal scrollers widening the page on a phone ([d29f521](https://github.com/humexxx/allstars-galaxy/commit/d29f521c47aa155a55fbe67eb6b2b392a34517dd))
+
+## [0.15.0](https://github.com/humexxx/allstars-galaxy/compare/v0.14.0...v0.15.0) (2026-10-26)
+
+
+### Features
+
+* **entertainment:** move the dashboard carousels on by themselves ([a87496c](https://github.com/humexxx/allstars-galaxy/commit/a87496c477bbced2f09a492f9bc2da4b28eafc78))
+* **entertainment:** move the dashboard carousels on by themselves ([c5cb802](https://github.com/humexxx/allstars-galaxy/commit/c5cb8020e7e1e1b8fd606718bf395c4544016d37))
+
+## [0.14.0](https://github.com/humexxx/allstars-galaxy/compare/v0.13.0...v0.14.0) (2026-10-26)
+
+
+### Features
+
+* **entertainment:** add MLS and Costa Rica's Primera División from ESPN ([7b5bbe4](https://github.com/humexxx/allstars-galaxy/commit/7b5bbe408f5c75cbb6a870587b907fd288b37869))
+* **entertainment:** add MLS and Costa Rica's Primera División from ESPN ([722e97f](https://github.com/humexxx/allstars-galaxy/commit/722e97f9d5d9ddd488f7c5abf82bd3c3272b9243))
+
+## [0.13.0](https://github.com/humexxx/allstars-galaxy/compare/v0.12.1...v0.13.0) (2026-10-26)
+
+
+### Features
+
+* **entertainment:** add League of Legends news, on its page and its card ([a362b33](https://github.com/humexxx/allstars-galaxy/commit/a362b33b7b7c88c94a1564a008c6de018a0c5762))
+* **entertainment:** add Ligue 1 and the Bundesliga to football ([5573c07](https://github.com/humexxx/allstars-galaxy/commit/5573c07e278457bb93719394dd5e443d8c3cb9e0))
+* **entertainment:** add news for padel and surfing ([904d19d](https://github.com/humexxx/allstars-galaxy/commit/904d19dfd5417b1e336623a99c32c6c85de850d5))
+* **entertainment:** news for every sport, Ligue 1 and Bundesliga, padel kept live ([0a7ed0a](https://github.com/humexxx/allstars-galaxy/commit/0a7ed0a94ccdd7fc45b44f265a9b242772233196))
+
+
+### Bug Fixes
+
+* **entertainment:** keep padel live under its rate limit; news on racquet and surf cards ([f02b46d](https://github.com/humexxx/allstars-galaxy/commit/f02b46dbefea82cc0fb944ee9c119d8b64854e93))
+
+## [0.12.1](https://github.com/humexxx/allstars-galaxy/compare/v0.12.0...v0.12.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **entertainment:** keep the sports picker on one line beside the title ([6195615](https://github.com/humexxx/allstars-galaxy/commit/6195615cfb9137728c4d999588cc79beadc022fe))
+* **entertainment:** keep the sports picker on one line beside the title ([d2a6c89](https://github.com/humexxx/allstars-galaxy/commit/d2a6c89413b3d16bf3c1f5a5bfe9a7ebf17d425e))
+
+## [0.12.0](https://github.com/humexxx/allstars-galaxy/compare/v0.11.0...v0.12.0) (2026-10-25)
+
+
+### Features
+
+* **entertainment:** add baseball, ice hockey and surfing; open F1 races in the sport's layout ([ed75b6d](https://github.com/humexxx/allstars-galaxy/commit/ed75b6dc72ed3d7bd7a82175407318aff976640c))
+* **entertainment:** add latest news to the NBA and NFL dashboard cards ([d49cdac](https://github.com/humexxx/allstars-galaxy/commit/d49cdaca27368e8468e3ab853d71ce56cfea8888))
+* **entertainment:** add News tabs to the NBA, NFL, football and tennis from ESPN ([0fd011d](https://github.com/humexxx/allstars-galaxy/commit/0fd011d2dfc53fb0b46199ac8cb45c45367b2655))
+* **entertainment:** bring in earlier and later F1 races from their headings ([86c9609](https://github.com/humexxx/allstars-galaxy/commit/86c9609b1c046f3288a8ec408cacf133721868c1))
+* **entertainment:** bring in earlier match days a few at a time, without a jump ([6fc2fd9](https://github.com/humexxx/allstars-galaxy/commit/6fc2fd93c2ae0158793274ae6c06aaa6d014f880))
+* **entertainment:** crown the World Cup champion and drop its Matches tab ([6787048](https://github.com/humexxx/allstars-galaxy/commit/6787048704bcd86fcc67328f5419794a921f2ce5))
+* **entertainment:** draw knockouts two-sided, half the draw on each side of the final ([fd4da25](https://github.com/humexxx/allstars-galaxy/commit/fd4da25b52112a6bdbd10b521525282dd15099cd))
+* **entertainment:** filter the matches by a team tapped in the table or a card ([3ba403d](https://github.com/humexxx/allstars-galaxy/commit/3ba403dd4018542894bee594ca8c2d2c6417d128))
+* **entertainment:** give LoL's international events a tab per stage, and bring back MSI ([c235a08](https://github.com/humexxx/allstars-galaxy/commit/c235a087b93c6ab5921faac725ce1de100912c0c))
+* **entertainment:** jump a bracket to its first round or to the final ([7fa4065](https://github.com/humexxx/allstars-galaxy/commit/7fa4065600fb956ef6c13f6b5c6d50640354e0fa))
+* **entertainment:** keep more past results for the match lists' clock ([f488d03](https://github.com/humexxx/allstars-galaxy/commit/f488d03809a5467002ea88541ceedc9d426c43ea))
+* **entertainment:** lay out padel and tennis like F1, with the bracket on a Draw tab ([5c25caa](https://github.com/humexxx/allstars-galaxy/commit/5c25caa2a542078a0e21dce34bff8af0a357f319))
+* **entertainment:** lead F1's news with its top story ([8f40d86](https://github.com/humexxx/allstars-galaxy/commit/8f40d86b9d64a4e4f444beee775373a2f9224ef9))
+* **entertainment:** list every F1 race to come and bring in the ones run from Earlier ([09b5c1b](https://github.com/humexxx/allstars-galaxy/commit/09b5c1b2de5e4867a9a1fd49012c49bac5aca0d8))
+* **entertainment:** list the NFL's weeks around this one, not this week alone ([96c0b9a](https://github.com/humexxx/allstars-galaxy/commit/96c0b9ac779e686eb50f123918176ed888340edc))
+* **entertainment:** make Earlier a pill that names the days it brings in ([289add8](https://github.com/humexxx/allstars-galaxy/commit/289add8fee8f5f94cf2a96270809d459988efc95))
+* **entertainment:** move between a LoL league's splits from inside it ([1256637](https://github.com/humexxx/allstars-galaxy/commit/125663776db259c67ceac83a9838d375f33d7b89))
+* **entertainment:** name the next session of the race on now in the F1 sheet ([63c4e5b](https://github.com/humexxx/allstars-galaxy/commit/63c4e5b6400f2118b5acc13c45604a816c7610b3))
+* **entertainment:** open a padel or tennis tournament in its sport's own layout ([c544a96](https://github.com/humexxx/allstars-galaxy/commit/c544a965bfa517b593782edb6a659584cf4f0981))
+* **entertainment:** open tournaments and races on pages of their own, men's tours only ([33bbc55](https://github.com/humexxx/allstars-galaxy/commit/33bbc5534f8fc76003538614f721b8c661279289))
+* **entertainment:** pick between the tournaments being played on Overview ([6ca1edf](https://github.com/humexxx/allstars-galaxy/commit/6ca1edf4a894f0cffceba62277ba61d25ec49a7f))
+* **entertainment:** pick the sport from one button beside the sport's name ([75b530c](https://github.com/humexxx/allstars-galaxy/commit/75b530ce0ce374827999a4c1885a6a08d41f16b4))
+* **entertainment:** put F1's races and standings on one Overview tab ([d0fc5be](https://github.com/humexxx/allstars-galaxy/commit/d0fc5be884f702985d574174200e4ebaac1a816a))
+* **entertainment:** put padel and tennis rankings beside the tournament on now ([974bb64](https://github.com/humexxx/allstars-galaxy/commit/974bb643eb09c73975cba0533ff4adc2a3f19a9e))
+* **entertainment:** read each F1 session's results from OpenF1 ([dc88cfd](https://github.com/humexxx/allstars-galaxy/commit/dc88cfd3f60b78f132f2021e8eb3cd69d419ffd3))
+* **entertainment:** shape each sport's loading skeleton like its Overview ([921d6a3](https://github.com/humexxx/allstars-galaxy/commit/921d6a3a6ed268b0c4ecc57207b50681985e6054))
+* **entertainment:** show a tournament's top three seeds on its featured card ([ac34fff](https://github.com/humexxx/allstars-galaxy/commit/ac34fff06d40d3739580fb249ae1f440cdfc2edf))
+* **entertainment:** show both players' faces by each padel pair in a draw ([ce4a0ff](https://github.com/humexxx/allstars-galaxy/commit/ce4a0ff51fcb553727e9cc971e9202ed0aa699dd))
+* **entertainment:** show each NBA and NFL game's national channel under its time ([cdd9e9c](https://github.com/humexxx/allstars-galaxy/commit/cdd9e9cf802d75baaa3495fc7242a0717d012342))
+* **entertainment:** show F1 session results by the driver's face, not a team dot ([d157dcb](https://github.com/humexxx/allstars-galaxy/commit/d157dcbd6599363f97032494b59b9dca77aa052a))
+* **entertainment:** show F1 session results on the race card and in its sheet ([c93dee6](https://github.com/humexxx/allstars-galaxy/commit/c93dee689ce6c157a5ae5a4e4339971b3da9db5d))
+* **entertainment:** show ten rows in every sports table, then a button for more ([a0bf29d](https://github.com/humexxx/allstars-galaxy/commit/a0bf29d63b6a57ba1f3eb18fff93cbd59de43f65))
+* **entertainment:** show the F1 driver's team as its logo behind the face ([18e38ab](https://github.com/humexxx/allstars-galaxy/commit/18e38ab1cda746199f2188406131b8702d4113c6))
+* **entertainment:** show the top seeds as faces alone, and over padel's poster ([fa67aee](https://github.com/humexxx/allstars-galaxy/commit/fa67aee423f62769d3afb76d0a01836c3778e524))
+* **entertainment:** sports overhaul — new sports, accessible pages, team filters ([cca28ef](https://github.com/humexxx/allstars-galaxy/commit/cca28ef917d501f44246e17718d16f4aaab27c0c))
+* **entertainment:** step through the next games on the dashboard's football, NBA and NFL cards ([15a931c](https://github.com/humexxx/allstars-galaxy/commit/15a931cf7c211351b2ba0a4e0d10ca550573d714))
+* **entertainment:** switch the competition from the title, the sports from a button group ([9f7fccf](https://github.com/humexxx/allstars-galaxy/commit/9f7fccf319d464feb8042c884c36706bbcb589b4))
+
+
+### Bug Fixes
+
+* **entertainment:** apply the branch review, bugs and dead code ([f9b3e59](https://github.com/humexxx/allstars-galaxy/commit/f9b3e5922c5233528446d1696346028fa77a5ae6))
+* **entertainment:** list a week of NBA fixtures, not one night's ([ea0e462](https://github.com/humexxx/allstars-galaxy/commit/ea0e4626e0666fecfcec5c94863112f5ca9faf18))
+* **entertainment:** make the sports pages work for keyboards, screen readers and low vision ([b698861](https://github.com/humexxx/allstars-galaxy/commit/b6988611b27a2ab2d0e22b9b57517263bc64cd12))
+* **entertainment:** put the F1 team logo behind the face, on its right ([6b8b4b7](https://github.com/humexxx/allstars-galaxy/commit/6b8b4b782f37867ac2523be30ab0d829f05fd13d))
+* **entertainment:** set a game's channel in the team names' colour ([0c1f539](https://github.com/humexxx/allstars-galaxy/commit/0c1f5399325cd1c90a437c33d053059a694f95d0))
+* **entertainment:** show a padel draw from its first round while the round of 16 fills ([926222f](https://github.com/humexxx/allstars-galaxy/commit/926222f22a167dfe2dbd6606d1b6c71891387458))
+* **entertainment:** show padel's posters whole and the round under way beside View details ([81282dc](https://github.com/humexxx/allstars-galaxy/commit/81282dc8a2fa768b5889007c0bf37ae92cbaaa7b))
+* **ui:** darken the light secondary text grey to clear 4.5:1 ([dd69cb5](https://github.com/humexxx/allstars-galaxy/commit/dd69cb5a6f755a276b6c8e611463b05b25c89d31))
+
+
+### Performance
+
+* **entertainment:** show a sport already seen this visit at once while it reloads ([d5f086d](https://github.com/humexxx/allstars-galaxy/commit/d5f086d38c6e981c3d00a2f1124b76b5389e7728))
+
+
+### Refactor
+
+* **entertainment:** apply the pre-merge review ([8838317](https://github.com/humexxx/allstars-galaxy/commit/883831796c6b9e75283ca7ea5934560ae5fa8be9))
+* **entertainment:** share the Earlier pill and the list's reveal motion ([0119a86](https://github.com/humexxx/allstars-galaxy/commit/0119a86daa0cca3f77b1ed9ec729182e0ab28c92))
+* **entertainment:** share the tiles, card and helpers racquet and F1 had twice ([00c555d](https://github.com/humexxx/allstars-galaxy/commit/00c555d11cfeb088bf8aff4eb6e1d9e9a31ffec9))
+* **entertainment:** share the upstream rate limiter between providers ([475b564](https://github.com/humexxx/allstars-galaxy/commit/475b56453f81230070af4494ade4e5a99029da04))
+
+## [0.11.0](https://github.com/humexxx/allstars-galaxy/compare/v0.10.0...v0.11.0) (2026-10-20)
+
+
+### Features
+
+* **db:** give board tasks a day, mark the Done column and record habit check-ins ([bfa9879](https://github.com/humexxx/allstars-galaxy/commit/bfa987942a09f31bb8d174d69d60038eed897323))
+* **db:** store the app's AI settings and each Claude call's usage ([3b368d4](https://github.com/humexxx/allstars-galaxy/commit/3b368d4bcc91d7230e15fec5a83bd7a2b30768fe))
+* **db:** store the championship each favourite sport's dashboard card shows ([673f9cb](https://github.com/humexxx/allstars-galaxy/commit/673f9cb29bf513a0a87f791f7692033ce86c6ec4))
+* **entertainment:** add the nba postseason tab, locked until the play-in ([b99a6fa](https://github.com/humexxx/allstars-galaxy/commit/b99a6fafa45a4f816b678a0d414d68646c8ada3f))
+* **entertainment:** build the NBA playoff bracket from ESPN's scoreboard ([bfd5cec](https://github.com/humexxx/allstars-galaxy/commit/bfd5cec80c372213434cde123a32741055f674b9))
+* **entertainment:** choose the championship each dashboard sport card shows ([1e1077f](https://github.com/humexxx/allstars-galaxy/commit/1e1077f1e139b9cd50f2fdf913650e5ef52abce5))
+* **entertainment:** compact sports hub, richer sport cards and share-link expiry ([e595431](https://github.com/humexxx/allstars-galaxy/commit/e595431e123246b763463cc417cd37fed39bcc40))
+* **entertainment:** draw each circuit's outline on the f1 race cards ([2163415](https://github.com/humexxx/allstars-galaxy/commit/21634153e80f2e1fd0e3089b2b747cc257be0bac))
+* **entertainment:** fill the LoL dashboard card while Worlds has no table ([eb2b220](https://github.com/humexxx/allstars-galaxy/commit/eb2b220fb078aaac5de09b2c0d060792ac34dd75))
+* **entertainment:** give the dashboard's f1 card a next race as full as football's match ([e292a5d](https://github.com/humexxx/allstars-galaxy/commit/e292a5dbee2bbc4770dda25ce69fda793fa5598c))
+* **entertainment:** keep worlds on until the next split starts ([a48cee8](https://github.com/humexxx/allstars-galaxy/commit/a48cee82cba9dd61bb17937dd339b090a0cc3fb2))
+* **entertainment:** lead f1's races tab with the next race, each race in a sheet ([1113b4f](https://github.com/humexxx/allstars-galaxy/commit/1113b4ffcd28f06936bc443d43b9411e8ffa50ef))
+* **entertainment:** load padel and tennis draws per tournament ([120dda7](https://github.com/humexxx/allstars-galaxy/commit/120dda737b685daba629e0447153c74f20e41269))
+* **entertainment:** load the new nba season with espn's preseason and last champion ([ebebfa3](https://github.com/humexxx/allstars-galaxy/commit/ebebfa3f3271b4a89a12c6d222cab7d8c15f16ea))
+* **entertainment:** merge f1 drivers and constructors into one standings tab ([5639cb3](https://github.com/humexxx/allstars-galaxy/commit/5639cb338bc6398a543b21ebbe0cccc22127a66d))
+* **entertainment:** move the team filter into the sport bar and line up the overview's cards ([314e8d0](https://github.com/humexxx/allstars-galaxy/commit/314e8d0916273d464ffb10b2baa9857894342578))
+* **entertainment:** open the match list on its latest results, in the page's scroll ([3546eae](https://github.com/humexxx/allstars-galaxy/commit/3546eaef01d8e1fe7d4b1444efff8e96d79f6c9d))
+* **entertainment:** put each sport's games and table on one tab ([097c5e4](https://github.com/humexxx/allstars-galaxy/commit/097c5e437a2af804aaabdc55a9c7927410c2dda6))
+* **entertainment:** put the season's champions on the lol card and hub ([8a889f8](https://github.com/humexxx/allstars-galaxy/commit/8a889f8bbb10bfbcf0e8599e321a8e1fa98e9e38))
+* **entertainment:** reach a match list's earlier days through a clock icon ([59793c4](https://github.com/humexxx/allstars-galaxy/commit/59793c4005865f00841d0ba223183c61e160fbf5))
+* **entertainment:** read each f1 race's weekend, results and classification ([373eb02](https://github.com/humexxx/allstars-galaxy/commit/373eb02dd07b400c50d8a4259d8d3ef90ad9b9ec))
+* **entertainment:** replace the sports page header with a sticky sport bar ([e23a691](https://github.com/humexxx/allstars-galaxy/commit/e23a691907cc6e05faec4f8a21f903226a4edf96))
+* **entertainment:** share the overview split and drop football's table tab ([d269391](https://github.com/humexxx/allstars-galaxy/commit/d26939150624f057e21799e750092486f58cb13d))
+* **entertainment:** show a skeleton while the hub loads a sport ([540cf69](https://github.com/humexxx/allstars-galaxy/commit/540cf69793b0b40a3dd1f3b080f64aedd04c54d8))
+* **entertainment:** show racquet tournaments like f1, with each draw in a sheet ([40d9b59](https://github.com/humexxx/allstars-galaxy/commit/40d9b59fe7c4f3224abbaa28d8bbd09dce6bbf7a))
+* **entertainment:** show the nba champion and tip-off until the opener ([b2d4d69](https://github.com/humexxx/allstars-galaxy/commit/b2d4d69853a1805225e39873a997e7f8a8b8e732))
+* **finance:** show three past months on the dashboard chart and dash the projection ([a5a3b9c](https://github.com/humexxx/allstars-galaxy/commit/a5a3b9ccff209fcb9af85cc20aa30c02631d3a2e))
+* **finance:** show three past months on the dashboard chart and dash the projection ([8cc397c](https://github.com/humexxx/allstars-galaxy/commit/8cc397cf0cba5498d055301106bcc4659edf427a))
+* **landing:** describe the daily board and habit road paths ([a796ad7](https://github.com/humexxx/allstars-galaxy/commit/a796ad7d83988548d9833f086f3cb760df31267e))
+* **portal:** fade the sidebar's separator out towards both ends ([f25773d](https://github.com/humexxx/allstars-galaxy/commit/f25773d6d97afe009dd68bd7926235c31fe827b5))
+* **portal:** give every portal page the plans page's width ([c92b452](https://github.com/humexxx/allstars-galaxy/commit/c92b45289bdc290bda4efa0fdcc79d0523474ed7))
+* **portal:** give every portal page the plans page's width ([022727b](https://github.com/humexxx/allstars-galaxy/commit/022727b3db674243ffa4aa790c3aa146c1e88af3))
+* **portal:** line up the sections of sport cards that sit side by side ([beec6de](https://github.com/humexxx/allstars-galaxy/commit/beec6dea0eb523663db4092ef783eb41b5faabc9))
+* **portal:** narrow the sidebar to 12rem and set it off with a hairline ([a5879f6](https://github.com/humexxx/allstars-galaxy/commit/a5879f65979cee2aaddac58623da0c030cadcebd))
+* **portal:** pick the AI model and track its spend and key expiry in settings ([fbd8235](https://github.com/humexxx/allstars-galaxy/commit/fbd82352d1da2dc6234189814d7b1bee32878965))
+* **portfolio:** show how fresh the prices are and refresh them on demand ([86247ca](https://github.com/humexxx/allstars-galaxy/commit/86247cac3d4276511278a2a3d3bb1ce4750269ed))
+* **portfolio:** show price freshness and refresh prices on demand ([08ed473](https://github.com/humexxx/allstars-galaxy/commit/08ed473d30dc61c036438de2409a37d141a792ac))
+* **productivity:** cheer a habit's check-in with its streak ([5a7d14b](https://github.com/humexxx/allstars-galaxy/commit/5a7d14bb6b498cb1785b95d51be67707b0e4cf82))
+* **productivity:** daily board and road paths as habits that feed it ([8aa0da4](https://github.com/humexxx/allstars-galaxy/commit/8aa0da4cbdc66e7d0b810ca8a791a8e35997ee6c))
+* **productivity:** load the board with its real frame, pulsing only the cards ([d6be119](https://github.com/humexxx/allstars-galaxy/commit/d6be119e183dc55ba3210dbde4520309e43defd4))
+* **productivity:** make the board daily and road paths habits that feed it ([4ad8784](https://github.com/humexxx/allstars-galaxy/commit/4ad87848e32642d2722007d7c4fcd79c9747ebb9))
+* **productivity:** show today's board and habits on the dashboard ([cb0f81d](https://github.com/humexxx/allstars-galaxy/commit/cb0f81dc47898bf514f59296af9ab7c028f1a617))
+* **travel:** add an AI assistant that plans trips behind a preview ([420976d](https://github.com/humexxx/allstars-galaxy/commit/420976daabe6873bf830eb8d031d52aded75bfde))
+* **travel:** add an AI assistant that plans trips behind a preview ([8044bea](https://github.com/humexxx/allstars-galaxy/commit/8044beac55980c5f0486d54f2c33ef039e0059e3))
+* **travel:** draw each trip as one strip across the trips calendar ([824398f](https://github.com/humexxx/allstars-galaxy/commit/824398fa2ad0bf3727e7cfb0a72999eaeb04ac70))
+* **travel:** draw each trip as one strip across the trips calendar ([8c8fbd5](https://github.com/humexxx/allstars-galaxy/commit/8c8fbd58ff47e370ea714999ef17882f896169a3))
+* **travel:** float the assistant beside the page on desktop ([80c7c01](https://github.com/humexxx/allstars-galaxy/commit/80c7c01eead4a314502660d9c6c6ec4bec01d8c2))
+* **travel:** let the assistant manage travellers and photos, and price with the web ([c54fdb4](https://github.com/humexxx/allstars-galaxy/commit/c54fdb48b2a86e2e7d20e715939b891772d465db))
+* **travel:** let the owner choose how long a share link lives ([c9b6467](https://github.com/humexxx/allstars-galaxy/commit/c9b64673a591ae9dc6e30b3eca5088e6252c91ed))
+* **travel:** log payments and decide the assistant's proposals on the trip page ([f58b739](https://github.com/humexxx/allstars-galaxy/commit/f58b739798c572b2ff1a81894882681b123e5681))
+* **travel:** turn the banner into a photo carousel and drop the gallery ([8a878cd](https://github.com/humexxx/allstars-galaxy/commit/8a878cd5a34b6bb399789f3a5e3843a2f3705dbb))
+* **ui:** show match cards three abreast when the list is wide ([85fbc6b](https://github.com/humexxx/allstars-galaxy/commit/85fbc6b999d1fbe4a0aa4b740f26753138888781))
+
+
+### Bug Fixes
+
+* **db:** find pending migrations by date, the way drizzle's migrator does ([c53ee79](https://github.com/humexxx/allstars-galaxy/commit/c53ee79151d5167c3edf7410eae1ba051c69ef19))
+* **db:** plan migrations by drizzle's timestamps, not a row count ([12f0e15](https://github.com/humexxx/allstars-galaxy/commit/12f0e151f5d65ddbf4f23ee9ed372f45f9750543))
+* **db:** plan migrations by drizzle's timestamps, not a row count ([d854c45](https://github.com/humexxx/allstars-galaxy/commit/d854c45a6acf90b001c61d469d57f05e3f4e8f86))
+* **entertainment:** call split winners the latest champions after msi ([8e343c0](https://github.com/humexxx/allstars-galaxy/commit/8e343c038a463b6877b00d0ede2026e9161935a9))
+* **entertainment:** draw the dashboard's next circuit as tall as the lines beside it ([80fb976](https://github.com/humexxx/allstars-galaxy/commit/80fb976ae2bdf2cda65bba7a33e5b90b8479e9ea))
+* **entertainment:** give draw seeds their own column, and the chips their own room ([25480ae](https://github.com/humexxx/allstars-galaxy/commit/25480ae12f2448af611cb6ea858b6b5413753522))
+* **entertainment:** give the sport's name its own row, and stick only its tabs ([e368198](https://github.com/humexxx/allstars-galaxy/commit/e3681984a9404e7accec76c4cbd576b5b22154be))
+* **entertainment:** hand the focus back to the race that opened its sheet ([ad77f2d](https://github.com/humexxx/allstars-galaxy/commit/ad77f2db240d955a25b4f71961798ae9a463baad))
+* **entertainment:** inset team logos so the badge never clips them ([8683751](https://github.com/humexxx/allstars-galaxy/commit/868375109e6fb7841ec2682d57d1993f941844c9))
+* **entertainment:** keep football results, and steady the match list ([9cc13a2](https://github.com/humexxx/allstars-galaxy/commit/9cc13a22752b1339e1510c888718f9276ef67b31))
+* **entertainment:** let follow what's on clear a lol event that is not on ([b14ed1b](https://github.com/humexxx/allstars-galaxy/commit/b14ed1bfb8960e0eea041fb431d8881c4c05c4a6))
+* **entertainment:** load the current racquet draw when the feed did not ship it ([9888c4a](https://github.com/humexxx/allstars-galaxy/commit/9888c4a460fa6d7e4ff9db3af733eca41adbc064))
+* **entertainment:** put every LoL logo on a dark disc ([96cc3c1](https://github.com/humexxx/allstars-galaxy/commit/96cc3c15103f530018fbb346ff9be7b8c83f803b))
+* **entertainment:** put the sport bar's tabs before its controls, and let them scroll ([dc40e4f](https://github.com/humexxx/allstars-galaxy/commit/dc40e4fe3c3c1b271531d38f4be62f424d10518a))
+* **entertainment:** read padel draws and tennis calendars outside their feeds' cache ([b8c8dd2](https://github.com/humexxx/allstars-galaxy/commit/b8c8dd23fcec2b19e8ca2ed934450de98320523c))
+* **entertainment:** read the nba bracket and preseason outside the games' cache ([4f9e7dd](https://github.com/humexxx/allstars-galaxy/commit/4f9e7ddba99a92d24dc002b93899b150fb2b0aa3))
+* **entertainment:** read the nba tip-off only before the season's opener ([46b787e](https://github.com/humexxx/allstars-galaxy/commit/46b787e4c0fbff7df1a095b0836e488f50242a19))
+* **entertainment:** refresh the dashboard after a championship change, not revalidate it ([e6fb0d3](https://github.com/humexxx/allstars-galaxy/commit/e6fb0d3c27ad00cf5dd37bb177585c0a8d847a22))
+* **entertainment:** work out each f1 race's status per read, from parts cached on their own ([ae8b9a4](https://github.com/humexxx/allstars-galaxy/commit/ae8b9a44f13b1b14e9c7b7a1b798cf71751d686e))
+* **portal:** keep the generic dashboard card skeleton for cards without one ([8b5225d](https://github.com/humexxx/allstars-galaxy/commit/8b5225d59a2bbf5d68a0e35bddcef828823fdcc6))
+* **portal:** land the dashboard cards where their skeletons are ([3d7e025](https://github.com/humexxx/allstars-galaxy/commit/3d7e025aedfe693c9ce4f6792ab7af618d048dbd))
+* **portal:** lay the dashboard out by its own width, not the viewport's ([2dda186](https://github.com/humexxx/allstars-galaxy/commit/2dda18630bd0b01436f5f2931956c8be15f47fba))
+* **portal:** paint each section's own skeleton first ([4093053](https://github.com/humexxx/allstars-galaxy/commit/40930533381c12e674d431a569615cee93306e2c))
+* **portal:** re-render once the reader's time zone is first written ([18dfbda](https://github.com/humexxx/allstars-galaxy/commit/18dfbdaa43cef4af5d206044d0022d78e1e634bb))
+* **portal:** record the model that answered each Claude call ([9d2fc99](https://github.com/humexxx/allstars-galaxy/commit/9d2fc995ba1ac018041fa7bca6f2b2ae72e143a2))
+* **portal:** shape the dashboard skeletons like the cards they stand in for ([9235e27](https://github.com/humexxx/allstars-galaxy/commit/9235e272ebefd527074089fa7840b35c9e235a7b))
+* **portal:** shape the dashboard skeletons like the cards they stand in for ([49c658c](https://github.com/humexxx/allstars-galaxy/commit/49c658c0e3759c75642c5200f1630cb88bff9e7a))
+* **portal:** show the plans skeleton when navigating to plans ([86fa4ff](https://github.com/humexxx/allstars-galaxy/commit/86fa4ff83dc13e59b891d588991536efdeb94e81))
+* **portal:** split the dashboard into two columns from 576px of content ([66823db](https://github.com/humexxx/allstars-galaxy/commit/66823dbfd5e97a780c3cb6a8fd8774e06bc3d301))
+* **productivity:** leave a carried-over task unticked when today already has one by that name ([55c44a0](https://github.com/humexxx/allstars-galaxy/commit/55c44a09684c656bb470047a9901e1aede5f30e5))
+* **productivity:** write nothing on the board before the reader's zone is known ([17c974a](https://github.com/humexxx/allstars-galaxy/commit/17c974af9eea058c7bb9404c814033cccf5748e6))
+* **travel:** end a share link's day after chile's repeated hour ([9f8f585](https://github.com/humexxx/allstars-galaxy/commit/9f8f585cfa03354a44268682e233a698a44b97fc))
+* **travel:** stop the dictation level meter only once ([b55471f](https://github.com/humexxx/allstars-galaxy/commit/b55471f77f53b7c2bd7f3485d6ade8a68d4a469f))
+
+
+### Refactor
+
+* **travel:** read a trip with its relations through any executor ([d316dd5](https://github.com/humexxx/allstars-galaxy/commit/d316dd5fc6420a348fcd6b62fd9f58d1d2d39962))
+* **travel:** share the trip and item row mapping and the trip colours ([f435df0](https://github.com/humexxx/allstars-galaxy/commit/f435df02cbc5e4b5064ffe1dd1265e8510fe6f00))
+* **travel:** share the trip photo upload between the picker and the assistant ([3b953d1](https://github.com/humexxx/allstars-galaxy/commit/3b953d181fd34289dcc018d5e870087cfa303b1d))
+
 ## [0.10.0](https://github.com/humexxx/allstars-galaxy/compare/v0.9.1...v0.10.0) (2026-10-19)
 
 

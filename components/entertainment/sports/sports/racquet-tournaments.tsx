@@ -1,64 +1,43 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
-import {
-  Banknote,
-  CalendarDays,
-  ChevronDown,
-  ChevronRight,
-  MapPin,
-  Shield,
-  Trophy,
-  type LucideIcon,
-} from "lucide-react";
+import { Banknote, CalendarDays, MapPin, Shield, Trophy } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
-import { comingUp, featuredTournament, justFinished } from "@/lib/sports/racquet";
+import { cityOf, justFinished, placeOf, playLine, seasonOf, topSeeds } from "@/lib/sports/racquet";
 import { cn } from "@/lib/utils";
-import { formatDayRange, formatMonthLong, formatShortDay } from "@/lib/utils/date";
-import type { RacquetCalendarEntry, RacquetData, RacquetTournament } from "@/types/sports";
+import { formatDayRange } from "@/lib/utils/date";
+import type { DrawVariant, RacquetData, RacquetDraw, RacquetTournament, Team } from "@/types/sports";
 
+import { PairFaces } from "../shared/draw-match-card";
+import { FactList, TileWinner, VersusLine, type Fact } from "../shared/event-facts";
+import { Portrait } from "../shared/portrait";
 import { StatusPill } from "../shared/status-pill";
-import { DrawBody, type DrawState, type DrawVariant } from "./racquet-draw";
+import {
+  EarlierPill,
+  SectionHeading,
+  showNames,
+  TILE,
+  TileSection,
+  useRevealEarlier,
+  ViewDetailsLink,
+} from "../shared/tile-section";
 
-const JUST_FINISHED = 3;
-const COMING_UP = 3;
-
-/** A calendar line in the shape the cards and the sheet read: no place, no draw. */
-function fromCalendar(entry: RacquetCalendarEntry): RacquetTournament {
-  return { ...entry, location: "" };
+/** A tournament on now by its city, or by its name where two share one. */
+function chipLabel(t: RacquetTournament, all: RacquetTournament[]): string {
+  const city = cityOf(t);
+  return city && all.filter((o) => cityOf(o) === city).length === 1 ? city : t.name;
 }
 
-/**
- * The feed's tournaments with the rest of the season's calendar behind them,
- * in date order. Tennis's feed covers only a fortnight either side of today;
- * read off it alone, "coming up" would stop two weeks out.
- */
-export function seasonOf(data: RacquetData): RacquetTournament[] {
-  const listed = new Set(data.tournaments.map((t) => t.id));
-  const rest = (data.calendar ?? []).filter((e) => !listed.has(e.id)).map(fromCalendar);
-  return [...data.tournaments, ...rest].sort((a, b) => a.startDate.localeCompare(b.startDate));
-}
-
-/** A tournament of the tour by id, from the feed or, failing that, the calendar. */
-export function findTournament(data: RacquetData, id: string): RacquetTournament | undefined {
-  const listed = data.tournaments.find((t) => t.id === id);
-  if (listed) return listed;
-  const entry = data.calendar?.find((e) => e.id === id);
-  return entry ? fromCalendar(entry) : undefined;
-}
-
-/** "Allianz Cloud Milano, Milan", "Shanghai, China PR" — or the city alone. */
-function placeOf(t: RacquetTournament): string | null {
-  const city = t.location && t.location !== "—" ? t.location : undefined;
-  if (t.venue && city && !t.venue.includes(city)) return `${t.venue}, ${city}`;
-  return t.venue ?? city ?? null;
+/** What a tournament is, in one word: its tier, else its surface. */
+function kindOf(t: RacquetTournament): string | undefined {
+  return t.tier ?? t.surface;
 }
 
 function prizeOf(prize: RacquetTournament["prize"]): string | null {
@@ -74,44 +53,10 @@ function prizeOf(prize: RacquetTournament["prize"]): string | null {
   }
 }
 
-/** "Oct 12 – 18", "Sep 28 – Oct 4": a season's list needs no year on every line. */
-function shortRange(start: string, end: string): string {
-  if (start === end) return formatShortDay(start);
-  if (start.slice(0, 7) === end.slice(0, 7)) return `${formatShortDay(start)} – ${Number(end.slice(8, 10))}`;
-  return `${formatShortDay(start)} – ${formatShortDay(end)}`;
-}
-
-/**
- * The event's poster, unoptimized: it comes off the provider's media host,
- * which is not on the optimizer's allowlist — the call `Portrait` makes for
- * faces. A poster that fails to load is left out rather than drawn broken.
- */
-export function TournamentPoster({ src, className }: { src: string; className?: string }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) return null;
-  return (
-    <span
-      className={cn("relative block aspect-video shrink-0 overflow-hidden rounded-lg bg-muted", className)}
-    >
-      <Image
-        src={src}
-        alt=""
-        fill
-        sizes="(min-width: 768px) 24rem, 100vw"
-        className="object-cover"
-        unoptimized
-        onError={() => setFailed(true)}
-      />
-    </span>
-  );
-}
-
 /** "Champions" for a pair, "Champion" for a player. */
 function championLabel(variant: DrawVariant): string {
   return variant === "pair" ? "Champions" : "Champion";
 }
-
-type Fact = { label: string; icon: LucideIcon; iconClassName?: string; value: ReactNode };
 
 /** The facts a tournament has, one per line, each behind its icon. */
 export function TournamentFacts({
@@ -120,7 +65,7 @@ export function TournamentFacts({
 }: {
   tournament: RacquetTournament;
   variant: DrawVariant;
-}) {
+}): React.ReactElement {
   const place = placeOf(t);
   const prize = prizeOf(t.prize);
   const facts: Fact[] = [
@@ -137,7 +82,7 @@ export function TournamentFacts({
       label: championLabel(variant),
       icon: Trophy,
       iconClassName: "text-warning",
-      value: <ChampionLine champion={t.champion} runnerUp={t.runnerUp} />,
+      value: <VersusLine winner={t.champion} runnerUp={t.runnerUp} />,
     });
   } else if (t.defendingChampion) {
     facts.push({
@@ -152,375 +97,321 @@ export function TournamentFacts({
     });
   }
 
-  return (
-    <dl className="flex flex-col gap-2">
-      {facts.map(({ label, icon: Icon, iconClassName, value }) => (
-        <div key={label} className="flex items-start gap-2 text-sm">
-          <dt className="flex h-6 shrink-0 items-center text-muted-foreground">
-            <Icon aria-hidden className={cn("size-4", iconClassName)} />
-            <span className="sr-only">{label}</span>
-          </dt>
-          <dd className="min-w-0 leading-6">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+  return <FactList facts={facts} />;
 }
 
-function ChampionLine({ champion, runnerUp }: { champion: string; runnerUp?: string }) {
+/**
+ * Who leads the draw — a week of tennis splits the best players between
+ * three or four events, and the seeds say which one has them. Just the
+ * faces, big (a pair's two), each surname small under it for a player with
+ * no photo, the seed in its tooltip and for a screen reader.
+ */
+function TopSeeds({ seeds, variant }: { seeds: Team[]; variant: DrawVariant }): React.ReactElement {
   return (
-    <>
-      <span className="font-medium">{champion}</span>
-      {runnerUp && <span className="text-muted-foreground"> d. {runnerUp}</span>}
-    </>
+    <ol aria-label="Top seeds" className="flex shrink-0 items-start gap-2">
+      {seeds.map((p) => {
+        // A pair's "Coello / Tapia" closes up; a player goes by the surname.
+        const label = variant === "pair" ? p.shortName.replace(" / ", "/") : p.shortName.split(" ").slice(-1)[0];
+        return (
+          <li
+            key={p.id}
+            title={`Seed ${p.code}: ${variant === "pair" ? p.name : p.shortName}`}
+            className={cn("flex flex-col items-center gap-1", variant === "pair" ? "w-18" : "w-14")}
+          >
+            {variant === "pair" ? (
+              <PairFaces pair={p} size="lg" />
+            ) : (
+              <Portrait
+                size="lg"
+                subject={{ name: p.shortName, imageUrl: p.logoUrl, flagEmoji: p.name }}
+                fallback={<span className="text-2xl leading-none">{p.name}</span>}
+              />
+            )}
+            <span className="w-full truncate text-center text-2xs text-muted-foreground">
+              <span className="sr-only">Seed {p.code}: </span>
+              {label}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
 /**
- * The card's title as its button, stretched over the whole card: a heading
- * inside a `<button>` is not allowed, a button inside a heading is.
+ * A tournament's card: its poster where it has one, beside the content and
+ * flush with the card's edge (the card clips it to its corners), above it on
+ * a phone; the draw's best seeds go to the content as `corner` to place. The
+ * poster comes off the provider's media host, unoptimized like `Portrait`'s
+ * faces.
+ *
+ * Key it by tournament where the tournament can change, or a failed poster
+ * is remembered for the next one.
  */
-function OpenButton({ onOpen, children }: { onOpen: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="cursor-pointer text-left outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
-    >
-      {children}
-    </button>
-  );
-}
-
-/** The live tournament, else the next: big, with its poster where it has one. */
-function FeaturedCard({
+export function TournamentCard({
   tournament: t,
+  seeds,
   variant,
-  onOpen,
-}: {
-  tournament: RacquetTournament;
-  variant: DrawVariant;
-  onOpen: (id: string) => void;
-}) {
-  return (
-    <Card className="relative transition-colors hover:bg-muted/40">
-      <CardContent className="flex flex-col gap-4 @2xl:flex-row @2xl:items-center @2xl:gap-6">
-        {t.imageUrl && (
-          <TournamentPoster key={t.imageUrl} src={t.imageUrl} className="@2xl:w-2/5" />
-        )}
-        <div className="flex min-w-0 flex-1 flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Eyebrow>{t.status === "live" ? "On now" : "Next up"}</Eyebrow>
-            {t.tier && <Badge variant="outline">{t.tier}</Badge>}
-            {t.status === "live" && <StatusPill status="live" />}
-          </div>
-          <Heading level="h4" as="h3">
-            <OpenButton onOpen={() => onOpen(t.id)}>{t.name}</OpenButton>
-          </Heading>
-          <TournamentFacts tournament={t} variant={variant} />
-        </div>
-        <ChevronRight aria-hidden className="hidden size-5 shrink-0 text-muted-foreground @2xl:block" />
-      </CardContent>
-    </Card>
-  );
-}
-
-/** One tournament in a row of cards: what, where, when — and who won, once somebody has. */
-function TournamentCard({
-  tournament: t,
-  onOpen,
-}: {
-  tournament: RacquetTournament;
-  onOpen: (id: string) => void;
-}) {
-  const place = placeOf(t);
-  const kind = t.tier ?? t.surface;
-  return (
-    <Card size="sm" className="relative transition-colors hover:bg-muted/40">
-      <CardContent className="flex flex-1 flex-col gap-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 flex-col leading-tight">
-            {kind && (
-              <Eyebrow size="sm" as="div">
-                {kind}
-              </Eyebrow>
-            )}
-            <Heading level="h6" as="h4">
-              <OpenButton onOpen={() => onOpen(t.id)}>{t.name}</OpenButton>
-            </Heading>
-            {place && (
-              <Text variant="small" as="div" className="truncate">
-                {place}
-              </Text>
-            )}
-          </div>
-          <StatusPill status={t.status} />
-        </div>
-        <Mono className="block text-xs text-muted-foreground">
-          {formatDayRange(t.startDate, t.endDate)}
-        </Mono>
-        {/* Pinned to the bottom, so the results line up along a row whatever
-            the names above them wrap to. */}
-        {t.status === "completed" && t.champion ? (
-          <div className="mt-auto flex items-start gap-2 border-t pt-2 text-xs">
-            <Trophy className="mt-0.5 size-3.5 shrink-0 text-warning" aria-label="Champion" />
-            <span className="min-w-0">
-              <ChampionLine champion={t.champion} runnerUp={t.runnerUp} />
-            </span>
-          </div>
-        ) : t.defendingChampion ? (
-          <div className="mt-auto flex items-start gap-2 border-t pt-2 text-xs text-muted-foreground">
-            <Shield className="mt-0.5 size-3.5 shrink-0" aria-label="Defending champion" />
-            <span className="min-w-0">{t.defendingChampion} defends the title</span>
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
-function Section({
-  title,
   children,
 }: {
-  title: string;
-  children: ReactNode;
-}) {
+  tournament: RacquetTournament;
+  seeds: Team[];
+  variant: DrawVariant;
+  children: (corner: ReactNode) => ReactNode;
+}): React.ReactElement {
+  const [posterGone, setPosterGone] = useState(false);
+  const poster = posterGone ? undefined : t.imageUrl;
+  const corner = seeds.length > 0 ? <TopSeeds seeds={seeds} variant={variant} /> : null;
   return (
-    <section className="flex flex-col gap-3">
-      <Heading level="h6" as="h3">
-        {title}
-      </Heading>
-      {children}
-    </section>
+    <Card>
+      <CardContent className="flex flex-col gap-4 @2xl:flex-row @2xl:items-stretch @2xl:gap-6">
+        {poster && (
+          // Padel's posters are A-format, portrait (1132×1600): beside the
+          // content the box keeps their shape, so the whole poster shows, and
+          // the card is at least its height. A 2:5 share of the card's width
+          // cut the top and the foot off, the event's name among them.
+          <span className="relative block aspect-video shrink-0 overflow-hidden rounded-lg bg-muted @2xl:-my-6 @2xl:-ml-6 @2xl:aspect-5/7 @2xl:w-56 @2xl:rounded-none">
+            <Image src={poster} alt="" fill className="object-cover" unoptimized onError={() => setPosterGone(true)} />
+          </span>
+        )}
+        {children(corner)}
+      </CardContent>
+    </Card>
   );
 }
 
-function CardRow({
-  tournaments,
-  onOpen,
+/**
+ * The tournament on now, else the next, as F1's next race: big, its poster
+ * where it has one, its facts, and at its foot the round under way (nothing
+ * before play starts) beside "View details", to the tournament's own page.
+ * The card itself stays still.
+ */
+function FeaturedTournament({
+  tournament: t,
+  draw,
+  variant,
+  today,
+  href,
 }: {
-  tournaments: RacquetTournament[];
-  onOpen: (id: string) => void;
-}) {
+  tournament: RacquetTournament;
+  draw?: RacquetDraw;
+  variant: DrawVariant;
+  today: string;
+  href: string;
+}): React.ReactElement {
+  const kind = kindOf(t);
+  const line = t.status === "live" ? playLine(t, draw?.rounds, today) : null;
   return (
-    <div className="grid gap-2 @xl:grid-cols-2 @4xl:grid-cols-3">
-      {tournaments.map((t) => (
-        <TournamentCard key={t.id} tournament={t} onOpen={onOpen} />
-      ))}
+    <TournamentCard tournament={t} seeds={draw ? topSeeds(draw) : []} variant={variant}>
+      {(corner) => (
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {kind && <Badge variant="outline">{kind}</Badge>}
+              <StatusPill status={t.status} />
+            </div>
+            {corner}
+          </div>
+          <Heading level="h3">{t.name}</Heading>
+          <TournamentFacts tournament={t} variant={variant} />
+          {/* At the card's foot, clear of the facts: the round under way, once
+              play has started, beside the way to the tournament's page. */}
+          <div className="mt-auto flex items-center justify-end gap-3 pt-2">
+            {line && (
+              <Text variant="muted" className="mr-auto">
+                {line}
+              </Text>
+            )}
+            <ViewDetailsLink href={href} name={t.name} />
+          </div>
+        </div>
+      )}
+    </TournamentCard>
+  );
+}
+
+/**
+ * The heading over the tournament on now, and with two or more being played
+ * (a week of tennis is three or four) a pill for each on its line, its
+ * negative margins keeping the line as tall as the Rankings label beside it.
+ * Under it on a phone.
+ */
+function OnNowHeading({
+  tournament: t,
+  onNow,
+  onPick,
+}: {
+  tournament: RacquetTournament;
+  onNow: RacquetTournament[];
+  onPick: (id: string) => void;
+}): React.ReactElement {
+  return (
+    <div className="flex flex-col gap-2 @md:flex-row @md:items-center @md:justify-between">
+      <SectionHeading>{t.status === "live" ? "On now" : "Next up"}</SectionHeading>
+      {onNow.length > 1 && (
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={t.id}
+          onValueChange={(id) => id && onPick(id)}
+          aria-label="Tournaments on now"
+          className="@md:-my-1.5 @md:justify-end"
+        >
+          {onNow.map((o) => {
+            const label = chipLabel(o, onNow);
+            return (
+              <ToggleGroupItem
+                key={o.id}
+                value={o.id}
+                // The name a screen reader hears starts with the city on the pill.
+                aria-label={label === o.name ? undefined : `${label}, ${o.name}`}
+                // Foreground on the tint: primary text on it is under 4.5:1. The
+                // full primary border keeps the pick visible.
+                className="h-6 rounded-full px-2.5 data-[state=on]:border-primary data-[state=on]:text-foreground"
+              >
+                {label}
+              </ToggleGroupItem>
+            );
+          })}
+        </ToggleGroup>
+      )}
     </div>
   );
 }
 
+/** One tournament as a tile to its page: what, where, when — and who won, once somebody has. */
+function TournamentTile({ tournament: t, href }: { tournament: RacquetTournament; href: string }): React.ReactElement {
+  const place = placeOf(t);
+  const kind = kindOf(t);
+  return (
+    <Link href={href} data-tournament={t.id} className={cn(TILE, "gap-2")}>
+      <span className="flex w-full items-start justify-between gap-2">
+        <span className="flex min-w-0 flex-col leading-tight">
+          {kind && (
+            <Eyebrow size="sm" as="span">
+              {kind}
+            </Eyebrow>
+          )}
+          <Text as="span" weight="semibold" className="truncate">
+            {t.name}
+          </Text>
+        </span>
+        {t.status === "live" && <StatusPill status="live" />}
+      </span>
+      <span className="flex min-w-0 flex-col gap-1">
+        {place && (
+          <Text variant="small" as="span" className="truncate">
+            {place}
+          </Text>
+        )}
+        <Mono className="text-xs text-muted-foreground">{formatDayRange(t.startDate, t.endDate)}</Mono>
+      </span>
+      {t.status === "completed" && t.champion ? (
+        <TileWinner label="Champion">
+          <VersusLine winner={t.champion} runnerUp={t.runnerUp} />
+        </TileWinner>
+      ) : t.defendingChampion ? (
+        <span className="flex items-start gap-2 border-t pt-2 text-xs text-muted-foreground">
+          <Shield aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+          <span className="min-w-0">{t.defendingChampion} defends the title</span>
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
 /**
- * The Tournaments tab, the way F1 shows its races: the event on now (else the
- * next) big, the last few results before it, what follows, and the whole
- * season one tap away. Every card opens the tournament's sheet.
+ * The left of padel's and tennis's Overview, laid out as F1's races: the
+ * tournament on now (a pill each when several are) or the next, big; every
+ * tournament still to come after it; and the ones played, latest first,
+ * brought in from their heading (`useRevealEarlier`). Every tile opens the
+ * tournament's own page.
+ *
+ * Its own container, so the tiles follow the column's width. Each part opens
+ * on a heading set like a day heading, which puts the first card level with
+ * the rankings card beside it (`OverviewSplit`).
  */
-export function RacquetTournaments({
+export function RacquetOverview({
   data,
+  featured,
+  draw,
   variant,
-  onOpen,
+  today,
+  onNow,
+  onPick,
+  hrefFor,
 }: {
   data: RacquetData;
+  /** The tournament on now (the one picked, else the first) or the next. */
+  featured: RacquetTournament | undefined;
+  /** Its draw, for the round under way and the seeds. */
+  draw?: RacquetDraw;
   variant: DrawVariant;
-  onOpen: (id: string) => void;
-}) {
+  today: string;
+  onNow: RacquetTournament[];
+  onPick: (id: string) => void;
+  /** A tournament's own page. */
+  hrefFor: (id: string) => string;
+}): React.ReactElement {
   const season = useMemo(() => seasonOf(data), [data]);
-  // From the feed's own list first: it is the one whose draw travelled with
-  // the page. The calendar only stands in when the feed has nothing ahead.
-  const featured = featuredTournament(data.tournaments) ?? featuredTournament(season);
-  const alsoOn = season.filter((t) => t.status === "live" && t.id !== featured?.id);
-  const finished = justFinished(season, JUST_FINISHED);
-  const next = comingUp(season, COMING_UP, featured?.id);
+  // Every one still to start; those being played are the pills on the heading.
+  const ahead = season.filter((t) => t.status === "upcoming" && t.id !== featured?.id);
+  const played = useMemo(() => justFinished(season, season.length), [season]);
+  const { listRef, earlier, next, reveal } = useRevealEarlier(played, {
+    open: !featured,
+    attr: "data-tournament",
+  });
 
   if (season.length === 0) {
     return <EmptyState icon={CalendarDays} title="No tournaments on the calendar for this tour." />;
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      {featured ? (
-        <FeaturedCard tournament={featured} variant={variant} onOpen={onOpen} />
-      ) : (
-        <EmptyState
-          icon={CalendarDays}
-          title="The season is over"
-          description="Next season's calendar is not out yet."
-        />
-      )}
-      {alsoOn.length > 0 && (
-        <Section title="Also on">
-          <CardRow tournaments={alsoOn} onOpen={onOpen} />
-        </Section>
-      )}
-      {finished.length > 0 && (
-        <Section title="Just finished">
-          <CardRow tournaments={finished} onOpen={onOpen} />
-        </Section>
-      )}
-      {next.length > 0 && (
-        <Section title="Coming up">
-          <CardRow tournaments={next} onOpen={onOpen} />
-        </Section>
-      )}
-      <FullCalendar season={season} onOpen={onOpen} />
-    </div>
-  );
-}
-
-/** The whole season by month, folded away until asked for. */
-function FullCalendar({
-  season,
-  onOpen,
-}: {
-  season: RacquetTournament[];
-  onOpen: (id: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const months = useMemo(() => {
-    const byMonth = new Map<string, RacquetTournament[]>();
-    for (const t of season) {
-      const month = t.startDate.slice(0, 7);
-      byMonth.set(month, [...(byMonth.get(month) ?? []), t]);
-    }
-    return [...byMonth.entries()].map(([month, entries]) => ({
-      month,
-      label: formatMonthLong(`${month}-01`),
-      entries,
-    }));
-  }, [season]);
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} className="flex flex-col gap-3">
-      <CollapsibleTrigger asChild>
-        <Button variant="outline" className="self-start">
-          <CalendarDays />
-          Full calendar
-          <Mono className="text-muted-foreground">{season.length}</Mono>
-          <ChevronDown className={cn("transition-transform", open && "rotate-180")} />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <Card size="sm">
-          <CardContent>
-            <ol className="flex flex-col gap-4">
-              {months.map(({ month, label, entries }) => (
-                <li key={month} className="flex flex-col gap-1">
-                  <Eyebrow size="sm" as="div">
-                    {label}
-                  </Eyebrow>
-                  <ul className="flex flex-col">
-                    {entries.map((t) => (
-                      <li key={t.id}>
-                        <CalendarRow tournament={t} onOpen={onOpen} />
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function CalendarRow({
-  tournament: t,
-  onOpen,
-}: {
-  tournament: RacquetTournament;
-  onOpen: (id: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(t.id)}
-      className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <Mono className="w-28 shrink-0 text-xs text-muted-foreground">
-        {shortRange(t.startDate, t.endDate)}
-      </Mono>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <Text as="span" weight="medium" className="truncate">
-          {t.name}
-        </Text>
-        {t.status === "completed" && t.champion && (
-          <Text as="span" variant="small" className="truncate">
-            {t.champion}
-          </Text>
+    <div ref={listRef} className="@container flex min-w-0 flex-col gap-6">
+      <section className="flex flex-col gap-2">
+        {featured ? (
+          <>
+            <OnNowHeading tournament={featured} onNow={onNow} onPick={onPick} />
+            <FeaturedTournament
+              key={featured.id}
+              tournament={featured}
+              draw={draw}
+              variant={variant}
+              today={today}
+              href={hrefFor(featured.id)}
+            />
+          </>
+        ) : (
+          <>
+            <SectionHeading>Next up</SectionHeading>
+            <EmptyState
+              icon={CalendarDays}
+              title="The season is over"
+              description="Every tournament is under Earlier tournaments below."
+            />
+          </>
         )}
-      </span>
-      {/* Upcoming goes without saying in a list by date; only "live" is news. */}
-      {t.status === "live" && <StatusPill status="live" />}
-    </button>
-  );
-}
+      </section>
 
-/**
- * The Current tab: the tournament being played, else the one just finished,
- * with its draw inline.
- */
-export function RacquetCurrent({
-  tournament: t,
-  draw,
-  variant,
-  onOpen,
-  onRetry,
-}: {
-  tournament: RacquetTournament | undefined;
-  draw: DrawState;
-  variant: DrawVariant;
-  onOpen: (id: string) => void;
-  onRetry?: () => void;
-}) {
-  if (!t) {
-    return (
-      <EmptyState
-        icon={Trophy}
-        title="Nothing on and nothing just finished"
-        description="The next tournament is under Tournaments."
-      />
-    );
-  }
-
-  const place = placeOf(t);
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 @2xl:flex-row @2xl:items-end @2xl:justify-between">
-        <div className="flex min-w-0 flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Eyebrow>{t.status === "live" ? "On now" : "Just finished"}</Eyebrow>
-            {t.tier && <Badge variant="outline">{t.tier}</Badge>}
-            <StatusPill status={t.status} />
-          </div>
-          <Heading level="h4" as="h3">
-            {t.name}
-          </Heading>
-          <Text variant="muted">
-            {[formatDayRange(t.startDate, t.endDate), place].filter(Boolean).join(" · ")}
-          </Text>
-        </div>
-        <Button variant="outline" size="sm" className="self-start @2xl:self-auto" onClick={() => onOpen(t.id)}>
-          Details
-          <ChevronRight />
-        </Button>
-      </div>
-      {t.status === "completed" && t.champion && (
-        <div className="flex items-start gap-2 rounded-lg bg-warning/10 px-3 py-2 text-sm dark:bg-warning/20">
-          <Trophy className="mt-0.5 size-4 shrink-0 text-warning" aria-label={championLabel(variant)} />
-          <span className="min-w-0">
-            <ChampionLine champion={t.champion} runnerUp={t.runnerUp} />
-          </span>
-        </div>
+      {ahead.length > 0 && (
+        <TileSection title="Coming up">
+          {ahead.map((t) => (
+            <TournamentTile key={t.id} tournament={t} href={hrefFor(t.id)} />
+          ))}
+        </TileSection>
       )}
-      <Card size="sm">
-        <CardContent>
-          <DrawBody tournament={t} state={draw} variant={variant} onRetry={onRetry} />
-        </CardContent>
-      </Card>
+
+      {played.length > 0 && (
+        <TileSection
+          title="Earlier tournaments"
+          action={next.length > 0 && <EarlierPill detail={showNames(next)} onClick={reveal} />}
+        >
+          {earlier.map((t) => (
+            <TournamentTile key={t.id} tournament={t} href={hrefFor(t.id)} />
+          ))}
+        </TileSection>
+      )}
     </div>
   );
 }

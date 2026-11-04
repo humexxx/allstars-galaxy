@@ -62,10 +62,11 @@ export function F1NextRace({
             </Mono>
           )}
           {race.status === "completed" && winner && (
-            <Mono className="truncate text-2xs text-muted-foreground">
-              Winner · {winner}
-              {race.pole && ` · Pole ${race.pole.code}`}
-            </Mono>
+            <span className="flex min-w-0 items-baseline gap-1.5 text-xs">
+              <span className="font-semibold">Winner {winner}</span>
+              {race.winner?.team && <span className="truncate text-muted-foreground">{race.winner.team}</span>}
+              {race.pole && <Mono className="shrink-0 text-2xs text-muted-foreground">Pole {race.pole.code}</Mono>}
+            </span>
           )}
           {race.lastYear && (
             <span className="truncate text-2xs text-muted-foreground">

@@ -1,0 +1,1780 @@
+[
+ {
+  "id": "760057",
+  "date": "2025-10-23T00:30:00Z",
+  "season": 2025,
+  "seasonType": "3",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Wild Card",
+   "abbreviation": "2025 MLS Playoffs"
+  },
+  "notes": [
+   {
+    "headline": "Chicago Fire FC advances."
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+7'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "12011",
+    "homeAway": "away",
+    "abbreviation": "ORL",
+    "displayName": "Orlando City SC",
+    "name": "Orlando",
+    "color": "60269e",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/12011.png",
+    "score": "1",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "182",
+    "homeAway": "home",
+    "abbreviation": "CHI",
+    "displayName": "Chicago Fire FC",
+    "name": "Chicago",
+    "color": "7ccdef",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/182.png",
+    "score": "3",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "760058",
+  "date": "2025-10-23T02:30:00Z",
+  "season": 2025,
+  "seasonType": "4",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Wild Card",
+   "abbreviation": "WC - Wild Card"
+  },
+  "notes": [
+   {
+    "headline": "Portland Timbers advances."
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+9'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "4771",
+    "homeAway": "away",
+    "abbreviation": "RSL",
+    "displayName": "Real Salt Lake",
+    "name": "Salt Lake",
+    "color": "a32035",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/4771.png",
+    "score": "1",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "9723",
+    "homeAway": "home",
+    "abbreviation": "POR",
+    "displayName": "Portland Timbers",
+    "name": "Portland",
+    "color": "2c5234",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9723.png",
+    "score": "3",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "760079",
+  "date": "2025-10-25T00:00:00Z",
+  "season": 2025,
+  "seasonType": "7",
+  "note": "Game 1",
+  "broadcast": "FS1/FOX Deportes/Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Round One",
+   "abbreviation": "EC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "MIA leads series 1-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+12'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "18986",
+    "homeAway": "away",
+    "abbreviation": "NSH",
+    "displayName": "Nashville SC",
+    "name": "Nashville",
+    "color": "ece83a",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18986.png",
+    "score": "1",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "20232",
+    "homeAway": "home",
+    "abbreviation": "MIA",
+    "displayName": "Inter Miami CF",
+    "name": "Miami",
+    "color": "231f20",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20232.png",
+    "score": "3",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "760067",
+  "date": "2025-10-26T21:30:00Z",
+  "season": 2025,
+  "seasonType": "5",
+  "note": "Game 1, PHI wins 4-2 on penalties",
+  "broadcast": "FS1/FOX Deportes/Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Round One",
+   "abbreviation": "EC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "PHI leads series 1-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 5,
+   "displayClock": "99'",
+   "type": {
+    "name": "STATUS_FINAL_PEN",
+    "state": "post",
+    "completed": true,
+    "detail": "FT-Pens",
+    "shortDetail": "FT-Pens"
+   }
+  },
+  "competitors": [
+   {
+    "id": "182",
+    "homeAway": "away",
+    "abbreviation": "CHI",
+    "displayName": "Chicago Fire FC",
+    "name": "Chicago",
+    "color": "7ccdef",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/182.png",
+    "score": "2",
+    "winner": false,
+    "advance": false,
+    "shootoutScore": 2.0
+   },
+   {
+    "id": "10739",
+    "homeAway": "home",
+    "abbreviation": "PHI",
+    "displayName": "Philadelphia Union",
+    "name": "Philadelphia",
+    "color": "051f31",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/10739.png",
+    "score": "2",
+    "winner": true,
+    "advance": true,
+    "shootoutScore": 4.0
+   }
+  ]
+ },
+ {
+  "id": "760076",
+  "date": "2025-10-26T23:30:00Z",
+  "season": 2025,
+  "seasonType": "10",
+  "note": "Game 1",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Round One",
+   "abbreviation": "WC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "VAN leads series 1-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+7'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "185",
+    "homeAway": "away",
+    "abbreviation": "DAL",
+    "displayName": "FC Dallas",
+    "name": "Dallas",
+    "color": "c6093b",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/185.png",
+    "score": "0",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "9727",
+    "homeAway": "home",
+    "abbreviation": "VAN",
+    "displayName": "Vancouver Whitecaps",
+    "name": "Vancouver",
+    "color": "ffffff",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9727.png",
+    "score": "3",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "760070",
+  "date": "2025-10-27T01:30:00Z",
+  "season": 2025,
+  "seasonType": "9",
+  "note": "Game 1",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Round One",
+   "abbreviation": "WC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "SD leads series 1-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+8'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "9723",
+    "homeAway": "away",
+    "abbreviation": "POR",
+    "displayName": "Portland Timbers",
+    "name": "Portland",
+    "color": "2c5234",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9723.png",
+    "score": "1",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "22529",
+    "homeAway": "home",
+    "abbreviation": "SD",
+    "displayName": "San Diego FC",
+    "name": "San Diego",
+    "color": "697a7C",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/22529.png",
+    "score": "2",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "760073",
+  "date": "2025-10-27T22:45:00Z",
+  "season": 2025,
+  "seasonType": "6",
+  "note": "Game 1",
+  "broadcast": "FS1/FOX Deportes/Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Round One",
+   "abbreviation": "EC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "CIN leads series 1-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+6'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "183",
+    "homeAway": "away",
+    "abbreviation": "CLB",
+    "displayName": "Columbus Crew",
+    "name": "Columbus",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/183.png",
+    "score": "0",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "18267",
+    "homeAway": "home",
+    "abbreviation": "CIN",
+    "displayName": "FC Cincinnati",
+    "name": "Cincinnati",
+    "color": "003087",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18267.png",
+    "score": "1",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "760088",
+  "date": "2025-10-28T01:00:00Z",
+  "season": 2025,
+  "seasonType": "12",
+  "note": "Game 1, MIN wins 3-2 on penalties",
+  "broadcast": "FS1/FOX Deportes/Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Round One",
+   "abbreviation": "WC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "MIN leads series 1-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 5,
+   "displayClock": "96'",
+   "type": {
+    "name": "STATUS_FINAL_PEN",
+    "state": "post",
+    "completed": true,
+    "detail": "FT-Pens",
+    "shortDetail": "FT-Pens"
+   }
+  },
+  "competitors": [
+   {
+    "id": "9726",
+    "homeAway": "away",
+    "abbreviation": "SEA",
+    "displayName": "Seattle Sounders FC",
+    "name": "Seattle",
+    "color": "2dc84d",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9726.png",
+    "score": "0",
+    "winner": false,
+    "advance": false,
+    "shootoutScore": 2.0
+   },
+   {
+    "id": "17362",
+    "homeAway": "home",
+    "abbreviation": "MIN",
+    "displayName": "Minnesota United FC",
+    "name": "Minnesota",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/17362.png",
+    "score": "0",
+    "winner": true,
+    "advance": true,
+    "shootoutScore": 3.0
+   }
+  ]
+ },
+ {
+  "id": "760085",
+  "date": "2025-10-28T22:45:00Z",
+  "season": 2025,
+  "seasonType": "8",
+  "note": "Game 1",
+  "broadcast": "FS1/FOX Deportes/Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Round One",
+   "abbreviation": "EC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "NYC leads series 1-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+7'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "17606",
+    "homeAway": "away",
+    "abbreviation": "NYC",
+    "displayName": "New York City FC",
+    "name": "NYCFC",
+    "color": "9fd2ff",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/17606.png",
+    "score": "1",
+    "winner": true,
+    "advance": true
+   },
+   {
+    "id": "21300",
+    "homeAway": "home",
+    "abbreviation": "CLT",
+    "displayName": "Charlotte FC",
+    "name": "Charlotte",
+    "color": "0085ca",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/21300.png",
+    "score": "0",
+    "winner": false,
+    "advance": false
+   }
+  ]
+ },
+ {
+  "id": "760082",
+  "date": "2025-10-30T02:30:00Z",
+  "season": 2025,
+  "seasonType": "11",
+  "note": "Game 1",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Round One",
+   "abbreviation": "WC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "LAFC leads series 1-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+7'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "20906",
+    "homeAway": "away",
+    "abbreviation": "ATX",
+    "displayName": "Austin FC",
+    "name": "Austin",
+    "color": "00b140",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20906.png",
+    "score": "1",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "18966",
+    "homeAway": "home",
+    "abbreviation": "LAFC",
+    "displayName": "LAFC",
+    "name": "LAFC",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18966.png",
+    "score": "2",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "760086",
+  "date": "2025-11-01T19:30:00Z",
+  "season": 2025,
+  "seasonType": "8",
+  "note": "Game 2, CLT wins 7-6 on penalties",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Round One",
+   "abbreviation": "EC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "Series tied 1-1"
+   }
+  ],
+  "fullStatus": {
+   "period": 5,
+   "displayClock": "93'",
+   "type": {
+    "name": "STATUS_FINAL_PEN",
+    "state": "post",
+    "completed": true,
+    "detail": "FT-Pens",
+    "shortDetail": "FT-Pens"
+   }
+  },
+  "competitors": [
+   {
+    "id": "21300",
+    "homeAway": "away",
+    "abbreviation": "CLT",
+    "displayName": "Charlotte FC",
+    "name": "Charlotte",
+    "color": "0085ca",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/21300.png",
+    "score": "0",
+    "winner": true,
+    "advance": true,
+    "shootoutScore": 7.0
+   },
+   {
+    "id": "17606",
+    "homeAway": "home",
+    "abbreviation": "NYC",
+    "displayName": "New York City FC",
+    "name": "NYCFC",
+    "color": "9fd2ff",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/17606.png",
+    "score": "0",
+    "winner": false,
+    "advance": false,
+    "shootoutScore": 6.0
+   }
+  ]
+ },
+ {
+  "id": "760068",
+  "date": "2025-11-01T21:30:00Z",
+  "season": 2025,
+  "seasonType": "5",
+  "note": "Game 2",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Round One",
+   "abbreviation": "EC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "PHI win series 2-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+4'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "10739",
+    "homeAway": "away",
+    "abbreviation": "PHI",
+    "displayName": "Philadelphia Union",
+    "name": "Philadelphia",
+    "color": "051f31",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/10739.png",
+    "score": "3",
+    "winner": true,
+    "advance": true
+   },
+   {
+    "id": "182",
+    "homeAway": "home",
+    "abbreviation": "CHI",
+    "displayName": "Chicago Fire FC",
+    "name": "Chicago",
+    "color": "7ccdef",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/182.png",
+    "score": "0",
+    "winner": false,
+    "advance": false
+   }
+  ]
+ },
+ {
+  "id": "760080",
+  "date": "2025-11-01T23:30:00Z",
+  "season": 2025,
+  "seasonType": "7",
+  "note": "Game 2",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Round One",
+   "abbreviation": "EC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "Series tied 1-1"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+7'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "20232",
+    "homeAway": "away",
+    "abbreviation": "MIA",
+    "displayName": "Inter Miami CF",
+    "name": "Miami",
+    "color": "231f20",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20232.png",
+    "score": "1",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "18986",
+    "homeAway": "home",
+    "abbreviation": "NSH",
+    "displayName": "Nashville SC",
+    "name": "Nashville",
+    "color": "ece83a",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18986.png",
+    "score": "2",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "760077",
+  "date": "2025-11-02T01:30:00Z",
+  "season": 2025,
+  "seasonType": "10",
+  "note": "Game 2, VAN wins 4-2 on penalties",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Round One",
+   "abbreviation": "WC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "VAN win series 2-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 5,
+   "displayClock": "97'",
+   "type": {
+    "name": "STATUS_FINAL_PEN",
+    "state": "post",
+    "completed": true,
+    "detail": "FT-Pens",
+    "shortDetail": "FT-Pens"
+   }
+  },
+  "competitors": [
+   {
+    "id": "9727",
+    "homeAway": "away",
+    "abbreviation": "VAN",
+    "displayName": "Vancouver Whitecaps",
+    "name": "Vancouver",
+    "color": "ffffff",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9727.png",
+    "score": "1",
+    "winner": true,
+    "advance": true,
+    "shootoutScore": 4.0
+   },
+   {
+    "id": "185",
+    "homeAway": "home",
+    "abbreviation": "DAL",
+    "displayName": "FC Dallas",
+    "name": "Dallas",
+    "color": "c6093b",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/185.png",
+    "score": "1",
+    "winner": false,
+    "advance": false,
+    "shootoutScore": 2.0
+   }
+  ]
+ },
+ {
+  "id": "760071",
+  "date": "2025-11-02T01:30:00Z",
+  "season": 2025,
+  "seasonType": "9",
+  "note": "Game 2, POR wins 3-2 on penalties",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Round One",
+   "abbreviation": "WC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "Series tied 1-1"
+   }
+  ],
+  "fullStatus": {
+   "period": 5,
+   "displayClock": "102'",
+   "type": {
+    "name": "STATUS_FINAL_PEN",
+    "state": "post",
+    "completed": true,
+    "detail": "FT-Pens",
+    "shortDetail": "FT-Pens"
+   }
+  },
+  "competitors": [
+   {
+    "id": "22529",
+    "homeAway": "away",
+    "abbreviation": "SD",
+    "displayName": "San Diego FC",
+    "name": "San Diego",
+    "color": "697a7C",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/22529.png",
+    "score": "2",
+    "winner": false,
+    "advance": false,
+    "shootoutScore": 2.0
+   },
+   {
+    "id": "9723",
+    "homeAway": "home",
+    "abbreviation": "POR",
+    "displayName": "Portland Timbers",
+    "name": "Portland",
+    "color": "2c5234",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9723.png",
+    "score": "2",
+    "winner": true,
+    "advance": true,
+    "shootoutScore": 3.0
+   }
+  ]
+ },
+ {
+  "id": "760074",
+  "date": "2025-11-02T23:30:00Z",
+  "season": 2025,
+  "seasonType": "6",
+  "note": "Game 2",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Round One",
+   "abbreviation": "EC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "Series tied 1-1"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+3'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "18267",
+    "homeAway": "away",
+    "abbreviation": "CIN",
+    "displayName": "FC Cincinnati",
+    "name": "Cincinnati",
+    "color": "003087",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18267.png",
+    "score": "0",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "183",
+    "homeAway": "home",
+    "abbreviation": "CLB",
+    "displayName": "Columbus Crew",
+    "name": "Columbus",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/183.png",
+    "score": "4",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "760083",
+  "date": "2025-11-03T01:45:00Z",
+  "season": 2025,
+  "seasonType": "11",
+  "note": "Game 2",
+  "broadcast": "FS1/FOX Deportes/Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Round One",
+   "abbreviation": "WC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "LAFC win series 2-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+4'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "18966",
+    "homeAway": "away",
+    "abbreviation": "LAFC",
+    "displayName": "LAFC",
+    "name": "LAFC",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18966.png",
+    "score": "4",
+    "winner": true,
+    "advance": true
+   },
+   {
+    "id": "20906",
+    "homeAway": "home",
+    "abbreviation": "ATX",
+    "displayName": "Austin FC",
+    "name": "Austin",
+    "color": "00b140",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20906.png",
+    "score": "1",
+    "winner": false,
+    "advance": false
+   }
+  ]
+ },
+ {
+  "id": "760089",
+  "date": "2025-11-04T03:45:00Z",
+  "season": 2025,
+  "seasonType": "12",
+  "note": "Game 2",
+  "broadcast": "FS1/FOX Deportes/Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Round One",
+   "abbreviation": "WC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "Series tied 1-1"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+7'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "17362",
+    "homeAway": "away",
+    "abbreviation": "MIN",
+    "displayName": "Minnesota United FC",
+    "name": "Minnesota",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/17362.png",
+    "score": "2",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "9726",
+    "homeAway": "home",
+    "abbreviation": "SEA",
+    "displayName": "Seattle Sounders FC",
+    "name": "Seattle",
+    "color": "2dc84d",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9726.png",
+    "score": "4",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "760078",
+  "date": "2025-11-07T20:00:00Z",
+  "season": 2025,
+  "seasonType": "10",
+  "note": "Game 3",
+  "group": {
+   "name": "Western Conference Playoffs - Round One",
+   "abbreviation": "WC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "VAN win series 2-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 0,
+   "displayClock": "0'",
+   "type": {
+    "name": "STATUS_CANCELED",
+    "state": "post",
+    "completed": false,
+    "detail": "Canceled",
+    "shortDetail": "Canceled"
+   }
+  },
+  "competitors": [
+   {
+    "id": "185",
+    "homeAway": "away",
+    "abbreviation": "DAL",
+    "displayName": "FC Dallas",
+    "name": "Dallas",
+    "color": "c6093b",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/185.png",
+    "score": "0",
+    "winner": false
+   },
+   {
+    "id": "9727",
+    "homeAway": "home",
+    "abbreviation": "VAN",
+    "displayName": "Vancouver Whitecaps",
+    "name": "Vancouver",
+    "color": "ffffff",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9727.png",
+    "score": "0",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "760087",
+  "date": "2025-11-08T00:00:00Z",
+  "season": 2025,
+  "seasonType": "8",
+  "note": "Game 3",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Round One",
+   "abbreviation": "EC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "NYC win series 2-1"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+16'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "17606",
+    "homeAway": "away",
+    "abbreviation": "NYC",
+    "displayName": "New York City FC",
+    "name": "NYCFC",
+    "color": "9fd2ff",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/17606.png",
+    "score": "3",
+    "winner": true,
+    "advance": true
+   },
+   {
+    "id": "21300",
+    "homeAway": "home",
+    "abbreviation": "CLT",
+    "displayName": "Charlotte FC",
+    "name": "Charlotte",
+    "color": "0085ca",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/21300.png",
+    "score": "1",
+    "winner": false,
+    "advance": false
+   }
+  ]
+ },
+ {
+  "id": "760084",
+  "date": "2025-11-08T20:00:00Z",
+  "season": 2025,
+  "seasonType": "11",
+  "note": "Game 3",
+  "group": {
+   "name": "Western Conference Playoffs - Round One",
+   "abbreviation": "WC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "LAFC win series 2-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 0,
+   "displayClock": "0'",
+   "type": {
+    "name": "STATUS_CANCELED",
+    "state": "post",
+    "completed": false,
+    "detail": "Canceled",
+    "shortDetail": "Canceled"
+   }
+  },
+  "competitors": [
+   {
+    "id": "20906",
+    "homeAway": "away",
+    "abbreviation": "ATX",
+    "displayName": "Austin FC",
+    "name": "Austin",
+    "color": "00b140",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20906.png",
+    "score": "0",
+    "winner": false
+   },
+   {
+    "id": "18966",
+    "homeAway": "home",
+    "abbreviation": "LAFC",
+    "displayName": "LAFC",
+    "name": "LAFC",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18966.png",
+    "score": "0",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "760069",
+  "date": "2025-11-08T20:00:00Z",
+  "season": 2025,
+  "seasonType": "5",
+  "note": "Game 3",
+  "group": {
+   "name": "Eastern Conference Playoffs - Round One",
+   "abbreviation": "EC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "PHI win series 2-0"
+   }
+  ],
+  "fullStatus": {
+   "period": 0,
+   "displayClock": "0'",
+   "type": {
+    "name": "STATUS_CANCELED",
+    "state": "post",
+    "completed": false,
+    "detail": "Canceled",
+    "shortDetail": "Canceled"
+   }
+  },
+  "competitors": [
+   {
+    "id": "182",
+    "homeAway": "away",
+    "abbreviation": "CHI",
+    "displayName": "Chicago Fire FC",
+    "name": "Chicago",
+    "color": "7ccdef",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/182.png",
+    "score": "0",
+    "winner": false
+   },
+   {
+    "id": "10739",
+    "homeAway": "home",
+    "abbreviation": "PHI",
+    "displayName": "Philadelphia Union",
+    "name": "Philadelphia",
+    "color": "051f31",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/10739.png",
+    "score": "0",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "760090",
+  "date": "2025-11-08T21:00:00Z",
+  "season": 2025,
+  "seasonType": "12",
+  "note": "Game 3, MIN wins 7-6 on penalties",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Round One",
+   "abbreviation": "WC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "MIN win series 2-1"
+   }
+  ],
+  "fullStatus": {
+   "period": 5,
+   "displayClock": "100'",
+   "type": {
+    "name": "STATUS_FINAL_PEN",
+    "state": "post",
+    "completed": true,
+    "detail": "FT-Pens",
+    "shortDetail": "FT-Pens"
+   }
+  },
+  "competitors": [
+   {
+    "id": "9726",
+    "homeAway": "away",
+    "abbreviation": "SEA",
+    "displayName": "Seattle Sounders FC",
+    "name": "Seattle",
+    "color": "2dc84d",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9726.png",
+    "score": "3",
+    "winner": false,
+    "advance": false,
+    "shootoutScore": 6.0
+   },
+   {
+    "id": "17362",
+    "homeAway": "home",
+    "abbreviation": "MIN",
+    "displayName": "Minnesota United FC",
+    "name": "Minnesota",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/17362.png",
+    "score": "3",
+    "winner": true,
+    "advance": true,
+    "shootoutScore": 7.0
+   }
+  ]
+ },
+ {
+  "id": "760075",
+  "date": "2025-11-08T23:00:00Z",
+  "season": 2025,
+  "seasonType": "6",
+  "note": "Game 3",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Round One",
+   "abbreviation": "EC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "CIN win series 2-1"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+9'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "183",
+    "homeAway": "away",
+    "abbreviation": "CLB",
+    "displayName": "Columbus Crew",
+    "name": "Columbus",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/183.png",
+    "score": "1",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "18267",
+    "homeAway": "home",
+    "abbreviation": "CIN",
+    "displayName": "FC Cincinnati",
+    "name": "Cincinnati",
+    "color": "003087",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18267.png",
+    "score": "2",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "760081",
+  "date": "2025-11-09T01:00:00Z",
+  "season": 2025,
+  "seasonType": "7",
+  "note": "Game 3",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Round One",
+   "abbreviation": "EC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "MIA win series 2-1"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+9'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "18986",
+    "homeAway": "away",
+    "abbreviation": "NSH",
+    "displayName": "Nashville SC",
+    "name": "Nashville",
+    "color": "ece83a",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18986.png",
+    "score": "0",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "20232",
+    "homeAway": "home",
+    "abbreviation": "MIA",
+    "displayName": "Inter Miami CF",
+    "name": "Miami",
+    "color": "231f20",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20232.png",
+    "score": "4",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "760072",
+  "date": "2025-11-10T02:00:00Z",
+  "season": 2025,
+  "seasonType": "9",
+  "note": "Game 3",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Round One",
+   "abbreviation": "WC - Round One"
+  },
+  "notes": [
+   {
+    "headline": "SD win series 2-1"
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+3'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "9723",
+    "homeAway": "away",
+    "abbreviation": "POR",
+    "displayName": "Portland Timbers",
+    "name": "Portland",
+    "color": "2c5234",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9723.png",
+    "score": "0",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "22529",
+    "homeAway": "home",
+    "abbreviation": "SD",
+    "displayName": "San Diego FC",
+    "name": "San Diego",
+    "color": "697a7C",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/22529.png",
+    "score": "4",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "760833",
+  "date": "2025-11-23T02:30:00Z",
+  "season": 2025,
+  "seasonType": "14",
+  "note": "Vancouver Whitecaps advance 4-3 on penalties",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Semifinals",
+   "abbreviation": "WC - Semifinals"
+  },
+  "notes": [
+   {
+    "headline": "Vancouver Whitecaps advance 4-3 on penalties"
+   },
+   {
+    "headline": "Vancouver Whitecaps advance 4-3 on penalties"
+   },
+   {
+    "headline": "Vancouver Whitecaps advance 4-3 on penalties."
+   }
+  ],
+  "fullStatus": {
+   "period": 5,
+   "displayClock": "120'",
+   "type": {
+    "name": "STATUS_FINAL_PEN",
+    "state": "post",
+    "completed": true,
+    "detail": "FT-Pens",
+    "shortDetail": "FT-Pens"
+   }
+  },
+  "competitors": [
+   {
+    "id": "18966",
+    "homeAway": "away",
+    "abbreviation": "LAFC",
+    "displayName": "LAFC",
+    "name": "LAFC",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18966.png",
+    "score": "2",
+    "winner": false,
+    "advance": false,
+    "shootoutScore": 3.0
+   },
+   {
+    "id": "9727",
+    "homeAway": "home",
+    "abbreviation": "VAN",
+    "displayName": "Vancouver Whitecaps",
+    "name": "Vancouver",
+    "color": "ffffff",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9727.png",
+    "score": "2",
+    "winner": true,
+    "advance": true,
+    "shootoutScore": 4.0
+   }
+  ]
+ },
+ {
+  "id": "760862",
+  "date": "2025-11-23T22:00:00Z",
+  "season": 2025,
+  "seasonType": "13",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Semifinals",
+   "abbreviation": "EC - Semifinals"
+  },
+  "notes": [
+   {
+    "headline": "Inter Miami CF advances."
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+3'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "20232",
+    "homeAway": "away",
+    "abbreviation": "MIA",
+    "displayName": "Inter Miami CF",
+    "name": "Miami",
+    "color": "231f20",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20232.png",
+    "score": "4",
+    "winner": true,
+    "advance": true
+   },
+   {
+    "id": "18267",
+    "homeAway": "home",
+    "abbreviation": "CIN",
+    "displayName": "FC Cincinnati",
+    "name": "Cincinnati",
+    "color": "003087",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18267.png",
+    "score": "0",
+    "winner": false,
+    "advance": false
+   }
+  ]
+ },
+ {
+  "id": "760834",
+  "date": "2025-11-24T00:45:00Z",
+  "season": 2025,
+  "seasonType": "13",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Semifinals",
+   "abbreviation": "EC - Semifinals"
+  },
+  "notes": [
+   {
+    "headline": "New York City FC advances."
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+8'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "17606",
+    "homeAway": "away",
+    "abbreviation": "NYC",
+    "displayName": "New York City FC",
+    "name": "NYCFC",
+    "color": "9fd2ff",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/17606.png",
+    "score": "1",
+    "winner": true,
+    "advance": true
+   },
+   {
+    "id": "10739",
+    "homeAway": "home",
+    "abbreviation": "PHI",
+    "displayName": "Philadelphia Union",
+    "name": "Philadelphia",
+    "color": "051f31",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/10739.png",
+    "score": "0",
+    "winner": false,
+    "advance": false
+   }
+  ]
+ },
+ {
+  "id": "760863",
+  "date": "2025-11-25T03:00:00Z",
+  "season": 2025,
+  "seasonType": "14",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Semifinals",
+   "abbreviation": "WC - Semifinals"
+  },
+  "notes": [
+   {
+    "headline": "San Diego FC advances."
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+5'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "17362",
+    "homeAway": "away",
+    "abbreviation": "MIN",
+    "displayName": "Minnesota United FC",
+    "name": "Minnesota",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/17362.png",
+    "score": "0",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "22529",
+    "homeAway": "home",
+    "abbreviation": "SD",
+    "displayName": "San Diego FC",
+    "name": "San Diego",
+    "color": "697a7C",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/22529.png",
+    "score": "1",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "761971",
+  "date": "2025-11-29T23:00:00Z",
+  "season": 2025,
+  "seasonType": "15",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference Playoffs - Final",
+   "abbreviation": "EC - Final"
+  },
+  "notes": [
+   {
+    "headline": "Inter Miami CF advances."
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+1'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "17606",
+    "homeAway": "away",
+    "abbreviation": "NYC",
+    "displayName": "New York City FC",
+    "name": "NYCFC",
+    "color": "9fd2ff",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/17606.png",
+    "score": "1",
+    "winner": false,
+    "advance": false
+   },
+   {
+    "id": "20232",
+    "homeAway": "home",
+    "abbreviation": "MIA",
+    "displayName": "Inter Miami CF",
+    "name": "Miami",
+    "color": "231f20",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20232.png",
+    "score": "5",
+    "winner": true,
+    "advance": true
+   }
+  ]
+ },
+ {
+  "id": "762050",
+  "date": "2025-11-30T02:00:00Z",
+  "season": 2025,
+  "seasonType": "16",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference Playoffs - Final",
+   "abbreviation": "WC - Final"
+  },
+  "notes": [
+   {
+    "headline": "Vancouver Whitecaps advances."
+   }
+  ],
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+7'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "9727",
+    "homeAway": "away",
+    "abbreviation": "VAN",
+    "displayName": "Vancouver Whitecaps",
+    "name": "Vancouver",
+    "color": "ffffff",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9727.png",
+    "score": "3",
+    "winner": true,
+    "advance": true
+   },
+   {
+    "id": "22529",
+    "homeAway": "home",
+    "abbreviation": "SD",
+    "displayName": "San Diego FC",
+    "name": "San Diego",
+    "color": "697a7C",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/22529.png",
+    "score": "1",
+    "winner": false,
+    "advance": false
+   }
+  ]
+ },
+ {
+  "id": "762182",
+  "date": "2025-12-06T19:30:00Z",
+  "season": 2025,
+  "seasonType": "17",
+  "broadcast": "FOX/FOX Deportes/Apple TV",
+  "group": {
+   "name": "MLS Cup",
+   "abbreviation": "MLS Cup"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+9'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "9727",
+    "homeAway": "away",
+    "abbreviation": "VAN",
+    "displayName": "Vancouver Whitecaps",
+    "name": "Vancouver",
+    "color": "ffffff",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9727.png",
+    "score": "1",
+    "winner": false
+   },
+   {
+    "id": "20232",
+    "homeAway": "home",
+    "abbreviation": "MIA",
+    "displayName": "Inter Miami CF",
+    "name": "Miami",
+    "color": "231f20",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20232.png",
+    "score": "3",
+    "winner": true
+   }
+  ]
+ }
+]

@@ -59,9 +59,10 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           // A card in the middle of the screen from `sm` up; on a phone it is the
-          // iOS sheet — pinned to the bottom edge, square at the bottom, sliding up.
-          "bg-popover data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/5 grid max-h-[calc(100svh-2rem)] max-w-[calc(100%-2rem)] gap-6 overflow-y-auto rounded-2xl p-6 text-sm shadow-2xl ring-1 duration-200 sm:max-w-md fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2",
-          "max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:max-h-[90svh] max-sm:max-w-full max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:pt-4 max-sm:data-open:slide-in-from-bottom-10 max-sm:data-closed:slide-out-to-bottom-10",
+          // iOS sheet — pinned to the bottom edge, square at the bottom, sliding
+          // up, its last row clear of the home indicator.
+          "bg-popover outline-none data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/5 grid max-h-[calc(100svh-2rem)] max-w-[calc(100%-2rem)] gap-6 overflow-y-auto rounded-2xl p-6 text-sm shadow-2xl ring-1 duration-200 sm:max-w-md fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2",
+          "max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:max-h-[90svh] max-sm:max-w-full max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:pt-4 max-sm:pb-safe-6 max-sm:data-open:slide-in-from-bottom-10 max-sm:data-closed:slide-out-to-bottom-10",
           className
         )}
         {...props}

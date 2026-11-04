@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
 
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
 import { NBA_DATA } from "@/lib/data/sports/nba";
-import type { NbaData } from "@/types/sports";
+import type { NbaData, NewsStory } from "@/types/sports";
 
 import { NbaView } from "./nba-view";
 
@@ -48,6 +50,25 @@ describe("NbaView", () => {
     expect(screen.getByText("NBA Finals")).toBeInTheDocument();
   });
 
+  it("names the table by the conference shown, each row by its team, and spells out its columns", () => {
+    render(<NbaView data={{ ...NBA_DATA, playoffs: [] }} />);
+    expect(screen.getByRole("table", { name: "Eastern Conference standings" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "West" }));
+
+    const table = screen.getByRole("table", { name: "Western Conference standings" });
+    expect(within(table).getAllByRole("rowheader")[0]).toHaveTextContent("Thunder");
+    expect(within(table).getAllByRole("columnheader").map((th) => th.getAttribute("aria-label"))).toEqual([
+      "Seed",
+      null,
+      "Wins",
+      "Losses",
+      "Games behind",
+    ]);
+    // The letters stay on screen.
+    expect(within(table).getByRole("columnheader", { name: "Games behind" })).toHaveTextContent("GB");
+  });
+
   describe("before the opener", () => {
     const preseason: NbaData = {
       ...NBA_DATA,
@@ -83,5 +104,43 @@ describe("NbaView", () => {
       expect(screen.queryByText(/champions/)).toBeNull();
       expect(screen.queryByText(/Tips off/)).toBeNull();
     });
+  });
+});
+
+describe("NbaView, the news", () => {
+  const story = (id: string, headline: string, over: Partial<NewsStory> = {}): NewsStory => ({
+    id,
+    headline,
+    description: null,
+    href: `https://www.espn.com/nba/story/_/id/${id}`,
+    external: true,
+    image: { url: `https://a.espncdn.com/photo/${id}.jpg` },
+    at: "2026-10-24T04:00:00Z",
+    kind: "story",
+    about: [],
+    ...over,
+  });
+  const news = [
+    story("1", "Game Highlights", { kind: "video" }),
+    story("2", "Giannis stays hot in a loss"),
+  ];
+
+  it("has a News tab only with news, and opens on it for ?tab=news", () => {
+    const { unmount } = render(<NbaView data={{ ...NBA_DATA, playoffs: [] }} />);
+    expect(screen.queryByRole("tab", { name: "News" })).toBeNull();
+    unmount();
+
+    render(<NbaView data={{ ...NBA_DATA, playoffs: [] }} news={news} initialTab="news" />);
+    expect(openTab()).toBe("News");
+  });
+
+  it("leads with a story, never a clip, and opens ESPN in a new tab", () => {
+    render(<NbaView data={{ ...NBA_DATA, playoffs: [] }} news={news} />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "News" }), { button: 0 });
+    const lead = screen.getByText("Top story").closest("a")!;
+    expect(within(lead).getByRole("heading", { name: "Giannis stays hot in a loss" })).toBeInTheDocument();
+    expect(lead).toHaveAttribute("target", "_blank");
+    expect(lead).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.getByText("Video")).toBeInTheDocument();
   });
 });

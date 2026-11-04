@@ -9,6 +9,9 @@ export const SPORTS: SportMeta[] = [
   { id: "nba", label: "NBA", shortLabel: "NBA", emoji: "🏀" },
   { id: "tennis", label: "Tennis", shortLabel: "Tennis", emoji: "🎾" },
   { id: "nfl", label: "American Football", shortLabel: "NFL", emoji: "🏈" },
+  { id: "mlb", label: "Baseball", shortLabel: "MLB", emoji: "⚾" },
+  { id: "nhl", label: "Ice Hockey", shortLabel: "NHL", emoji: "🏒" },
+  { id: "surf", label: "Surfing", shortLabel: "Surf", emoji: "🏄" },
   { id: "lol", label: "League of Legends", shortLabel: "LoL", emoji: "🎮" },
 ];
 

@@ -306,8 +306,8 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
   transactions, not split rows; "Owed now" is "Balance now".
 - **Tables become lists in narrow containers.** Transactions, investor
   summary, per-person positions and the admin queue switch on CSS container
-  queries (`@container` + `@3xl:`/`@2xl:`/`@xl:`), not the viewport — at 768 and
-  1024 the sidebar leaves far less than the viewport suggests. The KPI grids
+  queries (`@container` + `@3xl:`/`@2xl:`/`@xl:`), not the viewport — from
+  `lg` the sidebar leaves far less than the viewport suggests. The KPI grids
   do the same (`@md:grid-cols-2 @4xl:grid-cols-4`); four cards at 1024 clipped
   every figure.
 - **Price freshness (2026-10-19).** Owners only — an investor's value is a fixed
@@ -330,6 +330,6 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
 - `createDailySnapshots` must use `inArray(...)` for the "latest snapshot per portfolio" lookup — a raw ``sql`... = ANY(${ids})` `` makes Drizzle emit `ANY(($1, $2))` (a row tuple), which Postgres rejects once there's more than one portfolio. That bug silently broke every daily portfolio snapshot from 2026-05-26 until the `inArray` fix.
 - Transactions are created via `createTransactionAction` (server action). The previous `/api/transactions` route handler is gone; cron and webhook routes are the only remaining API routes.
 - `PerformanceChart` and the projection charts in [Finance](./finance.md) are lazy-loaded with `next/dynamic({ ssr: false })` to keep recharts out of the initial portal bundle.
-- `app/portal/portfolio/loading.tsx` and `app/portal/admin/loading.tsx` stream skeletons for the heavy data fetches; `app/portal/portfolio/error.tsx` is the module error boundary.
+- `app/portal/portfolio/loading.tsx` and `app/portal/admin/users/loading.tsx` stream skeletons for the heavy data fetches; `app/portal/portfolio/error.tsx` is the module error boundary.
 - The KPI grid renders `StatCard` from `components/ui/stat-card.tsx` (shared house primitive: `Eyebrow` label + `Mono` value + tone-colored sublabel).
 - The **Dev Tools drawer** (`components/dev-tools/`, mounted in `app/portal/layout.tsx`) is a portal-wide foundation: any page can call `useRegisterDevTool({ id, kind: "toggle" | "action" | "custom", ... })` and the helper shows up in the right-side `Sheet`. The floating wrench trigger only renders in `process.env.NODE_ENV === "development"` — registrations made by pages mounted in production are silently ignored. Context is split (`useDevToolsCommands` for stable register/unregister, `useDevToolsState` for the changing helpers/open) so consumer effects don't re-fire on every registration.

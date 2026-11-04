@@ -1,537 +1,169 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// task-automation-service uses three surfaces:
-//   - `db.query.roadPaths.findFirst/findMany` and `db.query.boardColumns.findFirst`
-//     for reads (relational query API).
-//   - `db.transaction(tx => ...)` wrapping `tx.insert(boardTasks)` +
-//     `tx.update(roadPaths)` for the task-create + stamp write pair.
-// `getNextTaskOrder` is pulled from ./board-service, so we stub that module
-// rather than re-mocking the full builder chain underneath.
+// ensureHabitTasksForDay reads road paths through `db.query.roadPaths`, the
+// columns and next order through ./board-service (stubbed here), and writes
+// the tasks plus the generation stamp inside `db.transaction`.
 
-const roadPathsFindFirst = vi.fn();
 const roadPathsFindMany = vi.fn();
-const boardColumnsFindFirst = vi.fn();
-const insertMock = vi.fn();
-const updateMock = vi.fn();
-const selectDistinctMock = vi.fn();
+const insertValues = vi.fn();
+const insertReturning = vi.fn();
+const updateSet = vi.fn();
 
-vi.mock("@/db", () => ({
-  db: {
-    query: {
-      roadPaths: {
-        findFirst: (...args: unknown[]) => roadPathsFindFirst(...args),
-        findMany: (...args: unknown[]) => roadPathsFindMany(...args),
+vi.mock("@/db", () => {
+  const tx = {
+    insert: () => ({
+      values: (rows: unknown) => {
+        insertValues(rows);
+        return { onConflictDoNothing: () => ({ returning: () => insertReturning() }) };
       },
-      boardColumns: {
-        findFirst: (...args: unknown[]) => boardColumnsFindFirst(...args),
+    }),
+    update: () => ({
+      set: (values: unknown) => {
+        updateSet(values);
+        return { where: () => Promise.resolve() };
       },
+    }),
+  };
+  return {
+    db: {
+      query: {
+        roadPaths: { findMany: (...args: unknown[]) => roadPathsFindMany(...args) },
+      },
+      transaction: (cb: (t: typeof tx) => Promise<unknown>) => cb(tx),
     },
-    insert: (...args: unknown[]) => insertMock(...args),
-    update: (...args: unknown[]) => updateMock(...args),
-    // db.selectDistinct(...).from(...).where(...) -> rows
-    selectDistinct: (...args: unknown[]) => selectDistinctMock(...args),
-    transaction: (cb: (tx: unknown) => Promise<unknown>) =>
-      cb({
-        insert: (...args: unknown[]) => insertMock(...args),
-        update: (...args: unknown[]) => updateMock(...args),
-      }),
-  },
-}));
+  };
+});
 
-const getNextTaskOrderMock = vi.fn();
+const getBoardColumns = vi.fn();
+const getNextTaskOrder = vi.fn();
 
 vi.mock("./board-service", () => ({
-  getNextTaskOrder: (...args: unknown[]) => getNextTaskOrderMock(...args),
+  getBoardColumns: (...args: unknown[]) => getBoardColumns(...args),
+  getNextTaskOrder: (...args: unknown[]) => getNextTaskOrder(...args),
 }));
 
-import {
-  createAutomatedTasksForAllRoadPaths,
-  createAutomatedTasksForAllUsers,
-  createAutomatedTasksForRoadPath,
-  getTaskTitle,
-  shouldCreateTask,
-} from "./task-automation-service";
-import type { BoardTask, RoadPath, RoadPathFrequency } from "@/types";
+import { ensureHabitTasksForDay } from "./task-automation-service";
+import type { BoardColumn, RoadPath } from "@/types";
 
 const USER_ID = "00000000-0000-0000-0000-000000000001";
-const ROAD_PATH_ID = "00000000-0000-0000-0000-0000000000aa";
-const COLUMN_ID = "00000000-0000-0000-0000-0000000000cc";
+const ZONE = "America/Costa_Rica";
+// A Monday.
+const MONDAY = "2026-10-19";
 
-// "Now" used by every fake-timer test. Pinning a single instant keeps the
-// arithmetic obvious: `n` days ago = NOW − n * MS_PER_DAY.
-const NOW = new Date("2026-06-15T12:00:00.000Z");
-const MS_PER_DAY = 1000 * 60 * 60 * 24;
-
-function daysAgo(n: number): Date {
-  return new Date(NOW.getTime() - n * MS_PER_DAY);
-}
-
-function buildPath(overrides: Partial<RoadPath> = {}): RoadPath {
+function path(overrides: Partial<RoadPath> = {}): RoadPath {
   return {
-    id: ROAD_PATH_ID,
+    id: "00000000-0000-0000-0000-0000000000aa",
     userId: USER_ID,
-    title: "Test Path",
-    description: null,
-    targetValue: "100",
+    title: "Exercise",
+    description: "30 minutes",
+    targetValue: null,
     currentValue: "0",
-    unit: "km",
-    startDate: new Date("2026-01-01T00:00:00Z"),
-    targetDate: new Date("2026-12-31T00:00:00Z"),
-    autoCreateTasks: true,
-    taskFrequency: "daily",
+    unit: null,
+    startDate: new Date("2026-10-01T00:00:00Z"),
+    targetDate: null,
+    autoCreateTasks: false,
+    taskFrequency: null,
+    scheduleDays: [1, 3, 5],
+    scheduleSince: "2026-10-01",
     lastTaskCreatedAt: null,
     completedAt: null,
-    createdAt: new Date("2026-01-01T00:00:00Z"),
-    updatedAt: new Date("2026-01-01T00:00:00Z"),
+    createdAt: new Date(),
+    updatedAt: new Date(),
     ...overrides,
-  } as unknown as RoadPath;
+  } as RoadPath;
 }
 
-function buildTask(overrides: Partial<BoardTask> = {}): BoardTask {
-  return {
-    id: "task-1",
-    userId: USER_ID,
-    columnId: COLUMN_ID,
-    roadPathId: ROAD_PATH_ID,
-    title: "Daily: Test Path",
-    description: null,
-    order: 0,
-    dueDate: NOW,
-    completedAt: null,
-    priority: null,
-    createdAt: NOW,
-    updatedAt: NOW,
-    ...overrides,
-  } as unknown as BoardTask;
-}
-
-function mockUpdateChain() {
-  // tx.update(roadPaths).set(...).where(...) — resolves with no .returning()
-  const chain = {
-    set: vi.fn().mockReturnThis(),
-    where: vi.fn().mockResolvedValue(undefined),
-  };
-  updateMock.mockReturnValue(chain);
-  return chain;
-}
-
-function mockInsertChain(rows: BoardTask[]) {
-  // tx.insert(boardTasks).values(...).returning() -> rows
-  const chain = {
-    values: vi.fn().mockReturnThis(),
-    returning: vi.fn().mockResolvedValue(rows),
-  };
-  insertMock.mockReturnValue(chain);
-  return chain;
-}
+const TODO = { id: "c-todo", order: 0, isDone: false } as BoardColumn;
+const DONE = { id: "c-done", order: 2, isDone: true } as BoardColumn;
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  vi.useFakeTimers();
-  vi.setSystemTime(NOW);
+  getBoardColumns.mockResolvedValue([DONE, TODO]);
+  getNextTaskOrder.mockResolvedValue(2);
+  insertReturning.mockImplementation(() => Promise.resolve([{ id: "task-1" }]));
 });
 
 afterEach(() => {
-  vi.useRealTimers();
+  vi.clearAllMocks();
 });
 
-// ---------- shouldCreateTask ----------
+describe("ensureHabitTasksForDay", () => {
+  it("puts a due habit's task on the day's board, in the first column that is not Done", async () => {
+    roadPathsFindMany.mockResolvedValueOnce([path()]);
 
-describe("shouldCreateTask", () => {
-  describe("with no prior task", () => {
-    it("fires when startDate has been reached", () => {
-      // startDate is one day before NOW → eligible
-      expect(
-        shouldCreateTask("daily", null, daysAgo(1))
-      ).toBe(true);
-    });
+    const created = await ensureHabitTasksForDay(USER_ID, MONDAY, ZONE);
 
-    it("fires when startDate equals now exactly", () => {
-      expect(shouldCreateTask("weekly", null, NOW)).toBe(true);
-    });
-
-    it("skips when startDate is in the future", () => {
-      // startDate 1 day in the future
-      const future = new Date(NOW.getTime() + MS_PER_DAY);
-      expect(shouldCreateTask("daily", null, future)).toBe(false);
-    });
-  });
-
-  describe("daily", () => {
-    it("skips when the last task was created earlier the same day", () => {
-      // 23h ago → Math.floor(23h / day) = 0
-      // Calendar days, not elapsed hours: a run 23h after yesterday's must
-      // still fire (see the next test); one 8h after today's must not.
-      const lastCreated = new Date(NOW.getTime() - 8 * 60 * 60 * 1000);
-      expect(shouldCreateTask("daily", lastCreated, daysAgo(30))).toBe(false);
-      const yesterdayLate = new Date(NOW.getTime() - 23 * 60 * 60 * 1000);
-      expect(shouldCreateTask("daily", yesterdayLate, daysAgo(30))).toBe(true);
-    });
-
-    it("fires at the 1-day boundary", () => {
-      expect(shouldCreateTask("daily", daysAgo(1), daysAgo(30))).toBe(true);
-    });
-
-    it("fires when the last task was much older", () => {
-      expect(shouldCreateTask("daily", daysAgo(5), daysAgo(30))).toBe(true);
-    });
-  });
-
-  describe("every_other_day", () => {
-    it("skips at 1 day", () => {
-      expect(
-        shouldCreateTask("every_other_day", daysAgo(1), daysAgo(30))
-      ).toBe(false);
-    });
-
-    it("fires at the 2-day boundary", () => {
-      expect(
-        shouldCreateTask("every_other_day", daysAgo(2), daysAgo(30))
-      ).toBe(true);
-    });
-  });
-
-  describe("weekly", () => {
-    it("skips at 6 days", () => {
-      expect(shouldCreateTask("weekly", daysAgo(6), daysAgo(60))).toBe(false);
-    });
-
-    it("fires at the 7-day boundary", () => {
-      expect(shouldCreateTask("weekly", daysAgo(7), daysAgo(60))).toBe(true);
-    });
-  });
-
-  describe("biweekly", () => {
-    it("skips at 13 days", () => {
-      expect(
-        shouldCreateTask("biweekly", daysAgo(13), daysAgo(60))
-      ).toBe(false);
-    });
-
-    it("fires at the 14-day boundary", () => {
-      expect(
-        shouldCreateTask("biweekly", daysAgo(14), daysAgo(60))
-      ).toBe(true);
-    });
-  });
-
-  describe("monthly", () => {
-    it("skips within the same calendar month", () => {
-      // NOW is Jun 15; ten days ago is still June.
-      expect(
-        shouldCreateTask("monthly", daysAgo(10), daysAgo(120))
-      ).toBe(false);
-    });
-
-    it("fires once the calendar month changes, even before 30 days", () => {
-      // 29 days ago is May 17 — a new month has started since.
-      expect(
-        shouldCreateTask("monthly", daysAgo(29), daysAgo(120))
-      ).toBe(true);
-    });
-  });
-
-  it("returns false for an unknown frequency value", () => {
-    // The default branch guards against bad data flowing in from the DB.
-    expect(
-      shouldCreateTask(
-        "yearly" as unknown as RoadPathFrequency,
-        daysAgo(400),
-        daysAgo(500)
-      )
-    ).toBe(false);
-  });
-});
-
-// ---------- getTaskTitle ----------
-
-describe("getTaskTitle", () => {
-  it("prefixes the road-path title with a human-readable frequency", () => {
-    expect(getTaskTitle("Read 30 mins", "daily")).toBe("Daily: Read 30 mins");
-    expect(getTaskTitle("Read", "every_other_day")).toBe(
-      "Every Other Day: Read"
-    );
-    expect(getTaskTitle("Read", "weekly")).toBe("Weekly: Read");
-    expect(getTaskTitle("Read", "biweekly")).toBe("Biweekly: Read");
-    expect(getTaskTitle("Read", "monthly")).toBe("Monthly: Read");
-  });
-});
-
-// ---------- createAutomatedTasksForRoadPath ----------
-
-describe("createAutomatedTasksForRoadPath", () => {
-  it("throws when the road path is not found", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(undefined);
-
-    await expect(
-      createAutomatedTasksForRoadPath(USER_ID, ROAD_PATH_ID)
-    ).rejects.toThrow("Road path not found");
-    expect(insertMock).not.toHaveBeenCalled();
-  });
-
-  it("returns null (no-op) when autoCreateTasks is false", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(
-      buildPath({ autoCreateTasks: false })
-    );
-
-    const result = await createAutomatedTasksForRoadPath(USER_ID, ROAD_PATH_ID);
-    expect(result).toBeNull();
-    expect(boardColumnsFindFirst).not.toHaveBeenCalled();
-    expect(insertMock).not.toHaveBeenCalled();
-  });
-
-  it("returns null when taskFrequency is missing", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(
-      buildPath({ taskFrequency: null })
-    );
-
-    const result = await createAutomatedTasksForRoadPath(USER_ID, ROAD_PATH_ID);
-    expect(result).toBeNull();
-    expect(insertMock).not.toHaveBeenCalled();
-  });
-
-  it("returns null when the schedule says it is too soon", async () => {
-    // Daily path created < 1 day ago → not yet due.
-    roadPathsFindFirst.mockResolvedValueOnce(
-      buildPath({
-        taskFrequency: "daily",
-        lastTaskCreatedAt: new Date(NOW.getTime() - 60 * 60 * 1000), // 1h ago
-      })
-    );
-
-    const result = await createAutomatedTasksForRoadPath(USER_ID, ROAD_PATH_ID);
-    expect(result).toBeNull();
-    expect(boardColumnsFindFirst).not.toHaveBeenCalled();
-  });
-
-  it("throws when the Todo column is missing for the user", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(buildPath());
-    boardColumnsFindFirst.mockResolvedValueOnce(undefined);
-
-    await expect(
-      createAutomatedTasksForRoadPath(USER_ID, ROAD_PATH_ID)
-    ).rejects.toThrow(
-      "Todo column not found. Please initialize board columns first."
-    );
-    expect(insertMock).not.toHaveBeenCalled();
-  });
-
-  it("creates a task in the Todo column and stamps lastTaskCreatedAt", async () => {
-    roadPathsFindFirst.mockResolvedValueOnce(
-      buildPath({
-        title: "Read",
-        description: "30 minutes a day",
-        taskFrequency: "daily",
-        lastTaskCreatedAt: daysAgo(2),
-      })
-    );
-    boardColumnsFindFirst.mockResolvedValueOnce({
-      id: COLUMN_ID,
-      userId: USER_ID,
-      name: "Todo",
-    });
-    getNextTaskOrderMock.mockResolvedValueOnce(3);
-    const created = buildTask({ title: "Daily: Read", order: 3 });
-    const insertChain = mockInsertChain([created]);
-    const updateChain = mockUpdateChain();
-
-    const result = await createAutomatedTasksForRoadPath(USER_ID, ROAD_PATH_ID);
-
-    expect(result).toEqual(created);
-
-    // Task creation payload
-    expect(insertMock).toHaveBeenCalledTimes(1);
-    const payload = insertChain.values.mock.calls[0][0];
-    expect(payload).toMatchObject({
-      userId: USER_ID,
-      columnId: COLUMN_ID,
-      roadPathId: ROAD_PATH_ID,
-      title: "Daily: Read",
-      description: "30 minutes a day",
-      order: 3,
-    });
-    expect(payload.dueDate).toBeInstanceOf(Date);
-    expect((payload.dueDate as Date).toISOString()).toBe(NOW.toISOString());
-
-    // Stamp update
-    expect(updateMock).toHaveBeenCalledTimes(1);
-    const setPayload = updateChain.set.mock.calls[0][0];
-    expect(setPayload.lastTaskCreatedAt).toBeInstanceOf(Date);
-    expect((setPayload.lastTaskCreatedAt as Date).toISOString()).toBe(
-      NOW.toISOString()
-    );
-    expect(setPayload.updatedAt).toBeInstanceOf(Date);
-  });
-});
-
-// ---------- createAutomatedTasksForAllRoadPaths ----------
-
-describe("createAutomatedTasksForAllRoadPaths", () => {
-  it("returns [] when the user has no auto-create paths", async () => {
-    roadPathsFindMany.mockResolvedValueOnce([]);
-
-    const result = await createAutomatedTasksForAllRoadPaths(USER_ID);
-    expect(result).toEqual([]);
-    // No paths => no need to even look up the Todo column.
-    expect(boardColumnsFindFirst).not.toHaveBeenCalled();
-    expect(insertMock).not.toHaveBeenCalled();
-  });
-
-  it("returns [] when no candidate paths are due yet", async () => {
-    roadPathsFindMany.mockResolvedValueOnce([
-      buildPath({
-        id: "p1",
-        taskFrequency: "weekly",
-        // Created 1 day ago → not yet due (weekly threshold = 7 days)
-        lastTaskCreatedAt: daysAgo(1),
+    expect(created).toEqual([{ id: "task-1" }]);
+    expect(getNextTaskOrder).toHaveBeenCalledWith("c-todo", USER_ID, MONDAY);
+    expect(insertValues).toHaveBeenCalledWith([
+      expect.objectContaining({
+        userId: USER_ID,
+        columnId: "c-todo",
+        roadPathId: path().id,
+        title: "Exercise",
+        description: "30 minutes",
+        boardDate: MONDAY,
+        order: 2,
       }),
     ]);
-
-    const result = await createAutomatedTasksForAllRoadPaths(USER_ID);
-    expect(result).toEqual([]);
-    expect(boardColumnsFindFirst).not.toHaveBeenCalled();
+    expect(updateSet).toHaveBeenCalledWith({ lastTaskCreatedAt: expect.any(Date) });
   });
 
-  it("skips paths without a frequency configured", async () => {
+  it("does nothing on a day the habit is not due", async () => {
+    roadPathsFindMany.mockResolvedValueOnce([path()]);
+
+    expect(await ensureHabitTasksForDay(USER_ID, "2026-10-20", ZONE)).toEqual([]);
+    expect(insertValues).not.toHaveBeenCalled();
+  });
+
+  it("does not bring back a task already generated today in the reader's zone", async () => {
+    // 8 pm Monday in Costa Rica is already Tuesday in UTC.
     roadPathsFindMany.mockResolvedValueOnce([
-      buildPath({ id: "p-no-freq", taskFrequency: null }),
+      path({ lastTaskCreatedAt: new Date("2026-10-20T02:00:00Z") }),
     ]);
 
-    const result = await createAutomatedTasksForAllRoadPaths(USER_ID);
-    expect(result).toEqual([]);
-    expect(boardColumnsFindFirst).not.toHaveBeenCalled();
+    expect(await ensureHabitTasksForDay(USER_ID, MONDAY, ZONE)).toEqual([]);
+    expect(insertValues).not.toHaveBeenCalled();
   });
 
-  it("throws when the Todo column is missing (with eligible paths)", async () => {
+  it("generates again once the last one was an earlier day", async () => {
     roadPathsFindMany.mockResolvedValueOnce([
-      buildPath({ taskFrequency: "daily", lastTaskCreatedAt: daysAgo(2) }),
+      path({ lastTaskCreatedAt: new Date("2026-10-16T15:00:00Z") }),
     ]);
-    boardColumnsFindFirst.mockResolvedValueOnce(undefined);
 
-    await expect(
-      createAutomatedTasksForAllRoadPaths(USER_ID)
-    ).rejects.toThrow(
-      "Todo column not found. Please initialize board columns first."
-    );
-    expect(insertMock).not.toHaveBeenCalled();
+    await ensureHabitTasksForDay(USER_ID, MONDAY, ZONE);
+
+    expect(insertValues).toHaveBeenCalledOnce();
   });
 
-  it("batch-creates one task per eligible path and stamps them in one update", async () => {
-    const pathA = buildPath({
-      id: "p-a",
-      title: "Read",
-      taskFrequency: "daily",
-      lastTaskCreatedAt: daysAgo(2),
-    });
-    const pathB = buildPath({
-      id: "p-b",
-      title: "Run",
-      taskFrequency: "weekly",
-      lastTaskCreatedAt: daysAgo(8),
-    });
-    // pathC is NOT eligible — weekly fired 1 day ago.
-    const pathC = buildPath({
-      id: "p-c",
-      title: "Stretch",
-      taskFrequency: "weekly",
-      lastTaskCreatedAt: daysAgo(1),
-    });
+  it("skips paths with no schedule or not started yet", async () => {
+    roadPathsFindMany.mockResolvedValueOnce([
+      path({ scheduleDays: null }),
+      path({ startDate: new Date("2026-10-26T00:00:00Z") }),
+    ]);
 
-    roadPathsFindMany.mockResolvedValueOnce([pathA, pathB, pathC]);
-    boardColumnsFindFirst.mockResolvedValueOnce({
-      id: COLUMN_ID,
-      userId: USER_ID,
-      name: "Todo",
-    });
-    getNextTaskOrderMock.mockResolvedValueOnce(0);
-    const taskA = buildTask({ id: "t-a", title: "Daily: Read", order: 0 });
-    const taskB = buildTask({ id: "t-b", title: "Weekly: Run", order: 1 });
-    const insertChain = mockInsertChain([taskA, taskB]);
-    mockUpdateChain();
-
-    const result = await createAutomatedTasksForAllRoadPaths(USER_ID);
-
-    expect(result).toEqual([taskA, taskB]);
-
-    // Single bulk insert with in-memory incremented orders (perf contract).
-    expect(insertMock).toHaveBeenCalledTimes(1);
-    const rows = insertChain.values.mock.calls[0][0];
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({
-      userId: USER_ID,
-      columnId: COLUMN_ID,
-      roadPathId: "p-a",
-      title: "Daily: Read",
-      order: 0,
-    });
-    expect(rows[1]).toMatchObject({
-      roadPathId: "p-b",
-      title: "Weekly: Run",
-      order: 1,
-    });
-
-    // Base order computed once, single stamp update, single column lookup.
-    expect(getNextTaskOrderMock).toHaveBeenCalledTimes(1);
-    expect(updateMock).toHaveBeenCalledTimes(1);
-    expect(boardColumnsFindFirst).toHaveBeenCalledTimes(1);
+    expect(await ensureHabitTasksForDay(USER_ID, MONDAY, ZONE)).toEqual([]);
   });
 
-  it("rejects atomically when the bulk insert fails (no partial stamps)", async () => {
-    const pathA = buildPath({
-      id: "p-a",
-      title: "Read",
-      taskFrequency: "daily",
-      lastTaskCreatedAt: daysAgo(2),
-    });
-    roadPathsFindMany.mockResolvedValueOnce([pathA]);
-    boardColumnsFindFirst.mockResolvedValueOnce({
-      id: COLUMN_ID,
-      userId: USER_ID,
-      name: "Todo",
-    });
-    getNextTaskOrderMock.mockResolvedValueOnce(0);
-    insertMock.mockReturnValueOnce({
-      values: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockRejectedValue(new Error("DB error")),
-    });
-    mockUpdateChain();
+  it("writes one task per due path in one insert, in order", async () => {
+    roadPathsFindMany.mockResolvedValueOnce([
+      path({ id: "p1", title: "Exercise" }),
+      path({ id: "p2", title: "Read", scheduleDays: [0, 1, 2, 3, 4, 5, 6] }),
+    ]);
 
-    await expect(createAutomatedTasksForAllRoadPaths(USER_ID)).rejects.toThrow(
-      "DB error"
-    );
-    expect(updateMock).not.toHaveBeenCalled();
-  });
-});
+    await ensureHabitTasksForDay(USER_ID, MONDAY, ZONE);
 
-// ---------- createAutomatedTasksForAllUsers ----------
-
-describe("createAutomatedTasksForAllUsers", () => {
-  function ownersQuery(rows: Array<{ userId: string }>): void {
-    selectDistinctMock.mockReturnValueOnce({
-      from: () => ({ where: () => Promise.resolve(rows) }),
-    });
-  }
-
-  it("visits only users with a live auto-creating path, and keeps going past a failure", async () => {
-    const OTHER = "00000000-0000-0000-0000-000000000002";
-    ownersQuery([{ userId: USER_ID }, { userId: OTHER }]);
-    // First user: the path lookup blows up. Second: nothing due.
-    roadPathsFindMany.mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce([]);
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    const run = await createAutomatedTasksForAllUsers();
-
-    expect(run).toEqual({ created: [], failedUserIds: [USER_ID] });
-    expect(roadPathsFindMany).toHaveBeenCalledTimes(2);
-    errorSpy.mockRestore();
+    const rows = insertValues.mock.calls[0][0] as { roadPathId: string; order: number }[];
+    expect(rows.map((r) => [r.roadPathId, r.order])).toEqual([
+      ["p1", 2],
+      ["p2", 3],
+    ]);
   });
 
-  it("does nothing when nobody has an auto-creating path", async () => {
-    ownersQuery([]);
+  it("does nothing when every column is a Done column", async () => {
+    roadPathsFindMany.mockResolvedValueOnce([path()]);
+    getBoardColumns.mockResolvedValueOnce([DONE]);
 
-    const run = await createAutomatedTasksForAllUsers();
-
-    expect(run).toEqual({ created: [], failedUserIds: [] });
-    expect(roadPathsFindMany).not.toHaveBeenCalled();
+    expect(await ensureHabitTasksForDay(USER_ID, MONDAY, ZONE)).toEqual([]);
+    expect(insertValues).not.toHaveBeenCalled();
   });
 });

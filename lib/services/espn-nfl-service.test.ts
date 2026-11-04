@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { __testing } from "./espn-nfl-service";
 
-const { matchFrom, standingsFrom, roundFrom, statusFrom, teamFrom } = __testing;
+const { matchFrom, standingsFrom, roundFrom, teamFrom } = __testing;
 
 const team = (abbreviation: string, shortDisplayName = abbreviation) => ({
   abbreviation,
@@ -62,6 +62,22 @@ describe("matchFrom", () => {
     expect(match.status).toBe("scheduled");
   });
 
+  it("names the game's national channels, TV first, and no regional ones", () => {
+    const game = event("5", "PHI", "DAL", ["0", "0"], "pre");
+    Object.assign(game.competitions[0], {
+      broadcasts: [{ market: "national", names: ["ESPN", "ABC", "Disney+"] }],
+      geoBroadcasts: [
+        { media: { shortName: "Disney+" }, type: { shortName: "Streaming" } },
+        { media: { shortName: "ESPN" }, type: { shortName: "TV" } },
+      ],
+    });
+    expect(matchFrom(game)!.match.broadcasts).toEqual(["ESPN", "ABC", "Disney+"]);
+
+    const regional = event("6", "MIA", "BUF", ["0", "0"], "pre");
+    Object.assign(regional.competitions[0], { broadcasts: [{ market: "home", names: ["WFOR"] }] });
+    expect(matchFrom(regional)!.match).not.toHaveProperty("broadcasts");
+  });
+
   it("keeps the score of a game in progress", () => {
     const { match } = matchFrom(event("3", "LAR", "ARI", ["9", "15"], "in"))!;
     expect(match).toMatchObject({ status: "live", homeScore: 9, awayScore: 15 });
@@ -77,11 +93,18 @@ describe("matchFrom", () => {
   });
 });
 
-describe("statusFrom", () => {
-  it("reads postponements and cancellations by name", () => {
-    expect(statusFrom(status("STATUS_POSTPONED", "post"))).toBe("postponed");
-    expect(statusFrom(status("STATUS_CANCELED", "post"))).toBe("cancelled");
-    expect(statusFrom(status("STATUS_HALFTIME", "in"))).toBe("live");
+describe("a game's status", () => {
+  const withStatus = (name: string, state: "pre" | "in" | "post") => {
+    const game = event("9", "KC", "LAC", ["0", "0"], state);
+    game.competitions[0].status = status(name, state);
+    return matchFrom(game)!.match.status;
+  };
+
+  it("reads postponements, suspensions and cancellations by name", () => {
+    expect(withStatus("STATUS_POSTPONED", "post")).toBe("postponed");
+    expect(withStatus("STATUS_SUSPENDED", "post")).toBe("postponed");
+    expect(withStatus("STATUS_CANCELED", "post")).toBe("cancelled");
+    expect(withStatus("STATUS_HALFTIME", "in")).toBe("live");
   });
 });
 
@@ -215,5 +238,25 @@ describe("roundFrom", () => {
 
   it("returns nothing for a round with no games", () => {
     expect(roundFrom({ events: [] }, { week: 2, id: "quarter-final", label: "Divisional" })).toBeNull();
+  });
+});
+
+describe("weeksAround", () => {
+  const { weeksAround } = __testing;
+
+  it("is four weeks back and three ahead of the current one", () => {
+    expect(weeksAround(7, 2)).toEqual([3, 4, 5, 6, 8, 9, 10]);
+  });
+
+  it("stays inside the season: week 1 has nothing behind it, week 18 nothing ahead", () => {
+    expect(weeksAround(1, 2)).toEqual([2, 3, 4]);
+    expect(weeksAround(17, 2)).toEqual([13, 14, 15, 16, 18]);
+    expect(weeksAround(3, 1)).toEqual([1, 2, 4]);
+  });
+
+  it("asks for nothing more in the postseason, the off-season or without a week", () => {
+    expect(weeksAround(2, 3)).toEqual([]);
+    expect(weeksAround(1, 4)).toEqual([]);
+    expect(weeksAround(undefined, 2)).toEqual([]);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { buildPlanTimeline, type ChartPoint } from "./chart-series";
 import { buildDashboardFigures } from "./dashboard";
 import { projectPlan, projectStateAt } from "./projection";
 import type { FinancePlan, FinancePlanExpense, FinancePlanIncome } from "@/types/finance";
@@ -93,5 +94,67 @@ describe("F11: dashboard card figures", () => {
     const fig = buildDashboardFigures(projection, today);
     expect(fig.status).toBe("before-start");
     expect(fig.savings).toBe(5000);
+  });
+
+  it("leads with the last three closed periods, then today, then the projection", () => {
+    const projection = projectPlan(plan, incomes, expenses, [], options);
+    const today = projectStateAt(plan, incomes, expenses, [], options, now);
+    // Jan–Aug have closed by Sep 10; the plan page's timeline holds all eight.
+    const timeline = buildPlanTimeline([], projection, now, 1, projection);
+    const fig = buildDashboardFigures(
+      projection,
+      today,
+      timeline.points.slice(0, timeline.todayIndex)
+    );
+
+    expect(fig.pastCount).toBe(3);
+    expect(fig.points).toHaveLength(3 + 1 + 12);
+    expect(fig.points.slice(0, 4).map((p) => p.label)).toEqual([
+      "Jun 2026",
+      "Jul 2026",
+      "Aug 2026",
+      "Today",
+    ]);
+    expect(fig.points[3].netWorth).toBe(Math.round(today!.netWorth * 100) / 100);
+    // The past changes neither the figures nor the badge.
+    expect(fig.deltaPeriods).toBe(12);
+    expect(fig.delta).toBeCloseTo(fig.points.at(-1)!.netWorth - fig.netWorth, 0);
+    // A projected close carries the portfolio in investments, like today.
+    const aug = projection.months[7];
+    expect(fig.points[2].investments).toBeCloseTo(aug.investments + aug.portfolioValue, 1);
+  });
+
+  it("splits a recorded snapshot into parts that add up to its net worth", () => {
+    // A snapshot keeps investments without the portfolio, and the net worth
+    // that includes it: the portfolio is the part nothing else explains.
+    const snapshot: ChartPoint = {
+      date: U(2026, 8),
+      netWorth: 25000,
+      savings: 3000,
+      investments: 500,
+      totalDebt: 1000,
+      receivables: 2300,
+    };
+    const projection = projectPlan(plan, incomes, expenses, [], options);
+    const today = projectStateAt(plan, incomes, expenses, [], options, now);
+    const [aug] = buildDashboardFigures(projection, today, [snapshot]).points;
+
+    expect(aug).toMatchObject({
+      month: "Aug",
+      savings: 3000,
+      investments: 20700,
+      receivables: 2300,
+      debt: 1000,
+      netWorth: 25000,
+    });
+  });
+
+  it("a plan that hasn't started has no past to show", () => {
+    const later = { ...plan, startMonth: U(2027, 1) } as FinancePlan;
+    const projection = projectPlan(later, incomes, expenses, [], {});
+    const today = projectStateAt(later, incomes, expenses, [], {}, now);
+    const fig = buildDashboardFigures(projection, today, [{ date: U(2026, 8), netWorth: 1 }]);
+    expect(fig.pastCount).toBe(0);
+    expect(fig.points[0].month).toBe("Start");
   });
 });

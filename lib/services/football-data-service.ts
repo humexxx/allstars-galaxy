@@ -7,16 +7,17 @@ import type {
   BracketMatch,
   BracketRound,
   BracketRoundId,
+  EspnFootballLeagueId,
   FootballGroupStandings,
   FootballLeagueData,
   FootballLeagueId,
-  FormResult,
   Match,
   MatchStatus,
   Standing,
   StandingBand,
   Team,
 } from "@/types/sports";
+import { withLateScores } from "./football-late-scores";
 import { cachedFeed, upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://api.football-data.org/v4";
@@ -27,10 +28,16 @@ const REVALIDATE_SECONDS = 300;
 // Wide enough to stay populated for competitions between rounds (e.g. UCL
 // knockout, or a domestic league in its off-week). Matches are capped below.
 const MATCH_WINDOW_DAYS = 60;
-const MAX_MATCHES = 40;
+// Each side has its own cap: results reach back across the whole window,
+// because the list's clock brings earlier days in a few at a time, and
+// fixtures need only about a month ahead.
+const MATCH_CAPS = { upcoming: 30, results: 80 } as const;
 
-type CompetitionConfig = {
-  internalId: FootballLeagueId;
+/** The leagues football-data.org serves: MLS and Costa Rica are ESPN's, the World Cup has a feed of its own. */
+export type FootballDataLeagueId = Exclude<FootballLeagueId, EspnFootballLeagueId | "world-cup">;
+
+type CompetitionConfig<Id extends FootballLeagueId = FootballDataLeagueId> = {
+  internalId: Id;
   code: string;
   shortName: string;
   name: string;
@@ -69,6 +76,22 @@ const COMPETITIONS: CompetitionConfig[] = [
     shortName: "Serie A",
     name: "Serie A",
     region: "ITA",
+    hasKnockout: false,
+  },
+  {
+    internalId: "ligue-1",
+    code: "FL1",
+    shortName: "Ligue 1",
+    name: "Ligue 1",
+    region: "FRA",
+    hasKnockout: false,
+  },
+  {
+    internalId: "bundesliga",
+    code: "BL1",
+    shortName: "Bundesliga",
+    name: "Bundesliga",
+    region: "GER",
     hasKnockout: false,
   },
 ];
@@ -171,7 +194,6 @@ type FdTableRow = {
   goalsFor: number;
   goalsAgainst: number;
   points: number;
-  form?: string;
 };
 
 type FdStandingsResponse = {
@@ -186,7 +208,17 @@ type FdStandingsResponse = {
 
 type FdMatchesResponse = { matches: FdMatch[] };
 
-const ZONE_BAND_DEFAULTS: Record<FootballLeagueId, (pos: number, total: number) => StandingBand> = {
+function eighteenClubLeague(pos: number, total: number): StandingBand {
+  if (pos <= 4) return "champions";
+  if (pos === 5) return "europa";
+  if (pos === 6) return "conference";
+  if (pos > total - 2) return "relegation";
+  if (pos === total - 2) return "playoff";
+  return null;
+}
+
+/** Each competition's zones by position, for a table whose provider names none. */
+export const ZONE_BAND_DEFAULTS: Record<FootballLeagueId, (pos: number, total: number) => StandingBand> = {
   "premier-league": (pos, total) => {
     if (pos <= 4) return "champions";
     if (pos === 5) return "europa";
@@ -208,6 +240,17 @@ const ZONE_BAND_DEFAULTS: Record<FootballLeagueId, (pos: number, total: number) 
     if (pos > total - 3) return "relegation";
     return null;
   },
+  // Eighteen clubs: 16th plays a relegation play-off, the last two go down.
+  "ligue-1": eighteenClubLeague,
+  "bundesliga": eighteenClubLeague,
+  // Each conference's top seven go straight into Round One; 8th and 9th play
+  // the wild-card match for the last place.
+  mls: (pos) => {
+    if (pos <= 7) return "champions";
+    if (pos <= 9) return "playoff";
+    return null;
+  },
+  "costa-rica": (pos) => (pos <= 4 ? "champions" : null),
   "uefa-champions-league": (pos) => {
     if (pos <= 8) return "champions";
     if (pos <= 24) return "playoff";
@@ -302,47 +345,6 @@ function goalsOf(score: FdScore): Goals {
   };
 }
 
-function parseForm(form: string | null | undefined): FormResult[] | undefined {
-  if (!form) return undefined;
-  const tokens = form
-    .split(/[,\s]+/)
-    .map((t) => t.trim().toUpperCase())
-    .filter(Boolean);
-  if (tokens.length === 0) return undefined;
-  return tokens.slice(0, 5).map((t): FormResult => {
-    if (t === "W" || t === "D" || t === "L") return t;
-    return "-";
-  });
-}
-
-/**
- * Last five results per team, most recent first, from the matches already
- * fetched. The free tier sends `form: null` on every standings row, so the
- * table's form column never rendered.
- */
-function formFromMatches(matches: FdMatch[]): Map<string, FormResult[]> {
-  const finished = matches
-    .filter((m) => m.status === "FINISHED")
-    .sort((a, b) => b.utcDate.localeCompare(a.utcDate));
-  const form = new Map<string, FormResult[]>();
-  for (const m of finished) {
-    const home = teamFromFd(m.homeTeam);
-    const away = teamFromFd(m.awayTeam);
-    const { home: hg, away: ag } = goalsOf(m.score);
-    if (!home || !away || hg === null || ag === null) continue;
-    for (const [team, scored, conceded] of [
-      [home, hg, ag],
-      [away, ag, hg],
-    ] as const) {
-      const list = form.get(team.id) ?? [];
-      if (list.length >= 5) continue;
-      list.push(scored > conceded ? "W" : scored < conceded ? "L" : "D");
-      form.set(team.id, list);
-    }
-  }
-  return form;
-}
-
 /**
  * The free tier allows ten requests a minute per KEY, and the key is shared:
  * production, previews and every local dev server draw on the same ten. This
@@ -418,9 +420,8 @@ function windowDates(): { from: string; to: string } {
 }
 
 function mapStandings(
-  competition: CompetitionConfig,
+  competition: CompetitionConfig<FootballLeagueId>,
   rows: FdTableRow[],
-  formByTeam: Map<string, FormResult[]> = new Map(),
 ): { standings: Standing[]; teams: Team[] } {
   const teamsMap = new Map<string, Team>();
   const total = rows.length;
@@ -439,7 +440,6 @@ function mapStandings(
       goalsFor: row.goalsFor,
       goalsAgainst: row.goalsAgainst,
       points: row.points,
-      form: parseForm(row.form) ?? formByTeam.get(team.id),
       band: ZONE_BAND_DEFAULTS[competition.internalId](row.position, total),
     });
   }
@@ -549,13 +549,17 @@ function buildRoundFromStage(
     if (tie.legs.length === 1) {
       // Single match (final, or one-legged round).
       const ft = goalsOf(leg1.score);
-      const winner = (leg1.score as FdScoreWithWinner).winner;
+      // football-data names whoever leads as `winner` while the match is
+      // still being played, which would crown a champion mid-final.
+      const winner =
+        leg1.status === "FINISHED" ? (leg1.score as FdScoreWithWinner).winner : null;
       matches.push({
         id: `m-${leg1.id}`,
         homeTeamId: homeId,
         awayTeamId: awayId,
         homeScore: ft.home,
         awayScore: ft.away,
+        ...(ft.penalties ? { penalties: ft.penalties } : {}),
         winnerTeamId:
           winner === "HOME_TEAM" ? homeId : winner === "AWAY_TEAM" ? awayId : null,
         date: leg1.utcDate,
@@ -754,7 +758,7 @@ function buildGroupStandings(
   return groups;
 }
 
-const WORLD_CUP: CompetitionConfig = {
+const WORLD_CUP: CompetitionConfig<"world-cup"> = {
   internalId: "world-cup",
   code: "WC",
   shortName: "World Cup",
@@ -776,10 +780,10 @@ async function fetchWorldCupFromApi(): Promise<FootballLeagueData> {
   const groups = buildGroupStandings(matchesRes.matches, teamsMap);
   const knockout = buildKnockoutBracket(matchesRes.matches, teamsMap);
   const matches = orderMatchesForDisplay(
-    mapMatches(matchesRes.matches, teamsMap),
+    await withLateScores(WORLD_CUP.internalId, mapMatches(matchesRes.matches, teamsMap), teamsMap),
     (m) => m.kickoff,
     (m) => m.status,
-    MAX_MATCHES,
+    MATCH_CAPS,
   );
   const seasonYear = matchesRes.matches[0]?.utcDate.slice(0, 4) ?? "2026";
 
@@ -840,20 +844,16 @@ async function fetchLeague(
   const seasonStart = standingsRes.season.startDate.slice(0, 4);
   const seasonEnd = standingsRes.season.endDate.slice(2, 4);
 
-  const { standings, teams: standingsTeams } = mapStandings(
-    competition,
-    tableBlock.table,
-    formFromMatches(matchesRes.matches),
-  );
+  const { standings, teams: standingsTeams } = mapStandings(competition, tableBlock.table);
   const teamsMap = new Map<string, Team>(standingsTeams.map((t) => [t.id, t]));
   const knockout = competition.hasKnockout
     ? buildKnockoutBracket(matchesRes.matches, teamsMap)
     : undefined;
   const matches = orderMatchesForDisplay(
-    mapMatches(matchesRes.matches, teamsMap),
+    await withLateScores(competition.internalId, mapMatches(matchesRes.matches, teamsMap), teamsMap),
     (m) => m.kickoff,
     (m) => m.status,
-    MAX_MATCHES
+    MATCH_CAPS
   );
 
   return {
@@ -872,21 +872,18 @@ async function fetchLeague(
   };
 }
 
-function competitionFor(id: FootballLeagueId): CompetitionConfig {
+function competitionFor(id: FootballDataLeagueId): CompetitionConfig {
   const competition = COMPETITIONS.find((c) => c.internalId === id);
   if (!competition) throw new Error(`football-data: no competition for ${id}`);
   return competition;
 }
 
-/**
- * What the league picker offers, in its order. Names only: nothing is fetched.
- * The World Cup comes last: a tournament every four years, not a season, and
- * read by `getWorldCupData` rather than `getFootballLeagueData`.
- */
-export const FOOTBALL_COMPETITIONS: ReadonlyArray<{ id: FootballLeagueId; name: string }> = [
-  ...COMPETITIONS,
-  WORLD_CUP,
-].map((c) => ({ id: c.internalId, name: c.name }));
+/** football-data's leagues for the picker, in its order. Names only: nothing is fetched. */
+export const FOOTBALL_DATA_LEAGUES: ReadonlyArray<{ id: FootballDataLeagueId; name: string }> = COMPETITIONS.map(
+  (c) => ({ id: c.internalId, name: c.name })
+);
+
+export const WORLD_CUP_LEAGUE: { id: "world-cup"; name: string } = { id: WORLD_CUP.internalId, name: WORLD_CUP.name };
 
 /**
  * One competition, cached on its own. The page and the dashboard each ask for
@@ -895,8 +892,8 @@ export const FOOTBALL_COMPETITIONS: ReadonlyArray<{ id: FootballLeagueId; name: 
  */
 export const getFootballLeagueData = cachedFeed(
   "football-data league",
-  (id: FootballLeagueId) => fetchLeague(competitionFor(id)),
-  (id: FootballLeagueId) => getFootballLeague(id),
+  (id: FootballDataLeagueId) => fetchLeague(competitionFor(id)),
+  (id: FootballDataLeagueId) => getFootballLeague(id),
   ["football-data:league"],
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:football"] },
 );
@@ -904,7 +901,6 @@ export const getFootballLeagueData = cachedFeed(
 /** The mappers and the request budget, exported for their tests. */
 export const __testing = {
   goalsOf,
-  formFromMatches,
   mapMatches,
   buildKnockoutBracket,
   noteBudget,

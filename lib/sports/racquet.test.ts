@@ -5,7 +5,6 @@ import type { RacquetTournament } from "@/types/sports";
 import {
   addDays,
   clampDay,
-  comingUp,
   currentTournament,
   drawIsOut,
   drawsShipped,
@@ -72,16 +71,6 @@ describe("justFinished", () => {
       t("almaty", "completed", "2026-10-12", "2026-10-18"),
     ];
     expect(justFinished(week, 2).map((x) => x.id)).toEqual(["shanghai", "almaty"]);
-  });
-});
-
-describe("comingUp", () => {
-  it("lists what starts after the featured tournament, soonest first", () => {
-    expect(comingUp(SEASON, 3, "kuwait").map((x) => x.id)).toEqual([
-      "mexico",
-      "barcelona",
-      "finals",
-    ]);
   });
 });
 

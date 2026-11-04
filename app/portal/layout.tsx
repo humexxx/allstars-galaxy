@@ -6,8 +6,11 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { DevToolsProvider } from "@/components/dev-tools/dev-tools-context";
 import { DevToolsDrawer } from "@/components/dev-tools/dev-tools-drawer";
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
+import { AiKeyExpiryNotice } from "@/components/portal/ai-key-expiry-notice";
+import { keyExpiryWarning, type KeyExpiryWarning } from "@/lib/ai/key-expiry";
+import { getAiSettings } from "@/lib/services/ai-service";
 import { getEffectiveContext } from "@/lib/services/impersonation";
-import { getRequestTimeZone } from "@/lib/utils/request-today";
+import { getRequestTimeZone, getRequestTodayIso } from "@/lib/utils/request-today";
 
 /**
  * Topology matches the shadcn docs site: sticky full-width header on top,
@@ -31,6 +34,9 @@ export default async function PortalLayout({
   if (!ctx) {
     redirect("/login");
   }
+
+  // Admins only, and only once the key's date has been entered in Settings.
+  const keyExpiry = ctx.realRole === "admin" ? await aiKeyExpiry() : null;
 
   return (
     <ReaderTimeZoneProvider timeZone={timeZone}>
@@ -62,16 +68,19 @@ export default async function PortalLayout({
                 isImpersonating={ctx.isImpersonating}
               />
               {/* `min-w-0`: a flex child never shrinks below its content's
-                min-content width by default, so from `md` (sidebar showing) a
+                min-content width by default, so from `lg` (sidebar showing) a
                 wide board or table pushed the whole page sideways by the
                 sidebar's width instead of scrolling inside its own card. */}
               <SidebarInset className="min-w-0">
                 {/* No container here: each route renders its own
-                  `PortalPageContainer` and declares the width it needs. */}
+                  `PortalPageContainer`. `relative`: an absolutely placed
+                  descendant with nothing positioned nearer (every `sr-only`
+                  label) otherwise sits outside this scroller, unclipped, and
+                  lengthened the document into a second scroll. */}
                 <main
                   id="main-content"
                   tabIndex={-1}
-                  className="flex min-h-0 min-w-0 flex-1 flex-col outline-none md:overflow-auto"
+                  className="relative flex min-h-0 min-w-0 flex-1 flex-col outline-none md:overflow-auto"
                 >
                   {children}
                 </main>
@@ -79,8 +88,16 @@ export default async function PortalLayout({
             </div>
           </div>
           <DevToolsDrawer />
+          {keyExpiry && <AiKeyExpiryNotice {...keyExpiry} />}
         </DevToolsProvider>
       </SidebarProvider>
     </ReaderTimeZoneProvider>
   );
+}
+
+/** The reminder an admin is due, if any. */
+async function aiKeyExpiry(): Promise<{ warning: KeyExpiryWarning; expiresOn: string } | null> {
+  const [{ apiKeyExpiresOn }, today] = await Promise.all([getAiSettings(), getRequestTodayIso()]);
+  const warning = keyExpiryWarning(apiKeyExpiresOn, today);
+  return warning && apiKeyExpiresOn ? { warning, expiresOn: apiKeyExpiresOn } : null;
 }

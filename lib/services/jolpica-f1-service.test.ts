@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { __testing } from "./jolpica-f1-service";
 
@@ -204,7 +204,6 @@ const {
   fastestLapsByRound,
   sprintWinnersByRound,
   deriveRaceStatus,
-  rateLimiter,
 } = __testing;
 
 // Jolpica's 2026 Chinese Grand Prix, a sprint weekend, with its keys in the
@@ -426,26 +425,5 @@ describe("mapClassification", () => {
     expect(rows[2].team).toBe("Alpine");
     expect(rows[1].fastestLap).toBe(true);
     expect(rows[0].fastestLap).toBeUndefined();
-  });
-});
-
-describe("rateLimiter", () => {
-  it("lets four through at once and holds the rest until the window has passed", async () => {
-    vi.useFakeTimers();
-    try {
-      const slot = rateLimiter(4, 1_000);
-      const started: number[] = [];
-      const t0 = Date.now();
-      const calls = Array.from({ length: 6 }, () =>
-        slot().then(() => started.push(Date.now() - t0))
-      );
-      await vi.advanceTimersByTimeAsync(999);
-      expect(started).toEqual([0, 0, 0, 0]);
-      await vi.advanceTimersByTimeAsync(1);
-      await Promise.all(calls);
-      expect(started).toEqual([0, 0, 0, 0, 1_000, 1_000]);
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });

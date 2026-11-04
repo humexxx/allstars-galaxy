@@ -42,7 +42,7 @@ exact change-to-doc map.
 ## Commands
 
 ```bash
-pnpm dev            # Start dev server (http://localhost:3010)
+pnpm dev            # Start dev server (http://localhost:3000)
 pnpm build          # Production build
 pnpm lint           # ESLint
 pnpm test           # Vitest — unit + integration (mocked DB)
@@ -62,8 +62,9 @@ pnpm db:seed        # Seed database
   and mocks `@/db` at the import boundary — no real Supabase needed. See
   [`vitest.config.ts`](vitest.config.ts) and [`vitest.setup.ts`](vitest.setup.ts)
   (the setup stubs the `server-only` marker so server modules can be imported
-  from the test runner).
-- **Playwright** (`e2e/*.spec.ts`) drives the real app at `http://localhost:3010`.
+  from the test runner, and gives jsdom a `matchMedia` that matches nothing —
+  a wide screen with motion allowed; a test that needs a phone stubs its own).
+- **Playwright** (`e2e/*.spec.ts`) drives the real app at `http://localhost:3000`.
   Requires a dedicated Supabase test user — copy [`.env.test.example`](.env.test.example)
   to `.env.test` and fill `TEST_USER_EMAIL` / `TEST_USER_PASSWORD`. The auth
   fixture logs in once and persists `storageState` to `playwright/.auth/user.json`
@@ -132,7 +133,10 @@ reader's zone — `formatDay(value, useReaderTimeZone())` — or the server (UTC
 and the browser render different days every evening west of Greenwich and
 hydration fails. Server code gets "today" from `getRequestToday()` /
 `getRequestTodayIso()` (`lib/utils/request-today.ts`, the `tz` cookie), never
-from `new Date()` passed down to a client.
+from `new Date()` passed down to a client. Until the browser has written that
+cookie (a device's first request) "today" is UTC's; the header writes it and
+refreshes once. A render that WRITES by "today" checks `readRequestTimeZone()`
+first and only reads while it is null.
 
 ### Chart colours
 `--chart-1..5` in [`app/globals.css`](app/globals.css) are a **categorical**
@@ -218,6 +222,19 @@ will cancel a long-running `ALTER COLUMN ... USING (...)` mid-flight.
 
 The pre-flight check in `drizzle.config.ts` will refuse to run if `DIRECT_URL`
 is missing and `DATABASE_URL` points at the transaction pooler.
+
+drizzle applies a migration only when its journal `when` is newer than the
+newest `created_at` in `drizzle.__drizzle_migrations` — never by count, name
+or hash. The one database is migrated from several branches, so
+`pnpm db:migrate` ([`scripts/db-migrate.ts`](scripts/db-migrate.ts)) plans by
+that rule (`scripts/migration-plan.ts`): it lists another branch's applied
+migrations, and refuses to run when an entry of yours is older than the
+database's newest, because drizzle would skip it forever. Move that entry's
+`when` past the newest and run it again.
+
+**The database is shared with production**, which runs the code on `main`. A
+migration applied ahead of its release must keep that code working: add, never
+drop or rename, and give new `NOT NULL` columns a default.
 
 ### Security
 - Every server action opens with an auth gate — never trust the caller:
@@ -346,14 +363,21 @@ RAPIDAPI_KEY            # Refreshes the stored F1 news archive on the daily
                         # cron. Unset = no refresh (not a cron failure); the
                         # articles already stored keep reading.
 
+# travel assistant
+ANTHROPIC_API_KEY       # Claude API key for the Travel Planner's AI chat.
+                        # Unset = no assistant button. Admins only, since
+                        # every message spends API credit. A Max plan's
+                        # monthly API credit covers it (claim it by linking a
+                        # Console organization from claude.ai Billing).
+
 # DORMANT — kept for reference, not used by any service today:
 API_SPORTS_KEY          # Free tier hard-locked to seasons 2022-2024, unusable
                         # for current data. ~$100/mo for the All Sports paid
                         # plan if we ever upgrade. https://dashboard.api-sports.io
 ```
 
-F1 (Jolpica, plus ESPN for the dashboard card), LoL (Lolesports), tennis and
-the NFL (ESPN) are key-less — nothing to configure in `.env`. The NBA's games
+F1 (Jolpica, plus ESPN for the dashboard card and OpenF1 for each session's
+results), LoL (Lolesports), tennis and the NFL (ESPN) are key-less — nothing to configure in `.env`. The NBA's games
 need `BALLDONTLIE_API_KEY`; its table comes from ESPN, also key-less.
 
 ## Common Workflows
@@ -365,7 +389,12 @@ need `BALLDONTLIE_API_KEY`; its table comes from ESPN, also key-less.
 4. Service in `/lib/services/[feature]-service.ts`
 5. Actions in `/app/actions/[feature].ts`
 6. UI in `/components/[feature]/`
-7. Page in `/app/portal/[feature]/page.tsx`
+7. Page in `/app/portal/[feature]/page.tsx`, with a `loading.tsx` beside it
+   shaped like the page. A `loading.tsx` also wraps every route below it, and a
+   reload paints it before theirs: a skeleton for one page shares a route group
+   with it (`app/portal/(dashboard)/`, `plans/(list)/`,
+   `travel-planner/(list)/`). There is no portal-wide fallback, so a route
+   without its own shows no skeleton at all.
 8. **Update the module doc** — bump *Last reviewed*, add a bullet for the new
    route / action / service / schema / type / table in
    [`docs/modules/<module>.md`](docs/modules/).

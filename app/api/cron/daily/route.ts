@@ -4,14 +4,9 @@ import { getAppStateValue, setAppState } from "@/lib/services/app-state-service"
 import { applyMonthlyInterest, LAST_INTEREST_RUN_KEY } from "@/lib/services/interest-service";
 import { createDailySnapshots } from "@/lib/services/snapshot-service";
 import { createDailyFinanceSnapshots } from "@/lib/services/finance-snapshot-service";
-import {
-  createAutomatedTasksForAllUsers,
-  type AutomatedTasksRun,
-} from "@/lib/services/task-automation-service";
 import { refreshF1News } from "@/lib/services/rapidapi-f1-news-service";
 
-// Interest, two snapshot passes, a per-user task loop and an upstream fetch
-// run back to back; the platform default would cut that off. (Hobby caps a
+// Interest, two snapshot passes and an upstream fetch run back to back; the platform default would cut that off. (Hobby caps a
 // function at 60 s.)
 export const maxDuration = 300;
 
@@ -78,22 +73,6 @@ async function processFinancePlanSnapshots(today: Date): Promise<FinanceSnapshot
   }
 }
 
-async function processAutomatedTasks(today: Date): Promise<AutomatedTasksRun> {
-  try {
-    const run = await createAutomatedTasksForAllUsers();
-    await setAppState(
-      "last_task_automation_run",
-      today.toISOString(),
-      run.failedUserIds.length > 0 ? `Failed for ${run.failedUserIds.length} user(s)` : null
-    );
-    return run;
-  } catch (error) {
-    console.error("Failed to process automated tasks:", error);
-    await setAppState("last_task_automation_run", today.toISOString(), messageOf(error));
-    throw error;
-  }
-}
-
 /**
  * Pull the day's F1 news.
  *
@@ -147,7 +126,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       () => processFinancePlanSnapshots(today),
       failed
     );
-    const tasks = await step("automated_tasks", () => processAutomatedTasks(today), failed);
     const f1News = await step("f1_news", () => processF1News(today), failed);
 
     return NextResponse.json({
@@ -162,8 +140,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         // A count, not the strings: those are built from raw error messages.
         failed: financeSnapshots?.errors.length ?? 0,
       },
-      taskCreationResults: tasks?.created ?? [],
-      taskAutomationFailures: tasks?.failedUserIds.length ?? 0,
       f1News: f1News ?? { fetched: 0, stored: 0 },
       failedOperations: failed,
     });

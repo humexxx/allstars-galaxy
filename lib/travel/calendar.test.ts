@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { addMonths, layOutWeek, monthWeeks, occupiedRuns } from "./calendar";
+import {
+  addMonths,
+  laneCount,
+  layOutTrips,
+  layOutWeek,
+  monthWeeks,
+  occupiedRuns,
+} from "./calendar";
 import type { CalendarItem } from "./calendar";
 
 const item = (over: Partial<CalendarItem>): CalendarItem => ({
@@ -83,5 +90,48 @@ describe("layOutWeek", () => {
 
   it("ignores anything that misses the week entirely", () => {
     expect(layOutWeek(week, [item({ scheduledOn: "2027-02-02" })])).toEqual([]);
+  });
+});
+
+describe("layOutTrips", () => {
+  // The owner's own January: Charlotte ends on the Saturday Orlando starts.
+  const CHARLOTTE = { id: "c", startDate: "2027-01-12", endDate: "2027-01-16" };
+  const ORLANDO = { id: "o", startDate: "2027-01-16", endDate: "2027-01-24" };
+  const weeks = monthWeeks("2027-01");
+  const bars = (week: number) =>
+    layOutTrips(weeks[week], [CHARLOTTE, ORLANDO]).map(({ value, ...bar }) => ({
+      id: value.id,
+      ...bar,
+    }));
+
+  it("draws a trip as one run across the days of a week", () => {
+    expect(bars(2)[0]).toEqual({
+      id: "c", start: 2, span: 5, opensRun: true, closesRun: true, lane: 0,
+    });
+  });
+
+  it("stacks trips that share a day", () => {
+    // Both are on the 16th, so Orlando drops a lane — and the week needs two.
+    expect(bars(2).map((b) => [b.id, b.lane])).toEqual([["c", 0], ["o", 1]]);
+    expect(laneCount(bars(2))).toBe(2);
+  });
+
+  it("carries a trip that wraps a week into the next row, cut at both edges", () => {
+    expect(bars(2)[1]).toMatchObject({ id: "o", start: 6, span: 1, opensRun: true, closesRun: false });
+    expect(bars(3)).toEqual([
+      { id: "o", start: 0, span: 7, opensRun: false, closesRun: false, lane: 0 },
+    ]);
+    expect(bars(4)).toEqual([
+      { id: "o", start: 0, span: 1, opensRun: false, closesRun: true, lane: 0 },
+    ]);
+  });
+
+  it("reads a trip with no end date as its one day", () => {
+    const [bar] = layOutTrips(weeks[2], [{ id: "d", startDate: "2027-01-13", endDate: null }]);
+    expect(bar).toMatchObject({ start: 3, span: 1, opensRun: true, closesRun: true });
+  });
+
+  it("needs no lanes for a week with nothing in it", () => {
+    expect(laneCount(layOutTrips(weeks[0], [CHARLOTTE, ORLANDO]))).toBe(0);
   });
 });

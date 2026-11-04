@@ -57,7 +57,7 @@ export const LANDING_MODULES: LandingModule[] = [
     name: "Board",
     title: "Productivity Board",
     description:
-      "Visual board for the week. Drag-and-drop columns and tasks; the layout you set is what loads next time.",
+      "A fresh board every day. Drag tasks across your columns, and whatever you didn't finish is offered to the next day.",
     icon: Kanban,
     status: "live",
     href: "/portal/productivity/board",
@@ -67,7 +67,7 @@ export const LANDING_MODULES: LandingModule[] = [
     name: "Road Paths",
     title: "Road Paths",
     description:
-      "Track long-term goals across quarters and years — milestones, progress and the slow compounding that gets you there.",
+      "Habits on the days you choose: each one lands on your board by itself, with a streak and a calendar of the days you kept it.",
     icon: Target,
     status: "live",
     href: "/portal/productivity/road-paths",

@@ -14,6 +14,23 @@ afterEach(async () => {
   cleanup();
 });
 
+// jsdom has no `matchMedia`, and media-query hooks (reduced motion, phone
+// width) call it on render. A default that matches nothing reads as a wide
+// screen with motion allowed; a test that needs otherwise stubs its own.
+if (typeof window !== "undefined" && !window.matchMedia) {
+  window.matchMedia = (query: string): MediaQueryList =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+}
+
 // `server-only` is a Next.js marker package that throws at build time when
 // imported from the client bundle. In Vitest we are deliberately running
 // server modules in a Node environment, so we stub it out globally.
@@ -63,4 +80,11 @@ if (typeof globalThis.IntersectionObserver === "undefined") {
       return [];
     }
   } as unknown as typeof IntersectionObserver;
+}
+
+// jsdom draws nothing on a canvas and logs "Not implemented" for every
+// `getContext`. No context reads as a browser that cannot draw, which the
+// confetti already steps aside for.
+if (typeof HTMLCanvasElement !== "undefined") {
+  HTMLCanvasElement.prototype.getContext = (() => null) as HTMLCanvasElement["getContext"];
 }

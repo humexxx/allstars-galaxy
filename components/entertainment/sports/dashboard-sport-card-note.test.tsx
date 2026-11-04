@@ -33,7 +33,7 @@ describe("DashboardSportCard's note", () => {
   it("stands in for the table, its date in the reader's zone", async () => {
     render(await DashboardSportCard({ sportId: "nba" }));
 
-    expect(screen.getByText("2025–26 champions")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "2025–26 champions" })).toBeInTheDocument();
     expect(screen.getByText("New York Knicks, 4–1 over San Antonio")).toBeInTheDocument();
     expect(screen.getByText("Tips off Tue, Oct 20")).toBeInTheDocument();
   });

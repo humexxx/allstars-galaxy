@@ -92,7 +92,7 @@ All four use `Alert` for form-level errors and `Field` + `FieldError` with
   `/schemas/auth.ts`; submit buttons disable on `isSubmitting`.
 - **Google OAuth requires Supabase dashboard config** (not in this repo):
   Auth → URL Configuration must allow-list every `redirect_to` origin —
-  `http://localhost:3010/auth/callback` for dev and
+  `http://localhost:3000/auth/callback` for dev (`pnpm dev`'s port) and
   `https://allstars-galaxy.vercel.app/auth/callback` for prod. A `redirect_to`
   missing from the allow-list makes Supabase fall back to the Site URL after
   the Google handshake, dropping the code exchange (symptom: Google login

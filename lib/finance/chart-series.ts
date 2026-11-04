@@ -10,6 +10,7 @@ export type PlanHistoryPoint = {
   savings: number;
   investments: number;
   totalDebt: number;
+  receivables?: number;
   netWorth: number;
 };
 
@@ -26,6 +27,8 @@ export type ChartPoint = {
   savings?: number;
   totalDebt?: number;
   investments?: number;
+  /** Owed to the user, inside `netWorth`; the dashboard draws it apart. */
+  receivables?: number;
 };
 
 function effAnchor(anchorDay: number): number {
@@ -67,6 +70,7 @@ export function historyToClosePoints(
         savings: h.savings,
         totalDebt: h.totalDebt,
         investments: h.investments,
+        receivables: h.receivables,
       },
     });
   }
@@ -116,6 +120,7 @@ export function buildPlanTimeline(
     savings: m.savings,
     totalDebt: m.totalDebt,
     investments: m.investments,
+    receivables: m.receivables,
   });
 
   let past = historyToClosePoints(history, a).filter((p) => isPast(p.date));

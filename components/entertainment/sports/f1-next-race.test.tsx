@@ -70,7 +70,8 @@ describe("F1NextRace", () => {
     const box = renderNextRace({ race: SINGAPORE });
     // 12:00Z on the 11th is 6 AM that day in Costa Rica.
     expect(box).toHaveTextContent("Final · Oct 11");
-    expect(screen.getByText("Winner · VER · Pole RUS")).toBeInTheDocument();
+    expect(screen.getByText("Winner VER")).toBeInTheDocument();
+    expect(screen.getByText("Pole RUS")).toBeInTheDocument();
     expect(box).not.toHaveTextContent(/ in \d/);
   });
 

@@ -47,6 +47,14 @@ import type { TripContribution } from "@/types/travel";
 import { formatTripMoney, moneyRange } from "@/lib/travel/format";
 import { isoDay } from "@/lib/travel/calendar";
 import { formatDay } from "@/lib/utils/date";
+import { cn } from "@/lib/utils";
+import {
+  PendingBadge,
+  pendingDelay,
+  pendingRowClass,
+  usePendingMark,
+  usePendingTrip,
+} from "./assistant/pending-preview";
 
 export type PaymentsTraveller = {
   id: string;
@@ -97,6 +105,9 @@ export function TripPayments({
   const shown = selected
     ? contributions.filter((c) => c.memberId === selected)
     : contributions;
+  // Payments a previewed proposal removes: listed, crossed out, not counted.
+  const removed = usePendingTrip()?.removed.payments ?? [];
+  const ghosts = selected ? removed.filter((c) => c.memberId === selected) : removed;
 
   const focus = travellers.find((t) => t.id === selected) ?? null;
 
@@ -193,7 +204,7 @@ export function TripPayments({
               </Text>
             </div>
 
-            {shown.length === 0 ? (
+            {shown.length + ghosts.length === 0 ? (
               <EmptyState
                 icon={Receipt}
                 title={
@@ -204,9 +215,10 @@ export function TripPayments({
               />
             ) : (
               <ul className="-mx-2 divide-y">
-                {shown.map((c) => (
+                {[...shown, ...ghosts].map((c, i) => (
                   <PaymentRow
                     key={c.id}
+                    index={i}
                     contribution={c}
                     currency={currency}
                     // Hidden when the list is already one person's: repeating
@@ -257,26 +269,35 @@ export function TripPayments({
  * figures on this card are.
  */
 function PaymentRow({
+  index,
   contribution,
   currency,
   who,
   onOpen,
 }: {
+  index: number;
   contribution: TripContribution;
   currency: string;
   who: string | null;
   onOpen: () => void;
 }) {
+  const pending = usePendingMark(contribution.id);
   return (
     <li>
       <button
         type="button"
         onClick={onOpen}
-        className="flex w-full cursor-pointer flex-col gap-0.5 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        style={pending ? pendingDelay(index) : undefined}
+        className={cn(
+          "flex w-full cursor-pointer flex-col gap-0.5 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          pendingRowClass(pending?.mark),
+          pending?.mark === "remove" && "line-through opacity-70"
+        )}
       >
         <span className="flex w-full items-baseline justify-between gap-2">
-          <Text weight="medium" className="truncate">
-            {who ?? contribution.note ?? "Payment"}
+          <Text weight="medium" className="flex min-w-0 items-center gap-2">
+            <span className="truncate">{who ?? contribution.note ?? "Payment"}</span>
+            {pending && <PendingBadge mark={pending.mark} />}
           </Text>
           <Mono className="shrink-0 whitespace-nowrap text-sm font-medium tabular-nums">
             {formatTripMoney(parseFloat(contribution.amount), currency)}

@@ -20,7 +20,7 @@ export function F1StandingsTabs({
 }: {
   drivers: F1StandingRow[];
   constructors: F1StandingRow[];
-}) {
+}): React.ReactElement {
   const [tab, setTab] = useState<"drivers" | "constructors">("drivers");
   const rows = tab === "drivers" ? drivers : constructors;
 

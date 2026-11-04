@@ -20,9 +20,6 @@ vi.mock("@/lib/services/finance-snapshot-service", () => ({
     errors: [],
   })),
 }));
-vi.mock("@/lib/services/task-automation-service", () => ({
-  createAutomatedTasksForAllUsers: vi.fn(async () => ({ created: [], failedUserIds: [] })),
-}));
 vi.mock("@/lib/services/rapidapi-f1-news-service", () => ({
   refreshF1News: vi.fn(async () => ({ fetched: 0, stored: 0 })),
 }));

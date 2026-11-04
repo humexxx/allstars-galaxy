@@ -1,0 +1,334 @@
+[
+ {
+  "id": "762470",
+  "date": "2025-12-11T02:00:00Z",
+  "season": 2025,
+  "seasonType": "2",
+  "note": "1st Leg",
+  "group": {
+   "name": "Apertura - Playoff Semifinals",
+   "abbreviation": "Semifinals"
+  },
+  "notes": [
+   {
+    "headline": "1st Leg"
+   },
+   {
+    "headline": "1st Leg"
+   }
+  ],
+  "leg": {
+   "value": 1
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "2057",
+    "homeAway": "away",
+    "abbreviation": "ALA",
+    "displayName": "Alajuelense",
+    "name": "Alajuelense",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/2057.png",
+    "score": "1",
+    "winner": false
+   },
+   {
+    "id": "9361",
+    "homeAway": "home",
+    "abbreviation": "LIB",
+    "displayName": "Municipal Liberia",
+    "name": "Municipal Li",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9361.png",
+    "score": "1",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "762471",
+  "date": "2025-12-12T02:00:00Z",
+  "season": 2025,
+  "seasonType": "2",
+  "note": "1st Leg",
+  "group": {
+   "name": "Apertura - Playoff Semifinals",
+   "abbreviation": "Semifinals"
+  },
+  "notes": [
+   {
+    "headline": "1st Leg"
+   },
+   {
+    "headline": "1st Leg"
+   }
+  ],
+  "leg": {
+   "value": 1
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "858",
+    "homeAway": "away",
+    "abbreviation": "SAP",
+    "displayName": "Saprissa",
+    "name": "Saprissa",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/858.png",
+    "score": "2",
+    "winner": true
+   },
+   {
+    "id": "7239",
+    "homeAway": "home",
+    "abbreviation": "CAR",
+    "displayName": "Cartaginés",
+    "name": "Cartaginés",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/7239.png",
+    "score": "1",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "762473",
+  "date": "2025-12-14T02:00:00Z",
+  "season": 2025,
+  "seasonType": "2",
+  "note": "Alajuelense advance 4-1 on aggregate",
+  "group": {
+   "name": "Apertura - Playoff Semifinals",
+   "abbreviation": "Semifinals"
+  },
+  "notes": [
+   {
+    "headline": "Alajuelense advance 4-1 on aggregate"
+   },
+   {
+    "headline": "2nd Leg - Alajuelense advance 4-1 on aggregate"
+   },
+   {
+    "headline": "Alajuelense advances."
+   }
+  ],
+  "leg": {
+   "value": 2
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "9361",
+    "homeAway": "away",
+    "abbreviation": "LIB",
+    "displayName": "Municipal Liberia",
+    "name": "Municipal Li",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9361.png",
+    "score": "0",
+    "winner": false,
+    "advance": false,
+    "aggregateScore": 1.0
+   },
+   {
+    "id": "2057",
+    "homeAway": "home",
+    "abbreviation": "ALA",
+    "displayName": "Alajuelense",
+    "name": "Alajuelense",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/2057.png",
+    "score": "3",
+    "winner": true,
+    "advance": true,
+    "aggregateScore": 4.0
+   }
+  ]
+ },
+ {
+  "id": "762472",
+  "date": "2025-12-14T22:00:00Z",
+  "season": 2025,
+  "seasonType": "2",
+  "note": "Saprissa advance 4-2 on aggregate",
+  "group": {
+   "name": "Apertura - Playoff Semifinals",
+   "abbreviation": "Semifinals"
+  },
+  "notes": [
+   {
+    "headline": "Saprissa advance 4-2 on aggregate"
+   },
+   {
+    "headline": "2nd Leg - Saprissa advance 4-2 on aggregate"
+   },
+   {
+    "headline": "Saprissa advances."
+   }
+  ],
+  "leg": {
+   "value": 2
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "7239",
+    "homeAway": "away",
+    "abbreviation": "CAR",
+    "displayName": "Cartaginés",
+    "name": "Cartaginés",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/7239.png",
+    "score": "1",
+    "winner": false,
+    "advance": false,
+    "aggregateScore": 2.0
+   },
+   {
+    "id": "858",
+    "homeAway": "home",
+    "abbreviation": "SAP",
+    "displayName": "Saprissa",
+    "name": "Saprissa",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/858.png",
+    "score": "2",
+    "winner": true,
+    "advance": true,
+    "aggregateScore": 4.0
+   }
+  ]
+ },
+ {
+  "id": "762650",
+  "date": "2025-12-18T02:00:00Z",
+  "season": 2025,
+  "seasonType": "4",
+  "group": {
+   "name": "Apertura - Playoff Finals",
+   "abbreviation": "Finals"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "2057",
+    "homeAway": "away",
+    "abbreviation": "ALA",
+    "displayName": "Alajuelense",
+    "name": "Alajuelense",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/2057.png",
+    "score": "2",
+    "winner": false
+   },
+   {
+    "id": "858",
+    "homeAway": "home",
+    "abbreviation": "SAP",
+    "displayName": "Saprissa",
+    "name": "Saprissa",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/858.png",
+    "score": "2",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "762651",
+  "date": "2025-12-21T01:00:00Z",
+  "season": 2025,
+  "seasonType": "4",
+  "group": {
+   "name": "Apertura - Playoff Finals",
+   "abbreviation": "Finals"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "858",
+    "homeAway": "away",
+    "abbreviation": "SAP",
+    "displayName": "Saprissa",
+    "name": "Saprissa",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/858.png",
+    "score": "1",
+    "winner": false
+   },
+   {
+    "id": "2057",
+    "homeAway": "home",
+    "abbreviation": "ALA",
+    "displayName": "Alajuelense",
+    "name": "Alajuelense",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/2057.png",
+    "score": "3",
+    "winner": true
+   }
+  ]
+ }
+]

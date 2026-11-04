@@ -13,7 +13,7 @@ Built with **Next.js 16 (App Router)**, **React 19** (Server Components),
 | --- | --- | --- |
 | Finance | Plans (incomes / expenses / debts) with monthly confirmation & health scoring | [docs/modules/finance.md](docs/modules/finance.md) |
 | Portfolio | Real portfolio: transactions, snapshots, investment methods | [docs/modules/portfolio.md](docs/modules/portfolio.md) |
-| Productivity | Personal kanban board + long-term road paths with milestones | [docs/modules/productivity.md](docs/modules/productivity.md) |
+| Productivity | Daily kanban board + road paths: habits on a weekly schedule (streaks, calendar) and goals with milestones | [docs/modules/productivity.md](docs/modules/productivity.md) |
 | Entertainment | Trip planner with public share links, plus live sports scores, standings and F1 news | [docs/modules/entertainment.md](docs/modules/entertainment.md) |
 | Admin | User management, transaction approvals, impersonation | [docs/modules/admin.md](docs/modules/admin.md) |
 | Auth | Supabase email auth + server action wrappers | [docs/modules/auth.md](docs/modules/auth.md) |
@@ -26,7 +26,7 @@ cd allstars-galaxy
 cp .env.example .env   # fill in Supabase URL, keys, and DATABASE_URL / DIRECT_URL
 pnpm install           # also wires the husky commit-msg hook
 pnpm db:migrate        # apply migrations against your DB
-pnpm dev               # http://localhost:3010
+pnpm dev               # http://localhost:3000
 ```
 
 Requires **Node 22+** and **pnpm 11+**.
@@ -34,7 +34,7 @@ Requires **Node 22+** and **pnpm 11+**.
 ## Scripts
 
 ```bash
-pnpm dev          # dev server (http://localhost:3010)
+pnpm dev          # dev server (http://localhost:3000)
 pnpm build        # production build
 pnpm start        # production server
 pnpm lint         # ESLint

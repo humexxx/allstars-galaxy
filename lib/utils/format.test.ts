@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCurrency, formatCurrencyCompact, moneySign, roundCents } from "./format";
+import { formatCurrency, formatCurrencyCompact, moneySign, ordinal, roundCents } from "./format";
 
 describe("formatCurrencyCompact", () => {
   it("chooses the unit after rounding (999,960 → $1M, 999.6 → $1k)", () => {
@@ -33,5 +33,24 @@ describe("cent-precision helpers", () => {
     expect(moneySign(-0.01)).toBe(-1);
     expect(moneySign(0.01)).toBe(1);
     expect(Object.is(roundCents(-0.001), 0)).toBe(true);
+  });
+});
+
+describe("ordinal", () => {
+  it("takes st, nd and rd except in the teens", () => {
+    expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101, 111].map(ordinal)).toEqual([
+      "1st",
+      "2nd",
+      "3rd",
+      "4th",
+      "11th",
+      "12th",
+      "13th",
+      "21st",
+      "22nd",
+      "23rd",
+      "101st",
+      "111th",
+    ]);
   });
 });

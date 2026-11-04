@@ -1,0 +1,594 @@
+{
+ "children": [
+  {
+   "name": "Apertura",
+   "abbreviation": "Apertura",
+   "standings": {
+    "season": 2026,
+    "seasonDisplayName": "2026-27 Primera División de Costa Rica",
+    "entries": [
+     {
+      "team": {
+       "abbreviation": "SAP",
+       "displayName": "Saprissa",
+       "shortDisplayName": "Saprissa",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/soccer/500/858.png",
+         "rel": [
+          "full",
+          "default"
+         ]
+        }
+       ]
+      },
+      "stats": [
+       {
+        "name": "gamesPlayed",
+        "displayValue": "13",
+        "value": 13.0
+       },
+       {
+        "name": "losses",
+        "displayValue": "5",
+        "value": 5.0
+       },
+       {
+        "name": "points",
+        "displayValue": "24",
+        "value": 24.0
+       },
+       {
+        "name": "pointsAgainst",
+        "displayValue": "14",
+        "value": 14.0
+       },
+       {
+        "name": "pointsFor",
+        "displayValue": "27",
+        "value": 27.0
+       },
+       {
+        "name": "ties",
+        "displayValue": "0",
+        "value": 0.0
+       },
+       {
+        "name": "wins",
+        "displayValue": "8",
+        "value": 8.0
+       },
+       {
+        "name": "rank",
+        "displayValue": "1",
+        "value": 1.0
+       }
+      ]
+     },
+     {
+      "team": {
+       "abbreviation": "ADSC",
+       "displayName": "AD San Carlos",
+       "shortDisplayName": "San Carlos",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/soccer/500/859.png",
+         "rel": [
+          "full",
+          "default"
+         ]
+        }
+       ]
+      },
+      "stats": [
+       {
+        "name": "gamesPlayed",
+        "displayValue": "13",
+        "value": 13.0
+       },
+       {
+        "name": "losses",
+        "displayValue": "5",
+        "value": 5.0
+       },
+       {
+        "name": "points",
+        "displayValue": "22",
+        "value": 22.0
+       },
+       {
+        "name": "pointsAgainst",
+        "displayValue": "15",
+        "value": 15.0
+       },
+       {
+        "name": "pointsFor",
+        "displayValue": "15",
+        "value": 15.0
+       },
+       {
+        "name": "ties",
+        "displayValue": "1",
+        "value": 1.0
+       },
+       {
+        "name": "wins",
+        "displayValue": "7",
+        "value": 7.0
+       },
+       {
+        "name": "rank",
+        "displayValue": "4",
+        "value": 4.0
+       }
+      ]
+     },
+     {
+      "team": {
+       "abbreviation": "HER",
+       "displayName": "Herediano",
+       "shortDisplayName": "Herediano",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/soccer/500/862.png",
+         "rel": [
+          "full",
+          "default"
+         ]
+        }
+       ]
+      },
+      "stats": [
+       {
+        "name": "gamesPlayed",
+        "displayValue": "13",
+        "value": 13.0
+       },
+       {
+        "name": "losses",
+        "displayValue": "7",
+        "value": 7.0
+       },
+       {
+        "name": "points",
+        "displayValue": "14",
+        "value": 14.0
+       },
+       {
+        "name": "pointsAgainst",
+        "displayValue": "17",
+        "value": 17.0
+       },
+       {
+        "name": "pointsFor",
+        "displayValue": "15",
+        "value": 15.0
+       },
+       {
+        "name": "ties",
+        "displayValue": "2",
+        "value": 2.0
+       },
+       {
+        "name": "wins",
+        "displayValue": "4",
+        "value": 4.0
+       },
+       {
+        "name": "rank",
+        "displayValue": "8",
+        "value": 8.0
+       }
+      ]
+     },
+     {
+      "team": {
+       "abbreviation": "ALA",
+       "displayName": "Alajuelense",
+       "shortDisplayName": "Alajuelense",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/soccer/500/2057.png",
+         "rel": [
+          "full",
+          "default"
+         ]
+        }
+       ]
+      },
+      "stats": [
+       {
+        "name": "gamesPlayed",
+        "displayValue": "12",
+        "value": 12.0
+       },
+       {
+        "name": "losses",
+        "displayValue": "3",
+        "value": 3.0
+       },
+       {
+        "name": "points",
+        "displayValue": "19",
+        "value": 19.0
+       },
+       {
+        "name": "pointsAgainst",
+        "displayValue": "14",
+        "value": 14.0
+       },
+       {
+        "name": "pointsFor",
+        "displayValue": "20",
+        "value": 20.0
+       },
+       {
+        "name": "ties",
+        "displayValue": "4",
+        "value": 4.0
+       },
+       {
+        "name": "wins",
+        "displayValue": "5",
+        "value": 5.0
+       },
+       {
+        "name": "rank",
+        "displayValue": "5",
+        "value": 5.0
+       }
+      ]
+     },
+     {
+      "team": {
+       "abbreviation": "ZEL",
+       "displayName": "Pérez Zeledón",
+       "shortDisplayName": "Pérez Zeledón",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/soccer/500/7234.png",
+         "rel": [
+          "full",
+          "default"
+         ]
+        }
+       ]
+      },
+      "stats": [
+       {
+        "name": "gamesPlayed",
+        "displayValue": "12",
+        "value": 12.0
+       },
+       {
+        "name": "losses",
+        "displayValue": "7",
+        "value": 7.0
+       },
+       {
+        "name": "points",
+        "displayValue": "9",
+        "value": 9.0
+       },
+       {
+        "name": "pointsAgainst",
+        "displayValue": "22",
+        "value": 22.0
+       },
+       {
+        "name": "pointsFor",
+        "displayValue": "9",
+        "value": 9.0
+       },
+       {
+        "name": "ties",
+        "displayValue": "3",
+        "value": 3.0
+       },
+       {
+        "name": "wins",
+        "displayValue": "2",
+        "value": 2.0
+       },
+       {
+        "name": "rank",
+        "displayValue": "10",
+        "value": 10.0
+       }
+      ]
+     },
+     {
+      "team": {
+       "abbreviation": "PUN",
+       "displayName": "Puntarenas FC",
+       "shortDisplayName": "Puntarenas",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/soccer/500/7237.png",
+         "rel": [
+          "full",
+          "default"
+         ]
+        }
+       ]
+      },
+      "stats": [
+       {
+        "name": "gamesPlayed",
+        "displayValue": "13",
+        "value": 13.0
+       },
+       {
+        "name": "losses",
+        "displayValue": "5",
+        "value": 5.0
+       },
+       {
+        "name": "points",
+        "displayValue": "18",
+        "value": 18.0
+       },
+       {
+        "name": "pointsAgainst",
+        "displayValue": "19",
+        "value": 19.0
+       },
+       {
+        "name": "pointsFor",
+        "displayValue": "15",
+        "value": 15.0
+       },
+       {
+        "name": "ties",
+        "displayValue": "3",
+        "value": 3.0
+       },
+       {
+        "name": "wins",
+        "displayValue": "5",
+        "value": 5.0
+       },
+       {
+        "name": "rank",
+        "displayValue": "6",
+        "value": 6.0
+       }
+      ]
+     },
+     {
+      "team": {
+       "abbreviation": "CAR",
+       "displayName": "Cartaginés",
+       "shortDisplayName": "Cartaginés",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/soccer/500/7239.png",
+         "rel": [
+          "full",
+          "default"
+         ]
+        }
+       ]
+      },
+      "stats": [
+       {
+        "name": "gamesPlayed",
+        "displayValue": "13",
+        "value": 13.0
+       },
+       {
+        "name": "losses",
+        "displayValue": "5",
+        "value": 5.0
+       },
+       {
+        "name": "points",
+        "displayValue": "24",
+        "value": 24.0
+       },
+       {
+        "name": "pointsAgainst",
+        "displayValue": "17",
+        "value": 17.0
+       },
+       {
+        "name": "pointsFor",
+        "displayValue": "24",
+        "value": 24.0
+       },
+       {
+        "name": "ties",
+        "displayValue": "0",
+        "value": 0.0
+       },
+       {
+        "name": "wins",
+        "displayValue": "8",
+        "value": 8.0
+       },
+       {
+        "name": "rank",
+        "displayValue": "2",
+        "value": 2.0
+       }
+      ]
+     },
+     {
+      "team": {
+       "abbreviation": "SSJ",
+       "displayName": "Sporting San José",
+       "shortDisplayName": "Spr. San José",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/soccer/500/20705.png",
+         "rel": [
+          "full",
+          "default"
+         ]
+        }
+       ]
+      },
+      "stats": [
+       {
+        "name": "gamesPlayed",
+        "displayValue": "13",
+        "value": 13.0
+       },
+       {
+        "name": "losses",
+        "displayValue": "3",
+        "value": 3.0
+       },
+       {
+        "name": "points",
+        "displayValue": "24",
+        "value": 24.0
+       },
+       {
+        "name": "pointsAgainst",
+        "displayValue": "20",
+        "value": 20.0
+       },
+       {
+        "name": "pointsFor",
+        "displayValue": "26",
+        "value": 26.0
+       },
+       {
+        "name": "ties",
+        "displayValue": "3",
+        "value": 3.0
+       },
+       {
+        "name": "wins",
+        "displayValue": "7",
+        "value": 7.0
+       },
+       {
+        "name": "rank",
+        "displayValue": "3",
+        "value": 3.0
+       }
+      ]
+     },
+     {
+      "team": {
+       "abbreviation": "ISC",
+       "displayName": "Inter de San Carlos",
+       "shortDisplayName": "San Carlos",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/soccer/500/131790.png",
+         "rel": [
+          "full",
+          "default"
+         ]
+        }
+       ]
+      },
+      "stats": [
+       {
+        "name": "gamesPlayed",
+        "displayValue": "13",
+        "value": 13.0
+       },
+       {
+        "name": "losses",
+        "displayValue": "5",
+        "value": 5.0
+       },
+       {
+        "name": "points",
+        "displayValue": "18",
+        "value": 18.0
+       },
+       {
+        "name": "pointsAgainst",
+        "displayValue": "20",
+        "value": 20.0
+       },
+       {
+        "name": "pointsFor",
+        "displayValue": "15",
+        "value": 15.0
+       },
+       {
+        "name": "ties",
+        "displayValue": "3",
+        "value": 3.0
+       },
+       {
+        "name": "wins",
+        "displayValue": "5",
+        "value": 5.0
+       },
+       {
+        "name": "rank",
+        "displayValue": "7",
+        "value": 7.0
+       }
+      ]
+     },
+     {
+      "team": {
+       "abbreviation": "BEL",
+       "displayName": "Escorpiones Belén",
+       "shortDisplayName": "Belén",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/soccer/500/132447.png",
+         "rel": [
+          "full",
+          "default"
+         ]
+        }
+       ]
+      },
+      "stats": [
+       {
+        "name": "gamesPlayed",
+        "displayValue": "13",
+        "value": 13.0
+       },
+       {
+        "name": "losses",
+        "displayValue": "9",
+        "value": 9.0
+       },
+       {
+        "name": "points",
+        "displayValue": "10",
+        "value": 10.0
+       },
+       {
+        "name": "pointsAgainst",
+        "displayValue": "22",
+        "value": 22.0
+       },
+       {
+        "name": "pointsFor",
+        "displayValue": "14",
+        "value": 14.0
+       },
+       {
+        "name": "ties",
+        "displayValue": "1",
+        "value": 1.0
+       },
+       {
+        "name": "wins",
+        "displayValue": "3",
+        "value": 3.0
+       },
+       {
+        "name": "rank",
+        "displayValue": "9",
+        "value": 9.0
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

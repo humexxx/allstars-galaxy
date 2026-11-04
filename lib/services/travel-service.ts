@@ -20,7 +20,7 @@ function groupByItem(rows: { itemId: string; memberId: string }[]): Map<string, 
 }
 
 /** The handle inside `db.transaction`, which is the same shape as `db`. */
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 import {
   trips,
   tripContributions,
@@ -116,6 +116,46 @@ function tripState(trip: Trip, today: string): DashboardTravelTripState {
   return "in_progress";
 }
 
+/**
+ * A trip's columns from validated input — one mapping for the trip form and
+ * the travel assistant, so the two can never save the same input differently.
+ */
+export function tripRowValues(
+  data: CreateTripData
+): Omit<typeof trips.$inferInsert, "id" | "userId" | "createdAt" | "updatedAt"> {
+  return {
+    title: data.title,
+    destination: data.destination ?? null,
+    description: data.description ?? null,
+    startDate: data.startDate,
+    endDate: data.endDate ?? null,
+    coverPhotoUrl: data.coverPhotoUrl ?? null,
+    currency: data.currency,
+    color: data.color,
+  };
+}
+
+/** An item's columns from validated input; see `tripRowValues`. */
+export function itemRowValues(
+  data: TripItemData
+): Omit<typeof tripItems.$inferInsert, "id" | "tripId" | "sortOrder" | "createdAt" | "updatedAt"> {
+  return {
+    title: data.title,
+    category: data.category,
+    link: data.link ?? null,
+    videoUrl: data.videoUrl ?? null,
+    fromCode: data.fromCode ?? null,
+    toCode: data.toCode ?? null,
+    roundTrip: data.roundTrip ?? false,
+    priceMax: data.priceMax ?? null,
+    priceUnit: data.priceUnit ?? "total",
+    endsOn: data.endsOn ?? null,
+    price: data.price ?? null,
+    scheduledOn: data.scheduledOn ?? null,
+    notes: data.notes ?? null,
+  };
+}
+
 // ---------- trip CRUD ----------
 
 export async function listUserTrips(userId: string): Promise<Trip[]> {
@@ -131,11 +171,22 @@ export async function listUserTrips(userId: string): Promise<Trip[]> {
  * body within the same request hit the DB once. Args are part of the cache
  * key, so the per-user filter remains safe.
  */
-export const getTripWithRelations = cache(async function getTripWithRelations(
+export const getTripWithRelations = cache(
+  (tripId: string, userId: string): Promise<TripWithRelations | null> =>
+    loadTripWithRelations(db, tripId, userId)
+);
+
+/**
+ * The trip as the page draws it, read through `exec` — the database, or an
+ * open transaction, which is how the travel assistant shows a proposal as the
+ * trip would look with it applied.
+ */
+export async function loadTripWithRelations(
+  exec: typeof db | Tx,
   tripId: string,
   userId: string
 ): Promise<TripWithRelations | null> {
-  const [trip] = await db
+  const [trip] = await exec
     .select()
     .from(trips)
     .where(and(eq(trips.id, tripId), eq(trips.userId, userId)));
@@ -143,17 +194,17 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
 
   const [items, photos, shares, stops, members, contributions, payers, attendees] =
     await Promise.all([
-    db
+    exec
       .select()
       .from(tripItems)
       .where(eq(tripItems.tripId, tripId))
       .orderBy(asc(tripItems.scheduledOn), asc(tripItems.sortOrder), asc(tripItems.createdAt)),
-    db
+    exec
       .select()
       .from(tripPhotos)
       .where(eq(tripPhotos.tripId, tripId))
       .orderBy(asc(tripPhotos.sortOrder), asc(tripPhotos.createdAt)),
-    db
+    exec
       .select()
       .from(tripShares)
       .where(eq(tripShares.tripId, tripId))
@@ -161,7 +212,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     // Every stop for this trip in one query, attached to its item below. A
     // query per item would be N+1 for something that is at most a couple of
     // dozen rows.
-    db
+    exec
       .select({
         id: tripItemStops.id,
         itemId: tripItemStops.itemId,
@@ -174,7 +225,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       .innerJoin(tripItems, eq(tripItemStops.itemId, tripItems.id))
       .where(eq(tripItems.tripId, tripId))
       .orderBy(asc(tripItemStops.dayNumber)),
-    db
+    exec
       .select({
         id: tripMembers.id,
         name: tripMembers.name,
@@ -184,7 +235,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       .from(tripMembers)
       .where(eq(tripMembers.tripId, tripId))
       .orderBy(asc(tripMembers.sortOrder), asc(tripMembers.createdAt)),
-    db
+    exec
       .select()
       .from(tripContributions)
       .where(eq(tripContributions.tripId, tripId))
@@ -194,13 +245,13 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     // Who covers what, in one query for the trip. `splitTrip` has honoured
     // this since it was written; nothing ever loaded it, so every item was
     // divided among everybody.
-    db
+    exec
       .select({ itemId: tripItemPayers.itemId, memberId: tripItemPayers.memberId })
       .from(tripItemPayers)
       .innerJoin(tripItems, eq(tripItemPayers.itemId, tripItems.id))
       .where(eq(tripItems.tripId, tripId)),
     // And who is actually ON each item, which is a different question.
-    db
+    exec
       .select({ itemId: tripItemAttendees.itemId, memberId: tripItemAttendees.memberId })
       .from(tripItemAttendees)
       .innerJoin(tripItems, eq(tripItemAttendees.itemId, tripItems.id))
@@ -214,8 +265,8 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
     stopsByItem.set(stop.itemId, list);
   }
 
-  // A photo belongs to one place or the other: the gallery is the trip's own
-  // photos, and an item's photos travel with the item.
+  // A photo belongs to one place or the other: the trip's own photos take
+  // turns on its banner, and an item's photos travel with the item.
   const payersByItem = groupByItem(payers);
   const attendeesByItem = groupByItem(attendees);
 
@@ -244,7 +295,7 @@ export const getTripWithRelations = cache(async function getTripWithRelations(
       sharePercent: m.sharePercent === null ? null : Number(m.sharePercent),
     })),
   };
-});
+}
 
 export async function createTrip(
   userId: string,
@@ -252,17 +303,7 @@ export async function createTrip(
 ): Promise<Trip> {
   const [trip] = await db
     .insert(trips)
-    .values({
-      userId,
-      title: data.title,
-      destination: data.destination ?? null,
-      description: data.description ?? null,
-      startDate: data.startDate,
-      endDate: data.endDate ?? null,
-      coverPhotoUrl: data.coverPhotoUrl ?? null,
-      currency: data.currency,
-      color: data.color,
-    })
+    .values({ userId, ...tripRowValues(data) })
     .returning();
   return trip;
 }
@@ -274,17 +315,7 @@ export async function updateTrip(
   await ensureTripOwnership(data.id, userId);
   const [trip] = await db
     .update(trips)
-    .set({
-      title: data.title,
-      destination: data.destination ?? null,
-      description: data.description ?? null,
-      startDate: data.startDate,
-      endDate: data.endDate ?? null,
-      coverPhotoUrl: data.coverPhotoUrl ?? null,
-      currency: data.currency,
-      color: data.color,
-      updatedAt: new Date(),
-    })
+    .set({ ...tripRowValues(data), updatedAt: new Date() })
     // Owner in the WHERE as well as the pre-check: the check and the write are
     // two statements, and the write must not trust what was true between them.
     .where(and(eq(trips.id, data.id), eq(trips.userId, userId)))
@@ -311,7 +342,7 @@ export async function deleteTrip(userId: string, tripId: string): Promise<void> 
  * Takes the table because payers and attendees differ in nothing else, and two
  * copies of this drift the moment one of them is fixed.
  */
-async function setItemMembers(
+export async function setItemMembers(
   table: typeof tripItemPayers | typeof tripItemAttendees,
   tx: Tx,
   tripId: string,
@@ -344,23 +375,7 @@ export async function addTripItem(
   return db.transaction(async (tx) => {
   const [row] = await tx
     .insert(tripItems)
-    .values({
-      tripId,
-      title: data.title,
-      category: data.category,
-      link: data.link ?? null,
-      videoUrl: data.videoUrl ?? null,
-      fromCode: data.fromCode ?? null,
-      toCode: data.toCode ?? null,
-      roundTrip: data.roundTrip ?? false,
-      priceMax: data.priceMax ?? null,
-      priceUnit: data.priceUnit ?? "total",
-      endsOn: data.endsOn ?? null,
-      price: data.price ?? null,
-      scheduledOn: data.scheduledOn ?? null,
-      notes: data.notes ?? null,
-      sortOrder: data.sortOrder ?? 0,
-    })
+    .values({ tripId, ...itemRowValues(data), sortOrder: data.sortOrder ?? 0 })
     .returning();
   // A brand-new row has nothing to clear, so only a named list is worth a
   // round trip here. On update it is unconditional — clearing is meaningful.
@@ -383,23 +398,7 @@ export async function updateTripItem(
   return db.transaction(async (tx) => {
   const [row] = await tx
     .update(tripItems)
-    .set({
-      title: data.title,
-      category: data.category,
-      link: data.link ?? null,
-      videoUrl: data.videoUrl ?? null,
-      fromCode: data.fromCode ?? null,
-      toCode: data.toCode ?? null,
-      roundTrip: data.roundTrip ?? false,
-      priceMax: data.priceMax ?? null,
-      priceUnit: data.priceUnit ?? "total",
-      endsOn: data.endsOn ?? null,
-      price: data.price ?? null,
-      scheduledOn: data.scheduledOn ?? null,
-      notes: data.notes ?? null,
-      sortOrder: data.sortOrder,
-      updatedAt: new Date(),
-    })
+    .set({ ...itemRowValues(data), sortOrder: data.sortOrder, updatedAt: new Date() })
     .where(and(eq(tripItems.id, data.id), eq(tripItems.tripId, tripId)))
     .returning();
   // The item can be gone — deleted in another tab while this dialog was open.

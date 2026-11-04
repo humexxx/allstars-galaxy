@@ -1,12 +1,10 @@
-import type { JSX } from "react";
-
 import { Badge } from "@/components/ui/badge";
 import type { F1Race } from "@/types/sports";
 
 import type { MatchTimeFormat } from "./shared/match-time";
 
-// Shared by the server-rendered dashboard card and the client Races tab, so
-// nothing here may be a client module.
+// Shared by the server-rendered dashboard card and the client F1Races (F1's
+// Overview races), so nothing here may be a client module.
 
 /**
  * When the race starts, in the reader's zone. Only a race with no start time
@@ -24,6 +22,6 @@ export function racePlace(race: F1Race): string {
   return `${race.circuit} · ${town}`;
 }
 
-export function SprintBadge(): JSX.Element {
+export function SprintBadge(): React.ReactElement {
   return <Badge variant="outline">Sprint</Badge>;
 }

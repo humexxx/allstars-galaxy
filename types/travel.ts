@@ -49,7 +49,7 @@ export type TripItemWithStops = TripItem & {
    * wrong.
    */
   attendeeIds: string[];
-  /** Photos attached to this item rather than to the trip's gallery. */
+  /** Photos attached to this item rather than to the trip's banner. */
   photos: TripPhoto[];
 };
 

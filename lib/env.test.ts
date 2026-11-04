@@ -29,7 +29,7 @@ afterEach(() => vi.resetModules());
 
 describe("getBaseUrl", () => {
   it("falls back to the dev origin when nothing is configured", async () => {
-    expect(await baseUrlWith({})).toBe("http://localhost:3010");
+    expect(await baseUrlWith({})).toBe("http://localhost:3000");
   });
 
   it("prefers the stable production host over the deployment's own", async () => {

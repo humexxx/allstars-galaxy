@@ -12,6 +12,24 @@
   line-height: 0.875rem;
 }
 
+/* The edges a phone's hardware covers: the home indicator, and the notch with
+   the phone on its side. The root layout's `viewportFit: "cover"` lets the page
+   paint under them, so whatever is pinned to an edge clears them itself, keeping
+   its own spacing wherever that is the larger. `pb-safe-0` adds the bare inset,
+   for a container whose children already pad. See docs/SPACING.md. */
+@utility pb-safe-* {
+  padding-bottom: max(calc(var(--spacing) * --value(integer)), env(safe-area-inset-bottom));
+}
+@utility pl-safe-* {
+  padding-left: max(calc(var(--spacing) * --value(integer)), env(safe-area-inset-left));
+}
+@utility pr-safe-* {
+  padding-right: max(calc(var(--spacing) * --value(integer)), env(safe-area-inset-right));
+}
+@utility bottom-safe-* {
+  bottom: max(calc(var(--spacing) * --value(integer)), env(safe-area-inset-bottom));
+}
+
 @theme inline {
   /* iOS motion: a little longer than the web default and on the UIKit
      ease-in-out curve, so every transition-* utility settles the same way. */
@@ -24,6 +42,7 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-primary-fill: var(--primary-fill);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -93,14 +112,22 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
 
-  --primary: oklch(0.62 0.2 255);       /* #007AFF systemBlue */
+  /* A step deeper than systemBlue (#007AFF), which carries white text at only
+     3.7:1. This is the blue Apple's own web puts under white button labels:
+     4.5:1, and the same as text on a card. */
+  --primary: oklch(0.57 0.18 255);      /* #1175DE */
+  /* What a solid fill under `primary-foreground` text is painted with. One with
+     `primary` here; dark mode splits them. */
+  --primary-fill: var(--primary);
   --primary-foreground: oklch(1 0 0);
 
   --secondary: oklch(0.93 0.004 286);   /* #E5E5EA systemGray5 */
   --secondary-foreground: oklch(0.21 0.006 285.885);
 
   --muted: oklch(0.945 0.005 286);
-  --muted-foreground: oklch(0.6 0.012 286); /* secondaryLabel */
+  /* Deeper than iOS's secondaryLabel (#7F7F87 was 3.5:1 on the page, 4:1 on a
+     card): text-safe, 4.9:1 on the page, 5.5:1 on a card, 4.7:1 on muted. */
+  --muted-foreground: oklch(0.52 0.012 286);
 
   --accent: oklch(0.945 0.005 286);
   --accent-foreground: oklch(0.205 0 0);
@@ -112,15 +139,15 @@
   --destructive: oklch(0.58 0.22 27);   /* systemRed, text-safe */
   --destructive-foreground: oklch(0.985 0 0);
 
-  --success: oklch(0.55 0.17 152);      /* systemGreen, text-safe */
+  --success: oklch(0.51 0.16 152);      /* systemGreen, text-safe: 5.2:1 on a card, 4.5:1 on its own /10 tint */
   --success-foreground: oklch(1 0 0);
 
-  --warning: oklch(0.58 0.16 58);       /* systemOrange, text-safe */
+  --warning: oklch(0.57 0.16 58);       /* systemOrange, text-safe */
   --warning-foreground: oklch(0.2 0 0);
 
   --border: oklch(0.9 0.005 286);
   --input: oklch(0.9 0.005 286);
-  --ring: oklch(0.62 0.2 255);
+  --ring: oklch(0.57 0.18 255);
   --background: oklch(0.962 0.005 286); /* #F2F2F7 systemGroupedBackground */
   --foreground: oklch(0.145 0 0);
   /* Categorical series palette — identity, not magnitude. These slots colour
@@ -156,12 +183,12 @@
      border — the shadcn docs look, rather than a tinted panel. */
   --sidebar: oklch(0.962 0.005 286);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.62 0.2 255);
+  --sidebar-primary: oklch(0.57 0.18 255);
   --sidebar-primary-foreground: oklch(1 0 0);
   --sidebar-accent: oklch(0.91 0.006 286);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.9 0.005 286);
-  --sidebar-ring: oklch(0.62 0.2 255);
+  --sidebar-ring: oklch(0.57 0.18 255);
 }
 
 .dark {
@@ -177,6 +204,10 @@
   --popover-foreground: oklch(0.985 0 0);
 
   --primary: oklch(0.67 0.19 255);      /* #0A84FF */
+  /* No one blue serves both jobs on black: #0A84FF reads at 5.5:1 as text on
+     a card but carries a white label at 3.1:1. Text, rings and indicators keep
+     it; a fill with a label takes the deeper blue, as Apple's web does. */
+  --primary-fill: oklch(0.57 0.18 255);
   --primary-foreground: oklch(1 0 0);
 
   --secondary: oklch(0.3 0.005 286);    /* #3A3A3C */
@@ -251,6 +282,13 @@ body {
     /* Native apps do not flash a grey box under a tap. */
     -webkit-tap-highlight-color: transparent;
   }
+  /* A phone on its side puts the notch over one edge. The page's own colour
+     fills the inset, and the content starts clear of it. On <html>, not
+     <body>: an open dialog's scroll lock zeroes the body's padding, and the
+     page behind it jumped sideways. */
+  html {
+    padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
+  }
 
   ::selection {
     @apply bg-primary/20;
@@ -278,6 +316,23 @@ body {
     html,
     body {
       overscroll-behavior: none;
+    }
+  }
+
+  /* The sports hub's tab bar is sticky, so whatever scrolls under it keeps
+     the bar's height clear above it: an element the keyboard focuses, or a
+     day the list scrolls to, lands below the bar instead of hidden under it.
+     Below `md` the page scrolls under the header and the bar (`top-14` +
+     `h-12`); from `md` under the bar alone. A margin on what follows the bar,
+     not padding on the scroller: padding would count the stuck bar itself as
+     hidden and scroll the page each time one of its tabs took focus. See
+     docs/SPACING.md. */
+  [data-sport-tabs] ~ * * {
+    scroll-margin-top: --spacing(26);
+  }
+  @media (min-width: 48rem) {
+    [data-sport-tabs] ~ * * {
+      scroll-margin-top: --spacing(12);
     }
   }
 

@@ -13,7 +13,7 @@ export function F1CircuitOutline({
 }: {
   circuitId: string;
   className?: string;
-}) {
+}): React.ReactElement | null {
   // `hasOwn`, or an id such as "constructor" would find Object's prototype.
   const d = Object.hasOwn(F1_CIRCUIT_OUTLINES, circuitId)
     ? F1_CIRCUIT_OUTLINES[circuitId]

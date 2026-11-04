@@ -1,0 +1,370 @@
+[
+ {
+  "id": "761904",
+  "date": "2026-10-26T01:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference",
+   "abbreviation": "Western Conference"
+  },
+  "fullStatus": {
+   "period": 1,
+   "displayClock": "33'",
+   "type": {
+    "name": "STATUS_FIRST_HALF",
+    "state": "in",
+    "completed": false,
+    "detail": "33'",
+    "shortDetail": "33'"
+   }
+  },
+  "competitors": [
+   {
+    "id": "187",
+    "homeAway": "away",
+    "abbreviation": "LA",
+    "displayName": "LA Galaxy",
+    "name": "LA Galaxy",
+    "color": "00235d",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/187.png",
+    "score": "0",
+    "winner": false
+   },
+   {
+    "id": "18966",
+    "homeAway": "home",
+    "abbreviation": "LAFC",
+    "displayName": "LAFC",
+    "name": "LAFC",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18966.png",
+    "score": "0",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "761889",
+  "date": "2026-10-18T21:00:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference",
+   "abbreviation": "Eastern Conference"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+5'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "183",
+    "homeAway": "away",
+    "abbreviation": "CLB",
+    "displayName": "Columbus Crew",
+    "name": "Columbus",
+    "color": "000000",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/183.png",
+    "score": "2",
+    "winner": true
+   },
+   {
+    "id": "18267",
+    "homeAway": "home",
+    "abbreviation": "CIN",
+    "displayName": "FC Cincinnati",
+    "name": "Cincinnati",
+    "color": "003087",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18267.png",
+    "score": "0",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "761891",
+  "date": "2026-10-24T21:30:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference",
+   "abbreviation": "Eastern Conference"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+5'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "20232",
+    "homeAway": "away",
+    "abbreviation": "MIA",
+    "displayName": "Inter Miami CF",
+    "name": "Miami",
+    "color": "231f20",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20232.png",
+    "score": "0",
+    "winner": false
+   },
+   {
+    "id": "190",
+    "homeAway": "home",
+    "abbreviation": "RBNY",
+    "displayName": "Red Bull New York",
+    "name": "Red Bull NY",
+    "color": "ba0c2f",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/190.png",
+    "score": "2",
+    "winner": true
+   }
+  ]
+ },
+ {
+  "id": "761893",
+  "date": "2026-10-24T23:30:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference",
+   "abbreviation": "Eastern Conference"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "36'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "182",
+    "homeAway": "away",
+    "abbreviation": "CHI",
+    "displayName": "Chicago Fire FC",
+    "name": "Chicago",
+    "color": "7ccdef",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/182.png",
+    "score": "3",
+    "winner": true
+   },
+   {
+    "id": "18418",
+    "homeAway": "home",
+    "abbreviation": "ATL",
+    "displayName": "Atlanta United FC",
+    "name": "Atlanta",
+    "color": "9d2235",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/18418.png",
+    "score": "2",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "761901",
+  "date": "2026-10-25T02:30:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference",
+   "abbreviation": "Western Conference"
+  },
+  "fullStatus": {
+   "period": 2,
+   "displayClock": "90'+11'",
+   "type": {
+    "name": "STATUS_FULL_TIME",
+    "state": "post",
+    "completed": true,
+    "detail": "FT",
+    "shortDetail": "FT"
+   }
+  },
+  "competitors": [
+   {
+    "id": "9726",
+    "homeAway": "away",
+    "abbreviation": "SEA",
+    "displayName": "Seattle Sounders FC",
+    "name": "Seattle",
+    "color": "2dc84d",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9726.png",
+    "score": "2",
+    "winner": false
+   },
+   {
+    "id": "22529",
+    "homeAway": "home",
+    "abbreviation": "SD",
+    "displayName": "San Diego FC",
+    "name": "San Diego",
+    "color": "697a7C",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/22529.png",
+    "score": "2",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "761907",
+  "date": "2026-10-28T23:30:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Eastern Conference",
+   "abbreviation": "Eastern Conference"
+  },
+  "fullStatus": {
+   "period": 0,
+   "displayClock": "0'",
+   "type": {
+    "name": "STATUS_SCHEDULED",
+    "state": "pre",
+    "completed": false,
+    "detail": "Wed, October 28th at 7:30 PM EDT",
+    "shortDetail": "Scheduled"
+   }
+  },
+  "competitors": [
+   {
+    "id": "9720",
+    "homeAway": "away",
+    "abbreviation": "MTL",
+    "displayName": "CF Montréal",
+    "name": "CF Montréal",
+    "color": "003da6",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9720.png",
+    "score": "",
+    "winner": false
+   },
+   {
+    "id": "21300",
+    "homeAway": "home",
+    "abbreviation": "CLT",
+    "displayName": "Charlotte FC",
+    "name": "Charlotte",
+    "color": "0085ca",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/21300.png",
+    "score": "",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "761916",
+  "date": "2026-10-29T02:30:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "broadcast": "Apple TV",
+  "group": {
+   "name": "Western Conference",
+   "abbreviation": "Western Conference"
+  },
+  "fullStatus": {
+   "period": 0,
+   "displayClock": "0'",
+   "type": {
+    "name": "STATUS_SCHEDULED",
+    "state": "pre",
+    "completed": false,
+    "detail": "Wed, October 28th at 10:30 PM EDT",
+    "shortDetail": "Scheduled"
+   }
+  },
+  "competitors": [
+   {
+    "id": "6077",
+    "homeAway": "away",
+    "abbreviation": "HOU",
+    "displayName": "Houston Dynamo FC",
+    "name": "Houston",
+    "color": "ff6b00",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/6077.png",
+    "score": "",
+    "winner": false
+   },
+   {
+    "id": "9726",
+    "homeAway": "home",
+    "abbreviation": "SEA",
+    "displayName": "Seattle Sounders FC",
+    "name": "Seattle",
+    "color": "2dc84d",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9726.png",
+    "score": "",
+    "winner": false
+   }
+  ]
+ },
+ {
+  "id": "761933",
+  "date": "2026-11-02T02:45:00Z",
+  "season": 2026,
+  "seasonType": "1",
+  "broadcast": "FS1/Apple TV/FOX Deportes",
+  "group": {
+   "name": "Western Conference",
+   "abbreviation": "Western Conference"
+  },
+  "fullStatus": {
+   "period": 0,
+   "displayClock": "0'",
+   "type": {
+    "name": "STATUS_SCHEDULED",
+    "state": "pre",
+    "completed": false,
+    "detail": "Sun, November 1st at 9:45 PM EST",
+    "shortDetail": "Scheduled"
+   }
+  },
+  "competitors": [
+   {
+    "id": "6077",
+    "homeAway": "away",
+    "abbreviation": "HOU",
+    "displayName": "Houston Dynamo FC",
+    "name": "Houston",
+    "color": "ff6b00",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/6077.png",
+    "score": "",
+    "winner": false
+   },
+   {
+    "id": "9723",
+    "homeAway": "home",
+    "abbreviation": "POR",
+    "displayName": "Portland Timbers",
+    "name": "Portland",
+    "color": "2c5234",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9723.png",
+    "score": "",
+    "winner": false
+   }
+  ]
+ }
+]

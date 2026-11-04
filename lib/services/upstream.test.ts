@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { cachedFeed } from "./upstream";
+import { cachedFeed, rateLimiter } from "./upstream";
 
 describe("cachedFeed", () => {
   it("returns the live answer when the provider gives one", async () => {
@@ -25,5 +25,26 @@ describe("cachedFeed", () => {
     await expect(read(3)).resolves.toBe(-3);
     expect(fallback).toHaveBeenCalledWith(3);
     warn.mockRestore();
+  });
+});
+
+describe("rateLimiter", () => {
+  it("lets four through at once and holds the rest until the window has passed", async () => {
+    vi.useFakeTimers();
+    try {
+      const slot = rateLimiter(4, 1_000);
+      const started: number[] = [];
+      const t0 = Date.now();
+      const calls = Array.from({ length: 6 }, () =>
+        slot().then(() => started.push(Date.now() - t0))
+      );
+      await vi.advanceTimersByTimeAsync(999);
+      expect(started).toEqual([0, 0, 0, 0]);
+      await vi.advanceTimersByTimeAsync(1);
+      await Promise.all(calls);
+      expect(started).toEqual([0, 0, 0, 0, 1_000, 1_000]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

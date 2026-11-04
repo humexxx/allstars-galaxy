@@ -33,8 +33,23 @@ into the back-swipe), vertical left alone below `md` — `none` *or* `contain`
 on the viewport is what disables pull-to-refresh.
 
 From `md` up the shell goes back to a fixed-height app frame with its own
-scrolling pane, which is what keeps the sidebar and header in place, and
-`overscroll-behavior: none` returns because the document edge is never reached.
+scrolling pane, which is what keeps the header (and, from `lg`, the sidebar) in
+place, and `overscroll-behavior: none` returns because the document edge is
+never reached.
+
+**The sidebar shows from `lg` (1024px), not `md`.** Below it — phones and
+tablets — it is a sheet opened from the header's button (`SidebarTrigger`,
+`lg:hidden`); `useIsBelowLg()` in `hooks/use-mobile.ts` decides, apart from
+`useIsMobile()` (768px), which still picks bottom sheets over dialogs. A fixed
+192px sidebar left a 768px tablet 576px of page. Anything sized against "the
+sidebar showing" reads `lg:`; the scroll model above stays at `md`.
+
+So on a phone nothing clips the page sideways, and **every horizontal scroller
+is `relative`**. An `sr-only` label is `position: absolute`: inside a scroller
+that is not positioned, its containing block is an ancestor outside it, so the
+labels of the cards scrolled out of view escape the scroller's clipping and
+widen the whole page (the dashboard's news rails made it 969px wide on a 375px
+phone). From `md` up the inner pane hid it.
 
 ## Dialogs on a phone
 
@@ -57,14 +72,21 @@ scrolling pane, which is what keeps the sidebar and header in place, and
 is the single source of truth for page-level padding and width:
 
 ```
-mx-auto flex w-full flex-1 flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8 lg:px-12
+mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8 lg:px-12
 ```
 
 - **Horizontal:** `px-4 sm:px-8 lg:px-12` (16 → 32 → 48px gutters).
 - **Vertical:** `py-6 sm:py-8` (24 → 32px top/bottom).
 - **Section rhythm:** `gap-6` (24px) between direct children.
-- **Width:** set by the `width` prop — `"default"` = `max-w-5xl` (reading width),
-  `"wide"` = `max-w-7xl` (data surfaces), `"full"` = `max-w-none`.
+- **Width:** `max-w-7xl` (1280px) on **every** portal route — the width
+  `/portal/plans` was laid out in — so the column never jumps between modules.
+  The component takes no width prop. A block that needs a shorter measure (a
+  form, a paragraph) caps itself inside the container; the page never does.
+
+| Route | Width |
+| --- | --- |
+| Every `/portal/**` page, plus its `loading.tsx` / `error.tsx` | `max-w-7xl` |
+| `/trips/[token]` (public share, outside the portal) | `max-w-5xl`, to match its own top bar |
 
 The string is **mobile-first**: the unprefixed step is the phone value and `sm:`
 pins the desktop one. If you ever retune it, step the base down from desktop —
@@ -73,18 +95,19 @@ don't leave a single unprefixed value that phones inherit (see the
 
 ### Where to render it
 
-**Each route renders its own container and declares its width.** It used to sit
-in `app/portal/layout.tsx` and sniff `usePathname()` to widen `/portal/plans`,
+**Each route renders its own container.** It used to sit in
+`app/portal/layout.tsx` and sniff `usePathname()` to widen `/portal/plans`,
 which buried a list of special-cased routes inside the shared shell and forced
 the whole container to be a client component. Now:
 
-- Several routes under one segment share a width → put it in that segment's
-  `layout.tsx` (see `app/portal/{entertainment,productivity,admin}/layout.tsx`,
-  and `app/portal/plans/layout.tsx` for `width="wide"`).
+- Several routes under one segment → put it in that segment's `layout.tsx`
+  (see `app/portal/{entertainment,admin,plans}/layout.tsx`).
 - A one-off route → wrap the page's own return.
 
 Exactly one container per route: nesting two would double the padding.
-Never fork the padding string — change the width, not the gutters.
+Never fork the padding string or give one route its own width — a grid that
+looks sparse at 7xl gets another column at a container breakpoint (`@5xl:`),
+not a narrower page.
 
 ## App-shell offsets (header + sidebar)
 
@@ -126,10 +149,14 @@ scrollers:
 | Piece | Value | Where |
 | --- | --- | --- |
 | Sport bar (the tabs row; the name row above it scrolls away) | `h-12` (48px) at `top-14 md:top-0`, `z-20`, opaque `bg-background` + `border-b` | [`sport-shell.tsx`](../components/entertainment/sports/shared/sport-shell.tsx) |
-| Day headings | `top-26 md:top-12` (header + bar, then the bar alone), `z-10`; days `scroll-mt-26 md:scroll-mt-12` | [`matches-by-date.tsx`](../components/entertainment/sports/shared/matches-by-date.tsx) |
-| Overview side table (`@4xl` only) | `top-18` (the bar + 24px); `bottom-6 self-end` once taller than the room below the bar | [`overview-split.tsx`](../components/entertainment/sports/shared/overview-split.tsx) |
+| Scroll margin (focus and `scrollIntoView` land below the bar) | `scroll-margin-top` of `--spacing(26)` (104px) below `md` (header + bar), `--spacing(12)` (48px) from `md` (the bar), on everything after `[data-sport-tabs]` (`[data-sport-tabs] ~ * *`). A margin on the content, not padding on the scroller, which would count the stuck bar as hidden and scroll each time a tab took focus | [`globals.css`](../app/globals.css) |
+| Day headings | `top-26 md:top-12` (header + bar, then the bar alone), `z-10`; no `scroll-mt-*` of their own, the rule above clears the bar | [`matches-by-date.tsx`](../components/entertainment/sports/shared/matches-by-date.tsx) |
+| Overview side table (`@4xl` only) | `top-12` (the bar, its label level with a stuck day heading); `bottom-6 self-end` once taller than the room below the bar | [`overview-split.tsx`](../components/entertainment/sports/shared/overview-split.tsx) |
 
-Change the bar's height and move the two rows under it by the same amount.
+Change the bar's height and move the two rows under it, and the scroll
+margin, by the same amount. Never add a `scroll-mt-*` under the bar as well:
+it would replace the rule's margin, not add to it, and pin that one element
+to another offset.
 
 ## Cards & sections
 
@@ -188,10 +215,44 @@ Change the bar's height and move the two rows under it by the same amount.
 - **Control height is 40px** (`h-10`) for `Button`, `Input`, `SelectTrigger`
   and `InputGroup` alike, so a field and the button beside it line up. `sm`
   (32px) is for toolbars and table rows. Skeletons for a form row are `h-10`.
+- **`sm` is a desktop density; a phone steps it up for a thumb.** Below `sm`
+  (640px) `Button size="sm"` / `"icon-sm"` and `SelectTrigger size="sm"` are
+  36px, and a `size="sm"` `ToggleGroup` gets the default 40px track, whose
+  26px segments a thumb kept missing. `xs` / `icon-xs` keep their 24px look —
+  they sit inside a line of text — and on a touch screen (`pointer-coarse`)
+  reach 36px through an invisible `::after` hit area, as `Switch` does. So
+  write `size="sm"` once and let the kit step it; never pin a small control to
+  `h-8` at every width. The step is `max-sm:`, never a desktop `sm:` value:
+  a caller's own height (`h-6`, `size-9`) holds from `sm` up exactly as it
+  did, and a `sm:` value in the kit outranked it on every desktop. A caller
+  that must keep its height on a phone too says so with `max-sm:`. A row that must keep its height on a phone (a pinned
+  toolbar) is the exception and says why. `TooltipContent` takes no pointer
+  events on a touch screen: a tap focuses the trigger, which opens the
+  tooltip mid-tap over the top of that hit area, and the click went nowhere.
+- **A touch screen never hovers.** A tooltip on something that is not a
+  control (a column heading's definition, the focusable `span` that explains
+  a disabled button) opens on a tap there, through `TooltipTrigger`; a
+  button's tooltip only names it, so its tap just acts. Nothing a phone needs
+  may live only in a tooltip on a control, in `title`, or behind
+  `group-hover`. Text fields stay 16px on a touch screen at every width
+  (`md:pointer-fine:text-sm` in `Input`, `Textarea` and `CommandInput`): under
+  16px iOS zooms the page on focus, and a phone on its side is wider than `md`.
+- **The hardware's edges.** The root layout sets `viewportFit: "cover"`, so
+  the page paints under the home indicator and, on its side, the notch.
+  `html` pads itself clear of the notch (not `body`, whose padding a dialog's
+  scroll lock zeroes); anything pinned to an edge clears its
+  inset with `pb-safe-N` / `pl-safe-N` / `pr-safe-N` / `bottom-safe-N`
+  (`globals.css`): the larger of step N and the inset, `-0` for the bare inset
+  under a container whose children already pad. `DialogContent`'s phone sheet,
+  `SheetContent` and `Toaster` already do; a new floating button or bar does
+  the same instead of `bottom-4`.
+- **A popover fits the screen.** `PopoverContent` caps itself at the room
+  Radix measures on its side and scrolls past it; a `Command` inside gives
+  way in its list. A month calendar is taller than a phone held sideways.
 - **Segmented controls are one component.** A switch between views of the
   same thing (range, unit, list/calendar) is `ToggleGroup` — its default
   variant is the same grey track and white chip as `TabsList`, `h-10`
-  (`size="sm"` → `h-8`). `Tabs` only when each option owns a `TabsContent`
+  (`size="sm"` → `h-8` from `sm`). `Tabs` only when each option owns a `TabsContent`
   panel; a `TabsList` with no panels points `aria-controls` at nothing. Chip
   filters are `ToggleGroup type="multiple" variant="outline"`.
 - **Empty and status surfaces.** "Nothing here yet" inside a card or list is
@@ -208,14 +269,18 @@ Change the bar's height and move the two rows under it by the same amount.
   Nothing to opt into — but do not fight it with `top-*` overrides, and do not
   add `max-h-[..vh] overflow-y-auto`: `DialogContent` already caps its height
   and scrolls.
-- **System colours.** `--primary` is system blue, `--destructive` system red,
+- **System colours.** `--primary` is system blue (a step deeper, so white
+  labels on it reach 4.5:1), `--destructive` system red,
   `--success` system green (the on-state of `Switch`), `--warning` system
   orange. Status text and tints use these tokens (`text-success`,
   `bg-destructive/10`, `border-warning/30`), never raw `emerald-*` / `rose-*` /
   `amber-*` steps — the tokens already carry their dark-mode value. The light
   steps sit deeper than Apple's swatches on purpose: they are read as small
   text on white far more than as fills, and systemGreen itself is 2.3:1 there. The chart
-  palette is separate and validated; it does not follow these. Tints are
+  palette is separate and validated; it does not follow these. A solid fill
+  under a `primary-foreground` label is `bg-primary-fill`, not `bg-primary`:
+  in dark mode #0A84FF reads well as text on a card but carries a white label
+  at 3.1:1, so the fill takes the deeper blue. Tints are
   always `/10` fills and `/30` borders (`dark:bg-X/20`), which is what the
   `success` / `warning` / `info` `Badge` and `Alert` variants use.
 

@@ -4,11 +4,21 @@ import { cookies } from "next/headers";
 
 import { TIME_ZONE_COOKIE, isValidTimeZone, todayInTimeZone } from "./date";
 
-/** The reader's IANA time zone from the `tz` cookie, or "UTC". */
-export async function getRequestTimeZone(): Promise<string> {
+/**
+ * The reader's IANA time zone from the `tz` cookie, or null before the
+ * browser has written it — a device's first request. A render that WRITES
+ * anything keyed on "today" checks this first: the UTC fallback is tomorrow
+ * on a Costa Rica evening.
+ */
+export async function readRequestTimeZone(): Promise<string | null> {
   const store = await cookies();
   const value = store.get(TIME_ZONE_COOKIE)?.value;
-  return isValidTimeZone(value) ? value : "UTC";
+  return isValidTimeZone(value) ? value : null;
+}
+
+/** The reader's IANA time zone from the `tz` cookie, or "UTC". */
+export async function getRequestTimeZone(): Promise<string> {
+  return (await readRequestTimeZone()) ?? "UTC";
 }
 
 /**

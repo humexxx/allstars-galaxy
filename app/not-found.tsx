@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 /** App-wide 404 — Next's stock page rendered on white in another font. */
 export default function NotFound() {
   return (
-    <main className="flex min-h-svh flex-col bg-background">
+    <main className="flex min-h-svh flex-col bg-background px-4">
       <EmptyState
         variant="card"
         titleAs="h1"

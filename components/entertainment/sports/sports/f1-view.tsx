@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   Table,
@@ -12,13 +12,22 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Mono, Text } from "@/components/ui/typography";
+import { f1Interest, fromF1Wire, leadStory } from "@/lib/sports/news";
 import { cn } from "@/lib/utils";
-import type { F1Constructor, F1Data, F1Driver, F1NewsArticle } from "@/types/sports";
+import type {
+  F1Constructor,
+  F1Data,
+  F1Driver,
+  F1NewsArticle,
+  F1WeekendResults,
+} from "@/types/sports";
 
 import { F1Races } from "../f1-races";
 import { NewsList } from "../shared/news-list";
+import { OverviewSplit } from "../shared/overview-split";
 import { Portrait } from "../shared/portrait";
 import { SportShell } from "../shared/sport-shell";
+import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportsTh, TableCard } from "../shared/table-primitives";
 
 type F1ViewProps = {
@@ -27,80 +36,90 @@ type F1ViewProps = {
   news?: F1NewsArticle[];
   /** `?tab=news` — the article page's "All news" link lands on the wire. */
   initialTab?: string;
+  /** The sessions run so far of the race on now or next. */
+  weekend?: F1WeekendResults;
 };
 
-const TABS = ["standings", "races", "news"] as const;
-type F1Tab = (typeof TABS)[number];
+type F1Tab = "overview" | "news";
 type Championship = "drivers" | "constructors";
 
-// Narrow on a phone, so Podiums is on screen without a sideways scroll.
 const NUM = "px-1 text-right sm:px-2";
+// The table sits beside the races at about 300px and fills a phone at 343:
+// by the card's own width, Wins shows from 20rem and Podiums from 24rem (each
+// under the name until then), and whichever column is last takes the row's end
+// padding.
+const WINS = "hidden @xs:table-cell @max-sm:pr-3";
+const PODIUMS = "hidden @sm:table-cell pr-3 sm:pr-4";
+const POINTS = "@max-xs:pr-3";
 
 /**
- * Where `?tab=` opens the view. Drivers and Constructors were tabs of their
- * own before they shared Standings, and a link to either still lands on its
- * table.
+ * Where `?tab=` opens the view. Standings and Races were tabs until they
+ * shared Overview, and Drivers and Constructors tabs before that; a link to
+ * any of them lands on Overview, on that table where it names one.
  */
 function openingView(
   initialTab: string | undefined,
   hasNews: boolean
 ): { tab: F1Tab; championship: Championship } {
   if (initialTab === "drivers" || initialTab === "constructors") {
-    return { tab: "standings", championship: initialTab };
+    return { tab: "overview", championship: initialTab };
   }
-  const tab = TABS.find((t) => t === initialTab) ?? "standings";
-  return { tab: tab === "news" && !hasNews ? "standings" : tab, championship: "drivers" };
+  return { tab: initialTab === "news" && hasNews ? "news" : "overview", championship: "drivers" };
 }
 
-export function F1View({ data, news = [], initialTab }: F1ViewProps) {
+export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps): React.ReactElement {
   const opening = openingView(initialTab, news.length > 0);
   const [championship, setChampionship] = useState<Championship>(opening.championship);
+  const wire = useMemo(() => leadStory(fromF1Wire(news), f1Interest(data)), [news, data]);
 
   return (
     <Tabs defaultValue={opening.tab} className="gap-6">
       <SportShell
-        emoji="🏎️"
+        sportId="f1"
         title="Formula 1"
         subtitle={`${data.season} Season`}
         tabs={
           <TabsList variant="line">
-            <TabsTrigger value="standings">Standings</TabsTrigger>
-            <TabsTrigger value="races">Races</TabsTrigger>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
             {news.length > 0 && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }
       >
-        <TabsContent value="standings">
-          <TableCard>
-            {/* A segmented control, not two more tabs: both championships
-                are the one table with its rows swapped. */}
-            <div className="border-b px-4 py-3">
-              <ToggleGroup
-                type="single"
-                size="sm"
-                value={championship}
-                onValueChange={(v) => v && setChampionship(v as Championship)}
-                aria-label="Championship"
-              >
-                <ToggleGroupItem value="drivers">Drivers</ToggleGroupItem>
-                <ToggleGroupItem value="constructors">Constructors</ToggleGroupItem>
-              </ToggleGroup>
-            </div>
-            {championship === "drivers" ? (
-              <DriversTable drivers={data.drivers} />
-            ) : (
-              <ConstructorsTable constructors={data.constructors} />
-            )}
-          </TableCard>
-        </TabsContent>
-
-        <TabsContent value="races">
-          <F1Races data={data} />
+        {/* The races and the standings on one tab, as football's matches and
+            table: the races on the left, the championship beside them. */}
+        <TabsContent value="overview">
+          <OverviewSplit
+            matches={<F1Races data={data} weekend={weekend} />}
+            table={
+              <TableCard className="@container">
+                {/* A segmented control, not two more tabs: both championships
+                    are the one table with its rows swapped. */}
+                <div className="border-b px-4 py-3">
+                  <ToggleGroup
+                    type="single"
+                    size="sm"
+                    value={championship}
+                    onValueChange={(v) => v && setChampionship(v as Championship)}
+                    aria-label="Championship"
+                  >
+                    <ToggleGroupItem value="drivers">Drivers</ToggleGroupItem>
+                    <ToggleGroupItem value="constructors">Constructors</ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+                {championship === "drivers" ? (
+                  <DriversTable drivers={data.drivers} constructors={data.constructors} />
+                ) : (
+                  <ConstructorsTable constructors={data.constructors} />
+                )}
+              </TableCard>
+            }
+            tableLabel="Standings"
+          />
         </TabsContent>
 
         {news.length > 0 && (
           <TabsContent value="news">
-            <NewsList items={news} />
+            <NewsList lead={wire.lead} items={wire.rest} />
           </TabsContent>
         )}
       </SportShell>
@@ -108,104 +127,172 @@ export function F1View({ data, news = [], initialTab }: F1ViewProps) {
   );
 }
 
-function DriversTable({ drivers }: { drivers: F1Driver[] }) {
+function DriversTable({
+  drivers,
+  constructors,
+}: {
+  drivers: F1Driver[];
+  constructors: F1Constructor[];
+}): React.ReactElement {
   // Faces come from ESPN. Without them the table keeps its flags, in a slot
-  // only as wide as a flag.
+  // only as wide as a flag, and the team's name under the driver's.
   const showsFaces = drivers.some((d) => d.imageUrl);
+  // A driver's team is the constructor's short name ("Red Bull", "RB").
+  const teams = new Map(constructors.flatMap((c) => [[c.name, c], [c.shortName, c]] as const));
+  const rows = useShownRows(drivers);
   return (
-    <Table>
-      <TableHeader>
-        <TableRow className="bg-muted/40 hover:bg-muted/40">
-          <SportsTh className="w-8 pl-3">#</SportsTh>
-          <SportsTh>Driver</SportsTh>
-          <SportsTh className={NUM}>Points</SportsTh>
-          <SportsTh className={NUM}>Wins</SportsTh>
-          <SportsTh className={cn(NUM, "pr-3 sm:pr-4")}>Podiums</SportsTh>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {drivers.map((d) => (
-          <TableRow key={d.code}>
-            <TableCell className="pl-3 text-sm tabular-nums text-muted-foreground">
-              {d.position}
-            </TableCell>
-            <TableCell>
-              <div className={cn("flex items-center", showsFaces ? "gap-2 sm:gap-3" : "gap-3")}>
-                {showsFaces ? (
-                  <Portrait
-                    size="table"
-                    subject={{ name: d.shortName, imageUrl: d.imageUrl, flagUrl: d.flagUrl }}
-                    fallback={<span className="text-base leading-none">{d.flagEmoji}</span>}
-                  />
-                ) : (
-                  <span className="text-base leading-none">{d.flagEmoji}</span>
-                )}
-                <div className="leading-tight">
-                  <Text as="div" weight="medium">{d.shortName}</Text>
-                  <Text variant="small" as="div">{d.team}</Text>
-                </div>
-              </div>
-            </TableCell>
-            <TableCell className={NUM}>
-              <Mono className="text-sm font-semibold">{d.points}</Mono>
-            </TableCell>
-            <TableCell className={NUM}>
-              <Mono className="text-sm">{d.wins}</Mono>
-            </TableCell>
-            <TableCell className={cn(NUM, "pr-3 sm:pr-4")}>
-              <Mono className="text-sm">{d.podiums}</Mono>
-            </TableCell>
+    <>
+      <Table aria-label="Drivers' championship">
+        <TableHeader>
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
+            <SportsTh className="w-8 pl-3">#</SportsTh>
+            <SportsTh>Driver</SportsTh>
+            <SportsTh className={cn(NUM, POINTS)}>Points</SportsTh>
+            <SportsTh className={cn(NUM, WINS)}>Wins</SportsTh>
+            <SportsTh className={cn(NUM, PODIUMS)}>Podiums</SportsTh>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {rows.shown.map((d) => (
+            <TableRow key={d.code}>
+              <TableCell className="pl-3 text-sm tabular-nums text-muted-foreground">
+                {d.position}
+              </TableCell>
+              <TableCell>
+                {showsFaces ? (
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <DriverAndTeam driver={d} team={teams.get(d.team)} />
+                    <span className="flex flex-col leading-tight">
+                      <Text as="span" weight="medium">
+                        {d.shortName}
+                        <span className="sr-only">, {d.team}</span>
+                      </Text>
+                      <DroppedFigures wins={d.wins} podiums={d.podiums} />
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <span className="text-base leading-none">{d.flagEmoji}</span>
+                    <div className="leading-tight">
+                      <Text as="div" weight="medium">{d.shortName}</Text>
+                      <Text variant="small" as="div">{d.team}</Text>
+                      <DroppedFigures wins={d.wins} podiums={d.podiums} />
+                    </div>
+                  </div>
+                )}
+              </TableCell>
+              <TableCell className={cn(NUM, POINTS)}>
+                <Mono className="text-sm font-semibold">{d.points}</Mono>
+              </TableCell>
+              <TableCell className={cn(NUM, WINS)}>
+                <Mono className="text-sm">{d.wins}</Mono>
+              </TableCell>
+              <TableCell className={cn(NUM, PODIUMS)}>
+                <Mono className="text-sm">{d.podiums}</Mono>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <ShowMoreRows rows={rows} className="border-t py-1" />
+    </>
   );
 }
 
-function ConstructorsTable({ constructors }: { constructors: F1Constructor[] }) {
+/**
+ * The driver's face with the team's logo showing from behind it on the right,
+ * in place of the team's name on a line of its own: one line a row, so the
+ * table is shorter. The face is ringed in the card's colour to sit apart from
+ * it, and stacked above it although it comes first.
+ */
+function DriverAndTeam({ driver, team }: { driver: F1Driver; team?: F1Constructor }): React.ReactElement {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow className="bg-muted/40 hover:bg-muted/40">
-          <SportsTh className="w-8 pl-3">#</SportsTh>
-          <SportsTh>Team</SportsTh>
-          <SportsTh className={NUM}>Points</SportsTh>
-          <SportsTh className={NUM}>Wins</SportsTh>
-          <SportsTh className={cn(NUM, "pr-3 sm:pr-4")}>Podiums</SportsTh>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {constructors.map((c) => (
-          <TableRow key={c.name}>
-            <TableCell className="pl-3 text-sm tabular-nums text-muted-foreground">
-              {c.position}
-            </TableCell>
-            <TableCell>
-              <div className="flex items-center gap-2 sm:gap-3">
-                {/* The logo, or the livery for a team with none
-                    published yet — the dashboard's badge. */}
-                <Portrait
-                  size="table"
-                  subject={{ name: c.shortName, logoUrl: c.logoUrl, color: c.primaryColor }}
-                />
-                {/* The short name, as the drivers table labels the
-                    team: with the logo beside it, "Cadillac F1
-                    Team" pushed Podiums off a phone's screen. */}
-                <Text as="span" weight="medium">{c.shortName}</Text>
-              </div>
-            </TableCell>
-            <TableCell className={NUM}>
-              <Mono className="text-sm font-semibold">{c.points}</Mono>
-            </TableCell>
-            <TableCell className={NUM}>
-              <Mono className="text-sm">{c.wins}</Mono>
-            </TableCell>
-            <TableCell className={cn(NUM, "pr-3 sm:pr-4")}>
-              <Mono className="text-sm">{c.podiums}</Mono>
-            </TableCell>
+    <span className="flex shrink-0 items-center">
+      <Portrait
+        size="table"
+        subject={{ name: driver.shortName, imageUrl: driver.imageUrl, flagUrl: driver.flagUrl }}
+        fallback={<span className="text-base leading-none">{driver.flagEmoji}</span>}
+        className="z-10 rounded-full ring-2 ring-card"
+      />
+      <Portrait
+        size="table"
+        subject={{ name: driver.team, logoUrl: team?.logoUrl, color: team?.primaryColor }}
+        className="-ml-2.5 sm:-ml-3"
+      />
+    </span>
+  );
+}
+
+/** "1 win", "3 podiums". */
+function count(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
+/**
+ * Under the name, the figures of the columns the card is too narrow for: both
+ * below 20rem, only podiums until 24rem, none past it. Each is shown in one
+ * place at any width, so it is read once.
+ */
+function DroppedFigures({ wins, podiums }: { wins: number; podiums: number }): React.ReactElement {
+  return (
+    <Text variant="small" as="span" className="block @sm:hidden">
+      <span className="@xs:hidden">{count(wins, "win")} · </span>
+      {count(podiums, "podium")}
+    </Text>
+  );
+}
+
+function ConstructorsTable({ constructors }: { constructors: F1Constructor[] }): React.ReactElement {
+  const rows = useShownRows(constructors);
+  return (
+    <>
+      <Table aria-label="Constructors' championship">
+        <TableHeader>
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
+            <SportsTh className="w-8 pl-3">#</SportsTh>
+            <SportsTh>Team</SportsTh>
+            <SportsTh className={cn(NUM, POINTS)}>Points</SportsTh>
+            <SportsTh className={cn(NUM, WINS)}>Wins</SportsTh>
+            <SportsTh className={cn(NUM, PODIUMS)}>Podiums</SportsTh>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {rows.shown.map((c) => (
+            <TableRow key={c.name}>
+              <TableCell className="pl-3 text-sm tabular-nums text-muted-foreground">
+                {c.position}
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2 sm:gap-3">
+                  {/* The logo, or the livery for a team with none
+                      published yet — the dashboard's badge. */}
+                  <Portrait
+                    size="table"
+                    subject={{ name: c.shortName, logoUrl: c.logoUrl, color: c.primaryColor }}
+                  />
+                  {/* The short name, as the drivers table labels the
+                      team: with the logo beside it, "Cadillac F1
+                      Team" pushed Podiums off a phone's screen. */}
+                  <span className="flex flex-col leading-tight">
+                    <Text as="span" weight="medium">{c.shortName}</Text>
+                    <DroppedFigures wins={c.wins} podiums={c.podiums} />
+                  </span>
+                </div>
+              </TableCell>
+              <TableCell className={cn(NUM, POINTS)}>
+                <Mono className="text-sm font-semibold">{c.points}</Mono>
+              </TableCell>
+              <TableCell className={cn(NUM, WINS)}>
+                <Mono className="text-sm">{c.wins}</Mono>
+              </TableCell>
+              <TableCell className={cn(NUM, PODIUMS)}>
+                <Mono className="text-sm">{c.podiums}</Mono>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <ShowMoreRows rows={rows} className="border-t py-1" />
+    </>
   );
 }

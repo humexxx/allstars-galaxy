@@ -594,7 +594,10 @@ function withReceivables(
 ): HistoryPoint[] {
   const repayments = plan ? planRepayments(plan) : [];
   if (repayments.length === 0) return points;
-  return points.map((p) => ({ ...p, netWorth: p.netWorth + owedAfter(repayments, p.date) }));
+  return points.map((p) => {
+    const owed = owedAfter(repayments, p.date);
+    return { ...p, receivables: owed, netWorth: p.netWorth + owed };
+  });
 }
 
 /** One recorded point of a plan's history, as the chart plots it. */
@@ -603,6 +606,8 @@ type HistoryPoint = {
   savings: number;
   investments: number;
   totalDebt: number;
+  /** Still owed to the user on the point's day; already inside `netWorth`. */
+  receivables: number;
   netWorth: number;
 };
 
@@ -649,6 +654,7 @@ function latestPerPeriod(rows: readonly HistoryRow[], anchorDay: number): Histor
       savings: parseFloat(r.savings),
       investments: parseFloat(r.investments),
       totalDebt: parseFloat(r.totalDebt),
+      receivables: 0,
       netWorth: parseFloat(r.netWorth),
     }));
 }

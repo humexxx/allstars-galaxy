@@ -1,6 +1,6 @@
 "use client";
 
-import { useOptimistic, useTransition, type ReactElement } from "react";
+import { useOptimistic, type ReactElement } from "react";
 
 import { setSportCompetitionAction } from "@/app/actions/sports";
 import {
@@ -14,6 +14,8 @@ import { runAction } from "@/lib/actions/run";
 import { cn } from "@/lib/utils";
 import type { DashboardCompetitions, SportId } from "@/types/sports";
 
+import { useCardTransition } from "./shared/card-pending";
+
 /** Radix reserves the empty string, so the card's own pick needs a value of its own. */
 const AUTOMATIC = "automatic";
 
@@ -23,7 +25,8 @@ const AUTOMATIC = "automatic";
  * with the stage for LoL — and the menu ticks how that was chosen.
  *
  * The choice shows at once; the card under it follows when the dashboard
- * comes back for it, and a refused change falls back to the line as it was.
+ * comes back for it — its changing parts as skeletons meanwhile (the card's
+ * `CardPendingProvider`) — and a refused change falls back to the line as it was.
  */
 export function DashboardCompetitionPicker({
   sportId,
@@ -36,7 +39,7 @@ export function DashboardCompetitionPicker({
   competitions: DashboardCompetitions;
 }): ReactElement {
   const { waiting } = competitions;
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useCardTransition();
   // What is stored, not what the card honoured: a waiting choice is ticked so
   // that the card's own pick is a change (Radix reports none for the ticked
   // item), and choosing it clears the old choice instead of keeping it.
@@ -61,11 +64,14 @@ export function DashboardCompetitionPicker({
 
   return (
     <Select value={value ?? AUTOMATIC} onValueChange={choose}>
+      {/* Text height, at every width: it reads as part of the card's subtitle.
+          A finger gets the kit's 36px through an invisible hit area instead
+          of the taller box `size="sm"` steps up to on a phone. */}
       <SelectTrigger
         size="sm"
         aria-label="Championship"
         aria-busy={pending}
-        className="max-w-full gap-1 border-transparent bg-transparent p-0 text-muted-foreground hover:text-foreground data-[size=sm]:h-auto data-[state=open]:text-foreground dark:bg-transparent dark:hover:bg-transparent [&_svg]:size-3.5"
+        className="relative -mx-1.5 max-w-full cursor-pointer gap-1 border-transparent bg-transparent px-1.5 py-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[size=sm]:h-auto max-sm:data-[size=sm]:h-auto pointer-coarse:after:absolute pointer-coarse:after:-inset-y-2 data-[state=open]:bg-muted data-[state=open]:text-foreground dark:bg-transparent dark:hover:bg-muted/50 dark:data-[state=open]:bg-muted/50 [&_svg]:size-3.5"
       >
         <SelectValue className="min-w-0">
           <span className={cn("truncate", pending && "motion-safe:animate-pulse")}>{shown}</span>

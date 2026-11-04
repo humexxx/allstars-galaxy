@@ -1,33 +1,49 @@
 import { Timer, Trophy } from "lucide-react";
-import type { JSX } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Mono, Text } from "@/components/ui/typography";
 import { raceSessions, SESSION_LABEL, weekendNow } from "@/lib/sports/f1-weekend";
 import { cn } from "@/lib/utils";
-import type { F1Driver, F1Race } from "@/types/sports";
+import type { F1Driver, F1Race, F1SessionKind, F1SessionResult, F1SessionResultRow } from "@/types/sports";
 
 import type { MatchTimeFormat } from "./shared/match-time";
-import { Portrait } from "./shared/portrait";
+import { Portrait, type PortraitSubject } from "./shared/portrait";
 import { StatusPill } from "./shared/status-pill";
 
 // No hooks, and `format` is a function: as a client module, a server
 // component passing it in would fail at render.
 
+/** What a session's first place is called: the fastest lap, the pole, the win. */
+const LEADER: Record<F1SessionKind, string> = {
+  fp1: "Fastest",
+  fp2: "Fastest",
+  fp3: "Fastest",
+  "sprint-qualifying": "Sprint pole",
+  sprint: "Winner",
+  qualifying: "Pole",
+  race: "Winner",
+};
+
 /**
  * The weekend's timetable in the reader's zone. With `now` (only after mount)
  * the sessions already run fade, the one on track is marked live and the next
- * one stands out.
+ * one stands out. A session with its `results` in shows who led it, and the
+ * time, in place of when it ran.
  */
 export function SessionList({
   race,
   format,
   now,
+  results,
+  drivers,
 }: {
   race: F1Race;
   format: MatchTimeFormat;
   now: number | null;
-}): JSX.Element {
+  results: F1SessionResult[];
+  /** The standings' drivers, whose faces and names the leaders take. */
+  drivers: F1Driver[];
+}): React.ReactElement {
   const state = now === null ? {} : weekendNow(race, now);
   return (
     <ol className="flex flex-col">
@@ -36,6 +52,7 @@ export function SessionList({
         const live = state.live?.kind === session.kind;
         const next = state.next?.kind === session.kind;
         const done = now !== null && !live && Date.parse(session.startsAt) <= now;
+        const leader = leaderOf(session.kind, results);
         return (
           <li
             key={`${session.kind}-${session.startsAt}`}
@@ -53,9 +70,17 @@ export function SessionList({
                 {SESSION_LABEL[session.kind]}
               </Text>
               {live && <StatusPill status="live" />}
-              {next && <Badge variant="info">Next</Badge>}
+              {next && (
+                <Badge variant="info" className="text-foreground">
+                  Next
+                </Badge>
+              )}
             </span>
-            <Mono className="shrink-0 text-xs">{format.dayTime(session.startsAt)}</Mono>
+            {leader ? (
+              <SessionLeader kind={session.kind} row={leader} drivers={drivers} />
+            ) : (
+              <Mono className="shrink-0 text-xs">{format.dayTime(session.startsAt)}</Mono>
+            )}
           </li>
         );
       })}
@@ -63,8 +88,49 @@ export function SessionList({
   );
 }
 
+function leaderOf(kind: F1SessionKind, results: F1SessionResult[]): F1SessionResultRow | undefined {
+  return results.find((r) => r.kind === kind)?.rows.find((row) => row.position === "1");
+}
+
+/** The face and name a session's row is drawn with: the standings' driver, matched by code. */
+export function sessionDriver(
+  row: F1SessionResultRow,
+  drivers: F1Driver[]
+): { name: string; subject: PortraitSubject } {
+  const known = drivers.find((d) => d.code === row.code);
+  const name = known?.shortName ?? row.name;
+  return {
+    name,
+    // Without a face, the team's colour and the driver's code, as a disc.
+    subject: { name, imageUrl: known?.imageUrl, flagUrl: known?.flagUrl, color: row.teamColor, code: row.code },
+  };
+}
+
+/** "(face) C. Leclerc 1:35.291". */
+function SessionLeader({
+  kind,
+  row,
+  drivers,
+}: {
+  kind: F1SessionKind;
+  row: F1SessionResultRow;
+  drivers: F1Driver[];
+}): React.ReactElement {
+  const { name, subject } = sessionDriver(row, drivers);
+  return (
+    <span className="flex min-w-0 shrink items-center gap-2 text-foreground">
+      <span className="sr-only">{LEADER[kind]}:</span>
+      <Portrait size="sm" subject={subject} />
+      <Text as="span" weight="medium" className="truncate">
+        {name}
+      </Text>
+      {row.time && <Mono className="shrink-0 text-xs text-muted-foreground">{row.time}</Mono>}
+    </span>
+  );
+}
+
 /** Winner, pole and fastest lap on one line, for a finished race's card. */
-export function ResultsLine({ race }: { race: F1Race }): JSX.Element {
+export function ResultsLine({ race }: { race: F1Race }): React.ReactElement {
   const winner = race.winner?.code ?? race.podium?.[0];
   if (!winner) {
     return (
@@ -101,7 +167,7 @@ export function ResultsLine({ race }: { race: F1Race }): JSX.Element {
  * The top three with their gaps. Names and faces come from the standings,
  * since the race feed carries only the codes.
  */
-export function Podium({ race, drivers }: { race: F1Race; drivers: F1Driver[] }): JSX.Element | null {
+export function Podium({ race, drivers }: { race: F1Race; drivers: F1Driver[] }): React.ReactElement | null {
   if (!race.podium) return null;
   const byCode = new Map(drivers.map((d) => [d.code, d]));
   const times = [race.winner?.time, race.podiumGaps?.[0], race.podiumGaps?.[1]];

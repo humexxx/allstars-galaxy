@@ -1,27 +1,26 @@
 "use client";
 
-import { Circle } from "lucide-react";
+import { Tv } from "lucide-react";
 
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { Match, Team } from "@/types/sports";
 
 import { TeamBadge } from "./team-badge";
+import { TeamPick } from "./team-pick";
 import { useMatchTime } from "./time-zone-context";
 
 type ScoreCardProps = {
   match: Match;
   teams: Map<string, Team>;
-  /**
-   * Leave the stage label off — for a list already grouped under that very
-   * label, where printing it again on every card is the same line twice.
-   */
-  hideStage?: boolean;
+  /** `li` for a card in a list, so a card with a team missing leaves no empty item. */
+  as?: "div" | "li";
   className?: string;
 };
 
 /** The status code, or null for a fixture (which shows its date instead). */
 function formatStatus(match: Match): string | null {
+  if (match.statusText && match.status !== "scheduled") return match.statusText.short;
   switch (match.status) {
     case "ft":
       return "FT";
@@ -42,7 +41,35 @@ function formatStatus(match: Match): string | null {
   }
 }
 
-export function ScoreCard({ match, teams, hideStage = false, className }: ScoreCardProps) {
+/** The status in words: a listener hears "FT" as two letters and "CAN" as "can". */
+function spokenStatus(match: Match): string | null {
+  if (match.statusText && match.status !== "scheduled") return match.statusText.spoken;
+  switch (match.status) {
+    case "ft":
+      return "Full time";
+    case "aet":
+      return "After extra time";
+    case "pen":
+      return match.penalties
+        ? `Penalties ${match.penalties.home}–${match.penalties.away}`
+        : "Penalties";
+    case "live":
+      return match.minute ? `Live, minute ${match.minute}` : "Live";
+    case "scheduled":
+      return null;
+    case "postponed":
+      return "Postponed";
+    case "cancelled":
+      return "Cancelled";
+  }
+}
+
+export function ScoreCard({
+  match,
+  teams,
+  as: Root = "div",
+  className,
+}: ScoreCardProps): React.ReactElement | null {
   const format = useMatchTime();
   const home = teams.get(match.homeTeamId);
   const away = teams.get(match.awayTeamId);
@@ -63,14 +90,14 @@ export function ScoreCard({ match, teams, hideStage = false, className }: ScoreC
   const status = formatStatus(match);
 
   return (
-    <div
+    <Root
       className={cn(
         "relative grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border bg-card px-3 py-2.5",
         className,
       )}
     >
       <div className="flex min-w-0 flex-col gap-1">
-        {match.stageLabel && !hideStage && (
+        {match.stageLabel && (
           <Eyebrow size="sm" className="truncate">
             {match.stageLabel}
           </Eyebrow>
@@ -98,14 +125,19 @@ export function ScoreCard({ match, teams, hideStage = false, className }: ScoreC
           card of a list. */}
       <div className="flex min-w-16 flex-col items-end justify-center gap-0.5 border-l pl-3 text-right">
         {status !== null && (
+          // Live in the team names' colour, which a 10px green word is too
+          // faint for; the green is the dot's.
           <span
             className={cn(
               "inline-flex items-center gap-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground",
-              isLive && "text-success",
+              isLive && "text-foreground",
             )}
           >
-            {isLive && <Circle className="size-2 fill-current motion-safe:animate-pulse" aria-hidden />}
-            {status}
+            {isLive && (
+              <span aria-hidden className="size-2 rounded-full bg-success motion-safe:animate-pulse" />
+            )}
+            <span aria-hidden>{status}</span>
+            <span className="sr-only">{spokenStatus(match)}</span>
           </span>
         )}
         {!isLive && (
@@ -114,8 +146,37 @@ export function ScoreCard({ match, teams, hideStage = false, className }: ScoreC
         {scheduled && (
           <Mono className="text-2xs text-muted-foreground">{format.time(match.kickoff)}</Mono>
         )}
+        {(scheduled || isLive) && match.broadcasts?.length ? (
+          <Channels names={match.broadcasts} />
+        ) : null}
       </div>
-    </div>
+    </Root>
+  );
+}
+
+/** A name too wide for the column under the time, as the channel brands itself. */
+const SHORT_CHANNEL: Record<string, string> = { "Prime Video": "Prime" };
+
+/**
+ * Where to watch, under the time: the first channel (TV before streaming),
+ * every one of them in its title and for a screen reader. As wide as the
+ * column and never wider (`w-0 min-w-full`), so a long name is cut rather
+ * than moving this card's divider off its neighbours'.
+ */
+function Channels({ names }: { names: string[] }): React.ReactElement {
+  const all = names.join(", ");
+  return (
+    <span
+      title={`On ${all}`}
+      className="flex w-0 min-w-full items-center justify-end gap-0.5 text-2xs text-muted-foreground"
+    >
+      <Tv aria-hidden className="size-2.5 shrink-0" />
+      {/* In the team names' colour: the one line of the column worth spotting. */}
+      <span aria-hidden className="truncate text-foreground">
+        {SHORT_CHANNEL[names[0]] ?? names[0]}
+      </span>
+      <span className="sr-only">On {all}</span>
+    </span>
   );
 }
 
@@ -133,7 +194,7 @@ function TeamRow({
   redCard?: boolean;
   dim?: boolean;
   scheduled?: boolean;
-}) {
+}): React.ReactElement {
   return (
     <div
       className={cn(
@@ -142,10 +203,12 @@ function TeamRow({
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <TeamBadge team={team} size="sm" />
-        <span className={cn("min-w-0 truncate", isWinner && "font-semibold")}>
-          {team.shortName}
-        </span>
+        <TeamPick team={team}>
+          <TeamBadge team={team} size="sm" />
+          <span className={cn("min-w-0 truncate", isWinner && "font-semibold")}>
+            {team.shortName}
+          </span>
+        </TeamPick>
         {redCard && (
           <span role="img" className="h-3 w-2 rounded-xs bg-destructive" aria-label="Red card" />
         )}

@@ -41,7 +41,9 @@ function ToggleGroup({
           : cn(
               // Same track as TabsList: grey rail, selected segment lifted.
               "rounded-lg bg-muted p-0.75",
-              size === "sm" ? "h-8" : size === "lg" ? "h-11" : "h-10"
+              // `sm` is a desktop density: a phone gets the default track,
+              // whose 34px segments a thumb can hit (26px ones it missed).
+              size === "sm" ? "h-8 max-sm:h-10" : size === "lg" ? "h-11" : "h-10"
             ),
         className
       )}
@@ -79,7 +81,7 @@ function ToggleGroupItem({
         // (`min-w-0` clipped "Calendar" beside "List"); chips keep their
         // natural width so a row of them wraps instead of overlapping.
         (context.variant ?? variant ?? "default") === "default"
-          ? "h-full min-w-fit flex-1"
+          ? "h-full min-w-fit flex-1 max-sm:h-full max-sm:min-w-fit"
           : "flex-none",
         className
       )}

@@ -10,7 +10,7 @@ import { createContext, useContext, type ReactNode } from "react";
  * day every evening west of Greenwich, and a hydration error with it.
  *
  * Before the cookie exists (the first request) both sides use UTC; the header
- * sets the cookie and the next render is local.
+ * sets the cookie and refreshes, and the page comes back in the reader's zone.
  */
 const ReaderTimeZoneContext = createContext("UTC");
 

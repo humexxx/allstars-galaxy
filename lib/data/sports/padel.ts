@@ -18,19 +18,6 @@ const MEN_RANKINGS: PlayerRanking[] = [
   { position: 10, name: "Pablo Lima", shortName: "P. Lima", countryCode: "BRA", flagEmoji: "🇧🇷", points: 5120, movement: 0 },
 ];
 
-const WOMEN_RANKINGS: PlayerRanking[] = [
-  { position: 1, name: "Gemma Triay", shortName: "G. Triay", countryCode: "ESP", flagEmoji: "🇪🇸", points: 10760, movement: 0 },
-  { position: 2, name: "Delfina Brea", shortName: "D. Brea", countryCode: "ARG", flagEmoji: "🇦🇷", points: 10620, movement: 0 },
-  { position: 3, name: "Bea González", shortName: "B. González", countryCode: "ESP", flagEmoji: "🇪🇸", points: 9180, movement: 1 },
-  { position: 4, name: "Claudia Fernández", shortName: "C. Fernández", countryCode: "ESP", flagEmoji: "🇪🇸", points: 8940, movement: 1 },
-  { position: 5, name: "Ariana Sánchez", shortName: "A. Sánchez", countryCode: "ESP", flagEmoji: "🇪🇸", points: 8410, movement: -2 },
-  { position: 6, name: "Paula Josemaría", shortName: "P. Josemaría", countryCode: "ESP", flagEmoji: "🇪🇸", points: 7890, movement: 0 },
-  { position: 7, name: "Tamara Icardo", shortName: "T. Icardo", countryCode: "ESP", flagEmoji: "🇪🇸", points: 6720, movement: 0 },
-  { position: 8, name: "Marta Ortega", shortName: "M. Ortega", countryCode: "ESP", flagEmoji: "🇪🇸", points: 5980, movement: 1 },
-  { position: 9, name: "Alejandra Salazar", shortName: "A. Salazar", countryCode: "ESP", flagEmoji: "🇪🇸", points: 5640, movement: -1 },
-  { position: 10, name: "Jessica Castelló", shortName: "J. Castelló", countryCode: "ESP", flagEmoji: "🇪🇸", points: 5020, movement: 0 },
-];
-
 const MEN_TOURNAMENTS: RacquetTournament[] = [
   { id: "wpt-m-doha", name: "Qatar Major", tier: "Major", location: "Doha", venue: "Khalifa International Tennis and Squash Complex", startDate: "2026-02-23", endDate: "2026-03-01", status: "completed", champion: "Coello / Tapia", runnerUp: "Galán / Chingotto" },
   { id: "wpt-m-riyadh", name: "Riyadh P1", tier: "P1", location: "Riyadh", startDate: "2026-03-16", endDate: "2026-03-22", status: "completed", champion: "Galán / Chingotto", runnerUp: "Coello / Tapia" },
@@ -38,15 +25,6 @@ const MEN_TOURNAMENTS: RacquetTournament[] = [
   { id: "wpt-m-madrid", name: "Madrid Master", tier: "P1", location: "Madrid", startDate: "2026-05-04", endDate: "2026-05-10", status: "completed", champion: "Coello / Tapia", runnerUp: "Galán / Chingotto" },
   { id: "wpt-m-rome", name: "Rome P1", tier: "P1", location: "Rome", venue: "Foro Italico", startDate: "2026-05-18", endDate: "2026-05-24", status: "live" },
   { id: "wpt-m-paris", name: "Paris Major", tier: "Major", location: "Paris", venue: "Roland Garros", prize: { amount: 1050000, currency: "EUR" }, startDate: "2026-06-08", endDate: "2026-06-14", status: "upcoming" },
-];
-
-const WOMEN_TOURNAMENTS: RacquetTournament[] = [
-  { id: "wpt-w-doha", name: "Qatar Major", tier: "Major", location: "Doha", venue: "Khalifa International Tennis and Squash Complex", startDate: "2026-02-23", endDate: "2026-03-01", status: "completed", champion: "Triay / Brea", runnerUp: "González / Fernández" },
-  { id: "wpt-w-riyadh", name: "Riyadh P1", tier: "P1", location: "Riyadh", startDate: "2026-03-16", endDate: "2026-03-22", status: "completed", champion: "Triay / Brea", runnerUp: "Sánchez / Josemaría" },
-  { id: "wpt-w-buenosaires", name: "Buenos Aires P1", tier: "P1", location: "Buenos Aires", startDate: "2026-04-06", endDate: "2026-04-12", status: "completed", champion: "González / Fernández", runnerUp: "Triay / Brea" },
-  { id: "wpt-w-madrid", name: "Madrid Master", tier: "P1", location: "Madrid", startDate: "2026-05-04", endDate: "2026-05-10", status: "completed", champion: "Triay / Brea", runnerUp: "González / Fernández" },
-  { id: "wpt-w-rome", name: "Rome P1", tier: "P1", location: "Rome", venue: "Foro Italico", startDate: "2026-05-18", endDate: "2026-05-24", status: "live" },
-  { id: "wpt-w-paris", name: "Paris Major", tier: "Major", location: "Paris", venue: "Roland Garros", prize: { amount: 1050000, currency: "EUR" }, startDate: "2026-06-08", endDate: "2026-06-14", status: "upcoming" },
 ];
 
 /** The season's lines, as the live feed lists them beside its tournaments. */
@@ -68,12 +46,5 @@ export const PADEL_DATA: PadelData = {
     rankings: MEN_RANKINGS,
     tournaments: MEN_TOURNAMENTS,
     calendar: calendarOf(MEN_TOURNAMENTS),
-  },
-  women: {
-    tour: "wpt-women",
-    season: 2026,
-    rankings: WOMEN_RANKINGS,
-    tournaments: WOMEN_TOURNAMENTS,
-    calendar: calendarOf(WOMEN_TOURNAMENTS),
   },
 };

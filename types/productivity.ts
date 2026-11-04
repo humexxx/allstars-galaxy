@@ -4,37 +4,47 @@ import type {
   roadPaths,
   roadPathMilestones,
   roadPathProgress,
+  roadPathCheckIns,
 } from "@/db/schema";
+import type { HabitStats } from "@/lib/productivity/habit";
 
 export type BoardColumn = typeof boardColumns.$inferSelect;
 export type BoardTask = typeof boardTasks.$inferSelect;
 export type RoadPath = typeof roadPaths.$inferSelect;
 export type RoadPathMilestone = typeof roadPathMilestones.$inferSelect;
 export type RoadPathProgress = typeof roadPathProgress.$inferSelect;
+export type RoadPathCheckIn = typeof roadPathCheckIns.$inferSelect;
 
 export type TaskPriority = NonNullable<BoardTask["priority"]>;
-export type RoadPathFrequency = NonNullable<RoadPath["taskFrequency"]>;
 
 export type BoardTaskWithColumn = BoardTask & {
   column: BoardColumn;
 };
 
-export type BoardColumnWithTasks = BoardColumn & {
-  tasks: BoardTask[];
+/** An unfinished task from an earlier day, offered to today's board. */
+export type CarryOverTask = {
+  id: string;
+  title: string;
+  columnId: string;
+  columnName: string;
+  boardDate: string;
 };
 
-export type RoadPathWithDetails = RoadPath & {
+export type RoadPathWithCheckIns = RoadPath & {
+  checkIns: RoadPathCheckIn[];
+};
+
+export type RoadPathWithDetails = RoadPathWithCheckIns & {
   milestones: RoadPathMilestone[];
   progress: RoadPathProgress[];
-  tasks: BoardTaskWithColumn[];
 };
 
 export type RoadPathStats = {
   totalProgress: number;
   completedMilestones: number;
   totalMilestones: number;
-  daysRemaining: number | null;
-  progressRate: number;
+  /** Null for a path with no schedule. */
+  habit: HabitStats | null;
 };
 
 export type RoadPathDetail = {

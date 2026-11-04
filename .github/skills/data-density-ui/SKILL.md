@@ -688,8 +688,8 @@ this map and link back to the relevant section above.
 
 | Module / Surface | Apply | Notes |
 |---|---|---|
-| **Portal dashboard** (`app/portal/page.tsx`) | KPI rail (§3) + Featured-list hero (§4) | Top: KPIs for total balance / net change / open plans / favorite count. Hero: featured plan or active trip; list: upcoming items. The finance card is the vertical rail beside its chart (§3) |
-| **Finance — Plans list** (`app/portal/plans/page.tsx`) | Data card grid (§1) | Each plan card: monthly cashflow row, debt row, savings row, footer = updated date + horizon |
+| **Portal dashboard** (`app/portal/(dashboard)/page.tsx`) | KPI rail (§3) + Featured-list hero (§4) | Top: KPIs for total balance / net change / open plans / favorite count. Hero: featured plan or active trip; list: upcoming items. The finance card is the vertical rail beside its chart (§3) |
+| **Finance — Plans list** (`app/portal/plans/(list)/page.tsx`) | Data card grid (§1) | Each plan card: monthly cashflow row, debt row, savings row, footer = updated date + horizon |
 | **Finance — Plan editor** (`components/finance/plan-editor.tsx`) | KPI rail (§3) for projection summary + Sticky right rail (§5) for strategy picker + dense projection table + **Chart §10** for projection | Projection chart drops its Card chrome and uses right-side Y-axis |
 | **Finance — Compare** (`app/portal/plans/compare/page.tsx`) | Side-by-side data cards (§1) with synced row labels + Delta indicator (§7) for plan-to-plan diff | Use a CSS Grid with shared row tracks so labels align across cards |
 | **Portfolio** (`components/portal/portfolio-client.tsx`) | KPI rail (§3) + Multi-outcome row (§8) for holdings + Compact list row (§9) for transactions + **Chart §10** for performance | Holdings = §8 (logo + symbol + price + delta + value). Performance chart strips its Card wrapper and moves Y-axis right |

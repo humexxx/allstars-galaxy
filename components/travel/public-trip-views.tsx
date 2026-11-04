@@ -90,7 +90,8 @@ export function PublicTripViews({
             <SharedTripCalendar trip={calendar} viewerName={viewerName} />
           )}
         </div>
-        <div className="flex min-w-0 flex-col gap-6">{aside}</div>
+        {/* Sticky like the planner's: the money stays beside the days. */}
+        <div className="flex min-w-0 flex-col gap-6 lg:sticky lg:top-6 lg:self-start">{aside}</div>
       </div>
     </article>
   );

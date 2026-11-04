@@ -174,7 +174,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       ? [
           {
             series: dashboardSeries("debt"),
-            label: "Debt now",
+            label: "Debt",
             value: formatCurrency(fig.debt),
           },
         ]

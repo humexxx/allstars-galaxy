@@ -23,9 +23,11 @@ export type DashboardSeries = {
 export const DASHBOARD_SERIES: readonly DashboardSeries[] = [
   { key: "netWorth", label: "Net worth", color: "var(--foreground)", mark: "line" },
   { key: "investments", label: "Portfolio", color: "var(--chart-1)", mark: "area" },
-  { key: "savings", label: "Cash", color: "var(--chart-2)", mark: "area" },
+  // Cash is neutral, not a hue: the orange slot sat next to Debt and read as
+  // money lost. Debt takes the destructive red — a sign, not an identity.
+  { key: "savings", label: "Cash", color: "var(--muted-foreground)", mark: "area" },
   { key: "receivables", label: "Owed to you", color: "var(--chart-3)", mark: "area" },
-  { key: "debt", label: "Debt", color: "var(--chart-4)", mark: "area" },
+  { key: "debt", label: "Debt", color: "var(--destructive)", mark: "area" },
 ];
 
 export function dashboardSeries(key: keyof DashboardParts): DashboardSeries {

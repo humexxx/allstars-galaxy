@@ -9,11 +9,12 @@ import {
   Download,
   Eye,
   EyeOff,
-  ListFilter,
   Plus,
   RefreshCw,
+  Search,
   Trash2,
   Wallet,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,6 +23,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { InvestmentMethodsView } from "@/components/portfolio/investment-methods-view";
@@ -42,6 +49,7 @@ import {
 } from "@/components/ui/tabs";
 import { runAction } from "@/lib/actions/run";
 import { cn } from "@/lib/utils";
+import { foldForSearch } from "@/lib/utils/text";
 import {
   formatCurrency,
   formatPercent,
@@ -132,9 +140,9 @@ type PortfolioData = {
   currentUserId: string;
 };
 
-// The owner-only panels pull recharts and a long table into the portfolio
-// chunk for every visitor, though only method owners ever see them. Split them
-// so an investor's bundle stops paying for the owner's dashboard.
+// The owner-only chart pulls recharts into the portfolio chunk for every
+// visitor, though only method owners ever see it. Split it so an investor's
+// bundle stops paying for the owner's dashboard.
 const MarginChart = dynamic(
   () =>
     import("@/components/portal/margin-chart").then((mod) => mod.MarginChart),
@@ -142,14 +150,6 @@ const MarginChart = dynamic(
     ssr: false,
     loading: () => <Skeleton className="h-80 w-full rounded-xl" />,
   }
-);
-
-const InvestorBreakdown = dynamic(
-  () =>
-    import("@/components/portal/investor-breakdown").then(
-      (mod) => mod.InvestorBreakdown
-    ),
-  { loading: () => <Skeleton className="h-64 w-full rounded-xl" /> }
 );
 
 const PerformanceChart = dynamic(
@@ -169,23 +169,25 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
   // The Investors tab only exists for people who actually run methods.
   const ownsMethods = data.methodInvestors.length > 0;
 
-  // Approved-only by default: those are the movements that actually happened.
-  // Pending and rejected rows matter, but they are the exception you go
-  // looking for, not the default reading of a history.
-  const [detailedTransactions, setDetailedTransactions] = useState(false);
+  // Rejected rows moved no money; the admin queue keeps them. Pending ones
+  // stay, labelled, because they are waiting on somebody.
+  const ownRows = useMemo(
+    () => data.transactionRows.filter((t) => t.status !== "rejected"),
+    [data.transactionRows]
+  );
 
-  const visibleRows = useMemo(() => {
-    const own = detailedTransactions
-      ? data.transactionRows
-      : data.transactionRows.filter((t) => t.status === "approved");
-    return {
-      own,
-      // Only rows this toggle actually hides. Investors are summarised one
-      // line per person whatever the view, so counting their pending rows
-      // here promised "4 hidden" and then revealed one.
-      hiddenCount: data.transactionRows.length - own.length,
-    };
-  }, [data.transactionRows, detailedTransactions]);
+  const investorMovements = useMemo(() => {
+    const byInvestor = new Map<string, TransactionTableRow[]>();
+    for (const t of data.investorTransactions) {
+      if (t.status === "rejected" || !t.investorId) continue;
+      const list = byInvestor.get(t.investorId) ?? [];
+      list.push(t);
+      byInvestor.set(t.investorId, list);
+    }
+    return byInvestor;
+  }, [data.investorTransactions]);
+
+  const [investorQuery, setInvestorQuery] = useState("");
 
   // Capital per method, straight off the investor aggregate the Managed tab
   // already loads. Only methods this user runs appear here, so a client
@@ -214,12 +216,17 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           ...b,
           // By id: two investors can share a display name (or both fall back
           // to "Unknown"), and the name join summed their movements together.
-          movements: data.investorTransactions.filter(
-            (t) => t.investorId === b.investorId
-          ).length,
+          movements: investorMovements.get(b.investorId)?.length ?? 0,
         })),
-    [data.investorBreakdown, data.investorTransactions]
+    [data.investorBreakdown, investorMovements]
   );
+
+  const visibleInvestors = useMemo(() => {
+    const q = foldForSearch(investorQuery.trim());
+    return q
+      ? investorSummary.filter((r) => foldForSearch(r.name).includes(q))
+      : investorSummary;
+  }, [investorSummary, investorQuery]);
 
   const ownerKpis = useMemo(() => {
     const h = data.marginHistory;
@@ -439,7 +446,10 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
       />
     );
 
-  const hasTransactions = data.transactions.length > 0;
+  // The file carries the investors' rows too, so an owner with no movements
+  // of their own still has something to export.
+  const hasTransactions =
+    data.transactions.length > 0 || data.investorTransactions.length > 0;
   const pendingCount = data.transactions.filter((t) => t.status === "pending").length;
   const exportLabel = (
     <>
@@ -579,49 +589,30 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             {/* Exactly one chart. Owners get allocations against what is owed —
                 the gap between the two lines is the margin. Everyone else gets
                 the ordinary performance chart. */}
+            {/* The per-person view is the chart's investor filter, and each
+                person's movements open from the Transactions tab. */}
             {ownsMethods ? (
-              ownerKpis !== null && (
-                <>
-                  {showCharts && (
-                    <Card>
-                      <CardContent>
-                        {data.marginStatus.unconfigured ? (
-                          // With nothing priced, Allocations is a flat zero
-                          // under the owed line — which reads as a total loss.
-                          <EmptyState
-                            icon={ChartLine}
-                            title="Nothing is priced yet"
-                            description="Set where each method's money goes (Methods tab, edit a method). The daily price run then values every contribution at its day's price."
-                          />
-                        ) : (
-                          <MarginChart
-                            input={data.marginHistoryInput}
-                            hideValues={hideValues}
-                            status={<PriceFreshness {...data.priceFreshness} />}
-                          />
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {data.investorBreakdown.length > 0 && (
-                    <div className="flex flex-col gap-3">
-                      <div className="flex flex-col gap-1">
-                        <Heading level="h5" as="h2" className="text-muted-foreground">
-                          By person
-                        </Heading>
-                        <Text variant="small">
-                          What each investor put in, what it bought, and what the
-                          promise costs you.
-                        </Text>
-                      </div>
-                      <InvestorBreakdown
-                        rows={data.investorBreakdown}
-                        hideValues={hideValues}
+              ownerKpis !== null &&
+              showCharts && (
+                <Card>
+                  <CardContent>
+                    {data.marginStatus.unconfigured ? (
+                      // With nothing priced, Allocations is a flat zero
+                      // under the owed line — which reads as a total loss.
+                      <EmptyState
+                        icon={ChartLine}
+                        title="Nothing is priced yet"
+                        description="Set where each method's money goes (Methods tab, edit a method). The daily price run then values every contribution at its day's price."
                       />
-                    </div>
-                  )}
-                </>
+                    ) : (
+                      <MarginChart
+                        input={data.marginHistoryInput}
+                        hideValues={hideValues}
+                        status={<PriceFreshness {...data.priceFreshness} />}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
               )
             ) : (
               stats && hasSettledMoney(stats) && showCharts && performanceChart
@@ -629,26 +620,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
           </TabsContent>
 
           <TabsContent value="transactions" className="flex flex-col gap-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Text variant="small">
-                {detailedTransactions
-                  ? "Every movement, including pending and rejected."
-                  : `Approved movements only${
-                      visibleRows.hiddenCount > 0
-                        ? ` · ${visibleRows.hiddenCount} hidden`
-                        : ""
-                    }`}
-              </Text>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setDetailedTransactions((v) => !v)}
-              >
-                <ListFilter />
-                {detailedTransactions ? "Simple view" : "Detailed view"}
-              </Button>
-            </div>
-
             <div className="flex flex-col gap-3">
               {ownsMethods && (
                 <Heading level="h5" as="h2" className="text-muted-foreground">
@@ -658,8 +629,8 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
               <Card>
                 <CardContent>
                   <TransactionsTable
-                    rows={visibleRows.own}
-                    showStatus={detailedTransactions}
+                    rows={ownRows}
+                    showStatus={ownRows.some((t) => t.status !== "approved")}
                     showPositions={ownsMethods}
                     balanceLabel="Balance"
                     hideValues={hideValues}
@@ -670,20 +641,64 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
 
             {ownsMethods && (
               <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-1">
-                  <Heading level="h5" as="h2" className="text-muted-foreground">
-                    Investors
-                  </Heading>
-                  <Text variant="small">
-                    One line per person investing in the methods you run.
-                  </Text>
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div className="flex flex-col gap-1">
+                    <Heading level="h5" as="h2" className="text-muted-foreground">
+                      Investors
+                    </Heading>
+                    <Text variant="small">
+                      One line per person investing in the methods you run. Open
+                      one to see each of their movements.
+                    </Text>
+                  </div>
+                  {investorSummary.length > 0 && (
+                    <InputGroup className="sm:max-w-64">
+                      <InputGroupAddon>
+                        <Search aria-hidden />
+                      </InputGroupAddon>
+                      <InputGroupInput
+                        placeholder="Filter by name…"
+                        value={investorQuery}
+                        onChange={(e) => setInvestorQuery(e.target.value)}
+                        aria-label="Filter investors by name"
+                      />
+                      {investorQuery && (
+                        <InputGroupAddon align="inline-end">
+                          <InputGroupButton
+                            size="icon-xs"
+                            aria-label="Clear the filter"
+                            onClick={() => setInvestorQuery("")}
+                          >
+                            <X />
+                          </InputGroupButton>
+                        </InputGroupAddon>
+                      )}
+                    </InputGroup>
+                  )}
                 </div>
                 <Card>
                   <CardContent>
-                    <InvestorSummaryTable
-                      rows={investorSummary}
-                      hideValues={hideValues}
-                    />
+                    {visibleInvestors.length === 0 && investorQuery ? (
+                      <EmptyState
+                        icon={Search}
+                        title="No investor matches your filter"
+                        action={
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setInvestorQuery("")}
+                          >
+                            Clear filter
+                          </Button>
+                        }
+                      />
+                    ) : (
+                      <InvestorSummaryTable
+                        rows={visibleInvestors}
+                        movements={investorMovements}
+                        hideValues={hideValues}
+                      />
+                    )}
                   </CardContent>
                 </Card>
               </div>

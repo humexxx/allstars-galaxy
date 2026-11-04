@@ -41,6 +41,7 @@ import type { OpeningRestatement } from "@/lib/finance/opening-balances";
 import { isoDay } from "@/lib/finance/schedule";
 
 import { getUserPortfolio, getPortfolioStats, getPortfolioAssets } from "./portfolio-service";
+import { getManagedAssets } from "./margin-service";
 import { ensureOwnedRow } from "./ownership";
 
 // ---------- helpers ----------
@@ -195,6 +196,7 @@ export async function createPlan(
         debtStrategy: data.debtStrategy,
         autoInvestPercent: data.autoInvestPercent,
         autoInvestMethodId: data.autoInvestMethodId ?? null,
+        autoInvestCustomRate: data.autoInvestCustomRate ?? null,
         initialInvestments: data.initialInvestments,
         confirmationDayOfMonth: data.confirmationDayOfMonth,
         color: data.color,
@@ -309,6 +311,7 @@ export async function updatePlan(
         debtStrategy: data.debtStrategy,
         autoInvestPercent: data.autoInvestPercent,
         autoInvestMethodId: data.autoInvestMethodId ?? null,
+        autoInvestCustomRate: data.autoInvestCustomRate ?? null,
         confirmationDayOfMonth: data.confirmationDayOfMonth,
         color: data.color,
         // undefined leaves the link untouched; null explicitly detaches.
@@ -453,6 +456,7 @@ export async function clonePlan(
         debtStrategy: source.debtStrategy,
         autoInvestPercent: source.autoInvestPercent,
         autoInvestMethodId: source.autoInvestMethodId,
+        autoInvestCustomRate: source.autoInvestCustomRate,
         initialInvestments: source.initialInvestments,
         // Keep the accounting-period anchor: without it the clone falls back to
         // day 1 and its periods drift out of alignment with the source plan.
@@ -1011,6 +1015,7 @@ export const getPortfolioWeightedMonthlyRoi = cache(async function getPortfolioW
  * 0 if none is linked. Used to compound the investments bucket during projection.
  */
 export async function getAutoInvestRate(plan: FinancePlan): Promise<number> {
+  if (plan.autoInvestCustomRate != null) return num(plan.autoInvestCustomRate);
   if (!plan.autoInvestMethodId) return 0;
   const [row] = await db
     .select({ monthlyRoi: investmentMethods.monthlyRoi })
@@ -1052,13 +1057,19 @@ export async function projectionOptionsFor(
   userId: string,
   prefetched: { autoInvestRate?: number } = {}
 ): Promise<ProjectOptions> {
-  const [portfolioValue, portfolioMonthlyGrowthRate, autoInvestRate] = await Promise.all([
+  const [ownValue, portfolioMonthlyGrowthRate, managed, autoInvestRate] = await Promise.all([
     plan.includePortfolio ? getPortfolioValueForUser(userId) : Promise.resolve(0),
     plan.includePortfolio ? getPortfolioWeightedMonthlyRoi(userId) : Promise.resolve(0),
+    // What the user holds with other people's money counts at market value,
+    // held flat: it has no promised rate of its own. The owner decided
+    // (2026-11-03) that net worth carries the assets, not the margin.
+    plan.includePortfolio ? getManagedAssets(userId) : Promise.resolve(null),
     prefetched.autoInvestRate ?? getAutoInvestRate(plan),
   ]);
+  const managedValue = managed?.value ?? 0;
   return {
-    portfolioValue,
+    portfolioValue: ownValue + managedValue,
+    portfolioHeldValue: managedValue,
     portfolioMonthlyGrowthRate,
     autoInvestRate,
     overrides: plan.overrides,

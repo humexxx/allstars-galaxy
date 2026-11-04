@@ -66,6 +66,9 @@ export type ProjectOptions = {
   /** Monthly growth (decimal) compounded onto the portfolio each period —
    *  the value-weighted ROI of the holdings. 0 holds it flat. */
   portfolioMonthlyGrowthRate?: number;
+  /** The part of `portfolioValue` held flat: assets the user runs with other
+   *  people's money. Their market value has no promised rate to grow at. */
+  portfolioHeldValue?: number;
   /** Monthly ROI (decimal) of the auto-invest method. */
   autoInvestRate?: number;
   /** Per-month overrides for recurring lines. */
@@ -179,6 +182,7 @@ function runEngine(
 ): EngineResult {
   const portfolioValue = Math.max(0, options.portfolioValue ?? 0);
   const growth = Math.max(0, options.portfolioMonthlyGrowthRate ?? 0);
+  const held = Math.min(portfolioValue, Math.max(0, options.portfolioHeldValue ?? 0));
   const autoInvestRate = Math.max(0, options.autoInvestRate ?? 0);
   const savingsRate = Math.max(0, num(plan.monthlySavingsRate));
   const surplusPercent = Math.max(0, Math.min(1, num(plan.surplusToDebtsPercent)));
@@ -436,7 +440,7 @@ function runEngine(
     const investmentsInterest = state.investments * autoInvestRate * fraction;
     state.savings = round2(state.savings + savingsContribution + savingsInterest);
     state.investments = round2(state.investments + investmentsContribution + investmentsInterest);
-    state.portfolio = round2(state.portfolio * (1 + growth * fraction));
+    state.portfolio = round2(state.portfolio + (state.portfolio - held) * growth * fraction);
     totalInvestmentsInterest += investmentsInterest;
     totalInterest += interestTotal;
 
@@ -598,7 +602,75 @@ export function projectStateAt(
     };
   }
 
-  return runEngine(plan, incomes, expenses, debts, options, day).partial;
+  const partial = runEngine(plan, incomes, expenses, debts, options, day).partial;
+  if (!partial) return null;
+  const close = runEngine(plan, incomes, expenses, debts, options, null).projection.months[
+    partial.periodIndex
+  ];
+  return close ? routeLandedCash(partial, close) : partial;
+}
+
+/**
+ * The period's money, sent where it goes as soon as it is on hand.
+ *
+ * The engine pays each debt on its date and routes the surplus at period
+ * end, so between a paycheque and those days (a plan anchored on the 5th is
+ * paid on the 1st, its cards on the 4th) the money sat in Cash and then
+ * dropped into debt. People pay when the money lands, so today's figure
+ * already pays the rest of the period's scheduled debt payments, then what the
+ * close sends to debts and investments — never more than is on hand once the
+ * period's remaining bills (everything that is not a debt payment) are kept
+ * back. The close itself is unchanged, and net worth with it: cash becomes
+ * less debt or more investments, one for one.
+ */
+export function routeLandedCash(today: TodayState, close: ProjectionMonth): TodayState {
+  const after = today.date.getTime();
+  const laterScheduled = new Map(
+    close.debts.map((d) => [
+      d.debtId,
+      d.payments
+        .filter((p) => p.applied && p.date.getTime() > after)
+        .reduce((sum, p) => sum + p.amount, 0),
+    ])
+  );
+  const scheduledLeft = [...laterScheduled.values()].reduce((sum, v) => sum + v, 0);
+  const routed = close.extraDebtPayments + close.investmentsContribution;
+  if (scheduledLeft + routed <= 0) return today;
+
+  // Cash the rest of the period adds (or takes) before the close routes it,
+  // without the debt payments this pays now.
+  const beforeRouting = close.savings - close.savingsInterest + routed;
+  const otherStillToCome = beforeRouting - today.savings + scheduledLeft;
+  let left = Math.max(
+    0,
+    Math.min(scheduledLeft + routed, today.savings + Math.min(0, otherStillToCome))
+  );
+  if (left <= 0) return today;
+  const total = left;
+
+  const extraByDebt = new Map(close.debts.map((d) => [d.debtId, d.extraPayment]));
+  const pay = (balance: number, due: number): number => {
+    const paid = Math.min(left, due, balance);
+    left -= paid;
+    return paid;
+  };
+  // Scheduled payments first, then the extra, as the close would.
+  const debts = today.debts
+    .map((d) => ({ ...d, balance: d.balance - pay(d.balance, laterScheduled.get(d.debtId) ?? 0) }))
+    .map((d) => ({ ...d, balance: round2(d.balance - pay(d.balance, extraByDebt.get(d.debtId) ?? 0)) }));
+  const toInvest = Math.min(left, close.investmentsContribution);
+  left -= toInvest;
+  const totalDebt = debts.reduce((sum, d) => sum + d.balance, 0);
+  const savings = round2(today.savings - (total - left));
+  const investments = round2(today.investments + toInvest);
+  return {
+    ...today,
+    savings,
+    investments,
+    debts,
+    totalDebt,
+    netWorth: savings + investments + today.portfolioValue + today.receivables - totalDebt,
+  };
 }
 
 /**

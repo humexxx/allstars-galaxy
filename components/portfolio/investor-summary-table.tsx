@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+import { ChevronRight } from "lucide-react";
+
 import {
   Table,
   TableBody,
@@ -13,6 +16,8 @@ import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { maskValue, statToneClass } from "@/components/ui/stat-card";
 import { formatCurrency, formatSignedPercent } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
+import type { TransactionTableRow } from "@/types/portfolio";
+import { TransactionsTable } from "./transactions-table";
 
 export type InvestorSummaryRow = {
   investorId: string;
@@ -39,14 +44,22 @@ export type InvestorSummaryRow = {
  * Margin card. It used to be headed "P/L" beside a transactions table whose
  * P/L means something else (value against cost), so one heading carried two
  * quantities on one screen.
+ *
+ * Each person opens to their movements, so the detail is one click from the
+ * summary instead of a second, separate table.
  */
 export function InvestorSummaryTable({
   rows,
+  movements,
   hideValues = false,
 }: {
   rows: InvestorSummaryRow[];
+  /** Each investor's movements, keyed by `investorId`. */
+  movements: Map<string, TransactionTableRow[]>;
   hideValues?: boolean;
 }) {
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+
   if (rows.length === 0) {
     return (
       <EmptyState
@@ -72,6 +85,61 @@ export function InvestorSummaryTable({
         {formatSignedPercent((value / base) * 100, 1)}
       </Mono>
     );
+
+  const toggle = (id: string): void =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+
+  const panelId = (id: string, layout: "list" | "table"): string =>
+    `investor-movements-${layout}-${id}`;
+
+  const nameToggle = (r: InvestorSummaryRow, layout: "list" | "table") => {
+    const expanded = open.has(r.investorId);
+    return (
+      <button
+        type="button"
+        onClick={() => toggle(r.investorId)}
+        aria-expanded={expanded}
+        aria-controls={panelId(r.investorId, layout)}
+        className="flex min-w-0 items-start gap-1.5 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        <ChevronRight
+          aria-hidden
+          className={cn(
+            "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
+            expanded && "rotate-90"
+          )}
+        />
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <Text as="span" variant="small" weight="medium" className="truncate text-foreground">
+            {r.name}
+          </Text>
+          {layout === "list" && (
+            <Text as="span" variant="small" className="text-2xs">
+              {r.movements} {r.movements === 1 ? "movement" : "movements"}
+            </Text>
+          )}
+        </span>
+      </button>
+    );
+  };
+
+  const movementsOf = (r: InvestorSummaryRow) => {
+    const list = movements.get(r.investorId) ?? [];
+    return (
+      <TransactionsTable
+        rows={list}
+        showStatus={list.some((m) => m.status !== "approved")}
+        balanceLabel="Owed"
+        hideValues={hideValues}
+        emptyTitle="No movements"
+        emptyDescription="Nothing approved or waiting for this person."
+      />
+    );
+  };
 
   const cells = (r: InvestorSummaryRow) => ({
     worth: (
@@ -110,19 +178,7 @@ export function InvestorSummaryTable({
           return (
             <li key={r.investorId} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0">
               <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <Text
-                    as="span"
-                    variant="small"
-                    weight="medium"
-                    className="truncate text-foreground"
-                  >
-                    {r.name}
-                  </Text>
-                  <Text as="span" variant="small" className="text-2xs">
-                    {r.movements} {r.movements === 1 ? "movement" : "movements"}
-                  </Text>
-                </div>
+                {nameToggle(r, "list")}
                 <div className="shrink-0 text-right">
                   <Eyebrow as="div" size="sm">
                     Net in
@@ -150,6 +206,14 @@ export function InvestorSummaryTable({
                   </div>
                 ))}
               </dl>
+              {open.has(r.investorId) && (
+                <div
+                  id={panelId(r.investorId, "list")}
+                  className="rounded-lg border bg-muted/30 p-3"
+                >
+                  {movementsOf(r)}
+                </div>
+              )}
             </li>
           );
         })}
@@ -172,13 +236,9 @@ export function InvestorSummaryTable({
           <TableBody>
             {rows.map((r) => {
               const c = cells(r);
-              return (
+              return [
                 <TableRow key={r.investorId}>
-                  <TableCell>
-                    <Text variant="small" weight="medium" className="text-foreground">
-                      {r.name}
-                    </Text>
-                  </TableCell>
+                  <TableCell>{nameToggle(r, "table")}</TableCell>
                   <TableCell>
                     <Mono className="text-xs tabular-nums">{r.movements}</Mono>
                   </TableCell>
@@ -190,8 +250,19 @@ export function InvestorSummaryTable({
                   <TableCell className="text-right">{c.worth}</TableCell>
                   <TableCell className="text-right">{c.owed}</TableCell>
                   <TableCell className="text-right">{c.margin}</TableCell>
-                </TableRow>
-              );
+                </TableRow>,
+                open.has(r.investorId) && (
+                  <TableRow key={`${r.investorId}-movements`} className="hover:bg-transparent">
+                    <TableCell
+                      id={panelId(r.investorId, "table")}
+                      colSpan={6}
+                      className="bg-muted/30 p-3 whitespace-normal"
+                    >
+                      {movementsOf(r)}
+                    </TableCell>
+                  </TableRow>
+                ),
+              ];
             })}
           </TableBody>
         </Table>

@@ -3,7 +3,10 @@ import { isCronAuthorized } from "@/lib/cron-auth";
 import { getAppStateValue, setAppState } from "@/lib/services/app-state-service";
 import { applyMonthlyInterest, LAST_INTEREST_RUN_KEY } from "@/lib/services/interest-service";
 import { createDailySnapshots } from "@/lib/services/snapshot-service";
-import { createDailyFinanceSnapshots } from "@/lib/services/finance-snapshot-service";
+import {
+  createDailyFinanceSnapshots,
+  createMovementSnapshots,
+} from "@/lib/services/finance-snapshot-service";
 import { refreshF1News } from "@/lib/services/rapidapi-f1-news-service";
 
 // Interest, two snapshot passes and an upstream fetch run back to back; the platform default would cut that off. (Hobby caps a
@@ -126,6 +129,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       () => processFinancePlanSnapshots(today),
       failed
     );
+    // After the period snapshots: those may auto-confirm a skipped period,
+    // which is the baseline the day's position is projected from.
+    const movements = await step(
+      "finance_movement_snapshots",
+      () => createMovementSnapshots(today),
+      failed
+    );
     const f1News = await step("f1_news", () => processF1News(today), failed);
 
     return NextResponse.json({
@@ -139,6 +149,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         snapshotsCreated: financeSnapshots?.snapshotsCreated ?? 0,
         // A count, not the strings: those are built from raw error messages.
         failed: financeSnapshots?.errors.length ?? 0,
+        movementsCreated: movements?.snapshotsCreated ?? 0,
       },
       f1News: f1News ?? { fetched: 0, stored: 0 },
       failedOperations: failed,

@@ -1,0 +1,2 @@
+ALTER TABLE "finance_plans" ADD COLUMN "auto_invest_custom_rate" numeric(9, 6);--> statement-breakpoint
+ALTER TABLE "finance_plans" ADD CONSTRAINT "finance_plans_auto_invest_custom_rate_chk" CHECK ("finance_plans"."auto_invest_custom_rate" IS NULL OR "finance_plans"."auto_invest_custom_rate" >= 0);

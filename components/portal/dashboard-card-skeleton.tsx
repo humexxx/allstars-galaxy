@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils";
 
 type DashboardCardSkeletonProps = {
   /**
-   * The finance card's body: a chart with this many figures in a rail beside
-   * it, the first one the larger hero figure.
+   * The finance card's body: this many figures in a column beside the chart,
+   * the first one the larger net-worth figure.
    */
   rail?: number;
   /** The travel card's body: its featured trip tiles. */
@@ -37,21 +37,8 @@ export function DashboardCardSkeleton({
     <Card className={cn("col-span-full", className)} aria-hidden="true">
       <CardHeader>
         <Skeleton className="h-6 w-40 sm:h-7" />
-        {rail ? (
-          // "12-month projection · updated <day>", which wraps as text (no gap
-          // between its lines), then the change badge. Flex bases, not widths:
-          // a fixed-width bar sets the header column's minimum and pushes the
-          // action off a phone-width card.
-          <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1">
-            <div className="flex min-w-0 shrink basis-71 flex-wrap gap-x-1">
-              <Skeleton className="h-5 min-w-0 shrink basis-40" />
-              <Skeleton className="h-5 min-w-0 shrink basis-30" />
-            </div>
-            <Skeleton className="h-5 min-w-0 shrink basis-44" />
-          </div>
-        ) : (
-          <Skeleton className="h-5 w-40 max-w-full" />
-        )}
+        {/* The finance card's header is its plan name alone. */}
+        {!rail && <Skeleton className="h-5 w-40 max-w-full" />}
         <CardAction>
           <Skeleton className="h-8 w-20" />
         </CardAction>
@@ -64,27 +51,33 @@ export function DashboardCardSkeleton({
 }
 
 /**
- * The same grid as `DashboardFinanceCard`'s body, with each bar the height of
- * the line box it stands in for (a 14px eyebrow over a 28px figure), so the
- * card swaps in without moving the chart.
+ * The same grid as `DashboardFinanceCard`'s body — figures in a 15rem column,
+ * the chart beside it from `@2xl` — with each bar the height of the line box
+ * it stands in for (net worth's 36→40px figure, then a 14px eyebrow over a
+ * 20→24px figure per part), so the card swaps in without moving the chart.
  */
 function RailBody({ figures }: { figures: number }) {
   return (
     <CardContent className="@container">
-      <div className="grid grid-cols-1 gap-4 @xl:grid-cols-[minmax(0,1fr)_14rem] @xl:grid-rows-[auto_1fr] @xl:gap-x-8">
-        <div className="flex flex-col gap-1 @xl:col-start-2">
-          <Skeleton className="h-3.5 w-20" />
-          <Skeleton className="h-7 w-36" />
-        </div>
-        <Skeleton className="h-48 w-full sm:h-56 @xl:col-start-1 @xl:row-span-2 @xl:row-start-1 @xl:h-auto @xl:min-h-72" />
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 @xl:col-start-2 @xl:grid-cols-1 @xl:self-end">
-          {Array.from({ length: figures - 1 }).map((_, i) => (
-            <div key={i} className="flex flex-col gap-1">
-              <Skeleton className="h-3.5 w-20" />
-              <Skeleton className="h-7 w-28" />
+      <div className="grid grid-cols-1 gap-6 @2xl:grid-cols-[15rem_minmax(0,1fr)] @2xl:gap-x-8">
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-1">
+            <Skeleton className="h-3.5 w-20" />
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <Skeleton className="h-9 w-44 sm:h-10" />
+              <Skeleton className="h-5 w-28" />
             </div>
-          ))}
+          </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4 @2xl:grid-cols-1">
+            {Array.from({ length: figures - 1 }).map((_, i) => (
+              <div key={i} className="flex flex-col gap-1">
+                <Skeleton className="h-3.5 w-20" />
+                <Skeleton className="h-5 w-24 sm:h-6" />
+              </div>
+            ))}
+          </div>
         </div>
+        <Skeleton className="h-64 w-full sm:h-72 @2xl:h-auto @2xl:min-h-96" />
       </div>
     </CardContent>
   );

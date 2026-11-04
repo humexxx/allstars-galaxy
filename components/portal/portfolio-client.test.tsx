@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -131,5 +131,96 @@ describe("PortfolioClientPage — empty books read as empty, not as zeros", () =
     );
 
     expect(screen.getByText("Waiting for approval")).toBeInTheDocument();
+  });
+});
+
+describe("PortfolioClientPage — transactions tab", () => {
+  const investor = (id: string, name: string) => ({
+    investorId: id,
+    name,
+    isOwn: false,
+    contributed: 1000,
+    withdrawn: 0,
+    owed: 1050,
+    positions: [],
+    positionValue: 800,
+    profitLoss: -250,
+  });
+  const movement = (id: string, investorId: string, investorName: string, status: "approved" | "rejected") => ({
+    id,
+    date: "2025-09-30T06:00:00.000Z",
+    methodName: "Steady Income",
+    investorId,
+    investorName,
+    type: "buy" as const,
+    status,
+    total: "1000.00",
+    initialValue: "1000.00",
+    currentValue: "1050.00",
+    allocations: [],
+  });
+
+  // An owner with no movements of their own and two investors.
+  const owner: Data = {
+    ...base,
+    methodInvestors: [
+      {
+        methodId: "m1",
+        methodName: "Steady Income",
+        enabled: true,
+        investors: [],
+        totalInvested: 2000,
+        totalHolding: 1600,
+      },
+    ],
+    investorBreakdown: [investor("y", "Yalena Hume"), investor("m", "María Pérez")],
+    investorTransactions: [
+      movement("t1", "y", "Yalena Hume", "approved"),
+      movement("t2", "y", "Yalena Hume", "rejected"),
+      movement("t3", "m", "María Pérez", "approved"),
+    ],
+  };
+
+  const openTransactions = (): void => {
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Transactions" }));
+  };
+  const investorTable = () => within(screen.getAllByRole("table").at(-1)!);
+
+  it("has no detailed-view toggle and counts only movements that moved money", () => {
+    render(<PortfolioClientPage data={owner} />);
+    openTransactions();
+
+    expect(screen.queryByRole("button", { name: /detailed view/i })).not.toBeInTheDocument();
+    // Yalena's rejected row is not a movement.
+    const yalenaRow = investorTable().getByRole("button", { name: /yalena hume/i }).closest("tr")!;
+    expect(within(yalenaRow).getByText("1")).toBeInTheDocument();
+  });
+
+  it("filters the investors by name, accents or not", () => {
+    render(<PortfolioClientPage data={owner} />);
+    openTransactions();
+
+    fireEvent.change(screen.getByRole("textbox", { name: /filter investors/i }), {
+      target: { value: "maria" },
+    });
+    expect(investorTable().getByText("María Pérez")).toBeInTheDocument();
+    expect(investorTable().queryByText("Yalena Hume")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: /filter investors/i }), {
+      target: { value: "nobody" },
+    });
+    expect(screen.getByText("No investor matches your filter")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+    expect(investorTable().getByText("Yalena Hume")).toBeInTheDocument();
+  });
+
+  it("can export the investors' rows when the owner has none of their own", () => {
+    render(<PortfolioClientPage data={owner} />);
+
+    expect(screen.getByRole("link", { name: /export csv/i })).toHaveAttribute(
+      "href",
+      "/api/portfolio/export"
+    );
   });
 });

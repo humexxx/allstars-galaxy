@@ -116,6 +116,8 @@ export const createFinancePlanSchema = z.object({
   debtStrategy: z.enum(DEBT_STRATEGIES).default("avalanche"),
   autoInvestPercent: share.default("0"),
   autoInvestMethodId: idSchema.nullable().optional(),
+  // Null: the auto-invest bucket grows at the method's ROI.
+  autoInvestCustomRate: monthlyRate.nullable().optional(),
   initialInvestments: decimal.default("0"),
   // 0 = disabled monthly confirmation. Otherwise day of month 1..28.
   confirmationDayOfMonth: z

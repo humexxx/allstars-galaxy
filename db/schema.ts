@@ -18,7 +18,9 @@ export const roadPathFrequencyEnum = pgEnum("road_path_frequency", ["daily", "ev
 export const taskPriorityEnum = pgEnum("task_priority", ["low", "medium", "high"]);
 export const debtPaymentTypeEnum = pgEnum("debt_payment_type", ["fixed", "percent_of_balance"]);
 export const debtStrategyEnum = pgEnum("debt_strategy", ["avalanche", "snowball", "none"]);
-export const financeSnapshotSourceEnum = pgEnum("finance_snapshot_source", ["system_cron", "confirmation", "manual"]);
+// "movement": the plan's position on a day something moved (a paycheque, a
+// payment, an edit). Period history ignores them; the dashboard draws them.
+export const financeSnapshotSourceEnum = pgEnum("finance_snapshot_source", ["system_cron", "confirmation", "manual", "movement"]);
 // "user" = the human confirmed their real numbers. "auto" = the cron rolled the
 // baseline forward through a period the user left unconfirmed (best-estimate,
 // still re-promptable). Lets the UI flag auto rows and keeps the chart honest.
@@ -506,6 +508,9 @@ export const financePlans = pgTable(
       () => investmentMethods.id,
       { onDelete: "set null" }
     ),
+    // A monthly return (decimal) of the user's own choosing for the auto-invest
+    // bucket. Set, it wins over the method; null means "use the method's ROI".
+    autoInvestCustomRate: numeric("auto_invest_custom_rate", { precision: 9, scale: 6 }),
     initialInvestments: numeric("initial_investments", { precision: 20, scale: 2 })
       .notNull()
       .default("0"),
@@ -551,6 +556,7 @@ export const financePlans = pgTable(
     check("finance_plans_savings_rate_chk", sql`${t.monthlySavingsRate} >= 0`),
     check("finance_plans_surplus_chk", sql`${t.surplusToDebtsPercent} >= 0 AND ${t.surplusToDebtsPercent} <= 1`),
     check("finance_plans_auto_invest_chk", sql`${t.autoInvestPercent} >= 0 AND ${t.autoInvestPercent} <= 1`),
+    check("finance_plans_auto_invest_custom_rate_chk", sql`${t.autoInvestCustomRate} IS NULL OR ${t.autoInvestCustomRate} >= 0`),
     check("finance_plans_confirmation_day_chk", sql`${t.confirmationDayOfMonth} >= 0 AND ${t.confirmationDayOfMonth} <= 28`),
   ]
 ).enableRLS();

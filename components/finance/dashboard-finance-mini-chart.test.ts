@@ -3,8 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { DashboardPoint } from "@/lib/finance/dashboard";
 
 import { toRows } from "./dashboard-finance-mini-chart";
+import { visibleSeriesKeys } from "./dashboard-finance-series";
 
 const point = (month: string, netWorth: number): DashboardPoint => ({
+  time: netWorth,
+  tick: true,
+  kind: "close",
   month,
   label: month,
   savings: -50,
@@ -38,5 +42,21 @@ describe("toRows", () => {
     const [start, next] = toRows([point("Start", 1), point("Jan", 2)], 0);
     expect([start.netWorthPast, next.netWorthPast]).toEqual([1, null]);
     expect([start.projected, next.projected]).toEqual([false, true]);
+  });
+});
+
+describe("visibleSeriesKeys", () => {
+  const parts = (debt: number, receivables = 0) => ({
+    savings: 0, investments: 0, receivables, debt, netWorth: receivables - debt,
+  });
+
+  it("always lists net worth, portfolio and cash; never debt nobody has", () => {
+    expect([...visibleSeriesKeys([parts(0), parts(0)])]).toEqual(["netWorth", "investments", "savings"]);
+  });
+
+  it("keeps debt for the whole range once any point has some, its $0 months included", () => {
+    const keys = visibleSeriesKeys([parts(500), parts(0), parts(0)]);
+    expect(keys.has("debt")).toBe(true);
+    expect(keys.has("receivables")).toBe(false);
   });
 });

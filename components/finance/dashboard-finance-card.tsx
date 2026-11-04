@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { statToneClass } from "@/components/ui/stat-card";
-import { Eyebrow, Mono, Text } from "@/components/ui/typography";
+import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
@@ -181,16 +181,14 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
             // The goal while there is debt: when it is gone.
             note:
               goal?.kind === "debt-free" ? (
-                <Text variant="small" as="span" className="block">
-                  {goal.text}
-                </Text>
+                <Mono className="block text-2xs text-muted-foreground">{goal.text}</Mono>
               ) : undefined,
           },
         ]
       : []),
   ];
-  // A plan with no periods has no line to draw, and a rail beside nothing is
-  // a column of figures with a hole on its left.
+  // A plan with no periods has no chart, and its parts would read against
+  // nothing.
   const rail = points.length > 0;
 
   return (
@@ -200,34 +198,6 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
           <Wallet className="size-5 shrink-0" aria-hidden="true" />
           <span className="truncate">{featured.name}</span>
         </CardTitle>
-        <div className="flex flex-col gap-1 pt-3">
-          <Eyebrow size="sm" as="div" className="flex items-center gap-1.5">
-            <span
-              aria-hidden="true"
-              className="h-0.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: dashboardSeries("netWorth").color }}
-            />
-            Net worth
-          </Eyebrow>
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <Mono
-              className={cn(
-                "text-2xl font-semibold sm:text-3xl",
-                statToneClass(moneySign(fig.netWorth) >= 0 ? "positive" : "negative")
-              )}
-            >
-              {formatCurrency(fig.netWorth)}
-            </Mono>
-            {lastClose && sinceClose !== null && (
-              <DeltaChip delta={sinceClose} since={lastClose} />
-            )}
-          </div>
-          {goal?.kind === "milestone" && (
-            <Text variant="small" as="span">
-              {goal.text}
-            </Text>
-          )}
-        </div>
         <CardAction>
           <Button variant="outline" size="sm" asChild>
             <Link href={`/portal/plans/${featured.id}`}>
@@ -239,31 +209,50 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       </CardHeader>
       {/* Laid out on the card's width, not the viewport's: from `lg` the
           sidebar takes 192px, so this card is narrower at 1050px than at 1000px.
-          Wide, the chart fills the left and the parts stack in a rail on the
-          right; narrow, the parts follow the chart. */}
-      <CardContent className="@container">
-        <div
-          className={cn(
-            "grid grid-cols-1 gap-4",
-            rail && "@xl:grid-cols-[minmax(0,1fr)_14rem] @xl:gap-x-8"
-          )}
-        >
-          <DashboardFinanceMiniChart
-            data={points}
-            pastCount={fig.pastCount}
-            className="h-48 sm:h-56 @xl:h-auto @xl:min-h-72"
-          />
-          <dl
-            className={cn(
-              "grid grid-cols-2 gap-x-4 gap-y-3",
-              rail && "@xl:grid-cols-1 @xl:self-center"
+          Net worth and its parts share the top row once there is room (the
+          parts used to be a rail beside the chart, which left the corner above
+          them empty); the chart takes the card's full width below. */}
+      <CardContent className="@container flex flex-col gap-6">
+        <div className="flex flex-col gap-4 @5xl:flex-row @5xl:items-end @5xl:justify-between @5xl:gap-8">
+          <div className="flex min-w-0 flex-col gap-1">
+            <Eyebrow size="sm" as="div" className="flex items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className="h-0.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: dashboardSeries("netWorth").color }}
+              />
+              Net worth
+            </Eyebrow>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <Mono
+                className={cn(
+                  "text-2xl font-semibold sm:text-3xl",
+                  statToneClass(moneySign(fig.netWorth) >= 0 ? "positive" : "negative")
+                )}
+              >
+                {formatCurrency(fig.netWorth)}
+              </Mono>
+              {lastClose && sinceClose !== null && (
+                <DeltaChip delta={sinceClose} since={lastClose} />
+              )}
+            </div>
+            {goal?.kind === "milestone" && (
+              <Mono className="block text-2xs text-muted-foreground">{goal.text}</Mono>
             )}
-          >
-            {breakdown.map((f) => (
-              <FigureItem key={f.label} figure={f} />
-            ))}
-          </dl>
+          </div>
+          {rail && (
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 @2xl:grid-cols-4 @5xl:shrink-0">
+              {breakdown.map((f) => (
+                <FigureItem key={f.label} figure={f} />
+              ))}
+            </dl>
+          )}
         </div>
+        <DashboardFinanceMiniChart
+          data={points}
+          pastCount={fig.pastCount}
+          className="h-56 sm:h-64 @5xl:h-72"
+        />
       </CardContent>
     </Card>
   );

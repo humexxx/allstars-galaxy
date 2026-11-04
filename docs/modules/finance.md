@@ -33,7 +33,7 @@ calibrated. Health scoring and scenario comparison are part of this module.
 - `period.ts` — accounting-period helpers (unchanged)
 - `chart-series.ts` — `buildPlanTimeline` / `buildChartSeries` (real past as period closes + projection), `alignTodayPoint`, `buildCompareRows` (compare chart, joined by calendar month), `calendarTicks` (axis ticks on calendar months), `forecastKpiPoints` (the "Next" KPI; a plan that has not started yet gets its first close, no today marker and no Confirm), `milestoneCrossings`, and the one debt-free definition (`debtFreeMonthsFromNow`, `describeDebtFree`, `formatDebtFree`, `summaryDebtFree`)
 - `scenario.ts` — `compareScenario` (scenario vs base at a shared period; payoff compared as dates)
-- `dashboard.ts` — `buildDashboardFigures` for the dashboard card: the last three closed periods (`DASHBOARD_PAST_MONTHS`), today and the next 12 closes as net worth's parts (savings, investments with the portfolio folded in, owed to you, debt), each point named after the month its period CLOSES in (`anchorDay`); `pastCount` says where today sits. `dashboardGoal` (`DashboardGoal`) — the debt-free date while there is debt (small print under Debt), then the next net-worth milestone the projection reaches (under net worth)
+- `dashboard.ts` — `buildDashboardFigures` for the dashboard card: the last three closed periods (`DASHBOARD_PAST_MONTHS`), today and the next 12 closes as net worth's parts (savings, investments with the portfolio folded in, owed to you, debt), each point named after the month its period CLOSES in (`anchorDay`); `pastCount` says where today sits. `dashboardGoal` (`DashboardGoal`) — the debt-free date while there is debt (small print under Debt, the margin note's type), then the next net-worth milestone the projection reaches (under net worth)
 - `debt-payments.ts` — `projectedDebtPayments` / `debtChipAmount`: the calendar's debt chips read the payments the projection made
 - `table-rows.ts` — `densify` (first 12 rows + real Decembers)
 - `amount-input.ts` — parses typed or pasted amounts ("$1,234.50") the way the server schema will, so the confirmation dialog shows per-field errors instead of a bare "Invalid input" toast
@@ -67,7 +67,10 @@ The dashboard card is [`dashboard-finance-card.tsx`](../../components/finance/da
 with its stacked chart in `dashboard-finance-mini-chart.tsx`; both read the
 series list in `dashboard-finance-series.ts`. Its past comes off the plan page's
 own timeline (`getRecentMonthlySnapshots` + `buildPlanTimeline`) and is drawn
-solid up to "Now"; the projection after it is dashed and fainter. The rail
+solid up to "Now"; the projection after it is dashed and fainter. Layout:
+the plan's name heads the card; net worth and its parts share the top row
+from `@5xl` (the parts were a rail beside the chart, which left the corner
+above them empty), and the chart takes the full width below. It
 reads Net worth, **Portfolio** (investments + portfolio, with the managed
 book's margin as a share of what is owed — this month and to date — in small
 print) and **Cash** (what the period has taken in and not yet paid out; in the tooltip too, even at $0)

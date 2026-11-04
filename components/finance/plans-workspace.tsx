@@ -85,16 +85,16 @@ const METRIC_LABEL: Record<Metric, string> = {
   totalDebt: "Total debt",
 };
 
-/** Horizon options, in periods. `0` means "as far as the projections run". */
+/** Horizon options, in periods. 10 years is as far as a plan projects. */
 const RANGES = [
+  { value: "3", label: "3 months" },
+  { value: "6", label: "6 months" },
   { value: "12", label: "12 months" },
-  { value: "24", label: "24 months" },
-  { value: "36", label: "3 years" },
   { value: "60", label: "5 years" },
-  { value: "0", label: "Full plan" },
+  { value: "120", label: "10 years" },
 ] as const;
 
-const DEFAULT_RANGE = "24";
+const DEFAULT_RANGE = "12";
 /** Periods before today kept in view, regardless of the horizon picked. */
 const PAST_MONTHS = 3;
 
@@ -151,9 +151,9 @@ export function PlansWorkspace({
   }
   const [metric, setMetric] = useState<Metric>("netWorth");
   const [range, setRange] = useState<string>(DEFAULT_RANGE);
-  // "Full plan" draws every month any plan covers; the others window around
-  // today (PAST_MONTHS before it).
-  const months = Number(range) || undefined;
+  // The horizon runs ahead of today; the window also holds today's month and
+  // the PAST_MONTHS before it.
+  const months = Number(range) + PAST_MONTHS + 1;
   // Two sources of emphasis: pointing at a rail row (transient) and pinning one
   // via its colour swatch (sticky, and the only route on touch, where there is
   // no hover). A pin always wins over a hover.

@@ -1,7 +1,7 @@
 # Settings
 
 > **Status:** Active
-> **Last reviewed:** 2026-10-19
+> **Last reviewed:** 2026-11-03
 
 ## Overview
 Personal portal preferences. Today it holds a single appearance toggle — the
@@ -34,7 +34,7 @@ shown after the content of module pages; on Finance it mines for gold.
 - `ai.ts` — `AiSettings`, `AiSpend`, `AiUsageSummary`
 
 ## Components
-`components/settings/` — `preferences-form.tsx` (optimistic Switch row + live mascot preview); `ai-settings.tsx` (`AiSettingsPane`: model `Select`, spend with a `Progress` against the credit, earlier months, key status and an expiry `DateField`); `settings-shell.tsx` takes `ai` and adds the category only when it is present. `components/portal/ai-key-expiry-notice.tsx` is the admins' reminder dialog, mounted by `app/portal/layout.tsx`. The mascot itself is [`components/portal/context-avatar.tsx`](../../components/portal/context-avatar.tsx) — shared, pure SVG + CSS keyframes (no client JS), one variant per module (`finance` only so far), animations pause under `prefers-reduced-motion`.
+`components/settings/` — `preferences-form.tsx` (optimistic Switch row + live mascot preview); `ai-settings.tsx` (`AiSettingsPane`: model `Select`, spend with a `Progress` against the credit, earlier months, key status and an expiry `DateField`); `settings-shell.tsx` takes `ai` and adds the category only when it is present. `components/portal/ai-key-expiry-notice.tsx` is the admins' reminder dialog, mounted by `app/portal/layout.tsx`. The mascot itself is [`components/portal/context-avatar.tsx`](../../components/portal/context-avatar.tsx) — shared, pure SVG + CSS keyframes (no client JS), one variant per module (`finance` only so far: a bean mining a gold cube and carrying the nuggets to a chest), every part keyed to one generated timeline on a `--ctxa-cycle` clock, animations stop under `prefers-reduced-motion`.
 
 ## DB tables — `db/schema.ts`
 - `user_preferences` — one row per user, created lazily on first write; absence of a row means "all defaults" (the service layer owns the default values)

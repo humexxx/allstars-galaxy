@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { readEvents } from "@/lib/ai/assistant/stream";
+import { useAssistantChat } from "@/components/assistant/use-assistant-chat";
 import { uploadTripPhoto, type UploadedPhoto } from "@/lib/travel/photo-upload";
 import type {
   TravelAssistantEvent,
@@ -34,30 +34,21 @@ import { PendingProposalProvider, type PendingProposal } from "./pending-preview
 import { PendingReviewBar } from "./pending-review-bar";
 import { ProposalCard, type ProposalState } from "./proposal-card";
 
-type Entry =
-  | { kind: "user"; id: string; text: string; images: string[] }
-  | { kind: "assistant"; id: string; text: string }
-  | { kind: "error"; id: string; message: string }
-  | {
-      kind: "proposal";
-      id: string;
-      proposal: TravelProposal;
-      state: ProposalState;
-      applied?: TravelChangeLine[];
-      undoToken?: string | null;
-      error?: string;
-    };
-
-type ProposalEntry = Extract<Entry, { kind: "proposal" }>;
+type ProposalEntry = {
+  kind: "proposal";
+  id: string;
+  proposal: TravelProposal;
+  state: ProposalState;
+  applied?: TravelChangeLine[];
+  undoToken?: string | null;
+  error?: string;
+};
 
 const SUGGESTIONS = [
   "Plan Orlando from Jan 16 to 24: flights SJO → MCO, a hotel near the parks and two days at Universal",
   "What do I still need to book on my next trip?",
   "Move everything on this trip one day later",
 ];
-
-let nextId = 0;
-const newId = (): string => `entry-${++nextId}`;
 
 const TRAVEL = "/portal/entertainment/travel-planner";
 
@@ -89,39 +80,41 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
   const [open, setOpen] = useState(false);
   /** The chat said something after it made way for a proposal. */
   const [unread, setUnread] = useState(false);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<UploadedPhoto[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const input = useRef<HTMLTextAreaElement>(null);
+  /** The proposal this message brought, opened on the page once the answer is in. */
+  const proposed = useRef<TravelProposal | null>(null);
 
-  const transcript = useRef<TravelAssistantMessage[]>([]);
-  const notes = useRef<string[]>([]);
-  /** The page the model was last told about; undefined before the first message. */
-  const toldTripId = useRef<string | null | undefined>(undefined);
-  const scroller = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = scroller.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [entries, status]);
+  const chat = useAssistantChat<TravelAssistantEvent, ProposalEntry>({
+    endpoint: "/api/travel/assistant",
+    context: () => ({ key: tripId ?? "list", value: { tripId } }),
+    onEvent: (event, chat) => {
+      switch (event.type) {
+        case "proposal":
+          proposed.current = event.proposal;
+          chat.setEntries((all) => [
+            // A newer proposal replaces one still waiting: the page shows one.
+            ...all.map((e) =>
+              e.kind === "proposal" && e.state === "open" ? { ...e, state: "cancelled" as const } : e
+            ),
+            { kind: "proposal", id: chat.newId(), proposal: event.proposal, state: "open" },
+          ]);
+          // A new assistant bubble after every card, so text never lands above one.
+          chat.breakText();
+          return true;
+        case "navigate":
+          if (event.href !== pathname) router.push(event.href);
+          return true;
+        default:
+          return false;
+      }
+    },
+  });
+  const { entries, setEntries, draft, setDraft, busy, status, input, scroller } = chat;
 
   const update = (id: string, patch: Partial<ProposalEntry>): void =>
     setEntries((all) => all.map((e) => (e.id === id && e.kind === "proposal" ? { ...e, ...patch } : e)));
-
-  const appendText = (assistantId: string, text: string): void =>
-    setEntries((all) => {
-      const at = all.findIndex((e) => e.id === assistantId);
-      if (at === -1) return [...all, { kind: "assistant", id: assistantId, text }];
-      const entry = all[at];
-      if (entry.kind !== "assistant") return all;
-      const next = [...all];
-      next[at] = { ...entry, text: entry.text + text };
-      return next;
-    });
 
   async function attach(files: FileList | null): Promise<void> {
     if (!files?.length) return;
@@ -143,13 +136,7 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
     const images = attachments;
     const message = text.trim() || (images.length ? "(See the attached images.)" : "");
     if (!message || busy || uploading) return;
-    setDraft("");
     setAttachments([]);
-    setBusy(true);
-    setEntries((all) => [
-      ...all,
-      { kind: "user", id: newId(), text: message, images: images.map((i) => i.url) },
-    ]);
 
     // Claude sees each picture, and the note gives it what it needs to save
     // one as a cover or a photo if asked.
@@ -157,70 +144,13 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
       ? `[Attached images: ${images.map((i, n) => `${n + 1}. url=${i.url} storagePath=${i.storagePath}`).join("; ")}]`
       : null;
     const content: TravelAssistantContent[] = [
-      ...notes.current.map((t) => ({ type: "text" as const, text: t })),
       ...images.map((i) => ({ type: "image" as const, source: { type: "url" as const, url: i.url } })),
       ...(imageNote ? [{ type: "text" as const, text: imageNote }] : []),
       { type: "text" as const, text: message },
     ];
-    notes.current = [];
-    const history: TravelAssistantMessage[] = [...transcript.current, { role: "user", content }];
-    transcript.current = history;
-    const context = toldTripId.current === tripId ? undefined : { tripId };
-    toldTripId.current = tripId;
-
-    // A new assistant bubble after every card, so text never lands above one.
-    let assistantId = newId();
-    let proposed: TravelProposal | null = null;
-    try {
-      const response = await fetch("/api/travel/assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, context }),
-      });
-      if (!response.ok || !response.body) {
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error ?? "The assistant did not answer");
-      }
-      await readEvents<TravelAssistantEvent>(response.body, (event) => {
-        switch (event.type) {
-          case "text":
-            setStatus(null);
-            appendText(assistantId, event.text);
-            break;
-          case "status":
-            setStatus(event.label);
-            break;
-          case "proposal":
-            setStatus(null);
-            proposed = event.proposal;
-            setEntries((all) => [
-              // A newer proposal replaces one still waiting: the page shows one.
-              ...all.map((e) =>
-                e.kind === "proposal" && e.state === "open" ? { ...e, state: "cancelled" as const } : e
-              ),
-              { kind: "proposal", id: newId(), proposal: event.proposal, state: "open" },
-            ]);
-            assistantId = newId();
-            break;
-          case "navigate":
-            if (event.href !== pathname) router.push(event.href);
-            break;
-          case "turn":
-            transcript.current = [...history, ...event.messages];
-            break;
-          case "error":
-            setEntries((all) => [...all, { kind: "error", id: newId(), message: event.message }]);
-            break;
-        }
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "The assistant did not answer";
-      setEntries((all) => [...all, { kind: "error", id: newId(), message }]);
-    } finally {
-      setStatus(null);
-      setBusy(false);
-    }
-    if (proposed) showOnPage(proposed);
+    proposed.current = null;
+    await chat.send(message, { content, images: images.map((i) => i.url) });
+    if (proposed.current) showOnPage(proposed.current);
   }
 
   /** Opens the page the proposal changes; on a phone, the chat makes way for it. */
@@ -241,14 +171,14 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
     const result = await applyTravelChangesAction(entry.proposal.set);
     if (!result.success) {
       update(entry.id, { state: "open", error: result.error });
-      notes.current.push(`[Note: the user pressed Apply on "${entry.proposal.set.summary}" but it failed: ${result.error}. Nothing was saved.]`);
+      chat.note(`[Note: the user pressed Apply on "${entry.proposal.set.summary}" but it failed: ${result.error}. Nothing was saved.]`);
       return;
     }
     const { lines, undoToken } = result.data;
     update(entry.id, { state: "applied", applied: lines, undoToken });
     const createdTrips = lines.filter((l) => l.subject === "trip" && l.action === "add" && l.tripId);
     const created = createdTrips.map((l) => ` The new trip "${l.title}" has id ${l.tripId}.`).join("");
-    notes.current.push(`[Note: the user applied "${entry.proposal.set.summary}"; it is saved.${created}]`);
+    chat.note(`[Note: the user applied "${entry.proposal.set.summary}"; it is saved.${created}]`);
 
     // The preview page was a stand-in; the trip has a page of its own now.
     // A trip that is gone leaves the user on the list.
@@ -264,7 +194,7 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
 
   function cancel(entry: ProposalEntry): void {
     update(entry.id, { state: "cancelled" });
-    notes.current.push(`[Note: the user cancelled "${entry.proposal.set.summary}"; nothing was saved.]`);
+    chat.note(`[Note: the user cancelled "${entry.proposal.set.summary}"; nothing was saved.]`);
     if (pathname === `${TRAVEL}/preview`) router.push(TRAVEL);
   }
 
@@ -277,7 +207,7 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
       return;
     }
     update(entry.id, { state: "undone" });
-    notes.current.push(`[Note: the user undid "${entry.proposal.set.summary}"; those changes are reverted.]`);
+    chat.note(`[Note: the user undid "${entry.proposal.set.summary}"; those changes are reverted.]`);
     // A trip the undo removed again has no page to stay on.
     const createdHere = entry.applied?.some(
       (l) => l.subject === "trip" && l.action === "add" && l.tripId && pathname.endsWith(l.tripId)
@@ -286,12 +216,7 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
     else router.refresh();
   }
 
-  function reset(): void {
-    setEntries([]);
-    transcript.current = [];
-    notes.current = [];
-    toldTripId.current = undefined;
-  }
+  const reset = chat.reset;
 
   const waiting = entries.findLast(
     (e): e is ProposalEntry => e.kind === "proposal" && (e.state === "open" || e.state === "applying")
@@ -343,7 +268,7 @@ export function TravelAssistant({ children }: { children?: ReactNode }) {
               case "user":
                 return (
                   <UserBubble key={entry.id} text={entry.text}>
-                    {entry.images.length > 0 && (
+                    {entry.images && entry.images.length > 0 && (
                       <div className="flex flex-wrap justify-end gap-1">
                         {entry.images.map((url) => (
                           <span key={url} className="relative block size-16 overflow-hidden rounded-lg bg-muted">

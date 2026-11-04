@@ -60,3 +60,16 @@ describe("visibleSeriesKeys", () => {
     expect(keys.has("receivables")).toBe(false);
   });
 });
+
+describe("toRows: a paid-off debt", () => {
+  const at = (month: string, debt: number): DashboardPoint => ({
+    ...point(month, 0),
+    debt,
+    savings: 0,
+  });
+
+  it("comes down to zero where it is paid off and is not drawn after", () => {
+    const rows = toRows([at("Now", 300), at("Dec", 100), at("Jan", 0), at("Feb", 0), at("Mar", 0)], 0);
+    expect(rows.map((r) => r.debtBelowAhead)).toEqual([-300, -100, 0, null, null]);
+  });
+});

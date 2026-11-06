@@ -12,6 +12,7 @@ import {
   LineChart,
   type LucideIcon,
   MoreHorizontal,
+  RotateCcw,
   Star,
   Table2,
   TriangleAlert,
@@ -53,7 +54,6 @@ import { useRegisterDevTool } from "@/components/dev-tools/dev-tools-context";
 import { runDailySnapshotsAction } from "@/app/actions/dev-tools";
 
 import { ConfirmationDialog } from "./confirmation-dialog";
-import { PeriodCompareDialog } from "./period-compare-dialog";
 import { FinancialHealthDonut } from "./financial-health-donut";
 import { PlanLineEditor } from "./plan-line-editor";
 import { PlanDebtEditor } from "./plan-debt-editor";
@@ -340,9 +340,11 @@ export function PlanEditor({
   // projected close of the period.
   const totalDebt = todayState?.totalDebt ?? current?.totalDebt ?? 0;
 
-  // Chart-hover preview: while the pointer is over a chart point, the sidebar
-  // cards show THAT period's figures; on leave they snap back.
-  const [hoverFigures, setHoverFigures] = useState<PeriodFigures | null>(null);
+  // A period picked on the chart: the sidebar shows THAT period's figures until
+  // the reader goes back to today. Hovering only shows the chart's tooltip —
+  // a sidebar that changed under every pointer move read as flicker.
+  const [picked, setPicked] = useState<{ index: number; figures: PeriodFigures } | null>(null);
+  const hoverFigures = picked?.figures ?? null;
   const isPreview = hoverFigures !== null;
   const dIncome = hoverFigures?.income ?? income;
   const dLivingExpenses = hoverFigures?.livingExpenses ?? livingExpenses;
@@ -581,7 +583,10 @@ export function PlanEditor({
           ghost={ghost}
           portfolioHistory={portfolioHistory}
           portfolioEnabled={plan.includePortfolio}
-          onHoverFigures={setHoverFigures}
+          selectedIndex={picked?.index ?? null}
+          onSelectPeriod={(index, figures) =>
+            setPicked(index !== null && figures ? { index, figures } : null)
+          }
           milestones={milestones}
           // Only the main plan records reality; a what-if reads its past.
           onConfirmToday={plan.isMain ? openConfirmation : undefined}
@@ -648,7 +653,18 @@ export function PlanEditor({
               )}
             >
               <CardContent className="flex flex-col gap-3">
-                <div className="flex flex-col items-center gap-1.5">
+                <div className="relative flex flex-col items-center gap-1.5">
+                  {isPreview && (
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      className="absolute top-0 right-0"
+                      onClick={() => setPicked(null)}
+                    >
+                      <RotateCcw />
+                      Today
+                    </Button>
+                  )}
                   <FinancialHealthDonut
                     obligations={dFixedOutflow}
                     income={dIncome}
@@ -1127,11 +1143,13 @@ type ProjectionPanelProps = {
    *  Rendered in the narrow column beside the chart on desktop, stacked below
    *  the chart on mobile. */
   sidebar: React.ReactNode;
-  /** Receives the hovered chart point's period figures (null on leave / when
-   *  hovering today's point) so the parent can preview them in the sidebar. */
-  onHoverFigures?: (figures: PeriodFigures | null) => void;
-  /** Clicking TODAY's point isn't a preview — it's "record what actually
-   *  happened", so the parent opens the confirmation dialog instead. */
+  /** The chart point the reader picked (its figures fill the sidebar), or
+   *  null for today. */
+  selectedIndex?: number | null;
+  /** A point clicked, with its period's figures; null, null for back to
+   *  today (today's own point, a new horizon, another view). */
+  onSelectPeriod?: (index: number | null, figures: PeriodFigures | null) => void;
+  /** Opens the confirmation dialog — the warning icon's action. */
   onConfirmToday?: () => void;
   /** Base plan overlay when this plan is a scenario (ghost line + delta). */
   ghost?: GhostPlan | null;
@@ -1308,7 +1326,8 @@ function ProjectionPanel({
   history,
   calendar,
   sidebar,
-  onHoverFigures,
+  selectedIndex = null,
+  onSelectPeriod,
   onConfirmToday,
   milestones,
   ghost = null,
@@ -1332,7 +1351,7 @@ function ProjectionPanel({
   const goView = (next: PlanView) => {
     // Leaving the chart view unmounts it mid-hover — drop any active preview
     // so the sidebar doesn't stay stuck on a hovered period.
-    onHoverFigures?.(null);
+    onSelectPeriod?.(null, null);
     setView(next);
   };
   const swipe = useSwitcherSwipe(view, goView);
@@ -1424,36 +1443,17 @@ function ProjectionPanel({
   const beforeStart = todayState?.status === "before-start";
   const todayIsOnChart = todayState?.status === "in-range";
 
-  // Hovering today's point is "the present" — treat it as no preview so the
-  // sidebar only takes the backdrop/chip treatment for OTHER periods.
-  const handleHoverIndex = useCallback(
-    (idx: number | null): void => {
-      if (!onHoverFigures) return;
-      if (idx === null || (todayIsOnChart && idx === chartSeries.pastCount)) {
-        onHoverFigures(null);
-        return;
-      }
-      onHoverFigures(pointFigures[idx] ?? null);
-    },
-    [onHoverFigures, chartSeries.pastCount, pointFigures, todayIsOnChart]
-  );
-
-  const [comparedIdx, setComparedIdx] = useState<number | null>(null);
-
-  // Clicking today means "record what actually happened", not "preview" — so it
-  // hands off to the confirmation dialog. Every other point opens the compare
-  // dialog for that period.
-  // Not before the plan starts: a confirmation dated today would rebase the
-  // plan onto today's period, months before the start it was given.
+  // Clicking a point shows its period in the sidebar and marks it on the
+  // chart; clicking today's point (or the one already picked) goes back.
   const handleSelectIndex = useCallback(
     (idx: number): void => {
-      if (todayIsOnChart && idx === chartSeries.pastCount) {
-        onConfirmToday?.();
+      if ((todayIsOnChart && idx === chartSeries.pastCount) || idx === selectedIndex) {
+        onSelectPeriod?.(null, null);
         return;
       }
-      setComparedIdx(idx);
+      onSelectPeriod?.(idx, pointFigures[idx] ?? null);
     },
-    [chartSeries.pastCount, onConfirmToday, todayIsOnChart]
+    [chartSeries.pastCount, onSelectPeriod, pointFigures, selectedIndex, todayIsOnChart]
   );
   const effAnchor = anchorDay > 0 ? anchorDay : 1;
   // Today as the header and the compare dialog read it — see
@@ -1485,7 +1485,6 @@ function ProjectionPanel({
     return { startIndex, count: endIndex - startIndex + 1 };
   }, [chartSeries.points, projection, effAnchor]);
 
-  const comparedPoint = comparedIdx !== null ? chartSeries.points[comparedIdx] : null;
 
   // The last closed period, for the "since" chip beside today's figure.
   const lastClose = chartSeries.pastCount > 0 ? chartSeries.points[chartSeries.pastCount - 1] : null;
@@ -1563,7 +1562,12 @@ function ProjectionPanel({
             type="single"
             size="sm"
             value={String(horizonMonths)}
-            onValueChange={(v) => v && setHorizonMonths(Number(v))}
+            onValueChange={(v) => {
+              if (!v) return;
+              // The picked point's index means another month on a new horizon.
+              onSelectPeriod?.(null, null);
+              setHorizonMonths(Number(v));
+            }}
             aria-label="Projection horizon"
           >
             {HORIZON_PRESETS.map((preset) => (
@@ -1647,8 +1651,8 @@ function ProjectionPanel({
                       points={chartSeries.points}
                       pastCount={chartSeries.pastCount}
                       heightClass="h-72 sm:h-80 xl:h-full"
-                      onHoverIndex={handleHoverIndex}
                       onSelectIndex={handleSelectIndex}
+                      selectedIndex={selectedIndex}
                       milestones={milestones}
                       todayLabel={todayIsOnChart ? todayCaption : undefined}
                       markToday={!beforeStart}
@@ -1679,17 +1683,6 @@ function ProjectionPanel({
         {sidebar}
       </div>
 
-      <PeriodCompareDialog
-        open={comparedIdx !== null}
-        onOpenChange={(next) => {
-          if (!next) setComparedIdx(null);
-        }}
-        anchorDay={effAnchor}
-        todayLabel={todayCaption}
-        todayPoint={todayPoint ?? null}
-        targetLabel={comparedPoint ? HOVER_PERIOD_LABEL.format(comparedPoint.date) : ""}
-        targetPoint={comparedPoint}
-      />
     </div>
   );
 }

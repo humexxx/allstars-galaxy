@@ -365,10 +365,11 @@ type ProjectionChartProps = {
    *  moves over the chart, and `null` when it leaves. Lets the page preview
    *  that period's figures elsewhere (e.g. the sidebar cards). */
   onHoverIndex?: (idx: number | null) => void;
-  /** Fires with the clicked point's index. Hover previews a period; this is the
-   *  commit — the page opens a dialog for it. Omit to leave the chart
-   *  read-only (no pointer cursor). */
+  /** Fires with the clicked point's index: the page shows that period. Omit to
+   *  leave the chart read-only (no pointer cursor). */
   onSelectIndex?: (idx: number) => void;
+  /** The point the page shows, marked with a vertical line. */
+  selectedIndex?: number | null;
   /** Base plan's net worth aligned per point (scenario ghost line). Nulls skip
    *  the point. Omit to render no ghost. */
   ghostValues?: (number | null)[];
@@ -401,6 +402,7 @@ export const ProjectionChart = memo(function ProjectionChart({
   heightClass = "h-80",
   onHoverIndex,
   onSelectIndex,
+  selectedIndex = null,
   ghostValues,
   ghostLabel,
   portfolioValues,
@@ -568,8 +570,15 @@ export const ProjectionChart = memo(function ProjectionChart({
   // taking its slice of time and curve (see `splitEasedStroke`).
   const stroke = splitEasedStroke(data.length > 1 ? pastCount / (data.length - 1) : 1, SWEEP_MS);
   const lineBegin = STAGGER_MS * 2;
+  // Once, on mount: picking a point re-renders the chart, and replaying the
+  // draw-in on every click wiped the lines and drew them again.
+  const [intro, setIntro] = useState(true);
+  useEffect(() => {
+    const done = window.setTimeout(() => setIntro(false), lineBegin + SWEEP_MS + STAGGER_MS);
+    return () => window.clearTimeout(done);
+  }, [lineBegin]);
   const draw = (half: "past" | "future" | "whole", begin: number) =>
-    reducedMotion
+    reducedMotion || !intro
       ? { isAnimationActive: false }
       : half === "whole"
         ? { isAnimationActive: true, animationBegin: begin, animationDuration: SWEEP_MS, animationEasing: asEasing(sweepEasing) }
@@ -665,6 +674,9 @@ export const ProjectionChart = memo(function ProjectionChart({
             strokeOpacity={0.2}
             strokeDasharray="2 2"
           />
+          {selectedIndex !== null && (
+            <ReferenceLine x={selectedIndex} stroke="currentColor" strokeOpacity={0.55} strokeWidth={1.5} />
+          )}
           {/* Milestone crossings — vertical dashed line at the EXACT fractional
               x where the trajectory hits the milestone. The numeric x-axis lets
               the line land between months so distinct milestones don't collide.

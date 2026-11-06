@@ -942,10 +942,15 @@ export function ComparePlansChart({
       pastMonths
     );
 
-    // The past is the user's one history, the same under every plan, so only
-    // the main plan draws it; the others branch off at today. With no main
-    // among them, the first plan draws it.
-    const pastKey = (seriesByPlan.find(({ plan }) => plan.isMain) ?? seriesByPlan[0]).key;
+    // The past is the user's one history, the same under every plan (each
+    // projects from the same real position today), so one series draws it:
+    // the plan being pointed at, so the past lights up with it instead of
+    // fading with the main plan; otherwise the main plan, or the first.
+    const pastKey = (
+      seriesByPlan.find(({ plan }) => plan.id === focusedPlanId) ??
+      seriesByPlan.find(({ plan }) => plan.isMain) ??
+      seriesByPlan[0]
+    ).key;
 
     // Beside net worth, each plan's debt, as on a plan's own page: what is
     // still owed, falling to zero. A paid-off debt draws its last $0 beside the
@@ -1017,7 +1022,7 @@ export function ComparePlansChart({
       hasDebt,
       pastKey,
     };
-  }, [series, today, months, pastMonths]);
+  }, [series, today, months, pastMonths, focusedPlanId]);
 
   const xTicks = useMemo(
     () =>

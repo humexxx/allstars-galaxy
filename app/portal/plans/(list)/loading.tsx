@@ -26,8 +26,14 @@ export default function PlansLoading() {
           <CardHeader className="flex flex-wrap items-start justify-between gap-3">
             {/* "Net worth" and the figure with its change chip */}
             <div className="flex flex-col gap-1">
-              <Skeleton className="h-3 w-16" />
-              <Skeleton className="h-9 w-64 sm:h-10" />
+              {/* The eyebrow row is h-5, like the real one */}
+              <div className="flex h-5 items-center">
+                <Skeleton className="h-3 w-16" />
+              </div>
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-9 w-52 sm:h-10 sm:w-60" />
+                <Skeleton className="h-5 w-28 rounded-full" />
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {/* horizon select */}
@@ -46,8 +52,9 @@ export default function PlansLoading() {
             <Skeleton className="h-4 w-full" />
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-16 w-full rounded-lg" />
+            {/* A row: name, net worth at the end, its date, the debt-free line */}
+            {Array.from({ length: 2 }).map((_, i) => (
+              <Skeleton key={i} className="h-21 w-full rounded-lg" />
             ))}
           </CardContent>
         </Card>

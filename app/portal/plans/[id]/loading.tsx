@@ -5,9 +5,10 @@ import { PageHeaderSkeleton } from "@/components/skeletons/page-header-skeleton"
 /**
  * Mirrors the PlanEditor silhouette: the compact PageHeader (back link, title,
  * tabs + More) and the Polymarket-style Overview hero — a 3/4 main panel
- * (forecast header with its control cluster + the default Graph view) beside
- * the 1/4 gauge / figures / strategy sidebar (from xl; below it the sidebar
- * cards sit under the panel, two abreast from lg). Matching spacing + breakpoints
+ * (net worth today with its change chip, the view switcher over the horizon
+ * presets, then the default Graph view) beside the 1/4 sidebar: the gauge and
+ * figures card, then the Portfolio card (from xl; below it the sidebar cards
+ * sit under the panel, two abreast from lg). Matching spacing + breakpoints
  * keeps the swap to the real editor a content fill-in, not a layout shift.
  */
 export default function PlanDetailLoading() {
@@ -24,28 +25,20 @@ export default function PlanDetailLoading() {
             xl:h-160 view box) */}
         <Card className="min-w-0 xl:col-span-3 xl:h-160">
           <CardHeader className="gap-3">
-            <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-              {/* KPIs: Today / Next / End */}
-              <div className="flex items-end gap-6">
-                <div className="flex flex-col gap-1.5">
-                  <Skeleton className="h-3 w-16" />
-                  <Skeleton className="h-7 w-28 sm:h-8" />
+            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+              {/* "Today", the figure with its change chip, the owed note */}
+              <div className="flex flex-col gap-1">
+                <Skeleton className="h-3 w-20" />
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-9 w-52 sm:h-10 sm:w-60" />
+                  <Skeleton className="h-5 w-28 rounded-full" />
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <Skeleton className="h-3 w-14" />
-                  <Skeleton className="h-5 w-20" />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Skeleton className="h-3 w-14" />
-                  <Skeleton className="h-5 w-20" />
-                </div>
+                <Skeleton className="h-3 w-36" />
               </div>
-              {/* View switcher, confirm, portfolio, horizon — all h-8 */}
-              <div className="flex flex-wrap items-center gap-2">
+              {/* View switcher over the horizon presets, both h-8 */}
+              <div className="flex flex-col items-end gap-2">
                 <Skeleton className="h-8 w-28 sm:w-56" />
-                <Skeleton className="h-8 w-32" />
-                <Skeleton className="h-8 w-24" />
-                <Skeleton className="h-8 w-44" />
+                <Skeleton className="h-8 w-52" />
               </div>
             </div>
           </CardHeader>
@@ -54,7 +47,7 @@ export default function PlanDetailLoading() {
           </CardContent>
         </Card>
 
-        {/* Sidebar: figures card (gauge + rows, stretches) + debt strategy */}
+        {/* Sidebar: figures card (gauge + rows, stretches) + Portfolio card */}
         <div className="grid min-w-0 items-start gap-3 lg:grid-cols-2 xl:flex xl:min-h-160 xl:flex-col xl:items-stretch xl:gap-4">
           <Card className="xl:flex-1">
             <CardContent className="flex flex-col gap-3">
@@ -63,7 +56,8 @@ export default function PlanDetailLoading() {
                 <Skeleton className="h-3 w-24" />
               </div>
               <div>
-                {Array.from({ length: 4 }).map((_, i) => (
+                {/* Income, expenses, debt, owed to you, surplus */}
+                {Array.from({ length: 5 }).map((_, i) => (
                   <div
                     key={i}
                     className="flex items-center justify-between gap-3 border-t py-2.5"
@@ -75,14 +69,22 @@ export default function PlanDetailLoading() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="gap-3">
             <CardHeader>
-              <Skeleton className="h-3 w-28" />
+              <Skeleton className="h-3 w-20" />
             </CardHeader>
-            <CardContent className="grid gap-1.5">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-13 w-full rounded-md" />
+            <CardContent className="flex flex-col gap-1">
+              {/* Today, in 12 months, then the "Count in net worth" switch */}
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between gap-3 py-0.5">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
               ))}
+              <div className="mt-2 flex items-center justify-between gap-3 border-t pt-3">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-5 w-9 rounded-full" />
+              </div>
             </CardContent>
           </Card>
         </div>

@@ -138,6 +138,8 @@ import type {
 import { closeLabels } from "@/lib/finance/dashboard";
 import { CountUpCurrency } from "./count-up";
 import { DeltaChip } from "./delta-chip";
+import { dashboardSeries, type DashboardSeries } from "./dashboard-finance-series";
+import { SeriesSwatch } from "./series-swatch";
 
 /** Figures for one accounting period, previewed in the sidebar while hovering
  *  a chart point. Health/surplus derive from these, so they're not stored. */
@@ -687,9 +689,9 @@ export function PlanEditor({
                   />
                   <StatRow
                     label="Total debt"
+                    series={dashboardSeries("debt")}
                     value={dTotalDebt}
                     description="What each debt stands at today."
-                    tone={moneySign(dTotalDebt) > 0 ? "negative" : undefined}
                     hint={plan.debts.length === 0 ? undefined : debtFreeLabel}
                     breakdown={
                       <BreakdownList
@@ -705,6 +707,7 @@ export function PlanEditor({
                   {owedToYou > 0 && (
                     <StatRow
                       label="Owed to you"
+                      series={dashboardSeries("receivables")}
                       value={owedToYou}
                       description="Money still to be paid back to you, counted in net worth."
                       breakdown={
@@ -997,7 +1000,10 @@ function PortfolioCard({
     <Card className="gap-3">
       <CardHeader>
         <Eyebrow asChild>
-          <h2>Portfolio</h2>
+          <h2 className="flex items-center gap-1.5">
+            <SeriesSwatch series={dashboardSeries("investments")} />
+            Portfolio
+          </h2>
         </Eyebrow>
       </CardHeader>
       <CardContent className="flex flex-col gap-1">
@@ -1515,7 +1521,8 @@ function ProjectionPanel({
   const forecastHeader = (
     <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
       <div className="flex min-w-0 flex-col gap-1">
-        <Eyebrow size="sm" as="p">
+        <Eyebrow size="sm" as="p" className="flex items-center gap-1.5">
+          <SeriesSwatch series={dashboardSeries("netWorth")} />
           {todayCaption}
         </Eyebrow>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -1800,6 +1807,7 @@ function StrategyPicker({
  */
 function StatRow({
   label,
+  series,
   value,
   tone,
   hint,
@@ -1807,6 +1815,8 @@ function StatRow({
   breakdown,
 }: {
   label: string;
+  /** The chart series this figure reads, whose swatch keys it as on the dashboard. */
+  series?: DashboardSeries;
   value: number;
   tone?: "positive" | "negative";
   /** Optional one-line context shown under the value (e.g. "Debt-free in 8 mo"). */
@@ -1821,7 +1831,10 @@ function StatRow({
 
   const inner = (
     <>
-      <Text variant="small" as="span">{label}</Text>
+      <Text variant="small" as="span" className="flex items-center gap-1.5">
+        {series && <SeriesSwatch series={series} />}
+        {label}
+      </Text>
       <span className="text-right">
         <Mono
           className={cn(

@@ -171,6 +171,18 @@ export function PlansWorkspace({
     };
   }, [plans, timelines]);
 
+  // Each plan's net worth at the end of the chosen horizon — the last month
+  // the chart draws — or at the plan's own end when it stops sooner.
+  const atHorizon = useMemo(() => {
+    const byPlan = new Map<string, { netWorth: number; date: Date }>();
+    for (const plan of plans) {
+      const timeline = timelines[plan.id];
+      const point = timeline?.points[Math.min(timeline.points.length - 1, timeline.todayIndex + Number(range))];
+      if (point) byPlan.set(plan.id, { netWorth: point.netWorth, date: point.date });
+    }
+    return byPlan;
+  }, [plans, timelines, range]);
+
   const filtered = useMemo(
     () =>
       plans
@@ -334,6 +346,7 @@ export function PlansWorkspace({
             <ul className="flex flex-col gap-2">
               {plans.map((plan) => {
                 const s = summaries[plan.id];
+                const end = atHorizon.get(plan.id) ?? null;
                 const inChart = selected.has(plan.id);
                 return (
                   <li
@@ -386,13 +399,16 @@ export function PlansWorkspace({
                             <Mono
                               className={cn(
                                 "text-foreground",
-                                moneySign(s.endingNetWorth) < 0 && NEGATIVE
+                                moneySign(end?.netWorth ?? s.endingNetWorth) < 0 && NEGATIVE
                               )}
                             >
-                              {formatCurrency(s.endingNetWorth)}
+                              {formatCurrency(end?.netWorth ?? s.endingNetWorth)}
                             </Mono>
-                            {/* Dated: each plan ends on its own horizon. */}
-                            {s.endDate && <span>at {END_LABEL.format(s.endDate)}</span>}
+                            {/* Dated: the horizon's last month, or the plan's
+                                own end when it stops sooner. */}
+                            {(end?.date ?? s.endDate) && (
+                              <span>at {END_LABEL.format(end?.date ?? s.endDate!)}</span>
+                            )}
                           </span>
                           {(() => {
                             const status = summaryDebtFree(s);

@@ -25,6 +25,7 @@ import {
   formatSignedPercent,
   moneySign,
 } from "@/lib/utils/format";
+import { formatProjectionMonth } from "@/lib/utils/date";
 import { densify } from "@/lib/finance/table-rows";
 import type { Projection } from "@/types/finance";
 
@@ -43,14 +44,6 @@ function SeriesHead({ series, children }: { series: DashboardSeries; children: R
   );
 }
 
-// Anchor formatting in UTC because the projection generates dates at UTC
-// midnight. Local-timezone formatting would shift a month for users in
-// negative offsets (e.g. May 1 UTC renders as "Apr 30" in UTC-5/6).
-const MONTH_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  year: "2-digit",
-  timeZone: "UTC",
-});
 
 type ProjectionTableProps = {
   projection: Projection;
@@ -318,7 +311,7 @@ export function ProjectionTable({
                       m.monthOffset === currentIndex ? "bg-muted" : "bg-card"
                     )}
                   >
-                    <Mono>{MONTH_FORMATTER.format(m.date)}</Mono>
+                    <Mono>{formatProjectionMonth(m.date)}</Mono>
                     {m.monthOffset === currentIndex && (
                       <span className="sr-only"> (current period, projected close)</span>
                     )}

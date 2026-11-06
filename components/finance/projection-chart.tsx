@@ -38,6 +38,7 @@ import {
   formatSignedCurrency,
   moneySign,
 } from "@/lib/utils/format";
+import { formatProjectionMonth } from "@/lib/utils/date";
 import type { ChartConfig } from "@/types/chart";
 import type { FinancePlan } from "@/types/finance";
 
@@ -78,7 +79,6 @@ function fadeStart(values: readonly (number | null | undefined)[], top: number, 
 // Format projection dates in UTC — the projection generates months at UTC
 // midnight, so any local timezone with a negative offset would shift the
 // formatted month back a day and show e.g. "Apr" for a "May 2026" bucket.
-const MONTH_PART = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
 const LONG_MONTH = new Intl.DateTimeFormat("en-US", {
   month: "long",
   year: "numeric",
@@ -86,13 +86,8 @@ const LONG_MONTH = new Intl.DateTimeFormat("en-US", {
 });
 const TODAY_DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
-/**
- * Axis month: "Nov ’26". Without the apostrophe "Nov 26" read as the 26th of
- * November, which put today's split three weeks out.
- */
-const MONTH_FORMATTER = {
-  format: (d: Date): string => `${MONTH_PART.format(d)} ’${String(d.getUTCFullYear()).slice(-2)}`,
-};
+/** Axis month: "Nov ’26" (see `formatProjectionMonth`). */
+const MONTH_FORMATTER = { format: formatProjectionMonth };
 
 
 // Stable chart config — the line stroke is overridden per-plan inside the

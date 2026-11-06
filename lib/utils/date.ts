@@ -129,6 +129,16 @@ export function formatMonth(value: DateInput): string {
   return MONTH.format(toDay(value));
 }
 
+const UTC_MONTH = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
+
+/**
+ * "Nov ’26": a projection month (a UTC-midnight date), with the year marked.
+ * Written "Nov 26" it read as the 26th of November.
+ */
+export function formatProjectionMonth(date: Date): string {
+  return `${UTC_MONTH.format(date)} ’${String(date.getUTCFullYear()).slice(-2)}`;
+}
+
 /** "September 2026" */
 export function formatMonthLong(value: DateInput): string {
   return MONTH_LONG.format(toDay(value));

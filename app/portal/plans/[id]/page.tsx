@@ -27,11 +27,13 @@ import {
 import { getUserPortfolio } from "@/lib/services/portfolio-service";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { todayInTimeZone } from "@/lib/utils/date";
+import { parsePlanView } from "@/lib/finance/plan-view";
 
 export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ view?: string | string[] }>;
 };
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -45,8 +47,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default async function PlanDetailPage({ params }: PageProps) {
-  const { id } = await params;
+export default async function PlanDetailPage({ params, searchParams }: PageProps) {
+  const [{ id }, { view: viewParam }] = await Promise.all([params, searchParams]);
   if (!idSchema.safeParse(id).success) notFound();
   const ctx = await requireEffectiveContext();
   const plan = await getPlanWithLines(id, ctx.effectiveUserId);
@@ -170,6 +172,7 @@ export default async function PlanDetailPage({ params }: PageProps) {
         backHref="/portal/plans"
         confirmationDue={confirmationDue}
         lastConfirmedDay={lastConfirmedDay}
+        initialView={parsePlanView(viewParam)}
       />
     </section>
   );

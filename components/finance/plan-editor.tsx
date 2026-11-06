@@ -115,6 +115,12 @@ import { cn } from "@/lib/utils";
 import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
 import { periodIndexForDate, periodRangeFor } from "@/lib/finance/period";
 import {
+  DEFAULT_PLAN_VIEW,
+  PLAN_VIEWS,
+  hrefWithPlanView,
+  type PlanView,
+} from "@/lib/finance/plan-view";
+import {
   alignTodayPoint,
   buildChartSeries,
   describeDebtFree,
@@ -250,6 +256,8 @@ type PlanEditorProps = {
   confirmationDue?: boolean;
   /** The user's last own confirmation (YYYY-MM-DD): net worth's change is from there. */
   lastConfirmedDay?: string | null;
+  /** The Overview view the page opens on, read from `?view=`. */
+  initialView?: PlanView;
 };
 
 export function PlanEditor({
@@ -272,6 +280,7 @@ export function PlanEditor({
   now,
   confirmationDue = false,
   lastConfirmedDay = null,
+  initialView = DEFAULT_PLAN_VIEW,
 }: PlanEditorProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -616,6 +625,7 @@ export function PlanEditor({
           onConfirmToday={plan.isMain ? openConfirmation : undefined}
           confirmationDue={plan.isMain && confirmationDue}
           lastConfirmedDay={lastConfirmedDay}
+          initialView={initialView}
           onOpenSetup={() => setTab("setup")}
           now={now}
           calendar={
@@ -1200,6 +1210,7 @@ type ProjectionPanelProps = {
   lastConfirmedDay?: string | null;
   /** The server's clock for this render — see PlanEditorProps. */
   now: Date;
+  initialView: PlanView;
   /** Opens the Setup tab — the empty chart's call to action. */
   onOpenSetup?: () => void;
 };
@@ -1236,9 +1247,6 @@ const HORIZON_PRESETS: ReadonlyArray<{ months: number; label: string }> = [
   { months: 120, label: "10 yr" },
 ];
 
-// The three views the Overview switcher alternates between (order = swipe order).
-const PLAN_VIEWS = ["chart", "table", "calendar"] as const;
-type PlanView = (typeof PLAN_VIEWS)[number];
 const PLAN_VIEW_LABEL: Record<PlanView, string> = {
   chart: "Graph",
   table: "Table",
@@ -1375,6 +1383,7 @@ function ProjectionPanel({
   confirmationDue = false,
   lastConfirmedDay = null,
   now,
+  initialView,
   onOpenSetup,
 }: ProjectionPanelProps) {
   // No income, expense or debt: the "projection" is a flat line at the
@@ -1387,12 +1396,15 @@ function ProjectionPanel({
   // device) sits at the BOTTOM, Polymarket-style; horizontal swipe on touch
   // changes view too. A plain fade on switch — no horizontal slide, so nothing
   // clips the active view's card.
-  const [view, setView] = useState<PlanView>("chart");
+  const [view, setView] = useState<PlanView>(initialView);
   const goView = (next: PlanView) => {
     // Leaving the chart view unmounts it mid-hover — drop any active preview
     // so the sidebar doesn't stay stuck on a hovered period.
     onSelectPeriod?.(null, null);
     setView(next);
+    // Kept in the address so a reload reopens it. The History API, not the
+    // router: a router navigation would re-render this dynamic page on the server.
+    window.history.replaceState(null, "", hrefWithPlanView(window.location.href, next));
   };
   const swipe = useSwitcherSwipe(view, goView);
 

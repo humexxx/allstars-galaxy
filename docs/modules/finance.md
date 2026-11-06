@@ -1,7 +1,7 @@
 # Finance
 
 > **Status:** Active
-> **Last reviewed:** 2026-11-05
+> **Last reviewed:** 2026-11-06
 
 ## Overview
 Personal financial planning: users build *plans* (scenarios) with incomes,
@@ -11,7 +11,7 @@ calibrated. Health scoring and scenario comparison are part of this module.
 ## Routes
 - `/portal/plans` — list of plans
 - `/portal/plans/new` — create plan
-- `/portal/plans/[id]` — plan detail + editor
+- `/portal/plans/[id]` — plan detail + editor; `?view=table` / `?view=calendar` opens that Overview view (the switcher keeps it in the address via `history.replaceState`, so a reload stays put — `lib/finance/plan-view.ts`)
 - `/portal/plans/compare` — side-by-side scenario comparison
 - `/api/plans/assistant` — the plans assistant's chat, `POST`, streamed as NDJSON (`PlansAssistantEvent` per line); admins with `ANTHROPIC_API_KEY` only (`canUseAssistant`)
 

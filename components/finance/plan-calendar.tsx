@@ -9,13 +9,9 @@ import {
   useTransition,
 } from "react";
 import {
-  addMonths,
   eachDayOfInterval,
-  endOfMonth,
   endOfWeek,
-  isSameMonth,
   isToday,
-  startOfMonth,
   startOfWeek,
 } from "date-fns";
 import {
@@ -47,7 +43,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Tooltip,
   TooltipContent,
@@ -400,9 +395,8 @@ export function PlanCalendar({
   onUpsertOverride,
   onDeleteOverride,
 }: PlanCalendarProps) {
-  // Open on the current month — that's the most actionable view ("what's
-  // happening this month?"). The "Plan start" button still jumps back to the
-  // plan's beginning when the user needs the long view.
+  // Open on the current period — the most actionable view ("what's happening
+  // this month?").
   // The cursor is a DAY inside the period to show. It used to be the 1st of the
   // month, which with an anchor day > 1 always belongs to the PREVIOUS period —
   // the calendar opened one period back and "Today" led there too.
@@ -410,40 +404,31 @@ export function PlanCalendar({
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }, []);
-  const planStartMonth = useMemo(() => {
-    const d = new Date(plan.startMonth);
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-  }, [plan.startMonth]);
-
   const [cursor, setCursor] = useState<Date>(todayMonth);
-  const [viewMode, setViewMode] = useState<"anchored" | "month">("anchored");
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
 
-  // Period anchor day. 0 (feature disabled) collapses to day=1 — equivalent
-  // to calendar months, which is the "Month" view anyway.
+  // Period anchor day. 0 (feature disabled) collapses to day=1 — calendar
+  // months.
   const anchorDay =
     plan.confirmationDayOfMonth > 0 ? plan.confirmationDayOfMonth : 1;
 
-  // Resolved "what to display": either a confirmation-day-anchored period
-  // (day N → day N-1 of next month) or the cursor's calendar month.
+  // The confirmation-day-anchored period on screen (day N → day N-1 of next
+  // month).
   // `periodRangeFor` works in UTC; everything below (the week grid and
   // the muted test) works in LOCAL days. Convert once here, or a
   // negative-offset zone shifts the whole period a day early and the period's
   // last day renders greyed out.
   const currentRange = useMemo<Period>(() => {
-    if (viewMode === "anchored") {
-      const r = periodRangeFor(
-        new Date(
-          Date.UTC(cursor.getFullYear(), cursor.getMonth(), cursor.getDate())
-        ),
-        anchorDay
-      );
-      return { start: utcToLocalDay(r.start), end: utcToLocalDay(r.end) };
-    }
-    return { start: startOfMonth(cursor), end: endOfMonth(cursor) };
-  }, [viewMode, cursor, anchorDay]);
+    const r = periodRangeFor(
+      new Date(
+        Date.UTC(cursor.getFullYear(), cursor.getMonth(), cursor.getDate())
+      ),
+      anchorDay
+    );
+    return { start: utcToLocalDay(r.start), end: utcToLocalDay(r.end) };
+  }, [cursor, anchorDay]);
 
   // Optimistic snapshot — every operation that touches the plan applies its
   // change here first, so chips jump to the new position the moment the user
@@ -488,10 +473,7 @@ export function PlanCalendar({
     [days, optimisticPlan, debtPayments]
   );
 
-  const monthLabel =
-    viewMode === "anchored"
-      ? formatDayRange(currentRange.start, currentRange.end)
-      : formatMonthLong(cursor);
+  const monthLabel = formatDayRange(currentRange.start, currentRange.end);
 
   // The save failures propagate: the dialog stays open, and the caller has
   // already toasted.
@@ -870,17 +852,11 @@ export function PlanCalendar({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={
-                viewMode === "anchored" ? "Previous period" : "Previous month"
-              }
+              aria-label="Previous period"
               onClick={() => {
-                if (viewMode === "anchored") {
-                  const prevDay = new Date(currentRange.start);
-                  prevDay.setUTCDate(prevDay.getUTCDate() - 1);
-                  setCursor(prevDay);
-                } else {
-                  setCursor((c) => addMonths(c, -1));
-                }
+                const prevDay = new Date(currentRange.start);
+                prevDay.setUTCDate(prevDay.getUTCDate() - 1);
+                setCursor(prevDay);
               }}
             >
               <ChevronLeft />
@@ -896,48 +872,23 @@ export function PlanCalendar({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={
-                viewMode === "anchored" ? "Next period" : "Next month"
-              }
+              aria-label="Next period"
               onClick={() => {
-                if (viewMode === "anchored") {
-                  const nextDay = new Date(currentRange.end);
-                  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-                  setCursor(nextDay);
-                } else {
-                  setCursor((c) => addMonths(c, 1));
-                }
+                const nextDay = new Date(currentRange.end);
+                nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+                setCursor(nextDay);
               }}
             >
               <ChevronRight />
             </Button>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <ToggleGroup
-              type="single"
-              size="sm"
-              value={viewMode}
-              onValueChange={(v) => v && setViewMode(v as "anchored" | "month")}
-              aria-label="Calendar view mode"
-            >
-              <ToggleGroupItem value="anchored">Anchored</ToggleGroupItem>
-              <ToggleGroupItem value="month">Month</ToggleGroupItem>
-            </ToggleGroup>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCursor(planStartMonth)}
-            >
-              Plan start
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCursor(todayMonth)}
-            >
-              Today
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCursor(todayMonth)}
+          >
+            Today
+          </Button>
         </div>
 
         <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
@@ -979,12 +930,7 @@ export function PlanCalendar({
           {days.map((day) => {
             const key = toISODate(day);
             const entries = dayMap.get(key) ?? NO_ENTRIES;
-            // In anchored mode, "muted" means outside the current period.
-            // In month mode it falls back to outside the cursor's month.
-            const muted =
-              viewMode === "anchored"
-                ? day < currentRange.start || day > currentRange.end
-                : !isSameMonth(day, cursor);
+            const muted = day < currentRange.start || day > currentRange.end;
             // Highlight the configured confirmation day in each rendered
             // calendar month — clamped to month-end so day-31 in February
             // shows on Feb 28/29.

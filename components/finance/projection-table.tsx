@@ -28,6 +28,21 @@ import {
 import { densify } from "@/lib/finance/table-rows";
 import type { Projection } from "@/types/finance";
 
+import { dashboardSeries, type DashboardSeries } from "./dashboard-finance-series";
+import { SeriesSwatch } from "./series-swatch";
+
+/** A column heading keyed with its chart series, as the dashboard keys its figures. */
+function SeriesHead({ series, children }: { series: DashboardSeries; children: React.ReactNode }): React.ReactElement {
+  return (
+    <TableHead className="text-right">
+      <span className="inline-flex items-center gap-1.5">
+        <SeriesSwatch series={series} />
+        {children}
+      </span>
+    </TableHead>
+  );
+}
+
 // Anchor formatting in UTC because the projection generates dates at UTC
 // midnight. Local-timezone formatting would shift a month for users in
 // negative offsets (e.g. May 1 UTC renders as "Apr 30" in UTC-5/6).
@@ -279,10 +294,10 @@ export function ProjectionTable({
                     </TooltipContent>
                   </Tooltip>
                 </TableHead>
-                <TableHead className="text-right">Savings</TableHead>
-                {hasInvestments && <TableHead className="text-right">Investments</TableHead>}
-                <TableHead className="text-right">Total debt</TableHead>
-                <TableHead className="text-right">Net worth</TableHead>
+                <SeriesHead series={dashboardSeries("savings")}>Savings</SeriesHead>
+                {hasInvestments && <SeriesHead series={dashboardSeries("investments")}>Investments</SeriesHead>}
+                <SeriesHead series={dashboardSeries("debt")}>Total debt</SeriesHead>
+                <SeriesHead series={dashboardSeries("netWorth")}>Net worth</SeriesHead>
               </TableRow>
             </TableHeader>
             <TableBody>

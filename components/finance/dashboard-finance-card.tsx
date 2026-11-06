@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 
 import { CountUpCurrency } from "./count-up";
 import { DeltaChip } from "./delta-chip";
+import { SeriesSwatch } from "./series-swatch";
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
 import { drawDelay } from "./dashboard-motion";
 import {
@@ -217,11 +218,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
           <div className="flex flex-col gap-6">
             <div className="flex min-w-0 flex-col gap-1">
               <Eyebrow size="sm" as="div" className="flex items-center gap-1.5">
-                <span
-                  aria-hidden="true"
-                  className="h-0.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: dashboardSeries("netWorth").color }}
-                />
+                <SeriesSwatch series={dashboardSeries("netWorth")} />
                 Net worth
               </Eyebrow>
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -317,14 +314,7 @@ function FigureItem({ figure }: { figure: Figure }) {
     >
       <Eyebrow size="sm" asChild>
         <dt className="flex items-center gap-1.5">
-          <span
-            aria-hidden="true"
-            className={cn(
-              "shrink-0",
-              series.mark === "line" ? "h-0.5 w-2.5 rounded-full" : "size-2 rounded-xs"
-            )}
-            style={{ backgroundColor: series.color }}
-          />
+          <SeriesSwatch series={series} />
           {href ? (
             // A stretched link: the whole figure is the target, and the
             // description list keeps its dt/dd structure.

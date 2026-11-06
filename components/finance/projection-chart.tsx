@@ -817,6 +817,19 @@ function ComparePlansTooltip(props: {
             />
           );
         })}
+        {seriesByPlan.map(({ plan, key }) => {
+          const debt = Number(row[`${key}DebtPast`] ?? row[`${key}DebtFuture`] ?? 0);
+          if (!(debt > 0)) return null;
+          return (
+            <TooltipRow
+              key={`${key}Debt`}
+              swatch={DEBT}
+              label={seriesByPlan.length > 1 ? `Debt · ${plan.name}` : "Debt"}
+              value={formatMoneyFull(debt)}
+              valueClass="text-destructive"
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -877,7 +890,7 @@ export function ComparePlansChart({
 
   // Every derived table below is O(periods × plans) and the parents re-render
   // on each focus change and metric switch, so it is computed once per input.
-  const { seriesByPlan, boundary, data, compareConfig, yAxisWidth, rowMonths } = useMemo(() => {
+  const { seriesByPlan, boundary, data, compareConfig, yAxisWidth, rowMonths, hasDebt, pastKey } = useMemo(() => {
     if (series.length === 0) {
       return {
         seriesByPlan: [],
@@ -886,6 +899,8 @@ export function ComparePlansChart({
         compareConfig: {},
         yAxisWidth: 32,
         rowMonths: [] as Date[],
+        hasDebt: false,
+        pastKey: "",
       };
     }
     // Stable, CSS-safe series keys (series0, series1, …) rather than raw UUIDs.
@@ -907,6 +922,25 @@ export function ComparePlansChart({
     // the main plan draws it; the others branch off at today. With no main
     // among them, the first plan draws it.
     const pastKey = (seriesByPlan.find(({ plan }) => plan.isMain) ?? seriesByPlan[0]).key;
+
+    // Beside net worth, each plan's debt, as on a plan's own page: what is
+    // still owed, falling to zero. A paid-off debt draws its last $0 beside the
+    // payment that cleared it and stops. Same window, so the rows line up.
+    const debtRows =
+      metric === "netWorth"
+        ? buildCompareRows(
+            series.map((s, i) => ({ key: `series${i}`, timeline: s.timeline })),
+            "totalDebt",
+            today,
+            months,
+            pastMonths
+          ).rows
+        : [];
+    const owed = (i: number, key: string): boolean => (debtRows[i]?.values[key] ?? 0) > 0;
+    const debtAt = (i: number, key: string): number | null =>
+      owed(i, key) || owed(i - 1, key) || owed(i + 1, key) ? debtRows[i]?.values[key] ?? null : null;
+    const hasDebt = debtRows.some((_, i) => seriesByPlan.some(({ key }) => owed(i, key)));
+
     const data = rows.map((r, i) => {
       const row: Record<string, string | number | null> = {
         month: MONTH_FORMATTER.format(r.month),
@@ -921,6 +955,11 @@ export function ComparePlansChart({
         const past = boundary < 0 || i === boundary || (i < boundary && key === pastKey);
         row[`${key}Past`] = past ? value : null;
         row[`${key}Future`] = boundary >= 0 && i >= boundary ? value : null;
+        if (hasDebt) {
+          const debt = debtAt(i, key);
+          row[`${key}DebtPast`] = past ? debt : null;
+          row[`${key}DebtFuture`] = boundary >= 0 && i >= boundary ? debt : null;
+        }
       }
       return row;
     });
@@ -932,16 +971,18 @@ export function ComparePlansChart({
       const entry = { label: plan.name, color: plan.color };
       acc[`${key}Past`] = entry;
       acc[`${key}Future`] = entry;
+      acc[`${key}DebtPast`] = { label: "Debt", color: DEBT };
       return acc;
     }, {} as ChartConfig);
 
     // Sized to the widest tick actually drawn (see `yAxisWidthFor`).
     const yAxisWidth = yAxisWidthFor(
       data.flatMap((row) =>
-        seriesByPlan.map(({ key }) => {
-          const v = row[`${key}Past`] ?? row[`${key}Future`];
-          return v == null ? null : Number(v);
-        })
+        seriesByPlan.flatMap(({ key }) =>
+          [row[`${key}Past`] ?? row[`${key}Future`], row[`${key}DebtPast`] ?? row[`${key}DebtFuture`]].map((v) =>
+            v == null ? null : Number(v)
+          )
+        )
       )
     );
 
@@ -952,6 +993,8 @@ export function ComparePlansChart({
       compareConfig,
       yAxisWidth,
       rowMonths: rows.map((r) => r.month),
+      hasDebt,
+      pastKey,
     };
   }, [series, metric, today, months, pastMonths]);
 
@@ -1006,14 +1049,40 @@ export function ComparePlansChart({
             render order, which we re-sort so the focused line paints on top —
             so the legend would reshuffle every time the pointer moved. */}
         <ChartLegend
-          payload={seriesByPlan.map(({ plan, key }) => ({
-            dataKey: `${key}Past`,
-            value: plan.name,
-            type: "line" as const,
-            color: plan.color,
-          }))}
+          payload={[
+            ...seriesByPlan.map(({ plan, key }) => ({
+              dataKey: `${key}Past`,
+              value: plan.name,
+              type: "line" as const,
+              color: plan.color,
+            })),
+            ...(hasDebt
+              ? [{ dataKey: `${pastKey}DebtPast`, value: "Debt", type: "line" as const, color: DEBT }]
+              : []),
+          ]}
           content={<ChartLegendContent className={legendClassName} />}
         />
+        {/* Debt underneath net worth: red as everywhere, thinner, dimmed with
+            its plan. */}
+        {hasDebt &&
+          seriesByPlan.flatMap(({ plan, key }) => {
+            const dimmed = focusedPlanId !== null && plan.id !== focusedPlanId;
+            const shared = {
+              type: "monotone" as const,
+              stroke: DEBT,
+              strokeWidth: 1.5,
+              strokeOpacity: dimmed ? 0.22 : 0.85,
+              dot: false as const,
+              activeDot: false as const,
+              isAnimationActive: false,
+              connectNulls: false,
+              legendType: "none" as const,
+            };
+            return [
+              <Line key={`${key}DebtPast`} dataKey={`${key}DebtPast`} {...shared} />,
+              <Line key={`${key}DebtFuture`} dataKey={`${key}DebtFuture`} strokeDasharray="6 4" {...shared} />,
+            ];
+          })}
         {/* Recharts paints children in order, so the focused series has to go
             last or the dimmed lines draw over the one we're highlighting. */}
         {[...seriesByPlan]

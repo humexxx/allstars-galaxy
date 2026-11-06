@@ -111,7 +111,7 @@ export const createFinancePlanSchema = z.object({
     .max(120, "At most 120 months (10 years)."),
   initialSavings: openingSavings.default("0"),
   monthlySavingsRate: monthlyRate.default("0"),
-  includePortfolio: z.boolean().default(false),
+  includePortfolio: z.boolean().default(true),
   surplusToDebtsPercent: share.default("0"),
   debtStrategy: z.enum(DEBT_STRATEGIES).default("avalanche"),
   autoInvestPercent: share.default("0"),

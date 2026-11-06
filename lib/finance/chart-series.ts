@@ -11,6 +11,8 @@ export type PlanHistoryPoint = {
   investments: number;
   totalDebt: number;
   receivables?: number;
+  /** The portfolio inside `netWorth`; absent on snapshots older than 0062. */
+  portfolioValue?: number | null;
   netWorth: number;
 };
 
@@ -29,6 +31,8 @@ export type ChartPoint = {
   investments?: number;
   /** Owed to the user, inside `netWorth`; the dashboard draws it apart. */
   receivables?: number;
+  /** The portfolio inside `netWorth`, when it was recorded. */
+  portfolioValue?: number | null;
 };
 
 function effAnchor(anchorDay: number): number {
@@ -71,6 +75,7 @@ export function historyToClosePoints(
         totalDebt: h.totalDebt,
         investments: h.investments,
         receivables: h.receivables,
+        portfolioValue: h.portfolioValue ?? null,
       },
     });
   }
@@ -121,6 +126,7 @@ export function buildPlanTimeline(
     totalDebt: m.totalDebt,
     investments: m.investments,
     receivables: m.receivables,
+    portfolioValue: m.portfolioValue,
   });
 
   let past = historyToClosePoints(history, a).filter((p) => isPast(p.date));
@@ -294,11 +300,15 @@ export function mapPortfolioValues(
   const a = effAnchor(anchorDay);
   return points.map((p, i) => {
     if (i < pastCount) {
+      // What the snapshot recorded, else the portfolio's own history, else
+      // nothing yet: drawn from $0 where the other series start, rather than
+      // the line appearing out of nowhere at today.
+      if (p.portfolioValue != null) return p.portfolioValue;
       let latest: number | null = null;
       for (const h of history) {
         if (periodIndexForDate(h.date, a, p.date) === 0) latest = h.value;
       }
-      return latest;
+      return latest ?? 0;
     }
     const m = projection.months.find((pm) => periodIndexForDate(pm.date, a, p.date) === 0);
     return m ? m.portfolioValue : null;

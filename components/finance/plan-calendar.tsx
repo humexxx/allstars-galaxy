@@ -1434,7 +1434,9 @@ const CalendarCell = memo(function CalendarCell({
 }: CalendarCellProps) {
   // Collapsed view shows up to 3 entries + overflow indicator. Expanded view
   // shows every entry inside a scroll container.
-  const visible = isExpanded ? entries : entries.slice(0, 3);
+  // Two chips before "+N more": with three, every week stood 140px tall and
+  // the month ran far past the chart's height.
+  const visible = isExpanded ? entries : entries.slice(0, 2);
   const extra = isExpanded ? 0 : entries.length - visible.length;
   const dayLabel = formatDay(day);
 
@@ -1477,11 +1479,11 @@ const CalendarCell = memo(function CalendarCell({
         isAnchor && !muted && "border-warning/60 bg-warning/10",
         // Ring only: the cell's own border already draws the edge.
         isDragOver && "bg-primary/5 ring-1 ring-primary/50",
-        isExpanded ? "min-h-80" : "min-h-16 @2xl/cal:min-h-35"
+        isExpanded ? "min-h-80" : "min-h-14 @2xl/cal:min-h-24"
       )}
       data-date={isoKey}
     >
-      <div className="mb-1 flex items-center justify-between">
+      <div className="mb-0.5 flex items-center justify-between">
         {/* Today's date number lives inside a filled pill (Google / Apple
             calendar pattern) so it pops out from a quick scan. Other days
             stay as flat numerals. Colour is not the only signal: the markers

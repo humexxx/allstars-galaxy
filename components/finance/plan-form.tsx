@@ -116,7 +116,7 @@ export function PlanForm({
 }: PlanFormProps): React.ReactElement {
   const router = useRouter();
   const [includePortfolio, setIncludePortfolio] = useState(
-    plan?.includePortfolio ?? false
+    plan?.includePortfolio ?? true
   );
   const [color, setColor] = useState(plan?.color ?? COLORS[0]);
 

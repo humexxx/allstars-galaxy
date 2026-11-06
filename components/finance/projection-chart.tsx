@@ -1,8 +1,10 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
   LineChart,
   ReferenceLine,
@@ -399,6 +401,9 @@ export const ProjectionChart = memo(function ProjectionChart({
   // colour (its identity among plans) is for the list and compare charts.
   const lineColor = color || NET_WORTH;
   const reducedMotion = usePrefersReducedMotion();
+  // Gradient ids, unique per chart: two charts on a page must not share them.
+  const gradientId = useId().replace(/:/g, "");
+  const fillOf = (series: "net" | "portfolio" | "debt"): string => `url(#${gradientId}-${series})`;
 
   // Build the per-point split between past (solid) and future (dashed). We use
   // a numeric x-axis (each row's `idx` is its x coordinate) so milestone
@@ -560,7 +565,7 @@ export const ProjectionChart = memo(function ProjectionChart({
         </p>
       )}
       <ChartContainer config={config} className={cn(heightClass, "w-full")}>
-        <LineChart
+        <ComposedChart
           accessibilityLayer
           data={data}
           margin={CHART_MARGIN}
@@ -586,6 +591,21 @@ export const ProjectionChart = memo(function ProjectionChart({
             }
           }}
         >
+          {/* Each area fades from its colour to nothing at the baseline. */}
+          <defs>
+            {(
+              [
+                ["net", lineColor, 0.28],
+                ["portfolio", PORTFOLIO, 0.18],
+                ["debt", DEBT, 0.16],
+              ] as const
+            ).map(([key, colour, opacity]) => (
+              <linearGradient key={key} id={`${gradientId}-${key}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={colour} stopOpacity={opacity} />
+                <stop offset="100%" stopColor={colour} stopOpacity={0} />
+              </linearGradient>
+            ))}
+          </defs>
           {/* Horizontal-only grid (vertical={false}) matches the shadcn
               Line-Label example — the vertical milestone markers below carry
               the x-axis storytelling, so we don't double up. */}
@@ -664,12 +684,13 @@ export const ProjectionChart = memo(function ProjectionChart({
               net worth is the (growing) portfolio. Solid past, dashed future,
               same convention as the net-worth line. */}
           {portfolioValues && (
-            <Line
+            <Area
               dataKey="portfolioPast"
               name="Portfolio"
               type="monotone"
               stroke={PORTFOLIO}
               strokeWidth={1.5}
+              fill={fillOf("portfolio")}
               {...draw("past", 0)}
               connectNulls
               dot={false}
@@ -677,13 +698,14 @@ export const ProjectionChart = memo(function ProjectionChart({
             />
           )}
           {portfolioValues && (
-            <Line
+            <Area
               dataKey="portfolioFuture"
               name="Portfolio"
               type="monotone"
               stroke={PORTFOLIO}
               strokeWidth={1.5}
               strokeDasharray="6 4"
+              fill={fillOf("portfolio")}
               {...draw("future", 0)}
               connectNulls
               dot={false}
@@ -694,12 +716,13 @@ export const ProjectionChart = memo(function ProjectionChart({
           {/* Debt — red, solid past and dashed projection, so the fall to
               zero is the payoff. */}
           {hasDebt && (
-            <Line
+            <Area
               dataKey="debtPast"
               name="Debt"
               type="monotone"
               stroke={DEBT}
               strokeWidth={1.5}
+              fill={fillOf("debt")}
               {...draw("past", STAGGER_MS)}
               connectNulls={false}
               dot={false}
@@ -707,13 +730,14 @@ export const ProjectionChart = memo(function ProjectionChart({
             />
           )}
           {hasDebt && (
-            <Line
+            <Area
               dataKey="debtFuture"
               name="Debt"
               type="monotone"
               stroke={DEBT}
               strokeWidth={1.5}
               strokeDasharray="6 4"
+              fill={fillOf("debt")}
               {...draw("future", STAGGER_MS)}
               connectNulls={false}
               dot={false}
@@ -724,12 +748,13 @@ export const ProjectionChart = memo(function ProjectionChart({
           {/* Past — solid line + filled dots. The boundary point (today) renders
               a pulsing marker. Labels are reserved for milestone crossings above,
               so the dots stay clean. */}
-          <Line
+          <Area
             dataKey="pastValue"
             name="Net worth"
             type="monotone"
             stroke={lineColor}
             strokeWidth={2}
+            fill={fillOf("net")}
             {...draw("past", lineBegin)}
             connectNulls={false}
             dot={renderDot(false)}
@@ -738,19 +763,20 @@ export const ProjectionChart = memo(function ProjectionChart({
 
           {/* Future — dashed, same colour so the line still reads as one trend.
               Skips a dot at the boundary so the past series' pulse stands alone. */}
-          <Line
+          <Area
             dataKey="futureValue"
             name="Net worth"
             type="monotone"
             stroke={lineColor}
             strokeWidth={2}
             strokeDasharray="6 4"
+            fill={fillOf("net")}
             {...draw("future", lineBegin)}
             connectNulls={false}
             dot={renderDot(true)}
             activeDot={{ r: 6 }}
           />
-        </LineChart>
+        </ComposedChart>
       </ChartContainer>
     </div>
   );

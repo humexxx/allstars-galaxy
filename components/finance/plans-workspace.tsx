@@ -239,12 +239,14 @@ export function PlansWorkspace({
               Projection comparison
             </CardTitle>
             <div className="flex min-w-0 flex-col gap-1">
-              <div className="flex min-w-0 items-center gap-2">
+              {/* Fixed height: the focused plan's badge is taller than the
+                  eyebrow, and appearing on hover it pushed the figure down. */}
+              <div className="flex h-5 min-w-0 items-center gap-2">
                 <Eyebrow size="sm" as="div">
                   Net worth
                 </Eyebrow>
                 {focusedPlan && (
-                  <Badge variant="outline" className="min-w-0 text-muted-foreground">
+                  <Badge variant="outline" className="h-5 min-w-0 py-0 text-muted-foreground">
                     <span
                       className="size-2 shrink-0 rounded-full"
                       style={{ backgroundColor: focusedPlan.color }}

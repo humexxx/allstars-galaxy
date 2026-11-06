@@ -14,6 +14,7 @@ import {
   MoreHorizontal,
   Star,
   Table2,
+  TriangleAlert,
   Unlink,
   Zap,
 } from "lucide-react";
@@ -44,6 +45,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { statToneClass } from "@/components/ui/stat-card";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 
 import { useRegisterDevTool } from "@/components/dev-tools/dev-tools-context";
@@ -121,6 +124,8 @@ import {
   type PlanHistoryPoint,
 } from "@/lib/finance/chart-series";
 import { planOccurrences } from "@/lib/finance/schedule";
+import { planStartDate } from "@/lib/finance/projection";
+import { owedAfter, owedRepayments } from "@/lib/finance/receivables";
 import { compareScenario } from "@/lib/finance/scenario";
 import type {
   DebtStrategy,
@@ -130,8 +135,9 @@ import type {
   StrategyComparison,
   TodayState,
 } from "@/types/finance";
+import { closeLabels } from "@/lib/finance/dashboard";
 import { CountUpCurrency } from "./count-up";
-import { STAGGER_MS } from "./dashboard-motion";
+import { DeltaChip } from "./delta-chip";
 
 /** Figures for one accounting period, previewed in the sidebar while hovering
  *  a chart point. Health/surplus derive from these, so they're not stored. */
@@ -237,6 +243,8 @@ type PlanEditorProps = {
   /** The reader's calendar day (UTC midnight), resolved on the server in their
    *  time zone. Everything "today" derives from it. */
   now: Date;
+  /** The main plan's current period has no confirmation yet. */
+  confirmationDue?: boolean;
 };
 
 export function PlanEditor({
@@ -257,6 +265,7 @@ export function PlanEditor({
   description,
   backHref,
   now,
+  confirmationDue = false,
 }: PlanEditorProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -391,6 +400,19 @@ export function PlanEditor({
     name: d.name,
     balance: d.balance,
   }));
+  // What is still owed to the user today, by line.
+  const owedToYou = todayState?.receivables ?? 0;
+  const owedItems = baseline.incomes
+    .filter((l) => l.owedToMe)
+    .map((l) => ({
+      name: l.name,
+      amount: owedAfter(
+        owedRepayments({ startMonth: new Date(baseline.startMonth), incomes: [l], overrides: baseline.overrides }, planStartDate(baseline)),
+        now
+      ),
+      hint: l.kind === "one_time" ? (l.date ?? undefined) : l.endDate ? `until ${l.endDate}` : undefined,
+    }))
+    .filter((i) => i.amount > 0);
   const debtFreeLabel = formatDebtFree(
     describeDebtFree(projection, effectiveAnchorDay, now)
   );
@@ -557,11 +579,11 @@ export function PlanEditor({
           ghost={ghost}
           portfolioHistory={portfolioHistory}
           portfolioEnabled={plan.includePortfolio}
-          onTogglePortfolio={handleTogglePortfolio}
           onHoverFigures={setHoverFigures}
           milestones={milestones}
           // Only the main plan records reality; a what-if reads its past.
           onConfirmToday={plan.isMain ? openConfirmation : undefined}
+          confirmationDue={plan.isMain && confirmationDue}
           onOpenSetup={() => setTab("setup")}
           now={now}
           calendar={
@@ -639,7 +661,6 @@ export function PlanEditor({
                   <StatRow
                     label={incomeLabel}
                     value={dIncome}
-                    tone={moneySign(dIncome) > 0 ? "positive" : undefined}
                     description="Every income landing in the current period."
                     breakdown={
                       <BreakdownList
@@ -681,17 +702,21 @@ export function PlanEditor({
                       />
                     }
                   />
+                  {owedToYou > 0 && (
+                    <StatRow
+                      label="Owed to you"
+                      value={owedToYou}
+                      description="Money still to be paid back to you, counted in net worth."
+                      breakdown={
+                        <BreakdownList items={owedItems} emptyLabel="Nothing owed to you" total={owedToYou} />
+                      }
+                    />
+                  )}
                   <StatRow
                     label="Surplus"
                     value={dSurplus}
                     description="Income less fixed obligations, and where the rest goes."
-                    tone={
-                      moneySign(dSurplus) > 0
-                        ? "positive"
-                        : moneySign(dSurplus) < 0
-                          ? "negative"
-                          : undefined
-                    }
+                    tone={moneySign(dSurplus) < 0 ? "negative" : undefined}
                     hint={moneySign(dSurplus) < 0 ? "Spends more than it earns" : undefined}
                     breakdown={
                       <SurplusBreakdown
@@ -717,31 +742,12 @@ export function PlanEditor({
                 today={now}
               />
             )}
-            {debtComparison && (
-              // gap-3: the stock 24px between header and rows is what pushed
-              // the sidebar past the main panel's height on xl.
-              <Card className="gap-3">
-                <CardHeader>
-                  <Eyebrow asChild>
-                    <h2 id="debt-strategy-heading">Debt payoff strategy</h2>
-                  </Eyebrow>
-                </CardHeader>
-                {/* All three options on screen with their cost, rather than a
-                    badge you have to expand: the choice is a trade-off, and
-                    hiding the alternatives hid the trade-off. */}
-                <CardContent>
-                  <StrategyPicker
-                    comparison={debtComparison}
-                    currentStrategy={currentStrategy}
-                    onChange={handleChangeStrategy}
-                    pending={isPending}
-                    hadDebt={projection.hadDebt}
-                    anchorDay={effectiveAnchorDay}
-                    today={now}
-                  />
-                </CardContent>
-              </Card>
-            )}
+            <PortfolioCard
+              enabled={plan.includePortfolio}
+              today={todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0}
+              inAYear={projection.months[Math.min(projection.months.length - 1, currentPeriodIdx + 12)]?.portfolioValue ?? null}
+              onToggle={handleTogglePortfolio}
+            />
             </>
           }
         />
@@ -756,6 +762,8 @@ export function PlanEditor({
               description="Recurring income or one-time receipts."
               emptyLabel="No income sources yet"
               lines={plan.incomes}
+              today={now}
+              schedule={{ startMonth: plan.startMonth, overrides: plan.overrides }}
               addLabel="Add income"
               onAdd={(input) =>
                 wrap(() => addPlanIncomeAction(plan.id, input))
@@ -776,6 +784,7 @@ export function PlanEditor({
               description="Recurring expenses or one-time payments."
               emptyLabel="No expense categories yet"
               lines={plan.expenses}
+              today={now}
               addLabel="Add expense"
               onAdd={(input) =>
                 wrap(() => addPlanExpenseAction(plan.id, input))
@@ -806,6 +815,29 @@ export function PlanEditor({
 
       <TabsContent value="settings" className="flex flex-col gap-6">
         <MainPlanToggle plan={plan} wrap={wrap} pending={isPending} />
+        {debtComparison && (
+          <Card className="gap-3">
+            <CardHeader>
+              <Eyebrow asChild>
+                <h2 id="debt-strategy-heading">Debt payoff strategy</h2>
+              </Eyebrow>
+            </CardHeader>
+            {/* All three options on screen with their cost, rather than a
+                badge you have to expand: the choice is a trade-off, and
+                hiding the alternatives hid the trade-off. */}
+            <CardContent>
+              <StrategyPicker
+                comparison={debtComparison}
+                currentStrategy={currentStrategy}
+                onChange={handleChangeStrategy}
+                pending={isPending}
+                hadDebt={projection.hadDebt}
+                anchorDay={effectiveAnchorDay}
+                today={now}
+              />
+            </CardContent>
+          </Card>
+        )}
         {plan.basedOnPlanId && (
           <Card>
             <CardContent className="flex flex-wrap items-center justify-between gap-3">
@@ -937,6 +969,69 @@ function MainPlanToggle({
 }
 
 /**
+ * Sidebar card for the portfolio: what it is worth today, where the plan
+ * takes it in a year, and whether the plan counts it in net worth. The switch
+ * stays enabled while saving: disabling the control that has focus drops
+ * keyboard focus to <body>, so input is ignored instead.
+ */
+function PortfolioCard({
+  enabled,
+  today,
+  inAYear,
+  onToggle,
+}: {
+  enabled: boolean;
+  today: number;
+  inAYear: number | null;
+  onToggle: (next: boolean) => Promise<void>;
+}): React.ReactElement {
+  const [pending, setPending] = useState(false);
+  const toggle = (next: boolean): void => {
+    if (pending) return;
+    setPending(true);
+    onToggle(next)
+      .catch(() => undefined)
+      .finally(() => setPending(false));
+  };
+  return (
+    <Card className="gap-3">
+      <CardHeader>
+        <Eyebrow asChild>
+          <h2>Portfolio</h2>
+        </Eyebrow>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-1">
+        <div className={cn("flex items-baseline justify-between gap-3", !enabled && "opacity-60")}>
+          <Text variant="small" as="span">
+            Today
+          </Text>
+          <Mono className="text-sm font-semibold">{formatCurrency(today)}</Mono>
+        </div>
+        {inAYear !== null && enabled && (
+          <div className="flex items-baseline justify-between gap-3">
+            <Text variant="small" as="span">
+              In 12 months
+            </Text>
+            <Mono className="text-sm text-muted-foreground">{formatCurrency(inAYear)}</Mono>
+          </div>
+        )}
+        <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 border-t pt-3">
+          <Text variant="small" as="span">
+            Count in net worth
+          </Text>
+          <Switch
+            checked={enabled}
+            onCheckedChange={toggle}
+            aria-disabled={pending}
+            aria-busy={pending}
+          />
+        </label>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
  * Sidebar card for scenario plans: scenario vs base on ONE footing — both
  * calibrated from the user's confirmations, compared at the same period (the
  * earlier end date), debt-free compared as dates. Green when the scenario wins.
@@ -1038,10 +1133,10 @@ type ProjectionPanelProps = {
   portfolioHistory?: { date: Date; value: number }[];
   /** Net-worth milestones annotated on the chart (user preference). */
   milestones?: readonly number[];
-  /** Current includePortfolio flag; drives the chart's Portfolio switch. */
+  /** Current includePortfolio flag: the chart draws the portfolio when set. */
   portfolioEnabled: boolean;
-  /** Persists a new includePortfolio value (full-payload plan update). */
-  onTogglePortfolio: (next: boolean) => Promise<void>;
+  /** The current period still waits for a confirmation (main plan only). */
+  confirmationDue?: boolean;
   /** The server's clock for this render — see PlanEditorProps. */
   now: Date;
   /** Opens the Setup tab — the empty chart's call to action. */
@@ -1073,6 +1168,7 @@ const FORMATTER = new Intl.DateTimeFormat("en-US", {
 // the way from the left edge regardless of which horizon is active — that
 // keeps the early-history context visible without dominating the forecast.
 const HORIZON_PRESETS: ReadonlyArray<{ months: number; label: string }> = [
+  { months: 6, label: "6 mo" },
   { months: 12, label: "12 mo" },
   { months: 24, label: "2 yr" },
   { months: 60, label: "5 yr" },
@@ -1212,7 +1308,7 @@ function ProjectionPanel({
   ghost = null,
   portfolioHistory = [],
   portfolioEnabled,
-  onTogglePortfolio,
+  confirmationDue = false,
   now,
   onOpenSetup,
 }: ProjectionPanelProps) {
@@ -1279,7 +1375,6 @@ function ProjectionPanel({
 
   // Portfolio series: recorded snapshots for the past, the projection's
   // (growing) portfolioValue for the future. Only when the plan includes it.
-  const [portfolioPending, setPortfolioPending] = useState(false);
   const portfolioValues = useMemo<(number | null)[] | undefined>(
     () =>
       portfolioEnabled
@@ -1293,16 +1388,6 @@ function ProjectionPanel({
         : undefined,
     [portfolioEnabled, chartSeries, portfolioHistory, projection, anchorDay]
   );
-  // The switch stays enabled while saving: disabling the control that has
-  // focus drops keyboard focus to <body>. Input is ignored instead.
-  const handlePortfolioSwitch = (next: boolean) => {
-    if (portfolioPending) return;
-    setPortfolioPending(true);
-    onTogglePortfolio(next)
-      .catch(() => undefined)
-      .finally(() => setPortfolioPending(false));
-  };
-
   // Per-point period figures for the sidebar hover preview. Flows (income /
   // expenses / debt minimums) come from the projection month sharing the
   // point's period — the calibrated one first, falling back to the raw past
@@ -1365,30 +1450,16 @@ function ProjectionPanel({
     [chartSeries.pastCount, onConfirmToday, todayIsOnChart]
   );
   const effAnchor = anchorDay > 0 ? anchorDay : 1;
-  // Today / Next as the header and the compare dialog read them — see
-  // `forecastKpiPoints` (before the start: the opening, then the FIRST close).
-  const { todayPoint, nextPoint } = forecastKpiPoints(chartSeries, todayState);
-  // End = the chart's last point, so the header, the chart and the table end
-  // on the same period.
-  const endPoint = chartSeries.points[chartSeries.points.length - 1];
+  // Today as the header and the compare dialog read it — see
+  // `forecastKpiPoints` (before the start: the opening).
+  const { todayPoint } = forecastKpiPoints(chartSeries, todayState);
   const today = todayState?.netWorth ?? todayPoint?.netWorth ?? 0;
-  const next = nextPoint?.netWorth;
-  const future = endPoint?.netWorth ?? today;
   const todayCaption =
     todayState?.status === "before-start"
       ? `Starts ${FORMATTER.format(todayState.periodStart)}`
       : todayState?.status === "after-end"
         ? `Ended ${FORMATTER.format(todayState.periodStart)}`
         : `Today ${TODAY_LABEL.format(now)}`;
-
-  // Horizon-end delta vs the base plan (scenario only) — matched by period.
-  const ghostFuture =
-    ghost && endPoint
-      ? ghost.projection.months.find(
-          (m) => periodIndexForDate(m.date, effAnchor, endPoint.date) === 0
-        )?.netWorth ?? null
-      : null;
-  const endDelta = ghostFuture !== null ? future - ghostFuture : null;
 
   // Table rows: the projection periods the chart window covers.
   const tableRange = useMemo(() => {
@@ -1410,125 +1481,95 @@ function ProjectionPanel({
 
   const comparedPoint = comparedIdx !== null ? chartSeries.points[comparedIdx] : null;
 
-  // Forecast header (Today / Next / End KPIs + horizon picker) — shared by the
-  // Graph and Table views (both are horizon-driven forecast views). It sits in
-  // the card header so the number reads as the headline, Polymarket-style.
+  // The last closed period, for the "since" chip beside today's figure.
+  const lastClose = chartSeries.pastCount > 0 ? chartSeries.points[chartSeries.pastCount - 1] : null;
+  const sinceClose = lastClose && todayIsOnChart ? today - lastClose.netWorth : null;
+
+  // Every control here is h-8 from `sm` (h-9 to h-10 on a phone, where they
+  // step up for a thumb), so the cluster wraps as one row height.
+  const viewControls = (
+    <div className="flex flex-wrap items-center gap-2">
+      {confirmationDue && onConfirmToday && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={onConfirmToday}
+              aria-label="This period isn't confirmed yet: confirm your balances"
+              className="text-warning"
+            >
+              <TriangleAlert />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>This period isn&apos;t confirmed yet — confirm your balances</TooltipContent>
+        </Tooltip>
+      )}
+      <ViewSwitcher value={view} onChange={goView} />
+    </div>
+  );
+
+  // Forecast header (today's net worth + its change since the last close, and
+  // the horizon picker) — shared by the Graph and Table views. It sits in the
+  // card header so the number reads as the headline, as on the dashboard.
   const forecastHeader = (
-    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-      {/* On a phone today's figure leads on its own line with the next and
-          the end figures side by side under it: in a wrapping row the end
-          figure dropped under today's and the three read as two rows of
-          unrelated numbers. */}
-      <div className="grid w-full grid-cols-2 items-end gap-x-4 gap-y-2 sm:flex sm:w-auto sm:flex-wrap sm:gap-x-6 sm:gap-y-1">
-        <div className="col-span-2">
-          <Eyebrow size="sm" as="p">
-            {todayCaption}
-          </Eyebrow>
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+      <div className="flex min-w-0 flex-col gap-1">
+        <Eyebrow size="sm" as="p">
+          {todayCaption}
+        </Eyebrow>
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <Mono
             as="p"
-            className={cn("text-xl font-semibold tabular-nums sm:text-2xl", signTone(today))}
+            className={cn(
+              "text-3xl font-semibold sm:text-4xl",
+              statToneClass(moneySign(today) >= 0 ? "positive" : "negative")
+            )}
           >
             <CountUpCurrency value={today} />
           </Mono>
-          {todayState && todayState.receivables > 0 && (
-            <Text variant="small" as="p" className="text-2xs">
-              incl. {formatCurrency(todayState.receivables)} owed to you
-            </Text>
+          {lastClose && sinceClose !== null && (
+            <DeltaChip delta={sinceClose} since={closeLabels(lastClose.date, anchorDay)} />
           )}
         </div>
-        {nextPoint && next !== undefined && (
-          <div>
-            <Eyebrow size="sm" as="p">
-              Next {FORMATTER.format(nextPoint.date)}
-            </Eyebrow>
-            <Mono
-              as="p"
-              className={cn("text-sm font-semibold", signTone(next))}
-            >
-              <CountUpCurrency value={next} delay={STAGGER_MS} />
-            </Mono>
-          </div>
+        {todayState && todayState.receivables > 0 && (
+          <Text variant="small" as="p" className="text-2xs">
+            incl. {formatCurrency(todayState.receivables)} owed to you
+          </Text>
         )}
-        <div>
-          <Eyebrow size="sm" as="p">
-            End {endPoint ? FORMATTER.format(endPoint.date) : ""}
-          </Eyebrow>
-          <Mono
-            as="p"
-            className={cn("text-sm font-semibold", signTone(future))}
-          >
-            <CountUpCurrency value={future} delay={STAGGER_MS * 2} />
-          </Mono>
-          {endDelta !== null && (
-            <Text
-              variant="small"
-              as="p"
-              className={cn(
-                "text-2xs",
-                moneySign(endDelta) >= 0 ? "text-success" : "text-destructive"
-              )}
-            >
-              {formatSignedCurrency(endDelta)} vs base
-            </Text>
-          )}
-        </div>
       </div>
-      {/* Every control here is h-8 from `sm` (h-9 to h-10 on a phone, where
-          they step up for a thumb), so the cluster wraps as one row height. */}
-      <div className="flex flex-wrap items-center gap-2">
-        {/* View first — it decides what the rest of this cluster even applies
-            to (Portfolio and the horizon presets only shape the Graph). */}
-        <ViewSwitcher value={view} onChange={goView} />
-        {/* The keyboard path to what clicking today's chart point does. */}
-        {onConfirmToday && todayIsOnChart && (
-          <Button variant="outline" size="sm" onClick={onConfirmToday}>
-            <ClipboardCheck />
-            Confirm period
-          </Button>
-        )}
-        {/* Chart toggles: portfolio series (persists to the plan) and the
-            scenario ghost line (view-only). Sit beside the horizon presets so
-            everything that shapes the chart lives in one cluster. */}
-        <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 text-xs font-medium text-muted-foreground sm:h-8">
-          <Switch
-            checked={portfolioEnabled}
-            onCheckedChange={handlePortfolioSwitch}
-            aria-disabled={portfolioPending}
-            aria-busy={portfolioPending}
-          />
-          Portfolio
-        </label>
-        {ghost && (
-          <Toggle
-            variant="outline"
-            pressed={showGhost}
-            onPressedChange={setShowGhost}
-            className="text-xs"
-          >
-            vs base
-          </Toggle>
-        )}
-        {/* On a phone the range is its own full-width row right over the
-            chart, as a phone's stock chart has it, instead of whichever
-            scrap of a line the controls before it left. */}
-        <ToggleGroup
-          type="single"
-          size="sm"
-          value={String(horizonMonths)}
-          onValueChange={(v) => v && setHorizonMonths(Number(v))}
-          aria-label="Projection horizon"
-          className="order-last w-full sm:order-none sm:w-fit"
-        >
-          {HORIZON_PRESETS.map((preset) => (
-            <ToggleGroupItem
-              key={preset.months}
-              value={String(preset.months)}
-              disabled={preset.months > maxAvailable}
+      <div className="flex flex-col items-end gap-2">
+        {viewControls}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {ghost && (
+            <Toggle
+              variant="outline"
+              size="sm"
+              pressed={showGhost}
+              onPressedChange={setShowGhost}
+              className="text-xs"
             >
-              {preset.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+              vs base
+            </Toggle>
+          )}
+          <ToggleGroup
+            type="single"
+            size="sm"
+            value={String(horizonMonths)}
+            onValueChange={(v) => v && setHorizonMonths(Number(v))}
+            aria-label="Projection horizon"
+          >
+            {HORIZON_PRESETS.map((preset) => (
+              <ToggleGroupItem
+                key={preset.months}
+                value={String(preset.months)}
+                disabled={preset.months > maxAvailable}
+              >
+                {preset.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
       </div>
     </div>
   );
@@ -1565,9 +1606,12 @@ function ProjectionPanel({
         >
           <div key={view} className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200 xl:h-full">
             {view === "calendar" ? (
-              // The calendar card is taller than the panel box — scroll it
-              // inside so the Calendar view keeps the same footprint.
-              <div className="xl:h-full xl:overflow-y-auto">{calendar}</div>
+              // The calendar brings its own card; the switcher rides above it
+              // so there is a way back to the other views.
+              <div className="flex flex-col gap-3 xl:h-full">
+                <div className="flex justify-end">{viewControls}</div>
+                <div className="xl:min-h-0 xl:flex-1 xl:overflow-y-auto">{calendar}</div>
+              </div>
             ) : (
               <Card className="xl:h-full">
                 <CardHeader className="gap-3">{forecastHeader}</CardHeader>

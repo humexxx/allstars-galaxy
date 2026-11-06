@@ -703,6 +703,9 @@ export const financePlanSnapshots = pgTable(
     investments: numeric("investments", { precision: 20, scale: 2 }).notNull(),
     totalDebt: numeric("total_debt", { precision: 20, scale: 2 }).notNull(),
     netWorth: numeric("net_worth", { precision: 20, scale: 2 }).notNull(),
+    // The portfolio inside net_worth (live portfolio + managed assets), so the
+    // past can draw it; null on rows from before migration 0062.
+    portfolioValue: numeric("portfolio_value", { precision: 20, scale: 2 }),
     source: financeSnapshotSourceEnum("source").notNull().default("system_cron"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

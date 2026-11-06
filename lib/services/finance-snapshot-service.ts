@@ -540,6 +540,7 @@ async function createSnapshotForPlan(
       savings: state.savings.toFixed(2),
       investments: state.investments.toFixed(2),
       totalDebt: state.totalDebt.toFixed(2),
+      portfolioValue: state.portfolioValue.toFixed(2),
       // Without money owed to the user: `getRecentMonthlySnapshots` adds it
       // back from the plan's current lines, so history and forecast always
       // count it the same way — including snapshots taken before it existed.
@@ -603,6 +604,7 @@ export async function recordMovementSnapshot(
         savings: today.savings.toFixed(2),
         investments: today.investments.toFixed(2),
         totalDebt: today.totalDebt.toFixed(2),
+        portfolioValue: today.portfolioValue.toFixed(2),
         // Without receivables, like every snapshot (see createSnapshotForPlan).
         netWorth: (today.netWorth - today.receivables).toFixed(2),
         source: MOVEMENT,
@@ -692,6 +694,7 @@ export async function getRecentMovementSnapshots(
       savings: parseFloat(r.savings),
       investments: parseFloat(r.investments),
       totalDebt: parseFloat(r.totalDebt),
+      portfolioValue: r.portfolioValue == null ? null : parseFloat(r.portfolioValue),
       receivables: 0,
       netWorth: parseFloat(r.netWorth),
     })),
@@ -763,6 +766,7 @@ type HistoryPoint = {
   savings: number;
   investments: number;
   totalDebt: number;
+  portfolioValue: number | null;
   /** Still owed to the user on the point's day; already inside `netWorth`. */
   receivables: number;
   netWorth: number;
@@ -774,6 +778,7 @@ const HISTORY_COLUMNS = {
   investments: financePlanSnapshots.investments,
   totalDebt: financePlanSnapshots.totalDebt,
   netWorth: financePlanSnapshots.netWorth,
+  portfolioValue: financePlanSnapshots.portfolioValue,
 };
 
 type HistoryRow = {
@@ -782,6 +787,7 @@ type HistoryRow = {
   investments: string;
   totalDebt: string;
   netWorth: string;
+  portfolioValue: string | null;
 };
 
 /** First day (UTC) of the month that is `monthsBack` months before `today`. */
@@ -811,6 +817,7 @@ function latestPerPeriod(rows: readonly HistoryRow[], anchorDay: number): Histor
       savings: parseFloat(r.savings),
       investments: parseFloat(r.investments),
       totalDebt: parseFloat(r.totalDebt),
+      portfolioValue: r.portfolioValue == null ? null : parseFloat(r.portfolioValue),
       receivables: 0,
       netWorth: parseFloat(r.netWorth),
     }));

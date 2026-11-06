@@ -1,0 +1,1 @@
+ALTER TABLE "finance_plan_snapshots" ADD COLUMN "portfolio_value" numeric(20, 2);

@@ -19,7 +19,12 @@ import {
 } from "@/components/ui/tooltip";
 import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
+import {
+  formatCurrency,
+  formatSignedCurrency,
+  formatSignedPercent,
+  moneySign,
+} from "@/lib/utils/format";
 import { densify } from "@/lib/finance/table-rows";
 import type { Projection } from "@/types/finance";
 
@@ -47,6 +52,32 @@ type ProjectionTableProps = {
 // initial window. Kept at a clean year so the table grows in human-sized
 // chunks rather than arbitrary numbers.
 const LOAD_MORE_STEP = 12;
+
+/**
+ * How far a figure moved since the row before, as a share of where it was:
+ * the small line under the figures that matter. Null with nothing to compare
+ * against, or from zero.
+ */
+function changeOf(value: number, previous: number | undefined): number | null {
+  if (previous === undefined || Math.abs(previous) < 0.01) return null;
+  return ((value - previous) / Math.abs(previous)) * 100;
+}
+
+function Change({
+  pct,
+  goodWhen = "up",
+}: {
+  pct: number | null;
+  goodWhen?: "up" | "down";
+}): React.ReactElement | null {
+  if (pct === null || Math.abs(pct) < 0.05) return null;
+  const good = goodWhen === "up" ? pct > 0 : pct < 0;
+  return (
+    <Mono className={cn("block text-2xs font-normal", good ? "text-success" : "text-destructive")}>
+      {formatSignedPercent(pct, 1)}
+    </Mono>
+  );
+}
 
 export function ProjectionTable({
   projection,
@@ -188,10 +219,10 @@ export function ProjectionTable({
           ref={scrollContainerRef}
           className="max-h-120 overflow-auto scroll-smooth"
         >
-          {/* One step down from the primitive's text-sm: this table is a dense
-              wall of currency, and 14px numerals made every column shout. The
-              header steps with it so the grid still reads as one block. */}
-          <Table className="text-xs">
+          {/* Two steps down from the primitive's text-sm: this table is a dense
+              wall of currency, and the change lines under net worth, debt and
+              investments need the room. */}
+          <Table className="text-2xs">
             <TableHeader className="sticky top-0 bg-card">
               <TableRow>
                 {/* Sticky: on a phone the table scrolls sideways, and without
@@ -255,7 +286,11 @@ export function ProjectionTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((m) => (
+              {rows.map((m, i) => {
+                // The row before, for the change lines: the previous row
+                // shown, or the period before the window for the first.
+                const prev = i > 0 ? rows[i - 1] : projection.months[first - 1];
+                return (
                 <TableRow
                   key={m.monthOffset}
                   data-month-offset={m.monthOffset}
@@ -322,24 +357,27 @@ export function ProjectionTable({
                     {formatCurrency(m.savings)}
                   </TableCell>
                   {hasInvestments && (
-                    <TableCell className="text-right font-mono tabular-nums text-primary">
+                    <TableCell className="text-right font-mono tabular-nums">
                       {formatCurrency(m.investments)}
+                      <Change pct={changeOf(m.investments, prev?.investments)} />
                     </TableCell>
                   )}
                   <TableCell className="text-right font-mono tabular-nums">
                     {formatCurrency(m.totalDebt)}
+                    <Change pct={changeOf(m.totalDebt, prev?.totalDebt)} goodWhen="down" />
                   </TableCell>
                   <TableCell
                     className={cn(
                       "text-right font-mono font-semibold tabular-nums",
-                      moneySign(m.netWorth) > 0 && "text-success",
                       moneySign(m.netWorth) < 0 && "text-destructive"
                     )}
                   >
                     {formatCurrency(m.netWorth)}
+                    <Change pct={changeOf(m.netWorth, prev?.netWorth)} />
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </div>

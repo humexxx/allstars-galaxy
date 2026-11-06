@@ -435,6 +435,13 @@
       "when": 1793924290014,
       "tag": "0061_lucky_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1793927675569,
+      "tag": "0062_moaning_blazing_skull",
+      "breakpoints": true
     }
   ]
 }

@@ -66,9 +66,13 @@ export type ProjectOptions = {
   /** Monthly growth (decimal) compounded onto the portfolio each period —
    *  the value-weighted ROI of the holdings. 0 holds it flat. */
   portfolioMonthlyGrowthRate?: number;
-  /** The part of `portfolioValue` held flat: assets the user runs with other
-   *  people's money. Their market value has no promised rate to grow at. */
+  /** The part of `portfolioValue` the user runs with other people's money:
+   *  the assets their methods' capital bought, at market value. */
   portfolioHeldValue?: number;
+  /** Monthly growth (decimal) of that part: the return the owner EXPECTS the
+   *  assets to earn (each method's `expected_monthly_roi`), not the one they
+   *  promised. 0 holds it flat. */
+  portfolioHeldMonthlyGrowthRate?: number;
   /** Monthly ROI (decimal) of the auto-invest method. */
   autoInvestRate?: number;
   /** Per-month overrides for recurring lines. */
@@ -163,6 +167,8 @@ type Opening = {
   savings: number;
   investments: number;
   portfolio: number;
+  /** The managed part of `portfolio` (see `portfolioHeldValue`). */
+  managed: number;
   debts: DebtState[];
 };
 
@@ -183,6 +189,7 @@ function runEngine(
   const portfolioValue = Math.max(0, options.portfolioValue ?? 0);
   const growth = Math.max(0, options.portfolioMonthlyGrowthRate ?? 0);
   const held = Math.min(portfolioValue, Math.max(0, options.portfolioHeldValue ?? 0));
+  const heldGrowth = Math.max(0, options.portfolioHeldMonthlyGrowthRate ?? 0);
   const autoInvestRate = Math.max(0, options.autoInvestRate ?? 0);
   const savingsRate = Math.max(0, num(plan.monthlySavingsRate));
   const surplusPercent = Math.max(0, Math.min(1, num(plan.surplusToDebtsPercent)));
@@ -219,6 +226,7 @@ function runEngine(
     savings: num(plan.initialSavings),
     investments: Math.max(0, num(plan.initialInvestments)),
     portfolio: portfolioValue,
+    managed: held,
     debts: debtStates,
   };
 
@@ -440,7 +448,11 @@ function runEngine(
     const investmentsInterest = state.investments * autoInvestRate * fraction;
     state.savings = round2(state.savings + savingsContribution + savingsInterest);
     state.investments = round2(state.investments + investmentsContribution + investmentsInterest);
-    state.portfolio = round2(state.portfolio + (state.portfolio - held) * growth * fraction);
+    // The user's own holdings grow at their methods' promised rate; the
+    // managed assets at the rate the owner expects them to earn.
+    const own = state.portfolio - state.managed;
+    state.managed = state.managed + state.managed * heldGrowth * fraction;
+    state.portfolio = round2(own + own * growth * fraction + state.managed);
     totalInvestmentsInterest += investmentsInterest;
     totalInterest += interestTotal;
 

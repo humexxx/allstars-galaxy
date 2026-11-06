@@ -10,6 +10,7 @@ import { buildMarginHistory } from "@/lib/finance/margin-history";
 import {
   buildHistoryInput,
   buildInvestors,
+  expectedManagedRate,
   summarizeManagedAssets,
   type AllocRow,
   type TxRow,
@@ -125,6 +126,29 @@ describe("buildHistoryInput", () => {
       investorId: MARIA,
       methodId: GROWTH,
     });
+  });
+});
+
+describe("expectedManagedRate", () => {
+  it("weights each method's expected return by what its holdings are worth", () => {
+    const rate = expectedManagedRate(
+      [
+        { methodId: "safe", assets: 3000 },
+        { methodId: "bold", assets: 1000 },
+        { methodId: "empty", assets: 0 },
+      ],
+      new Map([
+        ["safe", 1],
+        ["bold", 2],
+        ["empty", 9],
+      ])
+    );
+    expect(rate).toBeCloseTo((3000 * 0.01 + 1000 * 0.02) / 4000, 10);
+  });
+
+  it("holds a method with no expectation flat, and nothing at all at 0", () => {
+    expect(expectedManagedRate([{ methodId: "safe", assets: 2000 }], new Map([["safe", null]]))).toBe(0);
+    expect(expectedManagedRate([], new Map())).toBe(0);
   });
 });
 

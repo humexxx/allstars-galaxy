@@ -109,6 +109,11 @@ export const investmentMethods = pgTable(
     }),
     riskLevel: riskLevelEnum("risk_level").notNull(),
     monthlyRoi: numeric("monthly_roi", { precision: 7, scale: 4 }).notNull(),
+    // What the owner EXPECTS the capital to earn where they deploy it, as a
+    // percentage a month like `monthly_roi`. Private to the owner: clients only
+    // ever see and compound at `monthly_roi`. The owner's own plans project the
+    // assets this money bought at this rate; null holds them flat.
+    expectedMonthlyRoi: numeric("expected_monthly_roi", { precision: 7, scale: 4 }),
     // Disabled methods are hidden from portfolio transaction selectors but still
     // appear in finance plan auto-invest pickers (so they can be modelled as
     // hypothetical scenarios without being actively used).

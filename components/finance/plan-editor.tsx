@@ -349,6 +349,8 @@ export function PlanEditor({
   // a sidebar that changed under every pointer move read as flicker.
   const [picked, setPicked] = useState<{ index: number; figures: PeriodFigures } | null>(null);
   const hoverFigures = picked?.figures ?? null;
+  // The chart's horizon, here so the Portfolio card reads the same window.
+  const [horizonMonths, setHorizonMonths] = useState(12);
   const isPreview = hoverFigures !== null;
   const dIncome = hoverFigures?.income ?? income;
   const dLivingExpenses = hoverFigures?.livingExpenses ?? livingExpenses;
@@ -603,6 +605,8 @@ export function PlanEditor({
           ghost={ghost}
           portfolioHistory={portfolioHistory}
           portfolioEnabled={plan.includePortfolio}
+          horizonMonths={horizonMonths}
+          onHorizonChange={setHorizonMonths}
           selectedIndex={picked?.index ?? null}
           onSelectPeriod={(index, figures) =>
             setPicked(index !== null && figures ? { index, figures } : null)
@@ -785,7 +789,11 @@ export function PlanEditor({
             <PortfolioCard
               enabled={plan.includePortfolio}
               today={todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0}
-              inAYear={projection.months[Math.min(projection.months.length - 1, currentPeriodIdx + 12)]?.portfolioValue ?? null}
+              horizonMonths={horizonMonths}
+              atHorizon={
+                projection.months[Math.min(projection.months.length - 1, currentPeriodIdx + horizonMonths)]
+                  ?.portfolioValue ?? null
+              }
               onToggle={handleTogglePortfolio}
             />
             </>
@@ -1017,12 +1025,15 @@ function MainPlanToggle({
 function PortfolioCard({
   enabled,
   today,
-  inAYear,
+  horizonMonths,
+  atHorizon,
   onToggle,
 }: {
   enabled: boolean;
   today: number;
-  inAYear: number | null;
+  /** The chart's horizon, and where the plan takes the portfolio by its end. */
+  horizonMonths: number;
+  atHorizon: number | null;
   onToggle: (next: boolean) => Promise<void>;
 }): React.ReactElement {
   const [pending, setPending] = useState(false);
@@ -1050,12 +1061,12 @@ function PortfolioCard({
           </Text>
           <Mono className="text-sm font-semibold">{formatCurrency(today)}</Mono>
         </div>
-        {inAYear !== null && enabled && (
+        {atHorizon !== null && enabled && (
           <div className="flex items-baseline justify-between gap-3">
             <Text variant="small" as="span">
-              In 12 months
+              In {horizonMonths % 12 === 0 && horizonMonths > 12 ? `${horizonMonths / 12} years` : `${horizonMonths} months`}
             </Text>
-            <Mono className="text-sm text-muted-foreground">{formatCurrency(inAYear)}</Mono>
+            <Mono className="text-sm text-muted-foreground">{formatCurrency(atHorizon)}</Mono>
           </div>
         )}
         <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 border-t pt-3">
@@ -1166,6 +1177,9 @@ type ProjectionPanelProps = {
   sidebar: React.ReactNode;
   /** The chart point the reader picked (its figures fill the sidebar), or
    *  null for today. */
+  /** Months the chart shows ahead (6 mo … 10 yr), held by the editor. */
+  horizonMonths: number;
+  onHorizonChange: (months: number) => void;
   selectedIndex?: number | null;
   /** A point clicked, with its period's figures; null, null for back to
    *  today (today's own point, a new horizon, another view). */
@@ -1349,6 +1363,8 @@ function ProjectionPanel({
   history,
   calendar,
   sidebar,
+  horizonMonths: horizonPick,
+  onHorizonChange,
   selectedIndex = null,
   onSelectPeriod,
   onConfirmToday,
@@ -1380,12 +1396,10 @@ function ProjectionPanel({
   };
   const swipe = useSwitcherSwipe(view, goView);
 
-  // Horizon — 12 mo by default; bumps up to 2 / 5 / 10 yr when the user picks
-  // a preset above the chart.
+  // Horizon — 12 mo by default (held by the editor, which the Portfolio card
+  // reads too), never past what the plan projects.
   const maxAvailable = projection.months.length;
-  const [horizonMonths, setHorizonMonths] = useState<number>(
-    Math.min(12, maxAvailable)
-  );
+  const horizonMonths = Math.min(horizonPick, maxAvailable);
 
   // Accounting-period anchor (the plan's confirmation day). The window / chart /
   // today-seed all resolve "today" against this so a non-1 anchor lands on the
@@ -1594,7 +1608,7 @@ function ProjectionPanel({
               if (!v) return;
               // The picked point's index means another month on a new horizon.
               onSelectPeriod?.(null, null);
-              setHorizonMonths(Number(v));
+              onHorizonChange(Number(v));
             }}
             aria-label="Projection horizon"
           >

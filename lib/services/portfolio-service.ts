@@ -8,6 +8,8 @@ import { eq, and, ne, desc, inArray } from "drizzle-orm";
 import type { Portfolio, PortfolioTransaction, PortfolioStats, PortfolioAsset, MethodInvestors } from "@/types/portfolio";
 import type { TransactionStatus, TransactionType } from "@/types/transaction";
 
+import { methodColumnsFor } from "./method-columns";
+
 /**
  * Request-cached: the plans pages and the projection helpers each look the
  * portfolio up on their own, several times per render.
@@ -105,7 +107,8 @@ export async function getPortfolioTransactions(portfolioId: string): Promise<Por
       status: transactions.status,
       notes: transactions.notes,
       sourceTransactionId: transactions.sourceTransactionId,
-      investmentMethod: investmentMethods,
+      // Never the owner's expected return: these rows reach the investor.
+      investmentMethod: methodColumnsFor(null),
     })
     .from(transactions)
     .leftJoin(
@@ -132,7 +135,8 @@ export const getPortfolioAssets = cache(async function getPortfolioAssets(
       initialValue: transactions.initialValue,
       currentValue: transactions.currentValue,
       status: transactions.status,
-      investmentMethod: investmentMethods,
+      // Never the owner's expected return: these rows reach the investor.
+      investmentMethod: methodColumnsFor(null),
     })
     .from(transactions)
     .leftJoin(

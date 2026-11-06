@@ -1853,7 +1853,7 @@ function StatRow({
         {/* No aria-label: it would replace the visible figure in the name. */}
         <button
           type="button"
-          className={cn(rowClass, "w-full text-left transition hover:bg-muted/30")}
+          className={cn(rowClass, "w-full cursor-pointer text-left transition hover:bg-muted/30")}
         >
           {inner}
           <span className="sr-only">, show breakdown</span>

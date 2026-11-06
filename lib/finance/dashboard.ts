@@ -110,7 +110,8 @@ function partsOfPoint(p: ChartPoint): DashboardParts {
   };
 }
 
-function closeLabels(
+/** A closed period's names, after its last day: "Nov" and "Nov 4, 2026". */
+export function closeLabels(
   start: Date,
   anchorDay: number
 ): { time: number; month: string; label: string } {

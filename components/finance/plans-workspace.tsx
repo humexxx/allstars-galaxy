@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { statToneClass } from "@/components/ui/stat-card";
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import {
   DropdownMenu,
@@ -48,6 +49,8 @@ import {
   deletePlanAction,
   setMainPlanAction,
 } from "@/app/actions/finance-plans";
+import { CountUpCurrency } from "./count-up";
+import { DeltaChip } from "./delta-chip";
 import { PlanColorPicker } from "./plan-color-picker";
 import { runAction } from "@/lib/actions/run";
 import { cn } from "@/lib/utils";
@@ -57,6 +60,7 @@ import {
   summaryDebtFree,
   type PlanTimeline,
 } from "@/lib/finance/chart-series";
+import { closeLabels } from "@/lib/finance/dashboard";
 import type { FinancePlan, PlanSummary } from "@/types/finance";
 
 const END_LABEL = new Intl.DateTimeFormat("en-US", {
@@ -90,7 +94,6 @@ const DEFAULT_RANGE = "12";
 /** Periods before today kept in view, regardless of the horizon picked. */
 const PAST_MONTHS = 3;
 
-const POSITIVE = "text-success";
 const NEGATIVE = "text-destructive";
 
 /**
@@ -152,6 +155,21 @@ export function PlansWorkspace({
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const focusedId = pinnedId ?? hoveredId;
   const focusedPlan = plans.find((p) => p.id === focusedId) ?? null;
+
+  // Net worth today leads the page, as on the dashboard: the user's real
+  // position (the same under every plan) against the last closed period.
+  const hero = useMemo(() => {
+    const main = plans.find((p) => p.isMain);
+    const timeline = main ? timelines[main.id] : undefined;
+    const now = timeline?.points[timeline.todayIndex];
+    if (!main || !timeline || !now) return null;
+    const closed = timeline.todayIndex > 0 ? timeline.points[timeline.todayIndex - 1] : null;
+    return {
+      netWorth: now.netWorth,
+      sinceClose: closed ? now.netWorth - closed.netWorth : null,
+      since: closed ? closeLabels(closed.date, main.confirmationDayOfMonth) : null,
+    };
+  }, [plans, timelines]);
 
   const filtered = useMemo(
     () =>
@@ -216,18 +234,40 @@ export function PlansWorkspace({
           on lg and the rail fills it (see the rail card). */}
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="min-w-0 lg:col-span-2">
-          <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <CardTitle as="h2">Projection comparison</CardTitle>
-              {focusedPlan && (
-                <Badge variant="outline" className="min-w-0 text-muted-foreground">
-                  <span
-                    className="size-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: focusedPlan.color }}
-                    aria-hidden="true"
-                  />
-                  <span className="truncate">{focusedPlan.name}</span>
-                </Badge>
+          <CardHeader className="flex flex-wrap items-start justify-between gap-3">
+            <CardTitle as="h2" className="sr-only">
+              Projection comparison
+            </CardTitle>
+            <div className="flex min-w-0 flex-col gap-1">
+              <div className="flex min-w-0 items-center gap-2">
+                <Eyebrow size="sm" as="div">
+                  Net worth
+                </Eyebrow>
+                {focusedPlan && (
+                  <Badge variant="outline" className="min-w-0 text-muted-foreground">
+                    <span
+                      className="size-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: focusedPlan.color }}
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">{focusedPlan.name}</span>
+                  </Badge>
+                )}
+              </div>
+              {hero && (
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <Mono
+                    className={cn(
+                      "text-3xl font-semibold sm:text-4xl",
+                      statToneClass(moneySign(hero.netWorth) >= 0 ? "positive" : "negative")
+                    )}
+                  >
+                    <CountUpCurrency value={hero.netWorth} />
+                  </Mono>
+                  {hero.since && hero.sinceClose !== null && (
+                    <DeltaChip delta={hero.sinceClose} since={hero.since} />
+                  )}
+                </div>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -338,14 +378,14 @@ export function PlansWorkspace({
                         <div className="mt-0.5 flex flex-col gap-0.5 text-xs text-muted-foreground">
                           <span className="flex flex-wrap items-baseline gap-x-1">
                             Net worth
+                            {/* Plain figures: the rail lists plans, and colour is
+                                kept for what needs a look — a negative end, debt
+                                past the horizon. */}
                             <Mono
-                              className={
-                                moneySign(s.endingNetWorth) > 0
-                                  ? POSITIVE
-                                  : moneySign(s.endingNetWorth) < 0
-                                    ? NEGATIVE
-                                    : undefined
-                              }
+                              className={cn(
+                                "text-foreground",
+                                moneySign(s.endingNetWorth) < 0 && NEGATIVE
+                              )}
                             >
                               {formatCurrency(s.endingNetWorth)}
                             </Mono>
@@ -357,11 +397,7 @@ export function PlansWorkspace({
                             return (
                               <span
                                 className={
-                                  status.kind === "beyond-horizon"
-                                    ? NEGATIVE
-                                    : status.kind === "no-debt"
-                                      ? undefined
-                                      : POSITIVE
+                                  status.kind === "beyond-horizon" ? NEGATIVE : undefined
                                 }
                               >
                                 {status.kind === "beyond-horizon"

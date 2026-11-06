@@ -23,8 +23,12 @@ export default function PlansLoading() {
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Projection comparison */}
         <Card className="min-w-0 lg:col-span-2">
-          <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-            <Skeleton className="h-6 w-44" />
+          <CardHeader className="flex flex-wrap items-start justify-between gap-3">
+            {/* "Net worth" and the figure with its change chip */}
+            <div className="flex flex-col gap-1">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-9 w-64 sm:h-10" />
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               {/* horizon select */}
               <Skeleton className="h-8 w-38" />

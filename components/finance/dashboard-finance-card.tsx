@@ -2,8 +2,6 @@ import Link from "next/link";
 import {
   ArrowRight,
   PlusCircle,
-  TrendingDown,
-  TrendingUp,
   Wallet,
 } from "lucide-react";
 
@@ -16,12 +14,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { statToneClass } from "@/components/ui/stat-card";
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { CountUpCurrency } from "./count-up";
+import { DeltaChip } from "./delta-chip";
 import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
 import { drawDelay } from "./dashboard-motion";
 import {
@@ -29,12 +27,7 @@ import {
   visibleSeriesKeys,
   type DashboardSeries,
 } from "./dashboard-finance-series";
-import {
-  formatCurrency,
-  formatSignedCurrency,
-  formatSignedPercent,
-  moneySign,
-} from "@/lib/utils/format";
+import { formatSignedPercent, moneySign } from "@/lib/utils/format";
 import {
   getMainPlan,
   getPlanWithLines,
@@ -286,29 +279,6 @@ type Figure = {
  * A figure's change since the last closed period: green when it moved the
  * right way (up, or down for debt), red when not, neutral when it held.
  */
-function DeltaChip({
-  delta,
-  since,
-  goodWhen = "up",
-}: {
-  delta: number;
-  since: { month: string; label: string };
-  goodWhen?: "up" | "down";
-}) {
-  const sign = moneySign(delta);
-  const good = goodWhen === "up" ? sign > 0 : sign < 0;
-  return (
-    <Badge
-      variant={sign === 0 ? "secondary" : good ? "success" : "destructive"}
-      className="font-mono tabular-nums"
-      title={`Against the close of ${since.label}`}
-    >
-      {sign > 0 ? <TrendingUp /> : sign < 0 ? <TrendingDown /> : null}
-      {sign === 0 ? formatCurrency(0) : formatSignedCurrency(delta)} · vs {since.month}
-    </Badge>
-  );
-}
-
 /**
  * The managed book's margin as a share of what is owed, this month and to
  * date — beside the assets' value, which is what counts toward net worth.

@@ -9,6 +9,7 @@ import {
   Camera,
   ClipboardCheck,
   GitBranch,
+  Info,
   LineChart,
   type LucideIcon,
   MoreHorizontal,
@@ -536,14 +537,30 @@ export function PlanEditor({
         back={backHref ? { href: backHref, label: "Plans" } : undefined}
         title={title}
         badge={
-          ghost && (
-            <Badge variant="outline">
-              <GitBranch />
-              Based on: {ghost.name}
-            </Badge>
-          )
+          <>
+            {/* The description sits behind an icon: under the title it was a
+                line of help pushing the chart down on every visit. */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`About this plan: ${description}`}
+                  className="text-muted-foreground"
+                >
+                  <Info />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">{description}</TooltipContent>
+            </Tooltip>
+            {ghost && (
+              <Badge variant="outline">
+                <GitBranch />
+                Based on: {ghost.name}
+              </Badge>
+            )}
+          </>
         }
-        description={description}
         meta={periodLabel && `Current period · ${periodLabel}`}
         actions={
           <>

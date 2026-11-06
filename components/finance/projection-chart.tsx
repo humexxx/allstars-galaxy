@@ -627,7 +627,10 @@ export const ProjectionChart = memo(function ProjectionChart({
             }
           }}
         >
-          {/* Each area fades from its colour to nothing at the baseline. */}
+          {/* Each area fades from its colour to nothing at the baseline. The
+              gradients span the whole chart (userSpaceOnUse): stretched over
+              each half's own height, the past and the projection met at today
+              in two different shades. */}
           <defs>
             {(
               [
@@ -637,7 +640,7 @@ export const ProjectionChart = memo(function ProjectionChart({
                 ["owed", OWED, 0.16],
               ] as const
             ).map(([key, colour, opacity]) => (
-              <linearGradient key={key} id={`${gradientId}-${key}`} x1="0" y1="0" x2="0" y2="1">
+              <linearGradient key={key} id={`${gradientId}-${key}`} gradientUnits="userSpaceOnUse" x1="0" y1="0%" x2="0" y2="100%">
                 <stop offset="0%" stopColor={colour} stopOpacity={opacity} />
                 <stop offset="100%" stopColor={colour} stopOpacity={0} />
               </linearGradient>
@@ -1175,13 +1178,15 @@ export function ComparePlansChart({
         margin={{ left: 0, right: 4, top: 10, bottom: 0 }}
       >
         {/* Every plan is an area fading to the baseline, as on the other
-            charts: the emphasised one fuller, the rest faint. */}
+            charts: the emphasised one fuller, the rest faint. The gradients
+            span the whole chart, so a series' past and projection share one
+            shade where they meet. */}
         <defs>
           {seriesByPlan.map(({ plan, key }) => {
             const top =
               key === emphasisedKey ? 0.24 : focusedPlanId && plan.id !== focusedPlanId ? 0.04 : 0.1;
             return (
-              <linearGradient key={key} id={`${fillId}-${key}`} x1="0" y1="0" x2="0" y2="1">
+              <linearGradient key={key} id={`${fillId}-${key}`} gradientUnits="userSpaceOnUse" x1="0" y1="0%" x2="0" y2="100%">
                 <stop offset="0%" stopColor={`var(--color-${key}Past)`} stopOpacity={top} />
                 <stop offset="100%" stopColor={`var(--color-${key}Past)`} stopOpacity={0} />
               </linearGradient>
@@ -1193,7 +1198,7 @@ export function ComparePlansChart({
               ["debt-dim", 0.04],
             ] as const
           ).map(([id, top]) => (
-            <linearGradient key={id} id={`${fillId}-${id}`} x1="0" y1="0" x2="0" y2="1">
+            <linearGradient key={id} id={`${fillId}-${id}`} gradientUnits="userSpaceOnUse" x1="0" y1="0%" x2="0" y2="100%">
               <stop offset="0%" stopColor={DEBT} stopOpacity={top} />
               <stop offset="100%" stopColor={DEBT} stopOpacity={0} />
             </linearGradient>
@@ -1258,8 +1263,11 @@ export function ComparePlansChart({
               connectNulls: false,
               legendType: "none" as const,
             };
-            // An area, as on a plan's own page: a red fade to the baseline.
-            const fill = `url(#${fillId}-debt${dimmed ? "-dim" : ""})`;
+            // An area, as on a plan's own page: a red fade to the baseline —
+            // once, on the series that draws the past. Plans usually owe the
+            // same, and a fill per plan stacked from today on, so the red
+            // darkened at today. The others keep their line.
+            const fill = key === pastKey ? `url(#${fillId}-debt${dimmed ? "-dim" : ""})` : "none";
             return [
               <Area key={`${key}DebtPast`} dataKey={`${key}DebtPast`} {...shared} fill={fill} {...drawIn("past", 0)} />,
               <Area

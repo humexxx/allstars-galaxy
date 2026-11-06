@@ -1029,6 +1029,7 @@ export function ComparePlansChart({
   );
 
   if (series.length === 0) return null;
+  const focusedKey = seriesByPlan.find(({ plan }) => plan.id === focusedPlanId)?.key ?? null;
 
   return (
     <div ref={containerRef} className="min-w-0">
@@ -1084,7 +1085,7 @@ export function ComparePlansChart({
           content={<ChartLegendContent className={legendClassName} />}
         />
         {/* Debt underneath net worth: red as everywhere, thinner, dimmed with
-            its plan. */}
+            its plan. The past is every plan's, so it never dims. */}
         {hasDebt &&
           seriesByPlan.flatMap(({ plan, key }) => {
             const dimmed = focusedPlanId !== null && plan.id !== focusedPlanId;
@@ -1092,7 +1093,6 @@ export function ComparePlansChart({
               type: "monotone" as const,
               stroke: DEBT,
               strokeWidth: 1.5,
-              strokeOpacity: dimmed ? 0.22 : 0.85,
               dot: false as const,
               activeDot: false as const,
               isAnimationActive: false,
@@ -1100,8 +1100,19 @@ export function ComparePlansChart({
               legendType: "none" as const,
             };
             return [
-              <Line key={`${key}DebtPast`} dataKey={`${key}DebtPast`} {...shared} />,
-              <Line key={`${key}DebtFuture`} dataKey={`${key}DebtFuture`} strokeDasharray="6 4" {...shared} />,
+              <Line
+                key={`${key}DebtPast`}
+                dataKey={`${key}DebtPast`}
+                strokeOpacity={dimmed && key !== pastKey ? 0.22 : 0.85}
+                {...shared}
+              />,
+              <Line
+                key={`${key}DebtFuture`}
+                dataKey={`${key}DebtFuture`}
+                strokeDasharray="6 4"
+                strokeOpacity={dimmed ? 0.22 : 0.85}
+                {...shared}
+              />,
             ];
           })}
         {/* Recharts paints children in order, so the focused series has to go
@@ -1125,12 +1136,24 @@ export function ComparePlansChart({
               isAnimationActive: false,
               connectNulls: false,
             };
+            // The past is drawn once but belongs to every plan: it never dims,
+            // and with a plan in focus it wears that plan's colour and weight,
+            // so the highlighted line runs unbroken from the past into its
+            // future.
+            const past =
+              key === pastKey
+                ? {
+                    stroke: `var(--color-${focusedKey ?? key}Past)`,
+                    strokeWidth: focusedPlanId ? 3 : 2,
+                    strokeOpacity: 1,
+                  }
+                : { stroke: `var(--color-${key}Past)` };
             return [
               <Line
                 key={`${key}Past`}
                 dataKey={`${key}Past`}
-                stroke={`var(--color-${key}Past)`}
                 {...shared}
+                {...past}
                 // "You are here" pulse where solid meets dashed — the same
                 // marker the single-plan chart uses. Only on the past series;
                 // the future one shares that row and would stack a second one.

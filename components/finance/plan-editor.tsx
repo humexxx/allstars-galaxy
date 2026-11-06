@@ -197,7 +197,7 @@ function settle(promise: Promise<void>): void {
 type GhostPlan = {
   name: string;
   color: string;
-  /** The base plan projected from its plan as written (see page.tsx). */
+  /** The base plan's calibrated projection, as its own page shows it. */
   projection: Projection;
   /** The base plan's day-aware position today, for the ghost's today point. */
   today: TodayState | null;
@@ -560,7 +560,8 @@ export function PlanEditor({
           onTogglePortfolio={handleTogglePortfolio}
           onHoverFigures={setHoverFigures}
           milestones={milestones}
-          onConfirmToday={openConfirmation}
+          // Only the main plan records reality; a what-if reads its past.
+          onConfirmToday={plan.isMain ? openConfirmation : undefined}
           onOpenSetup={() => setTab("setup")}
           now={now}
           calendar={
@@ -937,7 +938,7 @@ function MainPlanToggle({
 
 /**
  * Sidebar card for scenario plans: scenario vs base on ONE footing — both
- * projected from their plans as written, compared at the same period (the
+ * calibrated from the user's confirmations, compared at the same period (the
  * earlier end date), debt-free compared as dates. Green when the scenario wins.
  */
 function ScenarioDeltaCard({
@@ -967,10 +968,6 @@ function ScenarioDeltaCard({
         <Text variant="small" as="p" className="flex items-center gap-1.5 pb-1">
           <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="truncate">{ghost.name}</span>
-          {/* Both plans are compared as written (a scenario copies no
-              confirmations), so the base's figures here are not the ones its
-              own page shows once it has been confirmed. Say so. */}
-          <span className="shrink-0">· as written</span>
         </Text>
         {netWorthDelta !== null && (
           <div className="flex items-center justify-between gap-3 border-t py-2">
@@ -1275,7 +1272,9 @@ function ProjectionPanel({
     if (ghost.today?.status === "in-range" && values[chartSeries.pastCount] != null) {
       values[chartSeries.pastCount] = ghost.today.netWorth;
     }
-    return values;
+    // The past is the user's, the same under both plans: the base branches
+    // off at today like the scenario does.
+    return values.map((v, i) => (i < chartSeries.pastCount ? null : v));
   }, [ghost, showGhost, chartSeries.points, chartSeries.pastCount, anchorDay]);
 
   // Portfolio series: recorded snapshots for the past, the projection's
@@ -1603,7 +1602,7 @@ function ProjectionPanel({
                       todayLabel={todayIsOnChart ? todayCaption : undefined}
                       markToday={!beforeStart}
                       ghostValues={ghostValues}
-                      ghostLabel={ghost ? `${ghost.name} (as written)` : undefined}
+                      ghostLabel={ghost?.name}
                       portfolioValues={portfolioValues}
                     />
                   ) : (

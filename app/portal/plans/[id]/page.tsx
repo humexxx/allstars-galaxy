@@ -13,7 +13,6 @@ import {
   compareDebtStrategies,
   getPlanWithLines,
   projectPlan,
-  projectStateAt,
   projectionOptionsFor,
 } from "@/lib/services/finance-plan-service";
 import {
@@ -91,28 +90,25 @@ export default async function PlanDetailPage({ params }: PageProps) {
       ? projection
       : projectPlan(rawPlan, rawPlan.incomes, rawPlan.expenses, rawPlan.debts, rawOptions);
 
-  // Scenario overlay: the base plan projected from its plan as written, the
-  // same footing as `pastProjection` for this plan (confirmations are not
-  // copied into a scenario, so comparing a calibrated base with an
-  // uncalibrated scenario showed deltas for an unchanged clone).
+  // Scenario overlay: the base plan as its own page shows it. Both plans
+  // calibrate from the user's confirmations, so the scenario differs from its
+  // base only where its lines do.
   let ghost: {
     name: string;
     color: string;
     projection: Projection;
     today: TodayState | null;
   } | null = null;
-  if (basePlan && baseRaw) {
-    const baseOptions = await projectionOptionsFor(baseRaw, ctx.effectiveUserId);
+  if (basePlan) {
+    const baseView = await loadCalibratedView(basePlan, ctx.effectiveUserId, now, { timeZone });
     ghost = {
       name: basePlan.name,
       color: basePlan.color,
-      projection: projectPlan(baseRaw, baseRaw.incomes, baseRaw.expenses, baseRaw.debts, baseOptions),
-      today: projectStateAt(baseRaw, baseRaw.incomes, baseRaw.expenses, baseRaw.debts, baseOptions, now),
+      projection: baseView.projection,
+      today: baseView.today,
     };
   }
-  const scenarioBasis = ghost
-    ? projectPlan(rawPlan, rawPlan.incomes, rawPlan.expenses, rawPlan.debts, rawOptions)
-    : null;
+  const scenarioBasis = ghost ? projection : null;
 
   // Recorded portfolio history feeds the chart's past segment of the portfolio
   // series when the plan includes the portfolio.

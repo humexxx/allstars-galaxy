@@ -428,6 +428,13 @@
       "when": 1793764250672,
       "tag": "0060_complex_skullbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1793924290014,
+      "tag": "0061_lucky_lady_mastermind",
+      "breakpoints": true
     }
   ]
 }

@@ -823,7 +823,7 @@ function ComparePlansTooltip(props: {
 }
 
 /** What the comparison chart needs to know about a plan. */
-type ComparePlan = Pick<FinancePlan, "id" | "name" | "color">;
+type ComparePlan = Pick<FinancePlan, "id" | "name" | "color" | "isMain">;
 
 /** One plan's line: its timeline (real past + calibrated future). */
 export type CompareChartSeries = {
@@ -903,6 +903,10 @@ export function ComparePlansChart({
       pastMonths
     );
 
+    // The past is the user's one history, the same under every plan, so only
+    // the main plan draws it; the others branch off at today. With no main
+    // among them, the first plan draws it.
+    const pastKey = (seriesByPlan.find(({ plan }) => plan.isMain) ?? seriesByPlan[0]).key;
     const data = rows.map((r, i) => {
       const row: Record<string, string | number | null> = {
         month: MONTH_FORMATTER.format(r.month),
@@ -914,7 +918,8 @@ export function ComparePlansChart({
         // the line stops instead of dropping to $0.
         const value = r.values[key] ?? null;
         // The boundary row carries BOTH keys so solid and dashed meet.
-        row[`${key}Past`] = boundary < 0 || i <= boundary ? value : null;
+        const past = boundary < 0 || i === boundary || (i < boundary && key === pastKey);
+        row[`${key}Past`] = past ? value : null;
         row[`${key}Future`] = boundary >= 0 && i >= boundary ? value : null;
       }
       return row;

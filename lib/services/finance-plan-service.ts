@@ -266,10 +266,16 @@ async function writeRestatement(
       ...extraDebts.map((d) => ({ debtId: d.id, balance: d.balance })),
     ];
     if (rows.length > 0) {
+      const keys = await tx
+        .select({ id: financePlanDebts.id, debtKey: financePlanDebts.debtKey })
+        .from(financePlanDebts)
+        .where(eq(financePlanDebts.planId, planId));
+      const keyById = new Map(keys.map((d) => [d.id, d.debtKey ?? d.id]));
       await tx.insert(financePlanDebtConfirmations).values(
         rows.map((row) => ({
           confirmationId: r.syncConfirmationId!,
           debtId: row.debtId,
+          debtKey: keyById.get(row.debtId) ?? row.debtId,
           confirmedBalance: row.balance,
         }))
       );
@@ -555,6 +561,8 @@ export async function clonePlanWithLineIds(
           source.debts.map((d) => ({
             planId: plan.id,
             name: d.name,
+            // The same debt in both plans: a confirmed balance reaches each.
+            debtKey: d.debtKey ?? d.id,
             initialBalance: options.opening?.debtBalances[d.id] ?? d.initialBalance,
             monthlyInterestRate: d.monthlyInterestRate,
             monthlyPayment: d.monthlyPayment,

@@ -931,6 +931,10 @@ describe("updatePlan — opening-balance restatement (balances_as_of)", () => {
       update: (table: unknown) => chain("update", table),
       insert: (table: unknown) => chain("insert", table),
       delete: (table: unknown) => chain("delete", table),
+      // The plan's debts and their keys across plans.
+      select: () => ({
+        from: () => ({ where: () => Promise.resolve([{ id: "debt-1", debtKey: "key-1" }]) }),
+      }),
     };
   }
 
@@ -990,7 +994,7 @@ describe("updatePlan — opening-balance restatement (balances_as_of)", () => {
       confirmedBalance: string;
     }[];
     expect(debtRows).toEqual([
-      { confirmationId: "conf-1", debtId: "debt-1", confirmedBalance: "800.00" },
+      { confirmationId: "conf-1", debtId: "debt-1", debtKey: "key-1", confirmedBalance: "800.00" },
     ]);
   });
 });

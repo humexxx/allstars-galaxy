@@ -136,7 +136,7 @@ import type {
   StrategyComparison,
   TodayState,
 } from "@/types/finance";
-import { closeLabels } from "@/lib/finance/dashboard";
+import { changeBaseline, closeLabels } from "@/lib/finance/dashboard";
 import { CountUpCurrency } from "./count-up";
 import { DeltaChip } from "./delta-chip";
 import { dashboardSeries, type DashboardSeries } from "./dashboard-finance-series";
@@ -248,6 +248,8 @@ type PlanEditorProps = {
   now: Date;
   /** The main plan's current period has no confirmation yet. */
   confirmationDue?: boolean;
+  /** The user's last own confirmation (YYYY-MM-DD): net worth's change is from there. */
+  lastConfirmedDay?: string | null;
 };
 
 export function PlanEditor({
@@ -269,6 +271,7 @@ export function PlanEditor({
   backHref,
   now,
   confirmationDue = false,
+  lastConfirmedDay = null,
 }: PlanEditorProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -608,6 +611,7 @@ export function PlanEditor({
           // Only the main plan records reality; a what-if reads its past.
           onConfirmToday={plan.isMain ? openConfirmation : undefined}
           confirmationDue={plan.isMain && confirmationDue}
+          lastConfirmedDay={lastConfirmedDay}
           onOpenSetup={() => setTab("setup")}
           now={now}
           calendar={
@@ -1178,6 +1182,8 @@ type ProjectionPanelProps = {
   portfolioEnabled: boolean;
   /** The current period still waits for a confirmation (main plan only). */
   confirmationDue?: boolean;
+  /** The user's last own confirmation (YYYY-MM-DD). */
+  lastConfirmedDay?: string | null;
   /** The server's clock for this render — see PlanEditorProps. */
   now: Date;
   /** Opens the Setup tab — the empty chart's call to action. */
@@ -1351,6 +1357,7 @@ function ProjectionPanel({
   portfolioHistory = [],
   portfolioEnabled,
   confirmationDue = false,
+  lastConfirmedDay = null,
   now,
   onOpenSetup,
 }: ProjectionPanelProps) {
@@ -1504,8 +1511,14 @@ function ProjectionPanel({
 
 
   // The last closed period, for the "since" chip beside today's figure.
-  const lastClose = chartSeries.pastCount > 0 ? chartSeries.points[chartSeries.pastCount - 1] : null;
-  const sinceClose = lastClose && todayIsOnChart ? today - lastClose.netWorth : null;
+  // Net worth's change: from the user's last confirmation, else the last close.
+  const changeFrom = changeBaseline(
+    chartSeries.points.slice(0, chartSeries.pastCount),
+    (p) => closeLabels(p.date, anchorDay).time,
+    (p) => closeLabels(p.date, anchorDay),
+    lastConfirmedDay
+  );
+  const sinceClose = changeFrom && todayIsOnChart ? today - changeFrom.point.netWorth : null;
 
   // Every control here is h-8 from `sm` (h-9 to h-10 on a phone, where they
   // step up for a thumb), so the cluster wraps as one row height.
@@ -1551,9 +1564,7 @@ function ProjectionPanel({
           >
             <CountUpCurrency value={today} />
           </Mono>
-          {lastClose && sinceClose !== null && (
-            <DeltaChip delta={sinceClose} since={closeLabels(lastClose.date, anchorDay)} />
-          )}
+          {changeFrom && sinceClose !== null && <DeltaChip delta={sinceClose} since={changeFrom.since} />}
         </div>
         {todayState && todayState.receivables > 0 && (
           <Text variant="small" as="p" className="text-2xs">

@@ -93,6 +93,21 @@ export async function getLatestConfirmation(
 }
 
 /**
+ * The last day the user confirmed their balances themselves (YYYY-MM-DD) —
+ * the newest figure that is real. Auto rows record a projection, so they
+ * don't count. Net worth's change is measured from here.
+ */
+export async function getLastConfirmedDay(userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ day: financePlanConfirmations.confirmationMonth })
+    .from(financePlanConfirmations)
+    .where(and(confirmationsOf(await historyOwner(userId)), eq(financePlanConfirmations.source, "user")))
+    .orderBy(desc(financePlanConfirmations.confirmationMonth))
+    .limit(1);
+  return row?.day ?? null;
+}
+
+/**
  * Whether the plan still needs a confirmation for the period containing
  * `today` (the reader's calendar day), and what the dialog should pre-fill.
  *

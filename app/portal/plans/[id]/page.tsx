@@ -20,7 +20,10 @@ import {
   getRecentMonthlySnapshots,
   loadCalibratedView,
 } from "@/lib/services/finance-snapshot-service";
-import { getConfirmationStatus } from "@/lib/services/finance-confirmation-service";
+import {
+  getConfirmationStatus,
+  getLastConfirmedDay,
+} from "@/lib/services/finance-confirmation-service";
 import { getUserPortfolio } from "@/lib/services/portfolio-service";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { todayInTimeZone } from "@/lib/utils/date";
@@ -82,9 +85,12 @@ export default async function PlanDetailPage({ params }: PageProps) {
   const { baseline, projection, options, today } = view;
   // Only the main plan is confirmed; the warning beside its chart says when
   // the current period still waits for one.
-  const confirmationDue = plan.isMain
-    ? (await getConfirmationStatus(plan, ctx.effectiveUserId, now)).isDue
-    : false;
+  const [confirmationDue, lastConfirmedDay] = await Promise.all([
+    plan.isMain
+      ? getConfirmationStatus(plan, ctx.effectiveUserId, now).then((s) => s.isDue)
+      : false,
+    getLastConfirmedDay(ctx.effectiveUserId),
+  ]);
 
   // The plan as written (no confirmation applied): the hover fallback for
   // periods before the calibration start, the chart's past while the plan has
@@ -163,6 +169,7 @@ export default async function PlanDetailPage({ params }: PageProps) {
         }
         backHref="/portal/plans"
         confirmationDue={confirmationDue}
+        lastConfirmedDay={lastConfirmedDay}
       />
     </section>
   );

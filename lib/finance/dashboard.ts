@@ -2,6 +2,8 @@ import type { Projection, ProjectionMonth, TodayState } from "@/types/finance";
 import { formatCurrencyCompact, moneySign, roundCents } from "@/lib/utils/format";
 import { describeDebtFree, formatDebtFree, type ChartPoint } from "./chart-series";
 import { nextPeriodStart } from "./period";
+import { parseIsoDay } from "./schedule";
+import { formatDay, formatShortDay } from "@/lib/utils/date";
 
 /** Closed periods the chart shows before today, drawn solid. */
 export const DASHBOARD_PAST_MONTHS = 3;
@@ -108,6 +110,35 @@ function partsOfPoint(p: ChartPoint): DashboardParts {
     debt,
     netWorth: p.netWorth,
   };
+}
+
+/**
+ * What net worth today is measured against: where it stood when the user last
+ * confirmed their balances (`confirmedDay`, YYYY-MM-DD) — the last figure that
+ * is real rather than projected — read off the last close before that day.
+ * Without a confirmation, or none on the chart, the last closed period.
+ * `closes` run oldest first and end before today.
+ */
+export function changeBaseline<P extends { netWorth: number }>(
+  closes: readonly P[],
+  closeTime: (point: P) => number,
+  closeLabel: (point: P) => { month: string; label: string },
+  confirmedDay: string | null
+): { point: P; since: { month: string; label: string } } | null {
+  const confirmed = parseIsoDay(confirmedDay);
+  const atConfirmation = confirmed
+    ? closes.findLast((p) => closeTime(p) < confirmed.getTime())
+    : undefined;
+  if (confirmed && atConfirmation) {
+    return {
+      point: atConfirmation,
+      since: { month: formatShortDay(confirmedDay!), label: `your confirmation of ${formatDay(confirmedDay!)}` },
+    };
+  }
+  const last = closes.at(-1);
+  if (!last) return null;
+  const labels = closeLabel(last);
+  return { point: last, since: { month: labels.month, label: `the close of ${labels.label}` } };
 }
 
 /** A closed period's names, after its last day: "Nov" and "Nov 4, 2026". */

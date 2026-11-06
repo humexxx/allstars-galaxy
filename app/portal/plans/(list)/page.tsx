@@ -11,6 +11,7 @@ import type { PlanTimeline } from "@/lib/finance/chart-series";
 
 import { requireEffectiveContext } from "@/lib/services/impersonation";
 import { listUserPlansWithLines } from "@/lib/services/finance-plan-service";
+import { getLastConfirmedDay } from "@/lib/services/finance-confirmation-service";
 import { loadPlanOverviews } from "@/lib/services/finance-snapshot-service";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { todayInTimeZone } from "@/lib/utils/date";
@@ -31,7 +32,10 @@ export default async function FinancePlansPage() {
   // figures and the chart match what the plan page shows.
   const timeZone = await getRequestTimeZone();
   const today = todayInTimeZone(timeZone);
-  const overviews = await loadPlanOverviews(plans, ctx.effectiveUserId, today, timeZone);
+  const [overviews, lastConfirmedDay] = await Promise.all([
+    loadPlanOverviews(plans, ctx.effectiveUserId, today, timeZone),
+    getLastConfirmedDay(ctx.effectiveUserId),
+  ]);
   const summaries: Record<string, PlanSummary> = Object.fromEntries(
     overviews.map((o) => [o.plan.id, o.summary])
   );
@@ -77,6 +81,7 @@ export default async function FinancePlansPage() {
           summaries={summaries}
           timelines={timelines}
           today={today}
+          lastConfirmedDay={lastConfirmedDay}
         />
       )}
     </section>

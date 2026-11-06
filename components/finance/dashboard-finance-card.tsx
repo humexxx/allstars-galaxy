@@ -42,9 +42,11 @@ import {
 import { buildPlanTimeline } from "@/lib/finance/chart-series";
 import {
   buildDashboardFigures,
+  changeBaseline,
   dashboardGoal,
   DASHBOARD_PAST_MONTHS,
 } from "@/lib/finance/dashboard";
+import { getLastConfirmedDay } from "@/lib/services/finance-confirmation-service";
 import { getManagedAssets } from "@/lib/services/margin-service";
 import { getUserPreferences } from "@/lib/services/user-preferences-service";
 import type { ManagedAssets } from "@/types/margin";
@@ -94,7 +96,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   // included), with "now" as the day-aware position in the reader's zone.
   const timeZone = await getRequestTimeZone();
   const now = todayInTimeZone(timeZone);
-  const [view, history, preferences, managed, movements] = await Promise.all([
+  const [view, history, preferences, managed, movements, lastConfirmedDay] = await Promise.all([
     loadCalibratedView(full, userId, now, { timeZone }),
     // One month more than the chart shows: a period's close is recorded by the
     // snapshots taken in the period after it.
@@ -109,6 +111,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     // Same request-cached read the projection already made for net worth.
     full.includePortfolio ? getManagedAssets(userId) : Promise.resolve(null),
     getRecentMovementSnapshots(full.id, userId, DASHBOARD_PAST_MONTHS, now),
+    getLastConfirmedDay(userId),
   ]);
   // The months before today come off the plan page's own timeline: recorded
   // snapshots, or the plan's forecast while it has none.
@@ -138,11 +141,16 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   // Only net worth is coloured by its sign. Each part wore its own colour
   // (blue investments, red debt), which clashed with the chart's series
   // colours that the swatches beside these labels now carry.
-  // Net worth leads the card under its title, against the last closed
-  // period: the number the whole card is about, and whether it moved.
-  const lastClose =
-    points.slice(0, fig.pastCount).findLast((p) => p.kind === "close") ?? null;
-  const sinceClose = lastClose ? fig.netWorth - lastClose.netWorth : null;
+  // Net worth leads the card under its title, against the user's last
+  // confirmation (else the last closed period): the number the whole card is
+  // about, and whether it moved.
+  const changeFrom = changeBaseline(
+    points.slice(0, fig.pastCount).filter((p) => p.kind === "close"),
+    (p) => p.time,
+    (p) => p,
+    lastConfirmedDay
+  );
+  const sinceClose = changeFrom ? fig.netWorth - changeFrom.point.netWorth : null;
   // Net worth, Portfolio and Cash always show; Owed to you and Debt when the
   // chart's range has any — a $0.00 debt tile on a plan with none is noise.
   const visible = visibleSeriesKeys(points);
@@ -230,8 +238,8 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
                 >
                   <CountUpCurrency value={fig.netWorth} delay={drawDelay("netWorth")} />
                 </Mono>
-                {lastClose && sinceClose !== null && (
-                  <DeltaChip delta={sinceClose} since={lastClose} />
+                {changeFrom && sinceClose !== null && (
+                  <DeltaChip delta={sinceClose} since={changeFrom.since} />
                 )}
               </div>
               {goal?.kind === "milestone" && (

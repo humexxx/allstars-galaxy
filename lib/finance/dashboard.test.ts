@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildPlanTimeline, type ChartPoint } from "./chart-series";
-import { buildDashboardFigures, dashboardGoal } from "./dashboard";
+import { buildDashboardFigures, changeBaseline, closeLabels, dashboardGoal } from "./dashboard";
 import { projectPlan, projectStateAt } from "./projection";
 import type {
   FinancePlan,
@@ -267,5 +267,28 @@ describe("dashboard card: movement days between the closes", () => {
     expect(past.every((p, i) => i === 0 || p.time > past[i - 1].time)).toBe(true);
     expect(fig.points[fig.pastCount]).toMatchObject({ label: "Today", tick: true });
     expect(past.filter((p) => p.tick)).toHaveLength(1);
+  });
+});
+
+describe("changeBaseline: what net worth's change is measured from", () => {
+  // Periods anchored on the 5th, each point dated at its start and worth its close.
+  const closes = [
+    { date: U(2026, 8, 5), netWorth: 10_000 }, // closes Sep 4
+    { date: U(2026, 9, 5), netWorth: 14_000 }, // closes Oct 4 — the position on Oct 5
+    { date: U(2026, 10, 5), netWorth: 23_600 }, // closes Nov 4, projected
+  ];
+  const time = (p: (typeof closes)[number]): number => closeLabels(p.date, 5).time;
+  const label = (p: (typeof closes)[number]): { month: string; label: string } => closeLabels(p.date, 5);
+
+  it("measures from the user's last confirmation, not the projected close after it", () => {
+    const from = changeBaseline(closes, time, label, "2026-10-05");
+    expect(from?.point.netWorth).toBe(14_000);
+    expect(from?.since).toEqual({ month: "Oct 5", label: "your confirmation of Oct 5, 2026" });
+  });
+
+  it("falls back to the last close with no confirmation, or one before the chart", () => {
+    expect(changeBaseline(closes, time, label, null)?.point.netWorth).toBe(23_600);
+    expect(changeBaseline(closes, time, label, "2026-01-05")?.since.month).toBe("Nov");
+    expect(changeBaseline([], time, label, null)).toBeNull();
   });
 });

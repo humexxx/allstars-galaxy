@@ -23,7 +23,7 @@ export function DeltaChip({
     <Badge
       variant={sign === 0 ? "secondary" : good ? "success" : "destructive"}
       className="font-mono tabular-nums"
-      title={`Against the close of ${since.label}`}
+      title={`Against ${since.label}`}
     >
       {sign > 0 ? <TrendingUp /> : sign < 0 ? <TrendingDown /> : null}
       {sign === 0 ? formatCurrency(0) : formatSignedCurrency(delta)} · vs {since.month}

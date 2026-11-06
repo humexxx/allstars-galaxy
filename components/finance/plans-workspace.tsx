@@ -60,7 +60,7 @@ import {
   summaryDebtFree,
   type PlanTimeline,
 } from "@/lib/finance/chart-series";
-import { closeLabels } from "@/lib/finance/dashboard";
+import { changeBaseline, closeLabels } from "@/lib/finance/dashboard";
 import type { FinancePlan, PlanSummary } from "@/types/finance";
 
 const END_LABEL = new Intl.DateTimeFormat("en-US", {
@@ -111,6 +111,7 @@ export function PlansWorkspace({
   summaries,
   timelines,
   today,
+  lastConfirmedDay = null,
 }: {
   plans: FinancePlan[];
   summaries: Record<string, PlanSummary>;
@@ -118,6 +119,8 @@ export function PlansWorkspace({
   timelines: Record<string, PlanTimeline>;
   /** The reader's calendar day — the chart's today boundary. */
   today: Date;
+  /** The user's last own confirmation (YYYY-MM-DD): net worth's change is from there. */
+  lastConfirmedDay?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
   // Deleting a row unmounts the menu that opened the dialog, so focus would
@@ -163,13 +166,19 @@ export function PlansWorkspace({
     const timeline = main ? timelines[main.id] : undefined;
     const now = timeline?.points[timeline.todayIndex];
     if (!main || !timeline || !now) return null;
-    const closed = timeline.todayIndex > 0 ? timeline.points[timeline.todayIndex - 1] : null;
+    const anchor = main.confirmationDayOfMonth;
+    const baseline = changeBaseline(
+      timeline.points.slice(0, timeline.todayIndex),
+      (p) => closeLabels(p.date, anchor).time,
+      (p) => closeLabels(p.date, anchor),
+      lastConfirmedDay
+    );
     return {
       netWorth: now.netWorth,
-      sinceClose: closed ? now.netWorth - closed.netWorth : null,
-      since: closed ? closeLabels(closed.date, main.confirmationDayOfMonth) : null,
+      sinceClose: baseline ? now.netWorth - baseline.point.netWorth : null,
+      since: baseline?.since ?? null,
     };
-  }, [plans, timelines]);
+  }, [plans, timelines, lastConfirmedDay]);
 
   // Each plan's net worth at the end of the chosen horizon — the last month
   // the chart draws — or at the plan's own end when it stops sooner.

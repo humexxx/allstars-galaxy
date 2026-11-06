@@ -1174,14 +1174,31 @@ export function ComparePlansChart({
         data={data}
         margin={{ left: 0, right: 4, top: 10, bottom: 0 }}
       >
-        {emphasisedKey && (
-          <defs>
-            <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={`var(--color-${emphasisedKey}Past)`} stopOpacity={0.24} />
-              <stop offset="100%" stopColor={`var(--color-${emphasisedKey}Past)`} stopOpacity={0} />
+        {/* Every plan is an area fading to the baseline, as on the other
+            charts: the emphasised one fuller, the rest faint. */}
+        <defs>
+          {seriesByPlan.map(({ plan, key }) => {
+            const top =
+              key === emphasisedKey ? 0.24 : focusedPlanId && plan.id !== focusedPlanId ? 0.04 : 0.1;
+            return (
+              <linearGradient key={key} id={`${fillId}-${key}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={`var(--color-${key}Past)`} stopOpacity={top} />
+                <stop offset="100%" stopColor={`var(--color-${key}Past)`} stopOpacity={0} />
+              </linearGradient>
+            );
+          })}
+          {(
+            [
+              ["debt", 0.16],
+              ["debt-dim", 0.04],
+            ] as const
+          ).map(([id, top]) => (
+            <linearGradient key={id} id={`${fillId}-${id}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={DEBT} stopOpacity={top} />
+              <stop offset="100%" stopColor={DEBT} stopOpacity={0} />
             </linearGradient>
-          </defs>
-        )}
+          ))}
+        </defs>
         {/* Full grid here (unlike the single-plan chart above, which stays
             horizontal-only because its milestone markers already carry the x
             axis). Kept recessive — dashed and low opacity — so it reads as
@@ -1241,13 +1258,16 @@ export function ComparePlansChart({
               connectNulls: false,
               legendType: "none" as const,
             };
+            // An area, as on a plan's own page: a red fade to the baseline.
+            const fill = `url(#${fillId}-debt${dimmed ? "-dim" : ""})`;
             return [
-              <Line key={`${key}DebtPast`} dataKey={`${key}DebtPast`} {...shared} {...drawIn("past", 0)} />,
-              <Line
+              <Area key={`${key}DebtPast`} dataKey={`${key}DebtPast`} {...shared} fill={fill} {...drawIn("past", 0)} />,
+              <Area
                 key={`${key}DebtFuture`}
                 dataKey={`${key}DebtFuture`}
                 strokeDasharray="6 4"
                 {...shared}
+                fill={fill}
                 {...drawIn("future", 0)}
               />,
             ];
@@ -1294,13 +1314,31 @@ export function ComparePlansChart({
               ...shared,
               ...drawIn("future", planBegin(order)),
             };
-            // Filled for the emphasised plan, a bare line for the rest.
-            return emphasised
-              ? [
-                  <Area key={`${key}Past`} {...past} fill={`url(#${fillId})`} />,
-                  <Area key={`${key}Future`} {...future} fill={`url(#${fillId})`} />,
-                ]
-              : [<Line key={`${key}Past`} {...past} />, <Line key={`${key}Future`} {...future} />];
+            // A wide, faint copy under the emphasised line — the dashboard's
+            // net worth highlight — undashed, so the glow reads as one band.
+            const glow = (half: "Past" | "Future") => (
+              <Line
+                key={`${key}${half}Glow`}
+                dataKey={`${key}${half}`}
+                type="monotone"
+                stroke={`var(--color-${key}Past)`}
+                strokeWidth={8}
+                strokeOpacity={0.18}
+                strokeLinecap="round"
+                dot={false}
+                activeDot={false}
+                legendType="none"
+                connectNulls={false}
+                {...drawIn(half === "Past" ? "past" : "future", half === "Past" ? STAGGER_MS : planBegin(order))}
+              />
+            );
+            // Every plan an area; the emphasised one glows as well.
+            const fill = `url(#${fillId}-${key})`;
+            return [
+              ...(emphasised ? [glow("Past"), glow("Future")] : []),
+              <Area key={`${key}Past`} {...past} fill={fill} />,
+              <Area key={`${key}Future`} {...future} fill={fill} />,
+            ];
           })}
       </ComposedChart>
     </ChartContainer>

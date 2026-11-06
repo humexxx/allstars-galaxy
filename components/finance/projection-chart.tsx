@@ -6,7 +6,6 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
-  LineChart,
   ReferenceLine,
   XAxis,
   YAxis,
@@ -992,6 +991,7 @@ export function ComparePlansChart({
   pastMonths = 3,
 }: CompareChartProps) {
   const reducedMotion = usePrefersReducedMotion();
+  const fillId = `${useId().replace(/:/g, "")}-emphasis`;
   // True until the first draw-in has played (see `drawIn` below).
   const [intro, setIntro] = useState(true);
   useEffect(() => {
@@ -1158,17 +1158,30 @@ export function ComparePlansChart({
         }
       : { isAnimationActive: false };
   const planBegin = (i: number): number => STAGGER_MS * (1 + i);
+  // The emphasised series (the one pointed at, else the main plan) wears the
+  // soft fill a plan's own page gives net worth.
+  const emphasisedKey = seriesByPlan.find(({ plan }) =>
+    focusedPlanId ? plan.id === focusedPlanId : plan.isMain
+  )?.key;
 
   return (
     <div ref={containerRef} className="min-w-0">
     <ChartContainer config={compareConfig} className={cn(heightClass, "w-full")}>
       {/* No left margin: the YAxis already reserves its own label gutter, so a
           margin on top of it is pure dead space. */}
-      <LineChart
+      <ComposedChart
         accessibilityLayer
         data={data}
         margin={{ left: 0, right: 4, top: 10, bottom: 0 }}
       >
+        {emphasisedKey && (
+          <defs>
+            <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={`var(--color-${emphasisedKey}Past)`} stopOpacity={0.24} />
+              <stop offset="100%" stopColor={`var(--color-${emphasisedKey}Past)`} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+        )}
         {/* Full grid here (unlike the single-plan chart above, which stays
             horizontal-only because its milestone markers already carry the x
             axis). Kept recessive — dashed and low opacity — so it reads as
@@ -1260,33 +1273,36 @@ export function ComparePlansChart({
               dot: false as const,
               connectNulls: false,
             };
-            return [
-              <Line
-                key={`${key}Past`}
-                dataKey={`${key}Past`}
-                stroke={`var(--color-${key}Past)`}
-                {...shared}
-                {...drawIn("past", STAGGER_MS)}
-                // "You are here" pulse where solid meets dashed — the same
-                // marker the single-plan chart uses. Once, on the series that
-                // draws the shared past: every plan is at the same point today,
-                // and one dot per plan stacked them, the last plan's on top.
-                dot={key === pastKey ? renderTodayDot(`var(--color-${key}Past)`, boundary, false) : false}
-              />,
-              // Dashed = projected. Kept out of the legend so each plan is
-              // named once.
-              <Line
-                key={`${key}Future`}
-                dataKey={`${key}Future`}
-                stroke={`var(--color-${key}Future)`}
-                legendType="none"
-                strokeDasharray="6 4"
-                {...shared}
-                {...drawIn("future", planBegin(order))}
-              />,
-            ];
+            const past = {
+              dataKey: `${key}Past`,
+              stroke: `var(--color-${key}Past)`,
+              ...shared,
+              ...drawIn("past", STAGGER_MS),
+              // "You are here" pulse where solid meets dashed — the same
+              // marker the single-plan chart uses. Once, on the series that
+              // draws the shared past: every plan is at the same point today,
+              // and one dot per plan stacked them, the last plan's on top.
+              dot: key === pastKey ? renderTodayDot(`var(--color-${key}Past)`, boundary, false) : (false as const),
+            };
+            // Dashed = projected. Kept out of the legend so each plan is
+            // named once.
+            const future = {
+              dataKey: `${key}Future`,
+              stroke: `var(--color-${key}Future)`,
+              legendType: "none" as const,
+              strokeDasharray: "6 4",
+              ...shared,
+              ...drawIn("future", planBegin(order)),
+            };
+            // Filled for the emphasised plan, a bare line for the rest.
+            return emphasised
+              ? [
+                  <Area key={`${key}Past`} {...past} fill={`url(#${fillId})`} />,
+                  <Area key={`${key}Future`} {...future} fill={`url(#${fillId})`} />,
+                ]
+              : [<Line key={`${key}Past`} {...past} />, <Line key={`${key}Future`} {...future} />];
           })}
-      </LineChart>
+      </ComposedChart>
     </ChartContainer>
     </div>
   );

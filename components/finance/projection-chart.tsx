@@ -61,6 +61,20 @@ const OWED = dashboardSeries("receivables").color;
 type Easing = "ease-out";
 const asEasing = (fn: (t: number) => number): Easing => fn as unknown as Easing;
 
+/**
+ * Where a series' fade starts, as a share of the chart's height: at the
+ * series' own peak. The fades span the whole chart (so a series' past and
+ * projection share one shade across today); started at the chart's top
+ * instead, a series far below it — debt under a growing net worth — got only
+ * the faint end of its fade.
+ */
+function fadeStart(values: readonly (number | null | undefined)[], top: number, bottom: number): string {
+  const finite = values.filter((v): v is number => v != null && Number.isFinite(v));
+  if (finite.length === 0 || top <= bottom) return "0%";
+  const peak = Math.max(...finite);
+  return `${Math.min(100, Math.max(0, ((top - peak) / (top - bottom)) * 100))}%`;
+}
+
 // Format projection dates in UTC — the projection generates months at UTC
 // midnight, so any local timezone with a negative offset would shift the
 // formatted month back a day and show e.g. "Apr" for a "May 2026" bucket.
@@ -634,13 +648,21 @@ export const ProjectionChart = memo(function ProjectionChart({
           <defs>
             {(
               [
-                ["net", lineColor, 0.28],
-                ["portfolio", PORTFOLIO, 0.18],
-                ["debt", DEBT, 0.16],
-                ["owed", OWED, 0.16],
+                ["net", lineColor, 0.28, data.map((r) => r.rawValue)],
+                ["portfolio", PORTFOLIO, 0.18, data.map((r) => r.portfolioRaw)],
+                ["debt", DEBT, 0.16, data.map((r) => r.debtPast ?? r.debtFuture)],
+                ["owed", OWED, 0.16, data.map((r) => r.owedPast ?? r.owedFuture)],
               ] as const
-            ).map(([key, colour, opacity]) => (
-              <linearGradient key={key} id={`${gradientId}-${key}`} gradientUnits="userSpaceOnUse" x1="0" y1="0%" x2="0" y2="100%">
+            ).map(([key, colour, opacity, values]) => (
+              <linearGradient
+                key={key}
+                id={`${gradientId}-${key}`}
+                gradientUnits="userSpaceOnUse"
+                x1="0"
+                y1={fadeStart(values, yTicks[yTicks.length - 1], yTicks[0])}
+                x2="0"
+                y2="100%"
+              >
                 <stop offset="0%" stopColor={colour} stopOpacity={opacity} />
                 <stop offset="100%" stopColor={colour} stopOpacity={0} />
               </linearGradient>
@@ -1163,6 +1185,15 @@ export function ComparePlansChart({
   const planBegin = (i: number): number => STAGGER_MS * (1 + i);
   // The emphasised series (the one pointed at, else the main plan) wears the
   // soft fill a plan's own page gives net worth.
+  // The value range the chart spans, for where each fade starts. recharts
+  // rounds its axis to nice ticks, so this is a close floor, not exact.
+  const plotted = data.flatMap((r) =>
+    Object.entries(r)
+      .filter(([k, v]) => /^series\d+(Debt)?(Past|Future)$/.test(k) && typeof v === "number")
+      .map(([, v]) => v as number)
+  );
+  const valueTop = plotted.length ? Math.max(0, ...plotted) : 0;
+  const valueBottom = plotted.length ? Math.min(0, ...plotted) : 0;
   const emphasisedKey = seriesByPlan.find(({ plan }) =>
     focusedPlanId ? plan.id === focusedPlanId : plan.isMain
   )?.key;
@@ -1186,7 +1217,19 @@ export function ComparePlansChart({
             const top =
               key === emphasisedKey ? 0.24 : focusedPlanId && plan.id !== focusedPlanId ? 0.04 : 0.1;
             return (
-              <linearGradient key={key} id={`${fillId}-${key}`} gradientUnits="userSpaceOnUse" x1="0" y1="0%" x2="0" y2="100%">
+              <linearGradient
+                key={key}
+                id={`${fillId}-${key}`}
+                gradientUnits="userSpaceOnUse"
+                x1="0"
+                y1={fadeStart(
+                  data.map((r) => (r[`${key}Past`] ?? r[`${key}Future`]) as number | null),
+                  valueTop,
+                  valueBottom
+                )}
+                x2="0"
+                y2="100%"
+              >
                 <stop offset="0%" stopColor={`var(--color-${key}Past)`} stopOpacity={top} />
                 <stop offset="100%" stopColor={`var(--color-${key}Past)`} stopOpacity={0} />
               </linearGradient>
@@ -1198,7 +1241,21 @@ export function ComparePlansChart({
               ["debt-dim", 0.04],
             ] as const
           ).map(([id, top]) => (
-            <linearGradient key={id} id={`${fillId}-${id}`} gradientUnits="userSpaceOnUse" x1="0" y1="0%" x2="0" y2="100%">
+            <linearGradient
+              key={id}
+              id={`${fillId}-${id}`}
+              gradientUnits="userSpaceOnUse"
+              x1="0"
+              y1={fadeStart(
+                data.flatMap((r) =>
+                  seriesByPlan.map(({ key }) => (r[`${key}DebtPast`] ?? r[`${key}DebtFuture`]) as number | null)
+                ),
+                valueTop,
+                valueBottom
+              )}
+              x2="0"
+              y2="100%"
+            >
               <stop offset="0%" stopColor={DEBT} stopOpacity={top} />
               <stop offset="100%" stopColor={DEBT} stopOpacity={0} />
             </linearGradient>

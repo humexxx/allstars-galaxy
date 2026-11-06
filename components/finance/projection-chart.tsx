@@ -748,6 +748,26 @@ export const ProjectionChart = memo(function ProjectionChart({
           {/* Past — solid line + filled dots. The boundary point (today) renders
               a pulsing marker. Labels are reserved for milestone crossings above,
               so the dots stay clean. */}
+          {/* A soft glow under net worth — the dashboard card's highlight on
+              the number the chart is about. An Area without fill, so it is
+              revealed exactly as the net-worth area above it is. */}
+          {(["past", "future"] as const).map((half) => (
+            <Area
+              key={`glow-${half}`}
+              dataKey={half === "past" ? "pastValue" : "futureValue"}
+              type="monotone"
+              stroke={lineColor}
+              strokeWidth={8}
+              strokeOpacity={0.18}
+              fill="none"
+              {...draw(half, lineBegin)}
+              connectNulls={false}
+              dot={false}
+              activeDot={false}
+              legendType="none"
+              tooltipType="none"
+            />
+          ))}
           <Area
             dataKey="pastValue"
             name="Net worth"
@@ -898,6 +918,16 @@ export function ComparePlansChart({
   months,
   pastMonths = 3,
 }: CompareChartProps) {
+  const reducedMotion = usePrefersReducedMotion();
+  // True until the first draw-in has played (see `drawIn` below).
+  const [intro, setIntro] = useState(true);
+  useEffect(() => {
+    const done = window.setTimeout(() => setIntro(false), SWEEP_MS + STAGGER_MS * (series.length + 2));
+    return () => window.clearTimeout(done);
+    // Once, on mount: later prop changes redraw without animating.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const animate = intro && !reducedMotion;
   // Width drives how many month ticks fit (~72px per "May 27" label).
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number | null>(null);
@@ -1031,6 +1061,25 @@ export function ComparePlansChart({
   if (series.length === 0) return null;
   const focusedKey = seriesByPlan.find(({ plan }) => plan.id === focusedPlanId)?.key ?? null;
 
+  // The draw-in, on the dashboard's clock, once: the shared past, then the
+  // debt, then each plan's projection in turn — every line one eased stroke,
+  // solid past and dashed future taking their slice of time and curve. Later
+  // renders (a focus, a horizon) redraw in place, or the rail would feel slow.
+  const stroke = splitEasedStroke(
+    boundary > 0 && data.length > 1 ? boundary / (data.length - 1) : 1,
+    SWEEP_MS
+  );
+  const drawIn = (half: "past" | "future", begin: number) =>
+    animate
+      ? {
+          isAnimationActive: true,
+          animationBegin: begin + (half === "future" ? stroke.second.delay : 0),
+          animationDuration: half === "future" ? stroke.second.duration : stroke.first.duration,
+          animationEasing: asEasing(half === "future" ? stroke.second.easing : stroke.first.easing),
+        }
+      : { isAnimationActive: false };
+  const planBegin = (i: number): number => STAGGER_MS * (1 + i);
+
   return (
     <div ref={containerRef} className="min-w-0">
     <ChartContainer config={compareConfig} className={cn(heightClass, "w-full")}>
@@ -1095,7 +1144,6 @@ export function ComparePlansChart({
               strokeWidth: 1.5,
               dot: false as const,
               activeDot: false as const,
-              isAnimationActive: false,
               connectNulls: false,
               legendType: "none" as const,
             };
@@ -1105,6 +1153,7 @@ export function ComparePlansChart({
                 dataKey={`${key}DebtPast`}
                 strokeOpacity={dimmed && key !== pastKey ? 0.22 : 0.85}
                 {...shared}
+                {...drawIn("past", 0)}
               />,
               <Line
                 key={`${key}DebtFuture`}
@@ -1112,6 +1161,7 @@ export function ComparePlansChart({
                 strokeDasharray="6 4"
                 strokeOpacity={dimmed ? 0.22 : 0.85}
                 {...shared}
+                {...drawIn("future", 0)}
               />,
             ];
           })}
@@ -1126,14 +1176,12 @@ export function ComparePlansChart({
           .flatMap(({ plan, key }) => {
             const dimmed =
               focusedPlanId !== null && plan.id !== focusedPlanId;
+            const order = seriesByPlan.findIndex((s) => s.key === key);
             const shared = {
               type: "monotone" as const,
               strokeWidth: dimmed ? 1.5 : focusedPlanId ? 3 : 2,
               strokeOpacity: dimmed ? 0.22 : 1,
               dot: false as const,
-              // Recharts animates on every prop change; re-running the 300ms
-              // draw-in each time the focus moves makes the rail feel laggy.
-              isAnimationActive: false,
               connectNulls: false,
             };
             // The past is drawn once but belongs to every plan: it never dims,
@@ -1154,6 +1202,7 @@ export function ComparePlansChart({
                 dataKey={`${key}Past`}
                 {...shared}
                 {...past}
+                {...drawIn("past", STAGGER_MS)}
                 // "You are here" pulse where solid meets dashed — the same
                 // marker the single-plan chart uses. Only on the past series;
                 // the future one shares that row and would stack a second one.
@@ -1172,6 +1221,7 @@ export function ComparePlansChart({
                 legendType="none"
                 strokeDasharray="6 4"
                 {...shared}
+                {...drawIn("future", planBegin(order))}
               />,
             ];
           })}

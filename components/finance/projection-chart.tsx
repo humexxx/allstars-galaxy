@@ -64,11 +64,21 @@ const asEasing = (fn: (t: number) => number): Easing => fn as unknown as Easing;
 // Format projection dates in UTC — the projection generates months at UTC
 // midnight, so any local timezone with a negative offset would shift the
 // formatted month back a day and show e.g. "Apr" for a "May 2026" bucket.
-const MONTH_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  year: "2-digit",
+const MONTH_PART = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
+const LONG_MONTH = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  year: "numeric",
   timeZone: "UTC",
 });
+const TODAY_DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+/**
+ * Axis month: "Nov ’26". Without the apostrophe "Nov 26" read as the 26th of
+ * November, which put today's split three weeks out.
+ */
+const MONTH_FORMATTER = {
+  format: (d: Date): string => `${MONTH_PART.format(d)} ’${String(d.getUTCFullYear()).slice(-2)}`,
+};
 
 
 // Stable chart config — the line stroke is overridden per-plan inside the
@@ -433,7 +443,7 @@ export const ProjectionChart = memo(function ProjectionChart({
       return {
         idx: i,
         monthLabel,
-        tooltipLabel: isBoundary && todayLabel ? todayLabel : monthLabel,
+        tooltipLabel: isBoundary && todayLabel ? todayLabel : LONG_MONTH.format(p.date),
         // pastValue and futureValue overlap at the boundary to keep the line
         // visually continuous when one rendered series ends and the other
         // begins.
@@ -848,7 +858,7 @@ function ComparePlansTooltip(props: {
 
   return (
     <div className="grid min-w-40 gap-1.5 rounded-lg border border-border/50 bg-popover px-2.5 py-1.5 text-xs shadow-xl">
-      <div className="font-medium">{String(row.month ?? "")}</div>
+      <div className="font-medium">{String(row.title ?? row.month ?? "")}</div>
       <div className="grid gap-1">
         {seriesByPlan.map(({ plan, key }) => {
           const value = row[`${key}Past`] ?? row[`${key}Future`];
@@ -1000,6 +1010,8 @@ export function ComparePlansChart({
     const data = rows.map((r, i) => {
       const row: Record<string, string | number | null> = {
         month: MONTH_FORMATTER.format(r.month),
+        // The tooltip's title: the month spelled out, or today itself.
+        title: i === boundary ? `Today · ${TODAY_DAY.format(today)}` : LONG_MONTH.format(r.month),
         // Carried so the dot renderer can spot today's row from the payload.
         idx: i,
       };

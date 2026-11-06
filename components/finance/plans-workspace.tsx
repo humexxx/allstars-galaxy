@@ -25,7 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import {
   DropdownMenu,
@@ -77,13 +76,6 @@ const ComparePlansChart = dynamic(
 );
 
 const CHART_HEIGHT = "h-64 sm:h-80 lg:h-115";
-
-type Metric = "netWorth" | "totalDebt";
-
-const METRIC_LABEL: Record<Metric, string> = {
-  netWorth: "Net worth",
-  totalDebt: "Total debt",
-};
 
 /** Horizon options, in periods. 10 years is as far as a plan projects. */
 const RANGES = [
@@ -149,7 +141,6 @@ export function PlansWorkspace({
       setSelected((prev) => new Set([...prev, ...added]));
     }
   }
-  const [metric, setMetric] = useState<Metric>("netWorth");
   const [range, setRange] = useState<string>(DEFAULT_RANGE);
   // The horizon runs ahead of today; the window also holds today's month and
   // the PAST_MONTHS before it.
@@ -239,7 +230,6 @@ export function PlansWorkspace({
                 </Badge>
               )}
             </div>
-            {/* Both controls at h-8, so the row has one height. */}
             <div className="flex flex-wrap items-center gap-2">
               <Select value={range} onValueChange={setRange}>
                 <SelectTrigger size="sm" className="w-38" aria-label="Horizon">
@@ -253,19 +243,6 @@ export function PlansWorkspace({
                   ))}
                 </SelectContent>
               </Select>
-              <ToggleGroup
-                type="single"
-                size="sm"
-                value={metric}
-                onValueChange={(v) => v && setMetric(v as Metric)}
-                aria-label="Metric"
-              >
-                {(Object.keys(METRIC_LABEL) as Metric[]).map((m) => (
-                  <ToggleGroupItem key={m} value={m}>
-                    {METRIC_LABEL[m]}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
             </div>
           </CardHeader>
           {/* The Card default of px-6 costs 48 of a 375px screen before a
@@ -283,7 +260,6 @@ export function PlansWorkspace({
               <ComparePlansChart
                 series={filtered}
                 today={today}
-                metric={metric}
                 heightClass={CHART_HEIGHT}
                 focusedPlanId={focusedId}
                 months={months}

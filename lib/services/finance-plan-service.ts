@@ -435,11 +435,7 @@ export const getMainPlan = cache(async function getMainPlan(
   return plan ?? null;
 });
 
-type CloneOptions = {
-  asScenario?: boolean;
-  /** Opening balances for the copy, instead of the source's stored ones. */
-  opening?: OpeningRestatement;
-};
+type CloneOptions = { asScenario?: boolean };
 
 export async function clonePlan(
   userId: string,
@@ -475,7 +471,7 @@ export async function clonePlanWithLineIds(
         description: source.description,
         startMonth: source.startMonth,
         monthsAhead: source.monthsAhead,
-        initialSavings: options.opening?.initialSavings ?? source.initialSavings,
+        initialSavings: source.initialSavings,
         monthlySavingsRate: source.monthlySavingsRate,
         includePortfolio: source.includePortfolio,
         surplusToDebtsPercent: source.surplusToDebtsPercent,
@@ -483,14 +479,14 @@ export async function clonePlanWithLineIds(
         autoInvestPercent: source.autoInvestPercent,
         autoInvestMethodId: source.autoInvestMethodId,
         autoInvestCustomRate: source.autoInvestCustomRate,
-        initialInvestments: options.opening?.initialInvestments ?? source.initialInvestments,
+        initialInvestments: source.initialInvestments,
         // Keep the accounting-period anchor: without it the clone falls back to
         // day 1 and its periods drift out of alignment with the source plan.
         confirmationDayOfMonth: source.confirmationDayOfMonth,
         color: source.color,
         // Same balances, stated on the same day — the clone opens exactly
         // where its source does.
-        balancesAsOf: options.opening?.balancesAsOf ?? source.balancesAsOf,
+        balancesAsOf: source.balancesAsOf,
         basedOnPlanId: options.asScenario ? source.id : null,
       })
       .returning();
@@ -563,7 +559,7 @@ export async function clonePlanWithLineIds(
             name: d.name,
             // The same debt in both plans: a confirmed balance reaches each.
             debtKey: d.debtKey ?? d.id,
-            initialBalance: options.opening?.debtBalances[d.id] ?? d.initialBalance,
+            initialBalance: d.initialBalance,
             monthlyInterestRate: d.monthlyInterestRate,
             monthlyPayment: d.monthlyPayment,
             paymentType: d.paymentType,

@@ -26,9 +26,8 @@ export default function PlansLoading() {
           <CardHeader className="flex flex-wrap items-center justify-between gap-3">
             <Skeleton className="h-6 w-44" />
             <div className="flex flex-wrap items-center gap-2">
-              {/* horizon select + metric toggle, both h-8 */}
+              {/* horizon select */}
               <Skeleton className="h-8 w-38" />
-              <Skeleton className="h-8 w-44" />
             </div>
           </CardHeader>
           <CardContent className="px-3 sm:px-6">

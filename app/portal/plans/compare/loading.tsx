@@ -28,11 +28,10 @@ export default function ComparePlansLoading() {
         </CardContent>
       </Card>
 
-      {/* Chart card — title left, metric toggle right */}
+      {/* Chart card — title */}
       <Card>
-        <CardHeader className="flex flex-wrap items-center justify-between gap-3">
+        <CardHeader>
           <Skeleton className="h-6 w-44" />
-          <Skeleton className="h-8 w-44 rounded-lg" />
         </CardHeader>
         <CardContent>
           <Skeleton className="h-96 w-full" />

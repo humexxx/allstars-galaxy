@@ -846,7 +846,6 @@ export type CompareChartSeries = {
 
 type CompareChartProps = {
   series: CompareChartSeries[];
-  metric: "netWorth" | "totalDebt";
   /** The reader's calendar day — marks the solid/dashed boundary. */
   today: Date;
   /** Tailwind height class(es) for the chart container. Defaults to `h-96`. */
@@ -866,7 +865,6 @@ type CompareChartProps = {
 
 export function ComparePlansChart({
   series,
-  metric,
   today,
   heightClass = "h-96",
   legendClassName,
@@ -912,7 +910,7 @@ export function ComparePlansChart({
     // five months early, and took the window and "today" from the first plan.
     const { rows, boundary } = buildCompareRows(
       series.map((s, i) => ({ key: `series${i}`, timeline: s.timeline })),
-      metric,
+      "netWorth",
       today,
       months,
       pastMonths
@@ -926,16 +924,13 @@ export function ComparePlansChart({
     // Beside net worth, each plan's debt, as on a plan's own page: what is
     // still owed, falling to zero. A paid-off debt draws its last $0 beside the
     // payment that cleared it and stops. Same window, so the rows line up.
-    const debtRows =
-      metric === "netWorth"
-        ? buildCompareRows(
-            series.map((s, i) => ({ key: `series${i}`, timeline: s.timeline })),
-            "totalDebt",
-            today,
-            months,
-            pastMonths
-          ).rows
-        : [];
+    const debtRows = buildCompareRows(
+      series.map((s, i) => ({ key: `series${i}`, timeline: s.timeline })),
+      "totalDebt",
+      today,
+      months,
+      pastMonths
+    ).rows;
     const owed = (i: number, key: string): boolean => (debtRows[i]?.values[key] ?? 0) > 0;
     const debtAt = (i: number, key: string): number | null =>
       owed(i, key) || owed(i - 1, key) || owed(i + 1, key) ? debtRows[i]?.values[key] ?? null : null;
@@ -996,7 +991,7 @@ export function ComparePlansChart({
       hasDebt,
       pastKey,
     };
-  }, [series, metric, today, months, pastMonths]);
+  }, [series, today, months, pastMonths]);
 
   const xTicks = useMemo(
     () =>

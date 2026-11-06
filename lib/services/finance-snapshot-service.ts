@@ -23,7 +23,6 @@ import {
   effectiveEdits,
   restateOpeningSet,
   type OpeningBalanceEdits,
-  type OpeningRestatement,
 } from "@/lib/finance/opening-balances";
 import {
   autoConfirmSkippedPeriods,
@@ -1035,22 +1034,6 @@ export async function restateOpeningBalances(
   const syncConfirmationId =
     plan.isMain && latest && isoDay(confirmationDay(latest)) === set.balancesAsOf ? latest.id : null;
   return { ...set, syncConfirmationId };
-}
-
-/**
- * The plan's opening balances moved to where it stands today, nothing edited.
- * A copy opens on these: confirmations stay with the plan they were made on,
- * so a copy given the stored opening balances would re-project every period
- * since and part from its source on day one.
- */
-export async function openingBalancesToday(
-  plan: FinancePlanWithLines,
-  userId: string,
-  today: Date,
-  timeZone?: string | null
-): Promise<OpeningRestatement> {
-  const { state } = await calibratedToday(plan, userId, today, timeZone);
-  return restateOpeningSet(plan, state, {}, today);
 }
 
 /** Where the plan, calibrated by its latest confirmation, stands on `today`. */

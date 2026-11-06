@@ -102,12 +102,6 @@ vi.mock("./finance-snapshot-service", async () => {
       today: projectStateAt(plan, plan.incomes, plan.expenses, plan.debts, {}, today),
     })),
     restateOpeningBalances: vi.fn(async () => null),
-    openingBalancesToday: vi.fn(async (plan: FinancePlanWithLines) => ({
-      initialSavings: plan.initialSavings,
-      initialInvestments: plan.initialInvestments,
-      debtBalances: Object.fromEntries(plan.debts.map((d) => [d.id, d.initialBalance])),
-      balancesAsOf: plan.balancesAsOf,
-    })),
   };
 });
 vi.mock("./finance-plan-operations", () => {

@@ -38,6 +38,7 @@ import type {
 
 import { projectPlan, type ProjectOptions } from "@/lib/finance/projection";
 import type { OpeningRestatement } from "@/lib/finance/opening-balances";
+import { nextPlanColor } from "@/lib/finance/plan-colors";
 import { isoDay } from "@/lib/finance/schedule";
 
 import { getUserPortfolio, getPortfolioStats, getPortfolioAssets } from "./portfolio-service";
@@ -174,12 +175,11 @@ export async function createPlan(
     // Auto-set as main when the user has no plans yet. Keeps the
     // confirmation host / dashboard finance card pointed at something
     // useful from the very first plan onwards.
-    const [existing] = await tx
-      .select({ id: financePlans.id })
+    const existing = await tx
+      .select({ color: financePlans.color })
       .from(financePlans)
-      .where(eq(financePlans.userId, userId))
-      .limit(1);
-    const shouldBeMain = !existing;
+      .where(eq(financePlans.userId, userId));
+    const shouldBeMain = existing.length === 0;
 
     const [plan] = await tx
       .insert(financePlans)
@@ -199,7 +199,7 @@ export async function createPlan(
         autoInvestCustomRate: data.autoInvestCustomRate ?? null,
         initialInvestments: data.initialInvestments,
         confirmationDayOfMonth: data.confirmationDayOfMonth,
-        color: data.color,
+        color: data.color ?? nextPlanColor(existing.map((p) => p.color)),
         balancesAsOf: today ? isoDay(today) : null,
         isMain: shouldBeMain,
       })
@@ -459,6 +459,14 @@ export async function clonePlanWithLineIds(
 ): Promise<{ plan: FinancePlan; lineIds: ReadonlyMap<string, string> }> {
   const source = await getPlanWithLines(sourcePlanId, userId);
   if (!source) throw new Error("Plan not found");
+  // Its own line colour: a copy wearing its source's drew the two plans as one.
+  // Read fresh, not through the request cache: a plan created moments ago in
+  // the same request (the assistant's create then copy) must count.
+  const worn = await db
+    .select({ color: financePlans.color })
+    .from(financePlans)
+    .where(eq(financePlans.userId, userId));
+  const color = nextPlanColor(worn.map((p) => p.color));
 
   // One transaction: a clone either arrives whole (plan, lines AND the
   // per-month overrides pointing at them) or not at all.
@@ -483,7 +491,7 @@ export async function clonePlanWithLineIds(
         // Keep the accounting-period anchor: without it the clone falls back to
         // day 1 and its periods drift out of alignment with the source plan.
         confirmationDayOfMonth: source.confirmationDayOfMonth,
-        color: source.color,
+        color,
         // Same balances, stated on the same day — the clone opens exactly
         // where its source does.
         balancesAsOf: source.balancesAsOf,

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import { describeDebtFree, formatDebtFree } from "@/lib/finance/chart-series";
 import { compareDebtStrategies } from "@/lib/finance/projection";
+import { nextPlanColor } from "@/lib/finance/plan-colors";
 import { formatCurrency } from "@/lib/utils/format";
 import {
   createFinancePlanSchema,
@@ -363,7 +364,7 @@ async function playChange(c: PlanOperationContext, w: Working, change: PlanChang
         autoInvestCustomRate: data.autoInvestCustomRate ?? null,
         initialInvestments: data.initialInvestments,
         confirmationDayOfMonth: data.confirmationDayOfMonth,
-        color: data.color,
+        color: data.color ?? nextPlanColor(wornColors(w)),
         isMain: w.plans.size === 0,
         basedOnPlanId: null,
         balancesAsOf: c.today.toISOString().slice(0, 10),
@@ -395,6 +396,7 @@ async function playChange(c: PlanOperationContext, w: Working, change: PlanChang
         name,
         isMain: false,
         basedOnPlanId: change.asScenario ? source.id : null,
+        color: nextPlanColor(wornColors(w)),
         createdAt: now,
         updatedAt: now,
       });
@@ -555,6 +557,11 @@ async function playChange(c: PlanOperationContext, w: Working, change: PlanChang
       return;
     }
   }
+}
+
+/** The colours the user's plans wear in this proposal so far. */
+function wornColors(w: Working): string[] {
+  return [...w.plans.values()].filter((p) => !w.deleted.has(p.id)).map((p) => p.color);
 }
 
 /** A new line as the table would hold it. */

@@ -100,6 +100,9 @@ type EntrySide = "income" | "expense" | "debt";
 /** The mutation callbacks reject on failure, having already reported it. */
 type PlanCalendarProps = {
   plan: FinancePlanWithLines;
+  /** The plan page's headline (net worth + the view switcher), drawn above the
+   *  calendar's own controls so every view opens the same way. */
+  header?: React.ReactNode;
   /** The projections behind the page (calibrated first, then the plan as
    *  written for earlier dates): debt chips show the payment they made. */
   projections?: readonly Projection[];
@@ -388,6 +391,7 @@ function applyOptimistic(
 
 export function PlanCalendar({
   plan,
+  header,
   projections = [],
   onAddIncome,
   onAddExpense,
@@ -908,13 +912,14 @@ export function PlanCalendar({
     // by the CALENDAR's width, not the viewport's. At 390px a cell is ~45px
     // wide and the full chip (grip, name, amount, menu) spilled into the
     // neighbouring days.
-    <Card className="@container/cal">
+    <Card className="@container/cal xl:h-full">
       <CardHeader className="gap-3">
+        {header}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               aria-label={
                 viewMode === "anchored" ? "Previous period" : "Previous month"
               }
@@ -931,16 +936,16 @@ export function PlanCalendar({
               <ChevronLeft />
             </Button>
             <Heading
-              level="h5"
+              level="h6"
               as="h2"
               aria-live="polite"
-              className="min-w-0 text-center sm:min-w-45"
+              className="min-w-0 text-center sm:min-w-40"
             >
               {monthLabel}
             </Heading>
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               aria-label={
                 viewMode === "anchored" ? "Next period" : "Next month"
               }
@@ -1008,7 +1013,7 @@ export function PlanCalendar({
       </CardHeader>
 
       {/* Narrow: the card's 24px gutters cost a seventh of a cell each. */}
-      <CardContent className="flex flex-col gap-3 px-3 @2xl/cal:px-6">
+      <CardContent className="flex flex-col gap-3 px-3 @2xl/cal:px-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
         <div
           aria-hidden="true"
           className="grid grid-cols-7 gap-1 text-center text-2xs font-semibold uppercase tracking-wide text-muted-foreground"
@@ -1479,7 +1484,7 @@ const CalendarCell = memo(function CalendarCell({
         isAnchor && !muted && "border-warning/60 bg-warning/10",
         // Ring only: the cell's own border already draws the edge.
         isDragOver && "bg-primary/5 ring-1 ring-primary/50",
-        isExpanded ? "min-h-80" : "min-h-14 @2xl/cal:min-h-24"
+        isExpanded ? "min-h-80" : "min-h-12 @2xl/cal:min-h-20"
       )}
       data-date={isoKey}
     >

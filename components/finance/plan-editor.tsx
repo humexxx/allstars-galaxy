@@ -628,9 +628,10 @@ export function PlanEditor({
           initialView={initialView}
           onOpenSetup={() => setTab("setup")}
           now={now}
-          calendar={
+          calendar={(header) => (
             <PlanCalendar
               plan={plan}
+              header={header}
               projections={[projection, pastProjection]}
               onAddIncome={(input) =>
                 wrap(() => addPlanIncomeAction(plan.id, input))
@@ -654,7 +655,7 @@ export function PlanEditor({
                 wrap(() => deleteLineOverrideAction(plan.id, input))
               }
             />
-          }
+          )}
           sidebar={
             // Condensed Polymarket-style rail (right 1/4 on desktop, stacked
             // under the chart on mobile): a figures card — health gauge on top,
@@ -1179,8 +1180,9 @@ type ProjectionPanelProps = {
   /** Real monthly snapshots for the chart's past (newest-last). */
   history: PlanHistoryPoint[];
   /** The Calendar view of the switcher (PlanCalendar, built by the parent which
-   *  owns the line/debt mutation handlers). Brings its own Card. */
-  calendar: React.ReactNode;
+   *  owns the line/debt mutation handlers). Brings its own Card, and puts the
+   *  panel's headline at its top. */
+  calendar: (header: React.ReactNode) => React.ReactNode;
   /** Right-hand sidebar content (health gauge + cycle figures + debt strategy).
    *  Rendered in the narrow column beside the chart on desktop, stacked below
    *  the chart on mobile. */
@@ -1571,9 +1573,9 @@ function ProjectionPanel({
   );
 
   // Forecast header (today's net worth + its change since the last close, and
-  // the horizon picker) — shared by the Graph and Table views. It sits in the
-  // card header so the number reads as the headline, as on the dashboard.
-  const forecastHeader = (
+  // the horizon picker) — every view's card opens with it, so the number reads
+  // as the headline, as on the dashboard. The calendar has no horizon.
+  const forecastHeader = (withHorizon: boolean): React.ReactNode => (
     <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
       <div className="flex min-w-0 flex-col gap-1">
         <Eyebrow size="sm" as="p" className="flex items-center gap-1.5">
@@ -1600,41 +1602,43 @@ function ProjectionPanel({
       </div>
       <div className="flex flex-col items-end gap-2">
         {viewControls}
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {ghost && (
-            <Toggle
-              variant="outline"
-              size="sm"
-              pressed={showGhost}
-              onPressedChange={setShowGhost}
-              className="text-xs"
-            >
-              vs base
-            </Toggle>
-          )}
-          <ToggleGroup
-            type="single"
-            size="sm"
-            value={String(horizonMonths)}
-            onValueChange={(v) => {
-              if (!v) return;
-              // The picked point's index means another month on a new horizon.
-              onSelectPeriod?.(null, null);
-              onHorizonChange(Number(v));
-            }}
-            aria-label="Projection horizon"
-          >
-            {HORIZON_PRESETS.map((preset) => (
-              <ToggleGroupItem
-                key={preset.months}
-                value={String(preset.months)}
-                disabled={preset.months > maxAvailable}
+        {withHorizon && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {ghost && (
+              <Toggle
+                variant="outline"
+                size="sm"
+                pressed={showGhost}
+                onPressedChange={setShowGhost}
+                className="text-xs"
               >
-                {preset.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </div>
+                vs base
+              </Toggle>
+            )}
+            <ToggleGroup
+              type="single"
+              size="sm"
+              value={String(horizonMonths)}
+              onValueChange={(v) => {
+                if (!v) return;
+                // The picked point's index means another month on a new horizon.
+                onSelectPeriod?.(null, null);
+                onHorizonChange(Number(v));
+              }}
+              aria-label="Projection horizon"
+            >
+              {HORIZON_PRESETS.map((preset) => (
+                <ToggleGroupItem
+                  key={preset.months}
+                  value={String(preset.months)}
+                  disabled={preset.months > maxAvailable}
+                >
+                  {preset.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1671,15 +1675,10 @@ function ProjectionPanel({
         >
           <div key={view} className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200 xl:h-full">
             {view === "calendar" ? (
-              // The calendar brings its own card; the switcher rides above it
-              // so there is a way back to the other views.
-              <div className="flex flex-col gap-3 xl:h-full">
-                <div className="flex justify-end">{viewControls}</div>
-                <div className="xl:min-h-0 xl:flex-1 xl:overflow-y-auto">{calendar}</div>
-              </div>
+              calendar(forecastHeader(false))
             ) : (
               <Card className="xl:h-full">
-                <CardHeader className="gap-3">{forecastHeader}</CardHeader>
+                <CardHeader className="gap-3">{forecastHeader(true)}</CardHeader>
                 <CardContent
                   className={cn(
                     "xl:min-h-0 xl:flex-1",

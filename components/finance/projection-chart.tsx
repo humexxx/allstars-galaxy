@@ -1148,7 +1148,8 @@ export function ComparePlansChart({
               strokeWidth: 1.5,
               strokeOpacity: dimmed ? 0.22 : 0.85,
               dot: false as const,
-              activeDot: false as const,
+              // The hovered month's dot, as on net worth's line.
+              activeDot: { r: 4, fill: DEBT, strokeWidth: 0 },
               connectNulls: false,
               legendType: "none" as const,
             };

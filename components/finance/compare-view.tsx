@@ -205,7 +205,7 @@ function EndingStateTile({ entry }: { entry: ComparePlanEntry }) {
       )}
       <dl className="mt-3 flex flex-col gap-1 text-sm">
         <div className="flex justify-between gap-3">
-          <dt className="text-muted-foreground">Savings</dt>
+          <dt className="text-muted-foreground">Cash</dt>
           <dd><Mono>{formatCurrency(p.endingSavings)}</Mono></dd>
         </div>
         {/* Investments belong on the sheet: without them Savings − Debt did

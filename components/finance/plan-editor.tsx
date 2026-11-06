@@ -2048,7 +2048,7 @@ function SurplusBreakdown({
             <Mono>{formatCurrency(toInvestments)}</Mono>
           </li>
           <li className="flex items-baseline justify-between gap-4">
-            <span>→ Savings</span>
+            <span>→ Cash</span>
             <Mono>{formatCurrency(toSavings)}</Mono>
           </li>
         </ul>

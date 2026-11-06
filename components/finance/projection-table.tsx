@@ -287,7 +287,7 @@ export function ProjectionTable({
                     </TooltipContent>
                   </Tooltip>
                 </TableHead>
-                <SeriesHead series={dashboardSeries("savings")}>Savings</SeriesHead>
+                <SeriesHead series={dashboardSeries("savings")}>Cash</SeriesHead>
                 {hasInvestments && <SeriesHead series={dashboardSeries("investments")}>Investments</SeriesHead>}
                 <SeriesHead series={dashboardSeries("debt")}>Total debt</SeriesHead>
                 <SeriesHead series={dashboardSeries("netWorth")}>Net worth</SeriesHead>

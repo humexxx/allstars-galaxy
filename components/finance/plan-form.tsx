@@ -314,7 +314,7 @@ export function PlanForm({
               </Field>
               <Field className="gap-2" data-invalid={!!errors.initialSavings || undefined}>
                 <FieldLabel htmlFor="plan-savings">
-                  {plan ? "Savings today" : "Initial savings"}
+                  {plan ? "Cash today" : "Initial cash"}
                 </FieldLabel>
                 <Input
                   id="plan-savings"
@@ -679,7 +679,7 @@ export function PlanForm({
               />
               <FieldDescription>
                 {plan
-                  ? "Where the plan has the investments bucket today. Changing it restates the opening balances as of today, like Savings today."
+                  ? "Where the plan has the investments bucket today. Changing it restates the opening balances as of today, like Cash today."
                   : "What the investments bucket holds on the day you create the plan."}
               </FieldDescription>
             </Field>

@@ -573,9 +573,14 @@ export function PlanEditor({
                 Based on: {ghost.name}
               </Badge>
             )}
+            {/* Beside the title rather than under it: one line less above the chart. */}
+            {periodLabel && (
+              <Text variant="small" as="span" className="tabular-nums">
+                Current period · {periodLabel}
+              </Text>
+            )}
           </>
         }
-        meta={periodLabel && `Current period · ${periodLabel}`}
         actions={
           <>
             <TabsList>

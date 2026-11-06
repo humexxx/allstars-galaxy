@@ -17,7 +17,6 @@ import {
   isToday,
   startOfMonth,
   startOfWeek,
-  subMonths,
 } from "date-fns";
 import {
   ChevronLeft,
@@ -54,7 +53,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Eyebrow, Heading, Mono } from "@/components/ui/typography";
+import { Heading, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { formatDay, formatDayRange, formatMonthLong } from "@/lib/utils/date";
 import {
@@ -429,10 +428,10 @@ export function PlanCalendar({
 
   // Resolved "what to display": either a confirmation-day-anchored period
   // (day N → day N-1 of next month) or the cursor's calendar month.
-  // `periodRangeFor` works in UTC; everything below (the week grid, the
-  // summary, the muted test) works in LOCAL days. Convert once here, or a
+  // `periodRangeFor` works in UTC; everything below (the week grid and
+  // the muted test) works in LOCAL days. Convert once here, or a
   // negative-offset zone shifts the whole period a day early and the period's
-  // last day renders greyed out with its entries missing from the totals.
+  // last day renders greyed out.
   const currentRange = useMemo<Period>(() => {
     if (viewMode === "anchored") {
       const r = periodRangeFor(
@@ -445,21 +444,6 @@ export function PlanCalendar({
     }
     return { start: startOfMonth(cursor), end: endOfMonth(cursor) };
   }, [viewMode, cursor, anchorDay]);
-
-  const previousRange = useMemo<Period>(() => {
-    if (viewMode === "anchored") {
-      // One day before the period start lies in the previous period.
-      const s = currentRange.start;
-      const prevDate = new Date(Date.UTC(s.getFullYear(), s.getMonth(), s.getDate() - 1));
-      const r = periodRangeFor(prevDate, anchorDay);
-      return { start: utcToLocalDay(r.start), end: utcToLocalDay(r.end) };
-    }
-    const prevCursor = subMonths(cursor, 1);
-    return {
-      start: startOfMonth(prevCursor),
-      end: endOfMonth(prevCursor),
-    };
-  }, [viewMode, cursor, anchorDay, currentRange.start]);
 
   // Optimistic snapshot — every operation that touches the plan applies its
   // change here first, so chips jump to the new position the moment the user
@@ -490,7 +474,7 @@ export function PlanCalendar({
     [rangeStartMs, rangeEndMs]
   );
 
-  // dayMap + summary read from the OPTIMISTIC snapshot so the calendar
+  // dayMap reads from the OPTIMISTIC snapshot so the calendar
   // surface updates instantly on user actions, before the server roundtrip.
   // Handler closures below still read `plan.*` (canonical) when looking up
   // the parent record being acted on.
@@ -503,40 +487,6 @@ export function PlanCalendar({
     () => buildDayMap(days, optimisticPlan, debtPayments),
     [days, optimisticPlan, debtPayments]
   );
-
-  // Summary for the displayed range and the one before it (month → month or
-  // period → period), so we can show a current-vs-prev delta per metric. Both
-  // views sum the same per-day entries, so a chip and the totals never
-  // disagree.
-  const summary = useMemo(() => {
-    const summarize = (range: Period) => {
-      const rangeDays = eachDayOfInterval({
-        start: range.start,
-        end: range.end,
-      });
-      const rangeMap = buildDayMap(rangeDays, optimisticPlan, debtPayments);
-      let income = 0;
-      let expense = 0;
-      let debt = 0;
-      for (const entries of rangeMap.values()) {
-        for (const e of entries) {
-          if (e.side === "income") income += e.amount;
-          else if (e.side === "expense") expense += e.amount;
-          else debt += e.amount;
-        }
-      }
-      return { income, expense, debt };
-    };
-
-    const curr = summarize(currentRange);
-    const prev = summarize(previousRange);
-    return {
-      curr,
-      prev,
-      currNet: curr.income - curr.expense - curr.debt,
-      prevNet: prev.income - prev.expense - prev.debt,
-    };
-  }, [currentRange, previousRange, optimisticPlan, debtPayments]);
 
   const monthLabel =
     viewMode === "anchored"
@@ -1071,7 +1021,6 @@ export function PlanCalendar({
           })}
         </div>
 
-        <MonthSummaryStrip summary={summary} />
       </CardContent>
 
       <LineFormDialog
@@ -1286,109 +1235,6 @@ function MoveRecurringPrompt({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  );
-}
-
-type MonthSummaryData = {
-  curr: { income: number; expense: number; debt: number };
-  prev: { income: number; expense: number; debt: number };
-  currNet: number;
-  prevNet: number;
-};
-
-// Strip above the calendar grid: 4 cards (Income / Expense / Debt / Net) with
-// the current month's value and a delta vs the previous month. Delta colour is
-// semantic (more income = good, more expense/debt = bad).
-function MonthSummaryStrip({ summary }: { summary: MonthSummaryData }) {
-  return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <SummaryTile
-        label="Income"
-        value={summary.curr.income}
-        delta={summary.curr.income - summary.prev.income}
-        biggerIsBetter
-      />
-      <SummaryTile
-        label="Expense"
-        value={summary.curr.expense}
-        delta={summary.curr.expense - summary.prev.expense}
-        biggerIsBetter={false}
-      />
-      <SummaryTile
-        label="Debt"
-        value={summary.curr.debt}
-        delta={summary.curr.debt - summary.prev.debt}
-        biggerIsBetter={false}
-      />
-      <SummaryTile
-        label="Net"
-        value={summary.currNet}
-        delta={summary.currNet - summary.prevNet}
-        biggerIsBetter
-        signedValue
-      />
-    </div>
-  );
-}
-
-function SummaryTile({
-  label,
-  value,
-  delta,
-  biggerIsBetter,
-  signedValue = false,
-}: {
-  label: string;
-  value: number;
-  delta: number;
-  biggerIsBetter: boolean;
-  /** When true (Net only), display the value with an explicit +/− sign. */
-  signedValue?: boolean;
-}) {
-  const deltaRounded = Math.round(delta * 100) / 100;
-  const direction =
-    Math.abs(deltaRounded) < 0.005 ? "flat" : deltaRounded > 0 ? "up" : "down";
-  // good = up && biggerIsBetter, or down && !biggerIsBetter.
-  const good =
-    direction === "up"
-      ? biggerIsBetter
-      : direction === "down"
-        ? !biggerIsBetter
-        : null;
-  const deltaColor =
-    good === null
-      ? "text-muted-foreground"
-      : good
-        ? "text-success"
-        : "text-destructive";
-  const arrow = direction === "up" ? "▲" : direction === "down" ? "▼" : "·";
-  const directionText =
-    direction === "up" ? "up" : direction === "down" ? "down" : "";
-
-  const displayValue = signedValue
-    ? formatSignedCurrency(value)
-    : formatCurrency(value);
-  const valueColor = signedValue
-    ? value >= 0
-      ? "text-success"
-      : "text-destructive"
-    : "";
-
-  return (
-    <div className="rounded-lg border p-2.5">
-      <Eyebrow size="sm" as="div">
-        {label}
-      </Eyebrow>
-      <Mono as="div" className={cn("mt-0.5 text-base font-semibold", valueColor)}>
-        {displayValue}
-      </Mono>
-      <Mono as="div" className={cn("text-2xs", deltaColor)}>
-        <span aria-hidden="true">{arrow}</span>{" "}
-        {direction === "flat"
-          ? "no change"
-          : `${directionText} ${formatCurrency(Math.abs(deltaRounded))} vs prev`}
-      </Mono>
-    </div>
   );
 }
 

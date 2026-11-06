@@ -1109,20 +1109,22 @@ export function ComparePlansChart({
               <Line key={`${key}DebtFuture`} dataKey={`${key}DebtFuture`} strokeDasharray="6 4" {...shared} />,
             ];
           })}
-        {/* Recharts paints children in order, so the focused series has to go
-            last or the dimmed lines draw over the one we're highlighting. */}
+        {/* Recharts paints children in order, so the emphasised series (the
+            one pointed at, else the main plan) goes last, on top. */}
         {[...seriesByPlan]
-          .sort(
-            (a, b) =>
-              Number(a.plan.id === focusedPlanId) -
-              Number(b.plan.id === focusedPlanId)
-          )
+          .sort((a, b) => {
+            const top = (p: ComparePlan): number => Number(focusedPlanId ? p.id === focusedPlanId : p.isMain);
+            return top(a.plan) - top(b.plan);
+          })
           .flatMap(({ plan, key }) => {
             const dimmed =
               focusedPlanId !== null && plan.id !== focusedPlanId;
+            // With nothing pointed at, the main plan stands out: it is the one
+            // the user lives by, and it draws the shared past.
+            const emphasised = focusedPlanId ? plan.id === focusedPlanId : plan.isMain;
             const shared = {
               type: "monotone" as const,
-              strokeWidth: dimmed ? 1.5 : focusedPlanId ? 3 : 2,
+              strokeWidth: dimmed ? 1.5 : emphasised ? 3 : 2,
               strokeOpacity: dimmed ? 0.22 : 1,
               dot: false as const,
               // Recharts animates on every prop change; re-running the 300ms
@@ -1137,13 +1139,10 @@ export function ComparePlansChart({
                 stroke={`var(--color-${key}Past)`}
                 {...shared}
                 // "You are here" pulse where solid meets dashed — the same
-                // marker the single-plan chart uses. Only on the past series;
-                // the future one shares that row and would stack a second one.
-                dot={renderTodayDot(
-                  `var(--color-${key}Past)`,
-                  boundary,
-                  dimmed
-                )}
+                // marker the single-plan chart uses. Once, on the series that
+                // draws the shared past: every plan is at the same point today,
+                // and one dot per plan stacked them, the last plan's on top.
+                dot={key === pastKey ? renderTodayDot(`var(--color-${key}Past)`, boundary, false) : false}
               />,
               // Dashed = projected. Kept out of the legend so each plan is
               // named once.

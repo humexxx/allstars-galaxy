@@ -890,27 +890,6 @@ export function PlanCalendar({
             Today
           </Button>
         </div>
-
-        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <span aria-hidden="true" className="inline-block size-2 rounded-full bg-success" />
-            Income
-          </span>
-          <span className="flex items-center gap-1">
-            <span aria-hidden="true" className="inline-block size-2 rounded-full bg-warning" />
-            Expense
-          </span>
-          <span className="flex items-center gap-1">
-            <span aria-hidden="true" className="inline-block size-2 rounded-full bg-destructive" />
-            Debt
-          </span>
-          <span className="ml-auto text-2xs italic text-muted-foreground/70 @2xl/cal:hidden">
-            Tap an entry for its options · tap a date to add one
-          </span>
-          <span className="ml-auto hidden text-2xs italic text-muted-foreground/70 @2xl/cal:inline">
-            Click an entry to edit · drag the ⋮ handle to move · “+N more” expands a day
-          </span>
-        </div>
       </CardHeader>
 
       {/* Narrow: the card's 24px gutters cost a seventh of a cell each. */}

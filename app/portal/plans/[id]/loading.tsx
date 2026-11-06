@@ -17,7 +17,9 @@ export default function PlanDetailLoading() {
       <span role="status" className="sr-only">
         Loading plan…
       </span>
-      <PageHeaderSkeleton back size="compact" actions={2} descriptionWidth="w-96" />
+      {/* The line under the title is the current period now; the plan's
+          description moved into a tooltip. */}
+      <PageHeaderSkeleton back size="compact" actions={2} descriptionWidth="w-44" />
 
       {/* Overview hero: 3/4 main panel + 1/4 sidebar (stacked on mobile). */}
       <div className="grid gap-4 xl:grid-cols-4 xl:items-start">

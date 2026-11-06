@@ -190,6 +190,7 @@ export function alignTodayPoint(
     savings: today.savings,
     totalDebt: today.totalDebt,
     investments: today.investments,
+    receivables: today.receivables,
   };
   return { points, pastCount: series.pastCount };
 }

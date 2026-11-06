@@ -55,6 +55,7 @@ import { splitEasedStroke, STAGGER_MS, sweepEasing, SWEEP_MS } from "./dashboard
 const NET_WORTH = dashboardSeries("netWorth").color;
 const PORTFOLIO = dashboardSeries("investments").color;
 const DEBT = dashboardSeries("debt").color;
+const OWED = dashboardSeries("receivables").color;
 
 // recharts types `animationEasing` as the named curves only, but its
 // animator (react-smooth) takes any t → progress function.
@@ -227,6 +228,10 @@ type ChartRow = {
   /** Debt still owed, split past/future: it falls to zero as it is paid. */
   debtPast: number | null;
   debtFuture: number | null;
+  /** Still owed to the user, inside net worth; split past/future like debt. */
+  receivables?: number;
+  owedPast: number | null;
+  owedFuture: number | null;
 };
 
 // Custom tooltip. The past (solid) and future (dashed) series OVERLAP at the
@@ -269,6 +274,9 @@ function PointTooltip(props: {
             label="Portfolio"
             value={formatMoneyFull(investments + (portfolio ?? 0))}
           />
+        )}
+        {(row.receivables ?? 0) > 0 && (
+          <TooltipRow swatch={OWED} label="Owed to you" value={formatMoneyFull(row.receivables ?? 0)} />
         )}
         {debt > 0 && (
           <TooltipRow swatch={DEBT} label="Debt" value={formatMoneyFull(debt)} valueClass="text-destructive" />
@@ -335,6 +343,8 @@ type ChartPoint = {
   netWorth: number;
   /** Drawn as its own falling line when any debt is in range. */
   totalDebt?: number;
+  /** Owed to the user, inside `netWorth`: drawn like debt, as on the dashboard. */
+  receivables?: number;
   /** Carried for the hover tooltip only. */
   investments?: number;
 };
@@ -413,7 +423,7 @@ export const ProjectionChart = memo(function ProjectionChart({
   const reducedMotion = usePrefersReducedMotion();
   // Gradient ids, unique per chart: two charts on a page must not share them.
   const gradientId = useId().replace(/:/g, "");
-  const fillOf = (series: "net" | "portfolio" | "debt"): string => `url(#${gradientId}-${series})`;
+  const fillOf = (series: "net" | "portfolio" | "debt" | "owed"): string => `url(#${gradientId}-${series})`;
 
   // Build the per-point split between past (solid) and future (dashed). We use
   // a numeric x-axis (each row's `idx` is its x coordinate) so milestone
@@ -421,15 +431,17 @@ export const ProjectionChart = memo(function ProjectionChart({
   // instead of snapping to the nearest data point. That avoids two milestones
   // collapsing onto the same month when both cross between the same pair of
   // points.
-  const { data, crossings, yTicks, hasDebt } = useMemo(() => {
-    // Debt is what is still owed, so it falls to zero as it is paid. A paid-off
-    // debt draws its last $0 beside the payment that cleared it, then stops: a
-    // line along zero for years would read as debt still there.
+  const { data, crossings, yTicks, hasDebt, hasOwed } = useMemo(() => {
+    // Debt is what is still owed, so it falls to zero as it is paid; money owed
+    // to the user falls the same way as it is paid back. Either draws its last
+    // $0 beside the payment that cleared it, then stops: a line along zero for
+    // years would read as something still owed.
     const debts = points.map((p) => p.totalDebt ?? 0);
-    const debtDrawn = (i: number): boolean =>
-      moneySign(debts[i]) !== 0 ||
-      (i > 0 && moneySign(debts[i - 1]) !== 0) ||
-      (i < debts.length - 1 && moneySign(debts[i + 1]) !== 0);
+    const owed = points.map((p) => p.receivables ?? 0);
+    const drawnAt = (values: number[], i: number): boolean =>
+      moneySign(values[i]) !== 0 ||
+      (i > 0 && moneySign(values[i - 1]) !== 0) ||
+      (i < values.length - 1 && moneySign(values[i + 1]) !== 0);
     const rows: ChartRow[] = points.map((p, i) => {
       const value = Number(p.netWorth.toFixed(2));
       const isPast = i < pastCount;
@@ -439,7 +451,8 @@ export const ProjectionChart = memo(function ProjectionChart({
       // the same boundary overlap so the series stays continuous.
       const portfolio = portfolioValues?.[i] ?? null;
       const monthLabel = MONTH_FORMATTER.format(p.date);
-      const debt = debtDrawn(i) ? debts[i] : null;
+      const debt = drawnAt(debts, i) ? debts[i] : null;
+      const owedNow = drawnAt(owed, i) ? owed[i] : null;
       return {
         idx: i,
         monthLabel,
@@ -459,6 +472,9 @@ export const ProjectionChart = memo(function ProjectionChart({
         portfolioRaw: portfolio,
         debtPast: isPast || isBoundary ? debt : null,
         debtFuture: isFuture || isBoundary ? debt : null,
+        receivables: p.receivables,
+        owedPast: isPast || isBoundary ? owedNow : null,
+        owedFuture: isFuture || isBoundary ? owedNow : null,
       };
     });
 
@@ -481,6 +497,7 @@ export const ProjectionChart = memo(function ProjectionChart({
       r.ghostValue,
       r.portfolioRaw,
       r.debtPast ?? r.debtFuture,
+      r.owedPast ?? r.owedFuture,
     ]);
     const ticks = niceTicks(plotted.filter((v): v is number => v !== null));
 
@@ -489,6 +506,7 @@ export const ProjectionChart = memo(function ProjectionChart({
       crossings: cross,
       yTicks: ticks,
       hasDebt: debts.some((d) => moneySign(d) !== 0),
+      hasOwed: owed.some((d) => moneySign(d) !== 0),
     };
   }, [points, pastCount, ghostValues, portfolioValues, milestones, todayLabel]);
 
@@ -608,6 +626,7 @@ export const ProjectionChart = memo(function ProjectionChart({
                 ["net", lineColor, 0.28],
                 ["portfolio", PORTFOLIO, 0.18],
                 ["debt", DEBT, 0.16],
+                ["owed", OWED, 0.16],
               ] as const
             ).map(([key, colour, opacity]) => (
               <linearGradient key={key} id={`${gradientId}-${key}`} x1="0" y1="0" x2="0" y2="1">
@@ -748,6 +767,38 @@ export const ProjectionChart = memo(function ProjectionChart({
               strokeWidth={1.5}
               strokeDasharray="6 4"
               fill={fillOf("debt")}
+              {...draw("future", STAGGER_MS)}
+              connectNulls={false}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          )}
+
+          {/* Owed to you — the dashboard's purple, falling to zero as it is
+              paid back; solid past, dashed projection. */}
+          {hasOwed && (
+            <Area
+              dataKey="owedPast"
+              name="Owed to you"
+              type="monotone"
+              stroke={OWED}
+              strokeWidth={1.5}
+              fill={fillOf("owed")}
+              {...draw("past", STAGGER_MS)}
+              connectNulls={false}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          )}
+          {hasOwed && (
+            <Area
+              dataKey="owedFuture"
+              name="Owed to you"
+              type="monotone"
+              stroke={OWED}
+              strokeWidth={1.5}
+              strokeDasharray="6 4"
+              fill={fillOf("owed")}
               {...draw("future", STAGGER_MS)}
               connectNulls={false}
               dot={false}

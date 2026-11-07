@@ -73,7 +73,11 @@ calibrated. Health scoring and scenario comparison are part of this module.
 `components/finance/` — plan editors, projection charts, confirmation dialogs,
 strategy comparisons, the plans workspace
 ([`plans-workspace.tsx`](../../components/finance/plans-workspace.tsx)), and the
-[`FinancialHealthDonut`](../../components/finance/financial-health-donut.tsx).
+[`FinancialHealthDonut`](../../components/finance/financial-health-donut.tsx),
+which names a period by obligations ÷ income in six bands
+([`lib/finance/period-health.ts`](../../lib/finance/period-health.ts)):
+Thriving under 50%, Healthy to 70%, Steady to 80%, Tight to 90%, Strained to
+100%, Underwater past it, each with its own `--health-*` colour token.
 The dashboard card is [`dashboard-finance-card.tsx`](../../components/finance/dashboard-finance-card.tsx)
 with its stacked chart in `dashboard-finance-mini-chart.tsx`; both read the
 series list in `dashboard-finance-series.ts`. Its past comes off the plan page's

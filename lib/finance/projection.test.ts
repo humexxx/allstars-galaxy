@@ -403,6 +403,19 @@ describe("F7 / F28: strategy comparison", () => {
     const last = projectPlan(p, [], [], [], opts).months.at(-1)!;
     expect(last.portfolioValue).toBeCloseTo(2663.05 + 10000 * 1.01 ** 12, 0);
   });
+
+  it("grows managed assets at the owner's expected return, apart from the user's own", () => {
+    // Own money at the promised 0.7%, managed assets at the expected 1%.
+    const p = plan({ monthsAhead: 12, includePortfolio: true });
+    const opts = {
+      portfolioValue: 12207.44,
+      portfolioHeldValue: 2207.44,
+      portfolioMonthlyGrowthRate: 0.007,
+      portfolioHeldMonthlyGrowthRate: 0.01,
+    };
+    const last = projectPlan(p, [], [], [], opts).months.at(-1)!;
+    expect(last.portfolioValue).toBeCloseTo(2207.44 * 1.01 ** 12 + 10000 * 1.007 ** 12, 0);
+  });
 });
 
 describe("payments record", () => {

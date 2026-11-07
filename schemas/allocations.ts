@@ -91,6 +91,15 @@ export const updateMethodSchema = z.object({
     .min(0, "A negative promised return makes no sense")
     .max(100, "That is a monthly percentage, not a multiplier")
     .finite(),
+  // What you expect the capital to really earn, private to you; your own
+  // plans grow these assets at it. Empty = held flat.
+  expectedMonthlyRoi: z.coerce
+    .number()
+    .min(0, "A negative expected return makes no sense")
+    .max(100, "That is a monthly percentage, not a multiplier")
+    .finite()
+    .nullable()
+    .optional(),
   enabled: z.boolean(),
 });
 

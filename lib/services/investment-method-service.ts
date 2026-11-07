@@ -12,9 +12,14 @@ import {
 import type { InvestmentMethodOption } from "@/types/finance";
 import type { InvestmentMethod } from "@/types/portfolio";
 
-/** Every method in the catalogue, enabled or not — callers filter. */
-export async function listAllInvestmentMethods(): Promise<InvestmentMethod[]> {
-  return db.select().from(investmentMethods);
+import { methodColumnsFor } from "./method-columns";
+
+/**
+ * Every method in the catalogue, enabled or not — callers filter. The
+ * expected return is the viewer's own methods' alone (`methodColumnsFor`).
+ */
+export async function listAllInvestmentMethods(viewerUserId: string): Promise<InvestmentMethod[]> {
+  return db.select(methodColumnsFor(viewerUserId)).from(investmentMethods);
 }
 
 /**
@@ -79,6 +84,8 @@ export type InvestmentMethodUpdate = {
   riskLevel: InvestmentMethod["riskLevel"];
   /** Percent per month, e.g. 0.7 for 0.7%. */
   monthlyRoi: number;
+  /** Percent per month the owner expects; null holds the assets flat. */
+  expectedMonthlyRoi?: number | null;
   enabled: boolean;
 };
 
@@ -108,6 +115,9 @@ export async function updateInvestmentMethod(
         description: data.description,
         riskLevel: data.riskLevel,
         monthlyRoi: data.monthlyRoi.toFixed(4),
+        ...(data.expectedMonthlyRoi !== undefined
+          ? { expectedMonthlyRoi: data.expectedMonthlyRoi === null ? null : data.expectedMonthlyRoi.toFixed(4) }
+          : {}),
         enabled: data.enabled,
         updatedAt: new Date(),
       })

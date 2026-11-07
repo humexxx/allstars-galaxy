@@ -141,7 +141,7 @@ export function ConfirmationDialog({
         <div className="flex flex-col gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field className="gap-2">
-              <FieldLabel htmlFor="conf-savings">Savings</FieldLabel>
+              <FieldLabel htmlFor="conf-savings">Cash</FieldLabel>
               <Input
                 id="conf-savings"
                 inputMode="decimal"

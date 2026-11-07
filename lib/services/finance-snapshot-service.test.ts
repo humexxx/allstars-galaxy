@@ -54,12 +54,10 @@ vi.mock("@/lib/finance/projection", async (importOriginal) => ({
 }));
 
 const getLatestConfirmationMock = vi.fn();
-const getLatestConfirmationsMock = vi.fn();
 const autoConfirmSkippedPeriodsMock = vi.fn();
 vi.mock("./finance-confirmation-service", () => ({
   getLatestConfirmation: (...args: unknown[]) =>
     getLatestConfirmationMock(...args),
-  getLatestConfirmations: (...args: unknown[]) => getLatestConfirmationsMock(...args),
   autoConfirmSkippedPeriods: (...args: unknown[]) =>
     autoConfirmSkippedPeriodsMock(...args),
 }));
@@ -95,6 +93,7 @@ function buildPlan(
     id: PLAN_ID,
     userId: USER_ID,
     name: "Test Plan",
+    isMain: true,
     description: null,
     startMonth: new Date(Date.UTC(2026, 0, 1)),
     monthsAhead: 12,
@@ -211,7 +210,6 @@ afterEach(() => {
   getAutoInvestRatesMock.mockReset();
   projectPlanMock.mockReset();
   getLatestConfirmationMock.mockReset();
-  getLatestConfirmationsMock.mockReset();
   autoConfirmSkippedPeriodsMock.mockReset();
   vi.useRealTimers();
 });
@@ -344,9 +342,18 @@ describe("createConfirmationSnapshot", () => {
     expect(childChain.values).toHaveBeenCalledOnce();
     const debtRows = childChain.values.mock.calls[0][0];
     expect(debtRows).toEqual([
-      { snapshotId: "snap-xyz", debtId: "d1", balance: "1000.00" },
-      { snapshotId: "snap-xyz", debtId: "d2", balance: "500.00" },
+      { snapshotId: "snap-xyz", debtId: "d1", debtKey: "d1", balance: "1000.00" },
+      { snapshotId: "snap-xyz", debtId: "d2", debtKey: "d2", balance: "500.00" },
     ]);
+  });
+
+  it("writes nothing for a what-if plan: history is the main plan's", async () => {
+    getPlanWithLinesMock.mockResolvedValueOnce(buildPlan({ isMain: false }));
+
+    const result = await createConfirmationSnapshot(PLAN_ID, USER_ID, new Date(Date.UTC(2026, 1, 15)));
+
+    expect(result).toEqual({ created: false });
+    expect(insertImpl).not.toHaveBeenCalled();
   });
 
   it("returns { created: false } when the plan cannot be loaded", async () => {
@@ -951,6 +958,28 @@ describe("calibratePlan", () => {
     recurrenceStart: null,
   } as unknown as FinancePlanWithLines["expenses"][number];
 
+  it("gives a copy's debts the balances confirmed on the main plan's, matched by key", () => {
+    const debt = (id: string, debtKey: string | null, initialBalance: string) =>
+      ({ id, debtKey, name: id, initialBalance, recurrenceType: "monthly_day", recurrenceStart: null }) as never;
+    // The copy: the main plan's card under its own id, and a car the what-if adds.
+    const copy = buildPlan({ id: OTHER_PLAN_ID, isMain: false, debts: [debt("copy-card", "card", "9000"), debt("car", null, "20000")] });
+    const cal = calibratePlan(
+      copy,
+      conf({
+        debtConfirmations: [
+          { debtId: "card", debtKey: "card", confirmedBalance: "4200" },
+          // Read off a line since deleted: matched by its key alone.
+          { debtId: null, debtKey: "gone", confirmedBalance: "1" },
+        ] as never,
+      })
+    );
+    expect(cal.initialSavings).toBe("8000");
+    expect(cal.debts.map((d) => [d.id, d.initialBalance])).toEqual([
+      ["copy-card", "4200"],
+      ["car", "20000"],
+    ]);
+  });
+
   it("F3: pins an every-N-months line to the ORIGINAL start month", async () => {
     const { projectPlan } = await actualEngine();
     const plan = buildPlan({ monthsAhead: 24, expenses: [quarterly] });
@@ -1274,10 +1303,9 @@ describe("loadPlanOverviews: batched, same figures as the per-plan path", () => 
     snap(PLAN_ID, new Date(Date.UTC(2026, 8, 2)), "3900"),
     snap(B_ID, new Date(Date.UTC(2026, 7, 4)), "2000"),
   ];
-  // The single-plan query selects no plan id.
-  const rowsOf = (planId: string) =>
+  // History is the user's: every plan reads all of it.
+  const userRows = () =>
     historyRows
-      .filter((r) => r.planId === planId)
       .map((r) => ({
         date: r.date,
         savings: r.savings,
@@ -1290,10 +1318,9 @@ describe("loadPlanOverviews: batched, same figures as the per-plan path", () => 
     const { projectPlan } = await actualEngine();
     projectPlanMock.mockImplementation(projectPlan);
 
-    // The per-plan path, as the plan page runs it.
-    getLatestConfirmationMock.mockImplementation(async (id: string) =>
-      id === PLAN_ID ? confA : null
-    );
+    // The per-plan path, as the plan page runs it. The confirmation is the
+    // user's, so every plan calibrates from it.
+    getLatestConfirmationMock.mockImplementation(async () => confA);
     getAutoInvestRateMock.mockImplementation(async (p: { autoInvestMethodId: string | null }) =>
       p.autoInvestMethodId === "m1" ? 0.005 : 0
     );
@@ -1303,7 +1330,7 @@ describe("loadPlanOverviews: batched, same figures as the per-plan path", () => 
       const asOfFallback = base ? calibratePlan(base, null, { timeZone: "UTC" }).asOf ?? null : null;
       const view = await loadCalibratedView(plan, USER_ID, today, { timeZone: "UTC", asOfFallback });
       mockOwnershipOk();
-      selectImpl.mockReturnValueOnce(makeSelectChain(rowsOf(plan.id)));
+      selectImpl.mockReturnValueOnce(makeSelectChain(userRows()));
       const history = await getRecentMonthlySnapshots(
         plan.id,
         USER_ID,
@@ -1342,22 +1369,21 @@ describe("loadPlanOverviews: batched, same figures as the per-plan path", () => 
     selectImpl.mockReset();
 
     // The batched path.
-    getLatestConfirmationsMock.mockResolvedValueOnce(new Map([[PLAN_ID, confA]]));
+    getLatestConfirmationMock.mockResolvedValueOnce(confA);
     getAutoInvestRatesMock.mockResolvedValueOnce(new Map([["m1", 0.005]]));
     selectImpl.mockReturnValueOnce(makeSelectChain(historyRows));
 
     const overviews = await loadPlanOverviews(plans, USER_ID, today, "UTC");
 
     expect(overviews).toEqual(expected);
-    expect(getLatestConfirmationsMock).toHaveBeenCalledTimes(1);
-    expect(getLatestConfirmationsMock).toHaveBeenCalledWith([PLAN_ID, B_ID, OTHER_PLAN_ID]);
+    expect(getLatestConfirmationMock).toHaveBeenCalledTimes(1);
+    expect(getLatestConfirmationMock).toHaveBeenCalledWith(USER_ID);
     expect(getAutoInvestRatesMock).toHaveBeenCalledWith(["m1"]);
-    expect(getLatestConfirmationMock).not.toHaveBeenCalled();
     expect(getAutoInvestRateMock).not.toHaveBeenCalled();
     // One history query for every plan, and no ownership round trip.
     expect(selectImpl).toHaveBeenCalledTimes(1);
-    // Sanity: the confirmation and the auto-invest rate did reach plan A.
-    expect(overviews[0].today?.savings).not.toBe(expected[1].today?.savings);
+    // One past for every plan: the user's, bucketed by each plan's own anchor.
+    for (const o of overviews) expect(o.timeline.todayIndex).toBeGreaterThan(0);
   });
 
   it("refuses a plan that isn't the caller's without querying anything", async () => {
@@ -1365,13 +1391,13 @@ describe("loadPlanOverviews: batched, same figures as the per-plan path", () => 
       loadPlanOverviews([buildPlan({ userId: "someone-else" } as never)], USER_ID, today, "UTC")
     ).rejects.toThrow("Plan not found");
     expect(selectImpl).not.toHaveBeenCalled();
-    expect(getLatestConfirmationsMock).not.toHaveBeenCalled();
+    expect(getLatestConfirmationMock).not.toHaveBeenCalled();
   });
 
   it("no plans, no queries", async () => {
     await expect(loadPlanOverviews([], USER_ID, today, "UTC")).resolves.toEqual([]);
     expect(selectImpl).not.toHaveBeenCalled();
-    expect(getLatestConfirmationsMock).not.toHaveBeenCalled();
+    expect(getLatestConfirmationMock).not.toHaveBeenCalled();
     expect(getAutoInvestRatesMock).not.toHaveBeenCalled();
   });
 });

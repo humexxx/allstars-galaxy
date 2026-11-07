@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active (page redesigned to mirror plan-editor layout)
-> **Last reviewed:** 2026-11-03
+> **Last reviewed:** 2026-11-05
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -60,7 +60,7 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
 - `portfolios` — user's portfolio account
 - `transactions` — buy/withdrawal transactions with approval workflow
 - `portfolio_snapshots` — historical portfolio value
-- `investment_methods` — investment vehicles with risk/ROI metadata; `owner_user_id` indexed, `updated_at` set by `updateMethodAction`
+- `investment_methods` — investment vehicles with risk/ROI metadata; `owner_user_id` indexed, `updated_at` set by `updateMethodAction`. `monthly_roi` is the fixed return promised to clients; `expected_monthly_roi` (nullable; migration `0063_quiet_spiral`) is what the owner expects the capital to really earn — private to the owner (`methodColumnsFor` in `lib/services/method-columns.ts` returns it only on the viewer's own methods, NULL elsewhere, so a client's portfolio never carries it), edited in the method dialog, and the rate the owner's finance plans grow the managed assets at
 - `price_assets` — catalogue of quotable assets (`symbol`, `external_id`, `source`)
 - `price_quotes` — append-only price history, one row per fetch; `(asset_id, fetched_at desc)` index serves the `DISTINCT ON` latest-price read
 - `method_allocations` — the policy: what share of incoming money goes to which asset

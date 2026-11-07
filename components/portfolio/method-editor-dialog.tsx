@@ -64,6 +64,9 @@ export function MethodEditorDialog({
   const [description, setDescription] = useState(method.description ?? "");
   const [riskLevel, setRiskLevel] = useState<RiskLevel>(method.riskLevel);
   const [monthlyRoi, setMonthlyRoi] = useState(String(method.monthlyRoi));
+  const [expectedRoi, setExpectedRoi] = useState(
+    method.expectedMonthlyRoi == null ? "" : String(Number(method.expectedMonthlyRoi))
+  );
   const [enabled, setEnabled] = useState(method.enabled);
 
   const submit = (): void => {
@@ -75,6 +78,7 @@ export function MethodEditorDialog({
           description: description || null,
           riskLevel,
           monthlyRoi: Number(monthlyRoi),
+          expectedMonthlyRoi: expectedRoi.trim() === "" ? null : Number(expectedRoi),
           enabled,
         }),
         { success: "Method saved", failure: "Failed to save method" }
@@ -144,6 +148,24 @@ export function MethodEditorDialog({
             <FieldDescription>
               The only figure a client sees, and what their balance compounds at.
               Changing it changes what you owe — it is not cosmetic.
+            </FieldDescription>
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="method-expected-roi">Expected monthly return (%)</FieldLabel>
+            <Input
+              id="method-expected-roi"
+              type="number"
+              step="0.0001"
+              inputMode="decimal"
+              value={expectedRoi}
+              onChange={(e) => setExpectedRoi(e.target.value)}
+              placeholder="Held flat"
+            />
+            <FieldDescription>
+              What you expect the capital to really earn. Only you see it: your own
+              plans grow the assets it bought at this rate. Clients keep the fixed
+              return above.
             </FieldDescription>
           </Field>
 

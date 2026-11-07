@@ -1,0 +1,1 @@
+ALTER TABLE "investment_methods" ADD COLUMN "expected_monthly_roi" numeric(7, 4);

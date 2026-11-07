@@ -38,6 +38,7 @@ import type {
 
 import { projectPlan, type ProjectOptions } from "@/lib/finance/projection";
 import type { OpeningRestatement } from "@/lib/finance/opening-balances";
+import { nextPlanColor } from "@/lib/finance/plan-colors";
 import { isoDay } from "@/lib/finance/schedule";
 
 import { getUserPortfolio, getPortfolioStats, getPortfolioAssets } from "./portfolio-service";
@@ -174,12 +175,11 @@ export async function createPlan(
     // Auto-set as main when the user has no plans yet. Keeps the
     // confirmation host / dashboard finance card pointed at something
     // useful from the very first plan onwards.
-    const [existing] = await tx
-      .select({ id: financePlans.id })
+    const existing = await tx
+      .select({ color: financePlans.color })
       .from(financePlans)
-      .where(eq(financePlans.userId, userId))
-      .limit(1);
-    const shouldBeMain = !existing;
+      .where(eq(financePlans.userId, userId));
+    const shouldBeMain = existing.length === 0;
 
     const [plan] = await tx
       .insert(financePlans)
@@ -199,7 +199,7 @@ export async function createPlan(
         autoInvestCustomRate: data.autoInvestCustomRate ?? null,
         initialInvestments: data.initialInvestments,
         confirmationDayOfMonth: data.confirmationDayOfMonth,
-        color: data.color,
+        color: data.color ?? nextPlanColor(existing.map((p) => p.color)),
         balancesAsOf: today ? isoDay(today) : null,
         isMain: shouldBeMain,
       })
@@ -266,10 +266,16 @@ async function writeRestatement(
       ...extraDebts.map((d) => ({ debtId: d.id, balance: d.balance })),
     ];
     if (rows.length > 0) {
+      const keys = await tx
+        .select({ id: financePlanDebts.id, debtKey: financePlanDebts.debtKey })
+        .from(financePlanDebts)
+        .where(eq(financePlanDebts.planId, planId));
+      const keyById = new Map(keys.map((d) => [d.id, d.debtKey ?? d.id]));
       await tx.insert(financePlanDebtConfirmations).values(
         rows.map((row) => ({
           confirmationId: r.syncConfirmationId!,
           debtId: row.debtId,
+          debtKey: keyById.get(row.debtId) ?? row.debtId,
           confirmedBalance: row.balance,
         }))
       );
@@ -429,11 +435,7 @@ export const getMainPlan = cache(async function getMainPlan(
   return plan ?? null;
 });
 
-type CloneOptions = {
-  asScenario?: boolean;
-  /** Opening balances for the copy, instead of the source's stored ones. */
-  opening?: OpeningRestatement;
-};
+type CloneOptions = { asScenario?: boolean };
 
 export async function clonePlan(
   userId: string,
@@ -457,6 +459,14 @@ export async function clonePlanWithLineIds(
 ): Promise<{ plan: FinancePlan; lineIds: ReadonlyMap<string, string> }> {
   const source = await getPlanWithLines(sourcePlanId, userId);
   if (!source) throw new Error("Plan not found");
+  // Its own line colour: a copy wearing its source's drew the two plans as one.
+  // Read fresh, not through the request cache: a plan created moments ago in
+  // the same request (the assistant's create then copy) must count.
+  const worn = await db
+    .select({ color: financePlans.color })
+    .from(financePlans)
+    .where(eq(financePlans.userId, userId));
+  const color = nextPlanColor(worn.map((p) => p.color));
 
   // One transaction: a clone either arrives whole (plan, lines AND the
   // per-month overrides pointing at them) or not at all.
@@ -469,7 +479,7 @@ export async function clonePlanWithLineIds(
         description: source.description,
         startMonth: source.startMonth,
         monthsAhead: source.monthsAhead,
-        initialSavings: options.opening?.initialSavings ?? source.initialSavings,
+        initialSavings: source.initialSavings,
         monthlySavingsRate: source.monthlySavingsRate,
         includePortfolio: source.includePortfolio,
         surplusToDebtsPercent: source.surplusToDebtsPercent,
@@ -477,14 +487,14 @@ export async function clonePlanWithLineIds(
         autoInvestPercent: source.autoInvestPercent,
         autoInvestMethodId: source.autoInvestMethodId,
         autoInvestCustomRate: source.autoInvestCustomRate,
-        initialInvestments: options.opening?.initialInvestments ?? source.initialInvestments,
+        initialInvestments: source.initialInvestments,
         // Keep the accounting-period anchor: without it the clone falls back to
         // day 1 and its periods drift out of alignment with the source plan.
         confirmationDayOfMonth: source.confirmationDayOfMonth,
-        color: source.color,
+        color,
         // Same balances, stated on the same day — the clone opens exactly
         // where its source does.
-        balancesAsOf: options.opening?.balancesAsOf ?? source.balancesAsOf,
+        balancesAsOf: source.balancesAsOf,
         basedOnPlanId: options.asScenario ? source.id : null,
       })
       .returning();
@@ -555,7 +565,9 @@ export async function clonePlanWithLineIds(
           source.debts.map((d) => ({
             planId: plan.id,
             name: d.name,
-            initialBalance: options.opening?.debtBalances[d.id] ?? d.initialBalance,
+            // The same debt in both plans: a confirmed balance reaches each.
+            debtKey: d.debtKey ?? d.id,
+            initialBalance: d.initialBalance,
             monthlyInterestRate: d.monthlyInterestRate,
             monthlyPayment: d.monthlyPayment,
             paymentType: d.paymentType,
@@ -1080,9 +1092,10 @@ export async function projectionOptionsFor(
   const [ownValue, portfolioMonthlyGrowthRate, managed, autoInvestRate] = await Promise.all([
     plan.includePortfolio ? getPortfolioValueForUser(userId) : Promise.resolve(0),
     plan.includePortfolio ? getPortfolioWeightedMonthlyRoi(userId) : Promise.resolve(0),
-    // What the user holds with other people's money counts at market value,
-    // held flat: it has no promised rate of its own. The owner decided
-    // (2026-11-03) that net worth carries the assets, not the margin.
+    // What the user holds with other people's money counts at market value
+    // (the owner decided on 2026-11-03 that net worth carries the assets, not
+    // the margin), growing at the return the owner EXPECTS of it — each
+    // method's `expected_monthly_roi`, not the rate promised to clients.
     plan.includePortfolio ? getManagedAssets(userId) : Promise.resolve(null),
     prefetched.autoInvestRate ?? getAutoInvestRate(plan),
   ]);
@@ -1090,6 +1103,7 @@ export async function projectionOptionsFor(
   return {
     portfolioValue: ownValue + managedValue,
     portfolioHeldValue: managedValue,
+    portfolioHeldMonthlyGrowthRate: managed?.expectedMonthlyRate ?? 0,
     portfolioMonthlyGrowthRate,
     autoInvestRate,
     overrides: plan.overrides,

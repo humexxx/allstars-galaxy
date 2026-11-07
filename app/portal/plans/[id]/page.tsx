@@ -13,7 +13,6 @@ import {
   compareDebtStrategies,
   getPlanWithLines,
   projectPlan,
-  projectStateAt,
   projectionOptionsFor,
 } from "@/lib/services/finance-plan-service";
 import {
@@ -21,14 +20,20 @@ import {
   getRecentMonthlySnapshots,
   loadCalibratedView,
 } from "@/lib/services/finance-snapshot-service";
+import {
+  getConfirmationStatus,
+  getLastConfirmedDay,
+} from "@/lib/services/finance-confirmation-service";
 import { getUserPortfolio } from "@/lib/services/portfolio-service";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { todayInTimeZone } from "@/lib/utils/date";
+import { parsePlanView } from "@/lib/finance/plan-view";
 
 export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ view?: string | string[] }>;
 };
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -42,8 +47,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default async function PlanDetailPage({ params }: PageProps) {
-  const { id } = await params;
+export default async function PlanDetailPage({ params, searchParams }: PageProps) {
+  const [{ id }, { view: viewParam }] = await Promise.all([params, searchParams]);
   if (!idSchema.safeParse(id).success) notFound();
   const ctx = await requireEffectiveContext();
   const plan = await getPlanWithLines(id, ctx.effectiveUserId);
@@ -80,6 +85,14 @@ export default async function PlanDetailPage({ params }: PageProps) {
     ),
   ]);
   const { baseline, projection, options, today } = view;
+  // Only the main plan is confirmed; the warning beside its chart says when
+  // the current period still waits for one.
+  const [confirmationDue, lastConfirmedDay] = await Promise.all([
+    plan.isMain
+      ? getConfirmationStatus(plan, ctx.effectiveUserId, now).then((s) => s.isDue)
+      : false,
+    getLastConfirmedDay(ctx.effectiveUserId),
+  ]);
 
   // The plan as written (no confirmation applied): the hover fallback for
   // periods before the calibration start, the chart's past while the plan has
@@ -91,28 +104,25 @@ export default async function PlanDetailPage({ params }: PageProps) {
       ? projection
       : projectPlan(rawPlan, rawPlan.incomes, rawPlan.expenses, rawPlan.debts, rawOptions);
 
-  // Scenario overlay: the base plan projected from its plan as written, the
-  // same footing as `pastProjection` for this plan (confirmations are not
-  // copied into a scenario, so comparing a calibrated base with an
-  // uncalibrated scenario showed deltas for an unchanged clone).
+  // Scenario overlay: the base plan as its own page shows it. Both plans
+  // calibrate from the user's confirmations, so the scenario differs from its
+  // base only where its lines do.
   let ghost: {
     name: string;
     color: string;
     projection: Projection;
     today: TodayState | null;
   } | null = null;
-  if (basePlan && baseRaw) {
-    const baseOptions = await projectionOptionsFor(baseRaw, ctx.effectiveUserId);
+  if (basePlan) {
+    const baseView = await loadCalibratedView(basePlan, ctx.effectiveUserId, now, { timeZone });
     ghost = {
       name: basePlan.name,
       color: basePlan.color,
-      projection: projectPlan(baseRaw, baseRaw.incomes, baseRaw.expenses, baseRaw.debts, baseOptions),
-      today: projectStateAt(baseRaw, baseRaw.incomes, baseRaw.expenses, baseRaw.debts, baseOptions, now),
+      projection: baseView.projection,
+      today: baseView.today,
     };
   }
-  const scenarioBasis = ghost
-    ? projectPlan(rawPlan, rawPlan.incomes, rawPlan.expenses, rawPlan.debts, rawOptions)
-    : null;
+  const scenarioBasis = ghost ? projection : null;
 
   // Recorded portfolio history feeds the chart's past segment of the portfolio
   // series when the plan includes the portfolio.
@@ -160,6 +170,9 @@ export default async function PlanDetailPage({ params }: PageProps) {
           plan.description ?? "Add income, expenses and debts to refine the projection."
         }
         backHref="/portal/plans"
+        confirmationDue={confirmationDue}
+        lastConfirmedDay={lastConfirmedDay}
+        initialView={parsePlanView(viewParam)}
       />
     </section>
   );

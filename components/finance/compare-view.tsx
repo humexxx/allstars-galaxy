@@ -12,13 +12,11 @@ import { LineChart } from "lucide-react";
 
 import {
   Card,
-  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -35,8 +33,6 @@ const ComparePlansChart = dynamic(
     loading: () => <Skeleton className="h-96 w-full" />,
   }
 );
-
-type Metric = "netWorth" | "totalDebt";
 
 /** One plan on the compare page, projected like its own page does it. */
 export type ComparePlanEntry = {
@@ -86,7 +82,6 @@ export function CompareView({
       setSelected((prev) => new Set([...prev, ...added]));
     }
   }
-  const [metric, setMetric] = useState<Metric>("netWorth");
 
   const filtered = useMemo(
     () =>
@@ -141,18 +136,6 @@ export function CompareView({
       <Card>
         <CardHeader>
           <CardTitle as="h2">Projection comparison</CardTitle>
-          <CardAction>
-            <ToggleGroup
-              type="single"
-              size="sm"
-              value={metric}
-              onValueChange={(v) => v && setMetric(v as Metric)}
-              aria-label="Metric"
-            >
-              <ToggleGroupItem value="netWorth">Net worth</ToggleGroupItem>
-              <ToggleGroupItem value="totalDebt">Total debt</ToggleGroupItem>
-            </ToggleGroup>
-          </CardAction>
         </CardHeader>
         <CardContent>
           {filtered.length === 0 ? (
@@ -164,7 +147,6 @@ export function CompareView({
           ) : (
             <ComparePlansChart
               series={filtered}
-              metric={metric}
               today={today}
               // Wrap whole items: in one squeezed row each long plan name
               // broke word by word.
@@ -223,7 +205,7 @@ function EndingStateTile({ entry }: { entry: ComparePlanEntry }) {
       )}
       <dl className="mt-3 flex flex-col gap-1 text-sm">
         <div className="flex justify-between gap-3">
-          <dt className="text-muted-foreground">Savings</dt>
+          <dt className="text-muted-foreground">Cash</dt>
           <dd><Mono>{formatCurrency(p.endingSavings)}</Mono></dd>
         </div>
         {/* Investments belong on the sheet: without them Savings − Debt did

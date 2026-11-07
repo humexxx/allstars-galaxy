@@ -50,6 +50,7 @@ import { Mono, Text } from "@/components/ui/typography";
 
 import { createPlanAction, updatePlanAction } from "@/app/actions/finance-plans";
 import { cn } from "@/lib/utils";
+import { PLAN_COLORS } from "@/lib/finance/plan-colors";
 import {
   createFinancePlanSchema,
   type CreateFinancePlanData,
@@ -72,6 +73,8 @@ type PlanFormProps = {
    *  their zone: a new plan starts in THEIR month. `new Date()` read in UTC
    *  started an evening plan in Costa Rica a month late. */
   today?: Date;
+  /** A new plan's colour: the first palette slot the user's plans leave free. */
+  defaultColor?: string;
 };
 
 // The month input holds a "YYYY-MM" string; the schema's z.coerce.date()
@@ -82,13 +85,7 @@ function toMonthInputValue(date: Date): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-const COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-];
+const COLORS = PLAN_COLORS;
 
 // 60% is the recommended starting point for new plans — aggressive enough to
 // meaningfully shorten the debt timeline without starving savings.
@@ -113,12 +110,13 @@ export function PlanForm({
   current,
   investmentMethods,
   today,
+  defaultColor,
 }: PlanFormProps): React.ReactElement {
   const router = useRouter();
   const [includePortfolio, setIncludePortfolio] = useState(
-    plan?.includePortfolio ?? false
+    plan?.includePortfolio ?? true
   );
-  const [color, setColor] = useState(plan?.color ?? COLORS[0]);
+  const [color, setColor] = useState<string>(plan?.color ?? defaultColor ?? COLORS[0]);
 
   // Surplus acceleration: stored as numeric string 0..1 in the DB. We convert to
   // an integer 0..100 for the slider UX.
@@ -316,7 +314,7 @@ export function PlanForm({
               </Field>
               <Field className="gap-2" data-invalid={!!errors.initialSavings || undefined}>
                 <FieldLabel htmlFor="plan-savings">
-                  {plan ? "Savings today" : "Initial savings"}
+                  {plan ? "Cash today" : "Initial cash"}
                 </FieldLabel>
                 <Input
                   id="plan-savings"
@@ -681,7 +679,7 @@ export function PlanForm({
               />
               <FieldDescription>
                 {plan
-                  ? "Where the plan has the investments bucket today. Changing it restates the opening balances as of today, like Savings today."
+                  ? "Where the plan has the investments bucket today. Changing it restates the opening balances as of today, like Cash today."
                   : "What the investments bucket holds on the day you create the plan."}
               </FieldDescription>
             </Field>

@@ -28,15 +28,23 @@ export function PageHeaderSkeleton({
 }: PageHeaderSkeletonProps) {
   return (
     <div className="@container/page-header flex flex-col gap-2">
-      {back && <Skeleton className="h-8 w-28" />}
-      <div className="flex flex-col gap-3 @2xl/page-header:flex-row @2xl/page-header:items-start @2xl/page-header:justify-between">
+      {back && size === "default" && <Skeleton className="h-8 w-28" />}
+      <div
+        className={cn(
+          "flex flex-col gap-3 @2xl/page-header:flex-row @2xl/page-header:justify-between",
+          size === "compact" ? "@2xl/page-header:items-center" : "@2xl/page-header:items-start"
+        )}
+      >
         <div className="flex flex-col gap-1">
-          <Skeleton
-            className={cn(
-              "w-48",
-              size === "compact" ? "h-7 sm:h-8" : "h-9 sm:h-10"
-            )}
-          />
+          <div className="flex items-center gap-2">
+            {back && size === "compact" && <Skeleton className="size-8" />}
+            <Skeleton
+              className={cn(
+                "w-48",
+                size === "compact" ? "h-7 sm:h-8" : "h-9 sm:h-10"
+              )}
+            />
+          </div>
           {description && <Skeleton className={cn("h-5 max-w-full", descriptionWidth)} />}
         </div>
         {actions > 0 && (

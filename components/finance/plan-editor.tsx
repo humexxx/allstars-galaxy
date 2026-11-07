@@ -9,11 +9,14 @@ import {
   Camera,
   ClipboardCheck,
   GitBranch,
+  Info,
   LineChart,
   type LucideIcon,
   MoreHorizontal,
+  RotateCcw,
   Star,
   Table2,
+  TriangleAlert,
   Unlink,
   Zap,
 } from "lucide-react";
@@ -44,13 +47,14 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { statToneClass } from "@/components/ui/stat-card";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 
 import { useRegisterDevTool } from "@/components/dev-tools/dev-tools-context";
 import { runDailySnapshotsAction } from "@/app/actions/dev-tools";
 
 import { ConfirmationDialog } from "./confirmation-dialog";
-import { PeriodCompareDialog } from "./period-compare-dialog";
 import { FinancialHealthDonut } from "./financial-health-donut";
 import { PlanLineEditor } from "./plan-line-editor";
 import { PlanDebtEditor } from "./plan-debt-editor";
@@ -111,6 +115,12 @@ import { cn } from "@/lib/utils";
 import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
 import { periodIndexForDate, periodRangeFor } from "@/lib/finance/period";
 import {
+  DEFAULT_PLAN_VIEW,
+  PLAN_VIEWS,
+  hrefWithPlanView,
+  type PlanView,
+} from "@/lib/finance/plan-view";
+import {
   alignTodayPoint,
   buildChartSeries,
   describeDebtFree,
@@ -121,6 +131,8 @@ import {
   type PlanHistoryPoint,
 } from "@/lib/finance/chart-series";
 import { planOccurrences } from "@/lib/finance/schedule";
+import { planStartDate } from "@/lib/finance/projection";
+import { owedAfter, owedRepayments } from "@/lib/finance/receivables";
 import { compareScenario } from "@/lib/finance/scenario";
 import type {
   DebtStrategy,
@@ -130,8 +142,11 @@ import type {
   StrategyComparison,
   TodayState,
 } from "@/types/finance";
+import { changeBaseline, closeLabels } from "@/lib/finance/dashboard";
 import { CountUpCurrency } from "./count-up";
-import { STAGGER_MS } from "./dashboard-motion";
+import { DeltaChip } from "./delta-chip";
+import { dashboardSeries, type DashboardSeries } from "./dashboard-finance-series";
+import { SeriesSwatch } from "./series-swatch";
 
 /** Figures for one accounting period, previewed in the sidebar while hovering
  *  a chart point. Health/surplus derive from these, so they're not stored. */
@@ -197,7 +212,7 @@ function settle(promise: Promise<void>): void {
 type GhostPlan = {
   name: string;
   color: string;
-  /** The base plan projected from its plan as written (see page.tsx). */
+  /** The base plan's calibrated projection, as its own page shows it. */
   projection: Projection;
   /** The base plan's day-aware position today, for the ghost's today point. */
   today: TodayState | null;
@@ -237,6 +252,12 @@ type PlanEditorProps = {
   /** The reader's calendar day (UTC midnight), resolved on the server in their
    *  time zone. Everything "today" derives from it. */
   now: Date;
+  /** The main plan's current period has no confirmation yet. */
+  confirmationDue?: boolean;
+  /** The user's last own confirmation (YYYY-MM-DD): net worth's change is from there. */
+  lastConfirmedDay?: string | null;
+  /** The Overview view the page opens on, read from `?view=`. */
+  initialView?: PlanView;
 };
 
 export function PlanEditor({
@@ -257,6 +278,9 @@ export function PlanEditor({
   description,
   backHref,
   now,
+  confirmationDue = false,
+  lastConfirmedDay = null,
+  initialView = DEFAULT_PLAN_VIEW,
 }: PlanEditorProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -329,9 +353,13 @@ export function PlanEditor({
   // projected close of the period.
   const totalDebt = todayState?.totalDebt ?? current?.totalDebt ?? 0;
 
-  // Chart-hover preview: while the pointer is over a chart point, the sidebar
-  // cards show THAT period's figures; on leave they snap back.
-  const [hoverFigures, setHoverFigures] = useState<PeriodFigures | null>(null);
+  // A period picked on the chart: the sidebar shows THAT period's figures until
+  // the reader goes back to today. Hovering only shows the chart's tooltip —
+  // a sidebar that changed under every pointer move read as flicker.
+  const [picked, setPicked] = useState<{ index: number; figures: PeriodFigures } | null>(null);
+  const hoverFigures = picked?.figures ?? null;
+  // The chart's horizon, here so the Portfolio card reads the same window.
+  const [horizonMonths, setHorizonMonths] = useState(12);
   const isPreview = hoverFigures !== null;
   const dIncome = hoverFigures?.income ?? income;
   const dLivingExpenses = hoverFigures?.livingExpenses ?? livingExpenses;
@@ -391,6 +419,19 @@ export function PlanEditor({
     name: d.name,
     balance: d.balance,
   }));
+  // What is still owed to the user today, by line.
+  const owedToYou = todayState?.receivables ?? 0;
+  const owedItems = baseline.incomes
+    .filter((l) => l.owedToMe)
+    .map((l) => ({
+      name: l.name,
+      amount: owedAfter(
+        owedRepayments({ startMonth: new Date(baseline.startMonth), incomes: [l], overrides: baseline.overrides }, planStartDate(baseline)),
+        now
+      ),
+      hint: l.kind === "one_time" ? (l.date ?? undefined) : l.endDate ? `until ${l.endDate}` : undefined,
+    }))
+    .filter((i) => i.amount > 0);
   const debtFreeLabel = formatDebtFree(
     describeDebtFree(projection, effectiveAnchorDay, now)
   );
@@ -510,15 +551,36 @@ export function PlanEditor({
         back={backHref ? { href: backHref, label: "Plans" } : undefined}
         title={title}
         badge={
-          ghost && (
-            <Badge variant="outline">
-              <GitBranch />
-              Based on: {ghost.name}
-            </Badge>
-          )
+          <>
+            {/* The description sits behind an icon: under the title it was a
+                line of help pushing the chart down on every visit. */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`About this plan: ${description}`}
+                  className="text-muted-foreground"
+                >
+                  <Info />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">{description}</TooltipContent>
+            </Tooltip>
+            {ghost && (
+              <Badge variant="outline">
+                <GitBranch />
+                Based on: {ghost.name}
+              </Badge>
+            )}
+            {/* Beside the title rather than under it: one line less above the chart. */}
+            {periodLabel && (
+              <Text variant="small" as="span" className="tabular-nums">
+                Current period · {periodLabel}
+              </Text>
+            )}
+          </>
         }
-        description={description}
-        meta={periodLabel && `Current period · ${periodLabel}`}
         actions={
           <>
             <TabsList>
@@ -557,15 +619,24 @@ export function PlanEditor({
           ghost={ghost}
           portfolioHistory={portfolioHistory}
           portfolioEnabled={plan.includePortfolio}
-          onTogglePortfolio={handleTogglePortfolio}
-          onHoverFigures={setHoverFigures}
+          horizonMonths={horizonMonths}
+          onHorizonChange={setHorizonMonths}
+          selectedIndex={picked?.index ?? null}
+          onSelectPeriod={(index, figures) =>
+            setPicked(index !== null && figures ? { index, figures } : null)
+          }
           milestones={milestones}
-          onConfirmToday={openConfirmation}
+          // Only the main plan records reality; a what-if reads its past.
+          onConfirmToday={plan.isMain ? openConfirmation : undefined}
+          confirmationDue={plan.isMain && confirmationDue}
+          lastConfirmedDay={lastConfirmedDay}
+          initialView={initialView}
           onOpenSetup={() => setTab("setup")}
           now={now}
-          calendar={
+          calendar={(header) => (
             <PlanCalendar
               plan={plan}
+              header={header}
               projections={[projection, pastProjection]}
               onAddIncome={(input) =>
                 wrap(() => addPlanIncomeAction(plan.id, input))
@@ -589,7 +660,7 @@ export function PlanEditor({
                 wrap(() => deleteLineOverrideAction(plan.id, input))
               }
             />
-          }
+          )}
           sidebar={
             // Condensed Polymarket-style rail (right 1/4 on desktop, stacked
             // under the chart on mobile): a figures card — health gauge on top,
@@ -623,7 +694,18 @@ export function PlanEditor({
               )}
             >
               <CardContent className="flex flex-col gap-3">
-                <div className="flex flex-col items-center gap-1.5">
+                <div className="relative flex flex-col items-center gap-1.5">
+                  {isPreview && (
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      className="absolute top-0 right-0"
+                      onClick={() => setPicked(null)}
+                    >
+                      <RotateCcw />
+                      Today
+                    </Button>
+                  )}
                   <FinancialHealthDonut
                     obligations={dFixedOutflow}
                     income={dIncome}
@@ -638,7 +720,6 @@ export function PlanEditor({
                   <StatRow
                     label={incomeLabel}
                     value={dIncome}
-                    tone={moneySign(dIncome) > 0 ? "positive" : undefined}
                     description="Every income landing in the current period."
                     breakdown={
                       <BreakdownList
@@ -665,9 +746,9 @@ export function PlanEditor({
                   />
                   <StatRow
                     label="Total debt"
+                    series={dashboardSeries("debt")}
                     value={dTotalDebt}
                     description="What each debt stands at today."
-                    tone={moneySign(dTotalDebt) > 0 ? "negative" : undefined}
                     hint={plan.debts.length === 0 ? undefined : debtFreeLabel}
                     breakdown={
                       <BreakdownList
@@ -680,17 +761,22 @@ export function PlanEditor({
                       />
                     }
                   />
+                  {owedToYou > 0 && (
+                    <StatRow
+                      label="Owed to you"
+                      series={dashboardSeries("receivables")}
+                      value={owedToYou}
+                      description="Money still to be paid back to you, counted in net worth."
+                      breakdown={
+                        <BreakdownList items={owedItems} emptyLabel="Nothing owed to you" total={owedToYou} />
+                      }
+                    />
+                  )}
                   <StatRow
                     label="Surplus"
                     value={dSurplus}
                     description="Income less fixed obligations, and where the rest goes."
-                    tone={
-                      moneySign(dSurplus) > 0
-                        ? "positive"
-                        : moneySign(dSurplus) < 0
-                          ? "negative"
-                          : undefined
-                    }
+                    tone={moneySign(dSurplus) < 0 ? "negative" : undefined}
                     hint={moneySign(dSurplus) < 0 ? "Spends more than it earns" : undefined}
                     breakdown={
                       <SurplusBreakdown
@@ -716,31 +802,16 @@ export function PlanEditor({
                 today={now}
               />
             )}
-            {debtComparison && (
-              // gap-3: the stock 24px between header and rows is what pushed
-              // the sidebar past the main panel's height on xl.
-              <Card className="gap-3">
-                <CardHeader>
-                  <Eyebrow asChild>
-                    <h2 id="debt-strategy-heading">Debt payoff strategy</h2>
-                  </Eyebrow>
-                </CardHeader>
-                {/* All three options on screen with their cost, rather than a
-                    badge you have to expand: the choice is a trade-off, and
-                    hiding the alternatives hid the trade-off. */}
-                <CardContent>
-                  <StrategyPicker
-                    comparison={debtComparison}
-                    currentStrategy={currentStrategy}
-                    onChange={handleChangeStrategy}
-                    pending={isPending}
-                    hadDebt={projection.hadDebt}
-                    anchorDay={effectiveAnchorDay}
-                    today={now}
-                  />
-                </CardContent>
-              </Card>
-            )}
+            <PortfolioCard
+              enabled={plan.includePortfolio}
+              today={todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0}
+              horizonMonths={horizonMonths}
+              atHorizon={
+                projection.months[Math.min(projection.months.length - 1, currentPeriodIdx + horizonMonths)]
+                  ?.portfolioValue ?? null
+              }
+              onToggle={handleTogglePortfolio}
+            />
             </>
           }
         />
@@ -755,6 +826,8 @@ export function PlanEditor({
               description="Recurring income or one-time receipts."
               emptyLabel="No income sources yet"
               lines={plan.incomes}
+              today={now}
+              schedule={{ startMonth: plan.startMonth, overrides: plan.overrides }}
               addLabel="Add income"
               onAdd={(input) =>
                 wrap(() => addPlanIncomeAction(plan.id, input))
@@ -775,6 +848,7 @@ export function PlanEditor({
               description="Recurring expenses or one-time payments."
               emptyLabel="No expense categories yet"
               lines={plan.expenses}
+              today={now}
               addLabel="Add expense"
               onAdd={(input) =>
                 wrap(() => addPlanExpenseAction(plan.id, input))
@@ -805,6 +879,29 @@ export function PlanEditor({
 
       <TabsContent value="settings" className="flex flex-col gap-6">
         <MainPlanToggle plan={plan} wrap={wrap} pending={isPending} />
+        {debtComparison && (
+          <Card className="gap-3">
+            <CardHeader>
+              <Eyebrow asChild>
+                <h2 id="debt-strategy-heading">Debt payoff strategy</h2>
+              </Eyebrow>
+            </CardHeader>
+            {/* All three options on screen with their cost, rather than a
+                badge you have to expand: the choice is a trade-off, and
+                hiding the alternatives hid the trade-off. */}
+            <CardContent>
+              <StrategyPicker
+                comparison={debtComparison}
+                currentStrategy={currentStrategy}
+                onChange={handleChangeStrategy}
+                pending={isPending}
+                hadDebt={projection.hadDebt}
+                anchorDay={effectiveAnchorDay}
+                today={now}
+              />
+            </CardContent>
+          </Card>
+        )}
         {plan.basedOnPlanId && (
           <Card>
             <CardContent className="flex flex-wrap items-center justify-between gap-3">
@@ -936,8 +1033,77 @@ function MainPlanToggle({
 }
 
 /**
+ * Sidebar card for the portfolio: what it is worth today, where the plan
+ * takes it in a year, and whether the plan counts it in net worth. The switch
+ * stays enabled while saving: disabling the control that has focus drops
+ * keyboard focus to <body>, so input is ignored instead.
+ */
+function PortfolioCard({
+  enabled,
+  today,
+  horizonMonths,
+  atHorizon,
+  onToggle,
+}: {
+  enabled: boolean;
+  today: number;
+  /** The chart's horizon, and where the plan takes the portfolio by its end. */
+  horizonMonths: number;
+  atHorizon: number | null;
+  onToggle: (next: boolean) => Promise<void>;
+}): React.ReactElement {
+  const [pending, setPending] = useState(false);
+  const toggle = (next: boolean): void => {
+    if (pending) return;
+    setPending(true);
+    onToggle(next)
+      .catch(() => undefined)
+      .finally(() => setPending(false));
+  };
+  return (
+    <Card className="gap-3">
+      <CardHeader>
+        <Eyebrow asChild>
+          <h2 className="flex items-center gap-1.5">
+            <SeriesSwatch series={dashboardSeries("investments")} />
+            Portfolio
+          </h2>
+        </Eyebrow>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-1">
+        <div className={cn("flex items-baseline justify-between gap-3", !enabled && "opacity-60")}>
+          <Text variant="small" as="span">
+            Today
+          </Text>
+          <Mono className="text-sm font-semibold">{formatCurrency(today)}</Mono>
+        </div>
+        {atHorizon !== null && enabled && (
+          <div className="flex items-baseline justify-between gap-3">
+            <Text variant="small" as="span">
+              In {horizonMonths % 12 === 0 && horizonMonths > 12 ? `${horizonMonths / 12} years` : `${horizonMonths} months`}
+            </Text>
+            <Mono className="text-sm text-muted-foreground">{formatCurrency(atHorizon)}</Mono>
+          </div>
+        )}
+        <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 border-t pt-3">
+          <Text variant="small" as="span">
+            Count in net worth
+          </Text>
+          <Switch
+            checked={enabled}
+            onCheckedChange={toggle}
+            aria-disabled={pending}
+            aria-busy={pending}
+          />
+        </label>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
  * Sidebar card for scenario plans: scenario vs base on ONE footing — both
- * projected from their plans as written, compared at the same period (the
+ * calibrated from the user's confirmations, compared at the same period (the
  * earlier end date), debt-free compared as dates. Green when the scenario wins.
  */
 function ScenarioDeltaCard({
@@ -967,10 +1133,6 @@ function ScenarioDeltaCard({
         <Text variant="small" as="p" className="flex items-center gap-1.5 pb-1">
           <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="truncate">{ghost.name}</span>
-          {/* Both plans are compared as written (a scenario copies no
-              confirmations), so the base's figures here are not the ones its
-              own page shows once it has been confirmed. Say so. */}
-          <span className="shrink-0">· as written</span>
         </Text>
         {netWorthDelta !== null && (
           <div className="flex items-center justify-between gap-3 border-t py-2">
@@ -1023,17 +1185,23 @@ type ProjectionPanelProps = {
   /** Real monthly snapshots for the chart's past (newest-last). */
   history: PlanHistoryPoint[];
   /** The Calendar view of the switcher (PlanCalendar, built by the parent which
-   *  owns the line/debt mutation handlers). Brings its own Card. */
-  calendar: React.ReactNode;
+   *  owns the line/debt mutation handlers). Brings its own Card, and puts the
+   *  panel's headline at its top. */
+  calendar: (header: React.ReactNode) => React.ReactNode;
   /** Right-hand sidebar content (health gauge + cycle figures + debt strategy).
    *  Rendered in the narrow column beside the chart on desktop, stacked below
    *  the chart on mobile. */
   sidebar: React.ReactNode;
-  /** Receives the hovered chart point's period figures (null on leave / when
-   *  hovering today's point) so the parent can preview them in the sidebar. */
-  onHoverFigures?: (figures: PeriodFigures | null) => void;
-  /** Clicking TODAY's point isn't a preview — it's "record what actually
-   *  happened", so the parent opens the confirmation dialog instead. */
+  /** The chart point the reader picked (its figures fill the sidebar), or
+   *  null for today. */
+  /** Months the chart shows ahead (6 mo … 10 yr), held by the editor. */
+  horizonMonths: number;
+  onHorizonChange: (months: number) => void;
+  selectedIndex?: number | null;
+  /** A point clicked, with its period's figures; null, null for back to
+   *  today (today's own point, a new horizon, another view). */
+  onSelectPeriod?: (index: number | null, figures: PeriodFigures | null) => void;
+  /** Opens the confirmation dialog — the warning icon's action. */
   onConfirmToday?: () => void;
   /** Base plan overlay when this plan is a scenario (ghost line + delta). */
   ghost?: GhostPlan | null;
@@ -1041,12 +1209,15 @@ type ProjectionPanelProps = {
   portfolioHistory?: { date: Date; value: number }[];
   /** Net-worth milestones annotated on the chart (user preference). */
   milestones?: readonly number[];
-  /** Current includePortfolio flag; drives the chart's Portfolio switch. */
+  /** Current includePortfolio flag: the chart draws the portfolio when set. */
   portfolioEnabled: boolean;
-  /** Persists a new includePortfolio value (full-payload plan update). */
-  onTogglePortfolio: (next: boolean) => Promise<void>;
+  /** The current period still waits for a confirmation (main plan only). */
+  confirmationDue?: boolean;
+  /** The user's last own confirmation (YYYY-MM-DD). */
+  lastConfirmedDay?: string | null;
   /** The server's clock for this render — see PlanEditorProps. */
   now: Date;
+  initialView: PlanView;
   /** Opens the Setup tab — the empty chart's call to action. */
   onOpenSetup?: () => void;
 };
@@ -1076,15 +1247,13 @@ const FORMATTER = new Intl.DateTimeFormat("en-US", {
 // the way from the left edge regardless of which horizon is active — that
 // keeps the early-history context visible without dominating the forecast.
 const HORIZON_PRESETS: ReadonlyArray<{ months: number; label: string }> = [
+  { months: 6, label: "6 mo" },
   { months: 12, label: "12 mo" },
   { months: 24, label: "2 yr" },
   { months: 60, label: "5 yr" },
   { months: 120, label: "10 yr" },
 ];
 
-// The three views the Overview switcher alternates between (order = swipe order).
-const PLAN_VIEWS = ["chart", "table", "calendar"] as const;
-type PlanView = (typeof PLAN_VIEWS)[number];
 const PLAN_VIEW_LABEL: Record<PlanView, string> = {
   chart: "Graph",
   table: "Table",
@@ -1209,14 +1378,19 @@ function ProjectionPanel({
   history,
   calendar,
   sidebar,
-  onHoverFigures,
+  horizonMonths: horizonPick,
+  onHorizonChange,
+  selectedIndex = null,
+  onSelectPeriod,
   onConfirmToday,
   milestones,
   ghost = null,
   portfolioHistory = [],
   portfolioEnabled,
-  onTogglePortfolio,
+  confirmationDue = false,
+  lastConfirmedDay = null,
   now,
+  initialView,
   onOpenSetup,
 }: ProjectionPanelProps) {
   // No income, expense or debt: the "projection" is a flat line at the
@@ -1229,21 +1403,22 @@ function ProjectionPanel({
   // device) sits at the BOTTOM, Polymarket-style; horizontal swipe on touch
   // changes view too. A plain fade on switch — no horizontal slide, so nothing
   // clips the active view's card.
-  const [view, setView] = useState<PlanView>("chart");
+  const [view, setView] = useState<PlanView>(initialView);
   const goView = (next: PlanView) => {
     // Leaving the chart view unmounts it mid-hover — drop any active preview
     // so the sidebar doesn't stay stuck on a hovered period.
-    onHoverFigures?.(null);
+    onSelectPeriod?.(null, null);
     setView(next);
+    // Kept in the address so a reload reopens it. The History API, not the
+    // router: a router navigation would re-render this dynamic page on the server.
+    window.history.replaceState(null, "", hrefWithPlanView(window.location.href, next));
   };
   const swipe = useSwitcherSwipe(view, goView);
 
-  // Horizon — 12 mo by default; bumps up to 2 / 5 / 10 yr when the user picks
-  // a preset above the chart.
+  // Horizon — 12 mo by default (held by the editor, which the Portfolio card
+  // reads too), never past what the plan projects.
   const maxAvailable = projection.months.length;
-  const [horizonMonths, setHorizonMonths] = useState<number>(
-    Math.min(12, maxAvailable)
-  );
+  const horizonMonths = Math.min(horizonPick, maxAvailable);
 
   // Accounting-period anchor (the plan's confirmation day). The window / chart /
   // today-seed all resolve "today" against this so a non-1 anchor lands on the
@@ -1275,12 +1450,13 @@ function ProjectionPanel({
     if (ghost.today?.status === "in-range" && values[chartSeries.pastCount] != null) {
       values[chartSeries.pastCount] = ghost.today.netWorth;
     }
-    return values;
+    // The past is the user's, the same under both plans: the base branches
+    // off at today like the scenario does.
+    return values.map((v, i) => (i < chartSeries.pastCount ? null : v));
   }, [ghost, showGhost, chartSeries.points, chartSeries.pastCount, anchorDay]);
 
   // Portfolio series: recorded snapshots for the past, the projection's
   // (growing) portfolioValue for the future. Only when the plan includes it.
-  const [portfolioPending, setPortfolioPending] = useState(false);
   const portfolioValues = useMemo<(number | null)[] | undefined>(
     () =>
       portfolioEnabled
@@ -1294,16 +1470,6 @@ function ProjectionPanel({
         : undefined,
     [portfolioEnabled, chartSeries, portfolioHistory, projection, anchorDay]
   );
-  // The switch stays enabled while saving: disabling the control that has
-  // focus drops keyboard focus to <body>. Input is ignored instead.
-  const handlePortfolioSwitch = (next: boolean) => {
-    if (portfolioPending) return;
-    setPortfolioPending(true);
-    onTogglePortfolio(next)
-      .catch(() => undefined)
-      .finally(() => setPortfolioPending(false));
-  };
-
   // Per-point period figures for the sidebar hover preview. Flows (income /
   // expenses / debt minimums) come from the projection month sharing the
   // point's period — the calibrated one first, falling back to the raw past
@@ -1334,62 +1500,29 @@ function ProjectionPanel({
   const beforeStart = todayState?.status === "before-start";
   const todayIsOnChart = todayState?.status === "in-range";
 
-  // Hovering today's point is "the present" — treat it as no preview so the
-  // sidebar only takes the backdrop/chip treatment for OTHER periods.
-  const handleHoverIndex = useCallback(
-    (idx: number | null): void => {
-      if (!onHoverFigures) return;
-      if (idx === null || (todayIsOnChart && idx === chartSeries.pastCount)) {
-        onHoverFigures(null);
-        return;
-      }
-      onHoverFigures(pointFigures[idx] ?? null);
-    },
-    [onHoverFigures, chartSeries.pastCount, pointFigures, todayIsOnChart]
-  );
-
-  const [comparedIdx, setComparedIdx] = useState<number | null>(null);
-
-  // Clicking today means "record what actually happened", not "preview" — so it
-  // hands off to the confirmation dialog. Every other point opens the compare
-  // dialog for that period.
-  // Not before the plan starts: a confirmation dated today would rebase the
-  // plan onto today's period, months before the start it was given.
+  // Clicking a point shows its period in the sidebar and marks it on the
+  // chart; clicking today's point (or the one already picked) goes back.
   const handleSelectIndex = useCallback(
     (idx: number): void => {
-      if (todayIsOnChart && idx === chartSeries.pastCount) {
-        onConfirmToday?.();
+      if ((todayIsOnChart && idx === chartSeries.pastCount) || idx === selectedIndex) {
+        onSelectPeriod?.(null, null);
         return;
       }
-      setComparedIdx(idx);
+      onSelectPeriod?.(idx, pointFigures[idx] ?? null);
     },
-    [chartSeries.pastCount, onConfirmToday, todayIsOnChart]
+    [chartSeries.pastCount, onSelectPeriod, pointFigures, selectedIndex, todayIsOnChart]
   );
   const effAnchor = anchorDay > 0 ? anchorDay : 1;
-  // Today / Next as the header and the compare dialog read them — see
-  // `forecastKpiPoints` (before the start: the opening, then the FIRST close).
-  const { todayPoint, nextPoint } = forecastKpiPoints(chartSeries, todayState);
-  // End = the chart's last point, so the header, the chart and the table end
-  // on the same period.
-  const endPoint = chartSeries.points[chartSeries.points.length - 1];
+  // Today as the header and the compare dialog read it — see
+  // `forecastKpiPoints` (before the start: the opening).
+  const { todayPoint } = forecastKpiPoints(chartSeries, todayState);
   const today = todayState?.netWorth ?? todayPoint?.netWorth ?? 0;
-  const next = nextPoint?.netWorth;
-  const future = endPoint?.netWorth ?? today;
   const todayCaption =
     todayState?.status === "before-start"
       ? `Starts ${FORMATTER.format(todayState.periodStart)}`
       : todayState?.status === "after-end"
         ? `Ended ${FORMATTER.format(todayState.periodStart)}`
         : `Today ${TODAY_LABEL.format(now)}`;
-
-  // Horizon-end delta vs the base plan (scenario only) — matched by period.
-  const ghostFuture =
-    ghost && endPoint
-      ? ghost.projection.months.find(
-          (m) => periodIndexForDate(m.date, effAnchor, endPoint.date) === 0
-        )?.netWorth ?? null
-      : null;
-  const endDelta = ghostFuture !== null ? future - ghostFuture : null;
 
   // Table rows: the projection periods the chart window covers.
   const tableRange = useMemo(() => {
@@ -1409,127 +1542,108 @@ function ProjectionPanel({
     return { startIndex, count: endIndex - startIndex + 1 };
   }, [chartSeries.points, projection, effAnchor]);
 
-  const comparedPoint = comparedIdx !== null ? chartSeries.points[comparedIdx] : null;
 
-  // Forecast header (Today / Next / End KPIs + horizon picker) — shared by the
-  // Graph and Table views (both are horizon-driven forecast views). It sits in
-  // the card header so the number reads as the headline, Polymarket-style.
-  const forecastHeader = (
-    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-      {/* On a phone today's figure leads on its own line with the next and
-          the end figures side by side under it: in a wrapping row the end
-          figure dropped under today's and the three read as two rows of
-          unrelated numbers. */}
-      <div className="grid w-full grid-cols-2 items-end gap-x-4 gap-y-2 sm:flex sm:w-auto sm:flex-wrap sm:gap-x-6 sm:gap-y-1">
-        <div className="col-span-2">
-          <Eyebrow size="sm" as="p">
-            {todayCaption}
-          </Eyebrow>
+  // The last closed period, for the "since" chip beside today's figure.
+  // Net worth's change: from the user's last confirmation, else the last close.
+  const changeFrom = changeBaseline(
+    chartSeries.points.slice(0, chartSeries.pastCount),
+    (p) => closeLabels(p.date, anchorDay).time,
+    (p) => closeLabels(p.date, anchorDay),
+    lastConfirmedDay
+  );
+  const sinceClose = changeFrom && todayIsOnChart ? today - changeFrom.point.netWorth : null;
+
+  // Every control here is h-8 from `sm` (h-9 to h-10 on a phone, where they
+  // step up for a thumb), so the cluster wraps as one row height.
+  const viewControls = (
+    <div className="flex flex-wrap items-center gap-2">
+      {confirmationDue && onConfirmToday && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={onConfirmToday}
+              aria-label="This period isn't confirmed yet: confirm your balances"
+              className="text-warning"
+            >
+              <TriangleAlert />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>This period isn&apos;t confirmed yet — confirm your balances</TooltipContent>
+        </Tooltip>
+      )}
+      <ViewSwitcher value={view} onChange={goView} />
+    </div>
+  );
+
+  // Forecast header (today's net worth + its change since the last close, and
+  // the horizon picker) — every view's card opens with it, so the number reads
+  // as the headline, as on the dashboard. The calendar has no horizon.
+  const forecastHeader = (withHorizon: boolean): React.ReactNode => (
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+      <div className="flex min-w-0 flex-col gap-1">
+        <Eyebrow size="sm" as="p" className="flex items-center gap-1.5">
+          <SeriesSwatch series={dashboardSeries("netWorth")} />
+          {todayCaption}
+        </Eyebrow>
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <Mono
             as="p"
-            className={cn("text-xl font-semibold tabular-nums sm:text-2xl", signTone(today))}
+            className={cn(
+              "text-3xl font-semibold sm:text-4xl",
+              statToneClass(moneySign(today) >= 0 ? "positive" : "negative")
+            )}
           >
             <CountUpCurrency value={today} />
           </Mono>
-          {todayState && todayState.receivables > 0 && (
-            <Text variant="small" as="p" className="text-2xs">
-              incl. {formatCurrency(todayState.receivables)} owed to you
-            </Text>
-          )}
+          {changeFrom && sinceClose !== null && <DeltaChip delta={sinceClose} since={changeFrom.since} />}
         </div>
-        {nextPoint && next !== undefined && (
-          <div>
-            <Eyebrow size="sm" as="p">
-              Next {FORMATTER.format(nextPoint.date)}
-            </Eyebrow>
-            <Mono
-              as="p"
-              className={cn("text-sm font-semibold", signTone(next))}
+        {todayState && todayState.receivables > 0 && (
+          <Text variant="small" as="p" className="text-2xs">
+            incl. {formatCurrency(todayState.receivables)} owed to you
+          </Text>
+        )}
+      </div>
+      <div className="flex flex-col items-end gap-2">
+        {viewControls}
+        {withHorizon && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {ghost && (
+              <Toggle
+                variant="outline"
+                size="sm"
+                pressed={showGhost}
+                onPressedChange={setShowGhost}
+                className="text-xs"
+              >
+                vs base
+              </Toggle>
+            )}
+            <ToggleGroup
+              type="single"
+              size="sm"
+              value={String(horizonMonths)}
+              onValueChange={(v) => {
+                if (!v) return;
+                // The picked point's index means another month on a new horizon.
+                onSelectPeriod?.(null, null);
+                onHorizonChange(Number(v));
+              }}
+              aria-label="Projection horizon"
             >
-              <CountUpCurrency value={next} delay={STAGGER_MS} />
-            </Mono>
+              {HORIZON_PRESETS.map((preset) => (
+                <ToggleGroupItem
+                  key={preset.months}
+                  value={String(preset.months)}
+                  disabled={preset.months > maxAvailable}
+                >
+                  {preset.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
           </div>
         )}
-        <div>
-          <Eyebrow size="sm" as="p">
-            End {endPoint ? FORMATTER.format(endPoint.date) : ""}
-          </Eyebrow>
-          <Mono
-            as="p"
-            className={cn("text-sm font-semibold", signTone(future))}
-          >
-            <CountUpCurrency value={future} delay={STAGGER_MS * 2} />
-          </Mono>
-          {endDelta !== null && (
-            <Text
-              variant="small"
-              as="p"
-              className={cn(
-                "text-2xs",
-                moneySign(endDelta) >= 0 ? "text-success" : "text-destructive"
-              )}
-            >
-              {formatSignedCurrency(endDelta)} vs base
-            </Text>
-          )}
-        </div>
-      </div>
-      {/* Every control here is h-8 from `sm` (h-9 to h-10 on a phone, where
-          they step up for a thumb), so the cluster wraps as one row height. */}
-      <div className="flex flex-wrap items-center gap-2">
-        {/* View first — it decides what the rest of this cluster even applies
-            to (Portfolio and the horizon presets only shape the Graph). */}
-        <ViewSwitcher value={view} onChange={goView} />
-        {/* The keyboard path to what clicking today's chart point does. */}
-        {onConfirmToday && todayIsOnChart && (
-          <Button variant="outline" size="sm" onClick={onConfirmToday}>
-            <ClipboardCheck />
-            Confirm period
-          </Button>
-        )}
-        {/* Chart toggles: portfolio series (persists to the plan) and the
-            scenario ghost line (view-only). Sit beside the horizon presets so
-            everything that shapes the chart lives in one cluster. */}
-        <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 text-xs font-medium text-muted-foreground sm:h-8">
-          <Switch
-            checked={portfolioEnabled}
-            onCheckedChange={handlePortfolioSwitch}
-            aria-disabled={portfolioPending}
-            aria-busy={portfolioPending}
-          />
-          Portfolio
-        </label>
-        {ghost && (
-          <Toggle
-            variant="outline"
-            pressed={showGhost}
-            onPressedChange={setShowGhost}
-            className="text-xs"
-          >
-            vs base
-          </Toggle>
-        )}
-        {/* On a phone the range is its own full-width row right over the
-            chart, as a phone's stock chart has it, instead of whichever
-            scrap of a line the controls before it left. */}
-        <ToggleGroup
-          type="single"
-          size="sm"
-          value={String(horizonMonths)}
-          onValueChange={(v) => v && setHorizonMonths(Number(v))}
-          aria-label="Projection horizon"
-          className="order-last w-full sm:order-none sm:w-fit"
-        >
-          {HORIZON_PRESETS.map((preset) => (
-            <ToggleGroupItem
-              key={preset.months}
-              value={String(preset.months)}
-              disabled={preset.months > maxAvailable}
-            >
-              {preset.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
       </div>
     </div>
   );
@@ -1566,12 +1680,10 @@ function ProjectionPanel({
         >
           <div key={view} className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200 xl:h-full">
             {view === "calendar" ? (
-              // The calendar card is taller than the panel box — scroll it
-              // inside so the Calendar view keeps the same footprint.
-              <div className="xl:h-full xl:overflow-y-auto">{calendar}</div>
+              calendar(forecastHeader(false))
             ) : (
               <Card className="xl:h-full">
-                <CardHeader className="gap-3">{forecastHeader}</CardHeader>
+                <CardHeader className="gap-3">{forecastHeader(true)}</CardHeader>
                 <CardContent
                   className={cn(
                     "xl:min-h-0 xl:flex-1",
@@ -1597,13 +1709,13 @@ function ProjectionPanel({
                       points={chartSeries.points}
                       pastCount={chartSeries.pastCount}
                       heightClass="h-72 sm:h-80 xl:h-full"
-                      onHoverIndex={handleHoverIndex}
                       onSelectIndex={handleSelectIndex}
+                      selectedIndex={selectedIndex}
                       milestones={milestones}
                       todayLabel={todayIsOnChart ? todayCaption : undefined}
                       markToday={!beforeStart}
                       ghostValues={ghostValues}
-                      ghostLabel={ghost ? `${ghost.name} (as written)` : undefined}
+                      ghostLabel={ghost?.name}
                       portfolioValues={portfolioValues}
                     />
                   ) : (
@@ -1629,17 +1741,6 @@ function ProjectionPanel({
         {sidebar}
       </div>
 
-      <PeriodCompareDialog
-        open={comparedIdx !== null}
-        onOpenChange={(next) => {
-          if (!next) setComparedIdx(null);
-        }}
-        anchorDay={effAnchor}
-        todayLabel={todayCaption}
-        todayPoint={todayPoint ?? null}
-        targetLabel={comparedPoint ? HOVER_PERIOD_LABEL.format(comparedPoint.date) : ""}
-        targetPoint={comparedPoint}
-      />
     </div>
   );
 }
@@ -1757,6 +1858,7 @@ function StrategyPicker({
  */
 function StatRow({
   label,
+  series,
   value,
   tone,
   hint,
@@ -1764,6 +1866,8 @@ function StatRow({
   breakdown,
 }: {
   label: string;
+  /** The chart series this figure reads, whose swatch keys it as on the dashboard. */
+  series?: DashboardSeries;
   value: number;
   tone?: "positive" | "negative";
   /** Optional one-line context shown under the value (e.g. "Debt-free in 8 mo"). */
@@ -1778,7 +1882,10 @@ function StatRow({
 
   const inner = (
     <>
-      <Text variant="small" as="span">{label}</Text>
+      <Text variant="small" as="span" className="flex items-center gap-1.5">
+        {series && <SeriesSwatch series={series} />}
+        {label}
+      </Text>
       <span className="text-right">
         <Mono
           className={cn(
@@ -1810,7 +1917,7 @@ function StatRow({
         {/* No aria-label: it would replace the visible figure in the name. */}
         <button
           type="button"
-          className={cn(rowClass, "w-full text-left transition hover:bg-muted/30")}
+          className={cn(rowClass, "w-full cursor-pointer text-left transition hover:bg-muted/30")}
         >
           {inner}
           <span className="sr-only">, show breakdown</span>
@@ -1945,7 +2052,7 @@ function SurplusBreakdown({
             <Mono>{formatCurrency(toInvestments)}</Mono>
           </li>
           <li className="flex items-baseline justify-between gap-4">
-            <span>→ Savings</span>
+            <span>→ Cash</span>
             <Mono>{formatCurrency(toSavings)}</Mono>
           </li>
         </ul>

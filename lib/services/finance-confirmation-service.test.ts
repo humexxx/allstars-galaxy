@@ -15,6 +15,12 @@ const insertImpl = vi.fn();
 const deleteImpl = vi.fn();
 const txInsertImpl = vi.fn();
 const txDeleteImpl = vi.fn();
+const txUpdateImpl = vi.fn(() => {
+  const chain: Record<string, ReturnType<typeof vi.fn>> = {};
+  chain.set = vi.fn().mockReturnValue(chain);
+  chain.where = vi.fn().mockResolvedValue(undefined);
+  return chain;
+});
 
 vi.mock("@/db", () => ({
   db: {
@@ -26,6 +32,7 @@ vi.mock("@/db", () => ({
       cb({
         insert: (...args: unknown[]) => txInsertImpl(...args),
         delete: (...args: unknown[]) => txDeleteImpl(...args),
+        update: () => txUpdateImpl(),
       }),
   },
 }));
@@ -43,11 +50,16 @@ vi.mock("./finance-snapshot-service", () => ({
     createConfirmationSnapshotMock(...args),
 }));
 
+// The user's main plan is the one under test.
+vi.mock("./finance-history", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./finance-history")>()),
+  historyOwner: vi.fn(async (userId: string) => ({ userId, mainPlanId: PLAN_ID })),
+}));
+
 import {
   autoConfirmSkippedPeriods,
   getConfirmationStatus,
   getLatestConfirmation,
-  getLatestConfirmations,
   saveConfirmation,
 } from "./finance-confirmation-service";
 import type {
@@ -58,7 +70,7 @@ import type {
   TodayState,
 } from "@/types/finance";
 
-const PLAN_ID = "11111111-1111-1111-1111-111111111111";
+const PLAN_ID = vi.hoisted(() => "11111111-1111-1111-1111-111111111111");
 const USER_ID = "22222222-2222-2222-2222-222222222222";
 
 // ---------- helpers ----------
@@ -70,6 +82,7 @@ function buildPlan(
     id: PLAN_ID,
     userId: USER_ID,
     name: "Test Plan",
+    isMain: true,
     description: null,
     startMonth: new Date(Date.UTC(2026, 0, 1)),
     monthsAhead: 12,
@@ -210,7 +223,7 @@ describe("getLatestConfirmation", () => {
     const first = makeSelectChain([]);
     selectImpl.mockReturnValueOnce(first);
 
-    const result = await getLatestConfirmation(PLAN_ID);
+    const result = await getLatestConfirmation(USER_ID);
 
     expect(result).toBeNull();
     expect(selectImpl).toHaveBeenCalledTimes(1);
@@ -234,7 +247,7 @@ describe("getLatestConfirmation", () => {
 
     selectImpl.mockReturnValueOnce(first).mockReturnValueOnce(second);
 
-    const result = await getLatestConfirmation(PLAN_ID);
+    const result = await getLatestConfirmation(USER_ID);
 
     expect(result).not.toBeNull();
     expect(result?.id).toBe(latest.id);
@@ -243,41 +256,6 @@ describe("getLatestConfirmation", () => {
     expect(selectImpl).toHaveBeenCalledTimes(2);
   });
 });
-
-describe("getLatestConfirmations (batched)", () => {
-  it("no plans, no queries", async () => {
-    await expect(getLatestConfirmations([])).resolves.toEqual(new Map());
-    expect(selectDistinctOnImpl).not.toHaveBeenCalled();
-  });
-
-  it("one row per plan plus all their debt rows: two queries for any number of plans", async () => {
-    const OTHER = "33333333-3333-3333-3333-333333333333";
-    const latestRows = makeSelectChain([
-      buildConfirmation({ id: "c-1", planId: PLAN_ID }),
-      buildConfirmation({ id: "c-2", planId: OTHER }),
-    ]);
-    selectDistinctOnImpl.mockReturnValueOnce(latestRows);
-    selectImpl.mockReturnValueOnce(
-      makeSelectChain([
-        buildDebtConfirmation({ id: "d-1", confirmationId: "c-1" }),
-        buildDebtConfirmation({ id: "d-2", confirmationId: "c-1", debtId: "debt-2" }),
-      ])
-    );
-
-    const byPlan = await getLatestConfirmations([PLAN_ID, OTHER, "no-confirmations"]);
-
-    expect(selectDistinctOnImpl).toHaveBeenCalledTimes(1);
-    expect(selectImpl).toHaveBeenCalledTimes(1);
-    // Same pick as getLatestConfirmation: newest day, then newest save.
-    expect(latestRows.orderBy).toHaveBeenCalledTimes(1);
-    expect(latestRows.orderBy.mock.calls[0]).toHaveLength(3);
-    expect(byPlan.get(PLAN_ID)?.debtConfirmations.map((d) => d.id)).toEqual(["d-1", "d-2"]);
-    expect(byPlan.get(OTHER)?.debtConfirmations).toEqual([]);
-    expect(byPlan.has("no-confirmations")).toBe(false);
-  });
-});
-
-// ---------- getConfirmationStatus ----------
 
 describe("getConfirmationStatus", () => {
   beforeEach(() => {
@@ -434,6 +412,29 @@ describe("getConfirmationStatus", () => {
 
 // ---------- saveConfirmation ----------
 
+describe("only the main plan records reality", () => {
+  it("never asks a what-if plan for a confirmation", async () => {
+    const status = await getConfirmationStatus(buildPlan({ isMain: false }), USER_ID, new Date(Date.UTC(2026, 4, 1)));
+    expect(status.isDue).toBe(false);
+    expect(selectImpl).not.toHaveBeenCalled();
+  });
+
+  it("refuses to confirm a what-if plan", async () => {
+    selectImpl.mockReturnValueOnce(makeSelectChain([{ userId: USER_ID, isMain: false }]));
+    await expect(
+      saveConfirmation(USER_ID, { planId: PLAN_ID, confirmedSavings: "1.00", confirmedInvestments: "0.00", debtBalances: [] })
+    ).rejects.toThrow("Only the main plan is confirmed");
+    expect(txInsertImpl).not.toHaveBeenCalled();
+  });
+
+  it("never auto-confirms a what-if plan", async () => {
+    await expect(
+      autoConfirmSkippedPeriods(buildPlan({ isMain: false }), USER_ID, new Date(Date.UTC(2026, 6, 1)))
+    ).resolves.toEqual({ confirmationsCreated: 0 });
+    expect(selectImpl).not.toHaveBeenCalled();
+  });
+});
+
 describe("saveConfirmation", () => {
   beforeEach(() => {
     createConfirmationSnapshotMock.mockResolvedValue(undefined);
@@ -442,7 +443,7 @@ describe("saveConfirmation", () => {
   function mockOwnershipOk() {
     // ensurePlanOwnership runs db.select().from().where() and expects the
     // row's userId to match.
-    const ownership = makeSelectChain([{ userId: USER_ID }]);
+    const ownership = makeSelectChain([{ userId: USER_ID, isMain: true }]);
     selectImpl.mockReturnValueOnce(ownership);
     return ownership;
   }
@@ -768,7 +769,7 @@ describe("autoConfirmSkippedPeriods", () => {
     // Per-debt breakdown written.
     const debtPayload = insertDebts.values.mock.calls[0][0];
     expect(debtPayload).toEqual([
-      { confirmationId: "auto-conf", debtId: "d1", confirmedBalance: "600.00" },
+      { confirmationId: "auto-conf", debtId: "d1", debtKey: "d1", confirmedBalance: "600.00" },
     ]);
 
     // Audit snapshot dated at the skipped period's anchor.

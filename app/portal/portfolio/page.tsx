@@ -65,7 +65,7 @@ export default async function PortfolioPage() {
     // InvestmentMethodsView, which filters to enabled itself and exposes a dev
     // toggle for the disabled ones. Consumers that only want the live set
     // (the transaction form) filter below.
-    listAllInvestmentMethods(),
+    listAllInvestmentMethods(userId),
     usersPromise,
     investorsPromise,
     managedOverviewPromise,

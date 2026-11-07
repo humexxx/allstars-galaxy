@@ -145,6 +145,16 @@
   --warning: oklch(0.57 0.16 58);       /* systemOrange, text-safe */
   --warning-foreground: oklch(0.2 0 0);
 
+  /* Period health, best to worst (lib/finance/period-health.ts). Green, teal,
+     blue for the good-to-normal bands, then the warning ramp; each is ≥4.5:1
+     on a card so the gauge's label reads as text. */
+  --health-thriving: var(--success);
+  --health-healthy: oklch(0.53 0.11 178);
+  --health-steady: var(--primary);
+  --health-tight: var(--warning);
+  --health-strained: var(--destructive);
+  --health-underwater: oklch(0.45 0.19 8);
+
   --border: oklch(0.9 0.005 286);
   --input: oklch(0.9 0.005 286);
   --ring: oklch(0.57 0.18 255);
@@ -227,6 +237,13 @@
 
   --warning: oklch(0.78 0.17 66);       /* #FF9F0A */
   --warning-foreground: oklch(0.2 0 0);
+
+  --health-thriving: var(--success);
+  --health-healthy: oklch(0.76 0.13 178);
+  --health-steady: var(--primary);
+  --health-tight: var(--warning);
+  --health-strained: var(--destructive);
+  --health-underwater: oklch(0.64 0.24 355);
 
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 12%);

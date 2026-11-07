@@ -11,7 +11,6 @@ vi.mock("@/lib/services/impersonation", () => ({
 
 vi.mock("@/lib/services/finance-snapshot-service", () => ({
   restateOpeningBalances: vi.fn(async () => null),
-  openingBalancesToday: vi.fn(async () => OPENING),
   recordMovementSnapshot: vi.fn(async () => ({ created: true })),
 }));
 
@@ -78,12 +77,7 @@ const USER_ID = "00000000-0000-4000-8000-000000000001";
 const PLAN_ID = "11111111-1111-4111-8111-111111111111";
 const ROW_ID = "22222222-2222-4222-8222-222222222222";
 const SECONDARY_ID = "33333333-3333-4333-8333-333333333333";
-const OPENING = vi.hoisted(() => ({
-  initialSavings: "1200.00",
-  initialInvestments: "0.00",
-  debtBalances: {},
-  balancesAsOf: "2026-11-03",
-}));
+
 
 beforeEach(() => {
   vi.mocked(requireEffectiveContext).mockResolvedValue({
@@ -274,7 +268,7 @@ describe("deletePlanAction", () => {
 // ---------- clonePlanAction ----------
 
 describe("clonePlanAction", () => {
-  it("clones when id and name are valid, opening where the source stands today", async () => {
+  it("clones when id and name are valid", async () => {
     const plan = { id: SECONDARY_ID, name: "Clone" };
     vi.mocked(getPlanWithLines).mockResolvedValueOnce({ id: PLAN_ID } as never);
     vi.mocked(clonePlanWithLineIds).mockResolvedValueOnce({ plan, lineIds: new Map() } as never);
@@ -282,10 +276,7 @@ describe("clonePlanAction", () => {
     const result = await clonePlanAction(PLAN_ID, "Clone");
 
     expect(result).toEqual({ success: true, data: plan });
-    expect(clonePlanWithLineIds).toHaveBeenCalledWith(USER_ID, PLAN_ID, "Clone", {
-      asScenario: undefined,
-      opening: OPENING,
-    });
+    expect(clonePlanWithLineIds).toHaveBeenCalledWith(USER_ID, PLAN_ID, "Clone", { asScenario: undefined });
     expect(logImpersonatedMutation).toHaveBeenCalled();
     expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });

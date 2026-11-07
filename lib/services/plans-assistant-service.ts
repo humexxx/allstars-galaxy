@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import { describeDebtFree, formatDebtFree } from "@/lib/finance/chart-series";
 import { compareDebtStrategies } from "@/lib/finance/projection";
+import { nextPlanColor } from "@/lib/finance/plan-colors";
 import { formatCurrency } from "@/lib/utils/format";
 import {
   createFinancePlanSchema,
@@ -49,7 +50,7 @@ import {
   updatePlanOperation,
   type PlanOperationContext,
 } from "./finance-plan-operations";
-import { loadCalibratedView, openingBalancesToday, restateOpeningBalances } from "./finance-snapshot-service";
+import { loadCalibratedView, restateOpeningBalances } from "./finance-snapshot-service";
 import { listInvestmentMethods } from "./investment-method-service";
 
 /**
@@ -363,7 +364,7 @@ async function playChange(c: PlanOperationContext, w: Working, change: PlanChang
         autoInvestCustomRate: data.autoInvestCustomRate ?? null,
         initialInvestments: data.initialInvestments,
         confirmationDayOfMonth: data.confirmationDayOfMonth,
-        color: data.color,
+        color: data.color ?? nextPlanColor(wornColors(w)),
         isMain: w.plans.size === 0,
         basedOnPlanId: null,
         balancesAsOf: c.today.toISOString().slice(0, 10),
@@ -387,21 +388,19 @@ async function playChange(c: PlanOperationContext, w: Working, change: PlanChang
       const name = checked(createFinancePlanSchema.shape.name, change.name, where);
       const id = randomUUID();
       const now = new Date();
-      // It opens where the source stands today, as Apply's copy will.
-      const opening = await openingBalancesToday(source, c.userId, c.today, c.timeZone);
+      // The source's balances and debt keys: the user's confirmations
+      // calibrate the copy as they do its source (see `copyPlanOperation`).
       const copy = structuredClone(source);
       Object.assign(copy, {
         id,
         name,
         isMain: false,
         basedOnPlanId: change.asScenario ? source.id : null,
-        initialSavings: opening.initialSavings,
-        initialInvestments: opening.initialInvestments,
-        balancesAsOf: opening.balancesAsOf,
+        color: nextPlanColor(wornColors(w)),
         createdAt: now,
         updatedAt: now,
       });
-      for (const d of copy.debts) d.initialBalance = opening.debtBalances[d.id] ?? d.initialBalance;
+      for (const d of copy.debts) d.debtKey = d.debtKey ?? d.id;
       for (const l of [...copy.incomes, ...copy.expenses, ...copy.debts, ...copy.overrides]) l.planId = id;
       w.plans.set(id, copy);
       w.refs.set(change.ref, id);
@@ -558,6 +557,11 @@ async function playChange(c: PlanOperationContext, w: Working, change: PlanChang
       return;
     }
   }
+}
+
+/** The colours the user's plans wear in this proposal so far. */
+function wornColors(w: Working): string[] {
+  return [...w.plans.values()].filter((p) => !w.deleted.has(p.id)).map((p) => p.color);
 }
 
 /** A new line as the table would hold it. */

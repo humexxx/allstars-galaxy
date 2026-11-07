@@ -182,9 +182,41 @@ export async function getManagedOverview(ownerUserId: string): Promise<ManagedOv
 export const getManagedAssets = cache(async function getManagedAssets(
   ownerUserId: string
 ): Promise<ManagedAssets> {
-  const managed = await getManagedOverview(ownerUserId);
-  return summarizeManagedAssets(managed.investors, managed.history);
+  const [managed, expected] = await Promise.all([
+    getManagedOverview(ownerUserId),
+    db
+      .select({ id: investmentMethods.id, expectedMonthlyRoi: investmentMethods.expectedMonthlyRoi })
+      .from(investmentMethods)
+      .where(eq(investmentMethods.ownerUserId, ownerUserId)),
+  ]);
+  return {
+    ...summarizeManagedAssets(managed.investors, managed.history),
+    expectedMonthlyRate: expectedManagedRate(
+      managed.overview.methods,
+      new Map(expected.map((m) => [m.id, m.expectedMonthlyRoi == null ? null : parseFloat(m.expectedMonthlyRoi)]))
+    ),
+  };
 });
+
+/**
+ * The monthly return (decimal) the owner expects across the assets their
+ * methods' capital bought: each method's `expected_monthly_roi`, weighted by
+ * what its holdings are worth today. A method with no expectation counts as
+ * held flat, as every method did before there was one.
+ */
+export function expectedManagedRate(
+  methods: readonly { methodId: string; assets: number }[],
+  expectedPercentByMethod: ReadonlyMap<string, number | null>
+): number {
+  let weighted = 0;
+  let total = 0;
+  for (const m of methods) {
+    if (m.assets <= 0) continue;
+    weighted += m.assets * ((expectedPercentByMethod.get(m.methodId) ?? 0) / 100);
+    total += m.assets;
+  }
+  return total > 0 ? weighted / total : 0;
+}
 
 /** Pure half of `getManagedAssets`; the percentages match the owner's Margin card. */
 export function summarizeManagedAssets(

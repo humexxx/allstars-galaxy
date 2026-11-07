@@ -111,7 +111,7 @@ export const createFinancePlanSchema = z.object({
     .max(120, "At most 120 months (10 years)."),
   initialSavings: openingSavings.default("0"),
   monthlySavingsRate: monthlyRate.default("0"),
-  includePortfolio: z.boolean().default(false),
+  includePortfolio: z.boolean().default(true),
   surplusToDebtsPercent: share.default("0"),
   debtStrategy: z.enum(DEBT_STRATEGIES).default("avalanche"),
   autoInvestPercent: share.default("0"),
@@ -126,7 +126,9 @@ export const createFinancePlanSchema = z.object({
     .min(0, "Enter a day from 1 to 28, or 0 to turn it off.")
     .max(28, "Enter a day from 1 to 28, or 0 to turn it off.")
     .default(1),
-  color: z.string().min(1).max(60).default("var(--chart-1)"),
+  // Left out, a new plan takes the first palette slot the user's other plans
+  // aren't wearing (`nextPlanColor`).
+  color: z.string().min(1).max(60).optional(),
 });
 
 /**

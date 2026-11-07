@@ -92,4 +92,7 @@ export type ManagedAssets = {
   monthMarginPercent: number | null;
   /** Margin today, as a share of what is owed. */
   allTimeMarginPercent: number | null;
+  /** The monthly return (decimal) the owner expects these assets to earn —
+   *  what the owner's own plans grow them at (see `expectedManagedRate`). */
+  expectedMonthlyRate?: number;
 };

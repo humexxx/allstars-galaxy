@@ -1031,6 +1031,41 @@ describe("calibratePlan", () => {
     ]);
   });
 
+  it("projects across periods nobody confirmed: today carries every one since the last confirmation", async () => {
+    const { projectStateAt } = await actualEngine();
+    const line = (id: string, monthlyAmount: string, dayOfMonth: number) =>
+      ({
+        id, name: id, monthlyAmount, kind: "recurring", dayOfMonth, date: null,
+        recurrenceType: "monthly_day", weekOfMonth: null, dayOfWeek: null,
+        intervalMonths: null, recurrenceStart: null,
+      }) as never;
+    // Anchored on the 5th: confirmed on Sep 5 with $1,000, then the Sep and
+    // Oct periods went by unconfirmed (no auto rows any more). Pay $3,000 on
+    // the 25th, rent $1,000 on the 10th.
+    const plan = buildPlan({
+      confirmationDayOfMonth: 5,
+      monthsAhead: 24,
+      initialInvestments: "0",
+      incomes: [line("pay", "3000", 25)],
+      expenses: [line("rent", "1000", 10)],
+    });
+    const cal = calibratePlan(
+      plan,
+      conf({ confirmationMonth: "2026-09-05", confirmedSavings: "1000" })
+    );
+    const today = projectStateAt(
+      cal,
+      cal.incomes,
+      cal.expenses,
+      cal.debts,
+      { asOf: cal.asOf },
+      new Date(Date.UTC(2026, 10, 8))
+    );
+    // Sep 10 / Oct 10 rent, Sep 25 / Oct 25 pay — both skipped periods — and
+    // nothing yet in the Nov 5 one by the 8th: 1,000 + 2 × (3,000 − 1,000).
+    expect(today?.savings).toBeCloseTo(5000, 2);
+  });
+
   it("F3: pins an every-N-months line to the ORIGINAL start month", async () => {
     const { projectPlan } = await actualEngine();
     const plan = buildPlan({ monthsAhead: 24, expenses: [quarterly] });

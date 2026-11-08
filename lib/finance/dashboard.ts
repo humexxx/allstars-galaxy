@@ -71,11 +71,15 @@ export type DashboardFigures = DashboardParts & {
   /** Periods the delta spans (12, fewer when the horizon ends sooner). */
   deltaPeriods: number;
   status: TodayState["status"] | null;
+  /** Owed today to the investors whose money is inside `investments`: net
+   *  worth counts the managed money only as its margin, so the parts add up
+   *  to it once this comes off. */
+  claims: number;
 };
 
 type State = Pick<
   TodayState & ProjectionMonth,
-  "savings" | "investments" | "portfolioValue" | "receivables" | "totalDebt" | "netWorth"
+  "savings" | "investments" | "portfolioValue" | "portfolioClaims" | "receivables" | "totalDebt" | "netWorth"
 >;
 
 /**
@@ -105,7 +109,8 @@ function partsOfPoint(p: ChartPoint): DashboardParts {
   const receivables = p.receivables ?? 0;
   return {
     savings,
-    investments: p.netWorth - savings - receivables + debt,
+    // The investors' claim is inside net worth but no part of its own.
+    investments: p.netWorth - savings - receivables + debt + (p.portfolioClaims ?? 0),
     receivables,
     debt,
     netWorth: p.netWorth,
@@ -197,6 +202,7 @@ export function buildDashboardFigures(
       investments: 0,
       receivables: 0,
       debt: 0,
+      claims: 0,
       netWorth: 0,
       delta: 0,
       deltaPeriods: 0,
@@ -260,6 +266,7 @@ export function buildDashboardFigures(
     delta: end - today.netWorth,
     deltaPeriods: ahead.length,
     status: today.status,
+    claims: roundCents(today.portfolioClaims ?? 0),
   };
 }
 

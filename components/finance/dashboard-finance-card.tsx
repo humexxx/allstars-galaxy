@@ -28,7 +28,7 @@ import {
   visibleSeriesKeys,
   type DashboardSeries,
 } from "./dashboard-finance-series";
-import { formatSignedPercent, moneySign } from "@/lib/utils/format";
+import { formatCurrency, formatSignedPercent, moneySign } from "@/lib/utils/format";
 import {
   getMainPlan,
   getPlanWithLines,
@@ -159,7 +159,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       series: dashboardSeries("investments"),
       label: "Portfolio",
       amount: fig.investments,
-      note: managedNote(managed),
+      note: managedNote(managed, fig.claims),
       href: "/portal/portfolio",
     },
     {
@@ -285,10 +285,11 @@ type Figure = {
  * right way (up, or down for debt), red when not, neutral when it held.
  */
 /**
- * The managed book's margin as a share of what is owed, this month and to
- * date — beside the assets' value, which is what counts toward net worth.
+ * What of the portfolio is owed to the investors — net worth counts the
+ * managed money only as its margin — and that margin as a share of what is
+ * owed, this month and to date.
  */
-function managedNote(managed: ManagedAssets | null): React.ReactNode {
+function managedNote(managed: ManagedAssets | null, claims: number): React.ReactNode {
   if (!managed || managed.value <= 0 || managed.allTimeMarginPercent === null) return undefined;
   const part = (pct: number, label: string) => (
     <span className={statToneClass(pct >= 0 ? "positive" : "negative")}>
@@ -297,6 +298,7 @@ function managedNote(managed: ManagedAssets | null): React.ReactNode {
   );
   return (
     <Mono className="block text-2xs text-muted-foreground">
+      {claims > 0 && <>{formatCurrency(claims)} owed to investors · </>}
       ({managed.monthMarginPercent !== null && <>{part(managed.monthMarginPercent, "mo")} · </>}
       {part(managed.allTimeMarginPercent, "all")}) margin
     </Mono>

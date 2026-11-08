@@ -56,6 +56,7 @@ const NET_WORTH = dashboardSeries("netWorth").color;
 const PORTFOLIO = dashboardSeries("investments").color;
 const DEBT = dashboardSeries("debt").color;
 const OWED = dashboardSeries("receivables").color;
+const CASH = dashboardSeries("savings").color;
 
 // recharts types `animationEasing` as the named curves only, but its
 // animator (react-smooth) takes any t → progress function.
@@ -232,6 +233,7 @@ type ChartRow = {
   pastValue: number | null;
   futureValue: number | null;
   rawValue: number;
+  savings?: number;
   totalDebt?: number;
   investments?: number;
   /** Base plan's net worth at this period (scenario ghost line). */
@@ -266,8 +268,10 @@ function PointTooltip(props: {
   if (!row) return null;
 
   const debt = row.totalDebt ?? 0;
-  const investments = row.investments ?? 0;
-  const portfolio = row.portfolioRaw;
+  // The plotted portfolio line already holds what the Portfolio card adds up
+  // (the plan's own investments and the managed margin); adding the
+  // investments again counted them twice.
+  const portfolioTotal = row.portfolioRaw ?? row.investments ?? 0;
   const ghost = row.ghostValue;
   const delta = ghost != null ? row.rawValue - ghost : null;
 
@@ -281,13 +285,23 @@ function PointTooltip(props: {
           value={formatMoneyFull(row.rawValue)}
           valueClass={row.rawValue < 0 ? "text-destructive" : "text-success"}
         />
-        {/* The investments bucket and the live portfolio read as one
-            Portfolio, as on the dashboard card. */}
-        {investments + (portfolio ?? 0) > 0 && (
+        {/* Our own investments plus the managed margin (positions less what
+            is owed to the investors): negative while the positions are worth
+            less than the promise. */}
+        {moneySign(portfolioTotal) !== 0 && (
           <TooltipRow
             swatch={PORTFOLIO}
             label="Portfolio"
-            value={formatMoneyFull(investments + (portfolio ?? 0))}
+            value={formatMoneyFull(portfolioTotal)}
+            valueClass={portfolioTotal < 0 ? "text-destructive" : undefined}
+          />
+        )}
+        {moneySign(row.savings ?? 0) !== 0 && (
+          <TooltipRow
+            swatch={CASH}
+            label="Cash"
+            value={formatMoneyFull(row.savings ?? 0)}
+            valueClass={(row.savings ?? 0) < 0 ? "text-destructive" : undefined}
           />
         )}
         {(row.receivables ?? 0) > 0 && (
@@ -362,6 +376,7 @@ type ChartPoint = {
   receivables?: number;
   /** Carried for the hover tooltip only. */
   investments?: number;
+  savings?: number;
 };
 
 type ProjectionChartProps = {
@@ -483,6 +498,7 @@ export const ProjectionChart = memo(function ProjectionChart({
         pastValue: isPast || isBoundary ? value : null,
         futureValue: isFuture || isBoundary ? value : null,
         rawValue: value,
+        savings: p.savings,
         totalDebt: p.totalDebt,
         investments: p.investments,
         ghostValue: ghostValues?.[i] ?? null,

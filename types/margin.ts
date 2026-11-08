@@ -95,4 +95,10 @@ export type ManagedAssets = {
   /** The monthly return (decimal) the owner expects these assets to earn —
    *  what the owner's own plans grow them at (see `expectedManagedRate`). */
   expectedMonthlyRate?: number;
+  /** What the owner owes the investors today: their capital plus the return
+   *  promised so far (the margin history's last liability). */
+  owed?: number;
+  /** The monthly return (decimal) promised to the investors, weighted like
+   *  `expectedMonthlyRate`: what `owed` grows at. */
+  promisedMonthlyRate?: number;
 };

@@ -416,6 +416,24 @@ describe("F7 / F28: strategy comparison", () => {
     const last = projectPlan(p, [], [], [], opts).months.at(-1)!;
     expect(last.portfolioValue).toBeCloseTo(2207.44 * 1.01 ** 12 + 10000 * 1.007 ** 12, 0);
   });
+  it("counts the managed money as its margin: the investors' claim comes off net worth", () => {
+    // $2,240 of assets bought with investors' money they are owed $7,540 for:
+    // the assets grow at the 1% expected, the claim at the 0.7% promised.
+    const p = plan({ monthsAhead: 12, includePortfolio: true });
+    const opts = {
+      portfolioValue: 2240,
+      portfolioHeldValue: 2240,
+      portfolioHeldMonthlyGrowthRate: 0.01,
+      portfolioClaims: 7540,
+      portfolioClaimsMonthlyRate: 0.007,
+    };
+    const months = projectPlan(p, [], [], [], opts).months;
+    const last = months.at(-1)!;
+    expect(last.portfolioValue).toBeCloseTo(2240 * 1.01 ** 12, 0);
+    expect(last.portfolioClaims).toBeCloseTo(7540 * 1.007 ** 12, 0);
+    expect(last.netWorth).toBeCloseTo(last.portfolioValue - last.portfolioClaims!, 2);
+    expect(months[0].netWorth).toBeLessThan(0);
+  });
 });
 
 describe("payments record", () => {

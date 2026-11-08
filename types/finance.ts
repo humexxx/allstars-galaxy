@@ -94,6 +94,10 @@ export type ProjectionMonth = {
   investmentsInterest: number;
   totalDebt: number;
   portfolioValue: number;
+  /** What the user owes the investors whose money is inside `portfolioValue`
+   *  (their capital plus the return promised so far). Taken off `netWorth`,
+   *  so the managed money counts only as its margin. */
+  portfolioClaims?: number;
   /** Money owed to the user and not yet repaid at period end. Part of
    *  `netWorth` — see lib/finance/receivables.ts. */
   receivables: number;
@@ -145,6 +149,8 @@ export type TodayState = {
   savings: number;
   investments: number;
   portfolioValue: number;
+  /** See `ProjectionMonth.portfolioClaims`. */
+  portfolioClaims?: number;
   totalDebt: number;
   /** Money owed to the user and not yet repaid on `date`. Part of `netWorth`. */
   receivables: number;

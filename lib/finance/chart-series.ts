@@ -41,6 +41,8 @@ export type ChartPoint = {
   receivables?: number;
   /** The portfolio inside `netWorth`, when it was recorded. */
   portfolioValue?: number | null;
+  /** Owed to the investors whose money is in the portfolio; off `netWorth`. */
+  portfolioClaims?: number;
 };
 
 function effAnchor(anchorDay: number): number {
@@ -131,6 +133,7 @@ export function buildPlanTimeline(
     investments: m.investments,
     receivables: m.receivables,
     portfolioValue: m.portfolioValue,
+    portfolioClaims: m.portfolioClaims,
   });
 
   if (todayIdx < 0) return { points: months.map(closeOf), todayIndex: 0 };
@@ -200,6 +203,8 @@ export function alignTodayPoint(
     totalDebt: today.totalDebt,
     investments: today.investments,
     receivables: today.receivables,
+    portfolioValue: today.portfolioValue,
+    portfolioClaims: today.portfolioClaims,
   };
   return { points, pastCount: series.pastCount };
 }
@@ -317,7 +322,9 @@ export function mapPortfolioValues(
     if (i <= pastCount) {
       let latest: number | null = null;
       for (const h of history) if (h.date <= p.date) latest = h.value;
-      if (i === pastCount) return latest ?? closeFor(p.date)?.portfolioValue ?? null;
+      // Today: the position `alignTodayPoint` put on it, the same figure the
+      // header and the Portfolio card read.
+      if (i === pastCount) return p.portfolioValue ?? latest ?? closeFor(p.date)?.portfolioValue ?? null;
       // What the snapshot recorded, else the portfolio's own history, else
       // nothing yet: drawn from $0 where the other series start, rather than
       // the line appearing out of nowhere at today.

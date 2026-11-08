@@ -185,7 +185,11 @@ export const getManagedAssets = cache(async function getManagedAssets(
   const [managed, expected] = await Promise.all([
     getManagedOverview(ownerUserId),
     db
-      .select({ id: investmentMethods.id, expectedMonthlyRoi: investmentMethods.expectedMonthlyRoi })
+      .select({
+        id: investmentMethods.id,
+        monthlyRoi: investmentMethods.monthlyRoi,
+        expectedMonthlyRoi: investmentMethods.expectedMonthlyRoi,
+      })
       .from(investmentMethods)
       .where(eq(investmentMethods.ownerUserId, ownerUserId)),
   ]);
@@ -194,6 +198,10 @@ export const getManagedAssets = cache(async function getManagedAssets(
     expectedMonthlyRate: expectedManagedRate(
       managed.overview.methods,
       new Map(expected.map((m) => [m.id, m.expectedMonthlyRoi == null ? null : parseFloat(m.expectedMonthlyRoi)]))
+    ),
+    promisedMonthlyRate: expectedManagedRate(
+      managed.overview.methods,
+      new Map(expected.map((m) => [m.id, parseFloat(m.monthlyRoi)]))
     ),
   };
 });
@@ -231,6 +239,7 @@ export function summarizeManagedAssets(
   const owed = last?.liability ?? 0;
   return {
     value,
+    owed,
     monthMarginPercent:
       last && prev && owed > 0 ? ((last.margin - prev.margin) / owed) * 100 : null,
     allTimeMarginPercent: last && owed > 0 ? (last.margin / owed) * 100 : null,

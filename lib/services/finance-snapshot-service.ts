@@ -328,6 +328,7 @@ async function computeStateAt(
   }
 
   const portfolioValue = Math.max(0, options.portfolioValue ?? 0);
+  const portfolioClaims = Math.max(0, options.portfolioClaims ?? 0);
   const initialsState = (): ProjectionMonth => {
     const totalDebt = calibrated.debts.reduce(
       (s, d) => s + parseFloat(d.initialBalance),
@@ -355,8 +356,9 @@ async function computeStateAt(
       // The portfolio exists on day one too; leaving it out made the
       // confirmation-day snapshot drop a cliff the size of the portfolio.
       portfolioValue,
+      portfolioClaims,
       receivables,
-      netWorth: savings + investments + portfolioValue + receivables - totalDebt,
+      netWorth: savings + investments + portfolioValue - portfolioClaims + receivables - totalDebt,
       preAsOfCashFlow: 0,
       debts: calibrated.debts.map((d) => ({
         debtId: d.id,

@@ -1092,10 +1092,11 @@ export async function projectionOptionsFor(
   const [ownValue, portfolioMonthlyGrowthRate, managed, autoInvestRate] = await Promise.all([
     plan.includePortfolio ? getPortfolioValueForUser(userId) : Promise.resolve(0),
     plan.includePortfolio ? getPortfolioWeightedMonthlyRoi(userId) : Promise.resolve(0),
-    // What the user holds with other people's money counts at market value
-    // (the owner decided on 2026-11-03 that net worth carries the assets, not
-    // the margin), growing at the return the owner EXPECTS of it — each
-    // method's `expected_monthly_roi`, not the rate promised to clients.
+    // What the user holds with other people's money: the assets at market
+    // value, growing at the return the owner EXPECTS of them (each method's
+    // `expected_monthly_roi`), less what is owed to the investors, growing at
+    // the rate PROMISED to them — so net worth carries only the margin (the
+    // owner's call of 2026-11-08; until then it carried the whole value).
     plan.includePortfolio ? getManagedAssets(userId) : Promise.resolve(null),
     prefetched.autoInvestRate ?? getAutoInvestRate(plan),
   ]);
@@ -1104,6 +1105,8 @@ export async function projectionOptionsFor(
     portfolioValue: ownValue + managedValue,
     portfolioHeldValue: managedValue,
     portfolioHeldMonthlyGrowthRate: managed?.expectedMonthlyRate ?? 0,
+    portfolioClaims: managed?.owed ?? 0,
+    portfolioClaimsMonthlyRate: managed?.promisedMonthlyRate ?? 0,
     portfolioMonthlyGrowthRate,
     autoInvestRate,
     overrides: plan.overrides,

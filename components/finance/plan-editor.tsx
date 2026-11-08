@@ -62,6 +62,7 @@ import { PlanDebtEditor } from "./plan-debt-editor";
 import { PlanForm } from "./plan-form";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -159,9 +160,6 @@ type PeriodFigures = {
   livingExpenses: number;
   minDebtPayments: number;
   totalDebt: number;
-  /** Where the period's surplus goes: extra debt payments and investing. */
-  toDebt: number;
-  toInvestments: number;
 };
 
 // Chip label for the hovered period — UTC for the same reason as the chart's
@@ -346,10 +344,8 @@ export function PlanEditor({
   const income = current?.income ?? 0;
   const livingExpenses = current?.expenses ?? 0;
   const minDebtPayments = current?.scheduledDebtPayments ?? 0;
-  const extraDebtPayments = current?.extraDebtPayments ?? 0;
   // Fixed outflow: living + debt minimums — the gauge numerator.
   const fixedOutflow = livingExpenses + minDebtPayments;
-  const investmentsContribution = Math.max(0, current?.investmentsContribution ?? 0);
 
   // Debt NOW (day-aware, the same figure as the chart's today dot), not the
   // projected close of the period.
@@ -369,10 +365,7 @@ export function PlanEditor({
   const dLivingExpenses = hoverFigures?.livingExpenses ?? livingExpenses;
   const dMinDebtPayments = hoverFigures?.minDebtPayments ?? minDebtPayments;
   const dFixedOutflow = dLivingExpenses + dMinDebtPayments;
-  const dSurplus = dIncome - dFixedOutflow;
   const dTotalDebt = hoverFigures?.totalDebt ?? totalDebt;
-  const dToDebt = hoverFigures?.toDebt ?? extraDebtPayments;
-  const dToInvestments = hoverFigures?.toInvestments ?? investmentsContribution;
 
   // Current accounting PERIOD (anchor→anchor, e.g. day 5 ⇒ Apr 5 – May 4).
   const anchorDay = plan.confirmationDayOfMonth;
@@ -779,11 +772,6 @@ export function PlanEditor({
                       }
                     />
                   )}
-                  <SurplusSplit
-                    surplus={dSurplus}
-                    toDebt={dToDebt}
-                    toInvestments={dToInvestments}
-                  />
                 </div>
               </CardContent>
             </Card>
@@ -802,14 +790,19 @@ export function PlanEditor({
               onPartsChange={setPortfolioParts}
               today={{
                 managed:
-                  todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0,
+                  (todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0) -
+                  (todayState?.portfolioClaims ?? 0),
                 own: todayState?.investments ?? projection.months[currentPeriodIdx]?.investments ?? 0,
               }}
+              positions={todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0}
+              owedToInvestors={todayState?.portfolioClaims ?? 0}
               horizonMonths={horizonMonths}
               atHorizon={(() => {
                 const m =
                   projection.months[Math.min(projection.months.length - 1, currentPeriodIdx + horizonMonths)];
-                return m ? { managed: m.portfolioValue, own: m.investments } : null;
+                return m
+                  ? { managed: m.portfolioValue - (m.portfolioClaims ?? 0), own: m.investments }
+                  : null;
               })()}
               onToggle={handleTogglePortfolio}
             />
@@ -1058,6 +1051,8 @@ function PortfolioCard({
   parts,
   onPartsChange,
   today,
+  positions,
+  owedToInvestors,
   horizonMonths,
   atHorizon,
   onToggle,
@@ -1065,7 +1060,12 @@ function PortfolioCard({
   enabled: boolean;
   parts: PortfolioParts;
   onPartsChange: (next: PortfolioParts) => void;
+  /** Each part as it counts in net worth: our own, and the managed margin. */
   today: PortfolioAmounts;
+  /** The managed money's two sides: what the positions are worth today, and
+   *  what is owed to the investors behind them. */
+  positions: number;
+  owedToInvestors: number;
   /** The chart's horizon, and where the plan takes each part by its end. */
   horizonMonths: number;
   atHorizon: PortfolioAmounts | null;
@@ -1081,8 +1081,8 @@ function PortfolioCard({
   };
   const nothing = !parts.managed && !parts.own;
   const choices: { key: keyof PortfolioParts; label: string }[] = [
-    { key: "managed", label: "Managed for others" },
     { key: "own", label: "Our own" },
+    { key: "managed", label: "Managed margin" },
   ];
   return (
     <Card className="gap-3">
@@ -1114,22 +1114,42 @@ function PortfolioCard({
         )}
         <div className="mt-1 flex flex-col gap-1.5 border-t pt-2">
           {choices.map((c) => (
-            <label key={c.key} className="flex cursor-pointer items-center justify-between gap-3">
-              <span className="flex items-center gap-2">
-                <Checkbox
-                  checked={parts[c.key]}
-                  onCheckedChange={(v) => onPartsChange({ ...parts, [c.key]: v === true })}
-                />
-                <Text variant="small" as="span">
-                  {c.label}
-                </Text>
-              </span>
-              <Mono className="text-xs text-muted-foreground">{formatCurrency(today[c.key])}</Mono>
-            </label>
+            <Fragment key={c.key}>
+              <label className="flex cursor-pointer items-center justify-between gap-3">
+                <span className="flex items-center gap-2">
+                  <Checkbox
+                    checked={parts[c.key]}
+                    onCheckedChange={(v) => onPartsChange({ ...parts, [c.key]: v === true })}
+                  />
+                  <Text variant="small" as="span">
+                    {c.label}
+                  </Text>
+                </span>
+                <Mono className="text-xs text-muted-foreground">{formatCurrency(today[c.key])}</Mono>
+              </label>
+              {/* The margin's two sides: the positions bought with the
+                  investors' money, and what is owed to them. */}
+              {c.key === "managed" && enabled && (positions > 0 || owedToInvestors > 0) && (
+                <>
+                  <div className="flex items-center justify-between gap-3 pl-6">
+                    <Text variant="small" as="span">
+                      Positions
+                    </Text>
+                    <Mono className="text-xs text-muted-foreground">{formatCurrency(positions)}</Mono>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 pl-6">
+                    <Text variant="small" as="span">
+                      Owed to investors
+                    </Text>
+                    <Mono className="text-xs text-muted-foreground">{formatCurrency(-owedToInvestors)}</Mono>
+                  </div>
+                </>
+              )}
+            </Fragment>
           ))}
           <label className="flex cursor-pointer items-center justify-between gap-3">
             <Text variant="small" as="span">
-              Count managed in net worth
+              Count margin in net worth
             </Text>
             <Switch
               checked={enabled}
@@ -1495,12 +1515,13 @@ function ProjectionPanel({
     return values.map((v, i) => (i < chartSeries.pastCount ? null : v));
   }, [ghost, showGhost, chartSeries.points, chartSeries.pastCount, anchorDay]);
 
-  // Portfolio series, the money the Portfolio card adds up: the managed
-  // money (recorded snapshots for the past, the projection's growing
-  // portfolioValue ahead; only when the plan counts it) plus the plan's own
-  // investments at each point.
+  // Portfolio series, the money the Portfolio card adds up: the plan's own
+  // investments plus the managed money's MARGIN — the positions (recorded
+  // for the past, the projection's growing value ahead) less what is owed to
+  // the investors — so it goes negative while the positions are worth less
+  // than the promise, and net worth's parts add up on every point.
   const portfolioValues = useMemo<(number | null)[] | undefined>(() => {
-    const managed =
+    const positions =
       portfolioEnabled && portfolioParts.managed
         ? mapPortfolioValues(
             chartSeries.points,
@@ -1510,6 +1531,9 @@ function ProjectionPanel({
             anchorDay
           )
         : null;
+    const managed = positions?.map((v, i) =>
+      v === null ? null : v - (chartSeries.points[i].portfolioClaims ?? 0)
+    );
     const own = portfolioParts.own ? chartSeries.points.map((p) => p.investments ?? null) : null;
     if (!managed && !own) return undefined;
     return chartSeries.points.map((_, i) => {
@@ -1538,8 +1562,6 @@ function ProjectionPanel({
         livingExpenses: m.expenses,
         minDebtPayments: m.scheduledDebtPayments,
         totalDebt: p.totalDebt ?? m.totalDebt,
-        toDebt: m.extraDebtPayments,
-        toInvestments: Math.max(0, m.investmentsContribution),
       };
     });
   }, [chartSeries.points, projection, pastProjection, anchorDay]);
@@ -2054,50 +2076,3 @@ function BreakdownList({
 }
 
 
-/**
- * What the period's surplus is spent on, under a hairline: extra payments on
- * debt, investing, and what stays as cash. Named and keyed like the chart's
- * series. A period that spends more than it earns has no surplus to split.
- */
-function SurplusSplit({
-  surplus,
-  toDebt,
-  toInvestments,
-}: {
-  surplus: number;
-  toDebt: number;
-  toInvestments: number;
-}) {
-  const lines = [
-    { series: dashboardSeries("debt"), value: toDebt },
-    { series: dashboardSeries("investments"), value: toInvestments },
-    { series: dashboardSeries("savings"), value: Math.max(0, surplus - toDebt - toInvestments) },
-  ];
-  return (
-    <div className="flex flex-col gap-1 border-t pt-2">
-      <Eyebrow size="sm" as="p">
-        Surplus goes to
-      </Eyebrow>
-      {moneySign(surplus) < 0 ? (
-        <Text variant="small" as="p" className="text-destructive">
-          Spends {formatCurrency(-surplus)} more than it earns
-        </Text>
-      ) : (
-        lines.map((l) => <SurplusSplitLine key={l.series.key} {...l} />)
-      )}
-    </div>
-  );
-}
-
-function SurplusSplitLine({ series, value }: { series: DashboardSeries; value: number }) {
-  const animated = useAnimatedNumber(value);
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <Text variant="small" as="span" className="flex items-center gap-1.5">
-        <SeriesSwatch series={series} />
-        {series.label}
-      </Text>
-      <Mono className="text-sm">{formatCurrency(animated)}</Mono>
-    </div>
-  );
-}

@@ -95,7 +95,14 @@ export default async function PlanDetailPage({ params, searchParams }: PageProps
       ? getConfirmationStatus(plan, ctx.effectiveUserId, now).then((s) => s.isDue)
       : false,
     getLastConfirmedDay(ctx.effectiveUserId),
-    off.includes("trading") ? null : getTradingSummary(ctx.effectiveUserId, timeZone),
+    // With the module on, the Trading card shows even before the first
+    // trade: an empty journal is the same card at $0.
+    off.includes("trading")
+      ? null
+      : getTradingSummary(ctx.effectiveUserId, timeZone).then(
+          (summary) =>
+            summary ?? { balance: 0, asOf: now.toISOString().slice(0, 10), monthlyGrowthRate: 0, growthMonths: 0 }
+        ),
     portfolioOn ? ownsAnyMethod(ctx.effectiveUserId) : false,
   ]);
 

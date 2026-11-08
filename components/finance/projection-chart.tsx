@@ -269,8 +269,10 @@ function PointTooltip(props: {
   payload?: Array<{ value: number | null; payload: ChartRow }>;
   lineColor: string;
   ghostLabel?: string;
+  /** The account has the trading module: its row shows, $0 included. */
+  showTrading?: boolean;
 }) {
-  const { active, payload, lineColor, ghostLabel } = props;
+  const { active, payload, lineColor, ghostLabel, showTrading } = props;
   if (!active || !payload?.length) return null;
   const row = payload.find((p) => p?.value != null)?.payload;
   if (!row) return null;
@@ -304,7 +306,7 @@ function PointTooltip(props: {
             valueClass={portfolioTotal < 0 ? "text-destructive" : undefined}
           />
         )}
-        {moneySign(row.tradingValue ?? 0) > 0 && (
+        {(showTrading || moneySign(row.tradingValue ?? 0) > 0) && (
           <TooltipRow swatch={TRADING} label="Trading" value={formatMoneyFull(row.tradingValue ?? 0)} />
         )}
         {/* Never under zero (see `shownCash`). */}
@@ -486,6 +488,10 @@ export const ProjectionChart = memo(function ProjectionChart({
     const debts = points.map((p) => p.totalDebt ?? 0);
     const owed = points.map((p) => p.receivables ?? 0);
     const trades = points.map((p) => (showTrading ? (p.tradingValue ?? 0) : 0));
+    // An account with the module sees its trading line even at $0 (flat on
+    // zero), as it sees the Trading card; a balance that ends is drawn down to
+    // zero and stops, like debt.
+    const tradingFlat = showTrading && trades.every((t) => moneySign(t) === 0);
     const drawnAt = (values: number[], i: number): boolean =>
       moneySign(values[i]) !== 0 ||
       (i > 0 && moneySign(values[i - 1]) !== 0) ||
@@ -504,7 +510,7 @@ export const ProjectionChart = memo(function ProjectionChart({
         isBoundary && todayLabel ? TODAY_DAY.format(p.date) : MONTH_FORMATTER.format(p.date);
       const debt = drawnAt(debts, i) ? debts[i] : null;
       const owedNow = drawnAt(owed, i) ? owed[i] : null;
-      const trading = drawnAt(trades, i) ? trades[i] : null;
+      const trading = !showTrading ? null : tradingFlat ? 0 : drawnAt(trades, i) ? trades[i] : null;
       return {
         idx: i,
         monthLabel,
@@ -570,7 +576,7 @@ export const ProjectionChart = memo(function ProjectionChart({
       yTicks: ticks,
       hasDebt: debts.some((d) => moneySign(d) !== 0),
       hasOwed: owed.some((d) => moneySign(d) !== 0),
-      hasTrading: trades.some((d) => moneySign(d) !== 0),
+      hasTrading: showTrading,
     };
   }, [points, pastCount, ghostValues, portfolioValues, showTrading, milestones, todayLabel]);
 
@@ -779,7 +785,7 @@ export const ProjectionChart = memo(function ProjectionChart({
             />
           ))}
           <ChartTooltip
-            content={<PointTooltip lineColor={lineColor} ghostLabel={ghostLabel} />}
+            content={<PointTooltip lineColor={lineColor} ghostLabel={ghostLabel} showTrading={showTrading} />}
           />
 
           {/* Base plan ghost (scenario comparison) — subdued and underneath the

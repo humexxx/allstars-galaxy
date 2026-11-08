@@ -67,7 +67,7 @@ export async function getTradingSummary(
   };
 }
 
-function tradeValues(data: TradeData) {
+export function tradeValues(data: TradeData) {
   return {
     symbol: data.symbol,
     side: data.side,

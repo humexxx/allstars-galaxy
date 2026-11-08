@@ -1208,12 +1208,13 @@ const CalendarCell = memo(function CalendarCell({
   onDragEnterCell,
   onDragLeaveCell,
 }: CalendarCellProps) {
-  // Collapsed view shows up to 3 entries + overflow indicator. Expanded view
-  // shows every entry inside a scroll container.
-  // Two chips before "+N more": with three, every week stood 140px tall and
-  // the month ran far past the chart's height.
-  const visible = isExpanded ? entries : entries.slice(0, 2);
+  // Collapsed, a day shows its one entry, or ONE summary chip for several
+  // ("3 entries" and the day's net): two chips side by side made the busy
+  // weeks twice as tall as the rest. Expanded, every entry, scrolling.
+  const visible = isExpanded || entries.length === 1 ? entries : [];
   const extra = isExpanded ? 0 : entries.length - visible.length;
+  const dayTotals = sumBySide(entries);
+  const dayNet = dayTotals.income - dayTotals.expense - dayTotals.debt;
   const dayLabel = formatDay(day);
 
   // Native HTML5 drop handlers — onDragOver must preventDefault to make the
@@ -1330,16 +1331,26 @@ const CalendarCell = memo(function CalendarCell({
                 <button
                   type="button"
                   aria-expanded={false}
-                  aria-label={`Show ${extra} more on ${dayLabel}`}
+                  aria-label={`Show the ${extra} entries on ${dayLabel}`}
                   onClick={() => onToggleExpand(isoKey)}
-                  className="w-full cursor-pointer rounded px-1 text-left text-2xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=delayed-open]:bg-muted data-[state=instant-open]:bg-muted data-[state=delayed-open]:text-foreground data-[state=instant-open]:text-foreground"
+                  className="flex w-full min-w-0 cursor-pointer flex-col rounded bg-muted px-0.5 py-0.5 text-left text-2xs outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring @lg/cal:px-1 @2xl/cal:py-1"
                 >
-                  +{extra}
-                  <span className="hidden @lg/cal:inline"> more</span>
+                  <span className="truncate font-medium leading-tight">
+                    {extra}
+                    <span className="hidden @lg/cal:inline"> entries</span>
+                  </span>
+                  <Mono
+                    className={cn(
+                      "truncate leading-tight",
+                      moneySign(dayNet) >= 0 ? "text-success" : "text-destructive"
+                    )}
+                  >
+                    {formatSignedCurrency(dayNet)}
+                  </Mono>
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={10} className="max-w-xs">
-                <HiddenEntriesTooltipBody allEntries={entries} />
+                <DayEntriesTooltipBody entries={entries} />
               </TooltipContent>
             </Tooltip>
           </li>
@@ -1516,21 +1527,18 @@ function chipPalette(side: EntrySide): string {
       : "bg-destructive/10 text-destructive";
 }
 
-// Listing of entries hidden behind "+N more" plus a per-side / net total for
-// the whole day. Showing the day's net gives the user a one-glance answer to
-// "is this day positive or negative?" without expanding the cell.
-function HiddenEntriesTooltipBody({ allEntries }: { allEntries: DayEntry[] }) {
-  const hidden = allEntries.slice(3);
-  const totals = sumBySide(allEntries);
+// The entries behind a day's summary chip, plus a per-side / net total for
+// the day: a one-glance answer to "is this day positive or negative?"
+// without expanding the cell.
+function DayEntriesTooltipBody({ entries }: { entries: DayEntry[] }) {
+  const totals = sumBySide(entries);
   const net = totals.income - totals.expense - totals.debt;
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-2xs opacity-80">
-        {hidden.length} more {hidden.length === 1 ? "entry" : "entries"} on this day
-      </div>
+      <div className="text-2xs opacity-80">{entries.length} entries on this day</div>
       <ul className="flex flex-col gap-0.5 text-2xs">
-        {hidden.map((e) => (
+        {entries.map((e) => (
           <li
             key={`${e.side}-${e.id}`}
             className="flex items-center justify-between gap-3"

@@ -114,6 +114,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
 import { periodIndexForDate, periodRangeFor } from "@/lib/finance/period";
 import { rowStepFor } from "@/lib/finance/table-rows";
+import { formatProjectionMonth } from "@/lib/utils/date";
 import {
   DEFAULT_PLAN_VIEW,
   PLAN_VIEWS,
@@ -780,7 +781,15 @@ export function PlanEditor({
               }}
               positions={todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0}
               owedToInvestors={todayState?.portfolioClaims ?? 0}
-              horizonMonths={horizonMonths}
+              horizonLabel={(() => {
+                const last = projection.months.length - 1;
+                if (currentPeriodIdx + horizonMonths > last && last >= 0) {
+                  return `By ${formatProjectionMonth(projection.months[last].date)}`;
+                }
+                return horizonMonths % 12 === 0 && horizonMonths > 12
+                  ? `In ${horizonMonths / 12} years`
+                  : `In ${horizonMonths} months`;
+              })()}
               atHorizon={(() => {
                 const m =
                   projection.months[Math.min(projection.months.length - 1, currentPeriodIdx + horizonMonths)];
@@ -1026,7 +1035,7 @@ function PortfolioCard({
   today,
   positions,
   owedToInvestors,
-  horizonMonths,
+  horizonLabel,
   atHorizon,
 }: {
   /** The plan counts the managed money (`includePortfolio`). */
@@ -1036,8 +1045,9 @@ function PortfolioCard({
    *  what is owed to the investors behind them. */
   positions: number;
   owedToInvestors: number;
-  /** The chart's horizon, and where the plan takes each part by its end. */
-  horizonMonths: number;
+  /** Where the chart's horizon ends ("In 12 months", or "By May ’36" when the
+   *  plan ends first), and what each part is there. */
+  horizonLabel: string;
   atHorizon: PortfolioAmounts | null;
 }): React.ReactElement {
   const row = (label: string, value: number, indent = false): React.ReactElement => (
@@ -1068,7 +1078,7 @@ function PortfolioCard({
         {atHorizon !== null && (
           <div className="flex items-baseline justify-between gap-3">
             <Text variant="small" as="span">
-              In {horizonMonths % 12 === 0 && horizonMonths > 12 ? `${horizonMonths / 12} years` : `${horizonMonths} months`}
+              {horizonLabel}
             </Text>
             {/* An estimate, at the expected rate: "≈" says so before the figure. */}
             <Mono className="text-sm text-muted-foreground">
@@ -1616,11 +1626,13 @@ function ProjectionPanel({
               }}
               aria-label="Projection horizon"
             >
-              {HORIZON_PRESETS.map((preset) => (
+              {HORIZON_PRESETS.map((preset, i) => (
                 <ToggleGroupItem
                   key={preset.months}
                   value={String(preset.months)}
-                  disabled={preset.months > maxAvailable}
+                  // A horizon past the plan's end still runs to it, so it is
+                  // off only when it would show nothing the one before shows.
+                  disabled={i > 0 && HORIZON_PRESETS[i - 1].months >= maxAvailable}
                 >
                   {preset.label}
                 </ToggleGroupItem>

@@ -45,6 +45,9 @@ export type ChartPoint = {
   portfolioValue?: number | null;
   /** Owed to the investors whose money is in the portfolio; off `netWorth`. */
   portfolioClaims?: number;
+  /** A period the user never confirmed: kept on the axis, its figures read
+   *  straight across from the points either side (see `fillSkippedPeriods`). */
+  skipped?: boolean;
 };
 
 function effAnchor(anchorDay: number): number {
@@ -151,11 +154,82 @@ export function buildPlanTimeline(
     return { points: past, todayIndex: Math.max(0, past.length - 1) };
   }
 
-  const before = past.filter((p) => p.date < today);
   const opening = past.at(-1) ?? closeOf(months[todayIdx]);
   const todayPoint: ChartPoint = { ...opening, date: today };
+  const before = withSkippedPeriods(
+    [...past.filter((p) => p.date < today), todayPoint],
+    a
+  ).slice(0, -1);
   const ahead = months.slice(todayIdx).map(closeOf);
-  return { points: [...before, todayPoint, ...ahead], todayIndex: before.length };
+  return {
+    points: interpolateSkipped([...before, todayPoint, ...ahead]),
+    todayIndex: before.length,
+  };
+}
+
+/**
+ * The period starts missing between consecutive checkpoints — periods the
+ * user never confirmed — put back as `skipped` points, so the axis keeps
+ * every month and the line runs straight across instead of the month
+ * vanishing. Their figures are filled by `interpolateSkipped`.
+ */
+function withSkippedPeriods(points: readonly ChartPoint[], anchorDay: number): ChartPoint[] {
+  const out: ChartPoint[] = [];
+  points.forEach((p, i) => {
+    const prev = out.at(-1);
+    if (i > 0 && prev) {
+      for (
+        let d = nextPeriodStart(periodStartFor(prev.date, anchorDay), anchorDay);
+        d < p.date;
+        d = nextPeriodStart(d, anchorDay)
+      ) {
+        out.push({ date: d, netWorth: prev.netWorth, skipped: true });
+      }
+    }
+    out.push(p);
+  });
+  return out;
+}
+
+const NUMERIC_FIELDS = [
+  "netWorth",
+  "savings",
+  "totalDebt",
+  "investments",
+  "receivables",
+  "portfolioValue",
+  "portfolioClaims",
+] as const;
+
+/**
+ * Each `skipped` point's figures, read off the straight line between the
+ * recorded points either side of it, by date. Run again whenever a neighbour
+ * changes — `alignTodayPoint` puts today's real position on the point after
+ * the last confirmation.
+ */
+export function interpolateSkipped(points: readonly ChartPoint[]): ChartPoint[] {
+  if (!points.some((p) => p.skipped)) return points.slice();
+  return points.map((p, i) => {
+    if (!p.skipped) return p;
+    let l = i - 1;
+    while (l >= 0 && points[l].skipped) l -= 1;
+    let r = i + 1;
+    while (r < points.length && points[r].skipped) r += 1;
+    const left = points[l];
+    const right = points[r];
+    if (!left || !right) return { ...(left ?? right ?? p), date: p.date, skipped: true };
+    const t =
+      (p.date.getTime() - left.date.getTime()) / (right.date.getTime() - left.date.getTime());
+    const filled: ChartPoint = { date: p.date, netWorth: 0, skipped: true };
+    for (const key of NUMERIC_FIELDS) {
+      const a = left[key];
+      const b = right[key];
+      if (a == null && b == null) continue;
+      const from = a ?? 0;
+      filled[key] = from + ((b ?? 0) - from) * t;
+    }
+    return filled;
+  });
 }
 
 /**
@@ -209,7 +283,7 @@ export function alignTodayPoint(
     portfolioValue: today.portfolioValue,
     portfolioClaims: today.portfolioClaims,
   };
-  return { points, pastCount: series.pastCount };
+  return { points: interpolateSkipped(points), pastCount: series.pastCount };
 }
 
 /**

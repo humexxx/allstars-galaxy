@@ -233,6 +233,8 @@ type ChartRow = {
   pastValue: number | null;
   futureValue: number | null;
   rawValue: number;
+  /** See `ChartPoint.skipped`. */
+  skipped?: boolean;
   savings?: number;
   totalDebt?: number;
   investments?: number;
@@ -324,7 +326,7 @@ type DotRenderProps = {
   cx?: number;
   cy?: number;
   index?: number;
-  payload?: { idx?: number };
+  payload?: { idx?: number; skipped?: boolean };
 };
 
 // Pulsing "you are here" marker for today's point: a solid dot with an
@@ -373,6 +375,8 @@ type ChartPoint = {
   /** Carried for the hover tooltip only. */
   investments?: number;
   savings?: number;
+  /** A period never confirmed: on the axis, no dot, figures interpolated. */
+  skipped?: boolean;
 };
 
 type ProjectionChartProps = {
@@ -487,7 +491,13 @@ export const ProjectionChart = memo(function ProjectionChart({
       return {
         idx: i,
         monthLabel,
-        tooltipLabel: isBoundary && todayLabel ? todayLabel : POINT_DAY.format(p.date),
+        tooltipLabel:
+          isBoundary && todayLabel
+            ? todayLabel
+            : p.skipped
+              ? `${POINT_DAY.format(p.date)} · not confirmed`
+              : POINT_DAY.format(p.date),
+        skipped: p.skipped,
         // pastValue and futureValue overlap at the boundary to keep the line
         // visually continuous when one rendered series ends and the other
         // begins.
@@ -577,7 +587,9 @@ export const ProjectionChart = memo(function ProjectionChart({
     const Dot = (props: DotRenderProps) => {
       const { cx, cy, payload, index } = props;
       const key = `dot-${isFutureSeries ? "f" : "p"}-${index ?? "x"}`;
-      if (cx == null || cy == null) return <g key={key} />;
+      // A period never confirmed has no figures of its own: the line just
+      // runs through it.
+      if (cx == null || cy == null || payload?.skipped) return <g key={key} />;
       const isToday = markToday && payload?.idx === pastCount;
       if (isToday) {
         return isFutureSeries ? (

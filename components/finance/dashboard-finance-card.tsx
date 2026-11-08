@@ -126,7 +126,9 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   const fig = buildDashboardFigures(
     view.projection,
     view.today,
-    timeline.points.slice(0, timeline.todayIndex),
+    // A period never confirmed is only a place on the plan page's axis; the
+    // card's axis is time, so the line crosses it anyway.
+    timeline.points.slice(0, timeline.todayIndex).filter((p) => !p.skipped),
     full.confirmationDayOfMonth,
     movements
   );

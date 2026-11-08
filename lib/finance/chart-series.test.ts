@@ -110,6 +110,50 @@ describe("buildChartSeries", () => {
     expect(points.map((p) => p.netWorth)).toEqual([14587, 25800, 25800, 30000, 35000, 40000]);
   });
 
+  it("keeps a period nobody confirmed on the axis, straight between its neighbours", () => {
+    // Confirmed Sep 5 and Nov 5; October was skipped. Today is Nov 20.
+    const history = [
+      { ...snap(utc(2026, 8, 5), 1000), totalDebt: 900, confirmed: true },
+      { ...snap(utc(2026, 10, 5), 3000), totalDebt: 500, confirmed: true },
+    ];
+    const proj = projectionOf([{ date: utc(2026, 10, 5), netWorth: 4000 }]);
+    const { points, pastCount } = buildChartSeries(history, proj, 12, utc(2026, 10, 20), 5);
+    expect(points.map((p) => [iso(p.date), p.skipped ?? false])).toEqual([
+      ["2026-09-05", false],
+      ["2026-10-05", true],
+      ["2026-11-05", false],
+      ["2026-11-20", false],
+      ["2026-12-05", false],
+    ]);
+    expect(pastCount).toBe(3);
+    // Oct 5 sits 30 of Sep 5 → Nov 5's 61 days along the line.
+    expect(points[1].netWorth).toBeCloseTo(1000 + 2000 * (30 / 61), 6);
+    expect(points[1].totalDebt).toBeCloseTo(900 - 400 * (30 / 61), 6);
+  });
+
+  it("re-reads a skipped period once today's real position is on the line", () => {
+    const history = [snap(utc(2026, 8, 5), 1000)];
+    const proj = projectionOf([{ date: utc(2026, 9, 5), netWorth: 9000 }]);
+    const series = buildChartSeries(history, proj, 12, utc(2026, 9, 20), 5);
+    const today = {
+      status: "in-range",
+      date: utc(2026, 9, 20),
+      periodIndex: 0,
+      periodStart: utc(2026, 9, 5),
+      savings: 0,
+      investments: 0,
+      portfolioValue: 0,
+      totalDebt: 0,
+      receivables: 0,
+      netWorth: 2000,
+      debts: [],
+    } as TodayState;
+    const aligned = alignTodayPoint(series, today, 5);
+    // Sep 5 (1,000) → Oct 20 (2,000): Oct 5 is 30 of 45 days along.
+    expect(aligned.points[1].skipped).toBe(true);
+    expect(aligned.points[1].netWorth).toBeCloseTo(1000 + 1000 * (30 / 45), 6);
+  });
+
   it("on the anchor day itself, today replaces that day's checkpoint", () => {
     const history = [snap(utc(2026, 9, 5), 100), snap(utc(2026, 10, 5), 200)];
     const proj = projectionOf([{ date: utc(2026, 10, 5), netWorth: 300 }]);
@@ -153,10 +197,12 @@ describe("buildChartSeries", () => {
       snap(utc(2026, 4, 28), 3), // May
     ];
     const proj = projectionOf([{ date: utc(2026, 5, 1), netWorth: 4 }]); // Jun
-    // horizon 4 → one closed period + today's period opening: Apr and May.
+    // horizon 4 → one closed period + today's period opening: May, and Jun 1,
+    // which nobody recorded (a skipped point on the way to today).
     const { points, pastCount } = buildChartSeries(history, proj, 4, utc(2026, 5, 10));
     expect(pastCount).toBe(2);
-    expect(points[0].netWorth).toBe(2);
+    expect(points[0].netWorth).toBe(3);
+    expect(points[1].skipped).toBe(true);
   });
 
   it("falls back to the projection's own closes when there is no history", () => {
@@ -215,8 +261,10 @@ describe("buildChartSeries", () => {
       { date: utc(2026, 5, 1), netWorth: 5 },
     ]);
     const { points, pastCount } = buildChartSeries(history, calibrated, 12, utc(2026, 5, 15), 1, raw);
-    expect(pastCount).toBe(1);
+    // May's real opening, then Jun 1 — not recorded, so skipped, not raw's.
+    expect(pastCount).toBe(2);
     expect(points[0].netWorth).toBe(200);
+    expect(points[1].skipped).toBe(true);
   });
 
   it("never draws the old forecast as the past once the plan is confirmed (F21)", () => {

@@ -14,19 +14,14 @@ import { Text } from "@/components/ui/typography";
 import { setPlanColorAction } from "@/app/actions/finance-plans";
 import type { FinancePlan } from "@/types/finance";
 import { cn } from "@/lib/utils";
+import { PLAN_COLORS } from "@/lib/finance/plan-colors";
 
 /**
  * The theme palette. Kept in sync with `planColorSchema`, which only accepts
  * these tokens or a 6-digit hex — the value ends up in a `style` attribute and
  * an SVG `stroke`, so arbitrary CSS is rejected server-side.
  */
-const PRESETS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-] as const;
+const PRESETS = PLAN_COLORS;
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 

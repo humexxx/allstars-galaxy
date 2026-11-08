@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,10 +15,18 @@ import {
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
-import { Heading, Text } from "@/components/ui/typography";
+import { Heading, Mono, Text } from "@/components/ui/typography";
+import { cn } from "@/lib/utils";
 import { formatDay, formatMonth } from "@/lib/utils/date";
 import { formatCurrency } from "@/lib/utils/format";
+import {
+  groupLinesByName,
+  owedStillToCome,
+  type LineGroup,
+  type OwedSchedule,
+} from "@/lib/finance/line-groups";
 import { describeRecurrence } from "@/lib/finance/recurrence-label";
+import { isoDay } from "@/lib/finance/schedule";
 import type { RecurrenceType } from "@/types/finance";
 import {
   LineFormDialog,
@@ -56,7 +64,26 @@ type PlanLineEditorProps = {
   onAdd: (input: LineFormValues) => Promise<void>;
   onUpdate: (id: string, input: LineFormValues) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  /** The reader's calendar day (UTC midnight), as the plan editor's `now`.
+   *  Picks each name's current phase; without it the browser's day is used
+   *  once hydrated. */
+  today?: Date;
+  /** The plan's anchor and overrides, so "still owed" matches net worth. */
+  schedule?: OwedSchedule;
 };
+
+const subscribeNever = (): (() => void) => () => {};
+
+function browserTodayIso(): string {
+  const d = new Date();
+  return isoDay(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())));
+}
+
+// The server has no reader's day to offer, so it renders without one and the
+// browser fills it in after hydration instead of disagreeing with it.
+function useBrowserToday(): string | null {
+  return useSyncExternalStore(subscribeNever, browserTodayIso, () => null);
+}
 
 export function PlanLineEditor({
   variant,
@@ -68,7 +95,9 @@ export function PlanLineEditor({
   onAdd,
   onUpdate,
   onDelete,
-}: PlanLineEditorProps) {
+  today,
+  schedule,
+}: PlanLineEditorProps): React.JSX.Element {
   const [dialogState, setDialogState] = useState<
     | { open: false }
     | { open: true; mode: "add" }
@@ -79,7 +108,24 @@ export function PlanLineEditor({
   // of on <body>.
   const addButtonRef = useRef<HTMLButtonElement>(null);
 
+  const browserToday = useBrowserToday();
+  const todayIso = today ? isoDay(today) : browserToday;
+
+  const splitOwed = variant === "income";
+  const ownLines = splitOwed ? lines.filter((line) => !line.owedToMe) : lines;
+  const owedLines = splitOwed ? lines.filter((line) => line.owedToMe) : [];
+  const ownGroups = groupLinesByName(ownLines, todayIso);
+  const owedGroups = groupLinesByName(owedLines, todayIso);
+
   const close = () => setDialogState({ open: false });
+  const edit = (line: EditorLine): void =>
+    setDialogState({ open: true, mode: "edit", line });
+  const rowActions = {
+    variant,
+    onEdit: edit,
+    onDelete,
+    onDeleted: () => addButtonRef.current?.focus(),
+  };
 
   // Failures propagate so the dialog stays open; the caller already toasted.
   const handleSubmit = async (values: LineFormValues) => {
@@ -125,19 +171,22 @@ export function PlanLineEditor({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {lines.map((line) => (
-                <LineRow
-                  key={line.id}
-                  line={line}
-                  variant={variant}
-                  onEdit={() =>
-                    setDialogState({ open: true, mode: "edit", line })
-                  }
-                  onDelete={onDelete}
-                  onDeleted={() => addButtonRef.current?.focus()}
-                />
+              {ownGroups.map((group) => (
+                <GroupRows key={group.key} group={group} {...rowActions} />
               ))}
             </TableBody>
+            {owedLines.length > 0 && (
+              <OwedSection
+                groups={owedGroups}
+                count={owedLines.length}
+                total={
+                  todayIso === null
+                    ? null
+                    : owedStillToCome(owedLines, todayIso, schedule)
+                }
+                {...rowActions}
+              />
+            )}
           </Table>
         </div>
       )}
@@ -157,52 +206,197 @@ export function PlanLineEditor({
   );
 }
 
+type RowActions = {
+  variant: LineVariant;
+  onEdit: (line: EditorLine) => void;
+  onDelete: (id: string) => Promise<void>;
+  onDeleted: () => void;
+};
+
+const disclosure =
+  "flex items-start gap-1 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+
+function Chevron({ open }: { open: boolean }): React.JSX.Element {
+  return (
+    <ChevronRight
+      aria-hidden
+      className={cn(
+        "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
+        open && "rotate-90"
+      )}
+    />
+  );
+}
+
+function KindBadge({ line }: { line: EditorLine }): React.JSX.Element {
+  return (
+    <Badge variant={line.kind === "recurring" ? "secondary" : "outline"}>
+      {line.kind === "recurring" ? "Recurring" : "One-time"}
+    </Badge>
+  );
+}
+
+function GroupRows({
+  group,
+  ...actions
+}: { group: LineGroup<EditorLine> } & RowActions): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+
+  if (group.lines.length === 1) {
+    return <LineRow line={group.lines[0]} {...actions} />;
+  }
+
+  const summary = groupSummary(group);
+  return (
+    <>
+      <TableRow>
+        <TableCell className="max-w-48 font-medium whitespace-normal sm:max-w-none">
+          <button
+            type="button"
+            className={disclosure}
+            aria-expanded={open}
+            onClick={() => setOpen((o) => !o)}
+          >
+            <Chevron open={open} />
+            <span className="break-words">{group.name}</span>
+            <span className="sr-only">, {group.lines.length} entries</span>
+          </button>
+          <span className="block pl-5 text-xs font-normal text-muted-foreground sm:hidden">
+            {summary}
+          </span>
+        </TableCell>
+        <TableCell className="hidden sm:table-cell">
+          <KindBadge line={group.headline} />
+        </TableCell>
+        <TableCell className="text-right font-mono tabular-nums sm:text-left">
+          {formatCurrency(Number(group.headline.monthlyAmount))}
+        </TableCell>
+        <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">
+          {summary}
+        </TableCell>
+        <TableCell />
+      </TableRow>
+      {open &&
+        group.lines.map((line) => (
+          <LineRow key={line.id} line={line} nested {...actions} />
+        ))}
+    </>
+  );
+}
+
+function groupSummary(group: LineGroup<EditorLine>): string {
+  const { lines, headline, status, from, to } = group;
+  const allOneTime = lines.every((line) => line.kind === "one_time");
+  const parts = [`${lines.length} ${allOneTime ? "payments" : "phases"}`];
+
+  if (status === "upcoming") {
+    parts.push(
+      headline.kind === "one_time"
+        ? `next ${headline.date ? formatDay(headline.date) : "—"}`
+        : `starts ${headline.startDate ? formatMonth(headline.startDate) : "—"}`
+    );
+    if (to) parts.push(`until ${formatMonth(to)}`);
+  } else if (status === "past" && to) {
+    parts.push(`ended ${formatMonth(to)}`);
+  } else if (from && to) {
+    parts.push(`${formatMonth(from)} – ${formatMonth(to)}`);
+  } else if (from) {
+    parts.push(`from ${formatMonth(from)}`);
+  } else if (to) {
+    parts.push(`until ${formatMonth(to)}`);
+  }
+  return parts.join(" · ");
+}
+
+function OwedSection({
+  groups,
+  count,
+  total,
+  ...actions
+}: {
+  groups: LineGroup<EditorLine>[];
+  count: number;
+  /** Null until today is known. */
+  total: number | null;
+} & RowActions): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <TableBody className="border-t">
+      <TableRow className="hover:bg-transparent">
+        <TableCell colSpan={5} className="whitespace-normal">
+          <button
+            type="button"
+            className={cn(disclosure, "w-full flex-wrap items-center gap-x-2")}
+            aria-expanded={open}
+            onClick={() => setOpen((o) => !o)}
+          >
+            <Chevron open={open} />
+            <span className="font-medium">Owed to you</span>
+            <Text as="span" variant="small">
+              {count} {count === 1 ? "entry" : "entries"}
+            </Text>
+            {total !== null && (
+              <span className="ml-auto">
+                <Mono className="font-medium">{formatCurrency(total)}</Mono>{" "}
+                <Text as="span" variant="small">
+                  still owed
+                </Text>
+              </span>
+            )}
+          </button>
+        </TableCell>
+      </TableRow>
+      {open &&
+        groups.map((group) => (
+          <GroupRows key={group.key} group={group} {...actions} />
+        ))}
+    </TableBody>
+  );
+}
+
 function LineRow({
   line,
+  nested = false,
   variant,
   onEdit,
   onDelete,
   onDeleted,
-}: {
-  line: EditorLine;
-  variant: LineVariant;
-  onEdit: () => void;
-  onDelete: (id: string) => Promise<void>;
-  onDeleted: () => void;
-}) {
+}: { line: EditorLine; nested?: boolean } & RowActions): React.JSX.Element {
   const [isPending, startTransition] = useTransition();
+  const schedule = scheduleText(line, variant);
+  // Phases share a name; the schedule tells their buttons apart.
+  const label = nested ? `${line.name} (${schedule})` : line.name;
 
   return (
-    <TableRow>
-      <TableCell className="max-w-48 font-medium whitespace-normal sm:max-w-none">
+    <TableRow className={cn(nested && "bg-muted/30")}>
+      <TableCell
+        className={cn(
+          "max-w-48 font-medium whitespace-normal sm:max-w-none",
+          nested && "pl-7 font-normal text-muted-foreground"
+        )}
+      >
         <span className="block break-words">{line.name}</span>
         <span className="block text-xs font-normal text-muted-foreground sm:hidden">
-          {line.kind === "recurring" ? "Recurring" : "One-time"} ·{" "}
-          <ScheduleSummary line={line} variant={variant} />
-          {line.owedToMe && " · Owed to you"}
+          {line.kind === "recurring" ? "Recurring" : "One-time"} · {schedule}
         </span>
       </TableCell>
       <TableCell className="hidden sm:table-cell">
-        <div className="flex flex-wrap gap-1">
-          <Badge variant={line.kind === "recurring" ? "secondary" : "outline"}>
-            {line.kind === "recurring" ? "Recurring" : "One-time"}
-          </Badge>
-          {line.owedToMe && <Badge variant="info">Owed to you</Badge>}
-        </div>
+        <KindBadge line={line} />
       </TableCell>
       <TableCell className="text-right font-mono tabular-nums sm:text-left">
         {formatCurrency(Number(line.monthlyAmount))}
       </TableCell>
       <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">
-        <ScheduleSummary line={line} variant={variant} />
+        {schedule}
       </TableCell>
       <TableCell className="text-right">
         <div className="flex justify-end gap-1">
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={onEdit}
-            aria-label={`Edit ${line.name}`}
+            onClick={() => onEdit(line)}
+            aria-label={`Edit ${label}`}
           >
             <Pencil />
           </Button>
@@ -221,7 +415,7 @@ function LineRow({
               })
             }
             disabled={isPending}
-            aria-label={`Delete ${line.name}`}
+            aria-label={`Delete ${label}`}
           >
             {isPending ? <Spinner /> : <Trash2 />}
           </Button>
@@ -231,15 +425,9 @@ function LineRow({
   );
 }
 
-function ScheduleSummary({
-  line,
-  variant,
-}: {
-  line: EditorLine;
-  variant: LineVariant;
-}) {
+function scheduleText(line: EditorLine, variant: LineVariant): string {
   if (line.kind === "one_time") {
-    return <>{line.date ? formatDay(line.date) : "—"}</>;
+    return line.date ? formatDay(line.date) : "—";
   }
   const parts: string[] = [
     describeRecurrence({
@@ -257,5 +445,5 @@ function ScheduleSummary({
     if (start) parts.push(`from ${formatMonth(start)}`);
     if (end) parts.push(`until ${formatMonth(end)}`);
   }
-  return <>{parts.join(" · ")}</>;
+  return parts.join(" · ");
 }

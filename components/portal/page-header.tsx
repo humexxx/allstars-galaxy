@@ -19,7 +19,7 @@ type PageHeaderProps = {
   badge?: ReactNode;
   /** A muted line under the description: a period, a date. */
   meta?: ReactNode;
-  /** The one "back" pattern: a ghost link above the title. */
+  /** The one "back" pattern: a ghost link above the title (an arrow before it when compact). */
   back?: PageHeaderBack;
   actions?: ReactNode;
   /**
@@ -46,11 +46,19 @@ export function PageHeader({
     // 192px, and a screen-width `sm:flex-row` squeezed the title into a
     // one-word column beside three actions.
     <header className={cn("@container/page-header flex flex-col gap-2", className)}>
-      {back && <PageHeaderBackButton back={back} />}
-      <div className="flex flex-col gap-3 @2xl/page-header:flex-row @2xl/page-header:items-start @2xl/page-header:justify-between">
+      {back && size === "default" && <PageHeaderBackButton back={back} />}
+      {/* Compact centres the title row on the actions: the h3 is shorter than
+          the tab list, and top-aligned it sat visibly high. */}
+      <div
+        className={cn(
+          "flex flex-col gap-3 @2xl/page-header:flex-row @2xl/page-header:justify-between",
+          size === "compact" ? "@2xl/page-header:items-center" : "@2xl/page-header:items-start"
+        )}
+      >
         <div className="flex min-w-0 flex-col gap-1">
           {eyebrow && <Eyebrow as="div">{eyebrow}</Eyebrow>}
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            {back && size === "compact" && <PageHeaderBackButton back={back} iconOnly />}
             <Heading level={size === "compact" ? "h3" : "h1"} as="h1">
               {title}
             </Heading>
@@ -75,22 +83,31 @@ export function PageHeader({
   );
 }
 
-function PageHeaderBackButton({ back }: { back: PageHeaderBack }) {
+function PageHeaderBackButton({
+  back,
+  iconOnly = false,
+}: {
+  back: PageHeaderBack;
+  iconOnly?: boolean;
+}) {
   const content = (
     <>
       <ArrowLeft aria-hidden />
-      {back.label}
+      {!iconOnly && back.label}
     </>
   );
+  const props = iconOnly
+    ? ({ size: "icon-sm", className: "-ml-2", "aria-label": `Back to ${back.label}` } as const)
+    : ({ size: "sm", className: "-ml-2 self-start" } as const);
   if ("href" in back) {
     return (
-      <Button variant="ghost" size="sm" className="-ml-2 self-start" asChild>
+      <Button variant="ghost" {...props} asChild>
         <Link href={back.href}>{content}</Link>
       </Button>
     );
   }
   return (
-    <Button variant="ghost" size="sm" className="-ml-2 self-start" onClick={back.onClick}>
+    <Button variant="ghost" {...props} onClick={back.onClick}>
       {content}
     </Button>
   );

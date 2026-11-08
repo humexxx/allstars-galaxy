@@ -11,6 +11,7 @@ vi.mock("@/lib/services/impersonation", () => ({
 
 vi.mock("@/lib/services/finance-snapshot-service", () => ({
   restateOpeningBalances: vi.fn(async () => null),
+  recordMovementSnapshot: vi.fn(async () => ({ created: true })),
 }));
 
 vi.mock("@/lib/utils/request-today", () => ({
@@ -22,7 +23,7 @@ vi.mock("@/lib/services/finance-plan-service", () => ({
   createPlan: vi.fn(),
   updatePlan: vi.fn(),
   deletePlan: vi.fn(),
-  clonePlan: vi.fn(),
+  clonePlanWithLineIds: vi.fn(),
   addIncome: vi.fn(),
   updateIncome: vi.fn(),
   deleteIncome: vi.fn(),
@@ -37,7 +38,10 @@ vi.mock("@/lib/services/finance-plan-service", () => ({
 }));
 
 import { revalidatePath } from "next/cache";
-import { restateOpeningBalances } from "@/lib/services/finance-snapshot-service";
+import {
+  recordMovementSnapshot,
+  restateOpeningBalances,
+} from "@/lib/services/finance-snapshot-service";
 import {
   logImpersonatedMutation,
   requireEffectiveContext,
@@ -45,7 +49,7 @@ import {
 import {
   addDebt,
   addIncome,
-  clonePlan,
+  clonePlanWithLineIds,
   createPlan,
   deleteIncome,
   getPlanWithLines,
@@ -73,6 +77,7 @@ const USER_ID = "00000000-0000-4000-8000-000000000001";
 const PLAN_ID = "11111111-1111-4111-8111-111111111111";
 const ROW_ID = "22222222-2222-4222-8222-222222222222";
 const SECONDARY_ID = "33333333-3333-4333-8333-333333333333";
+
 
 beforeEach(() => {
   vi.mocked(requireEffectiveContext).mockResolvedValue({
@@ -265,12 +270,13 @@ describe("deletePlanAction", () => {
 describe("clonePlanAction", () => {
   it("clones when id and name are valid", async () => {
     const plan = { id: SECONDARY_ID, name: "Clone" };
-    vi.mocked(clonePlan).mockResolvedValueOnce(plan as never);
+    vi.mocked(getPlanWithLines).mockResolvedValueOnce({ id: PLAN_ID } as never);
+    vi.mocked(clonePlanWithLineIds).mockResolvedValueOnce({ plan, lineIds: new Map() } as never);
 
     const result = await clonePlanAction(PLAN_ID, "Clone");
 
     expect(result).toEqual({ success: true, data: plan });
-    expect(clonePlan).toHaveBeenCalledWith(USER_ID, PLAN_ID, "Clone");
+    expect(clonePlanWithLineIds).toHaveBeenCalledWith(USER_ID, PLAN_ID, "Clone", { asScenario: undefined });
     expect(logImpersonatedMutation).toHaveBeenCalled();
     expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
   });
@@ -279,7 +285,7 @@ describe("clonePlanAction", () => {
     const result = await clonePlanAction("bad-id", "Clone");
 
     expect(result).toEqual({ success: false, error: "Invalid input" });
-    expect(clonePlan).not.toHaveBeenCalled();
+    expect(clonePlanWithLineIds).not.toHaveBeenCalled();
   });
 
   it("rejects too-long names (>120 chars)", async () => {
@@ -287,7 +293,7 @@ describe("clonePlanAction", () => {
     const result = await clonePlanAction(PLAN_ID, longName);
 
     expect(result).toEqual({ success: false, error: "Invalid input" });
-    expect(clonePlan).not.toHaveBeenCalled();
+    expect(clonePlanWithLineIds).not.toHaveBeenCalled();
   });
 });
 
@@ -451,6 +457,25 @@ describe("addPlanIncomeAction", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/portal/plans", "layout");
     expect(revalidatePath).toHaveBeenCalledWith("/portal");
     expect(revalidatePath).toHaveBeenCalledTimes(2);
+    // The dashboard draws the day the plan changed.
+    // On the reader's calendar (the zone the request carries: UTC here).
+    expect(recordMovementSnapshot).toHaveBeenCalledWith(PLAN_ID, USER_ID, expect.any(Date), "UTC");
+  });
+
+  it("still succeeds when the movement snapshot fails", async () => {
+    vi.mocked(addIncome).mockResolvedValueOnce({ id: ROW_ID } as never);
+    vi.mocked(recordMovementSnapshot).mockRejectedValueOnce(new Error("db down"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await addPlanIncomeAction(PLAN_ID, {
+      name: "Salary",
+      monthlyAmount: "5000",
+      kind: "recurring",
+      dayOfMonth: 15,
+      recurrenceType: "monthly_day",
+    } as never);
+
+    expect(result).toMatchObject({ success: true });
   });
 });
 

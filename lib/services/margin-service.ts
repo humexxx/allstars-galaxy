@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -20,9 +21,14 @@ import {
   type MarginHolding,
 } from "@/lib/finance/margin";
 import { netPositions } from "@/lib/finance/allocation";
-import { buildMarginHistory, withdrawnLiability } from "@/lib/finance/margin-history";
+import {
+  buildMarginHistory,
+  withdrawnLiability,
+  type MarginPoint,
+} from "@/lib/finance/margin-history";
 import type {
   InvestorBreakdown,
+  ManagedAssets,
   ManagedOverview,
   MarginHistoryInput,
   MarginOverview,
@@ -166,6 +172,90 @@ export async function getManagedOverview(ownerUserId: string): Promise<ManagedOv
           percent: parseFloat(p.percent),
         })),
     })),
+  };
+}
+
+/** `getManagedOverview`, once per request: the plan reads its value and its history. */
+const managedOverview = cache(getManagedOverview);
+
+/**
+ * The managed book month by month (positions, what was owed, the margin), for
+ * the finance plan's past. Request-cached.
+ */
+export const getManagedMarginHistory = cache(async function getManagedMarginHistory(
+  ownerUserId: string
+): Promise<MarginPoint[]> {
+  return (await managedOverview(ownerUserId)).history;
+});
+
+/**
+ * The assets the owner runs for other people, for the finance plan. Request-
+ * cached: every plan projected in one request asks for it.
+ */
+export const getManagedAssets = cache(async function getManagedAssets(
+  ownerUserId: string
+): Promise<ManagedAssets> {
+  const [managed, expected] = await Promise.all([
+    managedOverview(ownerUserId),
+    db
+      .select({
+        id: investmentMethods.id,
+        monthlyRoi: investmentMethods.monthlyRoi,
+        expectedMonthlyRoi: investmentMethods.expectedMonthlyRoi,
+      })
+      .from(investmentMethods)
+      .where(eq(investmentMethods.ownerUserId, ownerUserId)),
+  ]);
+  return {
+    ...summarizeManagedAssets(managed.investors, managed.history),
+    expectedMonthlyRate: expectedManagedRate(
+      managed.overview.methods,
+      new Map(expected.map((m) => [m.id, m.expectedMonthlyRoi == null ? null : parseFloat(m.expectedMonthlyRoi)]))
+    ),
+    promisedMonthlyRate: expectedManagedRate(
+      managed.overview.methods,
+      new Map(expected.map((m) => [m.id, parseFloat(m.monthlyRoi)]))
+    ),
+  };
+});
+
+/**
+ * The monthly return (decimal) the owner expects across the assets their
+ * methods' capital bought: each method's `expected_monthly_roi`, weighted by
+ * what its holdings are worth today. A method with no expectation counts as
+ * held flat, as every method did before there was one.
+ */
+export function expectedManagedRate(
+  methods: readonly { methodId: string; assets: number }[],
+  expectedPercentByMethod: ReadonlyMap<string, number | null>
+): number {
+  let weighted = 0;
+  let total = 0;
+  for (const m of methods) {
+    if (m.assets <= 0) continue;
+    weighted += m.assets * ((expectedPercentByMethod.get(m.methodId) ?? 0) / 100);
+    total += m.assets;
+  }
+  return total > 0 ? weighted / total : 0;
+}
+
+/** Pure half of `getManagedAssets`; the percentages match the owner's Margin card. */
+export function summarizeManagedAssets(
+  investors: InvestorBreakdown[],
+  history: MarginPoint[]
+): ManagedAssets {
+  const value = investors
+    .filter((i) => !i.isOwn)
+    .reduce((sum, i) => sum + i.positionValue, 0);
+  const last = history.at(-1);
+  const prev = history.at(-2);
+  const owed = last?.liability ?? 0;
+  return {
+    value,
+    owed,
+    monthMarginPercent:
+      last && prev && owed > 0 ? ((last.margin - prev.margin) / owed) * 100 : null,
+    allTimeMarginPercent: last && owed > 0 ? (last.margin / owed) * 100 : null,
   };
 }
 

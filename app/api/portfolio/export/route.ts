@@ -101,7 +101,7 @@ export async function GET(): Promise<NextResponse> {
     getUserPortfolio(ctx.effectiveUserId),
     getInvestorTransactions(ctx.effectiveUserId),
     listPriceAssets(),
-    listAllInvestmentMethods(),
+    listAllInvestmentMethods(ctx.effectiveUserId),
   ]);
   // Oldest first, like the viewer's own rows — the two blocks used to run in
   // opposite directions within one file.

@@ -33,7 +33,8 @@ type JolpicaDriver = {
   code?: string;
   givenName: string;
   familyName: string;
-  nationality: string;
+  /** Missing for a driver new to the grid (Rafael Câmara, Nov 2026). */
+  nationality?: string;
 };
 
 type JolpicaConstructor = {
@@ -266,11 +267,12 @@ const CONSTRUCTOR_COLOR: Record<string, string> = {
   Cadillac: "#2C3E50",
 };
 
-function flagForNationality(n: string): string {
-  return NATIONALITY_FLAG[n] ?? "🏁";
+function flagForNationality(n: string | undefined): string {
+  return (n && NATIONALITY_FLAG[n]) ?? "🏁";
 }
 
-function codeForNationality(n: string): string {
+function codeForNationality(n: string | undefined): string {
+  if (!n) return "";
   return NATIONALITY_CODE[n] ?? n.slice(0, 3).toUpperCase();
 }
 

@@ -7,7 +7,14 @@ vi.mock("./portfolio-service", () => ({ getMethodInvestors: vi.fn() }));
 
 import { buildMarginHistory } from "@/lib/finance/margin-history";
 
-import { buildHistoryInput, buildInvestors, type AllocRow, type TxRow } from "./margin-service";
+import {
+  buildHistoryInput,
+  buildInvestors,
+  expectedManagedRate,
+  summarizeManagedAssets,
+  type AllocRow,
+  type TxRow,
+} from "./margin-service";
 
 const OWNER = "owner";
 const MARIA = "maria";
@@ -119,5 +126,53 @@ describe("buildHistoryInput", () => {
       investorId: MARIA,
       methodId: GROWTH,
     });
+  });
+});
+
+describe("expectedManagedRate", () => {
+  it("weights each method's expected return by what its holdings are worth", () => {
+    const rate = expectedManagedRate(
+      [
+        { methodId: "safe", assets: 3000 },
+        { methodId: "bold", assets: 1000 },
+        { methodId: "empty", assets: 0 },
+      ],
+      new Map([
+        ["safe", 1],
+        ["bold", 2],
+        ["empty", 9],
+      ])
+    );
+    expect(rate).toBeCloseTo((3000 * 0.01 + 1000 * 0.02) / 4000, 10);
+  });
+
+  it("holds a method with no expectation flat, and nothing at all at 0", () => {
+    expect(expectedManagedRate([{ methodId: "safe", assets: 2000 }], new Map([["safe", null]]))).toBe(0);
+    expect(expectedManagedRate([], new Map())).toBe(0);
+  });
+});
+
+describe("summarizeManagedAssets", () => {
+  const point = (month: string, margin: number, liability: number) => ({
+    month, deployed: liability + margin, liability, ownPosition: 0, margin, invested: 6700,
+  });
+  const investor = (isOwn: boolean, positionValue: number) => ({
+    investorId: isOwn ? "me" : "y", name: "x", isOwn, contributed: 0, withdrawn: 0, owed: 0,
+    positions: [], positionValue, profitLoss: 0,
+  });
+
+  it("counts other people's positions at market value, not the owner's own", () => {
+    const s = summarizeManagedAssets([investor(false, 2663.05), investor(true, 500)], []);
+    expect(s.value).toBeCloseTo(2663.05, 2);
+    expect(s.allTimeMarginPercent).toBeNull();
+  });
+
+  it("measures the margin against what is owed, this month and to date", () => {
+    const s = summarizeManagedAssets(
+      [investor(false, 2663.05)],
+      [point("2026-10", -5225.33, 7400), point("2026-11", -4768.73, 7431.78)]
+    );
+    expect(s.monthMarginPercent).toBeCloseTo((456.6 / 7431.78) * 100, 1); // +6.1%
+    expect(s.allTimeMarginPercent).toBeCloseTo((-4768.73 / 7431.78) * 100, 1); // -64.2%
   });
 });

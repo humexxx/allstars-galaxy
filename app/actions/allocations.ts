@@ -195,13 +195,15 @@ export async function updateMethodAction(
       return { success: false, error: parsed.error.issues[0].message };
     }
 
-    const { methodId, name, description, riskLevel, monthlyRoi, enabled } = parsed.data;
+    const { methodId, name, description, riskLevel, monthlyRoi, expectedMonthlyRoi, enabled } =
+      parsed.data;
 
     const updated = await updateInvestmentMethod(methodId, ctx.effectiveUserId, {
       name,
       description: description || null,
       riskLevel,
       monthlyRoi,
+      expectedMonthlyRoi,
       enabled,
     });
     if (!updated) {
@@ -212,8 +214,12 @@ export async function updateMethodAction(
       action: "investmentMethod.update",
       entityTable: "investment_methods",
       entityId: methodId,
-      before: { name: updated.before.name, monthlyRoi: updated.before.monthlyRoi },
-      after: { name, monthlyRoi },
+      before: {
+        name: updated.before.name,
+        monthlyRoi: updated.before.monthlyRoi,
+        expectedMonthlyRoi: updated.before.expectedMonthlyRoi,
+      },
+      after: { name, monthlyRoi, expectedMonthlyRoi },
     });
     revalidatePath(PORTFOLIO_PATH);
     return { success: true };

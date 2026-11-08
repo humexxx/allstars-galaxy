@@ -73,7 +73,35 @@ export function niceTicks(values: readonly number[]): number[] {
   const finite = values.filter(Number.isFinite);
   const min = Math.min(0, ...finite);
   const max = finite.length > 0 ? Math.max(...finite) : 0;
-  return min === max ? singleValueTicks(min, TICK_COUNT) : rangeTicks(min, max, TICK_COUNT);
+  if (min === max) return singleValueTicks(min, TICK_COUNT);
+  return trimEnds(rangeTicks(min, max, TICK_COUNT), min, max);
+}
+
+/**
+ * The first round number at or past `n`: 1, 2, 2.5 or 5 times a power of ten.
+ */
+function roundUp(n: number): number {
+  const magnitude = 10 ** Math.floor(Math.log10(n));
+  for (const m of [1, 2, 2.5, 5, 10]) {
+    if (clean(m * magnitude) >= n) return clean(m * magnitude);
+  }
+  return clean(10 * magnitude);
+}
+
+/**
+ * An end tick across zero from the data that the data barely uses comes in to
+ * the first round number past it. Even steps from zero put a −$40k under a
+ * plan that dips to −$5k on its way to $108k, so a quarter of the chart sat
+ * empty below its lowest point; it now ends at −$10k.
+ */
+function trimEnds(ticks: number[], min: number, max: number): number[] {
+  if (ticks.length < 3) return ticks;
+  const out = ticks.slice();
+  const step = ticks[1] - ticks[0];
+  if (min < 0 && ticks[1] === 0 && -min < step / 2) out[0] = -roundUp(-min);
+  const last = ticks.length - 1;
+  if (max > 0 && ticks[last - 1] === 0 && max < step / 2) out[last] = roundUp(max);
+  return out;
 }
 
 /**

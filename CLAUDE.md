@@ -363,8 +363,8 @@ RAPIDAPI_KEY            # Refreshes the stored F1 news archive on the daily
                         # cron. Unset = no refresh (not a cron failure); the
                         # articles already stored keep reading.
 
-# travel assistant
-ANTHROPIC_API_KEY       # Claude API key for the Travel Planner's AI chat.
+# AI assistants (Travel, Sports, Plans)
+ANTHROPIC_API_KEY       # Claude API key for the assistants' chats.
                         # Unset = no assistant button. Admins only, since
                         # every message spends API credit. A Max plan's
                         # monthly API credit covers it (claim it by linking a

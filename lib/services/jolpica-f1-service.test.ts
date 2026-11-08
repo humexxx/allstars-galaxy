@@ -174,6 +174,22 @@ describe("mapDrivers", () => {
     const drivers = mapDrivers(standings, new Map());
     expect(drivers.every((d) => d.imageUrl === undefined && d.flagUrl === undefined)).toBe(true);
   });
+  it("takes a driver Jolpica lists without a nationality or a code", () => {
+    // Nov 2026: a newcomer arrived bare and the whole dashboard went down.
+    const [camara] = mapDrivers(
+      [
+        {
+          position: "25",
+          points: "0",
+          wins: "0",
+          Driver: { driverId: "rafael_camara", givenName: "Rafael", familyName: "Câmara" },
+          Constructors: [],
+        },
+      ],
+      new Map()
+    );
+    expect(camara).toMatchObject({ code: "CÂM", nationality: "", flagEmoji: "🏁", team: "—" });
+  });
 });
 
 describe("mapConstructors", () => {

@@ -3,7 +3,9 @@ import "server-only";
 import { revalidatePath } from "next/cache";
 
 import { visibleSections } from "@/components/portal/nav-config";
-import { toolFailed, toolOk, type AssistantToolResult, type AssistantToolUse } from "@/lib/ai/assistant/converse";
+import { z } from "zod";
+
+import { defineTool, ToolError, toolbox } from "@/lib/ai/assistant/tools";
 import { SPORTS } from "@/lib/data/sports/registry";
 import { getTennisData } from "@/lib/services/espn-tennis-service";
 import { FOOTBALL_COMPETITIONS } from "@/lib/services/football-service";
@@ -261,74 +263,74 @@ export function revalidateFavoritePaths(): void {
   revalidatePath("/portal");
 }
 
-function invalid(tool: AssistantToolUse, issues: { path: PropertyKey[]; message: string }[]): AssistantToolResult {
-  const detail = issues
-    .slice(0, 5)
-    .map((i) => `${i.path.map(String).join(".") || "input"}: ${i.message}`)
-    .join("; ");
-  return toolFailed(tool, `The input is not valid. ${detail}`);
-}
+const sportLabel = (sportId: SportId): string => SPORTS.find((s) => s.id === sportId)?.label ?? sportId;
 
-export async function runSportsTool(
-  tool: AssistantToolUse,
-  ctx: SportsToolContext,
-  send: (event: SportsAssistantEvent) => void
-): Promise<AssistantToolResult> {
-  switch (tool.name) {
-    case "list_sports":
-      send({ type: "status", label: "Reading the sports" });
-      return toolOk(tool, await listSports(ctx.userId));
+/** The sports assistant's tools: each one's description and input beside what it runs. */
+const sportsTools = toolbox<SportsToolContext, SportsAssistantEvent>(
+  [
+    defineTool({
+      name: "list_sports",
+      description:
+        "Every sport: id, label, whether it is one of the user's favourites, its competitions (football leagues, LoL leagues and events) with ids, and the tabs of its page.",
+      input: z.object({}),
+      status: "Reading the sports",
+      run: (_input, ctx) => listSports(ctx.userId),
+    }),
+    defineTool({
+      name: "get_sport",
+      description:
+        "One sport as its page shows it: yesterday's and today's results, live games and the next ones (kickoff on the user's clock), the standings, a bracket being played, the tournaments or races with their ids, rankings, and the latest headlines with links.",
+      input: getSportInputSchema,
+      status: (input) => `Reading ${sportLabel(input.sportId)}`,
+      run: async ({ sportId, competition, team, tournament }, ctx) => {
+        const payload = await loadSport(sportId, { league: sportId === "football" ? competition : undefined });
+        return summarizeSport(payload, { timeZone: ctx.timeZone, now: Date.now(), competition, team, tournament });
+      },
+    }),
+    defineTool({
+      name: "list_pages",
+      description: "The other parts of the app the user can open, with ids for navigate.",
+      input: z.object({}),
+      run: async (_input, ctx) => listPages(ctx),
+    }),
+    defineTool({
+      name: "navigate",
+      description:
+        "Open a page for the user: a sport (optionally a competition and a tab), a padel or tennis tournament, an F1 race, or another part of the app.",
+      input: navigateInputSchema,
+      run: async ({ destination }, ctx, { send }) => {
+        try {
+          const { href, label } = await resolveDestination(destination, ctx);
+          send({ type: "navigate", href });
+          return `The user now has ${label} open.`;
+        } catch (err) {
+          if (err instanceof DestinationError) throw new ToolError(err.message);
+          throw err;
+        }
+      },
+    }),
+    defineTool({
+      name: "set_favorite",
+      description: "Add a sport to the user's favourites, or remove it.",
+      input: setFavoriteInputSchema,
+      status: ({ sportId, favorite }) =>
+        favorite ? `Adding ${sportLabel(sportId)} to your favourites` : `Removing ${sportLabel(sportId)}`,
+      run: async ({ sportId, favorite }, ctx, { send }) => {
+        const label = sportLabel(sportId);
+        const { changed } = await setFavorite(ctx, sportId, favorite);
+        if (!changed) {
+          return `${label} was already ${favorite ? "one of" : "not among"} the user's favourites; nothing changed.`;
+        }
+        send({ type: "refresh" });
+        return `${label} is now ${favorite ? "one of" : "no longer among"} the user's favourites.`;
+      },
+    }),
+  ],
+  "sports-assistant"
+);
 
-    case "list_pages":
-      return toolOk(tool, listPages(ctx));
+/** What the API is told the sports assistant can call. */
+export const SPORTS_ASSISTANT_TOOLS = sportsTools.definitions;
 
-    case "get_sport": {
-      const input = getSportInputSchema.safeParse(tool.input);
-      if (!input.success) return invalid(tool, input.error.issues);
-      const { sportId, competition, team } = input.data;
-      const label = SPORTS.find((s) => s.id === sportId)?.label ?? sportId;
-      send({ type: "status", label: `Reading ${label}` });
-      const payload = await loadSport(sportId, { league: sportId === "football" ? competition : undefined });
-      return toolOk(
-        tool,
-        summarizeSport(payload, {
-          timeZone: ctx.timeZone,
-          now: Date.now(),
-          competition,
-          team,
-          tournament: input.data.tournament,
-        })
-      );
-    }
-
-    case "set_favorite": {
-      const input = setFavoriteInputSchema.safeParse(tool.input);
-      if (!input.success) return invalid(tool, input.error.issues);
-      const { sportId, favorite } = input.data;
-      const label = SPORTS.find((s) => s.id === sportId)?.label ?? sportId;
-      send({ type: "status", label: favorite ? `Adding ${label} to your favourites` : `Removing ${label}` });
-      const { changed } = await setFavorite(ctx, sportId, favorite);
-      if (!changed) {
-        return toolOk(tool, `${label} was already ${favorite ? "one of" : "not among"} the user's favourites; nothing changed.`);
-      }
-      send({ type: "refresh" });
-      return toolOk(tool, `${label} is now ${favorite ? "one of" : "no longer among"} the user's favourites.`);
-    }
-
-    case "navigate": {
-      const input = navigateInputSchema.safeParse(tool.input);
-      if (!input.success) return invalid(tool, input.error.issues);
-      try {
-        const { href, label } = await resolveDestination(input.data.destination, ctx);
-        send({ type: "navigate", href });
-        return toolOk(tool, `The user now has ${label} open.`);
-      } catch (err) {
-        if (err instanceof DestinationError) return toolFailed(tool, err.message);
-        throw err;
-      }
-    }
-
-    default:
-      return toolFailed(tool, `There is no tool called ${tool.name}`);
-  }
-}
+/** Runs one of the sports assistant's tools for the effective user. */
+export const runSportsTool = sportsTools.run;

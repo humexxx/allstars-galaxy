@@ -22,6 +22,13 @@ describe("niceTicks", () => {
     expect(niceTicks([-40, -20])).toEqual([-40, -35, -30, -25, -20]);
   });
 
+  it("brings a barely used end across zero in to a round number", () => {
+    // A plan dipping to −$5.3k on its way to $108k: even steps put −$40k under it.
+    expect(niceTicks([-5293.79, 108000])).toEqual([-10000, 0, 40000, 80000, 120000]);
+    // And the other way: mostly debt, a sliver above zero.
+    expect(niceTicks([-108000, 5293.79])).toEqual([-120000, -80000, -40000, 0, 10000]);
+  });
+
   it("falls back to recharts' ticks for an empty axis", () => {
     expect(niceTicks([])).toEqual([0, 1, 2, 3, 4]);
   });

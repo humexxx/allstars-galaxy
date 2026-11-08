@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -18,6 +18,7 @@ import {
 } from "@/lib/finance/period";
 import { isoDay, parseIsoDay } from "@/lib/finance/schedule";
 
+import { confirmationsOf, debtKeyOf, historyOwner } from "./finance-history";
 import { ensureOwnedRow } from "./ownership";
 import type { ConfirmationData } from "@/schemas/finance-confirmations";
 import {
@@ -47,7 +48,7 @@ function rowDay(row: { confirmationMonth: string }): Date {
 async function ensurePlanOwnership(
   planId: string,
   userId: string
-): Promise<{ confirmationDayOfMonth: number }> {
+): Promise<{ confirmationDayOfMonth: number; isMain: boolean }> {
   const plan = await ensureOwnedRow({
     table: financePlans,
     idColumn: financePlans.id,
@@ -55,26 +56,26 @@ async function ensurePlanOwnership(
     userId,
     entity: "Plan",
   });
-  return { confirmationDayOfMonth: plan.confirmationDayOfMonth };
+  return { confirmationDayOfMonth: plan.confirmationDayOfMonth, isMain: plan.isMain };
 }
 
 // ---------- public API ----------
 
 /**
- * The confirmation that sets the plan's baseline — the one describing the
- * LATEST day — plus its per-debt balances.
+ * The confirmation that sets every plan's baseline — the user's one
+ * describing the LATEST day — plus its per-debt balances.
  *
  * `confirmationMonth` holds that day: the calendar day a user confirmed on,
  * or the period start an auto row records the opening of. Ordering by it is
  * ordering by the day the balances describe.
  */
 export async function getLatestConfirmation(
-  planId: string
+  userId: string
 ): Promise<ConfirmationWithDebts | null> {
   const [latest] = await db
     .select()
     .from(financePlanConfirmations)
-    .where(eq(financePlanConfirmations.planId, planId))
+    .where(confirmationsOf(await historyOwner(userId)))
     .orderBy(
       desc(financePlanConfirmations.confirmationMonth),
       desc(financePlanConfirmations.confirmedAt)
@@ -92,44 +93,18 @@ export async function getLatestConfirmation(
 }
 
 /**
- * `getLatestConfirmation` for many plans in two queries, however many there
- * are (the list and compare pages calibrate every plan). Same pick — the
- * first row per plan in the same order — via DISTINCT ON. Plans with no
- * confirmation are absent from the map.
+ * The last day the user confirmed their balances themselves (YYYY-MM-DD) —
+ * the newest figure that is real. Auto rows record a projection, so they
+ * don't count. Net worth's change is measured from here.
  */
-export async function getLatestConfirmations(
-  planIds: readonly string[]
-): Promise<Map<string, ConfirmationWithDebts>> {
-  const byPlan = new Map<string, ConfirmationWithDebts>();
-  if (planIds.length === 0) return byPlan;
-
-  const latest = await db
-    .selectDistinctOn([financePlanConfirmations.planId])
+export async function getLastConfirmedDay(userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ day: financePlanConfirmations.confirmationMonth })
     .from(financePlanConfirmations)
-    .where(inArray(financePlanConfirmations.planId, [...planIds]))
-    .orderBy(
-      financePlanConfirmations.planId,
-      desc(financePlanConfirmations.confirmationMonth),
-      desc(financePlanConfirmations.confirmedAt)
-    );
-  if (latest.length === 0) return byPlan;
-
-  const debtRows = await db
-    .select()
-    .from(financePlanDebtConfirmations)
-    .where(
-      inArray(
-        financePlanDebtConfirmations.confirmationId,
-        latest.map((r) => r.id)
-      )
-    );
-  for (const row of latest) {
-    byPlan.set(row.planId, {
-      ...row,
-      debtConfirmations: debtRows.filter((d) => d.confirmationId === row.id),
-    });
-  }
-  return byPlan;
+    .where(and(confirmationsOf(await historyOwner(userId)), eq(financePlanConfirmations.source, "user")))
+    .orderBy(desc(financePlanConfirmations.confirmationMonth))
+    .limit(1);
+  return row?.day ?? null;
 }
 
 /**
@@ -151,7 +126,8 @@ export async function getConfirmationStatus(
   existingConfirmation: FinancePlanConfirmation | null;
 }> {
   const period = periodRangeFor(today, anchorOf(plan.confirmationDayOfMonth));
-  if (plan.confirmationDayOfMonth === 0) {
+  // Only the main plan is confirmed: the others are what-ifs on its past.
+  if (plan.confirmationDayOfMonth === 0 || !plan.isMain) {
     return {
       isDue: false,
       monthAnchor: isoDay(period.start),
@@ -163,7 +139,7 @@ export async function getConfirmationStatus(
   const rows = await db
     .select()
     .from(financePlanConfirmations)
-    .where(eq(financePlanConfirmations.planId, plan.id));
+    .where(confirmationsOf(await historyOwner(userId)));
   const existing =
     rows
       .filter((r) => isDateInPeriod(rowDay(r), period))
@@ -194,26 +170,40 @@ export async function saveConfirmation(
   input: ConfirmationData,
   today: Date = new Date()
 ): Promise<FinancePlanConfirmation> {
-  await ensurePlanOwnership(input.planId, userId);
+  const { isMain } = await ensurePlanOwnership(input.planId, userId);
+  if (!isMain) throw new Error("Only the main plan is confirmed");
 
   const day = isoDay(
     new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
   );
-  // Debt ids are caller-supplied. A balance recorded against another plan's
-  // debt would feed that plan's calibration, so every id must be this plan's.
+  // Debt ids are caller-supplied, so every one must be this plan's.
+  const keyById = new Map<string, string>();
   if (input.debtBalances.length > 0) {
     const ids = [...new Set(input.debtBalances.map((d) => d.debtId))];
     const owned = await db
-      .select({ id: financePlanDebts.id })
+      .select({ id: financePlanDebts.id, debtKey: financePlanDebts.debtKey })
       .from(financePlanDebts)
       .where(and(eq(financePlanDebts.planId, input.planId), inArray(financePlanDebts.id, ids)));
     if (owned.length !== ids.length) throw new Error("Debt not found");
+    for (const d of owned) keyById.set(d.id, debtKeyOf(d));
   }
 
   const conf = await db.transaction(async (tx) => {
+    // A row older code wrote for this day, without an owner, becomes the user's.
+    await tx
+      .update(financePlanConfirmations)
+      .set({ userId })
+      .where(
+        and(
+          isNull(financePlanConfirmations.userId),
+          eq(financePlanConfirmations.planId, input.planId),
+          eq(financePlanConfirmations.confirmationMonth, day)
+        )
+      );
     const [row] = await tx
       .insert(financePlanConfirmations)
       .values({
+        userId,
         planId: input.planId,
         confirmationMonth: day,
         confirmedSavings: input.confirmedSavings,
@@ -223,10 +213,11 @@ export async function saveConfirmation(
       })
       .onConflictDoUpdate({
         target: [
-          financePlanConfirmations.planId,
+          financePlanConfirmations.userId,
           financePlanConfirmations.confirmationMonth,
         ],
         set: {
+          planId: input.planId,
           confirmedSavings: input.confirmedSavings,
           confirmedInvestments: input.confirmedInvestments,
           notes: input.notes ?? null,
@@ -247,6 +238,7 @@ export async function saveConfirmation(
         input.debtBalances.map((d) => ({
           confirmationId: row.id,
           debtId: d.debtId,
+          debtKey: keyById.get(d.debtId) ?? d.debtId,
           confirmedBalance: d.confirmedBalance,
         }))
       );
@@ -317,7 +309,7 @@ export async function autoConfirmSkippedPeriods(
   today: Date = new Date()
 ): Promise<{ confirmationsCreated: number }> {
   const anchor = plan.confirmationDayOfMonth;
-  if (anchor === 0) return { confirmationsCreated: 0 };
+  if (anchor === 0 || !plan.isMain) return { confirmationsCreated: 0 };
 
   const currStart = periodStartFor(today, anchor);
 
@@ -326,12 +318,13 @@ export async function autoConfirmSkippedPeriods(
   const existing = await db
     .select({ month: financePlanConfirmations.confirmationMonth })
     .from(financePlanConfirmations)
-    .where(eq(financePlanConfirmations.planId, plan.id));
+    .where(confirmationsOf(await historyOwner(userId)));
   const confirmedPeriods = new Set(
     existing.map((r) => isoDay(periodStartFor(rowDay({ confirmationMonth: r.month }), anchor)))
   );
 
-  const latest = await getLatestConfirmation(plan.id);
+  const latest = await getLatestConfirmation(userId);
+  const keyById = new Map(plan.debts.map((d) => [d.id, debtKeyOf(d)]));
   const baselineStart = periodStartFor(balancesKnownOn(plan, latest), anchor);
 
   let confirmationsCreated = 0;
@@ -350,6 +343,7 @@ export async function autoConfirmSkippedPeriods(
           const [row] = await tx
             .insert(financePlanConfirmations)
             .values({
+              userId,
               planId: plan.id,
               confirmationMonth: monthKey,
               confirmedSavings: opening.savings.toFixed(2),
@@ -357,12 +351,8 @@ export async function autoConfirmSkippedPeriods(
               notes: null,
               source: "auto",
             })
-            .onConflictDoNothing({
-              target: [
-                financePlanConfirmations.planId,
-                financePlanConfirmations.confirmationMonth,
-              ],
-            })
+            // Any conflict: the user's row for the day, or one older code wrote.
+            .onConflictDoNothing()
             .returning();
 
           // onConflictDoNothing returns nothing when the row already existed
@@ -374,6 +364,7 @@ export async function autoConfirmSkippedPeriods(
               opening.debts.map((d) => ({
                 confirmationId: row.id,
                 debtId: d.debtId,
+                debtKey: keyById.get(d.debtId) ?? d.debtId,
                 confirmedBalance: Math.max(0, d.balance).toFixed(2),
               }))
             );

@@ -26,6 +26,7 @@ import {
   compareDebtStrategies,
   deleteLineOverride,
   deriveFinanceMood,
+  getAutoInvestRate,
   projectPlan,
   updateDebt,
   updatePlan,
@@ -930,6 +931,10 @@ describe("updatePlan — opening-balance restatement (balances_as_of)", () => {
       update: (table: unknown) => chain("update", table),
       insert: (table: unknown) => chain("insert", table),
       delete: (table: unknown) => chain("delete", table),
+      // The plan's debts and their keys across plans.
+      select: () => ({
+        from: () => ({ where: () => Promise.resolve([{ id: "debt-1", debtKey: "key-1" }]) }),
+      }),
     };
   }
 
@@ -989,7 +994,7 @@ describe("updatePlan — opening-balance restatement (balances_as_of)", () => {
       confirmedBalance: string;
     }[];
     expect(debtRows).toEqual([
-      { confirmationId: "conf-1", debtId: "debt-1", confirmedBalance: "800.00" },
+      { confirmationId: "conf-1", debtId: "debt-1", debtKey: "key-1", confirmedBalance: "800.00" },
     ]);
   });
 });
@@ -1108,5 +1113,16 @@ describe("per-month line overrides: the line must be the plan's", () => {
     const { sql, params } = render(cond as SQL);
     expect(sql).toContain('"finance_plan_line_overrides"."plan_id"');
     expect(params).toEqual(expect.arrayContaining(["plan-1", VICTIM_INCOME]));
+  });
+});
+
+describe("getAutoInvestRate", () => {
+  it("uses the plan's own return when it has one, without looking up the method", async () => {
+    const rate = await getAutoInvestRate({
+      autoInvestCustomRate: "0.012000",
+      autoInvestMethodId: "method-1",
+    } as unknown as FinancePlan);
+    expect(rate).toBeCloseTo(0.012, 6);
+    expect(db.select).not.toHaveBeenCalled();
   });
 });

@@ -36,6 +36,7 @@ export const PORTAL_NAV: NavSection[] = [
     items: [
       { title: "Portfolio", url: "/portal/portfolio" },
       { title: "Plans", url: "/portal/plans" },
+      { title: "Trading Journal", url: "/portal/trading" },
     ],
   },
   {

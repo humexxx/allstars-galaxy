@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Mono, Text } from "@/components/ui/typography";
 
 import { saveConfirmationAction } from "@/app/actions/finance-confirmations";
+import { shownCash } from "@/lib/finance/cash";
 import { runAction } from "@/lib/actions/run";
 import { formatCurrency } from "@/lib/utils/format";
 import { amountError, normalizeAmount } from "@/lib/finance/amount-input";
@@ -56,7 +57,7 @@ export function ConfirmationDialog({
 }: ConfirmationDialogProps) {
   const [isPending, startTransition] = useTransition();
 
-  const [savings, setSavings] = useState<string>(projected.savings.toFixed(2));
+  const [savings, setSavings] = useState<string>(shownCash(projected.savings).toFixed(2));
   const [investments, setInvestments] = useState<string>(
     projected.investments.toFixed(2)
   );
@@ -151,7 +152,7 @@ export function ConfirmationDialog({
                 aria-describedby="conf-savings-hint conf-savings-error"
               />
               <FieldDescription id="conf-savings-hint">
-                Projected: <Mono>{formatCurrency(projected.savings)}</Mono>
+                Projected: <Mono>{formatCurrency(shownCash(projected.savings))}</Mono>
               </FieldDescription>
               <FieldError id="conf-savings-error">{show(errors.savings)}</FieldError>
             </Field>

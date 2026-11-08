@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { statToneClass } from "@/components/ui/stat-card";
 import { Eyebrow, Mono } from "@/components/ui/typography";
+import { shownCash } from "@/lib/finance/cash";
 import { cn } from "@/lib/utils";
 
 import { CountUpCurrency } from "./count-up";
@@ -165,7 +166,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     {
       series: dashboardSeries("savings"),
       label: "Cash",
-      amount: fig.savings,
+      amount: shownCash(fig.savings),
     },
     ...(visible.has("receivables")
       ? [

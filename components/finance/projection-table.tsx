@@ -18,6 +18,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Mono } from "@/components/ui/typography";
+import { shownCash } from "@/lib/finance/cash";
 import { cn } from "@/lib/utils";
 import {
   formatCurrency,
@@ -356,13 +357,8 @@ export function ProjectionTable({
                       );
                     })()}
                   </TableCell>
-                  <TableCell
-                    className={cn(
-                      "text-right font-mono tabular-nums",
-                      moneySign(m.savings) < 0 && "text-destructive"
-                    )}
-                  >
-                    {formatCurrency(m.savings)}
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {formatCurrency(shownCash(m.savings))}
                   </TableCell>
                   {hasInvestments && (
                     <TableCell className="text-right font-mono tabular-nums">

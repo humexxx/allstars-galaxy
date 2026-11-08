@@ -3,19 +3,14 @@ import { isCronAuthorized } from "@/lib/cron-auth";
 import { getAppStateValue, setAppState } from "@/lib/services/app-state-service";
 import { applyMonthlyInterest, LAST_INTEREST_RUN_KEY } from "@/lib/services/interest-service";
 import { createDailySnapshots } from "@/lib/services/snapshot-service";
-import {
-  createDailyFinanceSnapshots,
-  createMovementSnapshots,
-} from "@/lib/services/finance-snapshot-service";
 import { refreshF1News } from "@/lib/services/rapidapi-f1-news-service";
 
-// Interest, two snapshot passes and an upstream fetch run back to back; the platform default would cut that off. (Hobby caps a
+// Interest, the portfolio snapshots and an upstream fetch run back to back; the platform default would cut that off. (Hobby caps a
 // function at 60 s.)
 export const maxDuration = 300;
 
 type InterestRun = { applied: boolean; result: { processed: number; closed: number } | null };
 type SnapshotRun = Awaited<ReturnType<typeof createDailySnapshots>>;
-type FinanceSnapshotRun = Awaited<ReturnType<typeof createDailyFinanceSnapshots>>;
 type F1NewsRun = Awaited<ReturnType<typeof refreshF1News>>;
 
 function messageOf(error: unknown): string {
@@ -64,17 +59,6 @@ async function processDailySnapshots(today: Date): Promise<SnapshotRun> {
   }
 }
 
-async function processFinancePlanSnapshots(today: Date): Promise<FinanceSnapshotRun> {
-  try {
-    const result = await createDailyFinanceSnapshots(today);
-    await setAppState("last_finance_snapshots_run", today.toISOString());
-    return result;
-  } catch (error) {
-    console.error("Failed to capture finance plan snapshots:", error);
-    await setAppState("last_finance_snapshots_run", today.toISOString(), messageOf(error));
-    throw error;
-  }
-}
 
 /**
  * Pull the day's F1 news.
@@ -124,18 +108,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const interest = await step("monthly_interest", () => processMonthlyInterest(today), failed);
     const snapshots = await step("daily_snapshots", () => processDailySnapshots(today), failed);
-    const financeSnapshots = await step(
-      "finance_plan_snapshots",
-      () => processFinancePlanSnapshots(today),
-      failed
-    );
-    // After the period snapshots: those may auto-confirm a skipped period,
-    // which is the baseline the day's position is projected from.
-    const movements = await step(
-      "finance_movement_snapshots",
-      () => createMovementSnapshots(today),
-      failed
-    );
+    // No finance plan snapshots here: a plan's history is written when the
+    // user confirms a period or edits the plan, never by the day. Its
+    // position today is computed on every read.
     const f1News = await step("f1_news", () => processF1News(today), failed);
 
     return NextResponse.json({
@@ -144,13 +119,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       interestApplied: interest?.applied ?? false,
       interestResult: interest?.result,
       snapshotsCreated: snapshots?.snapshotsCreated ?? 0,
-      financePlanSnapshots: {
-        totalPlans: financeSnapshots?.totalPlans ?? 0,
-        snapshotsCreated: financeSnapshots?.snapshotsCreated ?? 0,
-        // A count, not the strings: those are built from raw error messages.
-        failed: financeSnapshots?.errors.length ?? 0,
-        movementsCreated: movements?.snapshotsCreated ?? 0,
-      },
       f1News: f1News ?? { fetched: 0, stored: 0 },
       failedOperations: failed,
     });

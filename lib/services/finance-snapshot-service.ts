@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, asc, desc, eq, gte, lte, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -567,6 +567,16 @@ const MOVEMENT = "movement" as const;
 const CONFIRMATION = "confirmation" as const;
 
 /**
+ * The rows a plan's past is drawn from: the user's confirmations and the
+ * history they entered by hand. The cron's daily rows (`system_cron`, no
+ * longer written) were the plan's projection, not anything that happened,
+ * and an edit's row (`movement`) is a day's position, not a period's. A
+ * period the user never confirmed has no point: the line runs straight to
+ * the next one that was.
+ */
+const CHECKPOINT_SOURCES: ("confirmation" | "manual")[] = [CONFIRMATION, "manual"];
+
+/**
  * Where the plan stands on `day`, recorded as a movement snapshot: the same
  * day-aware position the dashboard shows as "Today". Written on days money
  * moves (by the daily cron) and when the plan is edited (by its actions); a
@@ -738,7 +748,7 @@ export async function getRecentMonthlySnapshots(
     .where(
       and(
         snapshotsOf(await historyOwner(userId)),
-        ne(financePlanSnapshots.source, MOVEMENT),
+        inArray(financePlanSnapshots.source, CHECKPOINT_SOURCES),
         gte(financePlanSnapshots.date, historyCutoff(today, monthsBack))
       )
     )
@@ -838,11 +848,9 @@ function historyCutoff(today: Date, monthsBack: number): Date {
 
 /**
  * The balance each accounting PERIOD opened with, one row per period, oldest
- * first: the period's confirmation when the user made one (whenever in the
- * period they got to it), else its FIRST snapshot. The cron re-reads the
- * plan's projected position every day, so a period's later rows already carry
- * its own payments; the latest row of November read like November's close and
- * October's checkpoint vanished behind it. Rows must be date-desc.
+ * first: the period's confirmation (whenever in the period the user got to
+ * it), else the earliest row of the period. Rows must be date-desc and come
+ * from `CHECKPOINT_SOURCES`.
  */
 function checkpointPerPeriod(rows: readonly HistoryRow[], anchorDay: number): HistoryPoint[] {
   const anchor = anchorDay > 0 ? anchorDay : 1;
@@ -887,7 +895,7 @@ async function recentSnapshotsForPlans(
     .where(
       and(
         snapshotsOf(owner),
-        ne(financePlanSnapshots.source, MOVEMENT),
+        inArray(financePlanSnapshots.source, CHECKPOINT_SOURCES),
         gte(financePlanSnapshots.date, historyCutoff(today, monthsBack))
       )
     )

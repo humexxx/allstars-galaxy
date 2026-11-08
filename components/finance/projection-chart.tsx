@@ -296,13 +296,9 @@ function PointTooltip(props: {
             valueClass={portfolioTotal < 0 ? "text-destructive" : undefined}
           />
         )}
-        {moneySign(row.savings ?? 0) !== 0 && (
-          <TooltipRow
-            swatch={CASH}
-            label="Cash"
-            value={formatMoneyFull(row.savings ?? 0)}
-            valueClass={(row.savings ?? 0) < 0 ? "text-destructive" : undefined}
-          />
+        {/* Never under zero (see `shownCash`). */}
+        {moneySign(row.savings ?? 0) > 0 && (
+          <TooltipRow swatch={CASH} label="Cash" value={formatMoneyFull(row.savings ?? 0)} />
         )}
         {(row.receivables ?? 0) > 0 && (
           <TooltipRow swatch={OWED} label="Owed to you" value={formatMoneyFull(row.receivables ?? 0)} />

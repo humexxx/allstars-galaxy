@@ -13,14 +13,6 @@ vi.mock("@/lib/services/interest-service", () => ({
 vi.mock("@/lib/services/snapshot-service", () => ({
   createDailySnapshots: vi.fn(async () => ({ snapshotsCreated: 0 })),
 }));
-vi.mock("@/lib/services/finance-snapshot-service", () => ({
-  createMovementSnapshots: vi.fn(async () => ({ snapshotsCreated: 0, errors: [] })),
-  createDailyFinanceSnapshots: vi.fn(async () => ({
-    totalPlans: 0,
-    snapshotsCreated: 0,
-    errors: [],
-  })),
-}));
 vi.mock("@/lib/services/rapidapi-f1-news-service", () => ({
   refreshF1News: vi.fn(async () => ({ fetched: 0, stored: 0 })),
 }));

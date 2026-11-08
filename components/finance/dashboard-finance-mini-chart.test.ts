@@ -27,9 +27,9 @@ describe("toRows", () => {
     expect(rows.map((r) => r.netWorthAhead)).toEqual([null, 2, 3]);
   });
 
-  it("splits each stacked part the same way, overdraft with the debts", () => {
+  it("splits each stacked part the same way, and never draws cash under zero", () => {
     expect(rows.map((r) => r.investmentsAhead)).toEqual([null, 300, 300]);
-    expect(rows.map((r) => r.savingsBelowPast)).toEqual([-50, -50, null]);
+    expect(rows.map((r) => r.savingsBelowPast)).toEqual([0, 0, null]);
     expect(rows.map((r) => r.savingsAbovePast)).toEqual([0, 0, null]);
     expect(rows.map((r) => r.debtBelowAhead)).toEqual([null, -100, -100]);
   });

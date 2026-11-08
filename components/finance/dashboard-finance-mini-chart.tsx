@@ -11,6 +11,7 @@ import {
 } from "recharts";
 
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import { shownCash } from "@/lib/finance/cash";
 import type { DashboardPoint } from "@/lib/finance/dashboard";
 import { cn } from "@/lib/utils";
 import { niceTicks, yAxisWidth } from "@/lib/utils/chart-axis";
@@ -54,10 +55,11 @@ const ENDS_AT_ZERO: ReadonlySet<Plotted> = new Set(["debtBelow", "receivables"])
 
 export function toRows(data: DashboardPoint[], pastCount: number): Row[] {
   const valuesOf = (p: DashboardPoint): Record<Plotted, number> => ({
-    savingsAbove: Math.max(0, p.savings),
+    savingsAbove: shownCash(p.savings),
     investments: p.investments,
     receivables: p.receivables,
-    savingsBelow: Math.min(0, p.savings),
+    // Cash is never drawn under zero (see `shownCash`).
+    savingsBelow: 0,
     // `0 - debt`, not `-debt`: a paid-off debt is 0, not -0.
     debtBelow: 0 - p.debt,
     netWorth: p.netWorth,
@@ -176,11 +178,11 @@ export function DashboardFinanceMiniChart({
   const ticks = niceTicks(
     data.flatMap((p) => [
       Math.max(0, p.savings) + p.investments + p.receivables,
-      Math.min(0, p.savings) - p.debt,
+      -p.debt,
       p.netWorth,
     ])
   );
-  const owesAnything = data.some((p) => moneySign(Math.min(0, p.savings) - p.debt) < 0);
+  const owesAnything = data.some((p) => moneySign(p.debt) > 0);
   const savings = dashboardSeries("savings").color;
   const debt = dashboardSeries("debt").color;
   // A projected month is the same series, dashed and fainter: the plan's

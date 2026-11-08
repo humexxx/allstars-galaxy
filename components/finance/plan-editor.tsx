@@ -1083,7 +1083,8 @@ function PortfolioCard({
             <Text variant="small" as="span">
               In {horizonMonths % 12 === 0 && horizonMonths > 12 ? `${horizonMonths / 12} years` : `${horizonMonths} months`}
             </Text>
-            <Mono className="text-sm text-muted-foreground">{formatCurrency(atHorizon)}</Mono>
+            {/* An estimate, at the expected rate: "≈" says so before the figure. */}
+            <Mono className="text-sm text-muted-foreground">≈ {formatCurrency(atHorizon)}</Mono>
           </div>
         )}
         <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 border-t pt-3">
@@ -1662,12 +1663,14 @@ function ProjectionPanel({
     // nothing. Below xl the sidebar cards sit under the panel, two abreast
     // from lg where there is room for both.
     //
-    // Equal heights on desktop: the view area is FIXED at xl:h-160 — every
-    // view (graph / table / calendar) fills exactly that box, scrolling
-    // internally when taller — and the sidebar column is xl:min-h-160 so its
-    // cards stretch to the same bottom edge (min- rather than fixed, so the
-    // expanded strategy picker can grow past it instead of clipping). Keep the
-    // two values in sync. On mobile everything sizes naturally.
+    // Equal heights on desktop: the view area is FIXED to the screen's height
+    // below the page header (never under 40rem; see "Plan panel" in
+    // SPACING.md) — every view (graph / table / calendar) fills exactly that
+    // box, scrolling internally when taller — and the sidebar column takes the
+    // same value as a min-height so its cards stretch to the same bottom edge
+    // (min- rather than fixed, so the expanded strategy picker can grow past
+    // it instead of clipping). Keep the two values in sync, and in the
+    // skeleton. On mobile everything sizes naturally.
     <div className="grid gap-4 xl:grid-cols-4 xl:items-start">
       {/* min-w-0 on both grid children: grid items default to min-width:auto,
           so wide content (the table, recharts' measured svg) would inflate the
@@ -1677,7 +1680,7 @@ function ProjectionPanel({
             fades in on switch (no horizontal slide → nothing clips the card's
             border/shadow). The active view brings its own Card. */}
         <div
-          className="touch-pan-y xl:h-160"
+          className="touch-pan-y xl:h-[max(40rem,calc(100svh-11.5rem))]"
           onTouchStart={swipe.onTouchStart}
           onTouchEnd={swipe.onTouchEnd}
         >
@@ -1740,7 +1743,7 @@ function ProjectionPanel({
       {/* flex column so the figures card (xl:flex-1, set by the parent) absorbs
           the leftover height and the sidebar's bottom edge lines up with the
           main panel's. */}
-      <div className="grid min-w-0 items-start gap-3 lg:grid-cols-2 xl:flex xl:min-h-160 xl:flex-col xl:items-stretch xl:gap-4">
+      <div className="grid min-w-0 items-start gap-3 lg:grid-cols-2 xl:flex xl:min-h-[max(40rem,calc(100svh-11.5rem))] xl:flex-col xl:items-stretch xl:gap-4">
         {sidebar}
       </div>
 

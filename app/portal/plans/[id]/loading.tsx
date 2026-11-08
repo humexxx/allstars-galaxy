@@ -24,8 +24,8 @@ export default function PlanDetailLoading() {
       {/* Overview hero: 3/4 main panel + 1/4 sidebar (stacked on mobile). */}
       <div className="grid gap-4 xl:grid-cols-4 xl:items-start">
         {/* Graph view card — fixed panel height on lg (ProjectionPanel's
-            xl:h-160 view box) */}
-        <Card className="min-w-0 xl:col-span-3 xl:h-160">
+            screen-tall view box) */}
+        <Card className="min-w-0 xl:col-span-3 xl:h-[max(40rem,calc(100svh-11.5rem))]">
           <CardHeader className="gap-3">
             <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
               {/* "Today", the figure with its change chip, the owed note */}
@@ -50,7 +50,7 @@ export default function PlanDetailLoading() {
         </Card>
 
         {/* Sidebar: figures card (gauge + rows, stretches) + Portfolio card */}
-        <div className="grid min-w-0 items-start gap-3 lg:grid-cols-2 xl:flex xl:min-h-160 xl:flex-col xl:items-stretch xl:gap-4">
+        <div className="grid min-w-0 items-start gap-3 lg:grid-cols-2 xl:flex xl:min-h-[max(40rem,calc(100svh-11.5rem))] xl:flex-col xl:items-stretch xl:gap-4">
           <Card className="xl:flex-1">
             <CardContent className="flex flex-col gap-3">
               <div className="flex flex-col items-center gap-1.5">

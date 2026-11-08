@@ -608,7 +608,10 @@ export const ProjectionChart = memo(function ProjectionChart({
           };
 
   return (
-    <div ref={containerRef} className="min-w-0">
+    // h-full so a `heightClass` of h-full reaches the card: with an auto-height
+    // wrapper the chart fell back to its 16:9 aspect and left the panel's
+    // bottom empty.
+    <div ref={containerRef} className="h-full min-w-0">
       {/* The line in words, for anyone who can't see it. */}
       {first && last && (
         <p className="sr-only">

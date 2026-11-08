@@ -153,9 +153,10 @@ export function buildPlanTimeline(
 }
 
 /**
- * The chart's window onto a plan's timeline: ~25% of `horizonMonths` in past
- * checkpoints (at most what exists), today, then closes up to `horizonMonths`
- * checkpoints in all. The chart, the End KPI and the table all read THIS
+ * The chart's window onto a plan's timeline: ~25% of `horizonMonths` in
+ * closed periods plus the opening of today's own (at most what exists) — on
+ * 12 months Aug, Sep, Oct and Nov before a Nov 8 — then today, then closes up
+ * to `horizonMonths` checkpoints in all. The chart, the End KPI and the table all read THIS
  * series, so they can't disagree on where the window ends.
  */
 export function buildChartSeries(
@@ -167,7 +168,7 @@ export function buildChartSeries(
   simulatedPast?: Projection | null
 ): { points: ChartPoint[]; pastCount: number } {
   const timeline = buildPlanTimeline(history, projection, today, anchorDay, simulatedPast);
-  const pastBudget = Math.max(1, Math.round(horizonMonths * 0.25));
+  const pastBudget = Math.max(1, Math.round(horizonMonths * 0.25)) + 1;
   const pastCount = Math.min(pastBudget, timeline.todayIndex);
   const start = timeline.todayIndex - pastCount;
   const live = timeline.points[timeline.todayIndex]?.date.getTime() === today.getTime();

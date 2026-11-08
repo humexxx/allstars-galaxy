@@ -146,17 +146,17 @@ describe("buildChartSeries", () => {
     expect(points.map((p) => p.netWorth)).toEqual([100, 200, 200, 250, 300, 340]);
   });
 
-  it("caps the past at pastBudget = round(horizon * 0.25)", () => {
+  it("shows round(horizon * 0.25) closed periods plus today's period's opening", () => {
     const history = [
       snap(utc(2026, 2, 28), 1), // Mar
       snap(utc(2026, 3, 28), 2), // Apr
       snap(utc(2026, 4, 28), 3), // May
     ];
     const proj = projectionOf([{ date: utc(2026, 5, 1), netWorth: 4 }]); // Jun
-    // horizon 4 → pastBudget = round(1) = 1 → only the latest (May) checkpoint.
+    // horizon 4 → one closed period + today's period opening: Apr and May.
     const { points, pastCount } = buildChartSeries(history, proj, 4, utc(2026, 5, 10));
-    expect(pastCount).toBe(1);
-    expect(points[0].netWorth).toBe(3);
+    expect(pastCount).toBe(2);
+    expect(points[0].netWorth).toBe(2);
   });
 
   it("falls back to the projection's own closes when there is no history", () => {

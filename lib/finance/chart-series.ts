@@ -14,6 +14,8 @@ export type PlanHistoryPoint = {
   /** The portfolio inside `netWorth`; absent on snapshots older than 0062. */
   portfolioValue?: number | null;
   netWorth: number;
+  /** Owed to the investors on the point's day; already off `netWorth`. */
+  portfolioClaims?: number;
   /** Written by a confirmation: the user's own figures. */
   confirmed?: boolean;
 };
@@ -82,6 +84,7 @@ export function historyToCheckpoints(
       investments: h.investments,
       receivables: h.receivables,
       portfolioValue: h.portfolioValue ?? null,
+      portfolioClaims: h.portfolioClaims,
     }));
 }
 

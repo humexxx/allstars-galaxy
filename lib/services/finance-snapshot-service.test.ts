@@ -62,6 +62,11 @@ vi.mock("./finance-confirmation-service", () => ({
     autoConfirmSkippedPeriodsMock(...args),
 }));
 
+const getManagedMarginHistoryMock = vi.fn();
+vi.mock("./margin-service", () => ({
+  getManagedMarginHistory: (...args: unknown[]) => getManagedMarginHistoryMock(...args),
+}));
+
 import {
   calibratePlan,
   createConfirmationSnapshot,
@@ -689,6 +694,28 @@ describe("getRecentMonthlySnapshots", () => {
 
     expect(result.map((r) => r.netWorth)).toEqual([4100, 4100]);
     expect(result.map((r) => r.receivables)).toEqual([4000, 0]);
+  });
+
+  it("adds the managed margin of each point's month to a past that recorded none", async () => {
+    mockOwnershipOk();
+    getPlanWithLinesMock.mockResolvedValueOnce(buildPlan({ includePortfolio: true }));
+    getManagedMarginHistoryMock.mockResolvedValueOnce([
+      { month: "2026-09", deployed: 4000, liability: 7300, ownPosition: 0, margin: -3300, invested: 6700 },
+      { month: "2026-10", deployed: 3000, liability: 7400, ownPosition: 0, margin: -4400, invested: 6700 },
+    ]);
+    selectImpl.mockReturnValueOnce(
+      makeSelectChain([
+        { date: new Date(Date.UTC(2026, 9, 5)), savings: "0", investments: "0", totalDebt: "100", netWorth: "-100", portfolioValue: null },
+        { date: new Date(Date.UTC(2026, 8, 5)), savings: "0", investments: "0", totalDebt: "100", netWorth: "-100", portfolioValue: null },
+      ])
+    );
+
+    const result = await getRecentMonthlySnapshots(PLAN_ID, USER_ID, 3, new Date(Date.UTC(2026, 10, 8)), 5);
+
+    expect(result.map((r) => [r.netWorth, r.portfolioValue, r.portfolioClaims])).toEqual([
+      [-100 + 4000 - 7300, 4000, 7300],
+      [-100 + 3000 - 7400, 3000, 7400],
+    ]);
   });
 
   it("buckets by accounting PERIOD (anchorDay) so straddling snapshots collapse per period", async () => {

@@ -175,6 +175,19 @@ export async function getManagedOverview(ownerUserId: string): Promise<ManagedOv
   };
 }
 
+/** `getManagedOverview`, once per request: the plan reads its value and its history. */
+const managedOverview = cache(getManagedOverview);
+
+/**
+ * The managed book month by month (positions, what was owed, the margin), for
+ * the finance plan's past. Request-cached.
+ */
+export const getManagedMarginHistory = cache(async function getManagedMarginHistory(
+  ownerUserId: string
+): Promise<MarginPoint[]> {
+  return (await managedOverview(ownerUserId)).history;
+});
+
 /**
  * The assets the owner runs for other people, for the finance plan. Request-
  * cached: every plan projected in one request asks for it.
@@ -183,7 +196,7 @@ export const getManagedAssets = cache(async function getManagedAssets(
   ownerUserId: string
 ): Promise<ManagedAssets> {
   const [managed, expected] = await Promise.all([
-    getManagedOverview(ownerUserId),
+    managedOverview(ownerUserId),
     db
       .select({
         id: investmentMethods.id,

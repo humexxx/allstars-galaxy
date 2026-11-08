@@ -35,6 +35,7 @@ import {
   snapshotsOf,
   type HistoryOwner,
 } from "./finance-history";
+import { getManagedMarginHistory } from "./margin-service";
 import { ensureOwnedRow } from "./ownership";
 import {
   iteratePeriods,
@@ -743,7 +744,38 @@ export async function getRecentMonthlySnapshots(
     )
     .orderBy(desc(financePlanSnapshots.date));
 
-  return withReceivables(checkpointPerPeriod(rows, anchorDay), plan);
+  return withManagedMargin(withReceivables(checkpointPerPeriod(rows, anchorDay), plan), plan, userId);
+}
+
+/**
+ * Adds the managed money's MARGIN to the past the way the forecast counts it:
+ * each point gets its month's positions (bought with investors' money) and
+ * what was owed to the investors, from the margin history. Snapshots written
+ * before the plan counted the managed money hold none of it in their net
+ * worth, so it goes in; one that recorded its portfolio already has it and
+ * only learns the claim. Computed on read: the stored rows stay as written.
+ */
+async function withManagedMargin(
+  points: HistoryPoint[],
+  plan: FinancePlanWithLines | null,
+  userId: string
+): Promise<HistoryPoint[]> {
+  if (!plan?.includePortfolio || points.length === 0) return points;
+  const history = await getManagedMarginHistory(userId);
+  if (history.length === 0) return points;
+  return points.map((p) => {
+    const month = p.date.toISOString().slice(0, 7);
+    const at = history.findLast((h) => h.month <= month);
+    if (!at) return p;
+    if (p.portfolioValue != null) return { ...p, portfolioClaims: at.liability };
+    const positions = at.deployed - at.ownPosition;
+    return {
+      ...p,
+      portfolioValue: positions,
+      portfolioClaims: at.liability,
+      netWorth: p.netWorth + positions - at.liability,
+    };
+  });
 }
 
 /**
@@ -773,6 +805,8 @@ type HistoryPoint = {
   /** Still owed to the user on the point's day; already inside `netWorth`. */
   receivables: number;
   netWorth: number;
+  /** Owed to the investors on the point's day; already off `netWorth`. */
+  portfolioClaims?: number;
   /** Written by a confirmation: the user's own figures, not the cron's. */
   confirmed?: boolean;
 };
@@ -860,7 +894,19 @@ async function recentSnapshotsForPlans(
     .orderBy(desc(financePlanSnapshots.date));
 
   return new Map(
-    plans.map((p) => [p.id, withReceivables(checkpointPerPeriod(rows, p.confirmationDayOfMonth), p)])
+    await Promise.all(
+      plans.map(
+        async (p) =>
+          [
+            p.id,
+            await withManagedMargin(
+              withReceivables(checkpointPerPeriod(rows, p.confirmationDayOfMonth), p),
+              p,
+              owner.userId
+            ),
+          ] as const
+      )
+    )
   );
 }
 

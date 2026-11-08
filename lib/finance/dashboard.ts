@@ -46,13 +46,12 @@ export type DashboardParts = {
 /** One mini-chart point, at cent precision: the tooltip printed "-1,467"
  *  beside a "-$1,467.28" tile for the same point. */
 export type DashboardPoint = DashboardParts & {
-  /** Where the point sits on the time axis (epoch ms): a close's last day,
-   *  a movement's day, today. */
+  /** Where the point sits on the time axis (epoch ms): a close's last day, today. */
   time: number;
   /** Whether the axis labels this point. */
   tick: boolean;
-  /** A period's close, a day money moved, or today's position. */
-  kind: "close" | "movement" | "today";
+  /** A period's close, or today's position. */
+  kind: "close" | "today";
   /** Axis tick: "Now" for today's position, else the month ("Oct"). */
   month: string;
   /** Tooltip title: "Today", else the close's date — the 12 closes run into
@@ -207,10 +206,7 @@ export function buildDashboardFigures(
   projection: Projection,
   today: TodayState | null,
   past: readonly ChartPoint[] = [],
-  anchorDay = 1,
-  /** Days money moved (movement snapshots), oldest first: drawn between the
-   *  closes, at their own dates. */
-  movements: readonly ChartPoint[] = []
+  anchorDay = 1
 ): DashboardFigures {
   const months = projection.months;
   if (!today || months.length === 0) {
@@ -246,22 +242,7 @@ export function buildDashboardFigures(
     ...checkpointLabels(p.date),
     ...inCents(partsOfPoint(p)),
   }));
-  const since = closes[0]?.time ?? -Infinity;
-  const moved =
-    today.status === "before-start"
-      ? []
-      : movements
-          .filter((p) => p.date.getTime() > since && p.date.getTime() < todayStart.getTime())
-          .map((p) => ({
-            kind: "movement" as const,
-            time: p.date.getTime(),
-            month: MONTH_FMT.format(p.date),
-            label: CLOSE_FMT.format(p.date),
-            ...inCents(partsOfPoint(p)),
-          }));
-  const pastPoints = [...closes, ...moved]
-    .sort((a, b) => a.time - b.time)
-    .map((p, i) => ({ ...p, tick: i === 0 }));
+  const pastPoints = closes.map((p, i) => ({ ...p, tick: i === 0 }));
   const points: DashboardPoint[] = [
     ...pastPoints,
     {

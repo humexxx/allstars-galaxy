@@ -93,23 +93,26 @@ Thriving under 50%, Healthy to 70%, Steady to 80%, Tight to 90%, Strained to
 100%, Underwater past it, each with its own `--health-*` colour token.
 **The dashboard card shows what the plan page shows** (2026-11-08): Portfolio (the managed note — positions, owed, margin — only for an account that runs methods, with the plan card's positions figure), Trading for an account with the module (its own series, `--chart-2`, as on the plan chart), Owed to you and Debt when present. No Cash: the plan page's chart draws none, so the card neither lists nor draws it; net worth still counts it.
 
-The dashboard card is [`dashboard-finance-card.tsx`](../../components/finance/dashboard-finance-card.tsx)
-with its stacked chart in `dashboard-finance-mini-chart.tsx`; both read the
-series list in `dashboard-finance-series.ts`. Its past comes off the plan page's
-own timeline (`getRecentMonthlySnapshots` + `buildPlanTimeline`) and is drawn
-solid up to "Now"; the projection after it is dashed and fainter. Layout:
+The dashboard card is [`dashboard-finance-card.tsx`](../../components/finance/dashboard-finance-card.tsx).
+**Its chart IS the plan page's** (`ProjectionChart`, 2026-11-08): the same
+points on the plan's default 12-month horizon (`buildChartSeries` +
+`alignTodayPoint` over the same `getRecentMonthlySnapshots` read), the same
+Portfolio series (`portfolioSeries` in `chart-series.ts`, shared with the plan
+editor), Trading for an account with the module, the user's milestones, and
+the same tooltip. The stacked mini chart it replaced drew the edit-day
+("movement") snapshots between the closes, which the plan never draws — that
+is where its odd dips came from; nothing reads those snapshots now. Layout:
 the plan's name heads the card; from `@2xl` net worth and its parts stack in
-a 15rem column on the left and the chart takes the rest, stretched to that
-column's height (min 24rem); narrower, the figures come first. It
-reads Net worth, **Portfolio** (investments + portfolio, with the managed
-book's margin as a share of what is owed — this month and to date — in small
-print) and **Cash** (what the period has taken in and not yet paid out; in the tooltip too, even at $0)
-always; **Owed to you** and **Debt** when any point in the chart's range has some — then at every point, $0 included, in the rail and the tooltip (`visibleSeriesKeys`). Portfolio
-is cyan (slot 1), Owed to you violet (slot 3), Cash white (`--foreground`), Debt red (`--destructive`) and the net-worth line green (`--success`). Net worth leads the header in large type with a chip for its change against the last closed period (the 12-month delta badge was dropped); The rail parts carry no chip. The net-worth chip compares with the last CLOSE (`DashboardPoint.kind`), not a movement day. **Portfolio** is a link to `/portal/portfolio` — a stretched link that looks like a button only on hover. On load the card runs one clock (`components/finance/dashboard-motion.ts`): each series sweeps in left to right in 900ms on Material 3's standard curve (`cubic-bezier(0.2, 0, 0, 1)`: soft start, long settle), 120ms apart (`DRAW_ORDER`: cash, portfolio, debt, owed to you, net worth), and every figure counts up from $0 in its series' turn on easeOutQuart (`CountUpCurrency`, the final figure holding the width). Net worth draws last with a faint wide glow; its solid past and dashed projection are one eased stroke (`splitEasedStroke` gives each half its slice of time and curve). Nothing animates under reduced motion. A part that is $0 at every point draws no area, and cash, at the bottom of the stack, always shows (flat on zero at $0). Cash is the bottom layer of the asset
-stack and always drawn, so at $0 it is a flat line on zero instead of a trace
-along the top of the stack. Debt and Owed to you are drawn down to zero where they end and not after (`toRows`): a paid-off debt's outline used to run along zero to the end.
+a 15rem column on the left and the chart takes the rest (`aspect-auto`, min
+24rem); narrower, the figures come first. The rail (`buildDashboardFigures`,
+`visibleSeriesKeys` in `dashboard-finance-series.ts`) reads Net worth,
+**Portfolio** (a link to `/portal/portfolio`), **Trading** (to the journal) for
+an account with the module, and **Owed to you** and **Debt** when any point has
+some. Net worth leads in large type with a chip for its change against the
+user's last confirmation (else the last close). The figures count up on the
+card's clock (`dashboard-motion.ts`).
 
-A plan's own page (`ProjectionChart`) wears the dashboard's colours — net worth green, portfolio cyan (the investments bucket and the live portfolio as one Portfolio in the tooltip), debt red — rather than the plan's identity colour, which stays on the list and compare charts. Debt is plotted as the balance still owed, falling to zero as it is paid (solid past / dashed projection), whenever the range holds any; a paid-off debt draws its last $0 beside the payment that cleared it and stops, and it counts toward the y-axis ticks. (The dashboard card stacks it below zero instead, as a share taken off net worth.) It draws in on the same clock (portfolio, debt, then net worth as one eased stroke) and the Today / Next / End figures count up (`CountUpCurrency`, which counts from the figure shown when a value changes, e.g. a new horizon).
+A plan's own page (`ProjectionChart`) wears the dashboard's colours — net worth green, portfolio cyan (the investments bucket and the live portfolio as one Portfolio in the tooltip), trading orange (`--chart-2`, its own series for an account with a journal: `showTrading`), debt red — rather than the plan's identity colour, which stays on the list and compare charts. Debt is plotted as the balance still owed, falling to zero as it is paid (solid past / dashed projection), whenever the range holds any; a paid-off debt draws its last $0 beside the payment that cleared it and stops, and it counts toward the y-axis ticks. It draws in on the same clock (portfolio, debt, then net worth as one eased stroke) and the Today / Next / End figures count up (`CountUpCurrency`, which counts from the figure shown when a value changes, e.g. a new horizon).
 
 `/portal/plans` renders the workspace for **any** number of plans (a lone plan
 still gets its projection curve). Rail rows drive the chart:

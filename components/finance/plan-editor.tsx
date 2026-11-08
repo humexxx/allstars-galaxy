@@ -131,7 +131,7 @@ import {
   forecastKpiPoints,
   formatDebtFree,
   mapGhostValues,
-  mapPortfolioValues,
+  portfolioSeries,
   type PlanHistoryPoint,
 } from "@/lib/finance/chart-series";
 import { planOccurrences } from "@/lib/finance/schedule";
@@ -619,6 +619,7 @@ export function PlanEditor({
           ghost={ghost}
           portfolioHistory={portfolioHistory}
           portfolioEnabled={plan.includePortfolio && portfolioOn}
+          showTrading={trading !== null}
           horizonMonths={horizonMonths}
           onHorizonChange={setHorizonMonths}
           selectedIndex={picked?.index ?? null}
@@ -1312,6 +1313,8 @@ type ProjectionPanelProps = {
   milestones?: readonly number[];
   /** Current includePortfolio flag: the chart draws the portfolio when set. */
   portfolioEnabled: boolean;
+  /** The account has a trading journal (and the module): the chart draws it. */
+  showTrading: boolean;
   /** The current period still waits for a confirmation (main plan only). */
   confirmationDue?: boolean;
   /** The user's last own confirmation (YYYY-MM-DD). */
@@ -1480,6 +1483,7 @@ function ProjectionPanel({
   ghost = null,
   portfolioHistory = [],
   portfolioEnabled,
+  showTrading,
   confirmationDue = false,
   lastConfirmedDay = null,
   now,
@@ -1541,24 +1545,12 @@ function ProjectionPanel({
     return values.map((v, i) => (i < chartSeries.pastCount ? null : v));
   }, [ghost, showGhost, chartSeries.points, chartSeries.pastCount, anchorDay]);
 
-  // Portfolio series, the money the Portfolio card adds up: the plan's own
-  // investments plus the managed money's MARGIN — the positions (recorded
-  // for the past, the projection's growing value ahead) less what is owed to
-  // the investors — so it goes negative while the positions are worth less
-  // than the promise, and net worth's parts add up on every point.
-  const portfolioValues = useMemo<(number | null)[] | undefined>(() => {
-    const positions = portfolioEnabled
-      ? mapPortfolioValues(chartSeries.points, portfolioHistory, projection, chartSeries.pastCount, anchorDay)
-      : null;
-    const managed = positions?.map((v, i) =>
-      v === null ? null : v - (chartSeries.points[i].portfolioClaims ?? 0)
-    );
-    return chartSeries.points.map((p, i) => {
-      const a = managed?.[i] ?? null;
-      const b = p.investments ?? null;
-      return a === null && b === null ? null : (a ?? 0) + (b ?? 0);
-    });
-  }, [portfolioEnabled, chartSeries, portfolioHistory, projection, anchorDay]);
+  // The Portfolio series (see `portfolioSeries`): the same one the
+  // dashboard card draws.
+  const portfolioValues = useMemo<(number | null)[]>(
+    () => portfolioSeries(chartSeries, portfolioHistory, projection, anchorDay, portfolioEnabled),
+    [portfolioEnabled, chartSeries, portfolioHistory, projection, anchorDay]
+  );
   // Per-point period figures for the sidebar hover preview. Flows (income /
   // expenses / debt minimums) come from the projection month sharing the
   // point's period — the calibrated one first, falling back to the raw past
@@ -1789,6 +1781,7 @@ function ProjectionPanel({
                       ghostValues={ghostValues}
                       ghostLabel={ghost?.name}
                       portfolioValues={portfolioValues}
+                      showTrading={showTrading}
                     />
                   ) : (
                     <ProjectionTable

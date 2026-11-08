@@ -422,6 +422,34 @@ export function mapPortfolioValues(
   });
 }
 
+/**
+ * The chart's Portfolio series, the money the plan's Portfolio card adds up:
+ * the plan's own investments plus the managed money's MARGIN — the positions
+ * (recorded for the past, the projection's growing value ahead) less what is
+ * owed to the investors — so it goes negative while the positions are worth
+ * less than the promise. The plan page and the dashboard card draw this same
+ * series. `withPortfolio` is the plan counting the live portfolio (and the
+ * account having the Portfolio module).
+ */
+export function portfolioSeries(
+  series: { points: readonly ChartPoint[]; pastCount: number },
+  portfolioHistory: readonly { date: Date; value: number }[],
+  projection: Projection,
+  anchorDay: number,
+  withPortfolio: boolean
+): (number | null)[] {
+  const { points, pastCount } = series;
+  const positions = withPortfolio
+    ? mapPortfolioValues(points, portfolioHistory, projection, pastCount, anchorDay)
+    : null;
+  return points.map((p, i) => {
+    const position = positions?.[i] ?? null;
+    const managed = position === null ? null : position - (p.portfolioClaims ?? 0);
+    const own = p.investments ?? null;
+    return managed === null && own === null ? null : (managed ?? 0) + (own ?? 0);
+  });
+}
+
 // ---------- debt-free: one definition everywhere ----------
 
 /**

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -684,46 +684,6 @@ export async function createMovementSnapshots(now: Date = new Date()): Promise<{
     }
   }
   return { snapshotsCreated, errors };
-}
-
-/**
- * The movement snapshots of the last `monthsBack` months, oldest first, with
- * what was still owed to the user added back — the dashboard's past.
- */
-export async function getRecentMovementSnapshots(
-  planId: string,
-  userId: string,
-  monthsBack: number,
-  today: Date
-): Promise<HistoryPoint[]> {
-  const plan = await getPlanWithLines(planId, userId);
-  if (!plan) return [];
-  const rows = await db
-    .select(HISTORY_COLUMNS)
-    .from(financePlanSnapshots)
-    .where(
-      and(
-        snapshotsOf(await historyOwner(userId)),
-        eq(financePlanSnapshots.source, MOVEMENT),
-        gte(financePlanSnapshots.date, historyCutoff(today, monthsBack))
-      )
-    )
-    .orderBy(asc(financePlanSnapshots.date));
-  return withTradingBalance(
-    withReceivables(
-      rows.map((r) => ({
-        date: r.date,
-        savings: parseFloat(r.savings),
-        investments: parseFloat(r.investments),
-        totalDebt: parseFloat(r.totalDebt),
-        portfolioValue: r.portfolioValue == null ? null : parseFloat(r.portfolioValue),
-        receivables: 0,
-        netWorth: parseFloat(r.netWorth),
-      })),
-      plan
-    ),
-    userId
-  );
 }
 
 /**

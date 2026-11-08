@@ -88,6 +88,12 @@ export const users = pgTable("users", {
   fullName: text("full_name"),
   avatarUrl: text("avatar_url"),
   role: userRoleEnum("role").default("user"),
+  // Product modules an admin turned off for this account (`lib/access/modules.ts`).
+  // The OFF list, so a module added later is on until someone says otherwise.
+  disabledModules: text("disabled_modules")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }).enableRLS();
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getEffectiveContext } from "@/lib/services/impersonation";
+import { isModuleEnabled } from "@/lib/services/module-access-service";
 import {
   getUserPortfolio,
   getPortfolioTransactions,
@@ -95,6 +96,9 @@ export async function GET(): Promise<NextResponse> {
   const ctx = await getEffectiveContext();
   if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await isModuleEnabled(ctx.effectiveUserId, "portfolio"))) {
+    return NextResponse.json({ error: "This module is not enabled for your account" }, { status: 403 });
   }
 
   const [portfolio, investorTxDesc, assets, methods] = await Promise.all([

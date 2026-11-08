@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { RacquetTournamentPage } from "@/components/entertainment/sports/sports/racquet-tournament-page";
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { requireModulePage } from "@/lib/services/module-access-service";
 import { listUserFavoriteSportIds } from "@/lib/services/sports-service";
 import { loadRacquetTournament } from "@/lib/sports/detail";
 
@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 /** One padel tournament, its whole draw: what "View details" and the tiles open. */
 export default async function PadelTournamentPage({ params, searchParams }: Props): Promise<React.ReactElement> {
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("sports");
   const [detail, favorites, { tab }] = await Promise.all([
     params.then(({ tournamentId }) => loadRacquetTournament("padel", tournamentId)),
     listUserFavoriteSportIds(ctx.effectiveUserId),

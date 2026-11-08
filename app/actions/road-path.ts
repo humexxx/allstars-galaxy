@@ -3,10 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import {
-  requireEffectiveContext,
-  logImpersonatedMutation,
-} from "@/lib/services/impersonation";
+import { logImpersonatedMutation } from "@/lib/services/impersonation";
+import { requireModuleContext } from "@/lib/services/module-access-service";
 import { getRequestTodayIso } from "@/lib/utils/request-today";
 import {
   getRoadPath,
@@ -43,7 +41,7 @@ export async function createRoadPathAction(
   data: CreateRoadPathInput
 ): Promise<ActionResult<RoadPath>> {
   return safe("road-path", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("road-paths");
     const parsed = createRoadPathSchema.safeParse(data);
     if (!parsed.success) {
       return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -66,7 +64,7 @@ export async function updateRoadPathAction(
   data: UpdateRoadPathInput
 ): Promise<ActionResult<RoadPath>> {
   return safe("road-path", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("road-paths");
     const parsed = updateRoadPathSchema.safeParse(data);
     if (!parsed.success) {
       return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -99,7 +97,7 @@ export async function updateRoadPathAction(
 
 export async function deleteRoadPathAction(roadPathId: string): Promise<ActionResult> {
   return safe("road-path", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("road-paths");
     const parsed = idSchema.safeParse(roadPathId);
     if (!parsed.success) return { success: false, error: "Invalid road path" };
 
@@ -124,7 +122,7 @@ export async function createRoadPathMilestoneAction(
   data: CreateRoadPathMilestoneData
 ): Promise<ActionResult<RoadPathMilestone>> {
   return safe("road-path", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("road-paths");
     const parsed = createRoadPathMilestoneSchema.safeParse(data);
     if (!parsed.success) {
       return { success: false, error: "Invalid input" };
@@ -150,7 +148,7 @@ export async function updateRoadPathMilestoneAction(
   data: UpdateRoadPathMilestoneInput
 ): Promise<ActionResult<RoadPathMilestone>> {
   return safe("road-path", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("road-paths");
     const parsed = updateRoadPathMilestoneSchema.safeParse(data);
     if (!parsed.success) {
       return { success: false, error: "Invalid input" };
@@ -172,7 +170,7 @@ export async function updateRoadPathMilestoneAction(
 
 export async function deleteRoadPathMilestoneAction(milestoneId: string): Promise<ActionResult> {
   return safe("road-path", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("road-paths");
     const parsed = idSchema.safeParse(milestoneId);
     if (!parsed.success) return { success: false, error: "Invalid milestone" };
 
@@ -192,7 +190,7 @@ export async function createRoadPathProgressAction(
   data: CreateRoadPathProgressInput
 ): Promise<ActionResult<RoadPathProgress>> {
   return safe("road-path", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("road-paths");
     const parsed = createRoadPathProgressSchema.safeParse(data);
     if (!parsed.success) {
       return { success: false, error: "Invalid input" };
@@ -211,7 +209,7 @@ export async function createRoadPathProgressAction(
 
 export async function deleteRoadPathProgressAction(progressId: string): Promise<ActionResult> {
   return safe("road-path", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("road-paths");
     const parsed = idSchema.safeParse(progressId);
     if (!parsed.success) return { success: false, error: "Invalid progress entry" };
 

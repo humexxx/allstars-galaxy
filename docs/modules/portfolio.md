@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active (page redesigned to mirror plan-editor layout)
-> **Last reviewed:** 2026-11-05
+> **Last reviewed:** 2026-11-08
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -68,6 +68,8 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
 - `app_state` — global key-value (cron state, etc.) — also touched by other modules; `last_manual_price_refresh` is the Refresh cooldown
 
 ## Notes
+- **Empty is the same page at zero.** With no portfolio, or nothing approved yet, the page keeps its compact header, its three tabs and its figures at $0.00 (an owner's figures too), with a flat chart from the month's start to today (built by the page) and the transactions table's headers over one empty line. A pending first transaction adds a note above the figures. A zero is neutral, never green. The separate `EmptyPortfolio` page is gone.
+- The admin-only "add for a user" picker and the snapshot tools are off while an admin impersonates, as the transaction actions already decided.
 - **Logic audit (2026-09-11).** Monthly interest is idempotent per calendar month: the cron consults `last_interest_run` on every day (the 1st included), a failure writes `last_interest_error` instead, and the admin's manual "apply interest" goes through the same month claim (see 2026-10-16). Approve/reject only move a `pending` row (re-approval used to reset accrued value). `PortfolioStats.totalWithdrawn` and `getPortfolioAssets` add approved withdrawals back into profit. `getDerivedHoldings` keeps `closed` buys' units; `backfillTransactionAllocations` and `setMethodAllocations` require a policy that totals 100%. The performance chart no longer fabricates a $0 origin. Daily snapshots skip a portfolio already snapshotted today; `COUNT(*)` is cast to int. The investor summary joins on `investorId`; the admin filter ignores a non-UUID user id; the CSV signs withdrawals.
 - **Review fixes (2026-10-16).** `applyMonthlyInterest` claims the month with a conditional upsert of `app_state.last_interest_run` (only a UTC month later than the one on record) inside the compounding transaction, so concurrent runs, a failed record write, or cron + manual snapshot can never compound a month twice; months up to the record count as done, and the manual path claims the snapshot's month (refused if taken or in the future). The manual-snapshot dialog sends "now" for today and the end of the local day for a past day — local midnight dropped that day's transactions. `backfillTransactionAllocations` prices `closed` buys too (same statuses as `getDerivedHoldings`). `isAssetOnlyInOwnMethods` also refuses when another owner's methods hold units of the asset in `transaction_allocations`.
 - **The owner-only chart loads on demand.** `MarginChart` is `next/dynamic`

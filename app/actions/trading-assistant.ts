@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { canUseAssistant } from "@/lib/ai/assistant/access";
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import { logImpersonatedMutation, requireEffectiveContext } from "@/lib/services/impersonation";
+import { logImpersonatedMutation } from "@/lib/services/impersonation";
+import { requireModuleContext } from "@/lib/services/module-access-service";
 import { applyTradingChanges, TradingChangeError } from "@/lib/services/trading-assistant-service";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { tradingChangeSetSchema, type TradingChangeSetInput } from "@/schemas/trading-assistant";
@@ -19,7 +20,7 @@ export async function applyTradingChangesAction(
   input: TradingChangeSetInput
 ): Promise<ActionResult<TradingOutlook>> {
   return safe("trading-assistant", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("trading");
     if (!canUseAssistant(ctx)) return { success: false, error: "The trading assistant is not available" };
 
     const parsed = tradingChangeSetSchema.safeParse(input);

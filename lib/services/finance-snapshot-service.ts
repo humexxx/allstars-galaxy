@@ -36,6 +36,7 @@ import {
   type HistoryOwner,
 } from "./finance-history";
 import { getManagedMarginHistory } from "./margin-service";
+import { isModuleEnabled } from "./module-access-service";
 import { getTradingJournal } from "./trading-journal-service";
 import { ensureOwnedRow } from "./ownership";
 import {
@@ -775,7 +776,7 @@ export async function getRecentMonthlySnapshots(
  * late still lands in every point after it.
  */
 async function withTradingBalance(points: HistoryPoint[], userId: string): Promise<HistoryPoint[]> {
-  if (points.length === 0) return points;
+  if (points.length === 0 || !(await isModuleEnabled(userId, "trading"))) return points;
   const { equity } = await getTradingJournal(userId, null);
   if (equity.length === 0) return points;
   return points.map((p) => {
@@ -798,7 +799,9 @@ async function withManagedMargin(
   plan: FinancePlanWithLines | null,
   userId: string
 ): Promise<HistoryPoint[]> {
-  if (!plan?.includePortfolio || points.length === 0) return points;
+  if (!plan?.includePortfolio || points.length === 0 || !(await isModuleEnabled(userId, "portfolio"))) {
+    return points;
+  }
   const history = await getManagedMarginHistory(userId);
   if (history.length === 0) return points;
   return points.map((p) => {

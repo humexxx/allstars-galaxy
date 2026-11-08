@@ -14,7 +14,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { EmptyState } from "@/components/ui/empty-state";
 import { formatCurrency } from "@/lib/utils/format";
 import { describeRecurrence } from "@/lib/finance/recurrence-label";
 
@@ -95,39 +94,43 @@ export function PlanDebtEditor({ debts, onAdd, onUpdate, onDelete }: PlanDebtEdi
         </Button>
       </div>
 
-      {debts.length === 0 ? (
-        <EmptyState title="No debts tracked yet" />
-      ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                {/* The figure the plan was stated with; confirmations since
-                    then are what the projection starts from. */}
-                <TableHead className="text-right sm:text-left">
-                  Opening<span className="hidden sm:inline"> balance</span>
-                </TableHead>
-                <TableHead className="hidden sm:table-cell">Rate / mo</TableHead>
-                <TableHead className="hidden md:table-cell">Payment</TableHead>
-                <TableHead className="hidden lg:table-cell">Schedule</TableHead>
-                <TableHead className="w-20" />
+      {/* Empty, it is still the table: its headers over one line saying so. */}
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              {/* The figure the plan was stated with; confirmations since
+                  then are what the projection starts from. */}
+              <TableHead className="text-right sm:text-left">
+                Opening<span className="hidden sm:inline"> balance</span>
+              </TableHead>
+              <TableHead className="hidden sm:table-cell">Rate / mo</TableHead>
+              <TableHead className="hidden md:table-cell">Payment</TableHead>
+              <TableHead className="hidden lg:table-cell">Schedule</TableHead>
+              <TableHead className="w-20" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {debts.length === 0 && (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">
+                  No debts tracked yet
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {debts.map((debt) => (
-                <DebtRow
-                  key={debt.id}
-                  debt={debt}
-                  onEdit={() => setDialogState({ open: true, mode: "edit", debt })}
-                  onDelete={onDelete}
-                  onDeleted={() => addButtonRef.current?.focus()}
-                />
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+            )}
+            {debts.map((debt) => (
+              <DebtRow
+                key={debt.id}
+                debt={debt}
+                onEdit={() => setDialogState({ open: true, mode: "edit", debt })}
+                onDelete={onDelete}
+                onDeleted={() => addButtonRef.current?.focus()}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
       <DebtFormDialog
         open={dialogState.open}

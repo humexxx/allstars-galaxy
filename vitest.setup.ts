@@ -88,3 +88,21 @@ if (typeof globalThis.IntersectionObserver === "undefined") {
 if (typeof HTMLCanvasElement !== "undefined") {
   HTMLCanvasElement.prototype.getContext = (() => null) as HTMLCanvasElement["getContext"];
 }
+
+// Module access reads the account's row; a test means an account with every
+// module on. The gates still run the auth check each test mocks itself
+// (`requireEffectiveContext`), so an unauthorised caller is refused as before.
+// `module-access-service.test.ts` tests the real one.
+// Imported when called, so a file that mocks `impersonation` gets its mock and
+// one that does not never loads it.
+vi.mock("@/lib/services/module-access-service", () => {
+  const gate = async () => (await import("@/lib/services/impersonation")).requireEffectiveContext();
+  return {
+    ModuleDisabledError: class extends Error {},
+    getDisabledModules: async () => [],
+    isModuleEnabled: async () => true,
+    requireModulePage: gate,
+    requireModuleContext: gate,
+    setModuleEnabled: async () => true,
+  };
+});

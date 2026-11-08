@@ -262,8 +262,13 @@ type PlanEditorProps = {
   lastConfirmedDay?: string | null;
   /** The Overview view the page opens on, read from `?view=`. */
   initialView?: PlanView;
-  /** The trading journal's balance and pace; null without a journal. */
+  /** The trading journal's balance and pace; null without a journal (or with the module off). */
   trading?: TradingSummary | null;
+  /** The Portfolio module is on for the account: off, the plan shows none of it. */
+  portfolioOn?: boolean;
+  /** The account runs investment methods: only then does the Portfolio card
+   *  break the managed money (positions, owed to investors) out. */
+  managesMoney?: boolean;
 };
 
 export function PlanEditor({
@@ -288,6 +293,8 @@ export function PlanEditor({
   lastConfirmedDay = null,
   initialView = DEFAULT_PLAN_VIEW,
   trading = null,
+  portfolioOn = true,
+  managesMoney = false,
 }: PlanEditorProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -611,7 +618,7 @@ export function PlanEditor({
           history={history}
           ghost={ghost}
           portfolioHistory={portfolioHistory}
-          portfolioEnabled={plan.includePortfolio}
+          portfolioEnabled={plan.includePortfolio && portfolioOn}
           horizonMonths={horizonMonths}
           onHorizonChange={setHorizonMonths}
           selectedIndex={picked?.index ?? null}
@@ -624,7 +631,6 @@ export function PlanEditor({
           confirmationDue={plan.isMain && confirmationDue}
           lastConfirmedDay={lastConfirmedDay}
           initialView={initialView}
-          onOpenSetup={() => setTab("setup")}
           now={now}
           calendar={(header) => (
             <PlanCalendar
@@ -777,8 +783,10 @@ export function PlanEditor({
                 today={now}
               />
             )}
+            {portfolioOn && (
             <PortfolioCard
               enabled={plan.includePortfolio}
+              managesMoney={managesMoney}
               today={{
                 managed:
                   (todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0) -
@@ -804,6 +812,7 @@ export function PlanEditor({
                   : null;
               })()}
             />
+            )}
             {trading && (
               <TradingCard
                 today={todayState?.tradingValue ?? trading.balance}
@@ -1050,6 +1059,7 @@ const total = (a: PortfolioAmounts, managedCounts: boolean): number =>
  */
 function PortfolioCard({
   enabled,
+  managesMoney,
   today,
   positions,
   owedToInvestors,
@@ -1058,6 +1068,9 @@ function PortfolioCard({
 }: {
   /** The plan counts the managed money (`includePortfolio`). */
   enabled: boolean;
+  /** The account runs methods. A client's "positions" are its own holdings,
+   *  so it gets no managed breakdown at all. */
+  managesMoney: boolean;
   today: PortfolioAmounts;
   /** The managed money's two sides: what the positions are worth today, and
    *  what is owed to the investors behind them. */
@@ -1104,16 +1117,18 @@ function PortfolioCard({
             </Mono>
           </div>
         )}
-        <div className="mt-1 flex flex-col gap-1.5 border-t pt-2">
-          {row("Our own", today.own)}
-          {enabled && (positions > 0 || owedToInvestors > 0) && (
-            <>
-              {row("Managed margin", today.managed)}
-              {row("Positions", positions, true)}
-              {row("Owed to investors", -owedToInvestors, true)}
-            </>
-          )}
-        </div>
+        {managesMoney && (
+          <div className="mt-1 flex flex-col gap-1.5 border-t pt-2">
+            {row("Our own", today.own)}
+            {enabled && (
+              <>
+                {row("Managed margin", today.managed)}
+                {row("Positions", positions, true)}
+                {row("Owed to investors", -owedToInvestors, true)}
+              </>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1304,8 +1319,6 @@ type ProjectionPanelProps = {
   /** The server's clock for this render — see PlanEditorProps. */
   now: Date;
   initialView: PlanView;
-  /** Opens the Setup tab — the empty chart's call to action. */
-  onOpenSetup?: () => void;
 };
 
 const STRATEGY_LABEL: Record<DebtStrategy, string> = {
@@ -1471,14 +1484,7 @@ function ProjectionPanel({
   lastConfirmedDay = null,
   now,
   initialView,
-  onOpenSetup,
 }: ProjectionPanelProps) {
-  // No income, expense or debt: the "projection" is a flat line at the
-  // opening balance under a $0 milestone marker, which says nothing.
-  const hasNoLines =
-    baseline.incomes.length === 0 &&
-    baseline.expenses.length === 0 &&
-    baseline.debts.length === 0;
   // View switcher — Graph (chart) / Table / Calendar. Segmented control (every
   // device) sits at the BOTTOM, Polymarket-style; horizontal swipe on touch
   // changes view too. A plain fade on switch — no horizontal slide, so nothing
@@ -1770,21 +1776,7 @@ function ProjectionPanel({
               <Card className="xl:h-full">
                 <CardHeader className="gap-3">{forecastHeader(true)}</CardHeader>
                 <CardContent className="xl:min-h-0 xl:flex-1">
-                  {view === "chart" && hasNoLines ? (
-                    <EmptyState
-                      icon={LineChart}
-                      title="Nothing to project yet"
-                      description="Add income, expenses or debts and the projection draws itself."
-                      className="flex h-72 flex-col justify-center sm:h-80 xl:h-full"
-                      action={
-                        onOpenSetup && (
-                          <Button size="sm" onClick={onOpenSetup}>
-                            Open Setup
-                          </Button>
-                        )
-                      }
-                    />
-                  ) : view === "chart" ? (
+                  {view === "chart" ? (
                     <ProjectionChart
                       points={chartSeries.points}
                       pastCount={chartSeries.pastCount}

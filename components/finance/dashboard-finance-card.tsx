@@ -49,6 +49,7 @@ import {
 } from "@/lib/finance/dashboard";
 import { getLastConfirmedDay } from "@/lib/services/finance-confirmation-service";
 import { getManagedAssets } from "@/lib/services/margin-service";
+import { isModuleEnabled } from "@/lib/services/module-access-service";
 import { getUserPreferences } from "@/lib/services/user-preferences-service";
 import type { ManagedAssets } from "@/types/margin";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
@@ -110,7 +111,9 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     ),
     getUserPreferences(userId),
     // Same request-cached read the projection already made for net worth.
-    full.includePortfolio ? getManagedAssets(userId) : Promise.resolve(null),
+    full.includePortfolio && (await isModuleEnabled(userId, "portfolio"))
+      ? getManagedAssets(userId)
+      : Promise.resolve(null),
     getRecentMovementSnapshots(full.id, userId, DASHBOARD_PAST_MONTHS, now),
     getLastConfirmedDay(userId),
   ]);

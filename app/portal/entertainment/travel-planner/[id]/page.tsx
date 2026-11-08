@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { TripDetail } from "@/components/travel/trip-detail";
 import { getBaseUrl } from "@/lib/env";
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { requireModulePage } from "@/lib/services/module-access-service";
 import { getTripWithRelations } from "@/lib/services/travel-service";
 import { idSchema } from "@/schemas/common";
 
@@ -17,7 +17,7 @@ export async function generateMetadata({
   const { id } = await params;
   // A malformed id is a missing trip, not a Postgres uuid syntax error (a 500).
   if (!idSchema.safeParse(id).success) return { title: "Trip" };
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("travel");
   const trip = await getTripWithRelations(id, ctx.effectiveUserId);
   if (!trip) return { title: "Trip" };
   return {
@@ -33,7 +33,7 @@ export default async function TripDetailPage({
 }) {
   const { id } = await params;
   if (!idSchema.safeParse(id).success) notFound();
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("travel");
   const trip = await getTripWithRelations(id, ctx.effectiveUserId);
   if (!trip) notFound();
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { TradingJournalView } from "@/components/finance/trading/trading-journal-view";
 import { parseJournalView } from "@/lib/finance/journal-view";
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { requireModulePage } from "@/lib/services/module-access-service";
 import { getTradingJournal } from "@/lib/services/trading-journal-service";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 
@@ -15,7 +15,7 @@ export default async function TradingJournalPage({
 }: {
   searchParams: Promise<{ view?: string | string[] }>;
 }): Promise<React.ReactElement> {
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("trading");
   const [journal, { view }] = await Promise.all([
     getTradingJournal(ctx.effectiveUserId, await getRequestTimeZone()),
     searchParams,

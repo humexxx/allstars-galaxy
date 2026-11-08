@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import { logImpersonatedMutation, requireEffectiveContext } from "@/lib/services/impersonation";
+import { logImpersonatedMutation } from "@/lib/services/impersonation";
+import { requireModuleContext } from "@/lib/services/module-access-service";
 import {
   addCashMovement,
   closeTrade,
@@ -38,7 +39,7 @@ async function journalWrite<T>(
   action: string,
   write: (userId: string) => Promise<T>
 ): Promise<ActionResult<T>> {
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModuleContext("trading");
   try {
     const data = await write(ctx.effectiveUserId);
     await logImpersonatedMutation({ action, entityTable: "trading_trades" });

@@ -8,7 +8,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { maskValue, statToneClass } from "@/components/ui/stat-card";
 import { useReaderTimeZone } from "@/components/reader-time-zone";
@@ -90,9 +89,6 @@ export function TransactionsTable({
   emptyDescription?: string;
 }) {
   const timeZone = useReaderTimeZone();
-  if (rows.length === 0) {
-    return <EmptyState title={emptyTitle} description={emptyDescription} />;
-  }
 
   const money = (v: number | string | null | undefined): string => {
     if (v === null || v === undefined) return "—";
@@ -185,6 +181,15 @@ export function TransactionsTable({
           showPositions ? "@3xl:hidden" : "@xl:hidden"
         )}
       >
+        {/* Empty, it is still the table, its headers over one line saying so. */}
+        {rows.length === 0 && (
+          <li className="flex flex-col gap-1 py-3">
+            <Text as="span" variant="small" weight="medium">
+              {emptyTitle}
+            </Text>
+            {emptyDescription && <Text variant="small">{emptyDescription}</Text>}
+          </li>
+        )}
         {derived.map((d) => {
           const r = d.row;
           return (
@@ -290,6 +295,14 @@ export function TransactionsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
+            {rows.length === 0 && (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={11} className="py-6 text-center text-muted-foreground">
+                  {emptyTitle}
+                  {emptyDescription && <span className="block text-xs">{emptyDescription}</span>}
+                </TableCell>
+              </TableRow>
+            )}
             {derived.map((d) => {
               const r = d.row;
               return (

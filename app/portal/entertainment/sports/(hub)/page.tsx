@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { SportsHub } from "@/components/entertainment/sports/sports-hub";
 import { DEFAULT_SPORT, SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { FOOTBALL_COMPETITIONS } from "@/lib/services/football-service";
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { requireModulePage } from "@/lib/services/module-access-service";
 import { getSportTeamFilter, listUserFavoriteSportIds } from "@/lib/services/sports-service";
 import { footballLeagueFrom, loadSport } from "@/lib/sports/load";
 import { teamFilterList } from "@/lib/sports/team-filter";
@@ -54,7 +54,7 @@ export default async function SportsPage({
 }: {
   searchParams: SearchParams;
 }): Promise<React.ReactElement> {
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("sports");
   // Kickoffs are formatted in the reader's zone by the portal-wide
   // ReaderTimeZoneProvider, so the server and the browser print the same time.
   const [favorites, { sport, tab, league }, today] = await Promise.all([

@@ -3,10 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import {
-  requireEffectiveContext,
-  logImpersonatedMutation,
-} from "@/lib/services/impersonation";
+import { logImpersonatedMutation } from "@/lib/services/impersonation";
+import { requireModuleContext } from "@/lib/services/module-access-service";
 import {
   getBoardColumn,
   createBoardColumn,
@@ -72,7 +70,7 @@ export async function createBoardColumnAction(
   data: CreateBoardColumnData
 ): Promise<ActionResult<BoardColumn>> {
   return safe("board", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("board");
     const parsed = createBoardColumnSchema.safeParse(data);
     if (!parsed.success) {
       return { success: false, error: "Invalid input" };
@@ -93,7 +91,7 @@ export async function updateBoardColumnAction(
   data: UpdateBoardColumnData
 ): Promise<ActionResult<BoardColumn>> {
   return safe("board", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("board");
     const parsed = updateBoardColumnSchema.safeParse(data);
     if (!parsed.success) {
       return { success: false, error: "Invalid input" };
@@ -121,7 +119,7 @@ export async function updateBoardColumnAction(
 
 export async function deleteBoardColumnAction(columnId: string): Promise<ActionResult> {
   return safe("board", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("board");
     const parsed = idSchema.safeParse(columnId);
     if (!parsed.success) return { success: false, error: "Invalid column" };
 
@@ -156,7 +154,7 @@ export async function createBoardTaskAction(
   data: CreateBoardTaskData
 ): Promise<ActionResult<BoardTask>> {
   return safe("board", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("board");
     const parsed = createBoardTaskSchema.safeParse(data);
     if (!parsed.success) {
       return { success: false, error: "Invalid input" };
@@ -185,7 +183,7 @@ export async function updateBoardTaskAction(
   data: UpdateBoardTaskData
 ): Promise<ActionResult<BoardTask>> {
   return safe("board", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("board");
     const parsed = updateBoardTaskSchema.safeParse(data);
     if (!parsed.success) {
       return { success: false, error: "Invalid input" };
@@ -213,7 +211,7 @@ export async function updateBoardTaskAction(
 
 export async function deleteBoardTaskAction(taskId: string): Promise<ActionResult> {
   return safe("board", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("board");
     const parsed = idSchema.safeParse(taskId);
     if (!parsed.success) return { success: false, error: "Invalid task" };
 
@@ -238,7 +236,7 @@ export async function reorderBoardTaskAction(
   data: ReorderTasksData
 ): Promise<ActionResult<BoardTaskWithColumn | null>> {
   return safe("board", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("board");
     const parsed = reorderTasksSchema.safeParse(data);
     if (!parsed.success) {
       return { success: false, error: "Invalid input" };
@@ -265,7 +263,7 @@ export async function reorderBoardTaskAction(
 
 export async function setDoneColumnAction(columnId: string): Promise<ActionResult<BoardColumn>> {
   return safe("board", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("board");
     const parsed = idSchema.safeParse(columnId);
     if (!parsed.success) return { success: false, error: "Invalid column" };
 
@@ -287,7 +285,7 @@ export async function carryOverTasksAction(
   data: CarryOverData
 ): Promise<ActionResult<CarryOverResult>> {
   return safe("board", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("board");
     const parsed = carryOverSchema.safeParse(data);
     if (!parsed.success) return { success: false, error: "Invalid input" };
 
@@ -313,7 +311,7 @@ export async function carryOverTasksAction(
 /** From an earlier day's board: put the task on today's. */
 export async function moveTaskToTodayAction(taskId: string): Promise<ActionResult<BoardTask>> {
   return safe("board", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("board");
     const parsed = idSchema.safeParse(taskId);
     if (!parsed.success) return { success: false, error: "Invalid task" };
 

@@ -10,6 +10,7 @@ import { getAiSettings, recordAiUsage } from "@/lib/services/ai-service";
 import { listUserPlans } from "@/lib/services/finance-plan-service";
 import { planOperationContext } from "@/lib/services/finance-plan-operations";
 import { getEffectiveContext } from "@/lib/services/impersonation";
+import { isModuleEnabled } from "@/lib/services/module-access-service";
 import { idSchema } from "@/schemas/common";
 import type { PlansAssistantEvent, PlansAssistantMessage } from "@/types/plans-assistant";
 
@@ -39,6 +40,9 @@ const bodySchema = z.object({
 export async function POST(request: Request): Promise<Response> {
   const ctx = await getEffectiveContext();
   if (!ctx) return NextResponse.json({ error: "Sign in again" }, { status: 401 });
+  if (!(await isModuleEnabled(ctx.effectiveUserId, "plans"))) {
+    return NextResponse.json({ error: "This module is not enabled for your account" }, { status: 403 });
+  }
   if (!canUseAssistant(ctx)) {
     return NextResponse.json({ error: "The plans assistant is not available" }, { status: 403 });
   }

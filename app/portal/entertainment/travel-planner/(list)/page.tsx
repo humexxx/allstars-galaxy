@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { TripsOverview } from "@/components/travel/trips-overview";
 
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { requireModulePage } from "@/lib/services/module-access-service";
 import { listUserTrips } from "@/lib/services/travel-service";
 import { getRequestTodayIso } from "@/lib/utils/request-today";
 
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function TravelPlannerPage() {
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("travel");
   const trips = await listUserTrips(ctx.effectiveUserId);
   // Decided here, once, on the reader's calendar, so the server render and the
   // browser agree on which trips are upcoming and how far away they are.

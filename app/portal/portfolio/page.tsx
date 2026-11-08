@@ -17,9 +17,10 @@ import {
   priceCronSchedule,
 } from "@/lib/services/price-service";
 import { getAllUsers } from "@/lib/services/user-service";
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { requireModulePage } from "@/lib/services/module-access-service";
 import type { ChartDataPoint } from "@/types/chart";
-import type { PortfolioTransaction } from "@/types/portfolio";
+import type { PortfolioStats, PortfolioTransaction } from "@/types/portfolio";
+import { getRequestTodayIso } from "@/lib/utils/request-today";
 import PortfolioClientPage from "@/components/portal/portfolio-client";
 import { performanceSeries } from "@/components/portfolio/performance-series";
 import { PortalPageContainer } from "@/components/portal/page-container";
@@ -29,9 +30,21 @@ export const metadata: Metadata = {
   description: "View and manage your investment portfolio",
 };
 
+const EMPTY_STATS: PortfolioStats = {
+  totalValue: 0,
+  costBasis: 0,
+  totalWithdrawn: 0,
+  allTimeProfit: 0,
+  allTimeProfitPercentage: 0,
+  totalInvestmentMethods: 0,
+  activeTransactions: 0,
+};
+
 export default async function PortfolioPage() {
-  const ctx = await requireEffectiveContext();
-  const isAdmin = ctx.realRole === "admin";
+  const ctx = await requireModulePage("portfolio");
+  // As the transaction actions decide it: while impersonating, the admin acts
+  // as that account, so no picker for putting money in for someone else.
+  const isAdmin = ctx.realRole === "admin" && !ctx.isImpersonating;
 
   // When impersonating, show the impersonated user's portfolio. Otherwise show the real user's.
   const userId = ctx.effectiveUserId;
@@ -86,6 +99,15 @@ export default async function PortfolioPage() {
     ]);
     chartData = performanceSeries(chartData, transactions, stats.totalValue, new Date());
   }
+  // A portfolio with nothing in it yet is the same page at zero: the figures
+  // read $0.00 and the chart is a flat line from the month's start to today.
+  if (chartData.length === 0) {
+    const today = await getRequestTodayIso();
+    chartData = [`${today.slice(0, 7)}-01`, today].map((day) => ({
+      date: new Date(`${day}T00:00:00Z`).toISOString(),
+      value: 0,
+    }));
+  }
 
   // Positions are the owner's private half of a method: a client is sold the
   // fixed return, and where the pooled money actually goes never reaches
@@ -130,7 +152,7 @@ export default async function PortfolioPage() {
 
   const data = {
     portfolio,
-    stats,
+    stats: stats ?? EMPTY_STATS,
     transactions,
     chartData,
     cashFlows: transactions

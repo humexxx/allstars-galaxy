@@ -34,8 +34,8 @@ export const PORTAL_NAV: NavSection[] = [
   {
     label: "Finance",
     items: [
-      { title: "Portfolio", url: "/portal/portfolio" },
       { title: "Plans", url: "/portal/plans" },
+      { title: "Portfolio", url: "/portal/portfolio" },
       { title: "Trading Journal", url: "/portal/trading" },
     ],
   },

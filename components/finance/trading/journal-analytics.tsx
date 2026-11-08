@@ -1,12 +1,10 @@
 "use client";
 
 import { useId } from "react";
-import { LineChart } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ReferenceLine, XAxis, YAxis } from "recharts";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { niceTicks, yAxisWidth } from "@/lib/utils/chart-axis";
@@ -31,15 +29,8 @@ const pct = (n: number | null): string => (n == null ? "—" : `${(n * 100).toFi
  */
 export function JournalAnalytics({ journal }: { journal: TradingJournal }): React.ReactElement {
   const s = journal.stats;
-  if (journal.equity.length === 0) {
-    return (
-      <EmptyState
-        icon={LineChart}
-        title="Nothing to analyse yet"
-        description="Add a deposit and your first trades, and the curve and the stats draw themselves."
-      />
-    );
-  }
+  // A journal with nothing in it yet still draws every chart, flat at zero.
+  const months = journal.months.length > 0 ? journal.months : [{ month: journal.today.slice(0, 7), pnl: 0 }];
   const tiles: { label: string; value: string; sub?: string; tone?: string }[] = [
     { label: "Net P&L", value: formatSignedCurrency(s.netPnl), sub: `${s.trades} closed trades`, tone: toneText(s.netPnl) },
     { label: "Win rate", value: pct(s.winRate), sub: `${s.wins} won · ${s.losses} lost` },
@@ -50,8 +41,8 @@ export function JournalAnalytics({ journal }: { journal: TradingJournal }): Reac
       tone: s.profitFactor != null ? (s.profitFactor >= 1 ? "text-success" : "text-destructive") : undefined,
     },
     { label: "Expectancy", value: formatSignedCurrency(s.expectancy), sub: "per trade", tone: toneText(s.expectancy) },
-    { label: "Avg win", value: formatCurrency(s.avgWin), sub: `Largest ${formatCurrency(s.largestWin)}`, tone: "text-success" },
-    { label: "Avg loss", value: formatCurrency(s.avgLoss), sub: `Largest ${formatCurrency(s.largestLoss)}`, tone: "text-destructive" },
+    { label: "Avg win", value: formatCurrency(s.avgWin), sub: `Largest ${formatCurrency(s.largestWin)}`, tone: toneText(s.avgWin) },
+    { label: "Avg loss", value: formatCurrency(s.avgLoss), sub: `Largest ${formatCurrency(s.largestLoss)}`, tone: s.avgLoss > 0 ? "text-destructive" : undefined },
     { label: "Max drawdown", value: formatCurrency(s.maxDrawdown), sub: "from a P&L high" },
     {
       label: "Avg hold",
@@ -85,7 +76,7 @@ export function JournalAnalytics({ journal }: { journal: TradingJournal }): Reac
       <div className="grid gap-4 lg:grid-cols-2">
         <BarsCard
           title="P&L by month"
-          rows={journal.months.map((m) => ({
+          rows={months.map((m) => ({
             key: formatProjectionMonth(new Date(`${m.month}-01T00:00:00Z`)),
             pnl: m.pnl,
             trades: 0,
@@ -110,7 +101,10 @@ const equityConfig = {
 
 function EquityCard({ journal }: { journal: TradingJournal }): React.ReactElement {
   const fill = useId().replace(/:/g, "");
-  const data = journal.equity;
+  const data =
+    journal.equity.length > 0
+      ? journal.equity
+      : [`${journal.today.slice(0, 7)}-01`, journal.today].map((day) => ({ day, balance: 0, cumulativePnl: 0 }));
   const ticks = niceTicks(data.flatMap((p) => [p.balance, p.cumulativePnl]));
   return (
     <Card className="gap-3">

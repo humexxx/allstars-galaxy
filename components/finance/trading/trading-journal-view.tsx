@@ -8,7 +8,6 @@ import { PageHeader } from "@/components/portal/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
@@ -39,7 +38,6 @@ export function TradingJournalView({ journal }: { journal: TradingJournal }): Re
   const monthPnl = month && month.month === journal.today.slice(0, 7) ? month.pnl : 0;
   const open = journal.trades.filter((t) => t.status === "open");
   const setups = [...new Set(journal.trades.map((t) => t.setup).filter((s): s is string => Boolean(s)))];
-  const empty = journal.trades.length === 0 && journal.cash.length === 0;
 
   const newTrade = (): void => {
     setEditing(null);
@@ -76,102 +74,80 @@ export function TradingJournalView({ journal }: { journal: TradingJournal }): Re
         }
       />
 
-      {empty ? (
-        <EmptyState
-          icon={LineChart}
-          title="Start your journal"
-          description="Deposit what your trading account holds, then log each trade as you open or close it. The calendar, the equity curve and the stats build from there."
-          action={
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button variant="outline" onClick={() => setCashKind("deposit")}>
-                <ArrowDownLeft />
-                Deposit
-              </Button>
-              <Button onClick={newTrade}>
-                <Plus />
-                New trade
-              </Button>
+      <Card>
+        <CardContent className="grid gap-6 md:grid-cols-3">
+          <div className="flex flex-col gap-1 md:col-span-2">
+            <Eyebrow size="sm" as="p">
+              Account balance
+            </Eyebrow>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <Mono as="p" className={cn("text-3xl font-semibold sm:text-4xl", journal.balance < 0 && "text-destructive")}>
+                <CountUpCurrency value={journal.balance} />
+              </Mono>
+              <Badge
+                variant={moneySign(monthPnl) > 0 ? "success" : moneySign(monthPnl) < 0 ? "destructive" : "secondary"}
+                className="font-mono"
+              >
+                {formatSignedCurrency(monthPnl)} · this month
+              </Badge>
             </div>
-          }
-        />
-      ) : (
-        <>
-          <Card>
-            <CardContent className="grid gap-6 md:grid-cols-3">
-              <div className="flex flex-col gap-1 md:col-span-2">
-                <Eyebrow size="sm" as="p">
-                  Account balance
-                </Eyebrow>
-                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <Mono as="p" className={cn("text-3xl font-semibold sm:text-4xl", journal.balance < 0 && "text-destructive")}>
-                    <CountUpCurrency value={journal.balance} />
-                  </Mono>
-                  <Badge
-                    variant={moneySign(monthPnl) > 0 ? "success" : moneySign(monthPnl) < 0 ? "destructive" : "secondary"}
-                    className="font-mono"
-                  >
-                    {formatSignedCurrency(monthPnl)} · this month
-                  </Badge>
-                </div>
-                <Text variant="small" as="p">
-                  {formatCurrency(journal.deposited)} deposited · {formatCurrency(journal.withdrawn)} withdrawn ·{" "}
-                  <span className={toneText(journal.realizedPnl)}>{formatSignedCurrency(journal.realizedPnl)}</span> from
-                  trades
-                </Text>
-              </div>
-              <div className="grid grid-cols-3 gap-3 md:grid-cols-1 md:gap-2 md:border-l md:pl-6">
-                <MiniStat
-                  label="Win rate"
-                  value={journal.stats.winRate == null ? "—" : `${Math.round(journal.stats.winRate * 100)}%`}
-                />
-                <MiniStat
-                  label="Profit factor"
-                  value={journal.stats.profitFactor == null ? "—" : journal.stats.profitFactor.toFixed(2)}
-                />
-                <MiniStat
-                  label="Open positions"
-                  value={String(open.length)}
-                  sub={open.length > 0 ? formatCurrency(journal.openExposure) : undefined}
-                />
-              </div>
-            </CardContent>
-          </Card>
+            <Text variant="small" as="p">
+              {formatCurrency(journal.deposited)} deposited · {formatCurrency(journal.withdrawn)} withdrawn ·{" "}
+              <span className={toneText(journal.realizedPnl)}>{formatSignedCurrency(journal.realizedPnl)}</span> from
+              trades
+            </Text>
+          </div>
+          <div className="grid grid-cols-3 gap-3 md:grid-cols-1 md:gap-2 md:border-l md:pl-6">
+            <MiniStat
+              label="Win rate"
+              value={journal.stats.winRate == null ? "—" : `${Math.round(journal.stats.winRate * 100)}%`}
+            />
+            <MiniStat
+              label="Profit factor"
+              value={journal.stats.profitFactor == null ? "—" : journal.stats.profitFactor.toFixed(2)}
+            />
+            <MiniStat
+              label="Open positions"
+              value={String(open.length)}
+              sub={open.length > 0 ? formatCurrency(journal.openExposure) : undefined}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
-          <Tabs defaultValue="calendar" className="gap-4">
-            <TabsList>
-              <TabsTrigger value="calendar">
-                <CalendarDays />
-                Calendar
-              </TabsTrigger>
-              <TabsTrigger value="analytics">
-                <LineChart />
-                Analytics
-              </TabsTrigger>
-              <TabsTrigger value="trades">
-                <List />
-                Trades
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="calendar">
-              <JournalCalendar days={journal.days} trades={journal.trades} today={journal.today} onOpenTrade={openTrade} />
-            </TabsContent>
-            <TabsContent value="analytics">
-              <JournalAnalytics journal={journal} />
-            </TabsContent>
-            <TabsContent value="trades">
-              <JournalTrades
-                trades={journal.trades}
-                cash={journal.cash}
-                onEdit={(t) => {
-                  setEditing(t);
-                  setTradeOpen(true);
-                }}
-                onClose={setClosing}
-              />
-            </TabsContent>
-          </Tabs>
-        </>
-      )}
+      <Tabs defaultValue="calendar" className="gap-4">
+        <TabsList>
+          <TabsTrigger value="calendar">
+            <CalendarDays />
+            Calendar
+          </TabsTrigger>
+          <TabsTrigger value="analytics">
+            <LineChart />
+            Analytics
+          </TabsTrigger>
+          <TabsTrigger value="trades">
+            <List />
+            Trades
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="calendar">
+          <JournalCalendar days={journal.days} trades={journal.trades} today={journal.today} onOpenTrade={openTrade} />
+        </TabsContent>
+        <TabsContent value="analytics">
+          <JournalAnalytics journal={journal} />
+        </TabsContent>
+        <TabsContent value="trades">
+          <JournalTrades
+            trades={journal.trades}
+            cash={journal.cash}
+            onEdit={(t) => {
+              setEditing(t);
+              setTradeOpen(true);
+            }}
+            onClose={setClosing}
+          />
+        </TabsContent>
+      </Tabs>
 
       <TradeDialog open={tradeOpen} onOpenChange={setTradeOpen} trade={editing} setups={setups} />
       <CloseTradeDialog trade={closing} onOpenChange={(o) => !o && setClosing(null)} />

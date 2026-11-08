@@ -43,6 +43,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toggle } from "@/components/ui/toggle";
@@ -361,6 +362,8 @@ export function PlanEditor({
   const hoverFigures = picked?.figures ?? null;
   // The chart's horizon, here so the Portfolio card reads the same window.
   const [horizonMonths, setHorizonMonths] = useState(12);
+  // Which money the Portfolio card and the chart's portfolio line add up.
+  const [portfolioParts, setPortfolioParts] = useState<PortfolioParts>({ managed: true, own: true });
   const isPreview = hoverFigures !== null;
   const dIncome = hoverFigures?.income ?? income;
   const dLivingExpenses = hoverFigures?.livingExpenses ?? livingExpenses;
@@ -622,6 +625,7 @@ export function PlanEditor({
           ghost={ghost}
           portfolioHistory={portfolioHistory}
           portfolioEnabled={plan.includePortfolio}
+          portfolioParts={portfolioParts}
           horizonMonths={horizonMonths}
           onHorizonChange={setHorizonMonths}
           selectedIndex={picked?.index ?? null}
@@ -794,12 +798,19 @@ export function PlanEditor({
             )}
             <PortfolioCard
               enabled={plan.includePortfolio}
-              today={todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0}
+              parts={portfolioParts}
+              onPartsChange={setPortfolioParts}
+              today={{
+                managed:
+                  todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0,
+                own: todayState?.investments ?? projection.months[currentPeriodIdx]?.investments ?? 0,
+              }}
               horizonMonths={horizonMonths}
-              atHorizon={
-                projection.months[Math.min(projection.months.length - 1, currentPeriodIdx + horizonMonths)]
-                  ?.portfolioValue ?? null
-              }
+              atHorizon={(() => {
+                const m =
+                  projection.months[Math.min(projection.months.length - 1, currentPeriodIdx + horizonMonths)];
+                return m ? { managed: m.portfolioValue, own: m.investments } : null;
+              })()}
               onToggle={handleTogglePortfolio}
             />
             </>
@@ -1028,18 +1039,36 @@ function MainPlanToggle({
  * stays enabled while saving: disabling the control that has focus drops
  * keyboard focus to <body>, so input is ignored instead.
  */
+/** The two kinds of money the portfolio holds; the card picks which to add up. */
+type PortfolioParts = { managed: boolean; own: boolean };
+type PortfolioAmounts = { managed: number; own: number };
+
+function sumParts(amounts: PortfolioAmounts, parts: PortfolioParts, managedCounts: boolean): number {
+  return (parts.managed && managedCounts ? amounts.managed : 0) + (parts.own ? amounts.own : 0);
+}
+
+/**
+ * The portfolio: the money managed for others (the investment methods' assets,
+ * which "Count in net worth" adds to the plan) and the plan's own — what the
+ * surplus invests. It used to read only the managed money, so a plan that
+ * starts investing in March still read ~$2.5k a year out.
+ */
 function PortfolioCard({
   enabled,
+  parts,
+  onPartsChange,
   today,
   horizonMonths,
   atHorizon,
   onToggle,
 }: {
   enabled: boolean;
-  today: number;
-  /** The chart's horizon, and where the plan takes the portfolio by its end. */
+  parts: PortfolioParts;
+  onPartsChange: (next: PortfolioParts) => void;
+  today: PortfolioAmounts;
+  /** The chart's horizon, and where the plan takes each part by its end. */
   horizonMonths: number;
-  atHorizon: number | null;
+  atHorizon: PortfolioAmounts | null;
   onToggle: (next: boolean) => Promise<void>;
 }): React.ReactElement {
   const [pending, setPending] = useState(false);
@@ -1050,6 +1079,11 @@ function PortfolioCard({
       .catch(() => undefined)
       .finally(() => setPending(false));
   };
+  const nothing = !parts.managed && !parts.own;
+  const choices: { key: keyof PortfolioParts; label: string }[] = [
+    { key: "managed", label: "Managed for others" },
+    { key: "own", label: "Our own" },
+  ];
   return (
     <Card className="gap-3">
       <CardHeader>
@@ -1061,32 +1095,50 @@ function PortfolioCard({
         </Eyebrow>
       </CardHeader>
       <CardContent className="flex flex-col gap-1">
-        <div className={cn("flex items-baseline justify-between gap-3", !enabled && "opacity-60")}>
+        <div className={cn("flex items-baseline justify-between gap-3", nothing && "opacity-60")}>
           <Text variant="small" as="span">
             Today
           </Text>
-          <Mono className="text-sm font-semibold">{formatCurrency(today)}</Mono>
+          <Mono className="text-sm font-semibold">{formatCurrency(sumParts(today, parts, true))}</Mono>
         </div>
-        {atHorizon !== null && enabled && (
+        {atHorizon !== null && !nothing && (
           <div className="flex items-baseline justify-between gap-3">
             <Text variant="small" as="span">
               In {horizonMonths % 12 === 0 && horizonMonths > 12 ? `${horizonMonths / 12} years` : `${horizonMonths} months`}
             </Text>
             {/* An estimate, at the expected rate: "≈" says so before the figure. */}
-            <Mono className="text-sm text-muted-foreground">≈ {formatCurrency(atHorizon)}</Mono>
+            <Mono className="text-sm text-muted-foreground">
+              ≈ {formatCurrency(sumParts(atHorizon, parts, enabled))}
+            </Mono>
           </div>
         )}
-        <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 border-t pt-3">
-          <Text variant="small" as="span">
-            Count in net worth
-          </Text>
-          <Switch
-            checked={enabled}
-            onCheckedChange={toggle}
-            aria-disabled={pending}
-            aria-busy={pending}
-          />
-        </label>
+        <div className="mt-1 flex flex-col gap-1.5 border-t pt-2">
+          {choices.map((c) => (
+            <label key={c.key} className="flex cursor-pointer items-center justify-between gap-3">
+              <span className="flex items-center gap-2">
+                <Checkbox
+                  checked={parts[c.key]}
+                  onCheckedChange={(v) => onPartsChange({ ...parts, [c.key]: v === true })}
+                />
+                <Text variant="small" as="span">
+                  {c.label}
+                </Text>
+              </span>
+              <Mono className="text-xs text-muted-foreground">{formatCurrency(today[c.key])}</Mono>
+            </label>
+          ))}
+          <label className="flex cursor-pointer items-center justify-between gap-3">
+            <Text variant="small" as="span">
+              Count managed in net worth
+            </Text>
+            <Switch
+              checked={enabled}
+              onCheckedChange={toggle}
+              aria-disabled={pending}
+              aria-busy={pending}
+            />
+          </label>
+        </div>
       </CardContent>
     </Card>
   );
@@ -1202,6 +1254,8 @@ type ProjectionPanelProps = {
   milestones?: readonly number[];
   /** Current includePortfolio flag: the chart draws the portfolio when set. */
   portfolioEnabled: boolean;
+  /** Which money the portfolio line adds up (see `PortfolioCard`). */
+  portfolioParts: PortfolioParts;
   /** The current period still waits for a confirmation (main plan only). */
   confirmationDue?: boolean;
   /** The user's last own confirmation (YYYY-MM-DD). */
@@ -1372,6 +1426,7 @@ function ProjectionPanel({
   ghost = null,
   portfolioHistory = [],
   portfolioEnabled,
+  portfolioParts,
   confirmationDue = false,
   lastConfirmedDay = null,
   now,
@@ -1440,11 +1495,13 @@ function ProjectionPanel({
     return values.map((v, i) => (i < chartSeries.pastCount ? null : v));
   }, [ghost, showGhost, chartSeries.points, chartSeries.pastCount, anchorDay]);
 
-  // Portfolio series: recorded snapshots for the past, the projection's
-  // (growing) portfolioValue for the future. Only when the plan includes it.
-  const portfolioValues = useMemo<(number | null)[] | undefined>(
-    () =>
-      portfolioEnabled
+  // Portfolio series, the money the Portfolio card adds up: the managed
+  // money (recorded snapshots for the past, the projection's growing
+  // portfolioValue ahead; only when the plan counts it) plus the plan's own
+  // investments at each point.
+  const portfolioValues = useMemo<(number | null)[] | undefined>(() => {
+    const managed =
+      portfolioEnabled && portfolioParts.managed
         ? mapPortfolioValues(
             chartSeries.points,
             portfolioHistory,
@@ -1452,9 +1509,15 @@ function ProjectionPanel({
             chartSeries.pastCount,
             anchorDay
           )
-        : undefined,
-    [portfolioEnabled, chartSeries, portfolioHistory, projection, anchorDay]
-  );
+        : null;
+    const own = portfolioParts.own ? chartSeries.points.map((p) => p.investments ?? null) : null;
+    if (!managed && !own) return undefined;
+    return chartSeries.points.map((_, i) => {
+      const a = managed?.[i] ?? null;
+      const b = own?.[i] ?? null;
+      return a === null && b === null ? null : (a ?? 0) + (b ?? 0);
+    });
+  }, [portfolioEnabled, portfolioParts, chartSeries, portfolioHistory, projection, anchorDay]);
   // Per-point period figures for the sidebar hover preview. Flows (income /
   // expenses / debt minimums) come from the projection month sharing the
   // point's period — the calibrated one first, falling back to the raw past
@@ -2011,7 +2074,7 @@ function SurplusSplit({
     { series: dashboardSeries("savings"), value: Math.max(0, surplus - toDebt - toInvestments) },
   ];
   return (
-    <div className="flex flex-col gap-1.5 border-t pt-3">
+    <div className="flex flex-col gap-1 border-t pt-2">
       <Eyebrow size="sm" as="p">
         Surplus goes to
       </Eyebrow>

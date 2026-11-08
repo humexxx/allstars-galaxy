@@ -43,8 +43,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -62,7 +60,6 @@ import { PlanDebtEditor } from "./plan-debt-editor";
 import { PlanForm } from "./plan-form";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -358,8 +355,6 @@ export function PlanEditor({
   const hoverFigures = picked?.figures ?? null;
   // The chart's horizon, here so the Portfolio card reads the same window.
   const [horizonMonths, setHorizonMonths] = useState(12);
-  // Which money the Portfolio card and the chart's portfolio line add up.
-  const [portfolioParts, setPortfolioParts] = useState<PortfolioParts>({ managed: true, own: true });
   const isPreview = hoverFigures !== null;
   const dIncome = hoverFigures?.income ?? income;
   const dLivingExpenses = hoverFigures?.livingExpenses ?? livingExpenses;
@@ -477,14 +472,6 @@ export function PlanEditor({
   });
   const handleChangeStrategy = (next: DebtStrategy) =>
     wrap(() => updatePlanAction({ ...fullPlanPayload(), debtStrategy: next }));
-
-  // Chart-level portfolio switch — persists to the plan's includePortfolio
-  // flag (same setting as the Settings form), then refreshes so the server
-  // recomputes the projection with the portfolio value + blended growth.
-  const handleTogglePortfolio = (next: boolean) =>
-    wrap(() =>
-      updatePlanAction({ ...fullPlanPayload(), includePortfolio: next })
-    );
 
   // Spin off a linked what-if copy of this plan and jump straight into it.
   const handleCreateScenario = () =>
@@ -618,7 +605,6 @@ export function PlanEditor({
           ghost={ghost}
           portfolioHistory={portfolioHistory}
           portfolioEnabled={plan.includePortfolio}
-          portfolioParts={portfolioParts}
           horizonMonths={horizonMonths}
           onHorizonChange={setHorizonMonths}
           selectedIndex={picked?.index ?? null}
@@ -786,8 +772,6 @@ export function PlanEditor({
             )}
             <PortfolioCard
               enabled={plan.includePortfolio}
-              parts={portfolioParts}
-              onPartsChange={setPortfolioParts}
               today={{
                 managed:
                   (todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0) -
@@ -804,7 +788,6 @@ export function PlanEditor({
                   ? { managed: m.portfolioValue - (m.portfolioClaims ?? 0), own: m.investments }
                   : null;
               })()}
-              onToggle={handleTogglePortfolio}
             />
             </>
           }
@@ -1026,41 +1009,28 @@ function MainPlanToggle({
   );
 }
 
-/**
- * Sidebar card for the portfolio: what it is worth today, where the plan
- * takes it in a year, and whether the plan counts it in net worth. The switch
- * stays enabled while saving: disabling the control that has focus drops
- * keyboard focus to <body>, so input is ignored instead.
- */
-/** The two kinds of money the portfolio holds; the card picks which to add up. */
-type PortfolioParts = { managed: boolean; own: boolean };
+/** The portfolio's two parts, as each counts in net worth. */
 type PortfolioAmounts = { managed: number; own: number };
 
-function sumParts(amounts: PortfolioAmounts, parts: PortfolioParts, managedCounts: boolean): number {
-  return (parts.managed && managedCounts ? amounts.managed : 0) + (parts.own ? amounts.own : 0);
-}
+const total = (a: PortfolioAmounts, managedCounts: boolean): number =>
+  a.own + (managedCounts ? a.managed : 0);
 
 /**
- * The portfolio: the money managed for others (the investment methods' assets,
- * which "Count in net worth" adds to the plan) and the plan's own — what the
- * surplus invests. It used to read only the managed money, so a plan that
- * starts investing in March still read ~$2.5k a year out.
+ * The portfolio: the plan's own investments (what the surplus invests) plus
+ * the margin on the money managed for others — the positions their money
+ * bought less what is owed to them, both shown beneath it. Both always count,
+ * as the chart's portfolio line does.
  */
 function PortfolioCard({
   enabled,
-  parts,
-  onPartsChange,
   today,
   positions,
   owedToInvestors,
   horizonMonths,
   atHorizon,
-  onToggle,
 }: {
+  /** The plan counts the managed money (`includePortfolio`). */
   enabled: boolean;
-  parts: PortfolioParts;
-  onPartsChange: (next: PortfolioParts) => void;
-  /** Each part as it counts in net worth: our own, and the managed margin. */
   today: PortfolioAmounts;
   /** The managed money's two sides: what the positions are worth today, and
    *  what is owed to the investors behind them. */
@@ -1069,21 +1039,15 @@ function PortfolioCard({
   /** The chart's horizon, and where the plan takes each part by its end. */
   horizonMonths: number;
   atHorizon: PortfolioAmounts | null;
-  onToggle: (next: boolean) => Promise<void>;
 }): React.ReactElement {
-  const [pending, setPending] = useState(false);
-  const toggle = (next: boolean): void => {
-    if (pending) return;
-    setPending(true);
-    onToggle(next)
-      .catch(() => undefined)
-      .finally(() => setPending(false));
-  };
-  const nothing = !parts.managed && !parts.own;
-  const choices: { key: keyof PortfolioParts; label: string }[] = [
-    { key: "own", label: "Our own" },
-    { key: "managed", label: "Managed margin" },
-  ];
+  const row = (label: string, value: number, indent = false): React.ReactElement => (
+    <div className={cn("flex items-center justify-between gap-3", indent && "pl-3")}>
+      <Text variant="small" as="span">
+        {label}
+      </Text>
+      <Mono className="text-xs text-muted-foreground">{formatCurrency(value)}</Mono>
+    </div>
+  );
   return (
     <Card className="gap-3">
       <CardHeader>
@@ -1095,69 +1059,32 @@ function PortfolioCard({
         </Eyebrow>
       </CardHeader>
       <CardContent className="flex flex-col gap-1">
-        <div className={cn("flex items-baseline justify-between gap-3", nothing && "opacity-60")}>
+        <div className="flex items-baseline justify-between gap-3">
           <Text variant="small" as="span">
             Today
           </Text>
-          <Mono className="text-sm font-semibold">{formatCurrency(sumParts(today, parts, true))}</Mono>
+          <Mono className="text-sm font-semibold">{formatCurrency(total(today, enabled))}</Mono>
         </div>
-        {atHorizon !== null && !nothing && (
+        {atHorizon !== null && (
           <div className="flex items-baseline justify-between gap-3">
             <Text variant="small" as="span">
               In {horizonMonths % 12 === 0 && horizonMonths > 12 ? `${horizonMonths / 12} years` : `${horizonMonths} months`}
             </Text>
             {/* An estimate, at the expected rate: "≈" says so before the figure. */}
             <Mono className="text-sm text-muted-foreground">
-              ≈ {formatCurrency(sumParts(atHorizon, parts, enabled))}
+              ≈ {formatCurrency(total(atHorizon, enabled))}
             </Mono>
           </div>
         )}
         <div className="mt-1 flex flex-col gap-1.5 border-t pt-2">
-          {choices.map((c) => (
-            <Fragment key={c.key}>
-              <label className="flex cursor-pointer items-center justify-between gap-3">
-                <span className="flex items-center gap-2">
-                  <Checkbox
-                    checked={parts[c.key]}
-                    onCheckedChange={(v) => onPartsChange({ ...parts, [c.key]: v === true })}
-                  />
-                  <Text variant="small" as="span">
-                    {c.label}
-                  </Text>
-                </span>
-                <Mono className="text-xs text-muted-foreground">{formatCurrency(today[c.key])}</Mono>
-              </label>
-              {/* The margin's two sides: the positions bought with the
-                  investors' money, and what is owed to them. */}
-              {c.key === "managed" && enabled && (positions > 0 || owedToInvestors > 0) && (
-                <>
-                  <div className="flex items-center justify-between gap-3 pl-6">
-                    <Text variant="small" as="span">
-                      Positions
-                    </Text>
-                    <Mono className="text-xs text-muted-foreground">{formatCurrency(positions)}</Mono>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 pl-6">
-                    <Text variant="small" as="span">
-                      Owed to investors
-                    </Text>
-                    <Mono className="text-xs text-muted-foreground">{formatCurrency(-owedToInvestors)}</Mono>
-                  </div>
-                </>
-              )}
-            </Fragment>
-          ))}
-          <label className="flex cursor-pointer items-center justify-between gap-3">
-            <Text variant="small" as="span">
-              Count margin in net worth
-            </Text>
-            <Switch
-              checked={enabled}
-              onCheckedChange={toggle}
-              aria-disabled={pending}
-              aria-busy={pending}
-            />
-          </label>
+          {row("Our own", today.own)}
+          {enabled && (positions > 0 || owedToInvestors > 0) && (
+            <>
+              {row("Managed margin", today.managed)}
+              {row("Positions", positions, true)}
+              {row("Owed to investors", -owedToInvestors, true)}
+            </>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -1274,8 +1201,6 @@ type ProjectionPanelProps = {
   milestones?: readonly number[];
   /** Current includePortfolio flag: the chart draws the portfolio when set. */
   portfolioEnabled: boolean;
-  /** Which money the portfolio line adds up (see `PortfolioCard`). */
-  portfolioParts: PortfolioParts;
   /** The current period still waits for a confirmation (main plan only). */
   confirmationDue?: boolean;
   /** The user's last own confirmation (YYYY-MM-DD). */
@@ -1446,7 +1371,6 @@ function ProjectionPanel({
   ghost = null,
   portfolioHistory = [],
   portfolioEnabled,
-  portfolioParts,
   confirmationDue = false,
   lastConfirmedDay = null,
   now,
@@ -1521,27 +1445,18 @@ function ProjectionPanel({
   // the investors — so it goes negative while the positions are worth less
   // than the promise, and net worth's parts add up on every point.
   const portfolioValues = useMemo<(number | null)[] | undefined>(() => {
-    const positions =
-      portfolioEnabled && portfolioParts.managed
-        ? mapPortfolioValues(
-            chartSeries.points,
-            portfolioHistory,
-            projection,
-            chartSeries.pastCount,
-            anchorDay
-          )
-        : null;
+    const positions = portfolioEnabled
+      ? mapPortfolioValues(chartSeries.points, portfolioHistory, projection, chartSeries.pastCount, anchorDay)
+      : null;
     const managed = positions?.map((v, i) =>
       v === null ? null : v - (chartSeries.points[i].portfolioClaims ?? 0)
     );
-    const own = portfolioParts.own ? chartSeries.points.map((p) => p.investments ?? null) : null;
-    if (!managed && !own) return undefined;
-    return chartSeries.points.map((_, i) => {
+    return chartSeries.points.map((p, i) => {
       const a = managed?.[i] ?? null;
-      const b = own?.[i] ?? null;
+      const b = p.investments ?? null;
       return a === null && b === null ? null : (a ?? 0) + (b ?? 0);
     });
-  }, [portfolioEnabled, portfolioParts, chartSeries, portfolioHistory, projection, anchorDay]);
+  }, [portfolioEnabled, chartSeries, portfolioHistory, projection, anchorDay]);
   // Per-point period figures for the sidebar hover preview. Flows (income /
   // expenses / debt minimums) come from the projection month sharing the
   // point's period — the calibrated one first, falling back to the raw past

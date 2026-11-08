@@ -52,3 +52,10 @@ export const updateRoadPathSchema = z.object({
 
 export type UpdateRoadPathInput = z.input<typeof updateRoadPathSchema>;
 export type UpdateRoadPathData = z.output<typeof updateRoadPathSchema>;
+
+/** The user's road paths, in the order they now go. */
+export const reorderRoadPathsSchema = z.object({
+  ids: z.array(idSchema).min(1).max(500),
+});
+
+export type ReorderRoadPathsData = z.infer<typeof reorderRoadPathsSchema>;

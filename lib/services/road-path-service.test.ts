@@ -9,12 +9,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const roadPathsFindMany = vi.fn();
 const roadPathsFindFirst = vi.fn();
+const selectMock = vi.fn();
 const insertMock = vi.fn();
 const updateMock = vi.fn();
 const deleteMock = vi.fn();
 
 vi.mock("@/db", () => ({
   db: {
+    select: (...args: unknown[]) => selectMock(...args),
     query: {
       roadPaths: {
         findMany: (...args: unknown[]) => roadPathsFindMany(...args),
@@ -40,6 +42,7 @@ import {
   getCheckInMessage,
   getRoadPathDetail,
   getUserRoadPaths,
+  reorderRoadPaths,
   updateRoadPath,
 } from "./road-path-service";
 import type { RoadPath, RoadPathWithCheckIns } from "@/types";
@@ -270,6 +273,29 @@ describe("updateRoadPath", () => {
 });
 
 // ---------- deleteRoadPath ----------
+
+describe("reorderRoadPaths", () => {
+  const A = "00000000-0000-0000-0000-0000000000a1";
+  const B = "00000000-0000-0000-0000-0000000000b2";
+  const owned = (rows: { id: string }[]) =>
+    selectMock.mockReturnValueOnce({ from: () => ({ where: async () => rows }) });
+
+  it("numbers the user's paths in the order given", async () => {
+    owned([{ id: A }, { id: B }]);
+    const chain = mockUpdateReturning(buildPath());
+
+    await expect(reorderRoadPaths(USER_ID, [B, A])).resolves.toBe(true);
+
+    expect(chain.set.mock.calls.map((c) => c[0])).toEqual([{ position: 0 }, { position: 1 }]);
+  });
+
+  it("writes nothing when a path is not the user's", async () => {
+    owned([{ id: A }]);
+
+    await expect(reorderRoadPaths(USER_ID, [A, B])).resolves.toBe(false);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+});
 
 describe("deleteRoadPath", () => {
   it("issues a delete scoped by id + userId", async () => {

@@ -16,7 +16,7 @@ a target, milestones and a progress log; that model was removed on 2026-11-08.
 
 ## Server actions — `/app/actions/`
 - `board.ts` — column/task CRUD, reordering (a move or edit that takes a habit's task into Done returns its streak line as `message`); `setDoneColumnAction`, `carryOverTasksAction` (moves or leaves each offered task; today from the `tz` cookie), `moveTaskToTodayAction` (refuses a habit's task)
-- `road-path.ts` — create / update (every field) / delete a road path; create and update take the reader's today for `scheduleSince`
+- `road-path.ts` — create / update (every field) / delete a road path; create and update take the reader's today for `scheduleSince`. `reorderRoadPathsAction({ ids })` saves the order the cards were dragged into
 
 All return `ActionResult<X>` through `safe()`; raw ids are checked with
 `idSchema`, and "not found" is a returned failure, never a throw. The unused
@@ -25,7 +25,7 @@ getter actions were deleted — pages read through the services.
 ## Services — `/lib/services/`
 - `board-service.ts` — every positional write is scoped to (column, day); `getBoardTasksForDay`, `setDoneColumn`, `getCarryOverCandidates`, `carryOverTasks`, `moveTaskToDay`; a move into / out of the Done column sets `completedAt` and writes / removes the habit's check-in. `updateBoardColumn` / `updateBoardTask` return `null` when nothing matched
 - `road-path-service.ts` — every write is scoped by owner;
-  `getRoadPathDetail(id, userId, today, timeZone)` feeds the server-rendered detail view with its habit figures, `getCheckInMessage` builds the check-in line. `updateRoadPath` clears an old path's target, unit and target date the first time it is saved
+  `getRoadPathDetail(id, userId, today, timeZone)` feeds the server-rendered detail view with its habit figures, `getCheckInMessage` builds the check-in line. `updateRoadPath` clears an old path's target, unit and target date the first time it is saved. `getUserRoadPaths` orders by `position` (nulls — never placed — first, newest first); `reorderRoadPaths(userId, ids)` numbers them, refusing a list with a path that is not the user's
 - `task-automation-service.ts` — `ensureHabitTasksForDay(userId, day, timeZone)`: today's habit tasks, called by the board page and the dashboard card
 - `productivity-dashboard-service.ts` — `getDashboardProductivity(userId, today, timeZone | null)`: generates today's habit tasks (zone known only), then reads the board, carry-over count and road paths
 - `lib/productivity/dashboard.ts` — `buildDashboardProductivity`: today's done / total, open tasks in board order, habits sorted due → done → next
@@ -46,13 +46,14 @@ getter actions were deleted — pages read through the services.
 - `board/carry-over-dialog.tsx` — "You didn't finish some things. Move them to today?"; a task named like one already on today's board starts unticked
 - `dashboard-productivity-card.tsx` — the dashboard's card (between finance and travel): today's board and each scheduled habit with its week and streak
 - `road-paths/road-path-dialog.tsx` — create and edit (title, description, weekday toggles, start date, completed); `road-path-menu.tsx` — edit / delete for the card and the detail header
-- `road-paths/road-path-card.tsx` — the days badge, the week row, the streak and the share done; `road-path-detail.tsx` — streak and completion over the habit calendar
+- `road-paths/road-paths-view.tsx` — the cards, sortable with dnd-kit (a drag starts after 8px, so a click still opens the card; space and the arrows move a focused one), over a faint grid in the charts' gridline tone that fades out downwards; the new order shows at once and is saved behind it
+- `road-paths/road-path-card.tsx` — no hover state (the card is dragged); the days badge, the week row, the streak and the share done; `road-path-detail.tsx` — streak and completion over the habit calendar
 - `road-paths/habit-days.tsx` — `HabitCalendar` (a month, paged back to the start) and `HabitWeek` (the card's row of seven)
 
 ## DB tables — `db/schema.ts`
 - `board_columns` — kanban columns per user; `is_done` flags the one Done column (partial unique index per user)
 - `board_tasks` — tasks on a day's board (`board_date`), optionally a road path's (unique per path and day); `carry_over_declined_at` once left behind
-- `road_paths` — habits; `schedule_days` (0 = Sunday), `schedule_since`. `target_value` / `current_value` / `unit` / `target_date`, `auto_create_tasks` / `task_frequency` are unused, kept for production's old code
+- `road_paths` — habits; `schedule_days` (0 = Sunday), `schedule_since`, `position` (migration 0066; null until dragged). `target_value` / `current_value` / `unit` / `target_date`, `auto_create_tasks` / `task_frequency` are unused, kept for production's old code
 - `road_path_check_ins` — a day a habit was done (unique per path and day; `task_id` set null when the task is deleted)
 - `road_path_milestones`, `road_path_progress` — unused since road paths are habits only (both empty), kept for production's old code; drop them in a release after this one ships
 

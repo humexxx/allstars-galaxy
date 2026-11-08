@@ -40,7 +40,7 @@ export function RoadPathCard({ roadPath, today, timeZone }: RoadPathCardProps) {
   return (
     // The title is the link; its ::after stretches over the whole card so the
     // card is one big hit area that the keyboard can also reach.
-    <Card className="relative transition-shadow hover:shadow-md hover:ring-foreground/15">
+    <Card className="relative h-full">
       <CardHeader>
         {/* Clamped: a long title ran to five lines and pushed its figures far
             below its neighbours'. The detail page has it in full. */}

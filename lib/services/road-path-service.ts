@@ -2,7 +2,7 @@ import "server-only";
 
 import { db } from "@/db";
 import { roadPaths, roadPathCheckIns, boardTasks } from "@/db/schema";
-import { eq, and, asc, desc, gte, isNull } from "drizzle-orm";
+import { eq, and, asc, desc, gte, inArray, isNull, sql } from "drizzle-orm";
 import type { RoadPath, RoadPathDetail, RoadPathWithCheckIns } from "@/types";
 import {
   checkInMessage,
@@ -12,10 +12,11 @@ import {
 } from "@/lib/productivity/habit";
 import type { CreateRoadPathData, UpdateRoadPathData } from "@/schemas/road-path";
 
+/** In the order the user dragged them into; one never placed comes first, newest first. */
 export async function getUserRoadPaths(userId: string): Promise<RoadPathWithCheckIns[]> {
   return db.query.roadPaths.findMany({
     where: eq(roadPaths.userId, userId),
-    orderBy: [desc(roadPaths.createdAt)],
+    orderBy: [sql`${roadPaths.position} asc nulls first`, desc(roadPaths.createdAt)],
     with: {
       checkIns: { orderBy: [asc(roadPathCheckIns.day)] },
     },
@@ -124,6 +125,27 @@ export async function updateRoadPath(
 
     return path ?? null;
   });
+}
+
+/**
+ * Puts the user's road paths in `ids`' order. Every one of them must be the
+ * user's, and no other is touched; false (nothing written) otherwise.
+ */
+export async function reorderRoadPaths(userId: string, ids: readonly string[]): Promise<boolean> {
+  const owned = await db
+    .select({ id: roadPaths.id })
+    .from(roadPaths)
+    .where(and(eq(roadPaths.userId, userId), inArray(roadPaths.id, [...ids])));
+  if (owned.length !== new Set(ids).size) return false;
+  await db.transaction(async (tx) => {
+    for (const [position, id] of ids.entries()) {
+      await tx
+        .update(roadPaths)
+        .set({ position })
+        .where(and(eq(roadPaths.id, id), eq(roadPaths.userId, userId)));
+    }
+  });
+  return true;
 }
 
 export async function deleteRoadPath(roadPathId: string, userId: string): Promise<void> {

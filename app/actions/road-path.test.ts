@@ -18,6 +18,7 @@ vi.mock("@/lib/services/road-path-service", () => ({
   createRoadPath: vi.fn(),
   updateRoadPath: vi.fn(),
   deleteRoadPath: vi.fn(),
+  reorderRoadPaths: vi.fn(),
 }));
 
 import { revalidatePath } from "next/cache";
@@ -25,9 +26,9 @@ import {
   logImpersonatedMutation,
   requireEffectiveContext,
 } from "@/lib/services/impersonation";
-import { createRoadPath, updateRoadPath, deleteRoadPath } from "@/lib/services/road-path-service";
+import { createRoadPath, updateRoadPath, deleteRoadPath, reorderRoadPaths } from "@/lib/services/road-path-service";
 
-import { createRoadPathAction, updateRoadPathAction, deleteRoadPathAction } from "./road-path";
+import { createRoadPathAction, updateRoadPathAction, deleteRoadPathAction, reorderRoadPathsAction } from "./road-path";
 
 const USER_ID = "00000000-0000-4000-8000-000000000001";
 const ROAD_PATH_ID = "11111111-1111-4111-8111-111111111111";
@@ -193,5 +194,34 @@ describe("deleteRoadPathAction", () => {
 
     expect(result).toEqual({ success: false, error: "Invalid road path" });
     expect(deleteRoadPath).not.toHaveBeenCalled();
+  });
+});
+
+describe("reorderRoadPathsAction", () => {
+  it("saves the order for the effective user and revalidates", async () => {
+    vi.mocked(reorderRoadPaths).mockResolvedValueOnce(true);
+
+    const result = await reorderRoadPathsAction({ ids: [ROAD_PATH_ID] });
+
+    expect(result).toEqual({ success: true });
+    expect(reorderRoadPaths).toHaveBeenCalledWith(USER_ID, [ROAD_PATH_ID]);
+    expect(revalidatePath).toHaveBeenCalledWith(PATH, "layout");
+  });
+
+  it("says so when a path is not the user's", async () => {
+    vi.mocked(reorderRoadPaths).mockResolvedValueOnce(false);
+
+    await expect(reorderRoadPathsAction({ ids: [ROAD_PATH_ID] })).resolves.toEqual({
+      success: false,
+      error: "Road path not found",
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("rejects ids that are not uuids", async () => {
+    await expect(reorderRoadPathsAction({ ids: ["nope"] })).resolves.toEqual({
+      success: false,
+      error: "Invalid order",
+    });
   });
 });

@@ -1051,6 +1051,9 @@ export const roadPaths = pgTable(
     // zone is what stops a deleted task from being generated again that day.
     lastTaskCreatedAt: timestamp("last_task_created_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    // Where the user dragged it on the page. Null (never placed) sorts first,
+    // newest first, so a new path shows up at the top.
+    position: integer("position"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },

@@ -6,12 +6,20 @@ import { safe, type ActionResult } from "@/lib/actions/safe";
 import { logImpersonatedMutation } from "@/lib/services/impersonation";
 import { requireModuleContext } from "@/lib/services/module-access-service";
 import { getRequestTodayIso } from "@/lib/utils/request-today";
-import { getRoadPath, createRoadPath, updateRoadPath, deleteRoadPath } from "@/lib/services/road-path-service";
+import {
+  getRoadPath,
+  createRoadPath,
+  updateRoadPath,
+  deleteRoadPath,
+  reorderRoadPaths,
+} from "@/lib/services/road-path-service";
 import { idSchema } from "@/schemas/common";
 import {
   createRoadPathSchema,
   updateRoadPathSchema,
+  reorderRoadPathsSchema,
   type CreateRoadPathInput,
+  type ReorderRoadPathsData,
   type UpdateRoadPathInput,
 } from "@/schemas/road-path";
 import type { RoadPath } from "@/types";
@@ -95,6 +103,27 @@ export async function deleteRoadPathAction(roadPathId: string): Promise<ActionRe
       entityTable: "road_paths",
       entityId: parsed.data,
       before,
+    });
+    revalidatePath(PATH, "layout");
+    return { success: true };
+  });
+}
+
+/** Saves the order the user dragged their road paths into. */
+export async function reorderRoadPathsAction(data: ReorderRoadPathsData): Promise<ActionResult> {
+  return safe("road-path", async () => {
+    const ctx = await requireModuleContext("road-paths");
+    const parsed = reorderRoadPathsSchema.safeParse(data);
+    if (!parsed.success) return { success: false, error: "Invalid order" };
+
+    if (!(await reorderRoadPaths(ctx.effectiveUserId, parsed.data.ids))) {
+      return { success: false, error: "Road path not found" };
+    }
+
+    await logImpersonatedMutation({
+      action: "roadPath.reorder",
+      entityTable: "road_paths",
+      metadata: { ids: parsed.data.ids },
     });
     revalidatePath(PATH, "layout");
     return { success: true };

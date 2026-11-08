@@ -167,7 +167,7 @@ export function PlansWorkspace({
     const now = timeline?.points[timeline.todayIndex];
     if (!main || !timeline || !now) return null;
     const baseline = changeBaseline(
-      timeline.points.slice(0, timeline.todayIndex),
+      timeline.points.slice(0, timeline.todayIndex).filter((p) => !p.skipped),
       (p) => checkpointLabels(p.date).time,
       (p) => checkpointLabels(p.date),
       lastConfirmedDay

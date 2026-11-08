@@ -56,7 +56,9 @@ const ENDS_AT_ZERO: ReadonlySet<Plotted> = new Set(["debtBelow", "receivables"])
 export function toRows(data: DashboardPoint[], pastCount: number): Row[] {
   const valuesOf = (p: DashboardPoint): Record<Plotted, number> => ({
     savingsAbove: shownCash(p.savings),
-    investments: p.investments,
+    // A negative margin is net worth's business, not an area: the stack is
+    // drawn up from zero.
+    investments: Math.max(0, p.investments),
     receivables: p.receivables,
     // Cash is never drawn under zero (see `shownCash`).
     savingsBelow: 0,

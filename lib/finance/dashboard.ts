@@ -90,7 +90,9 @@ type State = Pick<
 function partsOf(s: State): DashboardParts {
   return {
     savings: s.savings,
-    investments: s.investments + s.portfolioValue,
+    // Our own investments plus the managed MARGIN (positions less what the
+    // investors are owed), as the plan chart's Portfolio reads it.
+    investments: s.investments + s.portfolioValue - (s.portfolioClaims ?? 0),
     receivables: s.receivables,
     debt: s.totalDebt,
     netWorth: s.netWorth,
@@ -109,8 +111,7 @@ function partsOfPoint(p: ChartPoint): DashboardParts {
   const receivables = p.receivables ?? 0;
   return {
     savings,
-    // The investors' claim is inside net worth but no part of its own.
-    investments: p.netWorth - savings - receivables + debt + (p.portfolioClaims ?? 0),
+    investments: p.netWorth - savings - receivables + debt,
     receivables,
     debt,
     netWorth: p.netWorth,

@@ -288,9 +288,9 @@ type Figure = {
  * right way (up, or down for debt), red when not, neutral when it held.
  */
 /**
- * What of the portfolio is owed to the investors — net worth counts the
- * managed money only as its margin — and that margin as a share of what is
- * owed, this month and to date.
+ * The two sides of the managed margin the Portfolio figure holds — the
+ * positions and what is owed to the investors — and that margin as a share of
+ * what is owed, this month and to date.
  */
 function managedNote(managed: ManagedAssets | null, claims: number): React.ReactNode {
   if (!managed || managed.value <= 0 || managed.allTimeMarginPercent === null) return undefined;
@@ -301,7 +301,11 @@ function managedNote(managed: ManagedAssets | null, claims: number): React.React
   );
   return (
     <Mono className="block text-2xs text-muted-foreground">
-      {claims > 0 && <>{formatCurrency(claims)} owed to investors · </>}
+      {claims > 0 && (
+        <>
+          {formatCurrency(managed.value)} positions · {formatCurrency(claims)} owed ·{" "}
+        </>
+      )}
       ({managed.monthMarginPercent !== null && <>{part(managed.monthMarginPercent, "mo")} · </>}
       {part(managed.allTimeMarginPercent, "all")}) margin
     </Mono>

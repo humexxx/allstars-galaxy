@@ -217,16 +217,19 @@ export function interpolateSkipped(points: readonly ChartPoint[]): ChartPoint[] 
     while (r < points.length && points[r].skipped) r += 1;
     const left = points[l];
     const right = points[r];
-    if (!left || !right) return { ...(left ?? right ?? p), date: p.date, skipped: true };
+    // A window cut between a skipped point and its neighbour keeps the
+    // figures the whole timeline gave it.
+    if (!left || !right) return p;
     const t =
       (p.date.getTime() - left.date.getTime()) / (right.date.getTime() - left.date.getTime());
     const filled: ChartPoint = { date: p.date, netWorth: 0, skipped: true };
     for (const key of NUMERIC_FIELDS) {
       const a = left[key];
       const b = right[key];
-      if (a == null && b == null) continue;
-      const from = a ?? 0;
-      filled[key] = from + ((b ?? 0) - from) * t;
+      // A figure one side never recorded (an old snapshot's portfolio) is
+      // unknown, not zero: leave it out rather than bend toward $0.
+      if (a == null || b == null) continue;
+      filled[key] = a + (b - a) * t;
     }
     return filled;
   });

@@ -86,9 +86,9 @@ describe("F11: dashboard card figures", () => {
     // The portfolio rides in investments, or the tiles fall $20k short of
     // the net worth above them.
     expect(fig.investments).toBeCloseTo(today!.investments + today!.portfolioValue, 6);
-    expect(fig.savings + fig.investments + fig.receivables - fig.debt).toBeCloseTo(fig.netWorth, 6);
+    expect(fig.savings + fig.investments + fig.trading + fig.receivables - fig.debt).toBeCloseTo(fig.netWorth, 6);
     for (const p of fig.points) {
-      expect(p.savings + p.investments + p.receivables - p.debt).toBeCloseTo(p.netWorth, 1);
+      expect(p.savings + p.investments + p.trading + p.receivables - p.debt).toBeCloseTo(p.netWorth, 1);
     }
   });
 
@@ -127,6 +127,24 @@ describe("F11: dashboard card figures", () => {
     // A projected close carries the portfolio in investments, like today.
     const aug = projection.months[7];
     expect(fig.points[2].investments).toBeCloseTo(aug.investments + aug.portfolioValue, 1);
+  });
+
+  it("keeps the trading account out of the portfolio, as a part of its own", () => {
+    const withTrading = { ...options, tradingValue: 1500, tradingMonthlyRate: 0.02, tradingAsOf: now };
+    const projection = projectPlan(plan, incomes, expenses, [], withTrading);
+    const today = projectStateAt(plan, incomes, expenses, [], withTrading, now);
+    const fig = buildDashboardFigures(projection, today);
+
+    expect(fig.trading).toBe(1500);
+    expect(fig.investments).toBeCloseTo(today!.investments + today!.portfolioValue, 2);
+    for (const p of [fig, ...fig.points]) {
+      expect(p.savings + p.investments + p.trading + p.receivables - p.debt).toBeCloseTo(p.netWorth, 1);
+    }
+    // A recorded past point carries its trading balance apart too.
+    const [jul] = buildDashboardFigures(projection, today, [
+      { date: U(2026, 8), netWorth: 25000, savings: 3000, investments: 500, totalDebt: 0, receivables: 0, tradingValue: 1200 },
+    ]).points;
+    expect(jul).toMatchObject({ trading: 1200, investments: 20800 });
   });
 
   it("splits a recorded snapshot into parts that add up to its net worth", () => {

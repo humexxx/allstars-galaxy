@@ -17,7 +17,7 @@ export const COUNT_MS = 900;
 
 /** When each part starts: cash, portfolio, debt, owed to you, net worth. */
 export const DRAW_ORDER = {
-  savings: 0,
+  trading: 0,
   investments: 1,
   debt: 2,
   receivables: 3,

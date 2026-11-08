@@ -48,7 +48,7 @@ count and project at its own recent pace.
 - `line-groups.ts` — the Setup list's grouping: lines sharing a name become one row (the amount that applies today, "N phases" and their span), and on the income side every `owedToMe` line goes into one collapsed "Owed to you" section with the total still owed (`owedRepayments`/`owedAfter`, the net-worth rule)
 - `chart-series.ts` — `buildPlanTimeline` / `buildChartSeries` (real past as period closes + projection), `alignTodayPoint`, `buildCompareRows` (compare chart, joined by calendar month), `calendarTicks` (axis ticks on calendar months), `forecastKpiPoints` (the "Next" KPI; a plan that has not started yet gets its first close, no today marker and no Confirm), `milestoneCrossings`, and the one debt-free definition (`debtFreeMonthsFromNow`, `describeDebtFree`, `formatDebtFree`, `summaryDebtFree`)
 - `scenario.ts` — `compareScenario` (scenario vs base at a shared period; payoff compared as dates)
-- `dashboard.ts` — `buildDashboardFigures` for the dashboard card: the last three closed periods (`DASHBOARD_PAST_MONTHS`), today and the next 12 closes as net worth's parts (savings, investments with the portfolio folded in, owed to you, debt), each point named after the month its period CLOSES in (`anchorDay`); `pastCount` says where today sits. `dashboardGoal` (`DashboardGoal`) — the debt-free date while there is debt (small print under Debt, the margin note's type), then the next net-worth milestone the projection reaches (under net worth)
+- `dashboard.ts` — `buildDashboardFigures` for the dashboard card: the last three closed periods (`DASHBOARD_PAST_MONTHS`), today and the next 12 closes as net worth's parts (savings, investments with the portfolio folded in — own money plus the managed margin, trading — owed to you, debt; `positions` for the managed note), each point named after the month its period CLOSES in (`anchorDay`); `pastCount` says where today sits. `dashboardGoal` (`DashboardGoal`) — the debt-free date while there is debt (small print under Debt, the margin note's type), then the next net-worth milestone the projection reaches (under net worth)
 - `debt-payments.ts` — `projectedDebtPayments` / `debtChipAmount`: the calendar's debt chips read the payments the projection made
 - `table-rows.ts` — `densify` (first 12 rows + real Decembers)
 - `amount-input.ts` — parses typed or pasted amounts ("$1,234.50") the way the server schema will, so the confirmation dialog shows per-field errors instead of a bare "Invalid input" toast
@@ -91,6 +91,8 @@ which names a period by obligations ÷ income in six bands
 ([`lib/finance/period-health.ts`](../../lib/finance/period-health.ts)):
 Thriving under 50%, Healthy to 70%, Steady to 80%, Tight to 90%, Strained to
 100%, Underwater past it, each with its own `--health-*` colour token.
+**The dashboard card shows what the plan page shows** (2026-11-08): Portfolio (the managed note — positions, owed, margin — only for an account that runs methods, with the plan card's positions figure), Trading for an account with the module (its own series, `--chart-2`, as on the plan chart), Owed to you and Debt when present. No Cash: the plan page's chart draws none, so the card neither lists nor draws it; net worth still counts it.
+
 The dashboard card is [`dashboard-finance-card.tsx`](../../components/finance/dashboard-finance-card.tsx)
 with its stacked chart in `dashboard-finance-mini-chart.tsx`; both read the
 series list in `dashboard-finance-series.ts`. Its past comes off the plan page's

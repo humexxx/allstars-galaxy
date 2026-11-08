@@ -16,7 +16,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { statToneClass } from "@/components/ui/stat-card";
 import { Eyebrow, Mono } from "@/components/ui/typography";
-import { shownCash } from "@/lib/finance/cash";
 import { cn } from "@/lib/utils";
 
 import { CountUpCurrency } from "./count-up";
@@ -98,7 +97,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   // included), with "now" as the day-aware position in the reader's zone.
   const timeZone = await getRequestTimeZone();
   const now = todayInTimeZone(timeZone);
-  const [view, history, preferences, managed, movements, lastConfirmedDay] = await Promise.all([
+  const [view, history, preferences, managed, movements, lastConfirmedDay, tradingOn] = await Promise.all([
     loadCalibratedView(full, userId, now, { timeZone }),
     // One month more than the chart shows: a period's close is recorded by the
     // snapshots taken in the period after it.
@@ -116,6 +115,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
       : Promise.resolve(null),
     getRecentMovementSnapshots(full.id, userId, DASHBOARD_PAST_MONTHS, now),
     getLastConfirmedDay(userId),
+    isModuleEnabled(userId, "trading"),
   ]);
   // The months before today come off the plan page's own timeline: recorded
   // snapshots, or the plan's forecast while it has none.
@@ -157,22 +157,28 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     lastConfirmedDay
   );
   const sinceClose = changeFrom ? fig.netWorth - changeFrom.point.netWorth : null;
-  // Net worth, Portfolio and Cash always show; Owed to you and Debt when the
-  // chart's range has any — a $0.00 debt tile on a plan with none is noise.
-  const visible = visibleSeriesKeys(points);
+  // The parts the plan page shows: Portfolio always, Trading for an account
+  // with the module, Owed to you and Debt when the chart's range has any — a
+  // $0.00 debt tile on a plan with none is noise. No cash, as on the plan.
+  const visible = visibleSeriesKeys(points, { trading: tradingOn });
   const breakdown: Figure[] = [
     {
       series: dashboardSeries("investments"),
       label: "Portfolio",
       amount: fig.investments,
-      note: managedNote(managed, fig.claims),
+      note: managedNote(managed, fig.positions, fig.claims),
       href: "/portal/portfolio",
     },
-    {
-      series: dashboardSeries("savings"),
-      label: "Cash",
-      amount: shownCash(fig.savings),
-    },
+    ...(visible.has("trading")
+      ? [
+          {
+            series: dashboardSeries("trading"),
+            label: "Trading",
+            amount: fig.trading,
+            href: "/portal/trading",
+          },
+        ]
+      : []),
     ...(visible.has("receivables")
       ? [
           {
@@ -263,6 +269,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
           <DashboardFinanceMiniChart
             data={points}
             pastCount={fig.pastCount}
+            trading={tradingOn}
             className="h-64 sm:h-72 @2xl:h-auto @2xl:min-h-96"
           />
         </div>
@@ -292,10 +299,11 @@ type Figure = {
  */
 /**
  * The two sides of the managed margin the Portfolio figure holds — the
- * positions and what is owed to the investors — and that margin as a share of
- * what is owed, this month and to date.
+ * positions and what is owed to the investors, the plan's Portfolio card's
+ * figures — and that margin as a share of what is owed, this month and to
+ * date. Only for an account that runs methods: a client has none.
  */
-function managedNote(managed: ManagedAssets | null, claims: number): React.ReactNode {
+function managedNote(managed: ManagedAssets | null, positions: number, claims: number): React.ReactNode {
   if (!managed || managed.value <= 0 || managed.allTimeMarginPercent === null) return undefined;
   const part = (pct: number, label: string) => (
     <span className={statToneClass(pct >= 0 ? "positive" : "negative")}>
@@ -306,7 +314,7 @@ function managedNote(managed: ManagedAssets | null, claims: number): React.React
     <Mono className="block text-2xs text-muted-foreground">
       {claims > 0 && (
         <>
-          {formatCurrency(managed.value)} positions · {formatCurrency(claims)} owed ·{" "}
+          {formatCurrency(positions)} positions · {formatCurrency(claims)} owed ·{" "}
         </>
       )}
       ({managed.monthMarginPercent !== null && <>{part(managed.monthMarginPercent, "mo")} · </>}
@@ -349,7 +357,7 @@ function FigureItem({ figure }: { figure: Figure }) {
       <dd>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Mono className={cn("text-sm font-semibold sm:text-base", statToneClass(tone))}>
-            <CountUpCurrency value={amount} delay={drawDelay(series.key)} />
+            <CountUpCurrency value={amount} delay={drawDelay(series.key === "savings" ? "netWorth" : series.key)} />
           </Mono>
           {change}
         </div>

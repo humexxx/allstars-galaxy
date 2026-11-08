@@ -13,6 +13,7 @@ const point = (month: string, netWorth: number): DashboardPoint => ({
   label: month,
   savings: -50,
   investments: 300,
+  trading: 40,
   receivables: 0,
   debt: 100,
   netWorth,
@@ -27,11 +28,11 @@ describe("toRows", () => {
     expect(rows.map((r) => r.netWorthAhead)).toEqual([null, 2, 3]);
   });
 
-  it("splits each stacked part the same way, and never draws cash under zero", () => {
+  it("splits each stacked part the same way, trading among them, and draws no cash", () => {
     expect(rows.map((r) => r.investmentsAhead)).toEqual([null, 300, 300]);
-    expect(rows.map((r) => r.savingsBelowPast)).toEqual([0, 0, null]);
-    expect(rows.map((r) => r.savingsAbovePast)).toEqual([0, 0, null]);
+    expect(rows.map((r) => r.tradingPast)).toEqual([40, 40, null]);
     expect(rows.map((r) => r.debtBelowAhead)).toEqual([null, -100, -100]);
+    expect(rows[0]).not.toHaveProperty("savingsAbovePast");
   });
 
   it("marks only the months after today as projected", () => {
@@ -47,11 +48,16 @@ describe("toRows", () => {
 
 describe("visibleSeriesKeys", () => {
   const parts = (debt: number, receivables = 0) => ({
-    savings: 0, investments: 0, receivables, debt, netWorth: receivables - debt,
+    savings: -20, investments: 0, trading: 0, receivables, debt, netWorth: receivables - debt,
   });
 
-  it("always lists net worth, portfolio and cash; never debt nobody has", () => {
-    expect([...visibleSeriesKeys([parts(0), parts(0)])]).toEqual(["netWorth", "investments", "savings"]);
+  it("always lists net worth and portfolio; never cash, nor debt nobody has", () => {
+    expect([...visibleSeriesKeys([parts(0), parts(0)])]).toEqual(["netWorth", "investments"]);
+  });
+
+  it("lists trading only for an account with the module, even at $0", () => {
+    expect(visibleSeriesKeys([parts(0)], { trading: true }).has("trading")).toBe(true);
+    expect(visibleSeriesKeys([parts(0)]).has("trading")).toBe(false);
   });
 
   it("keeps debt for the whole range once any point has some, its $0 months included", () => {

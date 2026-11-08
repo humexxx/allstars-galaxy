@@ -29,10 +29,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** What net worth is made of, at one point. */
 export type DashboardParts = {
-  /** Can be negative: an overdrawn account. */
+  /** Can be negative: an overdrawn account. In net worth, never drawn: the
+   *  card follows the plan page, which shows no cash. */
   savings: number;
   /** Investments AND the portfolio — see `partsOf`. */
   investments: number;
+  /** The trading journal's balance. */
+  trading: number;
   /** Money owed to the user, not yet repaid. */
   receivables: number;
   /** Owed BY the user, as a positive amount. */
@@ -75,6 +78,9 @@ export type DashboardFigures = DashboardParts & {
    *  worth counts the managed money only as its margin, so the parts add up
    *  to it once this comes off. */
   claims: number;
+  /** What the positions are worth today, before that claim: the plan's
+   *  Portfolio card's figure. */
+  positions: number;
 };
 
 type State = Pick<
@@ -98,9 +104,10 @@ function partsOf(s: State): DashboardParts {
   return {
     savings: s.savings,
     // Our own investments plus the managed MARGIN (positions less what the
-    // investors are owed), as the plan chart's Portfolio reads it.
-    // The trading account is invested money too.
-    investments: s.investments + s.portfolioValue - (s.portfolioClaims ?? 0) + (s.tradingValue ?? 0),
+    // investors are owed), as the plan chart's Portfolio reads it. The
+    // trading account is its own part, as on the plan.
+    investments: s.investments + s.portfolioValue - (s.portfolioClaims ?? 0),
+    trading: s.tradingValue ?? 0,
     receivables: s.receivables,
     debt: s.totalDebt,
     netWorth: s.netWorth,
@@ -117,9 +124,11 @@ function partsOfPoint(p: ChartPoint): DashboardParts {
   const savings = p.savings ?? 0;
   const debt = p.totalDebt ?? 0;
   const receivables = p.receivables ?? 0;
+  const trading = p.tradingValue ?? 0;
   return {
     savings,
-    investments: p.netWorth - savings - receivables + debt,
+    investments: p.netWorth - savings - receivables - trading + debt,
+    trading,
     receivables,
     debt,
     netWorth: p.netWorth,
@@ -177,6 +186,7 @@ function inCents(p: DashboardParts): DashboardParts {
   return {
     savings: roundCents(p.savings),
     investments: roundCents(p.investments),
+    trading: roundCents(p.trading),
     receivables: roundCents(p.receivables),
     debt: roundCents(p.debt),
     netWorth: roundCents(p.netWorth),
@@ -209,9 +219,11 @@ export function buildDashboardFigures(
       pastCount: 0,
       savings: 0,
       investments: 0,
+      trading: 0,
       receivables: 0,
       debt: 0,
       claims: 0,
+      positions: 0,
       netWorth: 0,
       delta: 0,
       deltaPeriods: 0,
@@ -276,6 +288,7 @@ export function buildDashboardFigures(
     deltaPeriods: ahead.length,
     status: today.status,
     claims: roundCents(today.portfolioClaims ?? 0),
+    positions: roundCents(today.portfolioValue),
   };
 }
 

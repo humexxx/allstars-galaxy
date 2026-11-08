@@ -57,7 +57,7 @@ const PORTFOLIO = dashboardSeries("investments").color;
 const DEBT = dashboardSeries("debt").color;
 const OWED = dashboardSeries("receivables").color;
 const CASH = dashboardSeries("savings").color;
-const TRADING = "var(--chart-2)";
+const TRADING = dashboardSeries("trading").color;
 
 // recharts types `animationEasing` as the named curves only, but its
 // animator (react-smooth) takes any t → progress function.

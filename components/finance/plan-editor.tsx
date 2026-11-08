@@ -1157,7 +1157,7 @@ function TradingCard({
       <CardHeader className="flex items-center justify-between gap-2">
         <Eyebrow asChild>
           <h2 className="flex items-center gap-1.5">
-            <span aria-hidden className="inline-block size-2 rounded-xs" style={{ background: "var(--chart-2)" }} />
+            <SeriesSwatch series={dashboardSeries("trading")} />
             Trading
           </h2>
         </Eyebrow>

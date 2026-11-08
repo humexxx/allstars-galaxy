@@ -11,7 +11,6 @@ import {
 } from "recharts";
 
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
-import { shownCash } from "@/lib/finance/cash";
 import type { DashboardPoint } from "@/lib/finance/dashboard";
 import { cn } from "@/lib/utils";
 import { niceTicks, yAxisWidth } from "@/lib/utils/chart-axis";
@@ -29,15 +28,10 @@ const chartConfig: ChartConfig = Object.fromEntries(
 
 /**
  * Assets stack up from zero and debts down from it, each in its own stack:
- * a stack that mixes signs draws its layers across each other. Savings is
- * split for the same reason — an overdraft is owed, so it sits with the debt.
- *
- * Cash is the bottom layer, so at $0 its outline is a flat line on zero
- * rather than a trace along the top of the stack. Cash is usually $0 now
- * that the surplus is routed the day it lands, so Owed to you above it no
- * longer rides its swings.
+ * a stack that mixes signs draws its layers across each other. Cash is not
+ * drawn, as on the plan page's chart: net worth still counts it.
  */
-const PLOTTED = ["savingsAbove", "receivables", "investments", "savingsBelow", "debtBelow", "netWorth"] as const;
+const PLOTTED = ["receivables", "investments", "trading", "debtBelow", "netWorth"] as const;
 type Plotted = (typeof PLOTTED)[number];
 
 /**
@@ -51,17 +45,15 @@ export type Row = DashboardPoint & {
 } & Record<`${Plotted}${"Past" | "Ahead"}`, number | null>;
 
 /** Parts that stop being drawn while they are $0: once a debt is paid off its outline ran along zero to the end. */
-const ENDS_AT_ZERO: ReadonlySet<Plotted> = new Set(["debtBelow", "receivables"]);
+const ENDS_AT_ZERO: ReadonlySet<Plotted> = new Set(["debtBelow", "receivables", "trading"]);
 
 export function toRows(data: DashboardPoint[], pastCount: number): Row[] {
   const valuesOf = (p: DashboardPoint): Record<Plotted, number> => ({
-    savingsAbove: shownCash(p.savings),
     // A negative margin is net worth's business, not an area: the stack is
     // drawn up from zero.
     investments: Math.max(0, p.investments),
+    trading: Math.max(0, p.trading),
     receivables: p.receivables,
-    // Cash is never drawn under zero (see `shownCash`).
-    savingsBelow: 0,
     // `0 - debt`, not `-debt`: a paid-off debt is 0, not -0.
     debtBelow: 0 - p.debt,
     netWorth: p.netWorth,
@@ -88,8 +80,7 @@ export function toRows(data: DashboardPoint[], pastCount: number): Row[] {
 
 /** Which part each plotted area is, for its place in the draw-in. */
 const AREA_PART: Record<string, keyof typeof DRAW_ORDER> = {
-  savingsAbove: "savings",
-  savingsBelow: "savings",
+  trading: "trading",
   investments: "investments",
   debtBelow: "debt",
   receivables: "receivables",
@@ -164,11 +155,14 @@ function MiniTooltip({
 export function DashboardFinanceMiniChart({
   data,
   pastCount = 0,
+  trading = false,
   className,
 }: {
   data: DashboardPoint[];
   /** Points before today's: drawn solid, everything after it dashed. */
   pastCount?: number;
+  /** The account has the trading module: its balance is a series. */
+  trading?: boolean;
   className?: string;
 }) {
   const reducedMotion = usePrefersReducedMotion();
@@ -176,23 +170,22 @@ export function DashboardFinanceMiniChart({
   const rows = toRows(data, pastCount);
   const tickTimes = data.filter((p) => p.tick).map((p) => p.time);
   const monthByTime = new Map(data.map((p) => [p.time, p.month]));
-  const visible = visibleSeriesKeys(data);
+  const visible = visibleSeriesKeys(data, { trading });
   const ticks = niceTicks(
     data.flatMap((p) => [
-      Math.max(0, p.savings) + p.investments + p.receivables,
+      Math.max(0, p.investments) + (trading ? Math.max(0, p.trading) : 0) + p.receivables,
       -p.debt,
       p.netWorth,
     ])
   );
   const owesAnything = data.some((p) => moneySign(p.debt) > 0);
-  const savings = dashboardSeries("savings").color;
   const debt = dashboardSeries("debt").color;
   // A projected month is the same series, dashed and fainter: the plan's
   // guess, not a balance anyone has seen.
-  // A part that is $0 at every point draws nothing — its outline would lie
-  // along the stack — except cash, which always shows, flat on zero.
+  // A part that is $0 at every point draws nothing: its outline would lie
+  // along the stack.
   const present = (key: Plotted): boolean =>
-    key === "savingsAbove" ||
+    (key !== "trading" || trading) &&
     rows.some((r) => moneySign(r[`${key}Past`] ?? r[`${key}Ahead`] ?? 0) !== 0);
   const area = (key: Plotted, stack: "assets" | "debts", color: string, ahead: boolean) =>
     present(key) && (
@@ -216,10 +209,9 @@ export function DashboardFinanceMiniChart({
     />
   );
   const halves = [false, true].flatMap((ahead) => [
-    area("savingsAbove", "assets", savings, ahead),
     area("receivables", "assets", dashboardSeries("receivables").color, ahead),
     area("investments", "assets", dashboardSeries("investments").color, ahead),
-    area("savingsBelow", "debts", savings, ahead),
+    area("trading", "assets", dashboardSeries("trading").color, ahead),
     area("debtBelow", "debts", debt, ahead),
   ]);
   // Net worth draws last, past first and then the projection, as one eased

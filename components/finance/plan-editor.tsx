@@ -267,7 +267,7 @@ type PlanEditorProps = {
   /** The Portfolio module is on for the account: off, the plan shows none of it. */
   portfolioOn?: boolean;
   /** The account runs investment methods: only then does the Portfolio card
-   *  break the managed money (positions, owed to investors) out. */
+   *  break the managed margin out from its own money. */
   managesMoney?: boolean;
 };
 
@@ -794,8 +794,6 @@ export function PlanEditor({
                   (todayState?.portfolioClaims ?? 0),
                 own: todayState?.investments ?? projection.months[currentPeriodIdx]?.investments ?? 0,
               }}
-              positions={todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0}
-              owedToInvestors={todayState?.portfolioClaims ?? 0}
               horizonLabel={(() => {
                 const last = projection.months.length - 1;
                 if (currentPeriodIdx + horizonMonths > last && last >= 0) {
@@ -1055,15 +1053,14 @@ const total = (a: PortfolioAmounts, managedCounts: boolean): number =>
 /**
  * The portfolio: the plan's own investments (what the surplus invests) plus
  * the margin on the money managed for others — the positions their money
- * bought less what is owed to them, both shown beneath it. Both always count,
- * as the chart's portfolio line does.
+ * bought less what is owed to them. Both always count, as the chart's
+ * portfolio line does; the two sides of the margin stay off the card, for
+ * room (the dashboard's note and the Portfolio page carry them).
  */
 function PortfolioCard({
   enabled,
   managesMoney,
   today,
-  positions,
-  owedToInvestors,
   horizonLabel,
   atHorizon,
 }: {
@@ -1073,17 +1070,13 @@ function PortfolioCard({
    *  so it gets no managed breakdown at all. */
   managesMoney: boolean;
   today: PortfolioAmounts;
-  /** The managed money's two sides: what the positions are worth today, and
-   *  what is owed to the investors behind them. */
-  positions: number;
-  owedToInvestors: number;
   /** Where the chart's horizon ends ("In 12 months", or "By May ’36" when the
    *  plan ends first), and what each part is there. */
   horizonLabel: string;
   atHorizon: PortfolioAmounts | null;
 }): React.ReactElement {
-  const row = (label: string, value: number, indent = false): React.ReactElement => (
-    <div className={cn("flex items-center justify-between gap-3", indent && "pl-3")}>
+  const row = (label: string, value: number): React.ReactElement => (
+    <div className="flex items-center justify-between gap-3">
       <Text variant="small" as="span">
         {label}
       </Text>
@@ -1121,13 +1114,7 @@ function PortfolioCard({
         {managesMoney && (
           <div className="mt-1 flex flex-col gap-1.5 border-t pt-2">
             {row("Our own", today.own)}
-            {enabled && (
-              <>
-                {row("Managed margin", today.managed)}
-                {row("Positions", positions, true)}
-                {row("Owed to investors", -owedToInvestors, true)}
-              </>
-            )}
+            {enabled && row("Managed margin", today.managed)}
           </div>
         )}
       </CardContent>

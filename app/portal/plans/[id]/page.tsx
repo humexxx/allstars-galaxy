@@ -25,6 +25,7 @@ import {
   getLastConfirmedDay,
 } from "@/lib/services/finance-confirmation-service";
 import { getUserPortfolio } from "@/lib/services/portfolio-service";
+import { getTradingSummary } from "@/lib/services/trading-journal-service";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { todayInTimeZone } from "@/lib/utils/date";
 import { parsePlanView } from "@/lib/finance/plan-view";
@@ -87,11 +88,12 @@ export default async function PlanDetailPage({ params, searchParams }: PageProps
   const { baseline, projection, options, today } = view;
   // Only the main plan is confirmed; the warning beside its chart says when
   // the current period still waits for one.
-  const [confirmationDue, lastConfirmedDay] = await Promise.all([
+  const [confirmationDue, lastConfirmedDay, trading] = await Promise.all([
     plan.isMain
       ? getConfirmationStatus(plan, ctx.effectiveUserId, now).then((s) => s.isDue)
       : false,
     getLastConfirmedDay(ctx.effectiveUserId),
+    getTradingSummary(ctx.effectiveUserId, timeZone),
   ]);
 
   // The plan as written (no confirmation applied): the hover fallback for
@@ -172,6 +174,7 @@ export default async function PlanDetailPage({ params, searchParams }: PageProps
         backHref="/portal/plans"
         confirmationDue={confirmationDue}
         lastConfirmedDay={lastConfirmedDay}
+        trading={trading}
         initialView={parsePlanView(viewParam)}
       />
     </section>

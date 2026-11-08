@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  ChartCandlestick,
   HeartPulse,
   Kanban,
   Plane,
@@ -51,6 +52,16 @@ export const LANDING_MODULES: LandingModule[] = [
     icon: TrendingUp,
     status: "live",
     href: "/portal/plans",
+  },
+  {
+    area: "Finance",
+    name: "Trading Journal",
+    title: "Trading Journal",
+    description:
+      "Log every trade and see it on a calendar of green and red days, with the equity curve, win rate and profit factor behind it. Your plans grow the account at its own recent pace.",
+    icon: ChartCandlestick,
+    status: "live",
+    href: "/portal/trading",
   },
   {
     area: "Productivity",

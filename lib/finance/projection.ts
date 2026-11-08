@@ -81,6 +81,14 @@ export type ProjectOptions = {
   /** Monthly growth (decimal) of those claims: the rate promised to the
    *  investors (each method's `monthly_roi`). */
   portfolioClaimsMonthlyRate?: number;
+  /** The trading journal's balance today; added to net worth. */
+  tradingValue?: number;
+  /** Monthly growth (decimal) of it: the average return of the journal's
+   *  last complete months. 0 holds it flat; a losing average shrinks it. */
+  tradingMonthlyRate?: number;
+  /** The day `tradingValue` was read. It is a live figure, not one as of the
+   *  plan's opening, so it only grows after this day. */
+  tradingAsOf?: Date | null;
   /** Monthly ROI (decimal) of the auto-invest method. */
   autoInvestRate?: number;
   /** Per-month overrides for recurring lines. */
@@ -179,6 +187,8 @@ type Opening = {
   managed: number;
   /** Owed to the investors behind `managed` (see `portfolioClaims`). */
   claims: number;
+  /** The trading account (see `tradingValue`). */
+  trading: number;
   debts: DebtState[];
 };
 
@@ -201,6 +211,9 @@ function runEngine(
   const held = Math.min(portfolioValue, Math.max(0, options.portfolioHeldValue ?? 0));
   const heldGrowth = Math.max(0, options.portfolioHeldMonthlyGrowthRate ?? 0);
   const claimsGrowth = Math.max(0, options.portfolioClaimsMonthlyRate ?? 0);
+  // A losing pace shrinks the account, never past zero.
+  const tradingGrowth = Math.max(-1, options.tradingMonthlyRate ?? 0);
+  const tradingAsOf = options.tradingAsOf ?? null;
   const autoInvestRate = Math.max(0, options.autoInvestRate ?? 0);
   const savingsRate = Math.max(0, num(plan.monthlySavingsRate));
   const surplusPercent = Math.max(0, Math.min(1, num(plan.surplusToDebtsPercent)));
@@ -239,6 +252,7 @@ function runEngine(
     portfolio: portfolioValue,
     managed: held,
     claims: Math.max(0, options.portfolioClaims ?? 0),
+    trading: Math.max(0, options.tradingValue ?? 0),
     debts: debtStates,
   };
 
@@ -416,10 +430,17 @@ function runEngine(
           investments: state.investments,
           portfolioValue: state.portfolio,
           portfolioClaims: state.claims,
+          tradingValue: state.trading,
           totalDebt,
           receivables,
           netWorth:
-            savings + state.investments + state.portfolio - state.claims + receivables - totalDebt,
+            savings +
+            state.investments +
+            state.portfolio -
+            state.claims +
+            state.trading +
+            receivables -
+            totalDebt,
           debts: state.debts.map((d) => ({ debtId: d.id, name: d.name, balance: d.balance })),
         },
       };
@@ -468,6 +489,13 @@ function runEngine(
     state.managed = state.managed + state.managed * heldGrowth * fraction;
     state.portfolio = round2(own + own * growth * fraction + state.managed);
     state.claims = round2(state.claims + state.claims * claimsGrowth * fraction);
+    const tradingElapsed = tradingAsOf
+      ? Math.max(elapsed, Math.min(D, dayIndexInPeriod(tradingAsOf, period.start)))
+      : elapsed;
+    const tradingFraction = (D - tradingElapsed) / D;
+    state.trading = round2(
+      Math.max(0, state.trading + state.trading * tradingGrowth * tradingFraction)
+    );
     totalInvestmentsInterest += investmentsInterest;
     totalInterest += interestTotal;
 
@@ -482,7 +510,13 @@ function runEngine(
     const totalDebt = state.debts.reduce((s, d) => s + d.balance, 0);
     const receivables = owedAfter(repayments, period.end);
     const netWorth =
-      state.savings + state.investments + state.portfolio - state.claims + receivables - totalDebt;
+      state.savings +
+      state.investments +
+      state.portfolio -
+      state.claims +
+      state.trading +
+      receivables -
+      totalDebt;
     if (monthsToDebtFree === null && hadDebt && totalDebt <= DEBT_PAID_EPS) {
       monthsToDebtFree = m + 1;
       debtFreeDate = period.start;
@@ -506,6 +540,7 @@ function runEngine(
       totalDebt,
       portfolioValue: state.portfolio,
       portfolioClaims: state.claims,
+      tradingValue: state.trading,
       receivables,
       netWorth,
       preAsOfCashFlow: preAsOf,
@@ -537,6 +572,7 @@ function runEngine(
         state.investments +
         state.portfolio -
         state.claims +
+        state.trading +
         owedAfter(repayments, last.end) -
         endingDebt,
       monthsToDebtFree,
@@ -592,6 +628,7 @@ export function projectStateAt(
     const investments = Math.max(0, num(plan.initialInvestments));
     const portfolio = Math.max(0, options.portfolioValue ?? 0);
     const claims = Math.max(0, options.portfolioClaims ?? 0);
+    const trading = Math.max(0, options.tradingValue ?? 0);
     const totalDebt = debtRows.reduce((s, d) => s + d.balance, 0);
     const receivables = owedAfter(
       owedRepayments(
@@ -609,9 +646,10 @@ export function projectStateAt(
       investments,
       portfolioValue: portfolio,
       portfolioClaims: claims,
+      tradingValue: trading,
       totalDebt,
       receivables,
-      netWorth: savings + investments + portfolio - claims + receivables - totalDebt,
+      netWorth: savings + investments + portfolio - claims + trading + receivables - totalDebt,
       debts: debtRows,
     };
   }
@@ -628,6 +666,7 @@ export function projectStateAt(
       investments: close.investments,
       portfolioValue: close.portfolioValue,
       portfolioClaims: close.portfolioClaims,
+      tradingValue: close.tradingValue,
       totalDebt: close.totalDebt,
       receivables: close.receivables,
       netWorth: close.netWorth,
@@ -707,6 +746,7 @@ export function routeLandedCash(today: TodayState, close: ProjectionMonth): Toda
       investments +
       today.portfolioValue -
       (today.portfolioClaims ?? 0) +
+      (today.tradingValue ?? 0) +
       today.receivables -
       totalDebt,
   };

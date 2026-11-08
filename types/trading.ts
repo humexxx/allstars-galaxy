@@ -132,6 +132,8 @@ export type TradingJournal = {
 /** The trading account in a finance plan: today's balance and its pace. */
 export type TradingSummary = {
   balance: number;
+  /** The day `balance` was read (ISO). */
+  asOf: string;
   monthlyGrowthRate: number;
   growthMonths: number;
 };

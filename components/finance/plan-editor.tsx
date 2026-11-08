@@ -1,10 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import {
+  ArrowRight,
   CalendarDays,
   Camera,
   ClipboardCheck,
@@ -114,6 +116,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
 import { periodIndexForDate, periodRangeFor } from "@/lib/finance/period";
 import { rowStepFor } from "@/lib/finance/table-rows";
+import type { TradingSummary } from "@/types/trading";
 import { formatProjectionMonth } from "@/lib/utils/date";
 import {
   DEFAULT_PLAN_VIEW,
@@ -259,6 +262,8 @@ type PlanEditorProps = {
   lastConfirmedDay?: string | null;
   /** The Overview view the page opens on, read from `?view=`. */
   initialView?: PlanView;
+  /** The trading journal's balance and pace; null without a journal. */
+  trading?: TradingSummary | null;
 };
 
 export function PlanEditor({
@@ -282,6 +287,7 @@ export function PlanEditor({
   confirmationDue = false,
   lastConfirmedDay = null,
   initialView = DEFAULT_PLAN_VIEW,
+  trading = null,
 }: PlanEditorProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -798,6 +804,18 @@ export function PlanEditor({
                   : null;
               })()}
             />
+            {trading && (
+              <TradingCard
+                today={todayState?.tradingValue ?? trading.balance}
+                atHorizon={
+                  projection.months[Math.min(projection.months.length - 1, currentPeriodIdx + horizonMonths)]
+                    ?.tradingValue ?? null
+                }
+                horizonMonths={horizonMonths}
+                pace={trading.monthlyGrowthRate}
+                paceMonths={trading.growthMonths}
+              />
+            )}
             </>
           }
         />
@@ -1096,6 +1114,74 @@ function PortfolioCard({
             </>
           )}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * The trading journal in the plan: its balance today and where it is heading,
+ * grown at the average return of its last complete months (none yet: held
+ * flat), with a way into the journal.
+ */
+function TradingCard({
+  today,
+  atHorizon,
+  horizonMonths,
+  pace,
+  paceMonths,
+}: {
+  today: number;
+  atHorizon: number | null;
+  horizonMonths: number;
+  pace: number;
+  paceMonths: number;
+}): React.ReactElement {
+  return (
+    <Card className="gap-3">
+      <CardHeader className="flex items-center justify-between gap-2">
+        <Eyebrow asChild>
+          <h2 className="flex items-center gap-1.5">
+            <span aria-hidden className="inline-block size-2 rounded-xs" style={{ background: "var(--chart-2)" }} />
+            Trading
+          </h2>
+        </Eyebrow>
+        <Button variant="ghost" size="xs" asChild>
+          <Link href="/portal/trading">
+            Journal
+            <ArrowRight />
+          </Link>
+        </Button>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <Text variant="small" as="span">
+            Today
+          </Text>
+          <Mono className="text-sm font-semibold">{formatCurrency(today)}</Mono>
+        </div>
+        {atHorizon !== null && (
+          <div className="flex items-baseline justify-between gap-3">
+            <Text variant="small" as="span">
+              {horizonMonths % 12 === 0 && horizonMonths > 12 ? `In ${horizonMonths / 12} years` : `In ${horizonMonths} months`}
+            </Text>
+            <Mono className="text-sm text-muted-foreground">≈ {formatCurrency(atHorizon)}</Mono>
+          </div>
+        )}
+        <Text variant="small" as="p" className="mt-1 border-t pt-2 text-2xs">
+          {paceMonths > 0 ? (
+            <>
+              Grows at{" "}
+              <Mono className={cn(pace >= 0 ? "text-success" : "text-destructive")}>
+                {pace >= 0 ? "+" : ""}
+                {(pace * 100).toFixed(2)}%
+              </Mono>{" "}
+              a month, the average of the last {paceMonths} {paceMonths === 1 ? "month" : "months"}.
+            </>
+          ) : (
+            "Held flat until a full month of trading sets its pace."
+          )}
+        </Text>
       </CardContent>
     </Card>
   );

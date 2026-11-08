@@ -57,6 +57,7 @@ const PORTFOLIO = dashboardSeries("investments").color;
 const DEBT = dashboardSeries("debt").color;
 const OWED = dashboardSeries("receivables").color;
 const CASH = dashboardSeries("savings").color;
+const TRADING = "var(--chart-2)";
 
 // recharts types `animationEasing` as the named curves only, but its
 // animator (react-smooth) takes any t → progress function.
@@ -236,6 +237,8 @@ type ChartRow = {
   /** See `ChartPoint.skipped`. */
   skipped?: boolean;
   savings?: number;
+  /** The trading account's balance; inside net worth. */
+  tradingValue?: number;
   totalDebt?: number;
   investments?: number;
   /** Base plan's net worth at this period (scenario ghost line). */
@@ -297,6 +300,9 @@ function PointTooltip(props: {
             value={formatMoneyFull(portfolioTotal)}
             valueClass={portfolioTotal < 0 ? "text-destructive" : undefined}
           />
+        )}
+        {moneySign(row.tradingValue ?? 0) > 0 && (
+          <TooltipRow swatch={TRADING} label="Trading" value={formatMoneyFull(row.tradingValue ?? 0)} />
         )}
         {/* Never under zero (see `shownCash`). */}
         {moneySign(row.savings ?? 0) > 0 && (
@@ -375,6 +381,7 @@ type ChartPoint = {
   /** Carried for the hover tooltip only. */
   investments?: number;
   savings?: number;
+  tradingValue?: number;
   /** A period never confirmed: on the axis, no dot, figures interpolated. */
   skipped?: boolean;
 };
@@ -505,6 +512,7 @@ export const ProjectionChart = memo(function ProjectionChart({
         futureValue: isFuture || isBoundary ? value : null,
         rawValue: value,
         savings: p.savings,
+        tradingValue: p.tradingValue,
         totalDebt: p.totalDebt,
         investments: p.investments,
         ghostValue: ghostValues?.[i] ?? null,

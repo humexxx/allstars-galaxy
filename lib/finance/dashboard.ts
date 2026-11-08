@@ -79,7 +79,14 @@ export type DashboardFigures = DashboardParts & {
 
 type State = Pick<
   TodayState & ProjectionMonth,
-  "savings" | "investments" | "portfolioValue" | "portfolioClaims" | "receivables" | "totalDebt" | "netWorth"
+  | "savings"
+  | "investments"
+  | "portfolioValue"
+  | "portfolioClaims"
+  | "tradingValue"
+  | "receivables"
+  | "totalDebt"
+  | "netWorth"
 >;
 
 /**
@@ -92,7 +99,8 @@ function partsOf(s: State): DashboardParts {
     savings: s.savings,
     // Our own investments plus the managed MARGIN (positions less what the
     // investors are owed), as the plan chart's Portfolio reads it.
-    investments: s.investments + s.portfolioValue - (s.portfolioClaims ?? 0),
+    // The trading account is invested money too.
+    investments: s.investments + s.portfolioValue - (s.portfolioClaims ?? 0) + (s.tradingValue ?? 0),
     receivables: s.receivables,
     debt: s.totalDebt,
     netWorth: s.netWorth,

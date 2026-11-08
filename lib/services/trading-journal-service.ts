@@ -61,6 +61,7 @@ export async function getTradingSummary(
   if (journal.trades.length === 0 && journal.cash.length === 0) return null;
   return {
     balance: journal.balance,
+    asOf: journal.today,
     monthlyGrowthRate: journal.monthlyGrowthRate,
     growthMonths: journal.growthMonths,
   };

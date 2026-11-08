@@ -67,6 +67,11 @@ vi.mock("./margin-service", () => ({
   getManagedMarginHistory: (...args: unknown[]) => getManagedMarginHistoryMock(...args),
 }));
 
+vi.mock("./trading-journal-service", () => ({
+  getTradingJournal: async () => ({ equity: [] }),
+  getTradingSummary: async () => null,
+}));
+
 import {
   calibratePlan,
   createConfirmationSnapshot,

@@ -16,6 +16,8 @@ export type PlanHistoryPoint = {
   netWorth: number;
   /** Owed to the investors on the point's day; already off `netWorth`. */
   portfolioClaims?: number;
+  /** The trading account on the point's day; inside `netWorth`. */
+  tradingValue?: number;
   /** Written by a confirmation: the user's own figures. */
   confirmed?: boolean;
 };
@@ -45,6 +47,8 @@ export type ChartPoint = {
   portfolioValue?: number | null;
   /** Owed to the investors whose money is in the portfolio; off `netWorth`. */
   portfolioClaims?: number;
+  /** The trading account's balance; inside `netWorth`. */
+  tradingValue?: number;
   /** A period the user never confirmed: kept on the axis, its figures read
    *  straight across from the points either side (see `fillSkippedPeriods`). */
   skipped?: boolean;
@@ -88,6 +92,7 @@ export function historyToCheckpoints(
       receivables: h.receivables,
       portfolioValue: h.portfolioValue ?? null,
       portfolioClaims: h.portfolioClaims,
+      tradingValue: h.tradingValue,
     }));
 }
 
@@ -140,6 +145,7 @@ export function buildPlanTimeline(
     receivables: m.receivables,
     portfolioValue: m.portfolioValue,
     portfolioClaims: m.portfolioClaims,
+    tradingValue: m.tradingValue,
   });
 
   if (todayIdx < 0) return { points: months.map(closeOf), todayIndex: 0 };
@@ -199,6 +205,7 @@ const NUMERIC_FIELDS = [
   "receivables",
   "portfolioValue",
   "portfolioClaims",
+  "tradingValue",
 ] as const;
 
 /**
@@ -285,6 +292,7 @@ export function alignTodayPoint(
     receivables: today.receivables,
     portfolioValue: today.portfolioValue,
     portfolioClaims: today.portfolioClaims,
+    tradingValue: today.tradingValue,
   };
   return { points: interpolateSkipped(points), pastCount: series.pastCount };
 }

@@ -434,6 +434,26 @@ describe("F7 / F28: strategy comparison", () => {
     expect(last.netWorth).toBeCloseTo(last.portfolioValue - last.portfolioClaims!, 2);
     expect(months[0].netWorth).toBeLessThan(0);
   });
+  it("adds the trading account to net worth, growing at its pace only after it was read", () => {
+    const p = plan({ monthsAhead: 4 });
+    const base = projectPlan(p, [], [], [], {}).months;
+    const months = projectPlan(p, [], [], [], {
+      tradingValue: 10000,
+      tradingMonthlyRate: 0.05,
+      tradingAsOf: new Date(base[2].date.getTime() - 24 * 60 * 60 * 1000),
+    }).months;
+    expect(months[0].tradingValue).toBe(10000);
+    expect(months[1].tradingValue).toBe(10000);
+    expect(months[3].tradingValue).toBeCloseTo(10000 * 1.05 ** 2, 2);
+    expect(months[3].netWorth - base[3].netWorth).toBeCloseTo(months[3].tradingValue!, 2);
+  });
+  it("shrinks a losing trading account, never below zero", () => {
+    const last = projectPlan(plan({ monthsAhead: 3 }), [], [], [], {
+      tradingValue: 1000,
+      tradingMonthlyRate: -2,
+    }).months.at(-1)!;
+    expect(last.tradingValue).toBe(0);
+  });
 });
 
 describe("payments record", () => {

@@ -44,6 +44,7 @@ import { isoDay } from "@/lib/finance/schedule";
 import { getUserPortfolio, getPortfolioStats, getPortfolioAssets } from "./portfolio-service";
 import { getManagedAssets } from "./margin-service";
 import { ensureOwnedRow } from "./ownership";
+import { getTradingSummary } from "./trading-journal-service";
 
 // ---------- helpers ----------
 
@@ -1089,7 +1090,7 @@ export async function projectionOptionsFor(
   userId: string,
   prefetched: { autoInvestRate?: number } = {}
 ): Promise<ProjectOptions> {
-  const [ownValue, portfolioMonthlyGrowthRate, managed, autoInvestRate] = await Promise.all([
+  const [ownValue, portfolioMonthlyGrowthRate, managed, autoInvestRate, trading] = await Promise.all([
     plan.includePortfolio ? getPortfolioValueForUser(userId) : Promise.resolve(0),
     plan.includePortfolio ? getPortfolioWeightedMonthlyRoi(userId) : Promise.resolve(0),
     // What the user holds with other people's money: the assets at market
@@ -1099,6 +1100,9 @@ export async function projectionOptionsFor(
     // owner's call of 2026-11-08; until then it carried the whole value).
     plan.includePortfolio ? getManagedAssets(userId) : Promise.resolve(null),
     prefetched.autoInvestRate ?? getAutoInvestRate(plan),
+    // The trading journal is money the user holds, plan or no plan: its
+    // balance, growing at the average return of its last complete months.
+    getTradingSummary(userId, null),
   ]);
   const managedValue = managed?.value ?? 0;
   return {
@@ -1107,6 +1111,9 @@ export async function projectionOptionsFor(
     portfolioHeldMonthlyGrowthRate: managed?.expectedMonthlyRate ?? 0,
     portfolioClaims: managed?.owed ?? 0,
     portfolioClaimsMonthlyRate: managed?.promisedMonthlyRate ?? 0,
+    tradingValue: trading?.balance ?? 0,
+    tradingAsOf: trading ? new Date(`${trading.asOf}T00:00:00Z`) : null,
+    tradingMonthlyRate: trading?.monthlyGrowthRate ?? 0,
     portfolioMonthlyGrowthRate,
     autoInvestRate,
     overrides: plan.overrides,

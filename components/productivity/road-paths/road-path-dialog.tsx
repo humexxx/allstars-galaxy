@@ -29,7 +29,6 @@ import { createRoadPathSchema, type CreateRoadPathInput } from "@/schemas/road-p
 import type { RoadPath } from "@/types";
 
 import { calendarDayKey } from "../zoned-date";
-import { parseAmount } from "./format";
 
 type RoadPathDialogProps = {
   /** Present = editing that path; absent = creating one. */
@@ -57,36 +56,29 @@ function valuesOf(roadPath?: RoadPath): CreateRoadPathInput {
     return {
       title: "",
       description: "",
-      targetValue: undefined,
-      unit: "",
       // The schema requires a start date. Leaving the field empty used to send
       // `new Date("")` — an Invalid Date nothing rejected until the insert.
       startDate: today(),
-      targetDate: null,
       scheduleDays: [],
     };
   }
   return {
     title: roadPath.title,
     description: roadPath.description ?? "",
-    targetValue: parseAmount(roadPath.targetValue) ?? undefined,
-    unit: roadPath.unit ?? "",
     startDate: calendarDayKey(roadPath.startDate),
-    targetDate: roadPath.targetDate ? calendarDayKey(roadPath.targetDate) : null,
     scheduleDays: roadPath.scheduleDays ?? [],
   };
 }
 
 function scheduleHint(days: readonly number[]): string {
-  if (days.length === 0) return "No days picked: nothing goes on your board by itself.";
+  if (days.length === 0) return "Pick the days it is due on.";
   const often = frequencyLabel(days);
   return `${scheduleLabel(days)}${often ? ` · ${often}` : ""}. On these days its task is on your board when you open it.`;
 }
 
 /**
  * One form for creating a road path and for editing every part of one: what
- * it is, the days it repeats on, its dates, the figure it tracks, and whether
- * it is finished.
+ * it is, the days it repeats on, the day it starts, and whether it is finished.
  */
 export function RoadPathDialog({
   roadPath,
@@ -111,11 +103,11 @@ export function RoadPathDialog({
           )}
         </DialogTrigger>
       ) : null}
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit road path" : "Create road path"}</DialogTitle>
           <DialogDescription>
-            A habit you repeat on set days, or a goal you measure — or both.
+            A habit you repeat on set days. On each one, its task is on your board.
           </DialogDescription>
         </DialogHeader>
         {/* Mounted with the dialog's content, so every opening starts from
@@ -223,74 +215,23 @@ function RoadPathForm({ roadPath, onSaved }: { roadPath?: RoadPath; onSaved: () 
         <FieldError errors={[errors.scheduleDays as { message?: string } | undefined]} />
       </Field>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field data-invalid={!!errors.startDate}>
-          <FieldLabel htmlFor="road-path-start">Start date</FieldLabel>
-          <Controller
-            control={control}
-            name="startDate"
-            render={({ field }) => (
-              <DateField
-                id="road-path-start"
-                value={typeof field.value === "string" ? field.value : ""}
-                onChange={field.onChange}
-                placeholder="Pick a start day"
-                aria-invalid={!!errors.startDate}
-              />
-            )}
-          />
-          <FieldError errors={[errors.startDate]} />
-        </Field>
-
-        <Field data-invalid={!!errors.targetDate}>
-          <FieldLabel htmlFor="road-path-target-date">Target date</FieldLabel>
-          <Controller
-            control={control}
-            name="targetDate"
-            render={({ field }) => (
-              <DateField
-                id="road-path-target-date"
-                value={typeof field.value === "string" ? field.value : ""}
-                onChange={(day) => field.onChange(day || null)}
-                placeholder="No deadline"
-                clearable
-                aria-invalid={!!errors.targetDate}
-              />
-            )}
-          />
-          <FieldError errors={[errors.targetDate]} />
-        </Field>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field data-invalid={!!errors.targetValue}>
-          <FieldLabel htmlFor="road-path-target-value">Target value</FieldLabel>
-          <Input
-            id="road-path-target-value"
-            type="number"
-            inputMode="decimal"
-            placeholder="Optional, e.g. 100"
-            aria-invalid={!!errors.targetValue}
-            // An empty number input reads as NaN, and the schema rejects
-            // that — so "no target" has to become null, not NaN.
-            {...register("targetValue", {
-              setValueAs: (v) => (v === "" || v === null || v === undefined ? null : Number(v)),
-            })}
-          />
-          <FieldError errors={[errors.targetValue]} />
-        </Field>
-
-        <Field data-invalid={!!errors.unit}>
-          <FieldLabel htmlFor="road-path-unit">Unit</FieldLabel>
-          <Input
-            id="road-path-unit"
-            placeholder="km, hours, books…"
-            aria-invalid={!!errors.unit}
-            {...register("unit")}
-          />
-          <FieldError errors={[errors.unit]} />
-        </Field>
-      </div>
+      <Field data-invalid={!!errors.startDate}>
+        <FieldLabel htmlFor="road-path-start">Start date</FieldLabel>
+        <Controller
+          control={control}
+          name="startDate"
+          render={({ field }) => (
+            <DateField
+              id="road-path-start"
+              value={typeof field.value === "string" ? field.value : ""}
+              onChange={field.onChange}
+              placeholder="Pick a start day"
+              aria-invalid={!!errors.startDate}
+            />
+          )}
+        />
+        <FieldError errors={[errors.startDate]} />
+      </Field>
 
       {isEdit ? (
         <Field orientation="horizontal">

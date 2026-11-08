@@ -18,7 +18,7 @@ import { getRequestTimeZone, getRequestTodayIso } from "@/lib/utils/request-toda
 
 export const metadata: Metadata = {
   title: "Road Paths",
-  description: "Track your long-term goals and progress",
+  description: "Habits on the days you choose, with a streak and a calendar",
 };
 
 const LIST_HREF = "/portal/productivity/road-paths";

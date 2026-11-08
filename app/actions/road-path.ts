@@ -6,32 +6,15 @@ import { safe, type ActionResult } from "@/lib/actions/safe";
 import { logImpersonatedMutation } from "@/lib/services/impersonation";
 import { requireModuleContext } from "@/lib/services/module-access-service";
 import { getRequestTodayIso } from "@/lib/utils/request-today";
-import {
-  getRoadPath,
-  createRoadPath,
-  updateRoadPath,
-  deleteRoadPath,
-  createRoadPathMilestone,
-  updateRoadPathMilestone,
-  deleteRoadPathMilestone,
-  getNextMilestoneOrder,
-  createRoadPathProgress,
-  deleteRoadPathProgress,
-} from "@/lib/services/road-path-service";
+import { getRoadPath, createRoadPath, updateRoadPath, deleteRoadPath } from "@/lib/services/road-path-service";
 import { idSchema } from "@/schemas/common";
 import {
   createRoadPathSchema,
   updateRoadPathSchema,
-  createRoadPathMilestoneSchema,
-  updateRoadPathMilestoneSchema,
-  createRoadPathProgressSchema,
   type CreateRoadPathInput,
   type UpdateRoadPathInput,
-  type CreateRoadPathMilestoneData,
-  type UpdateRoadPathMilestoneInput,
-  type CreateRoadPathProgressInput,
 } from "@/schemas/road-path";
-import type { RoadPath, RoadPathMilestone, RoadPathProgress } from "@/types";
+import type { RoadPath } from "@/types";
 
 // The segment has no page of its own; the layout scope reaches /road-paths
 // and /board, which is where road-path edits show up.
@@ -112,113 +95,6 @@ export async function deleteRoadPathAction(roadPathId: string): Promise<ActionRe
       entityTable: "road_paths",
       entityId: parsed.data,
       before,
-    });
-    revalidatePath(PATH, "layout");
-    return { success: true };
-  });
-}
-
-export async function createRoadPathMilestoneAction(
-  data: CreateRoadPathMilestoneData
-): Promise<ActionResult<RoadPathMilestone>> {
-  return safe("road-path", async () => {
-    const ctx = await requireModuleContext("road-paths");
-    const parsed = createRoadPathMilestoneSchema.safeParse(data);
-    if (!parsed.success) {
-      return { success: false, error: "Invalid input" };
-    }
-    const milestone = await createRoadPathMilestone(ctx.effectiveUserId, {
-      ...parsed.data,
-      order:
-        parsed.data.order ??
-        (await getNextMilestoneOrder(parsed.data.roadPathId, ctx.effectiveUserId)),
-    });
-
-    await logImpersonatedMutation({
-      action: "roadPathMilestone.create",
-      entityTable: "road_path_milestones",
-      entityId: milestone.id,
-    });
-    revalidatePath(PATH, "layout");
-    return { success: true, data: milestone };
-  });
-}
-
-export async function updateRoadPathMilestoneAction(
-  data: UpdateRoadPathMilestoneInput
-): Promise<ActionResult<RoadPathMilestone>> {
-  return safe("road-path", async () => {
-    const ctx = await requireModuleContext("road-paths");
-    const parsed = updateRoadPathMilestoneSchema.safeParse(data);
-    if (!parsed.success) {
-      return { success: false, error: "Invalid input" };
-    }
-    const { id, ...updateData } = parsed.data;
-
-    const milestone = await updateRoadPathMilestone(id, ctx.effectiveUserId, updateData);
-    if (!milestone) return { success: false, error: "Milestone not found" };
-
-    await logImpersonatedMutation({
-      action: "roadPathMilestone.update",
-      entityTable: "road_path_milestones",
-      entityId: milestone.id,
-    });
-    revalidatePath(PATH, "layout");
-    return { success: true, data: milestone };
-  });
-}
-
-export async function deleteRoadPathMilestoneAction(milestoneId: string): Promise<ActionResult> {
-  return safe("road-path", async () => {
-    const ctx = await requireModuleContext("road-paths");
-    const parsed = idSchema.safeParse(milestoneId);
-    if (!parsed.success) return { success: false, error: "Invalid milestone" };
-
-    await deleteRoadPathMilestone(parsed.data, ctx.effectiveUserId);
-
-    await logImpersonatedMutation({
-      action: "roadPathMilestone.delete",
-      entityTable: "road_path_milestones",
-      entityId: parsed.data,
-    });
-    revalidatePath(PATH, "layout");
-    return { success: true };
-  });
-}
-
-export async function createRoadPathProgressAction(
-  data: CreateRoadPathProgressInput
-): Promise<ActionResult<RoadPathProgress>> {
-  return safe("road-path", async () => {
-    const ctx = await requireModuleContext("road-paths");
-    const parsed = createRoadPathProgressSchema.safeParse(data);
-    if (!parsed.success) {
-      return { success: false, error: "Invalid input" };
-    }
-    const progress = await createRoadPathProgress(ctx.effectiveUserId, parsed.data);
-
-    await logImpersonatedMutation({
-      action: "roadPathProgress.create",
-      entityTable: "road_path_progress",
-      entityId: progress.id,
-    });
-    revalidatePath(PATH, "layout");
-    return { success: true, data: progress };
-  });
-}
-
-export async function deleteRoadPathProgressAction(progressId: string): Promise<ActionResult> {
-  return safe("road-path", async () => {
-    const ctx = await requireModuleContext("road-paths");
-    const parsed = idSchema.safeParse(progressId);
-    if (!parsed.success) return { success: false, error: "Invalid progress entry" };
-
-    await deleteRoadPathProgress(parsed.data, ctx.effectiveUserId);
-
-    await logImpersonatedMutation({
-      action: "roadPathProgress.delete",
-      entityTable: "road_path_progress",
-      entityId: parsed.data,
     });
     revalidatePath(PATH, "layout");
     return { success: true };

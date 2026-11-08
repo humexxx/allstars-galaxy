@@ -1528,3 +1528,71 @@ export const aiUsage = pgTable(
   },
   (t) => [index("ai_usage_created_at_idx").on(t.createdAt)]
 ).enableRLS();
+
+// ---------- trading journal ----------
+
+// Long buys first and sells to close; short sells first and buys back.
+export const tradingSideEnum = pgEnum("trading_side", ["long", "short"]);
+// Money the user moves into or out of their trading account; trades move the rest.
+export const tradingCashKindEnum = pgEnum("trading_cash_kind", ["deposit", "withdrawal"]);
+
+// One trade in the user's journal. It is open until it has an exit: the exit
+// price and the moment it closed arrive together (the check below), and its
+// realized P&L is (exit − entry) × quantity × multiplier, negated for a short,
+// less fees.
+export const tradingTrades = pgTable(
+  "trading_trades",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    symbol: text("symbol").notNull(),
+    side: tradingSideEnum("side").notNull().default("long"),
+    quantity: numeric("quantity", { precision: 20, scale: 8 }).notNull(),
+    // Contract size: 1 for shares and crypto, 100 for an options contract,
+    // the point value for a future.
+    multiplier: numeric("multiplier", { precision: 20, scale: 8 }).notNull().default("1"),
+    entryPrice: numeric("entry_price", { precision: 20, scale: 8 }).notNull(),
+    exitPrice: numeric("exit_price", { precision: 20, scale: 8 }),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    fees: numeric("fees", { precision: 20, scale: 2 }).notNull().default("0"),
+    // The playbook the trade followed ("Breakout", "Pullback").
+    setup: text("setup"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("trading_trades_user_opened_idx").on(t.userId, t.openedAt),
+    check("trading_trades_quantity_chk", sql`${t.quantity} > 0`),
+    check("trading_trades_multiplier_chk", sql`${t.multiplier} > 0`),
+    check("trading_trades_prices_chk", sql`${t.entryPrice} >= 0 AND (${t.exitPrice} IS NULL OR ${t.exitPrice} >= 0)`),
+    check("trading_trades_fees_chk", sql`${t.fees} >= 0`),
+    check("trading_trades_close_chk", sql`(${t.exitPrice} IS NULL) = (${t.closedAt} IS NULL)`),
+    check("trading_trades_order_chk", sql`${t.closedAt} IS NULL OR ${t.closedAt} >= ${t.openedAt}`),
+  ]
+).enableRLS();
+
+// Deposits into and withdrawals from the trading account. The balance is what
+// went in, less what came out, plus every closed trade's P&L.
+export const tradingCashMovements = pgTable(
+  "trading_cash_movements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    kind: tradingCashKindEnum("kind").notNull(),
+    amount: numeric("amount", { precision: 20, scale: 2 }).notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("trading_cash_movements_user_occurred_idx").on(t.userId, t.occurredAt),
+    check("trading_cash_movements_amount_chk", sql`${t.amount} > 0`),
+  ]
+).enableRLS();

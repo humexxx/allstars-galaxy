@@ -113,6 +113,7 @@ import type { ActionResult } from "@/lib/actions/safe";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
 import { periodIndexForDate, periodRangeFor } from "@/lib/finance/period";
+import { rowStepFor } from "@/lib/finance/table-rows";
 import {
   DEFAULT_PLAN_VIEW,
   PLAN_VIEWS,
@@ -1704,6 +1705,7 @@ function ProjectionPanel({
                       monthsToShow={tableRange.count}
                       startIndex={tableRange.startIndex}
                       currentIndex={todayIsOnChart ? todayState?.periodIndex : undefined}
+                      rowStep={rowStepFor(horizonMonths)}
                     />
                   )}
                 </CardContent>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import {
   Table,
@@ -10,7 +10,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -26,7 +25,7 @@ import {
   moneySign,
 } from "@/lib/utils/format";
 import { formatProjectionMonth } from "@/lib/utils/date";
-import { densify } from "@/lib/finance/table-rows";
+import { sampleRows } from "@/lib/finance/table-rows";
 import type { Projection } from "@/types/finance";
 
 import { dashboardSeries, type DashboardSeries } from "./dashboard-finance-series";
@@ -54,6 +53,8 @@ type ProjectionTableProps = {
   startIndex?: number;
   /** Projection row of the period that contains today, highlighted. */
   currentIndex?: number;
+  /** Months between the rows from today's period on (see `rowStepFor`). */
+  rowStep?: number;
 };
 
 /**
@@ -87,8 +88,8 @@ export function ProjectionTable({
   monthsToShow,
   startIndex = 0,
   currentIndex,
+  rowStep = 1,
 }: ProjectionTableProps) {
-  const [showAll, setShowAll] = useState(false);
 
   // The rows are the chart's horizon (the editor works out the window): the
   // horizon picker above is the table's only control, so there is no "Load
@@ -106,33 +107,17 @@ export function ProjectionTable({
   );
 
   const hasInvestments = visibleMonths.some((m) => m.investments > 0.01);
-  const isLongHorizon = visibleMonths.length > 24;
+  // Long horizons list a row every few months; the % lines then read the
+  // change since the row above.
   const rows = useMemo(
-    () => (showAll || !isLongHorizon ? visibleMonths : densify(visibleMonths)),
-    [visibleMonths, showAll, isLongHorizon]
+    () => sampleRows(visibleMonths, (currentIndex ?? first) - first, rowStep),
+    [visibleMonths, currentIndex, first, rowStep]
   );
 
   return (
     // Fills the panel on desktop and scrolls inside it; the rounded box clips
     // the sticky header, which used to paint over its corners.
     <div className="flex flex-col gap-2 xl:h-full xl:min-h-0">
-      {isLongHorizon && (
-        <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          <span>
-            {showAll
-              ? `Showing all ${visibleMonths.length} months`
-              : `Showing the first 12 months + each December (${rows.length} of ${visibleMonths.length})`}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowAll((v) => !v)}
-          >
-            {showAll ? "Compact view" : "Show every month"}
-          </Button>
-        </div>
-      )}
       {/* As tall as its rows, never taller than the panel: a short horizon
           ends where its last row does instead of an empty bordered box. */}
       <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border">

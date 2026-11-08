@@ -820,8 +820,6 @@ export function PlanEditor({
                     ?.tradingValue ?? null
                 }
                 horizonMonths={horizonMonths}
-                pace={trading.monthlyGrowthRate}
-                paceMonths={trading.growthMonths}
               />
             )}
             </>
@@ -1176,14 +1174,10 @@ function TradingCard({
   today,
   atHorizon,
   horizonMonths,
-  pace,
-  paceMonths,
 }: {
   today: number;
   atHorizon: number | null;
   horizonMonths: number;
-  pace: number;
-  paceMonths: number;
 }): React.ReactElement {
   return (
     <Card className="gap-3">
@@ -1213,26 +1207,7 @@ function TradingCard({
             <Text variant="small" as="span">
               {horizonMonths % 12 === 0 && horizonMonths > 12 ? `In ${horizonMonths / 12} years` : `In ${horizonMonths} months`}
             </Text>
-            {/* How it is estimated rides in a tooltip, off the card. */}
-            <FigureWithTip
-              className="text-sm text-muted-foreground"
-              tip={
-                paceMonths > 0 ? (
-                  <>
-                    Grows at{" "}
-                    <Mono>
-                      {pace >= 0 ? "+" : ""}
-                      {(pace * 100).toFixed(2)}%
-                    </Mono>{" "}
-                    a month, the average of the last {paceMonths} {paceMonths === 1 ? "month" : "months"}.
-                  </>
-                ) : (
-                  "Held flat until a full month of trading sets its pace."
-                )
-              }
-            >
-              ≈ {formatCurrency(atHorizon)}
-            </FigureWithTip>
+            <Mono className="text-sm text-muted-foreground">≈ {formatCurrency(atHorizon)}</Mono>
           </div>
         )}
       </CardContent>

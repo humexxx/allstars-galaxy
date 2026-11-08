@@ -113,9 +113,9 @@ export function PlanForm({
   defaultColor,
 }: PlanFormProps): React.ReactElement {
   const router = useRouter();
-  const [includePortfolio, setIncludePortfolio] = useState(
-    plan?.includePortfolio ?? true
-  );
+  // No longer a choice on screen (2026-11-08): a plan keeps what it has, and
+  // a new one counts the portfolio.
+  const includePortfolio = plan?.includePortfolio ?? true;
   const [color, setColor] = useState<string>(plan?.color ?? defaultColor ?? COLORS[0]);
 
   // Surplus acceleration: stored as numeric string 0..1 in the DB. We convert to
@@ -371,25 +371,6 @@ export function PlanForm({
                   ))}
                 </ToggleGroup>
               </Field>
-              <Field
-                orientation="horizontal"
-                className="justify-between rounded-lg border p-3 sm:col-span-2"
-              >
-                <FieldContent>
-                  <FieldLabel htmlFor="plan-include-portfolio" className="cursor-pointer">
-                    Include current portfolio in net worth
-                  </FieldLabel>
-                  <FieldDescription>
-                    Adds your live portfolio value to the projection&apos;s net worth line.
-                  </FieldDescription>
-                </FieldContent>
-                <Switch
-                  id="plan-include-portfolio"
-                  checked={includePortfolio}
-                  onCheckedChange={setIncludePortfolio}
-                />
-              </Field>
-
               <Field
                 className="gap-2 sm:col-span-2"
                 data-invalid={!!errors.confirmationDayOfMonth || undefined}

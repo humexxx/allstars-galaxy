@@ -905,7 +905,9 @@ export function PlanCalendar({
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1">
+        {/* The weeks share whatever height the panel leaves (equal rows), so a
+            short month fills the card instead of ending above its bottom. */}
+        <div className="grid grid-cols-7 gap-1 xl:min-h-0 xl:flex-1 xl:auto-rows-fr">
           {days.map((day) => {
             const key = toISODate(day);
             const entries = dayMap.get(key) ?? NO_ENTRIES;

@@ -1051,6 +1051,38 @@ const total = (a: PortfolioAmounts, managedCounts: boolean): number =>
   a.own + (managedCounts ? a.managed : 0);
 
 /**
+ * A card figure that explains itself on hover or focus: a dotted underline
+ * says there is more, the tooltip holds it. Keeps the small print off the
+ * card.
+ */
+function FigureWithTip({
+  className,
+  tip,
+  children,
+}: {
+  className?: string;
+  tip: React.ReactNode;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "cursor-help font-mono tabular-nums underline decoration-muted-foreground/40 decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+            className
+          )}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">{tip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
  * The portfolio: the plan's own investments (what the surplus invests) plus
  * the margin on the money managed for others — the positions their money
  * bought less what is owed to them. Both always count, as the chart's
@@ -1076,29 +1108,48 @@ function PortfolioCard({
   atHorizon: PortfolioAmounts | null;
 }): React.ReactElement {
   const row = (label: string, value: number): React.ReactElement => (
-    <div className="flex items-center justify-between gap-3">
-      <Text variant="small" as="span">
-        {label}
-      </Text>
-      <Mono className="text-xs text-muted-foreground">{formatCurrency(value)}</Mono>
+    <div className="flex items-center justify-between gap-4">
+      <span>{label}</span>
+      <Mono>{formatCurrency(value)}</Mono>
     </div>
   );
   return (
     <Card className="gap-3">
-      <CardHeader>
+      <CardHeader className="flex items-center justify-between gap-2">
         <Eyebrow asChild>
           <h2 className="flex items-center gap-1.5">
             <SeriesSwatch series={dashboardSeries("investments")} />
             Portfolio
           </h2>
         </Eyebrow>
+        <Button variant="ghost" size="xs" asChild>
+          <Link href="/portal/portfolio">
+            Open
+            <ArrowRight />
+          </Link>
+        </Button>
       </CardHeader>
       <CardContent className="flex flex-col gap-1">
         <div className="flex items-baseline justify-between gap-3">
           <Text variant="small" as="span">
             Today
           </Text>
-          <Mono className="text-sm font-semibold">{formatCurrency(total(today, enabled))}</Mono>
+          {/* What it is made of rides in a tooltip, off the card. */}
+          {managesMoney ? (
+            <FigureWithTip
+              className="text-sm font-semibold"
+              tip={
+                <div className="flex flex-col gap-1">
+                  {row("Our own", today.own)}
+                  {enabled && row("Managed margin", today.managed)}
+                </div>
+              }
+            >
+              {formatCurrency(total(today, enabled))}
+            </FigureWithTip>
+          ) : (
+            <Mono className="text-sm font-semibold">{formatCurrency(total(today, enabled))}</Mono>
+          )}
         </div>
         {atHorizon !== null && (
           <div className="flex items-baseline justify-between gap-3">
@@ -1109,12 +1160,6 @@ function PortfolioCard({
             <Mono className="text-sm text-muted-foreground">
               ≈ {formatCurrency(total(atHorizon, enabled))}
             </Mono>
-          </div>
-        )}
-        {managesMoney && (
-          <div className="mt-1 flex flex-col gap-1.5 border-t pt-2">
-            {row("Our own", today.own)}
-            {enabled && row("Managed margin", today.managed)}
           </div>
         )}
       </CardContent>
@@ -1168,23 +1213,28 @@ function TradingCard({
             <Text variant="small" as="span">
               {horizonMonths % 12 === 0 && horizonMonths > 12 ? `In ${horizonMonths / 12} years` : `In ${horizonMonths} months`}
             </Text>
-            <Mono className="text-sm text-muted-foreground">≈ {formatCurrency(atHorizon)}</Mono>
+            {/* How it is estimated rides in a tooltip, off the card. */}
+            <FigureWithTip
+              className="text-sm text-muted-foreground"
+              tip={
+                paceMonths > 0 ? (
+                  <>
+                    Grows at{" "}
+                    <Mono>
+                      {pace >= 0 ? "+" : ""}
+                      {(pace * 100).toFixed(2)}%
+                    </Mono>{" "}
+                    a month, the average of the last {paceMonths} {paceMonths === 1 ? "month" : "months"}.
+                  </>
+                ) : (
+                  "Held flat until a full month of trading sets its pace."
+                )
+              }
+            >
+              ≈ {formatCurrency(atHorizon)}
+            </FigureWithTip>
           </div>
         )}
-        <Text variant="small" as="p" className="mt-1 border-t pt-2 text-2xs">
-          {paceMonths > 0 ? (
-            <>
-              Grows at{" "}
-              <Mono className={cn(pace >= 0 ? "text-success" : "text-destructive")}>
-                {pace >= 0 ? "+" : ""}
-                {(pace * 100).toFixed(2)}%
-              </Mono>{" "}
-              a month, the average of the last {paceMonths} {paceMonths === 1 ? "month" : "months"}.
-            </>
-          ) : (
-            "Held flat until a full month of trading sets its pace."
-          )}
-        </Text>
       </CardContent>
     </Card>
   );
